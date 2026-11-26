@@ -159,6 +159,12 @@ export default function InvestorPortfolioValueAdd() {
       await fill.afterSave(created?.item?.id);
       reload();
     } catch (error) {
+      // D6215: a capital ask that lands on a round call is answered on the call.
+      if (error?.code === 'ask_on_round_call') {
+        setForm((current) => ({ ...current, invalid: null, callUid: error.data?.call_uid || null, failed: false,
+          error: 'This ask lands on a round call, so nothing was recorded here. Promise support on the call.' }));
+        return;
+      }
       // PFA08: the entries stay in the form, and the form says it did not save.
       setForm((current) => ({ ...current, invalid: null, error: `This did not save. Your entries are kept.${error?.message ? ` ${error.message}` : ''}`, failed: true }));
     } finally { setBusy(''); }
@@ -680,6 +686,7 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
         <textarea id="va-outcome" rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" />
       </div>
       {form.error ? <p id="va-form-error" className="va-error" role="alert" data-testid="va-form-error">{form.error}</p> : null}
+      {form.callUid ? <Link className="pf-btn is-primary" to={`/round-calls/${encodeURIComponent(form.callUid)}`} data-testid="va-founder-ask-call">Open the round call</Link> : null}
       {form.ask_uid && form.confirmed ? <p role="status">Confirm this promise against the founder’s ask.</p> : null}
       <div className="pf-tools">
         <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : form.ask_uid ? (form.confirmed ? 'Confirm promise' : 'Review promise') : 'Record entry'}</button>

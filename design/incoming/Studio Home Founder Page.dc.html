@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Founder · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* IHS · Investor Studio Home v2 (#6126) — continues Studio Modularity (SM16 to SM27). Every class is ihs- prefixed. */
+.ihs-cv{--bg:#f4f3f7;--card:#fff;--raised:#faf9fc;--ink:#18181b;--body:#3f3a47;--mut:#6b6577;--line:#ececf1;--line2:#e2dfe8;--vi:#7c3aed;--vtx:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--chip:#f4f3f7;--pos:#047857;--posT:#ecfdf5;--posE:#a7f3d0;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--err:#b91c1c;--skel:#ececf1;--scrim:rgba(24,24,27,.42);
+  --sg:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;--mo:'Roboto Mono',ui-monospace,Menlo,Consolas,monospace;
+  font-family:var(--sg);font-size:13px;line-height:1.45;color:var(--ink);background:var(--bg);position:relative;overflow:hidden;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.ihs-cv.ihs-dark{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--body:#d1d5db;--mut:#9ca3af;--line:#374151;--line2:#4b5563;--vi:#a78bfa;--vtx:#c4b5fd;--lav:rgba(167,139,250,.14);--lavE:rgba(167,139,250,.42);--chip:#1f2937;--pos:#34d399;--posT:rgba(52,211,153,.12);--posE:rgba(52,211,153,.4);--amT:#fcd34d;--amBg:rgba(252,211,77,.1);--amE:rgba(252,211,77,.5);--err:#f87171;--skel:#1f2937;--scrim:rgba(0,0,0,.6)}
+.ihs-cv *{box-sizing:border-box}
+.ihs-cv h1,.ihs-cv h2,.ihs-cv h3,.ihs-cv p,.ihs-cv ul,.ihs-cv ol{margin:0;padding:0}
+.ihs-cv ul,.ihs-cv ol{list-style:none}
+.ihs-cv a{color:var(--vtx);text-decoration:none}
+.ihs-cv button{font-family:var(--sg);cursor:pointer}
+.ihs-mo{font-family:var(--mo)}
+.ihs-mu{color:var(--mut)}
+.ihs-ey{font:700 10.5px var(--mo);letter-spacing:.11em;text-transform:uppercase;color:var(--mut)}
+/* shell */
+.ihs-shell{display:flex;flex-direction:column;background:var(--bg)}
+.ihs-top{height:56px;flex:none;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line)}
+.ihs-brand{display:flex;align-items:center;gap:9px;width:214px;flex:none;font-size:15px;font-weight:800;letter-spacing:-.02em}
+.ihs-mark{width:28px;height:28px;border-radius:7px;background:var(--ink);display:grid;place-items:center;color:var(--card);font:800 12px var(--sg)}
+.ihs-search{width:340px;min-height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;background:var(--bg);color:var(--mut);font-size:13px}
+.ihs-ib{width:38px;height:38px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--body);display:grid;place-items:center}
+.ihs-avt{width:34px;height:34px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--vtx)}
+.ihs-hq{font:700 11.5px var(--mo);letter-spacing:.07em;padding:3px 10px;border-radius:999px;background:#18181b;color:#fff;border:1px solid #4b5563}
+.ihs-row{flex:1;display:flex;min-height:0}
+.ihs-side{width:232px;flex:none;background:var(--card);border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:2px}
+.ihs-side.ihs-nar{width:64px;align-items:center}
+.ihs-sw{width:100%;min-height:52px;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);text-align:left;margin-bottom:10px}
+.ihs-sw b{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ihs-sq{width:30px;height:30px;flex:none;border-radius:7px;background:var(--lav);border:1px solid var(--lavE);color:var(--vtx);display:grid;place-items:center;font-size:11px;font-weight:800}
+.ihs-nav{display:flex;align-items:center;min-height:36px;padding:0 12px;border-radius:9px;font-size:13.5px;color:var(--body)!important;font-weight:500}
+.ihs-nav[aria-current]{background:var(--lav);color:var(--vtx)!important;font-weight:700}
+.ihs-side.ihs-nar .ihs-nav{width:40px;height:40px;padding:0;justify-content:center;font-size:11.5px;font-weight:700}
+.ihs-sep{height:1px;background:var(--line);margin:8px 4px}
+.ihs-main{flex:1;min-width:0;padding:24px 28px 32px;display:flex;flex-direction:column;gap:16px;position:relative}
+.ihs-foot{height:38px;flex:none;display:flex;align-items:center;gap:16px;padding:0 20px;border-top:1px solid var(--line);background:var(--card);font-size:12px;color:var(--mut)}
+/* header */
+.ihs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.ihs-ttl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ihs-ttl h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.ihs-badge{display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:rgba(14,165,233,.14);color:var(--ink)}
+.ihs-badge i{width:7px;height:7px;border-radius:999px;background:#0ea5e9}
+.ihs-purp{font-size:13.5px;color:var(--mut);margin-top:4px;max-width:640px}
+.ihs-hr{display:flex;align-items:center;gap:12px;flex:none}
+.ihs-date{font:500 12.5px var(--mo);color:var(--mut)}
+/* buttons */
+.ihs-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 14px;border-radius:9px;font-size:13.5px;font-weight:600;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--ink)}
+.ihs-btn.ihs-p{border-color:#7c3aed;background:#7c3aed;color:#fff}
+.ihs-btn.ihs-v{border-color:var(--vi);color:var(--vtx);background:var(--card)}
+.ihs-btn.ihs-t{border-color:transparent;background:transparent;color:var(--body)}
+.ihs-btn.ihs-sm{min-height:32px;padding:0 11px;font-size:12.5px;border-radius:8px}
+.ihs-btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+.ihs-lnk{display:inline-flex;align-items:center;min-height:28px;font-size:12.5px;font-weight:600;color:var(--vtx);white-space:nowrap}
+/* annotation tags (not product copy) */
+.ihs-be{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px dashed var(--vi);border-radius:6px;background:var(--lav);color:var(--vtx);font:700 11px var(--mo);white-space:nowrap}
+.ihs-pol{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border:1.5px solid var(--amE);border-radius:6px;background:var(--amBg);color:var(--amT);font:700 11px var(--mo);white-space:nowrap}
+.ihs-note{font-size:12px;color:var(--mut);line-height:1.45}
+/* bands */
+.ihs-thesis{position:relative;background:var(--lav);border:1px solid var(--lavE);border-radius:12px;padding:12px 16px;display:flex;gap:16px;align-items:flex-start}
+.ihs-thesis .ihs-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.ihs-thesis .ihs-ey{color:var(--vtx)}
+.ihs-thq{font-size:13px;line-height:1.5}
+.ihs-crow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ihs-cg{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ihs-cgl{font:600 10.5px var(--mo);color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.ihs-chip{display:inline-flex;align-items:center;min-height:22px;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line2);font-size:11.5px;font-weight:600;color:var(--body);white-space:nowrap}
+.ihs-chip.ihs-x{text-decoration:line-through;color:var(--mut);background:transparent;border-style:dashed}
+.ihs-band{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 40px 12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ihs-av{width:40px;height:40px;flex:none;border-radius:999px;background:var(--chip);border:2px solid #0ea5e9;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--body)}
+.ihs-pill{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--chip);color:var(--body);border:1px solid var(--line2)}
+.ihs-pill.ihs-lv{background:var(--lav);color:var(--vtx);border-color:var(--lavE)}
+.ihs-pill.ihs-ps{background:var(--posT);color:var(--pos);border-color:var(--posE)}
+.ihs-pill.ihs-am{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.ihs-lock{position:absolute;top:12px;right:12px;color:var(--mut);display:flex}
+/* Eadwyn chat */
+.ihs-chat{background:var(--card);border:1px solid var(--lavE);border-radius:14px;overflow:hidden}
+.ihs-chh{display:flex;align-items:center;gap:12px;padding:14px 18px 14px 22px;background:var(--lav);border-bottom:1px solid var(--line)}
+.ihs-ead{width:36px;height:36px;flex:none;border-radius:10px;background:#7c3aed;color:#fff;display:grid;place-items:center;font:800 15px var(--sg)}
+.ihs-chg{display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.ihs-chl{display:flex;flex-direction:column;min-height:300px}
+.ihs-thr{flex:1;padding:18px 22px;display:flex;flex-direction:column;gap:10px}
+.ihs-bub{align-self:flex-start;max-width:78%;padding:10px 13px;border-radius:12px 12px 12px 4px;background:var(--chip);border:1px solid var(--line);font-size:13.5px;line-height:1.5}
+.ihs-bub.ihs-u{align-self:flex-end;border-radius:12px 12px 4px 12px;background:#7c3aed;color:#fff;border-color:#7c3aed}
+.ihs-comp{border-top:1px solid var(--line);padding:12px 20px 14px;display:flex;align-items:center;gap:6px}
+.ihs-inp{flex:1;min-width:0;min-height:44px;display:flex;align-items:center;padding:0 14px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13.5px;color:var(--mut);white-space:nowrap;overflow:hidden}
+.ihs-send{width:42px;height:42px;flex:none;border-radius:10px;border:none;background:#7c3aed;color:#fff;display:grid;place-items:center}
+.ihs-chr{background:var(--raised);border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.ihs-tabs{display:flex;gap:16px;padding:0 16px;border-bottom:1px solid var(--line)}
+.ihs-tabs a{display:inline-flex;align-items:center;min-height:46px;font-size:13.5px;font-weight:600;color:var(--body);border-bottom:2px solid transparent;white-space:nowrap}
+.ihs-tabs a[aria-current]{color:var(--vtx);font-weight:700;border-bottom-color:var(--vi)}
+.ihs-prop{border:1.5px dashed var(--vi);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:9px;max-width:560px}
+/* module grid + tile */
+.ihs-mh{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ihs-mh h2{font-size:16px;font-weight:800;letter-spacing:-.02em}
+.ihs-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:stretch}
+.ihs-grid.ihs-g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ihs-grid.ihs-g1{grid-template-columns:minmax(0,1fr)}
+.ihs-tile{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ihs-th{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ihs-th h3{flex:1;min-width:0;font-size:14px;font-weight:800;letter-spacing:-.01em}
+.ihs-tn{font-size:12px;color:var(--mut);text-align:right}
+.ihs-tf{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ihs-sub{font-size:12px;color:var(--mut);line-height:1.45}
+/* Needs you rows */
+.ihs-nr{display:grid;grid-template-columns:34px minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.ihs-nr.ihs-half{grid-template-columns:30px minmax(0,1fr) auto}
+.ihs-gl{width:32px;height:32px;border-radius:9px;background:var(--chip);border:1px solid var(--line);display:grid;place-items:center;color:var(--body)}
+.ihs-nr.ihs-top .ihs-gl{background:var(--lav);border-color:var(--lavE);color:var(--vtx)}
+.ihs-ns{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ihs-ns b{font-size:13.5px;font-weight:700;line-height:1.35}
+.ihs-ns span{font-size:12px;color:var(--mut);line-height:1.4}
+.ihs-nd{font:500 12px var(--mo);color:var(--body);white-space:nowrap;text-align:right}
+.ihs-od{display:inline-flex;align-items:center;gap:5px;font:700 12px var(--sg);color:var(--ink);white-space:nowrap}
+.ihs-od svg{color:var(--err)}
+/* state words (D5129): glyph + word, never colour alone */
+.ihs-st{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:1px 8px;border-radius:6px;font-size:11.5px;font-weight:600;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--body)}
+.ihs-st.ihs-ok{background:var(--posT);border-color:var(--posE);color:var(--pos)}
+.ihs-st.ihs-out{border-style:solid;border-color:var(--ink);color:var(--ink)}
+.ihs-st.ihs-nst{border-style:dashed;color:var(--mut);background:transparent}
+.ihs-st.ihs-nrc{border-style:dotted;color:var(--mut);background:var(--chip)}
+.ihs-st.ihs-un{border-color:var(--line2);color:var(--ink);background:var(--raised)}
+.ihs-st.ihs-wh{color:var(--mut);background:var(--chip)}
+.ihs-nrec{font-size:12.5px;font-weight:600;color:var(--mut)}
+.ihs-unr{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.5;color:var(--body)}
+.ihs-unr svg{color:var(--err);flex:none;margin-top:2px}
+/* funds */
+.ihs-tb{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.ihs-tb td,.ihs-tb th{color:inherit}
+.ihs-tb thead th{color:var(--mut)}
+.ihs-tb th{font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;text-align:right;padding:0 10px 8px;white-space:nowrap}
+.ihs-tb th:first-child,.ihs-tb td:first-child{text-align:left;padding-left:0}
+.ihs-tb td{padding:11px 10px;border-top:1px solid var(--line);text-align:right;font-family:var(--mo);font-size:12.5px;white-space:nowrap;vertical-align:middle}
+.ihs-tb td:first-child{font-family:var(--sg);font-size:13.5px;font-weight:700}
+.ihs-tb tfoot td{font-weight:700;border-top:1.5px solid var(--line2)}
+.ihs-bar{position:relative;height:8px;border-radius:999px;background:var(--chip);border:1px solid var(--line2);overflow:hidden;min-width:120px}
+.ihs-bar i{position:absolute;left:0;top:0;bottom:0;background:var(--lavE);border-right:2px solid var(--vi)}
+.ihs-bar b{position:absolute;left:0;top:0;bottom:0;background:var(--vi)}
+.ihs-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mut)}
+.ihs-lg i{width:12px;height:8px;border-radius:2px;display:inline-block}
+/* figures */
+.ihs-figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ihs-fig{padding:10px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ihs-fig .ihs-l{font-size:11.5px;color:var(--mut)}
+.ihs-fig .ihs-v{font:600 20px var(--mo);line-height:28px}
+.ihs-fig .ihs-r{font-size:12px;font-weight:600;color:var(--mut);line-height:1.35}
+.ihs-kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.ihs-kv span:last-child{font:600 12.5px var(--mo)}
+/* fit */
+.ihs-fr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.ihs-fr .ihs-co{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ihs-fr .ihs-co b{font-size:13.5px}
+.ihs-fchips{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:5px}
+.ihs-tip{position:absolute;z-index:4;width:250px;padding:8px 11px;border-radius:8px;background:#18181b;border:1px solid #374151;color:#fff;font-size:12px;line-height:1.45;box-shadow:0 8px 20px rgba(24,24,27,.25)}
+/* arrivals */
+.ihs-ar{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.ihs-ar .ihs-gl{width:28px;height:28px;border-radius:8px}
+/* skeleton */
+.ihs-sk{display:block;height:12px;border-radius:6px;background:var(--skel)}
+/* module map */
+.ihs-scrim{position:absolute;inset:0;background:var(--scrim);z-index:6}
+.ihs-modal{position:absolute;z-index:7;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.3);display:flex;flex-direction:column;overflow:hidden}
+.ihs-mc{border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--card);min-width:0}
+.ihs-mc b{font-size:13px}
+.ihs-pv{height:40px;border-radius:8px;background:var(--lav);padding:7px 9px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.ihs-pv i{height:4px;border-radius:3px;background:var(--vi);opacity:.55;display:block}
+.ihs-added{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:0 10px;border-radius:8px;background:var(--posT);color:var(--pos);font-size:12.5px;font-weight:700;align-self:flex-start}
+/* phone */
+.ihs-ph{width:390px;height:844px;overflow:hidden;position:relative;display:flex;flex-direction:column;background:var(--bg)}
+.ihs-pht{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 4px;background:var(--card);border-bottom:1px solid var(--line)}
+.ihs-t44{width:44px;height:44px;display:grid;place-items:center;border:none;background:transparent;color:var(--body);border-radius:10px;flex:none}
+.ihs-phb{flex:1;padding:14px 14px 20px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ihs-card44{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 12px;display:flex;align-items:center;gap:10px}
+.ihs-sheet{position:absolute;left:0;right:0;bottom:0;z-index:7;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:10px 18px 22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -12px 32px rgba(24,24,27,.22)}
+.ihs-grab{width:40px;height:4px;border-radius:999px;background:var(--line2);align-self:center}
+/* docs */
+.ihs-doc{width:1200px;padding:36px 44px;display:flex;flex-direction:column;gap:20px;background:var(--card)}
+.ihs-doc h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.ihs-doc h3{font-size:13.5px;font-weight:800}
+.ihs-dl{display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+.ihs-dl ul{display:flex;flex-direction:column;gap:6px}
+.ihs-dl li{font-size:12.5px;line-height:1.5;color:var(--body);padding-left:12px;position:relative}
+.ihs-dl li:before{content:'·';position:absolute;left:2px;color:var(--mut)}
+.ihs-code{font:500 11.5px var(--mo);background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ihs-crop{padding:24px;display:flex;flex-direction:column;gap:14px}
+.ihs-lab{font:700 10.5px var(--mo);letter-spacing:.1em;text-transform:uppercase;color:var(--mut)}
+.ihs-ebar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 14px 36px rgba(24,24,27,.14)}
+.ihs-phb>*{flex:none}
+/* SFD · Studio Home Founder (#8729) — active venture and next action. Reuses ihs_extra.css (the Studio frame); every new class is sfd- prefixed. */
+.sfd-sw{width:100%;min-height:56px;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);text-align:left;margin-bottom:10px;font-family:var(--sg)}
+.sfd-sw .sfd-swt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.sfd-sw .sfd-swt b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sfd-sw .sfd-swt span{font-size:11px;color:var(--mut)}
+.sfd-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.sfd-hd h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.sfd-ph{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--lav);color:var(--vtx);border:1px solid var(--lavE);white-space:nowrap}
+.sfd-next{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;position:relative}
+.sfd-next h2{font-size:16px;font-weight:800;letter-spacing:-.01em}
+.sfd-task{display:flex;align-items:center;gap:16px;padding:14px 16px;border-radius:12px;background:var(--lav);border:1px solid var(--lavE)}
+.sfd-task .sfd-tt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.sfd-task .sfd-tt b{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.sfd-row{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 2px;border-top:1px solid var(--line)}
+.sfd-row .sfd-tt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.sfd-row .sfd-tt b{font-size:13.5px;font-weight:700}
+.sfd-row .sfd-tt span{font-size:12px;color:var(--mut)}
+.sfd-where{font:700 10.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--vtx)}
+.sfd-focus{outline:3px solid var(--vi)!important;outline-offset:3px}
+.sfd-ann{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:1px 7px;border-radius:5px;background:#18181b;color:#fff;font:700 10.5px var(--mo);white-space:nowrap;vertical-align:middle}
+.sfd-dark .sfd-ann{background:#e5e7eb;color:#0b1220}
+.sfd-href{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:1px 7px;border-radius:5px;border:1px dashed var(--line2);background:var(--raised);color:var(--body);font:600 10.5px var(--mo);white-space:nowrap}
+.sfd-href.sfd-bad{border:1.5px solid var(--ink);color:var(--ink)}
+.sfd-href.sfd-good{border:1.5px solid var(--posE);background:var(--posT);color:var(--pos)}
+.sfd-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;position:relative}
+.sfd-strip.sfd-s3{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sfd-sc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.sfd-sc .sfd-k{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.sfd-sc .sfd-v{font:600 20px var(--mo);line-height:26px}
+.sfd-sc .sfd-s{font-size:11px;color:var(--mut);line-height:1.35}
+.sfd-nrw{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--mut);line-height:26px}
+.sfd-ladder{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sfd-ladder li{display:flex;flex-direction:column;gap:3px;font-size:11.5px}
+.sfd-ladder i{display:block;height:6px;border-radius:999px;background:var(--chip);border:1px solid var(--line2)}
+.sfd-q{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:12.5px}
+.sfd-amb{border:1px solid var(--amE);background:var(--amBg);color:var(--amT);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.sfd-amb b{font-weight:800}
+.sfd-choice{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--ink);text-align:left;width:100%;font-family:var(--sg)}
+.sfd-choice .sfd-tt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.sfd-choice .sfd-tt b{font-size:14px}
+.sfd-choice .sfd-tt span{font-size:12px;color:var(--mut)}
+.sfd-dlg{position:absolute;z-index:7;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.3);display:flex;flex-direction:column;overflow:hidden}
+.sfd-fl{display:flex;flex-direction:column;gap:6px}
+.sfd-fl>label{font-size:12.5px;font-weight:700}
+.sfd-in{min-height:44px;display:flex;align-items:center;padding:0 12px;border:1px solid var(--line2);border-radius:10px;background:var(--card);font-size:13.5px;color:var(--ink)}
+.sfd-in.sfd-ph0{color:var(--mut)}
+.sfd-chs{display:flex;flex-wrap:wrap;gap:6px}
+.sfd-ch{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:var(--card);font-size:12.5px;font-weight:600;color:var(--body)}
+.sfd-ch[aria-checked=true]{border-color:var(--vi);background:var(--lav);color:var(--vtx)}
+.sfd-tbl{width:100%;border-collapse:collapse;font-size:12.5px;color:var(--ink)}
+.sfd-tbl th{font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mut);text-align:left;padding:0 10px 8px 0;vertical-align:bottom}
+.sfd-tbl td{padding:10px 10px 10px 0;border-top:1px solid var(--line);vertical-align:top;line-height:1.45}
+.sfd-tbl td:first-child{font-weight:700;width:170px}
+.sfd-tbl td .sfd-href{white-space:normal;word-break:break-all}
+.sfd-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.sfd-step{border:1px solid var(--line);border-radius:12px;background:var(--raised);padding:12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.sfd-num{width:24px;height:24px;border-radius:999px;background:var(--vi);color:#fff;display:grid;place-items:center;font:700 12px var(--mo);flex:none}
+.sfd-fold{position:absolute;left:0;right:0;border-top:2px dashed #b91c1c;z-index:5}
+.sfd-fold span{position:absolute;right:8px;top:-22px;font:700 10.5px var(--mo);background:#b91c1c;color:#fff;padding:2px 7px;border-radius:5px}
+.sfd-tree{font:500 12px var(--mo);line-height:1.75;color:var(--body);background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:12px 14px;white-space:pre}
+.sfd-ebar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:12px;background:var(--card);border:1px solid var(--line);box-shadow:0 14px 36px rgba(24,24,27,.14)}
+.sfd-hdl{width:32px;height:32px;border-radius:8px;border:1px solid var(--line2);display:grid;place-items:center;color:var(--body);background:var(--card)}
+.sfd-lift{box-shadow:0 0 0 3px var(--vi),0 16px 36px rgba(24,24,27,.22)!important}
+.sfd-sz{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+.sfd-sz span{min-width:34px;min-height:30px;display:grid;place-items:center;font:600 11px var(--mo);color:var(--body);border-left:1px solid var(--line2)}
+.sfd-sz span:first-child{border-left:none}
+.sfd-sz span[aria-checked=true]{background:var(--lav);color:var(--vtx)}
+.sfd-eadrow{display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 12px;border:1px solid var(--lavE);border-radius:12px;background:var(--card)}
+.sfd-s3 .sfd-nrw{line-height:1.3;font-size:11.5px;align-items:flex-start;padding-top:3px}
+.sfd-s3 .sfd-nrw svg{margin-top:2px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "SFD03", "options": ["SFD00", "SFD01", "SFD02", "SFD03", "SFD15", "SFD04", "SFD05", "SFD05B", "SFD06", "SFD07", "SFD08", "SFD09", "SFD10", "SFD11", "SFD12A", "SFD12B", "SFD12C", "SFD12D", "SFD12E", "SFD12F", "SFD12G", "SFD13", "SFD14", "SFD16"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SFD03';
+    const J = a => a.join('');
+
+    /* ---------- icons (monochrome, aria-hidden) ---------- */
+    const SV = (d, z, sw) => '<svg aria-hidden="true" width="' + (z || 16) + '" height="' + (z || 16) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (sw || 1.8) + '" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex:none">' + d + '</svg>';
+    const I = {
+      call: SV('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.1M17.5 14.5v.1"/>'),
+      notice: SV('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'),
+      bell: SV('<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/>'),
+      pen: SV('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>'),
+      book: SV('<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10"/>'),
+      shield: SV('<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/>'),
+      folder: SV('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+      update: SV('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>'),
+      report: SV('<path d="M5 3h10l4 4v14H5z"/><path d="M9 17v-4M12 17v-7M15 17v-2"/>'),
+      deals: SV('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5h6v2M3 12h18"/>'),
+      cal: SV('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'),
+      gear: SV('<path d="M3 6h10M17 6h4M3 18h4M11 18h10"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="18" r="2"/>', 15),
+      lock: SV('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', 13),
+      err: SV('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v6M12 16.5v.1"/>', 15, 2),
+      warn: SV('<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.2v.1"/>', 14, 2),
+      send: SV('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>', 18),
+      search: SV('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', 14),
+      menu: SV('<path d="M4 7h16M4 12h16M4 17h16"/>', 20),
+      chev: SV('<path d="M9 6l6 6-6 6"/>', 14),
+      x: SV('<path d="M6 6l12 12M18 6L6 18"/>', 18),
+      max: SV('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 17),
+      tkt: SV('<path d="M3 8V6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5V8a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 13.5V12a2 2 0 0 0 0-4z"/>', 16)
+    };
+    /* state glyphs (12px) — Platform States D5129: glyph + word, never colour alone */
+    const G = {
+      ok: SV('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 12, 2.6),
+      out: SV('<path d="M6 6l12 12M18 6L6 18"/>', 12, 2.6),
+      ns: SV('<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/>', 12, 2),
+      nr: SV('<circle cx="12" cy="12" r="8"/><path d="M8.5 12h7"/>', 12, 2),
+      un: SV('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 20L20 4"/>', 12, 2),
+      lk: SV('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', 12, 2),
+      tl: SV('<path d="M12 4v13M6.5 11.5L12 17l5.5-5.5"/><path d="M5 21h14"/>', 12, 2.2)
+    };
+    const ST = { Match: ['ihs-ok', G.ok], Outside: ['ihs-out', G.out], 'Not set': ['ihs-nst', G.ns], 'Not recorded': ['ihs-nrc', G.nr], Unreadable: ['ihs-un', G.un], Withheld: ['ihs-wh', G.lk] };
+    const st = (w, pre, title) => '<span class="ihs-st ' + ST[w][0] + '"' + (title ? ' title="' + title + '"' : '') + '>' + ST[w][1] + (pre ? pre + ' · ' : '') + w + '</span>';
+    const BE = t => '<span class="ihs-be" title="Annotation: backend required (not product copy)">◇ ' + t + '</span>';
+    const POL = t => '<span class="ihs-pol" title="Annotation: owner decision (not product copy)">⚑ ' + t + '</span>';
+    const btn = (t, k, ex) => '<button type="button" class="ihs-btn' + (k ? ' ' + k.split(' ').map(x => 'ihs-' + x).join(' ') : '') + '"' + (ex || '') + '>' + t + '</button>';
+    const lnk = t => '<a href="#" class="ihs-lnk">' + t + '</a>';
+    const pill = (t, k) => '<span class="ihs-pill' + (k ? ' ihs-' + k : '') + '">' + t + '</span>';
+    const mo = t => '<span class="ihs-mo">' + t + '</span>';
+    const EAD = z => '<span class="ihs-ead" aria-hidden="true" style="width:' + (z || 36) + 'px;height:' + (z || 36) + 'px">E</span>';
+    const SK = (w, h) => '<span class="ihs-sk" style="width:' + w + ';height:' + (h || 12) + 'px"></span>';
+    const UNR = (t, retry) => '<div role="status" class="ihs-unr">' + I.err + '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start"><span>' + t + '</span>' + (retry === false ? '' : btn('Try again', 'sm')) + '</div></div>';
+    const TILE = (t, span, body, o) => {
+      o = o || {};
+      return '<article class="ihs-tile" aria-label="' + t + '" style="grid-column:span ' + span + (o.st ? ';' + o.st : '') + '"><div class="ihs-th"><h3>' + t + '</h3>' + (o.tag || '') + (o.note ? '<span class="ihs-tn">' + o.note + '</span>' : '') + '</div>' + body + (o.foot === false ? '' : '<div class="ihs-tf">' + (o.foot || '<span></span>') + (o.open === false ? '' : lnk(o.open || 'Open ›')) + '</div>') + '</article>';
+    };
+
+    /* ---------- SFD · Founder Studio home (#8729): the active venture and its next action ----------
+       Sample (fictional, the same on every board). Today Thu 26 Nov 2026. Founder [Maya Ruiz], Studio access,
+       not in a cohort. Two standalone projects: Atlas Orchard (id [12], first in the projects list) and
+       [Kiln Ledger] (id [19]). Atlas Orchard: Solution design empty (next "Add feature"), Product roadmap
+       [5] items (Now [1] · Next [3] · Later [1]), Eadwyn [18] of [24] answered, [6] waiting, profile [72%],
+       venture progress [40%], readiness [61]. Kiln Ledger: [4] features, [2] unlinked. */
+    const TODAY = 'Thu, 26 Nov 2026';
+    const VA = { n: 'Atlas Orchard', id: '[12]', ini: 'AO' };
+    const VB = { n: '[Kiln Ledger]', id: '[19]', ini: 'KL' };
+    const ANN = t => `<span class="sfd-ann">${t}</span>`;
+    const HREF = (t, k) => `<span class="sfd-href${k ? ' sfd-' + k : ''}">${t}</span>`;
+    const NRW = r => `<span class="sfd-nrw"${r ? ' title="' + r + '"' : ''}>${G.nr}Not recorded</span>`;
+    const UNW = `<span class="sfd-nrw">${G.un}Unavailable</span>`;
+    const FOC = h => h.replace('class="ihs-btn', 'class="sfd-focus ihs-btn');
+    const LOCK = `<span class="ihs-lock" title="Fixed: always on your Studio" aria-label="Fixed: always on your Studio">${I.lock}</span>`;
+
+    /* ---------- shell (#3704): project switcher top-left, union sidebar, Portfolio in the Account menu ---------- */
+    const NAV = ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const SW = o => {
+      o = o || {};
+      if (o.none) return `<button type="button" class="sfd-sw" aria-haspopup="listbox" aria-label="Switch company or project"><span class="ihs-sq">MR</span><span class="sfd-swt"><b>[Maya Ruiz]</b><span>No project yet</span></span><span aria-hidden="true" class="ihs-mu">▾</span></button>`;
+      const v = o.v || VA;
+      return `<button type="button" class="sfd-sw" aria-haspopup="listbox" aria-expanded="${o.open ? 'true' : 'false'}" aria-label="Switch company or project: ${v.n}"><span class="ihs-sq">${v.ini}</span><span class="sfd-swt"><b>${v.n}</b><span>Project · Standalone</span></span><span aria-hidden="true" class="ihs-mu">▾</span></button>`;
+    };
+    const side = o => `<nav class="ihs-side" aria-label="Main">${SW(o)}${J(NAV.map((t, i) => (t === 'Network' ? '<div class="ihs-sep"></div>' : '') + `<a href="#" class="ihs-nav"${i === (o.nav === undefined ? 0 : o.nav) ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const top = () => `<header class="ihs-top"><div class="ihs-brand"><span class="ihs-mark" aria-hidden="true">A</span>Axal VC</div><div class="ihs-search">${I.search}Search Axal VC</div><div style="flex:1"></div><button type="button" class="ihs-ib" aria-label="Notifications, [2] unread">${I.bell}</button><span role="button" tabindex="0" class="ihs-avt" aria-haspopup="menu" aria-label="Account menu: Portfolio, Companies, Licences, Settings">MR</span></header>`;
+    const page = (body, o) => {
+      o = o || {};
+      return `<div class="ihs-cv${o.dark ? ' ihs-dark sfd-dark' : ''}" style="width:1440px"><div class="ihs-shell">${top()}<div class="ihs-row">${side(o)}<main class="ihs-main"${o.mh ? ' style="min-height:' + o.mh + 'px"' : ''}>${body}</main></div><footer class="ihs-foot"><span>© 2026 Axal VC</span><a href="#" class="ihs-mu">Terms</a><a href="#" class="ihs-mu">Privacy</a><a href="#" class="ihs-mu">Status</a></footer></div>${o.over || ''}</div>`;
+    };
+    const crop = (inner, w, o) => { o = o || {}; return `<div class="ihs-cv${o.dark ? ' ihs-dark sfd-dark' : ''}" style="width:${w}px"><div class="ihs-crop">${inner}</div></div>`; };
+    const LAB = t => `<span class="ihs-lab">${t}</span>`;
+    const COL = (t, inner, span) => `<div style="${span ? 'grid-column:span ' + span + ';' : ''}display:flex;flex-direction:column;gap:8px;min-width:0">${LAB(t)}${inner}</div>`;
+
+    /* ---------- proposed header: the venture is the page's h1 ---------- */
+    const HEAD = o => {
+      o = o || {};
+      const v = o.v || VA;
+      const h1 = o.first ? 'Studio' : o.unav ? 'Venture not available' : v.n;
+      const phase = o.unav ? '' : `<span class="sfd-ph">Independent · not in a cohort</span>`;
+      const sub = o.first ? '[Maya Ruiz] · Studio access: no venture yet. Start one, or talk it through with Eadwyn first.'
+        : o.unav ? '[Maya Ruiz] · Studio access: the link names a venture you cannot open.'
+          : '[Maya Ruiz] · Studio access: everything you have built across the platform, what it unlocked, and what to do next.';
+      return `<div class="sfd-hd"><div style="min-width:0"><span class="ihs-ey">Studio${o.first || o.unav ? '' : ' · your venture'}</span><div class="ihs-ttl" style="margin-top:4px"><h1>${h1}</h1>${phase}${o.ann ? ANN('h1 · first heading') : ''}</div><p class="ihs-purp">${sub}</p></div><div class="ihs-hr"><span class="ihs-date">${TODAY}</span>${o.first ? '' : btn('Switch venture', '', ' aria-haspopup="listbox"')}${o.unav ? '' : btn(I.gear + 'Customise')}</div></div>`;
+    };
+    /* observed header (FounderStudioBody): h2 "Studio", the phase badge, the company line */
+    const BHEAD = () => `<div class="sfd-hd"><div><div class="ihs-ttl"><h2 style="font-size:24px;font-weight:800;letter-spacing:-.02em">Studio</h2><span class="sfd-ph">Independent · not in a cohort</span>${ANN('h2 · no h1 on the page')}</div><p class="ihs-purp">Atlas Orchard · [Maya Ruiz] · Studio access: everything you have built across the platform, what it unlocked, and what to do next.</p></div><div class="ihs-hr">${btn(I.gear + 'Customise')}</div></div>`;
+
+    /* ---------- the Next card (proposed): the placed modules' own next actions, in layout order ---------- */
+    const NEXT = o => {
+      o = o || {};
+      const v = o.v || VA;
+      const hd = (t, note) => `<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><h2>${t}</h2>${o.ann ? ANN('h2') : ''}<span class="ihs-sub" style="margin-left:auto">${note || 'From your placed modules, in layout order'}</span>${o.pol ? POL('Q2 · A layout order') : ''}</div>`;
+      if (o.st === 'load') return `<section class="sfd-next" aria-busy="true" aria-label="Next for ${v.n}">${hd('Next for ' + v.n, 'Reading your modules…')}<div class="sfd-task" style="background:var(--raised);border-color:var(--line)"><div class="sfd-tt">${SK('22%', 10)}${SK('46%', 16)}${SK('64%')}</div>${SK('120px', 40)}</div>${SK('70%')}</section>`;
+      if (o.st === 'unr') return `<section class="sfd-next" aria-label="Next for ${v.n}">${hd('Next for ' + v.n, ' ')}${UNR('Your next steps could not be read. This is not a sign that nothing is waiting. The venture is still ' + v.n + '.')}<div class="sfd-row"><div class="sfd-tt"><b>Open Build for ${v.n}</b><span>Every module page still works</span></div>${lnk('Open Build ›')}</div></section>`;
+      if (o.st === 'none') return `<section class="sfd-next" aria-label="Next for ${v.n}">${hd('Next for ' + v.n)}<div class="sfd-task" style="background:var(--raised);border-color:var(--line)"><div class="sfd-tt"><span class="sfd-where">Read Thu 26 Nov · none waiting</span><b style="font-size:14px">None of your placed modules has a next step</b><span class="ihs-sub">Each module was read and named nothing to do. Add a module, or open a cycle.</span></div>${btn(I.gear + 'Add modules')}</div></section>`;
+      if (o.first) return `<section class="sfd-next" aria-label="Start your first venture">${hd('Start your first venture', 'Nothing is recorded until a venture exists')}<div class="sfd-task"><div class="sfd-tt"><span class="sfd-where">Build</span><b>Create your startup</b><span class="ihs-sub">Name it and pick its stage. Studio then shows its modules and next steps.</span></div>${btn('Create your startup', 'p')}</div><div class="sfd-row"><div class="sfd-tt"><b>Talk it through with Eadwyn first</b><span>The founder interview below works without a venture</span></div>${lnk('Go to Eadwyn ›')}</div></section>`;
+      const task = v === VB
+        ? `<div class="sfd-task"><div class="sfd-tt"><span class="sfd-where">Build · Solution design</span><b>Link 2 features to a pain theme or hypothesis</b><span class="ihs-sub">[4] features · [2] linked · [2] unlinked</span></div>${btn('Link features', 'p', ' aria-label="Link features in ' + v.n + '"')}</div>`
+        : `<div class="sfd-task"><div class="sfd-tt"><span class="sfd-where">Build · Solution design</span><b>Add feature</b><span class="ihs-sub">No features yet. Add the first, with the pain theme it answers.</span></div>${(o.f ? FOC : x => x)(btn('Add feature', 'p', ' aria-label="Add feature to ' + v.n + '"'))}</div>`;
+      const ann = o.href ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${HREF('/build/solution-design/new?project_id=' + v.id + ' · state.under', 'good')}<span class="ihs-sub">Opens the dialog over Solution design; Cancel and Back return here.</span></div>` : '';
+      const rows = `<div class="sfd-row"><div class="sfd-tt"><b>Move the next planned item into Now</b><span>Build · Product roadmap · Now [1] · Next [3] · Later [1]</span></div>${lnk('Open roadmap ›')}</div><div class="sfd-row"><div class="sfd-tt"><b>[6] questions are waiting on you</b><span>Eadwyn · answer them in the chat below</span></div>${lnk('Answer ›')}</div>`;
+      return `<section class="sfd-next" aria-labelledby="sfd-nx">${hd('<span id="sfd-nx">Next for ' + v.n + '</span>')}${task}${ann}${o.short ? '' : rows}</section>`;
+    };
+
+    /* ---------- Eadwyn (the founder interview, StudioInterview): kept, below the venture work ---------- */
+    const CHAT = o => {
+      o = o || {};
+      const v = o.v || VA;
+      const hd = `<div class="ihs-chh">${EAD()}<div style="flex:1;min-width:0;display:flex;flex-direction:column"><b style="font-size:15.5px">Eadwyn AI</b><span style="font-size:12.5px;color:var(--body)">${o.first ? '[4]/[24] answered' : '[18]/[24] answered'}</span></div>${o.ann ? ANN('h2 · Eadwyn AI') : ''}<a href="#" class="ihs-lnk" style="gap:7px;font-size:13.5px">${I.tkt}Open a ticket</a><button type="button" class="ihs-t44" aria-label="Maximize" style="width:36px;height:36px">${I.max}</button></div>`;
+      const thr = `<div class="ihs-thr"${o.short ? ' style="padding:14px 22px"' : ''}><span class="ihs-ey">Today${o.first ? '' : o.unav ? '' : ' · ' + v.n}</span><div class="ihs-bub">Picking up where we left off.</div><div class="ihs-bub">${o.first ? 'What problem do you want to work on first?' : 'Which customer problem came up most in your interviews?'}</div>${o.short ? '' : `<div class="ihs-bub ihs-u">${o.first ? '[How growers track yields.]' : '[Growers still keep yield records on paper.]'}</div>`}</div>`;
+      const left = `<div class="ihs-chl"${o.short ? ' style="min-height:0"' : ''}>${thr}<div class="ihs-comp"><div class="ihs-inp">Type your answer, or “explain …”</div><button type="button" class="ihs-send" aria-label="Send">${I.send}</button></div></div>`;
+      if (o.narrow) return `<section class="ihs-chat" aria-label="Eadwyn AI">${hd}${left}</section>`;
+      const right = `<div class="ihs-chr"><nav class="ihs-tabs" aria-label="Eadwyn AI">${J(['Conversation', 'Tasks', 'My tickets'].map((t, i) => `<a href="#"${i === 0 ? ' aria-current="page"' : ''}>${t}</a>`))}</nav><div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px"><span class="ihs-ey">Waiting on you · ${o.first ? '[20]' : '[6]'}</span>${J((o.first ? ['[Which problem keeps you up at night?]', '[Who has that problem worst?]'] : ['[Who pays for yield records today?]', '[What would make a grower switch from paper?]']).map(q => `<div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--card);font-size:12.5px;font-weight:600">${q}</div>`))}</div></div>`;
+      return `<section class="ihs-chat" aria-label="Eadwyn AI">${hd}<div class="ihs-chg">${left}${right}</div></section>`;
+    };
+    const EROW = o => { o = o || {}; return `<section class="sfd-eadrow" aria-label="Eadwyn AI">${EAD(34)}<div class="sfd-tt" style="flex:1;min-width:0;display:flex;flex-direction:column"><b style="font-size:14.5px">Eadwyn AI</b><span class="ihs-sub">${o.first ? 'Today · no venture yet · [20] questions waiting' : o.unav ? 'Today · [6] questions waiting' : 'Today · Atlas Orchard · [6] questions waiting'}</span></div>${btn('Open', 'sm', ' aria-expanded="false" style="min-height:44px"')}</section>`; };
+
+    /* ---------- the fixed strip and profile (D1419, locked) ---------- */
+    const STRIP = {
+      ret: [['Venture progress', '[40%]', 'Self-directed'], ['Profile complete', '[72%]', '[3] gaps'], ['Questions answered', '[18]', '[6] waiting'], ['Artifacts active', null, 'Lab artifacts unlock week by week for cohort members.'], ['Tasks done', null, 'Tasks are the Lab’s milestones, recorded inside a cohort.'], ['Readiness', '[61]', '[Promising]']],
+      first: [['Venture progress', null, 'No company record yet.'], ['Profile complete', '[35%]', '[6] gaps'], ['Questions answered', '[4]', '[20] waiting'], ['Artifacts active', null, 'Lab artifacts unlock week by week for cohort members.'], ['Tasks done', null, 'Tasks are the Lab’s milestones, recorded inside a cohort.'], ['Readiness', null, 'No company record yet, so nothing has been scored.']],
+      unav: [['Venture progress', 'U', 'This venture is not available to your account.'], ['Profile complete', '[72%]', '[3] gaps'], ['Questions answered', '[18]', '[6] waiting'], ['Artifacts active', null, 'Lab artifacts unlock week by week for cohort members.'], ['Tasks done', null, 'Tasks are the Lab’s milestones, recorded inside a cohort.'], ['Readiness', 'U', 'This venture is not available to your account.']]
+    };
+    const strip = o => {
+      o = o || {};
+      const s = STRIP[o.k || 'ret'];
+      return `<div style="position:relative;padding-right:22px">${LOCK.replace('class="ihs-lock"', 'class="ihs-lock" style="top:4px;right:0"')}<ul class="sfd-strip${o.ph ? ' sfd-s3' : ''}" aria-label="Summary">${J(s.map(t => `<li class="sfd-sc"><span class="sfd-k">${t[0]}</span>${t[1] === null ? NRW(t[2]) : t[1] === 'U' ? UNW : `<span class="sfd-v">${t[1]}</span>`}${t[1] === null || t[1] === 'U' ? (o.ph ? '' : `<span class="sfd-s">${t[2]}</span>`) : `<span class="sfd-s">${t[2]}</span>`}</li>`))}</ul></div>`;
+    };
+    const PROF = o => {
+      o = o || {};
+      const dims = [['Problem', 'Confident', 82], ['Customer', 'Some gaps', 64], ['Market', 'Early', 38]];
+      const pct = o.k === 'first' ? '[35%]' : '[72%]';
+      return `<section class="ihs-tile" aria-label="Your founder profile" style="padding:14px 16px">${LOCK}<h3 style="font-size:14px;font-weight:800">Your founder profile</h3><div style="display:grid;grid-template-columns:${o.ph ? '1fr' : '150px minmax(0,1fr) minmax(0,1fr)'};gap:14px"><div><span class="ihs-mo" style="font-size:26px;font-weight:600">${pct}</span><p class="ihs-sub">complete</p></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><span class="ihs-av" aria-hidden="true" style="border-color:#7c3aed">MR</span>${pill('[Builder-operator] archetype', 'lv')}</div><div><span class="ihs-ey">Confidence by dimension</span>${J(dims.map(d => `<div style="margin-top:6px;font-size:12px"><span style="display:flex;justify-content:space-between"><span>${d[0]}</span><span class="ihs-mu">${d[1]}</span></span><span style="display:block;height:6px;border-radius:999px;background:var(--chip);margin-top:3px"><span style="display:block;height:6px;border-radius:999px;background:var(--vi);width:${d[2]}%"></span></span></div>`))}</div></div></section>`;
+    };
+
+    /* ---------- the module tiles (SM7 frame), founder catalogue ---------- */
+    const T_PROG = () => TILE('Company progress', 6, `<ol class="sfd-ladder" aria-label="Stages">${J(['[Problem]', '[Customer]', '[Solution]', '[Company]'].map(n => `<li><i></i><b>${n}</b><span class="ihs-mu">Not started</span></li>`))}</ol><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><span class="ihs-ey">Shipped</span><p class="ihs-sub" style="margin-top:4px">Nothing shipped yet.</p></div><div><span class="ihs-ey">Still open</span><p class="ihs-sub" style="margin-top:4px">Open items are the Lab’s weekly deliverables, inside a cohort.</p></div></div><p class="ihs-sub"><b style="color:var(--ink)">Gate</b> · No gates outside a cohort: you choose the order.</p>`, { note: 'Self-paced: no cohort clock', open: false });
+    const T_Q = o => TILE('Eadwyn’s questions', 3, `<div style="display:flex;flex-direction:column;gap:6px">${J([['[Who pays for yield records today?]', 1], ['[What would make a grower switch from paper?]'], ['[How many growers did you interview this month?]']].map(q => `<div class="sfd-q"><span>${q[0]}${q[1] ? ' ' + pill('High impact', 'am') : ''}</span>${lnk('Answer now')}</div>`))}</div>`, { note: '[18] answered · [6] open', open: false });
+    const T_SOL = o => {
+      o = o || {};
+      const v = o.v || VA;
+      let body;
+      if (o.st === 'nr') body = `<div style="display:flex;flex-direction:column;gap:4px">${NRW()}<span class="ihs-sub">No company record yet, so nothing is recorded for this module.</span></div>`;
+      else if (o.st === 'unr') body = `<p class="ihs-unr" role="alert">${I.err}<span>Solution design could not be read · </span>${btn('Try again', 'sm')}</p>`;
+      else if (v === VB) body = `<div style="display:flex;flex-direction:column;gap:8px"><div class="ihs-bar" role="img" aria-label="2 of 4 features linked"><b style="width:50%"></b></div><span class="ihs-sub">[4] features · [2] linked · [2] unlinked</span><a href="#" class="ihs-lnk">Link 2 features to a pain theme or hypothesis ›</a>${o.ann ? HREF('/build/solution-design?project=' + v.id) : ''}</div>`;
+      else body = `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><span class="ihs-sub">No features yet. Linked and unlinked features appear here.</span><a href="#" class="ihs-lnk">Add feature ›</a>${o.ann === 'today' ? HREF('/build/solution-design?project=' + v.id + '&amp;add=1') : o.ann === 'new' ? HREF('/build/solution-design/new?project_id=' + v.id + ' · state.under', 'good') : ''}</div>`;
+      const foot = o.ann === 'today' ? HREF('/build/solution-design', 'bad') : o.ann === 'new' ? HREF('/build/solution-design?project_id=' + v.id, 'good') : '';
+      return TILE('Solution design', 3, body, { foot: foot || undefined, open: o.st === 'nr' ? false : 'Open ›' });
+    };
+    const T_ROAD = o => { o = o || {}; return TILE('Product roadmap', 3, o.st === 'nr' ? `<div style="display:flex;flex-direction:column;gap:4px">${NRW()}<span class="ihs-sub">No company record yet, so nothing is recorded for this module.</span></div>` : `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">${J([['Now', '[1]'], ['Next', '[3]'], ['Later', '[1]']].map(c => `<div class="ihs-fig" style="padding:8px 10px"><span class="ihs-l">${c[0]}</span><span class="ihs-mo" style="font-size:18px;font-weight:600">${c[1]}</span></div>`))}</div><a href="#" class="ihs-lnk">Move the next planned item into Now ›</a>`, { open: o.st === 'nr' ? false : 'Open ›' }); };
+    const T_LAB = () => TILE('Lab tools', 3, `<div style="display:flex;flex-direction:column;gap:4px">${NRW()}<span class="ihs-sub">The Lab’s tools open week by week inside a cohort, and you are not in one.</span></div>`, { open: 'Open the Lab ›' });
+    const T_NS = (t, r) => TILE(t, 3, `<div style="display:flex;flex-direction:column;gap:4px">${NRW()}<span class="ihs-sub">${r}</span></div>`, { open: false });
+    const MODS = o => {
+      o = o || {};
+      return `<div style="display:flex;flex-direction:column;gap:12px"><div class="ihs-mh"><h2>Your modules</h2><span class="ihs-mu" style="font-size:12.5px">[5] of 12 placed</span></div>${GRIDX(T_PROG() + T_Q() + T_SOL({ v: o.v, ann: o.ann, st: o.st }) + T_ROAD({ st: o.st }) + T_LAB() + (o.ns === false ? '' : T_NS('Holding progress', 'Nothing records a blocker or its severity yet, so what is holding progress is not shown rather than guessed.') + T_NS('What this adds up to', 'No read across your completed work is recorded yet, so this summary is not shown rather than invented.')))}</div>`;
+    };
+    const GRIDX = inner => `<div class="ihs-grid">${inner}</div>`;
+    const HOME = o => { o = o || {}; return HEAD(o) + NEXT(o) + CHAT(o) + strip(o) + PROF(o) + MODS({ v: o.v, ann: o.mods }); };
+
+    /* ---------- the Add feature dialog (forms.js buildFeature), unchanged apart from the venture line ---------- */
+    const DLG = o => {
+      o = o || {};
+      const ch = (a, on) => `<div class="sfd-chs" role="radiogroup">${J(a.map((t, i) => `<span role="radio" tabindex="${i === on ? 0 : -1}" class="sfd-ch" aria-checked="${i === on}">${i === on ? G.ok : ''}${t}</span>`))}</div>`;
+      const empty = o.empty;
+      return `<div class="sfd-fl" style="padding:18px 22px 14px;border-bottom:1px solid var(--line);flex-direction:row;align-items:flex-start;gap:10px"><div style="flex:1;display:flex;flex-direction:column;gap:4px"><span class="sfd-where">${o.ann ? '' : ''}Atlas Orchard · Build · Solution design</span><h2 id="sfd-af" style="font-size:18px;font-weight:800">Add feature</h2><p class="ihs-sub" style="font-size:12.5px">A feature answers a pain theme and tests a hypothesis. One that links to nothing is flagged.</p></div><button type="button" class="ihs-t44" aria-label="Close">${I.x}</button></div>
+        <div style="padding:16px 22px;display:flex;flex-direction:column;gap:14px">
+        <div class="sfd-fl"><label>Feature <span class="ihs-mu">· required</span></label><div class="sfd-in${empty ? ' sfd-ph0' : ''}${o.f ? ' sfd-focus' : ''}">${empty ? 'What it lets the customer do' : '[Log a harvest from a photo of the paper sheet]'}</div></div>
+        <div class="sfd-fl"><label>Answers pain theme</label>${ch(['[Yield records kept on paper]', '[Picker shifts arranged by text]', 'None yet'], empty ? 2 : 0)}<span class="ihs-sub">Pick None yet and the feature is flagged until you link it.</span></div>
+        <div class="sfd-fl"><label>Tests hypothesis</label>${ch(['[Growers will log a harvest weekly]', 'None yet'], empty ? 1 : 0)}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px"><div class="sfd-fl"><label>Impact</label>${ch(['Low', 'Medium', 'High'], 2)}</div><div class="sfd-fl"><label>Effort</label>${ch(['Low', 'Medium', 'High'], empty ? 0 : 1)}</div><div class="sfd-fl"><label>Scope</label>${ch(['Core', 'Out of scope'], 0)}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid var(--line)"><span class="ihs-sub" style="flex:1">Counted on Solution design’s chart as linked or unlinked.</span>${btn('Cancel', o.cf ? 'v' : '')}${btn('Add feature', 'p', empty ? ' aria-disabled="true"' : '')}</div>`;
+    };
+    const DLGBOX = (o, style) => `<div class="sfd-dlg" role="dialog" aria-modal="true" aria-labelledby="sfd-af" style="${style}">${DLG(o)}</div>`;
+    const MODPAGE = `<a href="#" class="ihs-lnk" style="font-weight:700">‹ Build</a><div class="sfd-hd"><div><h1 style="font-size:24px">Solution design</h1><p class="ihs-purp">Features linked to a pain theme or a hypothesis, and risks by severity.</p></div><div class="ihs-hr">${btn('Add feature', 'p')}</div></div><div class="ihs-tile" style="min-height:220px"><span class="ihs-sub">No features yet. Linked and unlinked features appear here.</span></div>`;
+
+    /* ---------- phone 390 × 844 ---------- */
+    const PHT = o => `<div class="ihs-pht"><button type="button" class="ihs-t44" aria-label="Menu">${I.menu}</button><span class="ihs-mark" aria-hidden="true">A</span><span style="font-size:16px;font-weight:800;flex:1">${o && o.t ? o.t : 'Studio'}</span>${o && o.noE ? '' : `<button type="button" class="ihs-t44" aria-label="Open Eadwyn">${EAD(26)}</button>`}<button type="button" class="ihs-t44" aria-label="Notifications, [2] unread">${I.bell}</button></div>`;
+    const phone = (inner, o) => { o = o || {}; return `<div class="ihs-cv${o.dark ? ' ihs-dark sfd-dark' : ''}" style="width:390px"><div class="ihs-ph">${o.bar === false ? '' : PHT(o)}<div class="ihs-phb"${o.bs ? ' style="' + o.bs + '"' : ''}>${inner}</div>${o.over || ''}</div></div>`; };
+    const PHEAD = o => {
+      o = o || {};
+      const h1 = o.first ? 'Studio' : o.unav ? 'Venture not available' : (o.v || VA).n;
+      return `<div style="display:flex;flex-direction:column;gap:6px"><span class="ihs-ey">Studio${o.first || o.unav ? '' : ' · your venture'}</span><div style="display:flex;align-items:center;gap:8px"><h1 style="font-size:24px;font-weight:800;letter-spacing:-.02em;flex:1;min-width:0">${h1}</h1>${o.first || o.unav ? '' : btn('Switch', 'sm', ' aria-haspopup="listbox" aria-label="Switch venture" style="min-height:44px"')}</div>${o.ann ? `<div>${ANN('h1 · 1st in the tree')}</div>` : ''}${o.first || o.unav ? '' : `<span class="sfd-ph" style="align-self:flex-start">Independent · not in a cohort</span>`}</div>`;
+    };
+    const PNEXT = o => {
+      o = o || {};
+      if (o.first) return `<section class="sfd-next" style="padding:14px" aria-label="Start your first venture"><h2>Start your first venture</h2><div class="sfd-task" style="flex-direction:column;align-items:stretch;gap:10px;padding:12px"><div class="sfd-tt"><span class="sfd-where">Build</span><b>Create your startup</b><span class="ihs-sub">Name it and pick its stage. Studio then shows its modules and next steps.</span></div>${btn('Create your startup', 'p', ' style="min-height:44px"')}</div><div class="sfd-row"><div class="sfd-tt"><b>Talk it through with Eadwyn</b><span>Works without a venture</span></div>${I.chev}</div></section>`;
+      const b = (o.f ? FOC : x => x)(btn('Add feature', 'p', ' aria-label="Add feature to Atlas Orchard" style="min-height:44px"'));
+      return `<section class="sfd-next" style="padding:14px" aria-labelledby="sfd-pn"><h2 id="sfd-pn">Next for Atlas Orchard</h2>${o.ann ? `<div>${ANN('h2 · then the task, focus 3')}</div>` : ''}<div class="sfd-task" style="flex-direction:column;align-items:stretch;gap:10px;padding:12px"><div class="sfd-tt"><span class="sfd-where">Build · Solution design</span><b>Add feature</b><span class="ihs-sub">No features yet. Add the first, with the pain theme it answers.</span></div>${b}</div><div class="sfd-row" style="min-height:52px"><div class="sfd-tt"><b>Move the next planned item into Now</b><span>Build · Product roadmap</span></div><span style="color:var(--vtx)">${I.chev}</span></div><div class="sfd-row" style="min-height:52px"><div class="sfd-tt"><b>[6] questions are waiting on you</b><span>Eadwyn · answer in the chat</span></div><span style="color:var(--vtx)">${I.chev}</span></div></section>`;
+    };
+    const FOLD = (y, t) => `<div class="sfd-fold" style="top:${y}px"><span>${t}</span></div>`;
+
+    /* ---------- docs ---------- */
+    const L = a => '<ul>' + J(a.map(x => '<li>' + x + '</li>')) + '</ul>';
+    const CD = t => '<span class="ihs-code">' + t + '</span>';
+    const DOC = (ey, h, sub, inner) => `<div class="ihs-cv" style="width:1200px"><div class="ihs-doc"><div><span class="ihs-ey">${ey}</span><h2 style="font-size:22px;margin-top:6px">${h}</h2>${sub ? `<p class="ihs-sub" style="margin-top:6px;font-size:13px">${sub}</p>` : ''}</div>${inner}</div></div>`;
+    const STEP = (n, t, d) => `<div class="sfd-step"><div style="display:flex;align-items:center;gap:8px"><span class="sfd-num">${n}</span><b style="font-size:13px">${t}</b></div><span>${d}</span></div>`;
+
+    let html = '';
+    if (B === 'SFD00') {
+      html = DOC('Studio home · Founder · #8729 · route and link contract', 'The return route: Studio → Add feature → Cancel → Studio, on one venture',
+        'Numbered steps for desktop (1440) and phone (390). Every step keeps the venture in the address as ?project_id=. Boards: SFD03 to SFD06 on desktop, SFD12A to SFD12D on phone.',
+        `<div><h3 style="margin-bottom:10px">Desktop</h3><div class="sfd-steps">${STEP(1, 'Studio · Atlas Orchard', CD('/studio?project_id=[12]') + '. h1 names the venture. Next for Atlas Orchard leads with Add feature (SFD03).')}${STEP(2, 'Add feature', 'Pushes ' + CD('/build/solution-design/new?project_id=[12]') + ' with ' + CD('state.under') + '. The dialog opens over Solution design, its first line “Atlas Orchard · Build · Solution design” (SFD05).')}${STEP(3, 'Cancel or Esc', CD('closeAdd') + ' already goes Back when ' + CD('state.under') + ' is set: the address is ' + CD('/studio?project_id=[12]') + ' again (SFD06).')}${STEP(4, 'Focus returns', 'Focus lands on the Add feature button it left from, by its id in history state. Nothing was written.')}</div></div>
+         <div><h3 style="margin-bottom:10px">Phone 390 × 844</h3><div class="sfd-steps">${STEP(1, 'First screen', 'Venture h1, Switch, Next for Atlas Orchard with Add feature, then Eadwyn collapsed, inside 844 px (SFD12A).')}${STEP(2, 'Switch (optional)', 'The shell switcher as a sheet. Picking [Kiln Ledger] writes ' + CD('?project_id=[19]') + ' (SFD12B).')}${STEP(3, 'Add feature page', 'Below 1024 px the form is the page (D695), with the venture line and Cancel (SFD12C).')}${STEP(4, 'Cancel → Studio', 'Back to the first screen; focus on Add feature (SFD12D).')}</div></div>
+         <div class="ihs-dl"><div><h3>What changes in the route</h3>${L(['Today the card’s task link is the Worker’s ' + CD('/build/solution-design?project=[12]&add=1') + '. CycleRoute replaces it with ' + CD('/new') + ' and drops history state, so Cancel lands on the Solution design page, not Studio. Back from there does reach Studio.', 'Proposed: Studio writes the canonical ' + CD('/new?project_id=') + ' address itself and pushes ' + CD('{ under, focus }') + '. No Worker change: ' + CD('closeAdd') + ' and ' + CD('canonicalVentureSearch') + ' exist.', 'Submit is unchanged: the feature is saved on Solution design for the venture in the address.'])}</div><div><h3>What is kept</h3>${L(['The working Add feature dialog and its fields (' + CD('forms.js buildFeature') + '), including the disabled submit on an empty draft.', 'Customise and its keyboard handle (Space to lift, arrows to move, Esc to put back), SFD13.', 'Eadwyn’s chat, tabs and ticket links, which already carry ' + CD('project_id') + ' (' + CD('withProjectId') + ').'])}</div></div>`);
+    }
+    else if (B === 'SFD01') {
+      html = page(BHEAD() + CHAT() + strip() + PROF() + MODS({ ann: 'today' }));
+    }
+    else if (B === 'SFD02') {
+      const bar = `<div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--card)">${EAD(34)}<div style="flex:1"><h1 style="font-size:19px;font-weight:800">Eadwyn AI</h1><span class="ihs-sub">Conversations</span></div><button type="button" class="ihs-t44" aria-label="Open the Eadwyn menu" style="border:1px solid var(--line)">‹</button></div>`;
+      const body = `${bar}<div style="padding:12px 18px;display:flex;flex-direction:column;gap:10px;background:var(--card);flex:1"><div>${ANN('first h1 · Eadwyn AI')}</div><span class="ihs-ey">Today · Atlas Orchard</span><div class="ihs-bub">Picking up where we left off.</div><div class="ihs-bub">Which customer problem came up most in your interviews?</div><div class="ihs-bub ihs-u">[Growers still keep yield records on paper.]</div><div class="ihs-bub">[Which of those growers would pay to stop?]</div><div class="ihs-comp" style="padding:8px 0"><div class="ihs-inp">Type your answer…</div><button type="button" class="ihs-send" aria-label="Send">${I.send}</button></div><span class="ihs-ey" style="margin-top:6px">Conversations</span>${J(['[Founder profiling] · 18 of 24 answered', '[Pricing for growers] · 12 messages', '[Interview plan] · 9 messages'].map(t => `<div class="ihs-card44"><span style="flex:1;font-size:13px">${t}</span>${I.chev}</div>`))}</div>`;
+      html = phone(body, { bar: false, bs: 'padding:0;gap:0', over: `<div style="position:absolute;left:12px;right:12px;bottom:12px;z-index:5;background:#18181b;color:#fff;border-radius:10px;padding:10px 12px;font:600 11.5px var(--mo);line-height:1.5">Observed 26 Nov: the venture is named only in the thread. “Your modules” starts ≈ 2,595 px down; Add feature is below it.</div>` });
+    }
+    else if (B === 'SFD03') html = page(HOME({ ann: true, pol: true, href: true, mods: 'new' }));
+    else if (B === 'SFD15') html = page(HOME({}), { dark: true });
+    else if (B === 'SFD04') {
+      const pop = `<div class="sfd-dlg" role="listbox" aria-label="Switch company or project" style="left:12px;top:126px;width:340px;padding:10px;gap:4px"><span class="ihs-ey" style="padding:6px 8px">Standalone projects</span><div class="sfd-choice" role="option" aria-selected="true" style="border-color:var(--lavE);background:var(--lav)"><span class="ihs-sq">AO</span><span class="sfd-tt"><b>Atlas Orchard</b><span>Project · selected</span></span>${G.ok}</div><div class="sfd-choice sfd-focus" role="option" aria-selected="false"><span class="ihs-sq">KL</span><span class="sfd-tt"><b>[Kiln Ledger]</b><span>Project</span></span></div><div style="border-top:1px solid var(--line);margin:6px 0"></div><a href="#" class="ihs-lnk" style="padding:0 8px;min-height:40px">+ Add a new company</a><a href="#" class="ihs-lnk" style="padding:0 8px;min-height:40px">Open Portfolio ›</a><p class="ihs-sub" style="padding:4px 8px">Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.</p></div>`;
+      const note = `<div style="position:absolute;left:380px;top:500px;width:330px;z-index:8;background:#18181b;color:#fff;border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.5"><b>Picking [Kiln Ledger] on /studio</b><br>The switcher stays the one writer (CompanySwitcher). On /studio the page then replaces its address with <span class="ihs-mo">?project_id=[19]</span>: the h1, Next card, strip, tiles and every link follow. “Switch venture” in the header opens this same list.</div>`;
+      html = page(HOME({}), { open: true, over: pop + note });
+    }
+    else if (B === 'SFD05') html = page(MODPAGE, { nav: 3, mh: 760, over: `<div class="ihs-scrim"></div>` + DLGBOX({}, 'left:430px;top:100px;width:720px') });
+    else if (B === 'SFD05B') {
+      html = crop(`<div style="display:grid;grid-template-columns:640px minmax(0,1fr);gap:24px;align-items:start"><div class="sfd-dlg" role="dialog" aria-modal="true" aria-labelledby="sfd-af" style="position:static">${DLG({ empty: true, f: true })}</div><div style="display:flex;flex-direction:column;gap:12px">${LAB('Preserved as on main')}${L(['Opens with focus in Feature. Add feature stays disabled until it has text, as observed on 26 Nov.', 'Pain themes and hypotheses come from the venture’s own records (form-options), then None yet.', 'Esc, × and Cancel all close without writing.'].map(x => x)).replace('<ul>', '<ul class="ihs-dl" style="display:flex;flex-direction:column;gap:6px">')}${LAB('Added')}${L(['The first line names the venture and module: “Atlas Orchard · Build · Solution design”. It is the dialog’s description, read after its name.']).replace('<ul>', '<ul class="ihs-dl" style="display:flex;flex-direction:column;gap:6px">')}${LAB('Phone')}<p class="ihs-sub">Below 1024 px the same form is the page (SFD12C).</p></div></div>`, 1200);
+    }
+    else if (B === 'SFD06') {
+      html = crop(`<div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start"><div style="display:flex;flex-direction:column;gap:14px">${HEAD({})}${NEXT({ f: true })}</div><div style="display:flex;flex-direction:column;gap:10px">${LAB('After Cancel, Esc or Back')}<div class="sfd-step"><span>Address: <span class="ihs-mo">/studio?project_id=[12]</span>, the entry Studio pushed from.</span><span>Focus: the Add feature button (outlined). Screen readers hear “Add feature to Atlas Orchard, button”.</span><span>Nothing was saved, so nothing is announced and no draft is kept.</span><span>Scroll: the page is where it was.</span></div>${LAB('Today on main')}<p class="ihs-sub">Cancel replaces the address with <span class="ihs-mo">/build/solution-design?project_id=[12]</span>: the founder is on Solution design, not Studio, and focus starts at the top.</p></div></div>`, 1200);
+    }
+    else if (B === 'SFD07') {
+      const R = (l, t, tk, p, c) => `<tr><td>${l}</td><td>${t}</td><td>${tk}</td><td>${p}</td><td>${c}</td></tr>`;
+      html = crop(`${LAB('Which project each link keeps · two synthetic ventures, Atlas Orchard [12] (first in the projects list) and [Kiln Ledger] [19]')}<table class="sfd-tbl"><thead><tr><th>Link on /studio</th><th>Today on main</th><th>With [Kiln Ledger] selected, today</th><th>Proposed</th><th>Cancel and Back, proposed</th></tr></thead><tbody>
+        ${R('Tile “Open ›” (Solution design)', HREF('/build/solution-design', 'bad') + '<br><span class="ihs-sub">catalogue href, no venture</span>', `<span class="ihs-od">${G.out}Lands in Atlas Orchard</span><br><span class="ihs-sub">useProject picks the first venture</span>`, HREF('/build/solution-design?project_id=[19]', 'good'), 'Back → /studio?project_id=[19]')}
+        ${R('Tile task shortcut (card.next)', HREF('/build/solution-design?project=[19]&amp;add=1') + '<br><span class="ihs-sub">Worker href; already names the venture</span>', `${G.ok} [Kiln Ledger] dialog<br><span class="ihs-sub">Cancel stays on Solution design</span>`, HREF('/build/solution-design/new?project_id=[19] · under', 'good'), 'Cancel and Back → /studio?project_id=[19], focus on the link')}
+        ${R('Next card task (new)', '—', '—', HREF('/build/solution-design/new?project_id=[19] · under', 'good'), 'Cancel and Back → /studio?project_id=[19], focus on the button')}
+        ${R('Eadwyn tabs and Open a ticket', HREF('withProjectId(…)', 'good'), `${G.ok} keeps [19]`, 'unchanged', 'unchanged')}
+        ${R('“Open your Studio” on the unavailable notice', HREF('/studio', 'bad'), `${G.out} first venture, unannounced`, 'Choose a venture (SFD10)', '—')}
+        ${R('Studio with no ?project_id=', 'first venture in the list', 'switcher’s pick ignored', 'address → switcher’s pick → the only venture → ask (SFD08)', '—')}
+        </tbody></table><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px"><div>${LAB('Two-venture return check (the test to add)')}${L(['For [12] and [19]: open /studio?project_id=&lt;id&gt;, follow tile Open, Back; follow the task shortcut, Cancel; follow it again, browser Back.', 'After each: the address keeps project_id=&lt;id&gt;, the h1 is that venture, and no request names the other id.', 'With no project_id and the switcher on [19]: Studio shows [Kiln Ledger] and writes ?project_id=[19].']).replace('<ul>', '<ul class="ihs-dl" style="display:flex;flex-direction:column;gap:6px">')}</div><div>${LAB('Observed 26 Nov')}<p class="ihs-sub">The tile’s Open and Add feature links carried the venture differently. A wrong-project write was not observed; with one venture first in the list the difference is invisible, which is why the check uses two.</p></div></div>`, 1200);
+    }
+    else if (B === 'SFD08') {
+      const ch = (v, d) => `<button type="button" class="sfd-choice"><span class="ihs-sq">${v.ini}</span><span class="sfd-tt"><b>${v.n}</b><span>${d}</span></span>${I.chev}</button>`;
+      const a = `<div class="ihs-tile">${POL('Q1 · A ask')}<span class="ihs-ey">Studio</span><h1 style="font-size:22px;font-weight:800">Which venture are you working on?</h1><p class="ihs-sub">You have two. Studio opens the one you pick, and your switcher remembers it on this device.</p>${ch(VA, 'Build · Solution design')}${ch(VB, 'Build · Solution design')}<a href="#" class="ihs-lnk">Open Portfolio ›</a></div>`;
+      const b = `<div class="ihs-tile"><span class="ihs-ey">Studio · your venture</span><h1 style="font-size:22px;font-weight:800">[Kiln Ledger]</h1><div class="sfd-amb" role="status"><b>Opened from a link to [Kiln Ledger].</b><span>Your switcher had Atlas Orchard. It now shows [Kiln Ledger] too.</span><a href="#" class="ihs-lnk" style="color:var(--amT);text-decoration:underline">Back to Atlas Orchard</a></div><p class="ihs-sub">The address wins over the remembered pick, and the switcher follows it, so the two never disagree on screen.</p></div>`;
+      const c = `<div class="ihs-tile"><span class="ihs-ey">Studio</span><h1 style="font-size:22px;font-weight:800">Studio</h1>${UNR('Your ventures could not be read. This is not a sign that you have none.')}<p class="ihs-sub">No venture’s figures are drawn. Eadwyn and your profile still load below, from their own reads.</p></div>`;
+      html = crop(`<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start">${COL('A · Two ventures, none selected', a)}${COL('B · The link and the switcher disagree', b)}${COL('C · The projects read failed', c)}</div><p class="ihs-sub">Resolution order: <span class="ihs-mo">?project_id=</span> → the switcher’s pick (activeProject.js, this device) → the only venture → A. Today Studio skips the switcher and takes the first venture in the list.</p>`, 1200);
+    }
+    else if (B === 'SFD09') html = page(HEAD({ first: true }) + NEXT({ first: true }) + CHAT({ first: true }) + strip({ k: 'first' }) + PROF({ k: 'first' }) + `<div style="display:flex;flex-direction:column;gap:12px"><div class="ihs-mh"><h2>Your modules</h2><span class="ihs-mu" style="font-size:12.5px">[5] of 12 placed</span></div>${GRIDX(T_PROG() + T_Q() + T_SOL({ st: 'nr' }) + T_ROAD({ st: 'nr' }) + T_LAB())}</div>`, { none: true });
+    else if (B === 'SFD10') {
+      const box = `<section class="sfd-amb" role="status"><b>This venture is not available to your account.</b><span>The link names a venture you cannot open, so no venture’s records are shown here.</span><span style="font-weight:700;margin-top:4px">Open one of yours:</span><div style="display:flex;gap:8px;flex-wrap:wrap">${btn('Atlas Orchard', '')}${btn('[Kiln Ledger]', '')}</div></section>`;
+      const zones = `<div style="display:flex;flex-direction:column;gap:12px"><div class="ihs-mh"><h2>Your modules</h2><span class="ihs-mu" style="font-size:12.5px">[5] of 12 placed</span></div>${GRIDX(T_PROG() + T_Q() + T_SOL({ st: 'unr' }) + TILE('Product roadmap', 3, `<p class="ihs-unr" role="alert">${I.err}<span>Product roadmap could not be read · </span>${btn('Try again', 'sm')}</p>`, { open: false }) + T_LAB())}</div>`;
+      html = page(HEAD({ unav: true }) + box + CHAT({ unav: true }) + strip({ k: 'unav' }) + PROF() + zones, { v: { n: '[Maya Ruiz]', ini: 'MR' } }).replace('Project · Standalone', 'No project selected');
+    }
+    else if (B === 'SFD11') {
+      const eu = `<section class="ihs-tile" role="status"><div style="display:flex;gap:10px;align-items:flex-start">${EAD(30)}<div><b>Eadwyn</b> <span class="ihs-sub">Founder interview</span><p style="font-size:13px;margin-top:4px">The guided founder interview is not available in this environment. Your Studio records remain below.</p><p class="ihs-sub" style="margin-top:4px"><b>Source unavailable</b> · No answers or assessment data have been inferred.</p></div></div></section>`;
+      html = crop(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">${COL('Loading · the h1 waits for the venture read, the card holds its place', `<div class="ihs-tile" aria-busy="true"><span class="ihs-ey">Studio</span>${SK('48%', 24)}${SK('30%')}</div>` + NEXT({ st: 'load' }))}${COL('Next steps unavailable · the venture is still named', NEXT({ st: 'unr' }))}${COL('Confirmed: nothing waiting in the placed modules', NEXT({ st: 'none' }))}${COL('Eadwyn unavailable (AdvisorUnavailable, kept)', eu)}</div><p class="ihs-sub">Each source fails on its own (#4622): a failed next-step read never hides the venture or Eadwyn, and is never drawn as “nothing to do”. Loading keeps the card’s height so Add feature does not jump.</p>`, 1200);
+    }
+    else if (B === 'SFD12A') html = phone(PHEAD({ ann: true }) + PNEXT({ ann: true }) + EROW() + strip({ ph: true }));
+    else if (B === 'SFD12B') html = phone(PHEAD() + PNEXT(), { over: `<div class="ihs-scrim" style="top:56px"></div><div class="ihs-sheet" role="dialog" aria-modal="true" aria-labelledby="sfd-sws"><span class="ihs-grab" aria-hidden="true"></span><div style="display:flex;align-items:center"><h2 id="sfd-sws" style="flex:1;font-size:16px;font-weight:800">Switch company or project</h2><button type="button" class="ihs-t44" aria-label="Close">${I.x}</button></div><span class="ihs-ey">Standalone projects</span><div class="sfd-choice" role="option" aria-selected="true" style="border-color:var(--lavE);background:var(--lav)"><span class="ihs-sq">AO</span><span class="sfd-tt"><b>Atlas Orchard</b><span>Selected</span></span>${G.ok}</div><div class="sfd-choice" role="option" aria-selected="false"><span class="ihs-sq">KL</span><span class="sfd-tt"><b>[Kiln Ledger]</b><span>Opens /studio?project_id=[19]</span></span></div><a href="#" class="ihs-lnk" style="min-height:44px">Open Portfolio ›</a><p class="ihs-sub">Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.</p></div>` });
+    else if (B === 'SFD12C') {
+      const f = `<div style="display:flex;align-items:center;gap:6px;margin:-4px 0 2px"><a href="#" class="ihs-lnk" style="min-height:44px;font-weight:700">‹ Cancel</a></div><span class="sfd-where">Atlas Orchard · Build · Solution design</span><h1 style="font-size:22px;font-weight:800">Add feature</h1><p class="ihs-sub">A feature answers a pain theme and tests a hypothesis. One that links to nothing is flagged.</p><div class="sfd-fl"><label>Feature · required</label><div class="sfd-in">[Log a harvest from a photo of the paper sheet]</div></div><div class="sfd-fl"><label>Answers pain theme</label><div class="sfd-chs">${J(['[Yield records kept on paper]', '[Picker shifts arranged by text]', 'None yet'].map((t, i) => `<span class="sfd-ch" role="radio" aria-checked="${i === 0}" style="min-height:44px">${i === 0 ? G.ok : ''}${t}</span>`))}</div></div><div class="sfd-fl"><label>Tests hypothesis</label><div class="sfd-chs">${J(['[Growers will log a harvest weekly]', 'None yet'].map((t, i) => `<span class="sfd-ch" role="radio" aria-checked="${i === 0}" style="min-height:44px">${i === 0 ? G.ok : ''}${t}</span>`))}</div></div><div class="sfd-fl"><label>Impact · Effort · Scope</label><span class="ihs-sub">High · Medium · Core</span></div><div style="display:flex;gap:8px;margin-top:4px">${btn('Cancel', '', ' style="flex:1;min-height:44px"')}${btn('Add feature', 'p', ' style="flex:1;min-height:44px"')}</div>`;
+      html = phone(f, { t: 'Build', noE: true });
+    }
+    else if (B === 'SFD12D') html = phone(PHEAD() + PNEXT({ f: true }) + EROW() + `<div style="background:#18181b;color:#fff;border-radius:10px;padding:10px 12px;font:600 11.5px var(--mo);line-height:1.5">After Cancel: /studio?project_id=[12], focus on Add feature, scroll where it was.</div>`);
+    else if (B === 'SFD12E') html = phone(PHEAD({ first: true }) + PNEXT({ first: true }) + EROW({ first: true }) + strip({ k: 'first', ph: true }));
+    else if (B === 'SFD12F') html = phone(PHEAD({ unav: true }) + `<section class="sfd-amb" role="status"><b>This venture is not available to your account.</b><span>The link names a venture you cannot open, so no venture’s records are shown here.</span><span style="font-weight:700">Open one of yours:</span>${btn('Atlas Orchard', '', ' style="min-height:44px"')}${btn('[Kiln Ledger]', '', ' style="min-height:44px"')}</section>` + EROW({ unav: true }) + strip({ k: 'unav', ph: true }));
+    else if (B === 'SFD12G') html = phone(`<div>${ANN('scrolled ≈ 640 px · Eadwyn opened')}</div>` + CHAT({ narrow: true, short: true }) + PROF({ ph: true }) + `<div class="ihs-mh"><h2>Your modules</h2><span class="ihs-mu" style="font-size:12px">[5] of 12</span></div>` + T_SOL().replace('grid-column:span 3', 'grid-column:auto'), { bs: 'padding-top:10px' });
+    else if (B === 'SFD13') {
+      const head = (t, lifted, sz) => `<article class="ihs-tile${lifted ? ' sfd-lift' : ''}" aria-label="${t}" style="grid-column:span 3"><div class="ihs-th"><span role="button" tabindex="0" class="sfd-hdl${lifted ? ' sfd-focus' : ''}" aria-label="Move ${t}. Press Space to lift, then the arrow keys." aria-pressed="${lifted ? 'true' : 'false'}">⋮⋮</span><h3>${t}</h3><span class="sfd-sz" role="radiogroup" aria-label="Size of ${t}">${J(['⅓', '½', 'Full'].map((s, i) => `<span role="radio" aria-checked="${i === sz}">${s}</span>`))}</span><button type="button" class="ihs-t44" aria-label="More for ${t}" style="width:32px;height:32px">⋯</button><button type="button" class="ihs-t44" aria-label="Remove ${t}" style="width:32px;height:32px">${I.x}</button></div><div style="opacity:.55">${SK('80%')}${SK('60%')}</div></article>`;
+      html = crop(`<div class="sfd-ebar"><span class="ihs-mo" style="font-size:12.5px;font-weight:600">[5] of 12 modules</span>${btn('+ Add modules', 'sm')}${btn('Reset', 't sm')}<span style="flex:1"></span>${btn('Done', 'p')}</div><div style="display:flex;flex-direction:column;gap:8px;opacity:.6">${LAB('Fixed, not movable (lock): venture header, Next card, Eadwyn, strip, profile')}<div style="height:44px;border:1px dashed var(--line2);border-radius:12px;display:flex;align-items:center;padding:0 14px;gap:8px">${I.lock}<span class="ihs-sub">Atlas Orchard · Next for Atlas Orchard · Eadwyn AI · Summary · Your founder profile</span></div></div><div class="ihs-grid">${head('Eadwyn’s questions', false, 1)}${head('Solution design', true, 1)}${head('Product roadmap', false, 1)}${head('Lab tools', false, 1)}</div><div role="status" aria-live="polite" class="sfd-step" style="flex-direction:row;align-items:center"><span class="sfd-ann">live region</span><span>“Solution design, position 2 of 5.”</span></div><p class="ihs-sub">Kept from main (StudioModuleGrid, StudioModuleTile): focus the handle, Space to lift, arrow keys to move, Space to drop, Esc to put it back; size radiogroup; ⋯ menu with Move up and Move down; ×. The Next card reads the new order on Done: it lists next steps in layout order (⚑ Q2 A).</p>`, 1200);
+    }
+    else if (B === 'SFD14') {
+      html = DOC('Studio home · Founder · #8729 · accessibility', 'Heading structure, focus order and accessible names',
+        'The venture is the first heading on both widths. Eadwyn stays one tab stop away, never in front of the venture work.',
+        `<div class="ihs-dl"><div><h3>Desktop · headings</h3><div class="sfd-tree">h1  Atlas Orchard            (was h2 “Studio”)
+  h2  Next for Atlas Orchard
+  h2  Eadwyn AI               (section, aria-label)
+  h2  Summary                 (list, aria-label)
+  h3  Your founder profile
+  h2  Your modules
+    h3  Company progress … Lab tools</div><h3 style="margin-top:14px">Phone · headings</h3><div class="sfd-tree">h1  Atlas Orchard            (was h1 “Eadwyn AI”)
+  h2  Next for Atlas Orchard
+  h2  Eadwyn AI               (collapsed row, then the chat)
+  h2  Your modules</div></div><div><h3>Focus order (after the shell)</h3>${L(['1 Switch venture (opens the shell switcher’s list)', '2 Customise (desktop) · the phone keeps it in the bottom bar', '3 Add feature — the one primary; name “Add feature to Atlas Orchard”', '4 Open roadmap ›, 5 Answer ›', '6 Eadwyn: Open a ticket, Maximize, tabs, composer', '7 Each module’s links, in layout order'])}<h3 style="margin-top:14px">Focus return</h3>${L(['Cancel, Esc, × and browser Back from the Add feature dialog return focus to the control that opened it (Next card button or tile link), by an id kept in history state.', 'Closing the switcher returns focus to the Switch venture button or the sidebar switcher, whichever opened it.', 'A venture switch moves focus to the h1, which announces the new venture.'])}<h3 style="margin-top:14px">Names and targets</h3>${L(['Task buttons carry the venture: “Add feature to Atlas Orchard”.', 'Phone targets are 44 px; the Switch button and the Eadwyn row are reachable without scrolling.', 'States keep their words and glyphs: Not recorded, Unavailable, Read (none waiting).'])}</div></div>`);
+    }
+    else if (B === 'SFD16') {
+      html = DOC('Studio home · Founder · #8729 · handoff', 'Handoff: what is on main, what changes, and the owner’s questions',
+        'Checked against main f66e8faa25 (Wed 25 Nov 2026 23:20 UTC). Sample people, ventures and figures are fictional; Atlas Orchard is the brief’s name.',
+        `<div class="ihs-dl"><div><h3>Checked on main</h3>${L([CD('FounderStudioHome.jsx') + ': the venture is ' + CD('?project_id=') + ', else the first project; below 1024 px ' + CD('StudioPhone') + ' draws the Eadwyn bar with h1 “Eadwyn AI”, the chat, then the body.', CD('FounderStudioBody.jsx') + ': h2 “Studio”, chat, strip, profile, modules; ' + CD('ProjectUnavailable') + ' links ' + CD('/studio') + ' with no ID (D4619).', CD('founderStudioReads.js') + ': an unknown ' + CD('project_id') + ' is never swapped; lifecycle and scores are not requested.', CD('StudioModuleTile.jsx') + ': Open is the catalogue ' + CD('href') + ' (' + CD('/build/solution-design') + ', ' + CD('services/studioModules.ts') + '), with no venture.', CD('cycle_build.ts next()') + ': ' + CD('/build/solution-design?project=&lt;id&gt;&add=1') + '; ' + CD('CycleRoute.jsx') + ' rewrites it to ' + CD('/new') + ' with replace, so ' + CD('state.under') + ' is lost and Cancel stays on the module.', CD('forms.js buildFeature') + ': the Add feature fields and copy drawn in SFD05.', CD('CompanySwitcher.jsx') + ' + ' + CD('activeProject.js') + ': the project pick is client-only and Studio does not read it.', CD('StudioModuleGrid.jsx') + ': keyboard lift, move and announce (kept).'])}</div><div><h3>Frontend only</h3>${L(['h1 is the venture name (or Studio / Venture not available); phone bar drops its h1.', 'Next card from placed tiles’ ' + CD('card.next') + ', in layout order; the first is the one primary.', 'Tile Open and task links get ' + CD('?project_id=') + '; task links push ' + CD('/new?project_id=') + ' with ' + CD('{ under, focus }') + ' and focus is restored on return.', 'Venture resolution: address → switcher pick → only venture → chooser; the address is then written.', 'Unavailable notice offers the member’s ventures; phone order: venture, Next, Eadwyn row, strip.'])}<h3 style="margin-top:14px">Requires engineering ◇</h3>${L([BE('#5074') + ' Optional: the Worker’s card hrefs say ' + CD('?project=') + '; ' + CD('?project_id=') + ' would save a redirect. Not needed for this design.', 'No new store: “last opened module” is not recorded, so there is no Resume row; the Next card shows only what tiles already send.'])}<h3 style="margin-top:14px">Owner decisions ⚑ (A drawn)</h3>${L([POL('Q1') + ' Two ventures, none selected: A ask (SFD08 A). B open the first and show Switch.', POL('Q2') + ' Next card order: A layout order of placed modules. B a ranked next step from the Worker (◇).', POL('Q3') + ' Phone: A Eadwyn as a collapsed row under the Next card. B Eadwyn only behind the bar button.'])}</div></div>
+         <div class="ihs-dl" style="grid-template-columns:1fr"><div><h3>Acceptance → boards</h3>${L(['390 × 844: venture and one concrete task in the first viewport, venture heading first: SFD12A, SFD02 (before), SFD14.', 'Two ventures, Open and task shortcut land in the selected venture and keep it after Cancel or Back: SFD07, SFD04, SFD06, SFD12B, SFD12D, SFD00.', 'Selection cannot be resolved, with a recovery choice: SFD08, SFD10, SFD12F.', 'Add feature dialog preserved: SFD05, SFD05B, SFD12C. Keyboard layout controls preserved: SFD13.', 'Separate paths for first venture, returning founder and unavailable venture: SFD09 and SFD12E, SFD03 and SFD12A, SFD10 and SFD12F. States: SFD11. Dark: SFD15.'])}</div></div>
+         <div><h3>Coordination</h3><p class="ihs-sub">#4619 (data scoping, kept), #5130 (Eadwyn is the one shared assistant), #8730 (founder and exploring previews), audit #8689, qualification #8688.</p></div>`);
+    }
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

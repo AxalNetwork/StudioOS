@@ -156,11 +156,36 @@ export function readMainAllowlist(root) {
   return parseAllowlist(show.stdout);
 }
 
+/**
+ * #8779: the main this tree was built from. A pull request's checkout is GitHub's merge commit (base first, head
+ * second) and a merge-queue candidate sits on its base, so the first parent is the main the change was compared
+ * with. Main read at the moment the guard runs can be newer: when main has removed a line since, the tree still holds
+ * it and that would read as growth the pull request never made. Null when there is no such parent or it cannot be read.
+ */
+export function readBaseAllowlist(root, env) {
+  const run = (args, timeout = 10_000) => spawnSync('git', args, { cwd: root, encoding: 'utf8', timeout });
+  // The raw object, not `git log`: a shallow checkout (actions/checkout's default) hides the parents from log.
+  const head = run(['cat-file', '-p', 'HEAD']);
+  if (head.status !== 0) return null;
+  const list = [...head.stdout.split('\n\n')[0].matchAll(/^parent ([0-9a-f]{40})$/gm)].map((m) => m[1]);
+  const merged = env.GITHUB_EVENT_NAME === 'pull_request' && list.length === 2;
+  const queued = env.GITHUB_EVENT_NAME === 'merge_group' && list.length >= 1;
+  if (!merged && !queued) return null;
+  const base = list[0];
+  if (run(['cat-file', '-e', `${base}^{commit}`]).status !== 0 && run(['fetch', 'origin', base, '--depth=1'], 60_000).status !== 0) return null;
+  const show = run(['show', `${base}:${ALLOWLIST}`]);
+  return show.status === 0 ? { base, entries: parseAllowlist(show.stdout) } : null;
+}
+
 export function main(root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), env = process.env) {
   const findings = scanTree(root);
   const allowed = parseAllowlist(readFileSync(resolve(root, ALLOWLIST), 'utf8'));
   const problems = compareAllowlist(findings, allowed);
-  if (needsBaseCheck(env)) problems.push(...compareGrowth(allowed, readMainAllowlist(root)));
+  if (needsBaseCheck(env)) {
+    const base = readBaseAllowlist(root, env);
+    if (base) console.log(`test-clock: allowlist growth measured against the tree's base ${base.base.slice(0, 12)}`);
+    problems.push(...compareGrowth(allowed, base ? base.entries : readMainAllowlist(root)));
+  }
   if (problems.length) { for (const p of problems) console.error(`✖ test-clock: ${p}`); return 1; }
   console.log(`✓ test-clock: ${suiteFiles(root).length} tests/helpers, ${allowed.length} existing rule/file exceptions; no new or stale entries.`);
   return 0;

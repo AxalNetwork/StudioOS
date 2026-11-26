@@ -6,14 +6,15 @@
  *                   Reserve a seat; then Reserved, or "Someone reserved the last seat first" (nothing reserved,
  *                   nothing charged); No seats, Cancelled and Started each say so
  *   MyGroupSeats    the member's own seats: reserved, released, cancelled by the facilitator (with the reason), with
- *                   Release seat while the rule allows it
+ *                   Release seat while the rule allows it; D7120 part 3: Download calendar entry (.ics) on a
+ *                   reserved seat with a calendar choice, saying what the entry shows (never anyone else)
  *
  * Members never see who else reserved. The page sends a session's uid and the calendar choice, nothing else.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { wellbeingGroupSessionsApi } from '../../lib/api/wellbeingGroupSessions';
 import { BTN, FIELD } from './WellbeingParts';
-import { CALENDAR, isFull, reservationRow, seatAction, seatRefusal, seatsLine, sessionWhen } from './groupSessionsModel';
+import { CALENDAR, calendarEntry, calendarRefusal, isFull, reservationRow, seatAction, seatRefusal, seatsLine, sessionWhen } from './groupSessionsModel';
 import { deviceTimezone } from './reflectionsModel';
 
 const CARD = 'rounded-axal border border-stone-200 bg-stone-50 p-4 dark:border-gray-800 dark:bg-gray-900';
@@ -106,6 +107,31 @@ export function GroupSeatPanel({ uid, onChanged, onClose }) {
   );
 }
 
+/** D7120 part 3: save the member's own calendar entry on this device. A failed download says so; the seat is unchanged. */
+export function CalendarDownload({ uid, entry }) {
+  const [state, setState] = useState({ busy: false, error: null });
+  if (!entry) return null;
+  const run = async () => {
+    setState({ busy: true, error: null });
+    try {
+      const { text, filename } = await wellbeingGroupSessionsApi.calendarFile(uid);
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
+      const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setState({ busy: false, error: null });
+    } catch (e) { setState({ busy: false, error: calendarRefusal(e) }); }
+  };
+  return (
+    <span className="block">
+      <button type="button" className={BTN.ghost} onClick={run} disabled={state.busy} data-testid={`button-group-calendar-${uid}`}>
+        {state.busy ? 'Preparing…' : 'Download calendar entry (.ics)'}
+      </button>
+      <span className="block text-xs text-stone-600 dark:text-gray-400" data-testid={`group-calendar-note-${uid}`}>{entry.note}</span>
+      {state.error ? <span className={`${ALERT} mt-1 block`} role="alert" data-testid={`group-calendar-error-${uid}`}>{state.error}</span> : null}
+    </span>
+  );
+}
+
 /** The member's own group seats, with Release seat while the rule allows it. */
 export function MyGroupSeats({ version = 0 }) {
   const tz = deviceTimezone();
@@ -142,6 +168,7 @@ export function MyGroupSeats({ version = 0 }) {
                   <span className={`text-xs font-semibold ${row.status.tone === 'ok' ? 'text-emerald-800 dark:text-emerald-300' : row.status.tone === 'alert' ? 'text-amber-800 dark:text-amber-300' : 'text-stone-600 dark:text-gray-400'}`} data-testid={`group-seat-status-${row.uid}`}>
                     {row.status.word}{row.reason ? ` · ${row.reason}` : ''}
                   </span>
+                  <CalendarDownload uid={row.uid} entry={calendarEntry(r)} />
                 </div>
                 {row.releasable ? (confirm === row.uid ? (
                   <span className="flex items-center gap-2 text-xs text-stone-700 dark:text-gray-300">

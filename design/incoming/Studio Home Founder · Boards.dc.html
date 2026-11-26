@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Founder · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Studio home · Founder · #8729 · role audit 3 of 7 (#8727 to #8733) · audit #8689, qualification #8688</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Founder Studio — the active venture and its next action first, Eadwyn one step below, on 1440 and on 390 × 844</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/studio for a founder returning to Atlas Orchard. The venture becomes the page’s h1 (today the first heading is h2 “Studio” on desktop and h1 “Eadwyn AI” on the phone), and a Next card lists the next steps the placed modules already send (card.next), in layout order, with Add feature as the one primary. Eadwyn’s founder interview stays, directly below. Every Studio link keeps the venture as ?project_id=: the tile Open link gains it, and task links open the Add feature dialog with history state so Cancel and Back return to Studio with focus on the control that opened it. Separate paths are drawn for a first venture, a returning founder and an unavailable venture, and for a venture that cannot be resolved. The Add feature dialog and the keyboard layout controls are kept as on main. It keeps the Axal VC shell (#3704: project switcher top-left, union sidebar, Portfolio in the Account menu); Eadwyn is the one shared assistant (#5130). States follow the Platform States words. A violet dashed ◇ marks backend work and an amber ⚑ an owner decision, drawn as option A; neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main f66e8faa25 · Atlas Orchard is the brief’s venture; [Maya Ruiz], [Kiln Ledger], the questions, pain themes and every figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home Founder Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SFD-00', 'Route and link contract', 'The numbered return route on desktop and phone: Studio → Add feature → Cancel → Studio, on one venture, and what changes in the route against main.', [W('SFD00')]],
+      ['SFD-01', 'Before · observed on axal.vc', 'Desktop: h2 “Studio”, no h1, Eadwyn first, Solution design far down. The tile’s Open link carries no venture; its Add feature link carries ?project=&add=1.', [F('SFD01', 'Desktop 1440', 1800), P('SFD02', 'Phone 390 · first h1 is Eadwyn AI')]],
+      ['SFD-03', 'Returning founder · desktop', 'Step 1. h1 Atlas Orchard with Switch venture and Customise; Next for Atlas Orchard with Add feature as the one primary; then Eadwyn, the strip, the profile and the modules. Annotated: headings, the link each task opens, the Q2 decision.', [F('SFD03', false, 2142)]],
+      ['SFD-04', 'Switching venture', 'The shell switcher stays the one writer. Picking [Kiln Ledger] on /studio writes ?project_id=[19]; the header’s Switch venture opens the same list.', [F('SFD04', false, 900)]],
+      ['SFD-05', 'The Add feature dialog', 'Step 2. The working dialog over Solution design, unchanged except a first line naming the venture and module. B: the empty draft with Add feature disabled, as observed.', [F('SFD05', 'A · Draft', 854), C('SFD05B', 'B · Empty draft and what is kept', 1200, 593)]],
+      ['SFD-06', 'Cancel return', 'Steps 3 and 4. Cancel, Esc or Back return to /studio?project_id=[12] with focus on Add feature. Today Cancel stays on Solution design.', [C('SFD06', false, 1200, 430)]],
+      ['SFD-07', 'Which project each link keeps', 'Two synthetic ventures. The tile Open link lands in the first venture today; the task shortcut keeps the venture but loses the way back. The proposed addresses and the two-venture return check to add.', [C('SFD07', false, 1200, 628)]],
+      ['SFD-08', 'When the venture cannot be resolved', 'A: two ventures and none selected, ask (⚑ Q1 A). B: a link and the switcher disagree, the address wins and the switcher follows. C: the projects read failed, Unavailable with Try again.', [C('SFD08', false, 1200, 480)]],
+      ['SFD-09', 'First venture', 'No project yet: h1 Studio, Start your first venture with Create your startup (/build?new=1), Eadwyn below, modules Not recorded with their reasons.', [F('SFD09', false, 1813)]],
+      ['SFD-10', 'Unavailable venture', '?project_id= names a venture the member cannot open (D4619). The notice now offers their ventures; venture zones are Unavailable, never another venture’s figures.', [F('SFD10', false, 1738)]],
+      ['SFD-11', 'States', 'Loading with the card holding its place, next steps unavailable with Try again, confirmed none waiting, Eadwyn unavailable (kept).', [C('SFD11', false, 1200, 603)]],
+      ['SFD-12', 'Phone 390 × 844', 'A: the first screen, venture and Add feature inside 844 px (step 1). B: switch sheet (step 2). C: the form as a page (step 3). D: Cancel return (step 4). E: first venture. F: unavailable venture. G: further down, Eadwyn opened.', [P('SFD12A', 'A · Step 1 · first screen'), P('SFD12B', 'B · Step 2 · switch'), P('SFD12C', 'C · Step 3 · Add feature'), P('SFD12D', 'D · Step 4 · Cancel return'), P('SFD12E', 'E · First venture'), P('SFD12F', 'F · Unavailable venture'), P('SFD12G', 'G · Scrolled, Eadwyn open')]],
+      ['SFD-13', 'Customise, kept', 'The keyboard layout controls as on main: handle, Space to lift, arrows, live announcement, size radiogroup, ⋯ and ×. The venture header and Next card are fixed.', [C('SFD13', false, 1200, 529)]],
+      ['SFD-14', 'Headings, focus order and names', 'The heading tree before and after on both widths, the focus order, focus return after the dialog and the switcher, and accessible names.', [W('SFD14')]],
+      ['SFD-15', 'Dark mode', 'The returning founder on the dark tokens.', [F('SFD15', false, 2109)]],
+      ['SFD-16', 'Engineering handoff', 'What main has, with files; frontend-only work; the one optional ◇; the three owner decisions (A drawn); acceptance mapped to boards.', [W('SFD16')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

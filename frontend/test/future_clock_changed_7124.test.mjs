@@ -13,15 +13,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  FIX, LIBFAKETIME, MAX_FILES, OFFSETS, clockEnv, dateBound, failureKeys, groupBySuite, main, parseOffset, suiteCommands,
+  BUDGET_MS, FIX, LIBFAKETIME, MAX_FILES, OFFSETS, clockEnv, dateBound, failureKeys, groupBySuite, main, parseOffset, suiteCommands,
 } from '../../scripts/future-clock-changed.mjs';
 import {
   breakDate, futureClockLogLines, futureClockSummary, repoTestPath, safeTestName, tapFailures, withFutureClockRunLine,
 } from '../../scripts/lib/futureClockNames.mjs';
 import { verifiedFailures } from '../../scripts/future-clock-report.mjs';
+import { assessFutureClock } from '../../scripts/lib/futureClockEvidence.mjs';
 import { message } from '../../scripts/lib/githubAlerts.mjs';
 import { safeHealthFacts } from '../../scripts/health-alert-episodes.mjs';
 
@@ -166,9 +168,10 @@ test('main: fails ahead and passes now fails the step with file, test, offset an
     ]);
     assert.ok(errors.every((e) => e.endsWith(FIX)));
     assert.ok(logs.some((l) => /fails on today's clock too, left to the suite: scripts\/lib\/broken\.test\.mjs › always/.test(l)));
-    // Only the files that failed ahead run again on the real clock.
+    // One file per run, and only a file that failed ahead runs again on the real clock.
+    assert.ok(calls.every((c) => c.ran.length === 1));
     const realRuns = calls.filter((c) => c.label === null);
-    assert.deepEqual(realRuns.map((c) => c.ran), [['scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs'], ['scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs', 'scripts/lib/sat.test.mjs']]);
+    assert.deepEqual(realRuns.map((c) => c.ran[0]), ['scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs', 'scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs', 'scripts/lib/sat.test.mjs']);
     const text = readFileSync(summary, 'utf8');
     assert.match(text, /\| `scripts\/lib\/sat\.test\.mjs` \| not on a Saturday \| \+9d 11h \| `node scripts\/future-clock-changed\.mjs --offset '\+9d 11h' scripts\/lib\/sat\.test\.mjs` \|/);
     // Failing on both clocks alone is the suite's to report.
@@ -177,6 +180,39 @@ test('main: fails ahead and passes now fails the step with file, test, offset an
     const before = calls.length;
     assert.equal(main([], { root: dir, env: {}, log: quiet, error: quiet, sh, check: () => ({ status: 1 }), diff: () => ['scripts/lib/promo.test.mjs'] }), 1);
     assert.equal(calls.length, before);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+
+test('the step stops starting runs once its budget is spent; started runs finish and the rest are named for the nightly', () => {
+  // Owner answer A on #7124 (2026-11-26): about 150 s, then the nightly covers the rest, exit 0.
+  // Mutations checked: the budget check before each file dropped → every file runs; the offset-level check dropped →
+  // the second offset's clock proof still runs; `>=` turned to `>` → the run at exactly the budget starts.
+  assert.equal(BUDGET_MS, 150_000);
+  const dir = fixtureRoot({ 'scripts/lib/a.test.mjs': '', 'scripts/lib/b.test.mjs': '', 'scripts/lib/c.test.mjs': '' });
+  try {
+    let t = 0;
+    const { sh: inner, calls } = fakeShell((label, f) => (f === 'scripts/lib/b.test.mjs' && label === '+7d' ? ['expired'] : []));
+    const sh = (command, env) => { t += 60_000; return inner(command, env); };  // each run takes a minute
+    let proofs = 0;
+    const logs = [];
+    const status = main([], { root: dir, env: {}, log: (s) => logs.push(s), error: (s) => logs.push(s), sh, check: () => { proofs++; return { status: 0 }; },
+      diff: () => ['scripts/lib/a.test.mjs', 'scripts/lib/b.test.mjs', 'scripts/lib/c.test.mjs'], now: () => t, budgetMs: 150_000 });
+    // a (60 s), b ahead (120 s) fails, b today (180 s) still runs to decide it; c would start at 180 s, past the budget.
+    assert.deepEqual(calls.map((c) => [c.label, c.ran[0]]), [['+7d', 'scripts/lib/a.test.mjs'], ['+7d', 'scripts/lib/b.test.mjs'], [null, 'scripts/lib/b.test.mjs']]);
+    assert.equal(proofs, 1, 'the second offset is not even clock-checked');
+    assert.equal(status, 1, 'the date-bound test found inside the budget still fails the step');
+    const note = logs.find((l) => /budget was spent/.test(l));
+    assert.match(note, /the 150 s budget was spent; 4 run\(s\) not started, the nightly future-clock run covers them \(D7124\)/);
+    assert.match(note, /scripts\/lib\/c\.test\.mjs \+7d, scripts\/lib\/a\.test\.mjs \+9d 11h/);
+    // Within the budget nothing is skipped and nothing is said about it; a run at exactly the budget does not start.
+    t = 0; calls.length = 0;
+    const quietLogs = [];
+    assert.equal(main([], { root: dir, env: {}, log: (s) => quietLogs.push(s), error: quiet, sh, check: () => ({ status: 0 }), diff: () => ['scripts/lib/a.test.mjs'], now: () => t, budgetMs: 10 * 60_000 }), 0);
+    assert.equal(calls.length, 2);
+    assert.ok(!quietLogs.some((l) => /budget/.test(l)));
+    t = 0; calls.length = 0;
+    assert.equal(main([], { root: dir, env: {}, log: quiet, error: quiet, sh, check: () => ({ status: 0 }), diff: () => ['scripts/lib/a.test.mjs'], now: () => t, budgetMs: 60_000 }), 0);
+    assert.deepEqual(calls.map((c) => c.label), ['+7d'], 'the second run would start at exactly 60 s and does not');
   } finally { rmSync(dir, { recursive: true }); }
 });
 
@@ -258,6 +294,28 @@ test('the reporter lists failures from verified parts only, each with its part',
   assert.deepEqual(verifiedFailures(blobs, { discrepancies: ['artifact_corrupt:worker-1-of-6', 'missing:worker-3-of-6', 'unexpected_or_duplicate_artifact'] }), [
     { part: 'frontend-1-of-2', file: 'frontend/test/x.test.mjs', test: 'expired' },
   ]);
+});
+
+test('a part whose only doubt is tests_not_executed and that exited non-zero is named, because its failures are counted', () => {
+  // 2026-11-25 nightly 45604894738: failed:1 came from a part read as tests_not_executed, and the log named nothing.
+  // Mutations checked: the partial set folded back into the doubted set → no name; the exit-code test dropped → the
+  // exit-0 part is named.
+  const sha = 'a'.repeat(40), runId = '45604894738', expected = ['frontend-1-of-2', 'frontend-2-of-2', 'worker-1-of-6'];
+  const tapOf = (file) => `TAP version 13\nnot ok 1 - expired\n  ---\n  type: 'test'\n  location: '/w/${file}:3:1'\n  ...\nok 2 - not run here # SKIP\n1..2\n# tests 2\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 1\n# todo 0\n# duration_ms 10\n`;
+  const blob = (part, file, exitCode) => {
+    const tap = tapOf(file);
+    return { part, tap, manifest: { schema: 1, part, runId, attempt: 1, sha, days: 7, exitCode, bytes: Buffer.byteLength(tap), sha256: createHash('sha256').update(tap).digest('hex') } };
+  };
+  const blobs = [blob('frontend-1-of-2', 'frontend/test/z.test.mjs', 0), blob('frontend-2-of-2', 'frontend/test/x.test.mjs', 1)];
+  const jobs = expected.map(part => ({ name: `future clock (${part})`, status: 'completed', conclusion: 'success', steps: [{ name: 'Run the part 7 days ahead', status: 'completed', conclusion: 'success' }] }));
+  const evidence = assessFutureClock({ expected, blobs, jobs, runId, attempt: 1, sha });
+  assert.deepEqual(evidence.discrepancies, ['tests_not_executed:frontend-1-of-2', 'tests_not_executed:frontend-2-of-2', 'missing:worker-1-of-6']);
+  assert.equal(evidence.failed, 1, 'only the part that exited non-zero is counted');
+  const named = verifiedFailures(blobs, evidence);
+  assert.deepEqual(named, [{ part: 'frontend-2-of-2', file: 'frontend/test/x.test.mjs', test: 'expired' }]);
+  assert.equal(named.length, evidence.failed, 'the alert count and the names agree');
+  // A doubted part is still never named, whatever its exit code.
+  assert.deepEqual(verifiedFailures(blobs, { discrepancies: ['artifact_corrupt:frontend-2-of-2'] }).map(f => f.part), ['frontend-1-of-2']);
 });
 
 test('job log and step summary carry names and the reproduce command; the alert text carries the break date and no name', () => {

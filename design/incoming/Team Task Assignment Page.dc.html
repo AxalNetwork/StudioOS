@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Task Assignment · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+/* TMA (#8767): Team · Assigning Work from an Agent. Shell classes come from pl_full.css (founder shell, as Company Settings v2 and Build v2). */
+.tma-be{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:6px;border:1.5px dashed var(--vi);color:var(--vt);background:transparent;font:600 10.5px var(--mo);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.tma-oq{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:6px;border:1.5px solid var(--amE);background:var(--amBg);color:var(--amT);font:600 10.5px var(--mo);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.tma-step{width:22px;height:22px;flex:none;border-radius:999px;background:#18181b;color:#fff;border:2px solid #fff;box-shadow:0 0 0 1px #18181b;display:inline-grid;place-items:center;font:700 11px var(--mo);vertical-align:middle}
+.tma-ann{display:flex;align-items:flex-start;gap:7px;padding:7px 10px;border-radius:8px;border:1.5px dashed #a1a1aa;background:var(--annBg);color:var(--annT);font:500 11px/1.5 var(--mo)}
+.tma-chip{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11.5px/1.6 var(--sg);white-space:nowrap;border:1px solid var(--hair2);background:var(--raised);color:var(--ink)}
+.tma-chip .gl{font-size:10.5px;line-height:1}
+.tma-chip.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.tma-chip.cnr{color:var(--mu);background:transparent;border:1.5px dotted var(--hair2)}
+.tma-chip.cna{color:var(--mu);background:transparent;border-color:transparent}
+.tma-chip.none{color:var(--mu);background:transparent;border:1px solid var(--hair2)}
+.tma-chip.un{color:var(--ink);background:var(--card);border:1.5px dashed var(--neg)}
+.tma-chip.un .gl{color:var(--neg)}
+.tma-chip.off{color:var(--mu);background:transparent;border:1.5px dashed var(--hair2)}
+.tma-chip.ref{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.tma-chip.am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.tma-chip.vi{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.tma-chip.dv{color:var(--mu);background:transparent;border:1.5px dashed var(--mu)}
+.tma-mono{font:500 12px var(--mo);color:var(--ink)}
+.tma-mu{color:var(--mu)}
+.tma-sm{font-size:12px;color:var(--mu);line-height:1.5}
+.tma-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.tma-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.tma-hd{display:flex;align-items:flex-start;gap:14px}
+.tma-hd h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.tma-hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.tma-mark{width:44px;height:44px;flex:none;border-radius:11px;background:#14532d;color:#fff;display:grid;place-items:center;font-weight:800;font-size:16px}
+.tma-tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tma-tabs a{padding:8px 0 10px;font-size:13.5px;font-weight:600;color:var(--mu)!important;border-bottom:2px solid transparent}
+.tma-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-bottom-color:var(--vi)}
+.tma-sub{display:flex;gap:4px;flex-wrap:wrap}
+.tma-sub a{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)!important}
+.tma-sub a[aria-current=page]{background:var(--lav);color:var(--vt)!important;font-weight:800}
+.tma-cnt{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--raised);border:1px solid var(--hair2);font:700 10.5px var(--mo);color:var(--ink)}
+.tma-av{width:30px;height:30px;flex:none;border-radius:999px;background:var(--raised);border:1px solid var(--hair2);display:grid;place-items:center;font:800 11px var(--sg);color:var(--ink)}
+.tma-ag{position:relative;width:32px;height:32px;flex:none;border-radius:9px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font:800 13px var(--sg);color:var(--vt)}
+.tma-ag::after{content:'AI';position:absolute;right:-5px;bottom:-5px;font:800 8px var(--mo);padding:1px 3px;border-radius:4px;background:var(--vbtn);color:#fff}
+.tma-ag.big{width:52px;height:52px;border-radius:13px;font-size:20px}
+.tma-li{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--hair)}
+.tma-li:first-child{border-top:0;padding-top:2px}
+.tma-li .who{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.tma-li .who b{font-size:14px}
+.tma-dim{position:absolute;inset:0;background:var(--dim)}
+.tma-sheet{position:absolute;top:0;right:0;bottom:0;background:var(--card);border-left:1px solid var(--hair);display:flex;flex-direction:column;box-shadow:-18px 0 40px rgba(24,24,27,.14)}
+.tma-sheet .sh-h{display:flex;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.tma-sheet .sh-h h2{font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.2}
+.tma-sheet .sh-b{flex:1;padding:16px 22px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.tma-sheet .sh-f{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:12px 22px;border-top:1px solid var(--hair);background:var(--card)}
+.tma-x{width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);display:grid;place-items:center;font-size:15px;padding:0;margin-left:auto;flex:none}
+.tma-box{border:1px solid var(--hair);border-radius:11px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.tma-box h3{font-size:13.5px;font-weight:800}
+.tma-box.v{border-color:var(--lavE);background:var(--lav)}
+.tma-box.a{border-color:var(--amE);background:var(--amBg)}
+.tma-box.r{border-color:var(--negE);background:var(--negBg)}
+.tma-chk{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 12px;align-items:center;font-size:12.5px}
+.tma-chk dt{color:var(--mu);font-weight:600}
+.tma-chk dd{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.tma-f{display:flex;flex-direction:column;gap:5px;min-width:0}
+.tma-f label,.tma-f .lb{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tma-f .hint{font-size:11.5px;color:var(--mu);line-height:1.45}
+.tma-in{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink);min-width:0}
+.tma-in.mlt{min-height:58px;align-items:flex-start;padding:8px 11px;line-height:1.45}
+.tma-in.foc{outline:2px solid var(--vi);outline-offset:1px}
+.tma-in.dis{background:var(--raised);color:var(--mu)}
+.tma-in .car{margin-left:auto;color:var(--mu)}
+.tma-g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.tma-seg{display:inline-flex;align-self:flex-start;border:1px solid var(--hair2);border-radius:9px;overflow:hidden}
+.tma-seg span{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;font-size:12.5px;font-weight:700;color:var(--mu);border-left:1px solid var(--hair2)}
+.tma-seg span:first-child{border-left:0}
+.tma-seg span[aria-checked=true]{background:var(--lav);color:var(--vt)}
+.tma-tb{width:100%;border-collapse:collapse;font-size:12.5px}
+.tma-tb th{text-align:left;font:600 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;background:var(--raised);border-bottom:1px solid var(--hair)}
+.tma-tb td{padding:10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tma-tb tr.sel td{background:var(--lav)}
+.tma-sk{display:block;height:10px;border-radius:5px;background:var(--skel)}
+.tma-bar{height:7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.tma-bar i{display:block;height:100%;background:var(--vi)}
+.tma-tl{display:flex;flex-direction:column;gap:0}
+.tma-tl li{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tma-tl li:first-child{border-top:0}
+.tma-mode{display:flex;align-items:center;gap:10px;padding:8px 30px;background:#881337;color:#fff;font-size:12.5px}
+.tma-mode a{color:#fecdd3!important;font-weight:800;margin-left:auto}
+.tma-toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:#18181b;color:#fff;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.tma-pst{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 16px;background:var(--card);border-top:1px solid var(--hair);display:flex;gap:8px}
+.tma-pst .btn{flex:1;min-height:44px}
+.tma-ph-h{display:flex;flex-direction:column;gap:4px}
+.tma-ph-h h1{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.tma-dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.tma-dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.tma-dk h2{font-size:16px;font-weight:800;margin:24px 0 8px}
+.tma-dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:1000px}
+.tma-dk ul.b{list-style:disc;padding-left:20px;font-size:13px;line-height:1.6;color:#3f3a49}
+.tma-dk code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.tma-out{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.tma-out .orow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 12px;border-top:1px solid var(--hair);font-size:12.5px}
+.tma-out .orow:first-child{border-top:0}
+.tma-out .orow.tot{background:var(--raised);font-weight:800}
+.tma-steps{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.tma-steps div{display:flex;align-items:center;gap:8px}
+.tma-opt{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid var(--hair2);border-radius:9px;font-size:12.5px}
+.tma-opt.cur{border-color:var(--vi);background:var(--lav)}
+.tma-opt.dis{opacity:.62}
+.tma-rad{width:16px;height:16px;flex:none;border-radius:999px;border:1.5px solid var(--hair2);margin-top:2px;background:var(--card)}
+.tma-opt.cur .tma-rad{border:5px solid var(--vi)}
+.tma-crop{padding:20px;display:flex;flex-direction:column;gap:14px}
+.tma-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.tma-phw .tma-chk{grid-template-columns:100px minmax(0,1fr)}
+.tma-phw .tma-chk dd .tma-sm{display:none}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "TMA01", "options": ["TMA50", "TMA00", "TMA01", "TMA02", "TMA02B", "TMA03", "TMA04", "TMA04B", "TMA10", "TMA11", "TMA12", "TMA13", "TMA13B", "TMA20", "TMA20B", "TMA20C", "TMA20D", "TMA20E", "TMA21", "TMA22", "TMA23", "TMA24", "TMA24B", "TMA25", "TMA30", "TMA31", "TMA31B", "TMA32", "TMA40", "TMA40B", "TMA40C", "TMA40D", "TMA40E", "TMA40F", "TMA40G", "TMA40H", "TMA40I", "TMA40J", "TMA60", "TMAH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'TMA01';
+    const dark = /^TMA50/.test(B);
+    /* ---------- tokens: the founder shell's palette (Company Settings v2, Build v2 via bur.js) ---------- */
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', vbtn: '#7c3aed', lav: 'rgba(167,139,250,.13)', lavE: 'rgba(167,139,250,.42)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', annBg: '#0f172a', annT: '#d1d5db' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', vbtn: '#7c3aed', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.42)', skel: '#ececf1', annBg: '#fafafa', annT: '#3f3a47' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- annotations (not product copy) ---------- */
+    const BK = (t) => `<span class="tma-be" title="Needs backend work">◇ ${t}</span>`;
+    const OQ = (t) => `<span class="tma-oq" title="Owner decision">⚑ ${t}</span>`;
+    const STEP = (n) => n ? `<span class="tma-step" aria-hidden="true">${'①②③④⑤⑥⑦⑧⑨'.indexOf(n) + 1 || n}</span>` : '';
+    const ANN = (t, x) => `<div class="tma-ann" aria-hidden="true" style="${x || ''}"><span>${t}</span></div>`;
+
+    /* ---------- Platform States chips (D5129, st.js words): glyph + word + border, never colour alone ---------- */
+    const chip = (cls, g, t) => `<span class="tma-chip ${cls}"><span class="gl" aria-hidden="true">${g}</span>${t}</span>`;
+    const C = {
+      ok: (t) => chip('ok', '✓', t), none: (t) => chip('none', '∅', t || 'None'), nr: (t) => chip('cnr', '○', t || 'Not recorded'),
+      na: (t) => chip('cna', '–', t || 'Not applicable'), un: (t) => chip('un', '!', t || 'Unavailable'), off: (t) => chip('off', '◌', t || 'Not switched on'),
+      ref: (t) => chip('ref', '⊘', t || 'Refused'), load: (t) => chip('', '◌', t || 'Reading…'), wait: (t) => chip('am', '⧗', t || 'Waiting for review'),
+      run: (t) => chip('vi', '◐', t || 'In progress'), ready: (t) => chip('vi', '▸', t || 'Ready'), done: (t) => chip('ok', '✓', t || 'Done'),
+      act: (t) => chip('ok', '●', t || 'Active'), pause: (t) => chip('am', '‖', t || 'Paused'), dev: (t) => chip('dv', '○', t || 'Draft · this device'),
+      open: (t) => chip('', '○', t || 'Open'), ro: (t) => chip('none', '⊘', t || 'Read only'), part: (t) => chip('am', '◑', t || 'Partial')
+    };
+
+    /* ---------- sample (bracketed, fictional; TBP_SAMPLES.md § TMA): the same figures on every board ---------- */
+    const CO = '[Atlas Orchard, Inc.]', PRJ = '[Atlas Orchard]', MAYA = '[Maya Ruiz]', NOAH = '[Noah Brandt]', PRIYA = '[Priya Shah]', IRIS = '[Iris Chen]';
+    const TASK = 'Draft a first-pass runway analysis';
+    const NOW = '26 Nov 2026';
+
+    /* ---------- shell: the founder shell as shipped (company switcher top left, workspace nav, Eadwyn rail #5130) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="width:100%;font-size:12px" aria-label="Switch company or project, now ' + CO + '"><span>' + CO + '</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const top = (ini) => '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" style="border:0" aria-label="Account menu">' + (ini || 'MR') + '</button></div></div>';
+    const rail = (t) => '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: ' + (t || 'Ask about Team') + '" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px;height:' + (o.h || 900) + 'px;overflow:hidden"><div class="sh" style="height:' + (o.h || 900) + 'px">' + side(o.cur || '') + '<div class="mn">' + top(o.ini) + (o.mode || '') + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail(o.rail) + '</div>' + (o.overlay || '') + '</div>'; };
+    const crop = (inner, w, h) => '<div class="cv" style="' + VARS + ';width:' + (w || 1200) + 'px' + (h ? ';height:' + h + 'px;overflow:hidden' : '') + '"><div class="tma-crop">' + inner + '</div></div>';
+    const sheet = (w, head, body, foot) => '<div class="tma-dim" aria-hidden="true"></div><div class="tma-sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t" style="width:' + w + 'px"><div class="sh-h">' + head + '<button type="button" class="tma-x" aria-label="Close">✕</button></div><div class="sh-b">' + body + '</div>' + (foot ? '<div class="sh-f">' + foot + '</div>' : '') + '</div>';
+    const phone = (title, body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="tma-phw" style="width:390px;height:844px;position:relative;overflow:hidden;display:flex;flex-direction:column"><div class="pt">' + (o.back ? '<button type="button" class="pi" aria-label="' + o.back + '">‹</button>' : '<button type="button" class="pi" aria-label="Menu">☰</button>') + '<b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div>' + (o.mode || '') + '<div class="pbd" style="overflow:hidden;padding-bottom:' + (o.sticky ? 90 : 28) + 'px">' + body + '</div>' + (o.sticky ? '<div class="tma-pst">' + o.sticky + '</div>' : '') + '</div></div>'; };
+
+    const btn = (t, k, x) => '<button type="button" class="btn' + (k ? ' ' + k : '') + '"' + (x || '') + '>' + t + '</button>';
+    const AV = (ini) => '<span class="tma-av" aria-hidden="true">' + ini + '</span>';
+    const AG = (ini, big) => '<span class="tma-ag' + (big ? ' big' : '') + '" aria-hidden="true">' + ini + '</span>';
+    const nt = (tone, ic, h, d, role) => '<div class="nt ' + tone + '"' + (role ? ' role="' + role + '"' : '') + '><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + h + '</b>' + (d ? '<div>' + d + '</div>' : '') + '</div></div>';
+    const dl = (rows) => '<dl class="tma-chk">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl>';
+    const field = (lb, inner, hint, tag) => '<div class="tma-f"><span class="lb">' + lb + (tag || '') + '</span>' + inner + (hint ? '<span class="hint">' + hint + '</span>' : '') + '</div>';
+    const inp = (v, cls, car) => '<div class="tma-in' + (cls ? ' ' + cls : '') + '">' + v + (car ? '<span class="car" aria-hidden="true">' + car + '</span>' : '') + '</div>';
+
+    /* ---------- Team page (company form, /account/companies/:uid/settings/team) ---------- */
+    const teamHead = (sub, cta) => '<div class="tma-hd"><span class="tma-mark" aria-hidden="true">AO</span><div style="flex:1;min-width:0"><span class="eye">Company settings · ' + CO + '</span><h1>Team</h1><p>The people and AI agents working on ' + CO + '. Agents propose; people decide.</p></div><div class="tma-row" style="margin-top:6px">' + (cta === undefined ? btn('Add to team ▾', 'p') : cta) + '</div></div>'
+      + '<nav class="tma-tabs" aria-label="Company settings"><a href="#" aria-current="page">Team</a><a href="#">General</a><a href="#">Legal</a><a href="#">Projects</a></nav>'
+      + '<nav class="tma-sub" aria-label="Team">' + J([['people', 'People and agents'], ['tasks', 'Tasks'], ['skills', 'Skills'], ['roles', 'Roles and rule books'], ['approvals', 'Approvals <span class="tma-cnt">1</span>'], ['settings', 'Settings']].map(([k, t]) => '<a href="#"' + (k === sub ? ' aria-current="page"' : '') + '>' + t + (k === 'tasks' ? '' : '') + '</a>')) + '</nav>';
+
+    const ENG = { on: 'on', off: 'off' };
+    const agentRow = (a, eng, o) => {
+      o = o || {};
+      const take = eng === 'off' ? C.off('Can’t take work yet') : a.ready ? C.ready('Ready for work') : C.pause('Paused');
+      return '<div class="tma-li"' + (o.sel ? ' style="background:var(--lav);margin:0 -10px;padding:12px 10px;border-radius:10px"' : '') + '>' + AG(a.n[0]) + '<div class="who"><span class="tma-row">' + (o.step ? STEP(o.step) : '') + '<a href="#" style="color:var(--ink);font-weight:800;font-size:14px">' + a.n + '</a><span class="tma-chip none">' + a.role + '</span>' + C.act() + take + '</span><span class="tma-sm">Sponsor ' + a.sp + ' · <span class="tma-mono">' + a.used + '</span> of <span class="tma-mono">' + a.cap + '</span> this month · ' + (eng === 'off' ? 'tasks can’t be read yet' : a.open) + '</span></div>' + (o.noAssign ? '' : btn(eng === 'off' ? 'Prepare a draft' : 'Assign a task', '', ' style="flex:none"' + (eng === 'off' ? ' aria-describedby="eng-off"' : ''))) + '</div>';
+    };
+    const ORRIN = { n: 'Orrin', role: 'CFO', sp: MAYA, used: '$12.40', cap: '$40.00', open: 'no open tasks', ready: true };
+    const SOLEN = { n: 'Solen', role: 'CEO', sp: NOAH, used: '$6.10', cap: '$30.00', open: '1 open task', ready: true };
+    const personRow = (ini, n, role, lic, extra) => '<div class="tma-li">' + AV(ini) + '<div class="who"><span class="tma-row"><b>' + n + '</b><span class="tma-chip none">' + lic + '</span></span><span class="tma-sm">' + role + '</span></div>' + (extra || '') + '</div>';
+    const peopleCard = () => '<section class="cd"><div class="ch"><h2>People</h2><span class="sm">3</span></div><div>' + personRow('MR', MAYA + ' (you)', 'Owner · Team editor · no open tasks', 'Founder') + personRow('NB', NOAH, 'Co-founder · Team editor · 1 open task', 'Founder') + personRow('PS', PRIYA, 'Investor seat · reads this team', 'Investor') + '</div></section>';
+    const engineCard = (eng) => '<section class="cd"><div class="ch"><h2>AI agents on this team</h2></div>' + (eng === 'off'
+      ? dl([['Agent engine', C.off()], ['Runs at once', C.off()], ['Proposals waiting', C.off()], ['Spent this month', '<span class="tma-mono">$18.50 of $70.00</span>']]) + '<p class="tma-sm" id="eng-off">Agents are on the roster, but Axal hasn’t switched the agent engine on yet, so no task can be saved or run. <a href="#">What can I do now?</a></p>'
+      : dl([['Agent engine', C.ok('On')], ['Runs at once', '<span class="tma-mono">0 of 2</span>'], ['Proposals waiting', '<span class="tma-mono">1</span> <a href="#">Approvals</a>'], ['Spent this month', '<span class="tma-mono">$18.50 of $70.00</span>']])) + '</section>';
+    const roster = (eng, o) => { o = o || {}; return teamHead('people', o.ro ? '' : undefined) + '<div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start"><div class="tma-col"><section class="cd"><div class="ch"><h2>AI agents</h2><span class="sm">2 on the roster</span></div><div>' + agentRow(ORRIN, eng, { step: o.step, sel: o.sel, noAssign: o.ro }) + agentRow(SOLEN, eng, { noAssign: o.ro }) + '</div><p class="tma-sm" style="border-top:1px solid var(--hair);padding-top:10px">Agents propose; a named person accepts. Nothing is written without Accept.</p></section>' + peopleCard() + '</div><div class="tma-col">' + engineCard(eng) + (o.side || '') + '</div></div>'; };
+
+    /* ---------- the agent profile sheet (TM5a, AgentProfileSheet.jsx, 640) with the new "Can Orrin take work now?" block ---------- */
+    const profHead = (status) => '<div class="tma-row" style="gap:12px;align-items:flex-start;flex-wrap:nowrap">' + AG('O', 1) + '<div style="display:flex;flex-direction:column;gap:4px"><h2 id="sh-t">Orrin</h2><span class="tma-row"><span class="tma-chip none">CFO agent</span>' + status + '</span><span class="tma-sm" style="font-style:italic">“Show me the winter before the harvest.”</span></div></div>';
+    const canTake = (kind) => {
+      if (kind === 'off') return '<section class="tma-box a" aria-labelledby="ct-h"><h3 id="ct-h">Orrin can’t start work yet</h3>' + dl([['Agent engine', C.off() + '<span class="tma-sm">for the platform</span>'], ['Status on this team', C.act('Active on the roster')], ['Sponsor', MAYA + ' ' + C.ok('can manage this team')], ['Monthly cap', '<span class="tma-mono">$12.40</span> of <span class="tma-mono">$40.00</span> used'], ['Skill for this work', C.ok('Cash runway snapshot') ]]) + '</section>'
+        + '<section class="tma-box" aria-labelledby="why-h"><h3 id="why-h">What this means</h3><dl class="tma-chk" style="grid-template-columns:170px minmax(0,1fr);align-items:start"><dt>Who can switch it on</dt><dd>Axal switches the agent engine on for the platform. Your team’s editors can’t change it here.</dd><dt>What you can do now</dt><dd>Write the task now. It’s kept as a draft on this device.</dd><dt>What happens to the draft</dt><dd>Nothing is sent to Orrin, nothing runs and nothing is charged. When agents are switched on, you’re asked to save it as a task. You can delete it at any time. ' + OQ('Q2 A · this device') + '</dd><dt>Not the same as</dt><dd>A support ticket (that asks Axal for help) or a suggestion (an agent’s proposal waiting in Approvals).</dd></dl><a href="#" style="font-size:12.5px;font-weight:700">Ask Axal about AI agents · opens a support ticket</a></section>';
+      if (kind === 'ro') return '<section class="tma-box" aria-labelledby="ct-h"><h3 id="ct-h">Can Orrin take work now?</h3>' + dl([['Agent engine', C.ok('On')], ['Status', C.act()], ['Monthly cap', '<span class="tma-mono">$12.40</span> of <span class="tma-mono">$40.00</span> used'], ['Skill', C.ok('Cash runway snapshot')]]) + '<p class="tma-sm">You can read this team. Its editors, ' + MAYA + ' and ' + NOAH + ', assign work to Orrin.</p></section>';
+      return '<section class="tma-box v" aria-labelledby="ct-h"><div class="tma-row"><h3 id="ct-h">Can Orrin take work now?</h3>' + C.ready('Ready for work') + '</div>' + dl([['Agent engine', C.ok('On for this team')], ['Status', C.act() + '<span class="tma-sm">not paused</span>'], ['Sponsor', MAYA + ' ' + C.ok('can manage this team')], ['Monthly cap', '<span class="tma-mono">$12.40</span> of <span class="tma-mono">$40.00</span> used · <span class="tma-mono">$27.60</span> left'], ['Runs at once', '<span class="tma-mono">0 of 2</span> running on this team'], ['Skills', C.ok('Cash runway snapshot') + '<span class="tma-sm">balances and 3 months of burn recorded</span>']]) + '<p class="tma-sm">Assigning saves a task. Orrin starts only when someone presses Start run on it.</p></section>';
+    };
+    const profRest = (kind) => '<section class="tma-col" style="gap:6px"><h3 style="font-size:13px;font-weight:800">Skills</h3><div class="tma-row">' + C.ok('Cash runway snapshot · v1') + '<a href="#" style="font-size:12.5px">Skills tab</a></div></section>'
+      + '<section class="tma-col" style="gap:6px"><h3 style="font-size:13px;font-weight:800">Budget</h3><div class="tma-row" style="justify-content:space-between"><span class="tma-mono">$12.40 of $40.00 · November</span><span class="tma-sm">Resets 1 Dec</span></div><div class="tma-bar" role="img" aria-label="$12.40 of $40.00 used"><i style="width:31%"></i></div></section>'
+      + '<section class="tma-col" style="gap:6px"><h3 style="font-size:13px;font-weight:800">Open work</h3><div class="tma-row">' + C.none('No open tasks') + '<span class="tma-sm">a confirmed zero from the Tasks read</span></div></section>';
+    const profile = (kind, o) => {
+      o = o || {};
+      let foot, status = C.act();
+      if (kind === 'off') { status = C.act('Active on the roster') + C.off('Can’t take work yet'); foot = btn('Edit cap') + btn('Change sponsor') + btn('Prepare a draft', 'p'); }
+      else if (kind === 'ro') foot = '<span class="tma-sm" style="margin-right:auto">Read only · you’re on this team as an investor seat</span>' + btn('Close');
+      else if (kind === 'pv') foot = '<span class="tma-sm" style="margin-right:auto">Preview · writes are off</span>' + btn('Close');
+      else foot = btn('Pause') + btn('Edit cap') + btn('Change sponsor') + (o.step ? STEP(o.step) : '') + btn('Assign a task', 'p');
+      const body = (o.top || '') + canTake(kind === 'pv' ? 'ro' : kind).replace(kind === 'pv' ? 'You can read this team. Its editors, ' + MAYA + ' and ' + NOAH + ', assign work to Orrin.' : '§§', 'You’re previewing ' + CO + ' from HQ. Assigning work is off in a preview; HQ reads this venture and isn’t on its Team.') + (o.extra || '') + profRest(kind);
+      return sheet(640, profHead(status), body, foot);
+    };
+
+    /* ---------- the Assign a task sheet (new; 560) ---------- */
+    const assignee = (who, off) => {
+      if (who === 'person') return '<div class="tma-seg" role="radiogroup" aria-label="Assign to"><span role="radio" aria-checked="false">An AI agent</span><span role="radio" aria-checked="true">A person</span></div>'
+        + inp(AV('NB') + '<b style="white-space:nowrap">' + NOAH + '</b><span class="tma-chip none">Founder</span><span class="tma-sm">Co-founder</span>', 'foc', '▾')
+        + '<div class="tma-col" style="gap:6px;border:1px solid var(--hair2);border-radius:9px;padding:8px" role="listbox" aria-label="People on this Team"><span class="eye">Team · people</span>'
+        + '<div class="tma-opt">' + AV('MR') + '<span style="flex:1"><b>' + MAYA + '</b> (you) · Owner · 0 open tasks</span></div>'
+        + '<div class="tma-opt cur">' + AV('NB') + '<span style="flex:1"><b>' + NOAH + '</b> · Co-founder · 1 open task · capacity ' + C.nr() + '</span><span class="tma-sm">selected</span></div>'
+        + '<div class="tma-opt">' + AV('PS') + '<span style="flex:1"><b>' + PRIYA + '</b> · Investor seat · 0 open tasks</span></div>'
+        + '<div class="tma-opt dis">' + AV('IC') + '<span style="flex:1"><b>' + IRIS + '</b> · HQ</span>' + C.ref('Reads from HQ, not on this Team') + '</div></div>';
+      const n = who === 'solen' ? 'Solen' : 'Orrin', r = who === 'solen' ? 'CEO' : 'CFO';
+      return '<div class="tma-seg" role="radiogroup" aria-label="Assign to"><span role="radio" aria-checked="true">An AI agent</span><span role="radio" aria-checked="false">A person</span></div>' + inp(AG(n[0]) + '<b>' + n + '</b><span class="tma-chip none">' + r + '</span>' + (off ? C.off('Can’t take work yet') : C.ready('Ready for work') + '<span class="tma-sm">' + (who === 'solen' ? '1 open task' : 'no open tasks') + '</span>'), '', '▾');
+    };
+    const assignBody = (o) => {
+      o = o || {};
+      const who = o.who || 'orrin';
+      const agent = who !== 'person';
+      const skill = who === 'solen'
+        ? '<div class="tma-col" style="gap:6px" role="radiogroup" aria-label="Skill" aria-describedby="no-skill"><div class="tma-opt dis"><span class="tma-rad"></span><span style="flex:1"><b>Board meeting brief</b> · v1<br><span class="tma-sm">Produces a board brief, not a runway brief.</span></span>' + C.na('Doesn’t fit') + '</div><div class="tma-opt dis"><span class="tma-rad"></span><span style="flex:1"><b>Monthly investor update</b> · v1<br><span class="tma-sm">Produces an investor update, not a runway brief.</span></span>' + C.na('Doesn’t fit') + '</div></div>'
+          + '<div class="tma-box a" id="no-skill" role="status"><h3>No skill Solen holds produces a runway brief</h3><p class="tma-sm" style="color:var(--ink)">Solen can’t be given this task as it stands. A runway brief comes from <b>Cash runway snapshot</b>, which Orrin holds.</p><div class="tma-row">' + btn('Give it to Orrin instead') + btn('Give it to a person') + '<a href="#" style="font-size:12.5px;font-weight:700">Add a skill to Solen · Skills tab</a></div></div>'
+        : agent ? inp('<span style="white-space:nowrap"><b>Cash runway snapshot</b> · v1</span>' + C.ok('Ready') + '<span class="tma-sm">inputs recorded</span>', '', '▾') : '';
+      const errs = o.fail ? '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The task wasn’t saved.</b><div>Nothing changed, and your answers are still here. Check your connection, then try again.</div></div><button type="button" class="btn bt">Try again</button></div>' : '';
+      const draftNote = o.draft ? '<div class="nt a" role="status"><span class="ic" aria-hidden="true">◌</span><div><b>Agents aren’t switched on yet, so this is a draft.</b><div>It’s kept on this device only. Nothing is sent to Orrin, nothing runs and nothing is charged. When agents are on, you’re asked to save it as a task.</div></div></div>' : '';
+      return (o.top || '') + errs + draftNote
+        + field('Assign to', assignee(who, o.draft))
+        + field('Task', inp(TASK, o.focus === 'title' ? 'foc' : ''), '200 characters at most.')
+        + field('Expected deliverable', inp('Runway brief · cash on hand, average monthly burn, months of runway', '', '▾'), 'What comes back for review.', ' ' + BK('#8767 deliverable'))
+        + (agent ? field('Skill', skill, who === 'solen' ? '' : 'From Orrin’s skills. Only a skill that produces the deliverable is offered.', ' ' + BK('#8767 skill on a task')) : field('Skill', C.na('A person does this work')))
+        + '<div class="tma-g2">' + field('Module', inp('Use of funds', '', '▾'), agent ? 'Where ' + (who === 'solen' ? 'Solen' : 'Orrin') + ' may work, from the rule book.' : 'Optional.') + field('About a project', inp(PRJ, '', '▾'), 'Optional.') + '</div>'
+        + '<div class="tma-g2">' + field('Reviewer', inp(AV('MR') + MAYA + ' (you)', '', '▾'), 'Accepts the result or sends it back.', ' ' + BK('reviewer') + ' ' + OQ('Q3 A')) + field('Due', inp('<span class="tma-mono">4 Dec 2026</span>', '', '▦')) + '</div>'
+        + (agent ? field('Cap for this task', inp('<span class="tma-mono">$2.00</span>'), (who === 'solen' ? 'Each run holds its quote from Solen’s monthly cap, <span class="tma-mono">$23.90</span> left.' : 'Each run holds up to <span class="tma-mono">$0.40</span> (quote) from Orrin’s monthly cap, <span class="tma-mono">$27.60</span> left.'), ' ' + BK('#8767 task cap')) : field('Cap for this task', C.na('A person’s work isn’t charged')))
+        + field('Notes for ' + (who === 'person' ? 'Noah' : who === 'solen' ? 'Solen' : 'Orrin'), inp('Use the bank balances as of 25 Nov. Flag any month whose burn is far from the average.', 'mlt'), 'Optional.')
+        + (o.noSummary ? '' : '<div class="tma-box"><h3>When you save</h3><ol style="list-style:decimal;padding-left:18px;font-size:12.5px;line-height:1.55"><li>A task is saved on ' + CO + '’s Team. You’re its owner.</li>' + (agent ? '<li>Orrin doesn’t start yet. You press <b>Start run</b> on the task.</li><li>His result comes back as a proposal for ' + MAYA + ' to accept or send back. Nothing is written without Accept.</li>' : '<li>' + NOAH + ' is notified and moves its status himself.</li><li>' + MAYA + ' reviews it when he marks it done.</li>') + '</ol></div>');
+    };
+    const assignSheet = (o) => { o = o || {}; const who = o.who || 'orrin'; return sheet(560, '<div style="display:flex;flex-direction:column;gap:3px"><h2 id="sh-t">' + (o.draft ? 'Prepare a draft task' : 'Assign a task') + '</h2><span class="tma-sm">' + (who === 'person' ? 'To a person on ' + CO + '’s Team' : 'To ' + (who === 'solen' ? 'Solen · CEO' : 'Orrin · CFO') + ' agent on ' + CO + '’s Team') + ' · owner ' + MAYA + '</span></div>', assignBody(o), btn('Cancel') + (o.step ? STEP(o.step) : '') + (o.draft ? btn('Save draft on this device', 'p') : btn('Save task', 'p', who === 'solen' ? ' aria-disabled="true" style="opacity:.5" title="Choose another assignee or a skill first"' : ''))); };
+
+    /* ---------- the Tasks tab (new, company scope: GET /api/teams/company/:uid/tasks) ---------- */
+    const taskRows = (st) => {
+      const r1 = st === 'new' ? [C.open() + C.ready(), C.none('No runs yet'), '<a href="#">Start run</a>'] : st === 'wait' ? [C.wait(), '<span class="tma-mono">$0.31</span>', '<a href="#">Review</a>'] : [C.done(), '<span class="tma-mono">$0.58</span>', C.na('Nothing left')];
+      return [
+        ['<a href="#" style="font-weight:800;color:var(--ink)">' + TASK + '</a>', AG('O') + ' Orrin', r1[0], '<span class="tma-mono">4 Dec</span>', MAYA, r1[1], r1[2]],
+        ['<a href="#" style="font-weight:700;color:var(--ink)">[Board brief for December]</a>', AG('S') + ' Solen', C.wait(), '<span class="tma-mono">9 Dec</span>', NOAH, '<span class="tma-mono">$0.22</span>', '<a href="#">Review</a>'],
+        ['<a href="#" style="font-weight:700;color:var(--ink)">[Renew the D&amp;O insurance quote]</a>', AV('NB') + ' ' + NOAH, C.run(), '<span class="tma-mono">11 Dec</span>', MAYA, C.na(), NOAH + ' updates it']
+      ];
+    };
+    const tasksTable = (rows, sel) => '<table class="tma-tb" aria-label="Tasks on this Team"><thead><tr><th>Task</th><th>Assignee</th><th>Status</th><th>Due</th><th>Reviewer</th><th>Cost</th><th>Next action</th></tr></thead><tbody>' + J(rows.map((r, i) => '<tr' + (sel && i === 0 ? ' class="sel"' : '') + '>' + J(r.map((c, j) => '<td>' + (j === 1 ? '<span class="tma-row" style="flex-wrap:nowrap">' + c + '</span>' : j === 2 ? '<span class="tma-row">' + c + '</span>' : c) + '</td>')) + '</tr>')) + '</tbody></table>';
+    const tasksFilters = '<div class="tma-row"><div class="tma-seg" role="radiogroup" aria-label="Show"><span role="radio" aria-checked="true">Open</span><span role="radio" aria-checked="false">Done</span><span role="radio" aria-checked="false">All</span></div><div class="tma-in" style="min-height:34px">Assignee: Anyone <span class="car">▾</span></div><span style="margin-left:auto" class="tma-sm">Project work lives on each project’s board: <a href="#">' + PRJ + ' · Open Work ↗</a></span></div>';
+    const tasksTab = (st, o) => {
+      o = o || {};
+      let inner;
+      if (st === 'load') inner = '<div role="status" class="tma-col"><span class="tma-sm">Reading tasks…</span>' + J([1, 2, 3].map(() => '<div style="display:grid;grid-template-columns:2fr 1fr 1fr .6fr 1fr .6fr 1fr;gap:16px;padding:12px 0;border-top:1px solid var(--hair)">' + J([1, 2, 3, 4, 5, 6, 7].map(() => '<span class="tma-sk"></span>')) + '</div>')) + '</div>';
+      else if (st === 'empty') inner = '<div class="tma-col" style="align-items:flex-start;padding:26px 0">' + C.none('No tasks') + '<h3 style="font-size:15px;font-weight:800">Nothing is assigned on this Team yet</h3><p class="tma-sm">Give work to an agent or a person from <b>People and agents</b>, or with Assign a task. Agents’ own suggestions wait in <a href="#">Approvals</a>, not here.</p></div>';
+      else if (st === 'err') inner = '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Tasks could not be read.</b><div>That is not the same as having none. The rest of the Team page is unaffected.</div></div><button type="button" class="btn bt">Try again</button></div><div class="tma-row">' + C.un() + '<span class="tma-sm">last good read: not this session</span></div>';
+      else if (st === 'off') inner = '<div class="nt a" role="status"><span class="ic" aria-hidden="true">◌</span><div><b>Tasks aren’t switched on for the platform yet.</b><div>Axal switches the agent engine on; your editors can’t change it here. You can prepare drafts on this device until then.</div></div></div><div class="tma-box"><div class="tma-row"><h3>Drafts on this device</h3>' + C.dev('1 draft') + '</div><div class="tma-row" style="justify-content:space-between;border-top:1px solid var(--hair);padding-top:8px"><span><b>' + TASK + '</b><br><span class="tma-sm">For Orrin · saved 26 Nov 09:42 · not sent, not shared with ' + NOAH + '</span></span><span class="tma-row">' + btn('Open draft') + btn('Delete') + '</span></div></div>';
+      else inner = tasksTable(taskRows(o.row || 'new'), o.sel);
+      return teamHead('tasks', o.cta === undefined ? (o.step ? STEP(o.step) : '') + btn('Assign a task', 'p') : o.cta) + '<section class="cd"><div class="ch"><h2>Tasks</h2><span class="sm">' + (st === 'list' ? '3 open' : st === 'empty' ? '0 open' : '') + '</span></div>' + (st === 'list' || st === 'empty' ? tasksFilters : '') + inner + '</section>' + (o.after || '');
+    };
+
+    /* ---------- the task sheet (company task; GET/PATCH /api/teams/tasks/:uid, start, runs, queue) ---------- */
+    const taskMeta = (st) => dl([
+      ['Status', st === 'saved' ? C.open() + C.ready() : st === 'run' ? C.run() : st === 'wait' ? C.wait() : st === 'back' ? C.open('Sent back · round 2') + C.ready() : C.done('Done · accepted')],
+      ['Owner', MAYA + ' (you)'], ['Assignee', AG('O') + ' Orrin · CFO agent'], ['Reviewer', MAYA + ' (you) ' + BK('named reviewer')],
+      ['Expected deliverable', 'Runway brief ' + BK('deliverable')], ['Skill', 'Cash runway snapshot · v1'],
+      ['Due', '<span class="tma-mono">4 Dec 2026</span>'],
+      ['Cost', st === 'saved' ? C.none('No runs yet') + '<span class="tma-sm">cap <span class="tma-mono">$2.00</span></span>' : st === 'run' ? '<span class="tma-mono">$0.40</span> held · cap <span class="tma-mono">$2.00</span>' : st === 'wait' ? '<span class="tma-mono">$0.31</span> charged · cap <span class="tma-mono">$2.00</span>' : st === 'back' ? '<span class="tma-mono">$0.31</span> charged · cap <span class="tma-mono">$2.00</span>' : '<span class="tma-mono">$0.58</span> charged over 2 runs · cap <span class="tma-mono">$2.00</span>']
+    ]);
+    const nextBox = (h, d, b) => '<section class="tma-box v" aria-labelledby="nx-h"><span class="eye">Next action</span><h3 id="nx-h">' + h + '</h3>' + (d ? '<p class="tma-sm" style="color:var(--ink)">' + d + '</p>' : '') + (b ? '<div class="tma-row">' + b + '</div>' : '') + '</section>';
+    const snapshot = (round) => '<div class="tma-out" role="table" aria-label="Runway brief"><div class="orow tot" role="row"><span role="cell">Cash on hand · 25 Nov 2026</span><span role="cell" class="tma-mono">[$1,284,000]</span></div><div class="orow" role="row"><span role="cell">Operating account</span><span role="cell" class="tma-mono">[$1,034,000]</span></div><div class="orow" role="row"><span role="cell">Reserve account</span><span role="cell" class="tma-mono">[$250,000]</span></div><div class="orow" role="row"><span role="cell">Burn · Sep / Oct / Nov</span><span role="cell" class="tma-mono">[$92,000] / [$131,000] / [$98,000]</span></div><div class="orow" role="row"><span role="cell">Average monthly burn</span><span role="cell" class="tma-mono">[$107,000]</span></div><div class="orow tot" role="row"><span role="cell">Runway</span><span role="cell" class="tma-mono">12.0 months</span></div>' + (round === 2 ? '<div class="orow tot" role="row"><span role="cell">Runway with the January hire (+[$18,000] a month)</span><span role="cell" class="tma-mono">10.3 months</span></div>' : '') + '</div><p class="tma-sm">▲ October burn was 22% above the average. Sources: Mercury balances read 26 Nov 09:47 UTC; Grow › burn records Sep–Nov.</p>';
+    const taskHead = (back) => '<div style="display:flex;flex-direction:column;gap:3px">' + (back ? '<a href="#" style="font-size:12.5px;font-weight:700">‹ Back to My tasks</a>' : '<span class="eye">Team › Tasks · ' + CO + '</span>') + '<h2 id="sh-t">' + TASK + '</h2></div>';
+    const taskSheet = (st, o) => {
+      o = o || {};
+      let body = (o.top || '') + taskMeta(st), foot = '';
+      if (st === 'saved') { body += nextBox('Start Orrin’s run', 'The run holds up to <span class="tma-mono">$0.40</span> of the <span class="tma-mono">$2.00</span> cap; you’re charged only what it uses. Orrin reads the balances and burn, then proposes a runway brief.', (o.step ? STEP(o.step) : '') + btn('Start run', 'p')); }
+      if (st === 'run') { body += '<section class="tma-box" aria-labelledby="rn-h"><div class="tma-row"><h3 id="rn-h">Run 1 · started 09:46 by ' + MAYA + '</h3>' + C.run('Running') + '</div><div class="tma-steps"><div>' + C.ok('Done') + 'Read account balances · 2 accounts</div><div>' + C.ok('Done') + 'Read monthly burn · Sep–Nov</div><div>' + C.run('Now') + 'Drafting the runway brief</div></div><div class="tma-row">' + btn('Cancel run') + '</div></section>' + nextBox('Wait for Orrin’s proposal', 'You’re notified when it’s ready. Nothing is written until the reviewer accepts it.', ''); }
+      if (st === 'wait' || st === 'back' || st === 'done') {
+        const r = st === 'done' ? 2 : 1;
+        body += '<section class="tma-box" aria-labelledby="pr-h"><div class="tma-row"><h3 id="pr-h">Orrin’s proposal · round ' + r + '</h3>' + (st === 'done' ? C.done('Accepted') : st === 'back' ? C.na('Sent back') : C.wait()) + '<span class="tma-sm" style="margin-left:auto">' + (r === 2 ? '26 Nov 10:08 · <span class="tma-mono">$0.27</span>' : '26 Nov 09:51 · <span class="tma-mono">$0.31</span>') + '</span></div>' + snapshot(r) + '</section>';
+      }
+      if (st === 'wait') {
+        if (!o.changes) body += nextBox('Review Orrin’s proposal', 'Accept keeps the brief on this task and closes it. Request changes sends it back with your comment; round 2 starts only when you press Start round 2. ' + BK('#8767 request changes on a company task'), '');
+        body += '<p class="tma-sm">This is the result of a task you assigned. Suggestions an agent makes on its own wait in <a href="#">Approvals</a>.</p>';
+        body += o.changes ? '<div class="tma-f"><label for="rc">Review comment <span class="tma-sm" style="font-weight:600">· required to send back</span></label><div class="tma-in mlt foc" id="rc">Add a case with the January hire (+[$18,000] a month). Keep the rest.</div></div>' : '';
+        foot = o.changes ? btn('Cancel') + (o.step ? STEP(o.step) : '') + btn('Send back to Orrin', 'p') : btn('Discard') + btn('Edit') + (o.step2 ? STEP(o.step2) : '') + btn('Request changes') + (o.step ? STEP(o.step) : '') + btn('Accept', 'p');
+      }
+      if (st === 'back') body += nextBox('Start round 2', 'Your comment goes to Orrin with the task: “Add a case with the January hire (+[$18,000] a month). Keep the rest.” Round 2 holds up to <span class="tma-mono">$0.40</span>; <span class="tma-mono">$1.69</span> of the cap is left.', btn('Start round 2', 'p'));
+      if (st === 'done') body += nextBox('Nothing left to do', 'Accepted by ' + MAYA + ' on 26 Nov at 10:12. The brief is kept on this task; nothing was sent to anyone else.', btn('Back to Tasks'));
+      body += '<section class="tma-col" style="gap:4px"><h3 style="font-size:13px;font-weight:800">Activity</h3><ul class="tma-tl">' + J((st === 'saved' ? [['26 Nov 09:44', MAYA + ' created the task and gave it to Orrin.']] : st === 'run' ? [['26 Nov 09:46', MAYA + ' started run 1.'], ['26 Nov 09:44', MAYA + ' created the task and gave it to Orrin.']] : st === 'wait' ? [['26 Nov 09:51', 'Orrin proposed a runway brief (round 1).'], ['26 Nov 09:46', MAYA + ' started run 1.']] : st === 'back' ? [['26 Nov 09:58', MAYA + ' sent it back: “Add a case with the January hire…”'], ['26 Nov 09:51', 'Orrin proposed a runway brief (round 1).']] : [['26 Nov 10:12', MAYA + ' accepted round 2.'], ['26 Nov 10:08', 'Orrin proposed round 2.'], ['26 Nov 09:58', MAYA + ' sent round 1 back.']]).map(r => '<li><span class="tma-mono" style="color:var(--mu)">' + r[0] + '</span><span>' + r[1] + '</span></li>')) + '</ul></section>';
+      return sheet(600, taskHead(o.back), body, foot || null);
+    };
+
+    /* ---------- My tasks (MyTasks.jsx on the founder's Home, GET /api/teams/me/tasks) ---------- */
+    const myTasks = (o) => {
+      o = o || {};
+      const filt = '<div class="tma-row"><div class="tma-in" style="min-height:32px">Show: Open <span class="car">▾</span></div><div class="tma-in" style="min-height:32px">Due: This week <span class="car">▾</span></div></div>';
+      let inner;
+      if (o.off === 'today') inner = '<div class="nt"><span class="ic" aria-hidden="true">i</span><div>Work is not switched on yet. Its board, backlog and burn-up arrive with the Worker part (#3969).</div></div>';
+      else if (o.off === 'new') inner = '<div class="nt a" role="status"><span class="ic" aria-hidden="true">◌</span><div><b>Tasks aren’t switched on for the platform yet.</b><div>Nothing assigned to you is lost. Axal switches tasks on; you’ll find them here when it does.</div></div></div><a href="#" style="font-size:12.5px;font-weight:700">1 draft on this device · ' + CO + ' Team</a>';
+      else inner = '<div class="tma-col" style="gap:4px"><h3 style="font-size:12.5px;font-weight:700">' + CO + ' · Team tasks ' + BK('#8767 company tasks and reviews in My tasks') + '</h3><div class="tma-li" style="align-items:center;' + (o.focus ? 'outline:2px solid var(--vi);outline-offset:2px;border-radius:8px;padding:8px' : '') + '">' + (o.step ? STEP(o.step) : '') + '<a href="#" style="flex:1;font-weight:700;color:var(--ink)">Review · ' + TASK + '</a>' + C.wait('Waiting for your review') + '<span class="tma-mono">Due 4 Dec</span></div></div>'
+        + '<div class="tma-col" style="gap:4px"><h3 style="font-size:12.5px;font-weight:700">' + PRJ + ' · Work</h3><div class="tma-li" style="align-items:center"><a href="#" style="flex:1;font-weight:700;color:var(--ink)">[Write the pilot onboarding email]</a>' + C.ready() + '<span class="tma-mono">Due 1 Dec</span></div></div>';
+      return '<section class="cd" aria-labelledby="mt-h"><div class="ch"><h2 id="mt-h" class="tma-row">My tasks <span class="tma-chip none">Founder</span>' + (o.off ? '' : '<span class="tma-sm">2</span>') + '</h2>' + (o.off === 'new' ? '' : filt) + '</div>' + inner + '</section>';
+    };
+    const homePage = (o) => '<div class="tma-hd"><div style="flex:1"><span class="eye">Studio · ' + CO + '</span><h1>Home</h1><p>What needs you today on ' + CO + '.</p></div></div>' + myTasks(o) + '<section class="cd" style="opacity:.55" aria-hidden="true"><div class="ch"><h2>Studio zones</h2></div><div class="tma-row"><span class="tma-sk" style="width:220px"></span><span class="tma-sk" style="width:180px"></span><span class="tma-sk" style="width:260px"></span></div></section>';
+
+    /* ---------- phone pieces ---------- */
+    const pHead = (eye, h, p) => '<div class="tma-ph-h"><span class="eye">' + eye + '</span><h1>' + h + '</h1>' + (p ? '<p class="tma-sm">' + p + '</p>' : '') + '</div>';
+    const pTabs = (cur) => '<nav class="tma-sub" aria-label="Team" style="flex-wrap:nowrap;overflow:hidden">' + J([['people', 'People and agents'], ['tasks', 'Tasks'], ['approvals', 'Approvals']].map(([k, t]) => '<a href="#"' + (k === cur ? ' aria-current="page"' : '') + ' style="min-height:40px;white-space:nowrap">' + t + '</a>')) + '<a href="#" style="min-height:40px">More ▾</a></nav>';
+    const pAgent = (a, eng, step) => '<div class="tma-li" style="flex-wrap:wrap">' + AG(a.n[0]) + '<div class="who"><span class="tma-row">' + (step ? STEP(step) : '') + '<a href="#" style="color:var(--ink);font-weight:800;font-size:15px">' + a.n + '</a><span class="tma-chip none">' + a.role + '</span></span><span class="tma-row">' + C.act() + (eng === 'off' ? C.off('Can’t take work yet') : C.ready('Ready for work')) + '</span><span class="tma-sm">' + a.used + ' of ' + a.cap + ' this month · ' + a.open + '</span></div></div>';
+
+    /* ---------- docs boards ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="tma-dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+
+    /* ================= boards ================= */
+    const STATES = {
+      TMA00: () => page(roster('on', { step: '①', sel: true }) + ANN('① The agent’s name opens its profile (TM5a). Each agent row also offers <b>Assign a task</b>, a secondary action: the page’s one primary stays “Add to team”. “Ready for work” comes from the engine read plus the agent’s status, sponsor and cap, never from “Active” alone.'), { h: 900 }),
+      TMA01: () => page(roster('on'), { h: 960, overlay: profile('ready', { step: '②' }) }),
+      TMA02: () => page(roster('off'), { h: 980, overlay: profile('off') }),
+      TMA02B: () => crop('<h2 style="font-size:16px;font-weight:800">When Orrin can’t start: the reason, who can resolve it, and what you can do now</h2><p class="tma-sm">Shown in “Can Orrin take work now?” and on Start run. Each is the Worker’s refusal code in the canvas’s words (engineModel.js REFUSALS). A task can be saved in every case but the first; only the run waits.</p><div class="tma-g3">' + J([
+        ['Not switched on', C.off(), 'AI agents are not switched on for the platform (404 agent_engine_off).', 'Axal', 'Prepare a draft on this device.'],
+        ['Paused on the platform', C.pause(), 'Axal has paused all AI agents on the platform. Open proposals can still be decided. (engine_paused, halted)', 'Axal', 'Save the task. Start run is offered again when Axal resumes.'],
+        ['Paused on this team', C.pause(), 'Agents are paused on this team. An editor can resume them. (scope_paused)', MAYA + ', ' + NOAH, 'An editor: <b>Resume agents</b>. Others: save the task.'],
+        ['Monthly cap reached', C.pause('Paused · cap'), 'This agent has reached its monthly cap, so it is paused. Raise the cap to resume it. Resumes 1 Dec.', 'Sponsor ' + MAYA, 'The sponsor: <b>Raise the cap</b>. Others: save the task.'],
+        ['Sponsor lost access', C.pause(), 'The person who added this agent can no longer manage this team, so it is paused. (sponsor_lost_access)', 'Any editor', 'An editor: <b>Choose a new sponsor</b>.'],
+        ['At the team’s run limit', C.run('2 of 2 running'), 'This team runs as many agents at once as it allows. Try again when one finishes. (scope_busy)', 'Nobody needs to act', 'Save the task; Start run is offered when a run finishes.']
+      ].map(r => '<section class="tma-box"><div class="tma-row"><h3>' + r[0] + '</h3>' + r[1] + '</div><p style="font-size:12.5px">' + r[2] + '</p>' + dl([['Who can resolve it', '<span>' + r[3] + '</span>'], ['What you can do now', '<span>' + r[4] + '</span>']]) + '</section>')) + '</div>', 1200),
+      TMA03: () => page(roster('on'), { h: 1220, overlay: assignSheet({ who: 'solen' }) }),
+      TMA04: () => page(roster('on', { ro: true }), { h: 900, ini: 'PS', overlay: profile('ro') }),
+      TMA04B: () => page(roster('on', { ro: true }), { h: 900, ini: 'IC', mode: '<div class="tma-mode" role="status"><span aria-hidden="true">⊘</span><span><b>Super Admin preview of ' + CO + '’s Founder view.</b> Writes are off: nothing you do here is saved.</span><a href="#">Exit preview</a></div>', overlay: profile('pv') }),
+
+      TMA10: () => page(roster('on'), { h: 1240, overlay: assignSheet({ step: '③' }) }),
+      TMA11: () => page(roster('on'), { h: 1320, overlay: assignSheet({ who: 'person' }) }),
+      TMA12: () => page(roster('on'), { h: 1200, overlay: assignSheet({ fail: true, noSummary: true }) }),
+      TMA13: () => page(roster('off'), { h: 1200, overlay: assignSheet({ draft: true, noSummary: true }) }),
+      TMA13B: () => page(roster('off', { side: '<section class="cd"><div class="ch"><h2>Drafts on this device</h2>' + C.dev('1') + '</div><div class="tma-col" style="gap:4px"><b>' + TASK + '</b><span class="tma-sm">For Orrin · saved 26 Nov 09:42 · not sent</span><div class="tma-row">' + btn('Open draft') + btn('Delete') + '</div></div><p class="tma-sm">When agents are switched on: <b>Save as a task</b> is offered here and on the draft.</p></section>' }), { h: 900, overlay: '<div class="tma-toast" role="status"><span aria-hidden="true">○</span>Draft saved on this device. It isn’t sent to Orrin.<a href="#" style="color:#c4b5fd;font-weight:800">Open</a></div>' }),
+
+      TMA20: () => page(tasksTab('list', { sel: true, step: '' }).replace('<a href="#" aria-current="page">Tasks</a>', STEP('④') + '<a href="#" aria-current="page">Tasks</a>') + ANN('④ <b>Tasks</b> is a new tab on the company Team, reading the company’s tasks (GET /api/teams/company/:uid/tasks, on main). /account/companies/:uid/work, the URL #3973 named, redirects here (⚑ Q1 A), keeping ?task=. Project tasks stay on each project’s Work board.'), { h: 900 }),
+      TMA20B: () => page(tasksTab('load'), { h: 760 }),
+      TMA20C: () => page(tasksTab('empty'), { h: 760 }),
+      TMA20D: () => page(tasksTab('err'), { h: 760 }),
+      TMA20E: () => page(tasksTab('off', { cta: btn('Prepare a draft', 'p') }), { h: 760 }),
+      TMA21: () => page(tasksTab('list', { sel: true }), { h: 1000, overlay: taskSheet('saved', { step: '⑤' }) }),
+      TMA22: () => page(tasksTab('list', { sel: true }), { h: 1000, overlay: taskSheet('run') }),
+      TMA23: () => page(tasksTab('list', { sel: true, row: 'wait' }), { h: 1120, overlay: taskSheet('wait', { step: '⑥', step2: '⑦' }) }),
+      TMA24: () => page(tasksTab('list', { sel: true, row: 'wait' }), { h: 1180, overlay: taskSheet('wait', { changes: true, step: '⑦' }) }),
+      TMA24B: () => page(tasksTab('list', { sel: true }), { h: 1120, overlay: taskSheet('back') }),
+      TMA25: () => page(tasksTab('list', { sel: true, row: 'done' }), { h: 1160, overlay: taskSheet('done') }),
+
+      TMA30: () => page(homePage({ step: '①' }) + ANN('① A review named to you opens the task where it lives, with the list’s filters kept in the address: /account/companies/atlas-orchard/settings/team?tab=tasks&task=tsk_[8f2c]&from=my-tasks&state=open&due=week.'), { h: 640, cur: 'Home', rail: 'Ask about Home' }),
+      TMA31: () => page(tasksTab('list', { sel: true, row: 'wait' }), { h: 1120, overlay: taskSheet('wait', { back: true, step: '⑥' }) }),
+      TMA31B: () => page(homePage({ focus: true }) + ANN('② “‹ Back to My tasks” (or Esc, or browser Back) returns to Home with Show: Open and Due: This week kept, and focus on the same row. Accepting from the task updates the row to Done without a reload.'), { h: 640, cur: 'Home', rail: 'Ask about Home' }),
+      TMA32: () => crop('<h2 style="font-size:16px;font-weight:800">My tasks while tasks are off: today and proposed</h2><div class="tma-g2"><div class="tma-col"><span class="eye">Today on main · workAdapter.js WORK_OFF</span>' + myTasks({ off: 'today' }) + '<p class="tma-sm">Names a board the reader didn’t ask for and cites an issue number; Show and Due are drawn though they change nothing.</p></div><div class="tma-col"><span class="eye">Proposed · frontend only</span>' + myTasks({ off: 'new' }) + '<p class="tma-sm">Says who switches it on and that nothing is lost; no filters; links the draft.</p></div></div>', 1200)
+    };
+
+    const MOB = {
+      TMA40: () => phone('Team', pHead('Company settings · ' + CO, 'Team', 'People and AI agents. Agents propose; people decide.') + pTabs('people') + '<section class="cd" style="padding:12px 14px"><div class="ch"><h2>AI agents</h2><span class="sm">2</span></div>' + pAgent(ORRIN, 'on', '①') + pAgent(SOLEN, 'on') + '</section><section class="cd" style="padding:12px 14px"><div class="ch"><h2>AI agents on this team</h2></div>' + dl([['Agent engine', C.ok('On')], ['Runs at once', '<span class="tma-mono">0 of 2</span>']]) + '</section>', { sticky: btn('Add to team ▾', 'p') }),
+      TMA40B: () => phone('Orrin', '<div class="tma-row" style="flex-wrap:nowrap">' + AG('O', 1) + '<div class="tma-col" style="gap:3px"><h1 style="font-size:21px;font-weight:800">Orrin</h1><span class="tma-row"><span class="tma-chip none">CFO agent</span>' + C.act() + '</span></div></div>' + canTake('ready') + '<section class="tma-col" style="gap:6px"><h2 style="font-size:13px;font-weight:800">Budget</h2><span class="tma-mono">$12.40 of $40.00 · November</span><div class="tma-bar" role="img" aria-label="$12.40 of $40.00 used"><i style="width:31%"></i></div></section>', { back: 'Back to Team', sticky: STEP('②') + btn('Assign a task', 'p') }),
+      TMA40C: () => phone('Orrin', '<div class="tma-row" style="flex-wrap:nowrap">' + AG('O', 1) + '<div class="tma-col" style="gap:3px"><h1 style="font-size:21px;font-weight:800">Orrin</h1><span class="tma-row"><span class="tma-chip none">CFO agent</span>' + C.off('Can’t take work yet') + '</span></div></div>' + canTake('off').replace(/grid-template-columns:170px minmax\(0,1fr\)/, 'grid-template-columns:minmax(0,1fr)').replace(/<dl class="tma-chk">/, '<dl class="tma-chk" style="grid-template-columns:118px minmax(0,1fr)">'), { back: 'Back to Team', sticky: btn('Prepare a draft', 'p') }),
+      TMA40D: () => phone('Assign a task', '<span class="tma-sm">To Solen · CEO agent · owner ' + MAYA + '</span>' + field('Assign to', assignee('solen')) + field('Task', inp(TASK)) + field('Expected deliverable', inp('Runway brief', '', '▾'), '', ' ' + BK('deliverable')) + '<div class="tma-box a" role="status"><h3>No skill Solen holds produces a runway brief</h3><p class="tma-sm" style="color:var(--ink)">A runway brief comes from Cash runway snapshot, which Orrin holds.</p>' + btn('Give it to Orrin instead', '', ' style="width:100%;min-height:44px"') + btn('Give it to a person', '', ' style="width:100%;min-height:44px"') + '<a href="#" style="font-size:12.5px;font-weight:700;min-height:44px;display:flex;align-items:center">Add a skill to Solen · Skills tab</a></div>', { back: 'Cancel', sticky: btn('Save task', 'p', ' aria-disabled="true" style="opacity:.5"') }),
+      TMA40E: () => phone('Orrin', '<div class="tma-row" style="flex-wrap:nowrap">' + AG('O', 1) + '<div class="tma-col" style="gap:3px"><h1 style="font-size:21px;font-weight:800">Orrin</h1><span class="tma-row"><span class="tma-chip none">CFO agent</span>' + C.act() + C.ro() + '</span></div></div>' + canTake('ro'), { back: 'Back to Team' }),
+      TMA40F: () => phone('Assign a task', '<span class="tma-sm">To Orrin · CFO agent · owner ' + MAYA + '</span>' + field('Assign to', assignee('orrin')) + field('Task', inp(TASK)) + field('Expected deliverable', inp('Runway brief', '', '▾'), '', ' ' + BK('deliverable')) + field('Skill', inp('Cash runway snapshot ' + C.ok('Ready'), '', '▾'), '', ' ' + BK('skill')) + field('Reviewer', inp(MAYA + ' (you)', '', '▾'), '', ' ' + BK('reviewer')) + field('Due', inp('<span class="tma-mono">4 Dec 2026</span>', '', '▦')) + field('Cap for this task', inp('<span class="tma-mono">$2.00</span>'), 'Each run holds up to $0.40.', ' ' + BK('cap')), { back: 'Cancel', sticky: STEP('③') + btn('Save task', 'p') }),
+      TMA40G: () => phone('Task', '<span class="eye">Team › Tasks</span><h1 style="font-size:19px;font-weight:800;line-height:1.25">' + TASK + '</h1>' + dl([['Status', C.open() + C.ready()], ['Assignee', 'Orrin'], ['Reviewer', MAYA + ' (you)'], ['Due', '<span class="tma-mono">4 Dec 2026</span>'], ['Cost', C.none('No runs yet')]]).replace('<dl class="tma-chk">', '<dl class="tma-chk" style="grid-template-columns:96px minmax(0,1fr)">') + nextBox('Start Orrin’s run', 'Holds up to <span class="tma-mono">$0.40</span> of the <span class="tma-mono">$2.00</span> cap.', ''), { back: 'Back to Tasks', sticky: STEP('⑤') + btn('Start run', 'p') }),
+      TMA40H: () => phone('Review', '<span class="eye">Team › Tasks</span><h1 style="font-size:19px;font-weight:800;line-height:1.25">' + TASK + '</h1><div class="tma-row">' + C.wait() + '<span class="tma-sm">Reviewer ' + MAYA + ' (you)</span></div><h2 style="font-size:14px;font-weight:800">Orrin’s proposal · round 1</h2>' + snapshot(1) + '<div class="tma-row">' + btn('Request changes', '', ' style="flex:1;min-height:44px"') + btn('More ▾', '', ' style="min-height:44px" aria-label="More: Edit, Discard"') + '</div>', { back: 'Back to Tasks', sticky: STEP('⑥') + btn('Accept', 'p') }),
+      TMA40I: () => phone('Request changes', '<span class="eye">' + TASK + '</span><div class="tma-f"><label for="rcm">Review comment <span class="tma-sm" style="font-weight:600">· required</span></label><div class="tma-in mlt foc" id="rcm" style="min-height:120px">Add a case with the January hire (+[$18,000] a month). Keep the rest.</div><span class="hint">Orrin gets this with the task. Round 2 starts only when you press Start round 2.</span></div><p class="tma-sm">' + BK('#8767 request changes on a company task') + '</p>', { back: 'Cancel', sticky: STEP('⑦') + btn('Send back to Orrin', 'p') }),
+      TMA40J: () => phone('Task', '<a href="#" style="font-size:13px;font-weight:700;min-height:44px;display:flex;align-items:center">‹ Back to My tasks</a><h1 style="font-size:19px;font-weight:800;line-height:1.25">' + TASK + '</h1><div class="tma-row">' + C.wait() + '<span class="tma-sm">' + CO + ' · Team › Tasks</span></div>' + snapshot(1) + ANN('Opened from My tasks (Show: Open · Due: This week). Back returns to that list, filters kept, focus on this row.'), { back: 'Back to My tasks', sticky: btn('Request changes') + btn('Accept', 'p') })
+    };
+
+    const DOCS = {
+      TMA60: () => dk('<h1>Labels, headings and keyboard order</h1><p>Exact labels as drawn. One h1 per page; sheets are dialogs labelled by their h2. Focus moves into a sheet on open (to its h2) and back to the control that opened it on close; Esc closes. Every state has a word and a glyph (D5129). Status changes are announced politely; a failed save is an alert because the person pressed Save.</p>'
+        + '<h2>Heading outline</h2>' + tbl(['Screen', 'Outline'], [
+          ['Team › People and agents', 'h1 Team · h2 AI agents · h2 People · h2 AI agents on this team'],
+          ['Agent profile (sheet)', 'h2 Orrin · h3 Can Orrin take work now? (or Orrin can’t start work yet · What this means) · h3 Skills · h3 Budget · h3 Open work'],
+          ['Assign a task (sheet)', 'h2 Assign a task (Prepare a draft task when off) · field labels · h3 When you save'],
+          ['Team › Tasks', 'h1 Team · h2 Tasks · table “Tasks on this Team”'],
+          ['Task (sheet)', 'h2 the task’s title · h3 Next action · h3 Run 1 / Orrin’s proposal · round n · h3 Activity'],
+          ['Home › My tasks', 'h1 Home · h2 My tasks · h3 per company or project']])
+        + '<h2>Keyboard focus order</h2>' + tbl(['Screen', 'Order'], [
+          ['Team roster', 'Company switcher → sidebar → Add to team → settings tabs → Team tabs → Orrin (opens profile) → Assign a task (Orrin) → Solen → Assign a task (Solen) → people → engine card links → Eadwyn'],
+          ['Agent profile', 'Close → Skills tab link → (off: Ask Axal about AI agents) → Pause → Edit cap → Change sponsor → Assign a task (or Prepare a draft)'],
+          ['Assign a task', 'Close → Assign to (radio group: arrows move) → assignee picker (combobox; Esc closes list) → Task → Expected deliverable → Skill (radio group) → Module → About a project → Reviewer → Due (date input, typed or picker) → Cap → Notes → Cancel → Save task. On a failed save focus goes to the alert, then Try again. With no eligible skill: Give it to Orrin instead → Give it to a person → Add a skill to Solen; Save task stays focusable with aria-disabled and its reason.'],
+          ['Task', 'Close (or ‹ Back to My tasks) → Start run / Cancel run → proposal table → Discard → Edit → Request changes → Accept. Request changes moves focus to Review comment; Send back is refused with “Add a comment explaining the changes needed.” if it is empty (TaskReview.jsx).'],
+          ['Phone 390', 'Same order; the sticky action bar is last; every target is at least 44 px.']])
+        + '<h2>Exact labels</h2>' + tbl(['Where', 'Label'], [
+          ['Roster row and profile', 'Assign a task · Ready for work · Can’t take work yet · Active on the roster'],
+          ['Off', 'Orrin can’t start work yet · Who can switch it on · What you can do now · What happens to the draft · Not the same as · Prepare a draft · Save draft on this device · Ask Axal about AI agents · opens a support ticket'],
+          ['Assign', 'Assign to · An AI agent · A person · Task · Expected deliverable · Skill · Module · About a project · Reviewer · Due · Cap for this task · Notes for Orrin · Save task · Cancel'],
+          ['Task', 'Next action · Start run · Cancel run · Start round 2 · Accept · Request changes · Edit · Discard · Review comment · Send back to Orrin · Back to Tasks · ‹ Back to My tasks'],
+          ['Announcements', '“Task saved. Orrin hasn’t started.” · “Draft saved on this device. It isn’t sent to Orrin.” · “Run started.” · “Orrin proposed a runway brief.” · “Sent back to Orrin.” · “Accepted.” · alert: “The task wasn’t saved. Nothing changed…”']])),
+      TMAH: () => dk('<h1>Handoff · #8767 Team · Assigning Work from an Agent</h1><p>Checked against main <code>7553cd37b9</code> (Thu 26 Nov 2026). Sample people, company, figures and costs are bracketed and fictional; Orrin and Solen are main’s CFO and CEO personas (D4117).</p>'
+        + '<h2>What main does today</h2>' + tbl(['File', 'What it shows'], [
+          ['<code>frontend/src/routes/team.jsx</code>', 'Company Team at <code>/account/companies/:uid/settings/team</code>; Work only at <code>/projects/:id/work</code> (“D1614: only projects have Work; a company has compliance tasks”). No route for <code>/account/companies/:uid/work</code>, so the URL in #3973 falls to the 404.'],
+          ['<code>pages/team/AgentProfileSheet.jsx</code>', 'Persona, Story, Values, permissions, budget, proposals, activity; actions Change sponsor, Edit cap, Pause, Remove. No assignment action.'],
+          ['<code>routes/team_agents.ts</code> vs <code>routes/agent_engine.ts</code>', 'Two flags: the roster needs <code>TEAM_AGENTS_ENABLED</code>; tasks, runs and the engine also need <code>AGENT_ENGINE</code> (404 <code>agent_engine_off</code>). That is why agents read “Active” while every task read is off.'],
+          ['<code>agent_engine.ts</code>, <code>services/agents/tasks.ts</code>', 'Company and project tasks: <code>POST /:scope/:id/tasks</code> (manage) with title, detail, module, option, assignee (person or agent), due_at, priority, goal, context_project_id; refusals agent_not_live, module_not_allowed, assignee_not_member, read_only_admin. <code>GET /tasks/:uid/quote</code>, <code>POST /tasks/:uid/start</code> (manage or sponsor; engine_paused, scope_paused, agent_busy, scope_busy, queue_full). No skill, deliverable, reviewer or per-task cap field.'],
+          ['<code>routes/work_items.ts</code>, <code>pages/work/TaskReview.jsx</code>', 'Approve and close / Request changes (comment required) exist for project tasks only; a company scope answers 404.'],
+          ['<code>routes/team_agents.ts</code> queue, <code>pages/team/ApprovalsTab.jsx</code>', 'An agent’s proposal is decided once in Approvals: Accept, Edit, Discard (manage or sponsor).'],
+          ['<code>GET /agents/:uid/skills/:slug/readiness</code>', 'Per-agent skill preflight (D4667) for the first ten skills, including <code>cash-runway-snapshot</code> (balances and three months of burn).'],
+          ['<code>pages/work/MyTasks.jsx</code>, <code>services/agents/teamRoster.ts</code>', 'My tasks lists project tasks given to the reader (link <code>/projects/:id/work?item=</code>) and company compliance tasks. Company Team tasks and reviews are not listed. With the engine off it shows <code>WORK_OFF</code>, which cites #3969.'],
+          ['<code>lib/api/agentEngine.js</code>', '<code>taskQuote</code> and <code>startTask</code> client methods exist; no page calls them.']])
+        + '<h2>Requires engineering (◇)</h2><ul class="b"><li>◇ Skill on a task: store the chosen skill and check it against the agent’s skills and the deliverable (today: module and option only).</li><li>◇ Expected deliverable as a field (today it can only go in <code>detail</code>).</li><li>◇ Named reviewer on a task, and the review decision limited to them (today any editor or the sponsor decides).</li><li>◇ Per-task cap enforced across runs (today: the agent’s monthly cap and a per-run quote).</li><li>◇ Request changes on a company task (W7 review is project-only; the queue has Accept, Edit, Discard).</li><li>◇ My tasks: company Team tasks given to me and reviews named to me.</li></ul>'
+        + '<h2>Pending the owner (⚑)</h2><ul class="b"><li>⚑ Q1 The company Work URL. <b>A (drawn):</b> redirect <code>/account/companies/:uid/work</code> to the company Team’s new Tasks tab, keeping <code>?task=</code>; project Work stays per project. B: restore a company Work board (needs W1’s board for company scope).</li><li>⚑ Q2 A draft while tasks are off. <b>A (drawn):</b> kept on this device only, never sent or shared, deletable; offered as a task when agents are on. B: hold drafts on the server (a new store).</li><li>⚑ Q3 Who reviews. <b>A (drawn):</b> the named reviewer decides; another editor can change the reviewer. B: keep today’s rule, any editor or the sponsor.</li></ul>'
+        + '<h2>Frontend only (on main’s routes)</h2><ul class="b"><li>Assign a task on the roster row and the profile; “Can Orrin take work now?” from the engine, agent, budget and readiness reads; the six reasons with who resolves each (TMA02B).</li><li>The Assign sheet with the fields main stores (assignee person or agent, title, module, project, due, notes); refusals in the Worker’s words; a failed save keeps the answers.</li><li>Team › Tasks tab on <code>GET /api/teams/company/:uid/tasks</code>; the task sheet with Start run (<code>taskQuote</code>, <code>startTask</code>), run steps, the proposal and Accept/Edit/Discard through the queue.</li><li>Back to My tasks with the filters in the address; My tasks copy while off. Drafts on this device (if Q2 = A).</li></ul>'
+        + '<h2>Preserved</h2><p>The founder shell, company switcher, Company settings tabs, Team tabs, “Add to team” as the page’s primary, the profile’s sections and actions, Approvals as the home of agents’ own suggestions, the Eadwyn rail.</p>'
+        + '<h2>Acceptance → boards</h2>' + tbl(['Criterion', 'Boards'], [
+          ['Discoverable path from Team and an agent profile to scoped work', 'TMA00 ① → TMA01 ② → TMA10 ③ → TMA20 ④ → TMA21 ⑤; phone TMA40 → TMA40B → TMA40F → TMA40G'],
+          ['Honour the engine state, role and seats; Active alone isn’t enough', 'TMA01, TMA02, TMA02B, TMA03, TMA11 (seat refusals), TMA40C'],
+          ['Restore the documented URL or redirect', 'TMA20 annotation, ⚑ Q1'],
+          ['Execution off: who resolves, what to prepare, what happens to a draft', 'TMA02, TMA02B, TMA13, TMA13B, TMA20E, TMA32, TMA40C'],
+          ['Distinct from a support ticket and from a suggestion awaiting acceptance', 'TMA02 (Not the same as), TMA20C, TMA23 note'],
+          ['Agent, skill, deliverable, reviewer, due, cap', 'TMA10, TMA40F (◇ for skill, deliverable, reviewer, cap)'],
+          ['Proposal, request changes and acceptance', 'TMA22, TMA23 ⑥, TMA24 ⑦, TMA24B, TMA25; TMA40H, TMA40I'],
+          ['Unavailable engine and a human-only assignment', 'TMA02, TMA13, TMA20E; TMA11'],
+          ['Runnable, configured-but-unavailable, no eligible skill, read-only', 'TMA01; TMA02; TMA03, TMA40D; TMA04, TMA04B, TMA40E'],
+          ['Loading, failure with retry, confirmed empty, unavailable', 'TMA20B, TMA12, TMA20D, TMA20C, TMA20E'],
+          ['Owner, deliverable, budget and next action visible', 'TMA21–TMA25 (meta and Next action), TMA40G'],
+          ['Route back from My tasks; project and task preserved', 'TMA30 ① → TMA31 → TMA31B ②; TMA40J'],
+          ['Desktop and 390, exact labels, keyboard order', 'All TMA0–3 boards; TMA40–TMA40J; TMA60'],
+          ['Dark', 'TMA50']]))
+    };
+
+    let html;
+    if (B === 'TMA50') html = page(tasksTab('list', { sel: true, row: 'wait' }), { h: 1120, overlay: taskSheet('wait', { step: '⑥', step2: '⑦' }) });
+    else if (STATES[B]) html = STATES[B]();
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = STATES.TMA01();
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

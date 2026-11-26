@@ -195,6 +195,8 @@ test('a closing line reads In Portfolio only through a position that names it; t
   assert.deepEqual(none.body.lines.map((l: any) => [l.investor_user_id, l.in_portfolio, l.portfolio_position_uid]),
     [[INV_A, false, null], [INV_B, false, null]], 'no position yet: false, never guessed');
 
+  // D6889 part 2: only a received line can be recorded as a position.
+  db.prepare("UPDATE closing_lines SET status = 'received' WHERE uid = ?").run(lines[INV_A]);
   const pos = await call(db, 'POST', '/api/positions', ADMIN, { project_id: PROJECT, round_name: 'Seed', invested_amount: 250000, closing_line_uid: lines[INV_A] });
   assert.equal(pos.status, 201, pos.text);
   // A position of the same venture and round that names no line links nothing.

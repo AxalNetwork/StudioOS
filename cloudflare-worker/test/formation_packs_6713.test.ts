@@ -57,7 +57,7 @@ test('registering and replaying the seed writes project steps and company events
   } finally { f.close(); }
 });
 
-test('company-only items seed company events and honestly have no reminder coverage', async () => {
+test('company-only items seed company events, which the filing reminder job covers (D6039 part 2)', async () => {
   const f = fixture(true);
   try {
     item(f, 'annual_report', 'Synthetic report', 'annual_report', { due_month: 12, due_day: 1 });
@@ -65,8 +65,11 @@ test('company-only items seed company events and honestly have no reminder cover
     assert.equal(f.db.prepare('SELECT count(*) AS n FROM formation_steps WHERE project_id=6713').get()!.n, 0);
     assert.equal(f.db.prepare('SELECT count(*) AS n FROM compliance_events WHERE company_id=6713 AND project_id IS NULL').get()!.n, 1);
     const pack = await formationPack(f.env, 'us_de_ccorp', { versionId: 6713, today: ON, registeredOn: ON });
-    assert.equal(pack[0].reminders, false);
+    assert.equal(pack[0].reminders, false, 'a read with neither a venture nor a company has no reminder source');
     assert.equal(pack[0].due_date, '2026-12-01');
+    assert.equal((await formationPack(f.env, 'us_de_ccorp', { versionId: 6713, today: ON, registeredOn: ON, companyId: 6713 }))[0].reminders, true);
+    const evidence = JSON.parse(String(f.db.prepare("SELECT evidence_json FROM formation_case_stages WHERE case_id=6713 AND stage='registered'").get()!.evidence_json));
+    assert.equal(evidence.pack_items[0].reminders, true);
   } finally { f.close(); }
 });
 

@@ -247,6 +247,14 @@
     ]
   },
   {
+    "id": "coverage-matrix",
+    "command": [
+      "node",
+      "scripts/ci/coverage-matrix.mjs",
+      "--check"
+    ]
+  },
+  {
     "id": "build-route-map",
     "command": [
       "node",

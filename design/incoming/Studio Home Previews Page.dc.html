@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Previews · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nwi-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nwi-cv.nwi-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nwi-cv *{box-sizing:border-box}
+.nwi-cv a{color:var(--vt);text-decoration:none}
+.nwi-cv button{font-family:var(--sg);cursor:pointer}
+.nwi-cv :focus-visible,.nwi-cv .nwi-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nwi-cv h1,.nwi-cv h2,.nwi-cv h3,.nwi-cv p,.nwi-cv ol,.nwi-cv ul,.nwi-cv dl,.nwi-cv dd,.nwi-cv dt{margin:0;padding:0}
+.nwi-cv ol,.nwi-cv ul{list-style:none}
+.nwi-mo{font-family:var(--mo)}
+.nwi-mu{color:var(--mu)}
+.nwi-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nwi-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nwi-sd .nwi-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nwi-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nwi-sd .nwi-grp{padding:6px 20px 4px}
+.nwi-sd nav{display:flex;flex-direction:column;gap:2px}
+.nwi-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nwi-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nwi-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nwi-mn{min-width:0;display:flex;flex-direction:column}
+.nwi-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nwi-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nwi-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nwi-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nwi-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nwi-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nwi-sp .nwi-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nwi-sp .nwi-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nwi-hdr{display:flex;flex-direction:column;gap:6px}
+.nwi-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nwi-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nwi-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nwi-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nwi-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nwi-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nwi-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nwi-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nwi-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nwi-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nwi-k.nwi-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nwi-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nwi-kv.nwi-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nwi-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nwi-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nwi-c3{grid-column:span 3}
+.nwi-c4{grid-column:span 4}
+.nwi-c5{grid-column:span 5}
+.nwi-c6{grid-column:span 6}
+.nwi-c7{grid-column:span 7}
+.nwi-c8{grid-column:span 8}
+.nwi-c9{grid-column:span 9}
+.nwi-c12{grid-column:span 12}
+.nwi-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nwi-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nwi-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nwi-ch .nwi-sm{font:500 12px var(--mo);color:var(--mu)}
+.nwi-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nwi-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nwi-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nwi-btn.nwi-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nwi-btn.nwi-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nwi-btn.nwi-ask .nwi-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nwi-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nwi-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nwi-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nwi-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nwi-pl.nwi-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nwi-pl.nwi-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nwi-pl.nwi-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nwi-pl.nwi-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nwi-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nwi-nt.nwi-r{background:var(--negBg);border-color:var(--negE)}
+.nwi-nt.nwi-a{background:var(--amBg);border-color:var(--amE)}
+.nwi-nt.nwi-g{background:var(--posBg);border-color:var(--posE)}
+.nwi-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nwi-nt.nwi-r .nwi-ic{background:var(--neg)}
+.nwi-nt.nwi-a .nwi-ic{background:var(--amT)}
+.nwi-nt.nwi-g .nwi-ic{background:var(--pos)}
+.nwi-nt .nwi-bt{margin-left:auto;flex:none}
+.nwi-sk{display:block;border-radius:6px;background:var(--skel)}
+.nwi-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nwi-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nwi-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nwi-tbl .nwi-n{text-align:right;font-family:var(--mo)}
+.nwi-tbl td.nwi-na{color:var(--mu);font-weight:500}
+.nwi-tbl td b{font-weight:700}
+.nwi-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nwi-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nwi-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nwi-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nwi-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nwi-pg .nwi-pb{display:flex;gap:5px;align-items:center}
+.nwi-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nwi-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nwi-st{display:grid;gap:14px 18px}
+.nwi-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nwi-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nwi-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nwi-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nwi-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nwi-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nwi-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nwi-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nwi-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nwi-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nwi-stp span:first-child{border-radius:999px 0 0 999px}
+.nwi-stp span:last-child{border-radius:0 999px 999px 0}
+.nwi-stp span+span{border-left:0}
+.nwi-stp span.nwi-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nwi-stp span.nwi-nx{border-style:dashed}
+.nwi-tl{display:flex;flex-direction:column}
+.nwi-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nwi-tl li:first-child{border-top:0}
+.nwi-tl .nwi-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nwi-tl .nwi-mk.nwi-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nwi-tl .nwi-mk.nwi-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nwi-tl .nwi-mk.nwi-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nwi-tl .nwi-mk.nwi-no{border-style:dashed}
+.nwi-tl .nwi-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nwi-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nwi-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nwi-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nwi-ph .nwi-hrow h1{font-size:22px}
+.nwi-ph .nwi-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nwi-ph .nwi-k{padding:12px 13px}
+.nwi-ph .nwi-kv{font-size:22px}
+.nwi-ph .nwi-btn{min-height:44px}
+.nwi-ph .nwi-lk{min-height:44px}
+.nwi-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nwi-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nwi-lst li:first-child{border-top:0}
+.nwi-lst b{font-size:13.5px}
+.nwi-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nwi-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nwi-bar i{display:block;height:100%;background:var(--vi)}
+.nwi-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nwi-toast a{color:#c4b5fd!important}
+.nwi-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nwi-pr:first-of-type{border-top:0}
+.nwi-pr b{font-size:13px}
+.nwi-pr small{display:block;font-size:12px;color:var(--mu)}
+.nwi-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grp:first-of-type{border-top:0}
+.nwi-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nwi-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nwi-tbl tr.nwi-cur td{background:var(--lav)}
+.nwi-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nwi-sec h3{font-size:13.5px;font-weight:800}
+.nwi-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nwi-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nwi-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nwi-k.nwi-bad{border-color:var(--negE)}
+.nwi-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nwi-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nwi-cv{text-align:left}
+.nwi-cv table{border-spacing:0}
+.nwi-st.nwi-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nwi-sh.nwi-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nwi-sd .nwi-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nwi-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nwi-s.nwi-ur{color:var(--neg)}
+.nwi-s.nwi-rf{color:var(--ink)}
+.nwi-s b{font:800 12px var(--mo)}
+.nwi-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nwi-vd{text-decoration:line-through;color:var(--mu)}
+.nwi-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nwi-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nwi-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nwi-rh .nwi-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nwi-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nwi-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nwi-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nwi-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nwi-src span::before{content:"↳ ";color:var(--vt)}
+.nwi-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nwi-draft p.nwi-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nwi-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nwi-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nwi-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nwi-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nwi-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nwi-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nwi-line b.nwi-mo{font-size:14px}
+.nwi-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grh:first-child{border-top:0;padding-top:0}
+.nwi-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nwi-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nwi-mc .nwi-mh{display:flex;gap:10px;align-items:center}
+.nwi-mc .nwi-mh>div{flex:1;min-width:0}
+.nwi-mc small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nwi-rs span::before{content:"· ";color:var(--mu)}
+.nwi-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nwi-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nwi-strip .nwi-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nwi-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nwi-f{display:flex;flex-direction:column;gap:5px}
+.nwi-f label,.nwi-f .nwi-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nwi-in.nwi-hint{color:var(--mu)}
+.nwi-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nwi-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nwi-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nwi-panel .nwi-dh{padding:16px 20px 12px}
+.nwi-panel .nwi-dc{padding:14px 20px}
+.nwi-panel .nwi-df{padding:12px 20px}
+.nwi-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nwi-pick.nwi-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nwi-pick small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nwi-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nwi-bn.nwi-ro{background:#334155;color:#fff}
+.nwi-bn.nwi-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nwi-bn b{font-weight:800}
+.nwi-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nwi-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nwi-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nwi-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nwi-tile b{font:700 22px var(--mo)}
+.nwi-ph.nwi-fx{height:844px;overflow:hidden}
+.nwi-ph .nwi-pbd{flex:1;min-height:0}
+.nwi-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nwi-stk .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nwi-pc .nwi-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nwi-pc small{font-size:12px;color:var(--mu)}
+.nwi-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nwi-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nwi-doc h2{font-size:17px;font-weight:800}
+.nwi-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nwi-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-doc .nwi-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nwi-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nwi-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nwi-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nwi-lst small{display:block}
+.nwi-lst li>div{min-width:0}
+.nwi-cv td,.nwi-cv th,.nwi-cv dd,.nwi-cv li,.nwi-cv p,.nwi-cv h1,.nwi-cv h2,.nwi-cv h3{color:inherit}
+.nwi-tbl td{color:var(--ink)}
+.nwi-tbl td.nwi-mo{white-space:nowrap}
+.nwi-crop,.nwi-doc{box-sizing:border-box}
+/* SPV · Studio Home Previews: Founder and Exploring in an HQ-held role preview and as a member (#8730). Built on nwi_extra.css; only new pieces here. */
+/* preview bar (H38 strip, drawn solid) */
+.spv-pv{display:flex;align-items:center;gap:10px;min-height:42px;padding:6px 16px;background:#4c1d95;color:#fff;font:500 12.5px var(--sg);flex-wrap:wrap}
+.spv-pv b{font-weight:700}
+.spv-pv .spv-trig{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border-radius:8px;border:0;background:rgba(255,255,255,.16);color:#fff;font:600 12.5px var(--sg)}
+.spv-pv .spv-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.2);font:700 11.5px var(--sg);white-space:nowrap}
+.spv-pv .spv-say{opacity:.92}
+.spv-pv .spv-back{display:inline-flex;align-items:center;min-height:30px;padding:0 12px;border-radius:8px;border:0;background:#fff;color:#4c1d95;font:800 12.5px var(--sg);white-space:nowrap}
+.spv-pv .spv-sp{flex:1}
+.spv-ppv{display:flex;flex-direction:column;gap:4px;padding:8px 12px 9px;background:#4c1d95;color:#fff;font:500 12px var(--sg)}
+.spv-ppv .spv-r{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.spv-ppv .spv-chip{display:inline-flex;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.2);font:700 11.5px var(--sg)}
+.spv-ppv .spv-back{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:9px;border:0;background:#fff;color:#4c1d95;font:800 13px var(--sg);white-space:nowrap}
+.spv-ppv .spv-say{opacity:.92;line-height:1.4}
+/* preview notice in the page (AdvisorPreviewNotice's shape) */
+.spv-note{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:9px 12px;border:1px dashed var(--hair2);border-radius:9px;background:var(--raised);font-size:12.5px;line-height:1.5;color:var(--mu)}
+.spv-note .spv-w{font:800 10px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
+.spv-note a{font-weight:700}
+/* state chips: word + border + glyph */
+.spv-c{display:inline-flex;align-items:center;gap:5px;padding:0 8px;border-radius:6px;font:700 11px var(--sg);line-height:1.8;white-space:nowrap;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.spv-c svg{flex:none}
+.spv-c.spv-na{border-style:dashed}
+.spv-c.spv-un{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.spv-c.spv-wh{color:var(--ink);background:var(--raised)}
+.spv-c.spv-ex{color:var(--vt);border:1px dashed #a78bfa;background:var(--lav);font-family:var(--mo);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.spv-c.spv-ok{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.spv-c.spv-nr{border-color:var(--hair2)}
+.spv-why{font-size:12px;color:var(--mu);line-height:1.45}
+/* studio header */
+.spv-hd{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.spv-hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.spv-hd p{font-size:13px;color:var(--mu);margin-top:4px;max-width:680px}
+.spv-ph{display:inline-flex;align-items:center;padding:1px 10px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 11px var(--sg);border:1px solid var(--lavE)}
+.spv-ph.spv-sky{background:#e0f2fe;color:#075985;border-color:#bae6fd}
+.nwi-dk .spv-ph.spv-sky{background:rgba(14,165,233,.12);color:#7dd3fc;border-color:rgba(14,165,233,.4)}
+/* tiles strip */
+.spv-tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.spv-tile{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.spv-tile .spv-v{font:700 20px var(--mo);letter-spacing:-.02em;line-height:1.2}
+.spv-tile .spv-v.spv-dash{color:var(--mu)}
+.spv-tile .spv-c{align-self:flex-start}
+.spv-tile .spv-s{font-size:11.5px;color:var(--mu);line-height:1.4}
+.spv-tile.spv-tna{border-style:dashed;background:transparent}
+/* Eadwyn interview panel */
+.spv-chat{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:grid;grid-template-columns:minmax(0,1fr) 300px;min-width:0;overflow:hidden}
+.spv-chat.spv-one{grid-template-columns:minmax(0,1fr)}
+.spv-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.spv-ch h2{font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px}
+.spv-ch .spv-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.spv-main{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--hair)}
+.spv-chat.spv-one .spv-main{border-right:0}
+.spv-thr{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.spv-day{align-self:center;font:600 11px var(--mo);color:var(--mu)}
+.spv-bub{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:start;max-width:86%}
+.spv-bub .spv-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 11px var(--sg)}
+.spv-bub .spv-tx{padding:9px 12px;border-radius:4px 12px 12px 12px;background:var(--raised);border:1px solid var(--hair);font-size:13px;line-height:1.5}
+.spv-bub .spv-tx small{display:block;font:600 10.5px var(--mo);color:var(--mu);margin-bottom:3px;letter-spacing:.03em}
+.spv-bub.spv-exq .spv-tx{border:1.5px dashed #a78bfa;background:var(--card)}
+.spv-me{align-self:flex-end;max-width:78%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:13px;line-height:1.5}
+.spv-opts{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 0 32px}
+.spv-opts button{min-height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--lavE);background:var(--card);color:var(--vt);font:700 12.5px var(--sg)}
+.spv-held{margin:2px 0 0 32px;display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1px solid var(--hair2);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5}
+.spv-cmp{margin-top:auto;display:flex;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid var(--hair)}
+.spv-cmp .spv-in{flex:1;display:flex;align-items:center;min-height:38px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;color:var(--mu);font-size:13px;background:var(--card)}
+.spv-cmp.spv-off .spv-in{border-style:dashed;background:var(--raised)}
+.spv-main .spv-cmpn{padding:0 16px 12px;font-size:11.5px;color:var(--mu)}
+.spv-side{padding:14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0;background:var(--card)}
+.spv-side h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;gap:6px}
+.spv-nx{display:flex;flex-direction:column;gap:3px;padding:9px 10px;border:1px solid var(--hair);border-radius:10px;font-size:12.5px;line-height:1.45}
+.spv-nx b{font-weight:700}
+.spv-nx a{font-weight:700;font-size:12px}
+.spv-nx.spv-dx{border-style:dashed}
+.spv-nx .spv-t{display:flex;justify-content:space-between;align-items:center;gap:6px}
+/* next step card */
+.spv-ns{background:var(--card);border:1px solid var(--hair);border-left:3px solid var(--vi);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.spv-ns h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.spv-ns p{font-size:13px;line-height:1.55;color:var(--ink)}
+.spv-ns .spv-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.spv-ns.spv-wait{border-left-color:var(--hair2)}
+/* lists for exploring lanes */
+.spv-lane{display:flex;flex-direction:column;gap:8px}
+.spv-lane li{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border:1px solid var(--hair);border-radius:10px;font-size:12.5px;line-height:1.45}
+.spv-lane li b{font-size:13px}
+.spv-lane li span{color:var(--mu)}
+.spv-lane.spv-later li{border-style:dashed}
+.spv-lane li a{font-weight:700}
+/* numbered route step */
+.spv-n{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#18181b;color:#fff;font:800 11px var(--mo);vertical-align:middle}
+.nwi-dk .spv-n{background:#e5e7eb;color:#111827}
+.spv-stepbar{display:flex;align-items:center;gap:10px;padding:7px 12px;border:1.5px dashed #a78bfa;border-radius:10px;background:transparent;font-size:12.5px;color:var(--mu)}
+.spv-stepbar b{font-weight:800}
+/* annotations: not product copy */
+.spv-ann{border:1.5px dashed #a78bfa;border-radius:10px;padding:9px 12px;font:500 11.5px var(--sg);line-height:1.55;color:var(--mu);background:transparent}
+.spv-ann b{color:var(--ink)}
+.spv-ann code{font:500 11px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px;color:var(--ink)}
+.spv-fo{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#f59e0b;color:#18181b;font:800 10px var(--mo);vertical-align:1px;margin-right:4px}
+/* preview shell menu */
+.spv-menu{position:absolute;top:44px;left:190px;width:340px;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:6px 0;z-index:5;font-family:var(--sg)}
+.spv-menu .spv-mh{padding:4px 14px 8px;font:800 10.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:#6b6577}
+.spv-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px 14px;font:600 13px var(--sg);color:#18181b}
+.spv-menu button span{display:block;font-size:11.5px;font-weight:500;color:#6b6577}
+.spv-menu button[aria-checked=true]{background:#f4f0fe;color:#6d28d9}
+.spv-menu button.spv-fv{outline:2px solid #7c3aed;outline-offset:-2px}
+.spv-menu .spv-mf{margin-top:4px;border-top:1px solid #ececf1;padding:8px 14px 4px;font-size:11.5px;line-height:1.45;color:#6b6577}
+.spv-sheet{position:absolute;left:0;right:0;bottom:0;z-index:5;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--hair);padding:10px 0 18px;box-shadow:0 -10px 30px rgba(0,0,0,.18)}
+.spv-sheet .spv-grab{width:40px;height:4px;border-radius:9px;background:var(--hair2);margin:0 auto 10px}
+.spv-sheet .spv-mh{padding:2px 16px 8px;font:800 10.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.spv-sheet button{display:flex;flex-direction:column;justify-content:center;width:100%;min-height:52px;text-align:left;border:0;background:transparent;padding:6px 16px;font:700 14px var(--sg);color:var(--ink)}
+.spv-sheet button span{font-size:12px;font-weight:500;color:var(--mu)}
+.spv-sheet button[aria-checked=true]{background:var(--lav);color:var(--vt)}
+.spv-sheet .spv-mf{border-top:1px solid var(--hair);margin-top:6px;padding:10px 16px 0;font-size:12px;color:var(--mu);line-height:1.45}
+/* example-state select in the Exploring preview */
+.spv-exsel{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;border:1px dashed #a78bfa;border-radius:10px;background:var(--lav)}
+.spv-exsel .spv-w{font:800 10px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--vt)}
+.spv-exsel select{min-height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--lavE);background:var(--card);color:var(--ink);font:600 13px var(--sg)}
+/* matrix */
+.spv-mx{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.spv-mx th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:9px 12px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.spv-mx td{padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.5}
+.spv-mx tr:last-child td{border-bottom:0}
+.spv-mx td b{font-weight:800}
+.spv-mx code{font:500 11px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.spv-btnx{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:8px;background:#7c3aed;color:#fff;font:700 12px var(--sg);white-space:nowrap}
+/* skeleton */
+.spv-sk{display:block;border-radius:6px;background:var(--skel)}
+.spv-pf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.spv-pane{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.spv-pane h2{font-size:15px;font-weight:800}
+.spv-pane h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.spv-pane.spv-dsh{border-style:dashed;background:transparent}
+.spv-hq{display:flex;flex-direction:column;gap:14px;padding:22px 30px}
+.spv-toast{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;background:#18181b;color:#fff;font:600 13px var(--sg);align-self:flex-start}
+.spv-sticky{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card);display:flex;gap:8px}
+.spv-sticky .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pbd>*{flex-shrink:0}
+.spv-pane .spv-c{align-self:flex-start}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "SPV01", "options": ["SPV32", "SPV00", "SPV05", "SPV01", "SPV02", "SPV03", "SPV06", "SPV10", "SPV11", "SPV12", "SPV13", "SPV31", "SPV30", "SPV20", "SPV21", "SPV22", "SPV23", "SPV24", "SPV25", "SPV26", "SPV27", "SPV40", "SPVH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SPV01';
+    const dark = B === 'SPV32';
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const ANN = (t, st) => `<div class="spv-ann"${st ? ` style="${st}"` : ''}>${t}</div>`;
+    const N = (n) => `<span class="spv-n" aria-hidden="true">${n}</span>`;
+
+    /* ---------- D5129 state chips: glyph + border + word ---------- */
+    const SV = (d) => `<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">${d}</svg>`;
+    const G = {
+      na: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.6"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      lock: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      none: SV('<circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const NA = (t) => `<span class="spv-c spv-na">${G.na}${t || 'Not applicable'}</span>`;
+    const UN = (t) => `<span class="spv-c spv-un">${G.un}${t || 'Unavailable'}</span>`;
+    const NRc = (t) => `<span class="spv-c spv-nr">${G.nr}${t || 'Not recorded'}</span>`;
+    const WH = (t) => `<span class="spv-c spv-wh">${G.lock}${t || 'Withheld in preview'}</span>`;
+    const EX = (t) => `<span class="spv-c spv-ex">${t || 'Example'}</span>`;
+    const NONE = (t) => `<span class="spv-c">${G.none}${t || 'None'}</span>`;
+    const OK = (t) => `<span class="spv-c spv-ok">${G.ok}${t}</span>`;
+    const RETRY = `<button type="button" class="btn">${G.re} Retry</button>`;
+
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const eye = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const shield = '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+
+    /* ---------- sample data: fictional; every figure agrees on every board ----------
+       Thu 26 Nov 2026. Super Admin [Iris Chen] previews. Founder [Maya Ruiz] · [Northwind Labs] · Validate ·
+       venture progress 4 of 9 · profile 62% · 18 of 41 answered · readiness 58 (scored 2026-11-19).
+       Exploring: [Theo Marsh] no role chosen · [Priya Nair] founder track 7 of 12 discovery answered ·
+       [Oskar Lind] investor track 5 of 12 answered. Every discovery bank holds 12 questions (main). */
+    const TILES_M = [
+      ['Venture progress', '4 of 9', 'checklist items done'],
+      ['Profile complete', '62%', 'profiling, toward confidence'],
+      ['Questions answered', '18 of 41', 'in your interview with Eadwyn'],
+      ['Artifacts active', null, 'Lab artifacts unlock week by week for cohort members.'],
+      ['Tasks done', null, 'Tasks are the Lab’s milestones, recorded inside a cohort.'],
+      ['Readiness', '58', 'of 100 · scored 19 Nov']
+    ];
+
+    /* ---------- shell: company/project switcher top-left, sidebar = the shell previewed, Account menu holds Portfolio, Companies, Licences ---------- */
+    const NAVS = {
+      f: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'],
+      x: ['Studio', 'Spin-Out Lab', 'Email', '|', 'My Profile']
+    };
+    const GRP = { f: 'Founder', x: 'Exploring' };
+    const side = (r, sw) => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: ${sw}">${sw} <span aria-hidden="true">▾</span></button><span class="eye grp">${GRP[r]}</span><nav aria-label="${GRP[r]}">${J(NAVS[r].map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === 'Studio' ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`;
+    const top = (ini) => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">${ini}</button></div></div>`;
+    const RAILC = `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask Eadwyn</span></aside>`;
+    const PVBAR = (label) => `<div class="spv-pv" role="region" aria-label="Preview shell">${shield}<b>Super Admin Mode</b><button type="button" class="spv-trig" aria-haspopup="menu" aria-expanded="false">${eye} Preview shell ▾</button><span class="spv-chip">Previewing · ${label} shell</span><span class="spv-say">This changes this browser’s chrome only. Every write still goes out as the Super Admin.</span><span class="spv-sp"></span><button type="button" class="spv-back">Back to HQ</button></div>`;
+    const shell = (r, body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.pv ? PVBAR(o.pv) : ''}<div class="sh" style="min-height:${h - (o.pv ? 42 : 0)}px">${side(r, o.sw)}<div class="mn">${top(o.ini)}<main class="bd" id="main">${body}</main></div>${RAILC}</div></div>`;
+    };
+
+    /* ---------- page notices ---------- */
+    const NOTE_F = `<div class="spv-note" role="note"><span class="spv-w">Founder preview</span><span>You are previewing the Founder role, not a person. Interview questions are labelled examples from the founder question bank. Your own conversation with Eadwyn stays in HQ, and nothing typed here is saved.</span><a href="#">View As a founder from Team →</a></div>`;
+    const NOTE_X = `<div class="spv-note" role="note"><span class="spv-w">Exploring preview</span><span>You are previewing the Exploring role, not a person. Pick the visitor state to show; every question and step below is a labelled example. Nothing typed here is saved.</span><a href="#">View As a visitor from Team →</a></div>`;
+
+    /* ---------- founder Studio pieces ---------- */
+    const FHEAD = (pv) => `<header class="spv-hd"><div><h1>Studio <span class="spv-ph">${pv ? 'Founder' : 'Validate'}</span>${pv ? EX('Preview') : ''}</h1><p>${pv ? 'A founder’s venture, what Eadwyn asks next and where each answer is used.' : '[Northwind Labs] · what Eadwyn asks next and where each answer is used.'}</p></div></header>`;
+    const tileM = (t) => `<div class="spv-tile"><span class="eye">${t[0]}</span>${t[1] ? `<span class="spv-v">${t[1]}</span><span class="spv-s">${t[2]}</span>` : `<span class="spv-v spv-dash" aria-hidden="true">—</span>${NRc()}<span class="spv-s">${t[2]}</span>`}</div>`;
+    const tileP = (t) => `<div class="spv-tile spv-tna"><span class="eye">${t[0]}</span>${NA('Not applicable in preview')}</div>`;
+    const STRIP_M = `<section aria-labelledby="sm"><h2 id="sm" class="sr">Venture summary</h2><div class="spv-tiles">${J(TILES_M.map(tileM))}</div></section>`;
+    const STRIP_P = `<section aria-labelledby="sp" style="display:flex;flex-direction:column;gap:8px"><h2 id="sp" class="sr">Venture summary</h2><div class="spv-tiles">${J(TILES_M.map(tileP))}</div><p class="spv-why">These six figures are a founder’s own. HQ holds no founder record, so none is drawn here, not even 0.</p></section>`;
+
+    const TABS = (pv) => `<div class="seg" role="radiogroup" aria-label="Eadwyn panel"><button type="button" role="radio" aria-checked="true">Conversation</button>${pv ? '' : '<button type="button" role="radio" aria-checked="false">Tasks</button><button type="button" role="radio" aria-checked="false">My tickets</button>'}</div>`;
+    const bub = (sec, q, ex) => `<div class="spv-bub${ex ? ' spv-exq' : ''}"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>${ex ? 'Example · founder question bank · ' : ''}${sec}</small>${q}</div></div>`;
+    const me = (t) => `<div class="spv-me"><span class="sr">You: </span>${t}</div>`;
+    const nx = (q, area, link, ex) => `<div class="spv-nx${ex ? ' spv-dx' : ''}"><div class="spv-t"><span class="eye">${area}</span>${ex ? EX() : ''}</div><b>${q}</b><a href="#">${link} →</a></div>`;
+
+    const CHAT_M = (o) => {
+      o = o || {};
+      return `<section class="spv-chat" id="studio-chat" aria-labelledby="ec"><div class="spv-main"><div class="spv-ch"><h2 id="ec"><span class="spv-e" aria-hidden="true">E</span>Eadwyn</h2>${TABS(false)}<span class="mo mu" style="font-size:12px">18 of 41 answered</span></div>
+      <div class="spv-thr" role="log" aria-label="Conversation with Eadwyn"><span class="spv-day">Today · [Northwind Labs]</span>
+      ${bub('Product', 'In one paragraph — what is consistently working in the product right now?')}
+      ${me('[Teams that finish setup keep the weekly digest; 7 of 10 trial teams opened it every week.]')}
+      ${bub('Product', 'And what is consistently breaking, or where do users churn / get confused?')}
+      ${me('[Teams stall at the CSV import step; 3 of 10 trial teams stopped there.]')}
+      ${bub('Product · asking now', 'What is the next big bet on the product roadmap, and why now?')}</div>
+      <div class="spv-cmp"><label class="sr" for="ans">Your answer</label><span class="spv-in" id="ans">Type your answer…</span><button type="button" class="btn">Skip</button><button type="button" class="btn p">Send</button></div></div>
+      <aside class="spv-side" aria-labelledby="nu"><h3 id="nu"><span>Next up</span><span>3</span></h3>
+      ${nx('One-sentence ICP today: who you sell to, at what stage, for which job.', 'Customer research', 'Open Customer research')}
+      ${nx('Current stage?', 'Company', 'Open Build')}
+      ${nx('Latest traction — top 2–3 numbers.', 'Company', 'Open Build')}
+      <h3 style="margin-top:4px"><span>Completed</span><span>18</span></h3><a href="#" style="font-weight:700;font-size:12.5px">Show all 18</a></aside></section>`;
+    };
+    const HELD_HQ = `<div class="spv-held" role="note" style="margin-left:0">${WH()}<span>Your HQ conversation with Eadwyn is not shown here. It holds your answers as an operator and stays in HQ.</span></div>`;
+    const CHAT_P = (o) => {
+      o = o || {};
+      const ex = o.exErr
+        ? `<div class="spv-held" role="status">${UN()}<span>The founder question examples could not be read. This is not a claim that the bank is empty.</span>${RETRY}</div>`
+        : `<span class="spv-day">Example · how a founder’s interview starts</span>
+      ${bub('Company', 'Confirm your company / project name.', true)}
+      ${bub('Company', 'One-paragraph pitch — refresh how you position yourselves today.', true)}
+      <div class="spv-held">${NONE('No answers drawn')}<span>A founder’s answers appear here. A preview draws none, and invents none.</span></div>`;
+      return `<section class="spv-chat${o.one ? ' spv-one' : ''}" id="studio-chat" aria-labelledby="ec"><div class="spv-main"><div class="spv-ch"><h2 id="ec"><span class="spv-e" aria-hidden="true">E</span>Eadwyn · founder interview</h2>${TABS(true)}${EX('Example interview')}</div>
+      <div class="spv-thr" role="log" aria-label="Example founder interview">${HELD_HQ}${ex}</div>
+      <div class="spv-cmp spv-off"><label class="sr" for="ans">Answer (off in preview)</label><span class="spv-in" id="ans" aria-disabled="true">Answers are not saved in a preview</span><button type="button" class="btn" aria-disabled="true">Send</button></div><p class="spv-cmpn">Send is off because a preview has no founder to save an answer for. Back to HQ is in the bar above.</p></div>
+      ${o.one ? '' : `<aside class="spv-side" aria-labelledby="nu"><h3 id="nu"><span>Next up · example</span><span>2</span></h3>
+      ${nx('One-sentence ICP today: who you sell to, at what stage, for which job.', 'Customer research', 'Open Customer research', true)}
+      ${nx('Current stage?', 'Company', 'Open Build', true)}
+      <p class="spv-why">Links open the founder pages in this preview. Tasks and My tickets are a founder’s own and are not drawn.</p></aside>`}</section>`;
+    };
+
+    const FOUNDER_P = (o) => shell('f', `${NOTE_F}${FHEAD(true)}${CHAT_P(o)}${STRIP_P}
+      <section class="spv-pane spv-dsh" aria-labelledby="fp"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 id="fp">Founder profile</h2>${NA('Not applicable in preview')}</div><p class="spv-why">Profile completeness, dimensions and the archetype card are a founder’s own answers. Profiling does apply to the Founder role: a founder sees four modules (Skills, Work values, Archetype, Axal Fit).</p></section>`, { pv: 'Founder', sw: 'No company · preview', ini: 'IC', h: o && o.h || 1000 });
+
+    const FOUNDER_M = () => shell('f', `${FHEAD(false)}${CHAT_M()}${STRIP_M}
+      <section class="spv-pane" aria-labelledby="fp"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h2 id="fp">Your founder profile</h2><span class="mo" style="font-weight:700">62%</span></div><p class="spv-why">Skills 3 of 5 · Work values 2 of 3 · Archetype 2 of 3 · Axal Fit 6 of 10, toward confidence (13 of 21). Keep answering Eadwyn to raise it.</p></section>`, { sw: '[Northwind Labs]', ini: 'MR', h: 900 });
+
+    /* ---------- Exploring pieces ---------- */
+    const XS = {
+      none: { name: '[Theo]', ini: 'TM', chip: 'Exploring', eye: 'Your next step', h: 'Tell Eadwyn which role you are exploring', p: 'Founder, investor, advisor or operating partner. Your answer picks the short set of questions that follows. You can change it later in Settings.', act: '<a href="#studio-chat" class="btn p">Answer in Eadwyn</a>', disc: null, role: null },
+      founder: { name: '[Priya]', ini: 'PN', chip: 'Founder · under review', eye: 'Your next step', h: 'Apply to the Spin-Out Lab', p: 'The Axal team reviews your venture profile and sends a membership agreement to sign. Once it is signed, a short venture setup opens your workspace with the Spin-Out Lab tools.', act: '<a href="#" class="btn p">Apply to the Spin-Out Lab</a>', disc: 7, role: 'Founder' },
+      investor: { name: '[Oskar]', ini: 'OL', chip: 'Investor · under review', eye: 'Your next step', h: 'Answer the investor discovery questions', p: '5 of 12 answered. They tell the Axal team what you invest in and what you need. Once they are done, nothing else is needed from you before the review.', act: '<a href="#studio-chat" class="btn p">Continue with Eadwyn</a>', disc: 5, role: 'Investor' },
+      done: { name: '[Oskar]', ini: 'OL', chip: 'Investor · under review', eye: 'Where you are', h: 'Nothing is needed from you now', p: 'The Axal team reviews your investor profile and sends a membership agreement to sign. Once it is signed, deal flow and diligence surfaces open up.', act: '<a href="#studio-chat" class="lk">Review your answers in Eadwyn</a>', disc: 12, role: 'Investor', wait: true }
+    };
+    const NEXT = (s, noAct) => `<section class="spv-ns${s.wait ? ' spv-wait' : ''}" aria-labelledby="ns"><span class="eye">${s.eye}</span><h2 id="ns">${s.h}</h2><p>${s.p}</p>${noAct ? '<p class="spv-why">The action is the bar at the foot of the screen.</p>' : `<div class="spv-row">${s.act}</div>`}</section>`;
+    const XHEAD = (s, pv) => `<header class="spv-hd"><div><h1>${pv ? 'Welcome' : 'Welcome, ' + s.name} <span class="spv-ph spv-sky">◎ ${s.chip}</span>${pv ? EX('Preview') : ''}</h1><p>${s.role ? 'Membership under review — you can keep working. We send an agreement to sign when it clears.' : 'Tell us which role you are exploring, and the Axal team reviews your profile for it.'}</p></div></header>`;
+    const STAND = (s, pv) => `<section class="spv-pane" aria-labelledby="ws"><h2 id="ws">Where things stand</h2>
+      <div><h3>Role you are exploring</h3><div style="margin-top:4px">${s.role ? `<b>${s.role}</b>${pv ? ' ' + EX() : ''}` : NONE('None chosen yet')}</div></div>
+      <div><h3>Discovery questions</h3><div style="margin-top:4px">${pv ? `${NA('Not applicable in preview')} <span class="spv-why">A visitor’s own count.</span>` : s.disc === null ? `${NA()} <span class="spv-why">They follow your role.</span>` : s.disc === 12 ? OK('12 of 12 answered') : `<b class="mo">${s.disc}</b> <span class="mu">of</span> <b class="mo">12</b> <span class="mu">answered</span>`}</div></div>
+      <div><h3>Profiling</h3><div style="margin-top:4px;display:flex;flex-direction:column;gap:4px">${NA('Not applicable while exploring')}<span class="spv-why">Skills, work values, archetype and Axal Fit are asked once your membership agreement is signed. Nothing here is waiting on you.</span></div></div></section>`;
+    const LANES = `<div class="g"><section class="spv-pane c6" aria-labelledby="an"><h2 id="an">Available now</h2><ul class="spv-lane">
+      <li><a href="#">Spin-Out Lab</a><span>The 28-day programme, its weeks and what each one asks.</span></li>
+      <li><a href="#">Email</a><span>Your Axal inbox.</span></li>
+      <li><a href="#">My Profile</a><span>Name, photo and how people reach you.</span></li></ul></section>
+      <section class="spv-pane c6" aria-labelledby="ol"><h2 id="ol">Opens with membership</h2><ul class="spv-lane spv-later">
+      <li><b>Validate · log interviews</b><span>Opens once your agreement is signed.</span></li>
+      <li><b>Build · this week</b><span>Commitments, board, roadmap, cadence.</span></li>
+      <li><b>Research · ask the library</b><span>Metered per question.</span></li>
+      <li><b>Company record</b><span>Name, jurisdiction, stage.</span></li>
+      <li><b>Send an introduction · share a data room · apply to a cohort decision</b><span>Held until the licence is assigned.</span></li></ul></section></div>`;
+    const ROLEQ = (ex) => `<div class="spv-bub${ex ? ' spv-exq' : ''}"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>${ex ? 'Example · role question' : 'Role'}</small>Welcome to Axal. Which best describes how you’ll use StudioOS?</div></div>
+      <div class="spv-opts" role="group" aria-label="Choose one">${J(['I am building a startup', 'I invest in startups', 'I advise founders', 'I partner with the studio'].map((t) => `<button type="button"${ex ? ' aria-disabled="true"' : ''}>${t}</button>`))}</div>`;
+    const XCHAT = (s, pv) => {
+      let thr;
+      if (pv) thr = `${HELD_HQ}<span class="spv-day">Example · ${s.role ? s.role.toLowerCase() + ' discovery questions' : 'the first question'}</span>${s.role ? `<div class="spv-bub spv-exq"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Example · ${s.role.toLowerCase()} discovery · 1 of 12</small>What’s your current status?</div></div><div class="spv-bub spv-exq"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Example · 2 of 12</small>Are you building solo or with co-founder(s)?</div></div>` : ROLEQ(true)}<div class="spv-held">${NONE('No answers drawn')}<span>A visitor’s answers appear here. A preview draws none.</span></div>`;
+      else if (!s.role) thr = `<span class="spv-day">Today</span>${ROLEQ(false)}`;
+      else if (s.disc === 12) thr = `<span class="spv-day">Mon 23 Nov</span><div class="spv-bub"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Investor discovery · 12 of 12</small>Thank you — that is every discovery question. The Axal team reads them with your profile.</div></div>`;
+      else thr = `<span class="spv-day">Today</span><div class="spv-bub"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Investor discovery · 5 of 12</small>What are your top 3 challenges right now? (Select up to 3)</div></div>`;
+      const cmp = pv ? `<div class="spv-cmp spv-off"><span class="spv-in" aria-disabled="true">Answers are not saved in a preview</span><button type="button" class="btn" aria-disabled="true">Send</button></div>`
+        : s.disc === 12 ? `<div class="spv-cmp"><span class="spv-in">Ask Eadwyn anything…</span><button type="button" class="btn">Send</button></div>`
+          : `<div class="spv-cmp"><span class="spv-in">Type your answer…</span><button type="button" class="btn">Send</button></div>`;
+      return `<section class="spv-chat spv-one" id="studio-chat" aria-labelledby="ec"><div class="spv-main"><div class="spv-ch"><h2 id="ec"><span class="spv-e" aria-hidden="true">E</span>Eadwyn</h2>${pv ? EX('Example') : s.disc !== null && s.role ? `<span class="mo mu" style="font-size:12px">${s.disc} of 12 answered</span>` : ''}</div><div class="spv-thr" role="log" aria-label="Conversation with Eadwyn">${thr}</div>${cmp}</div></section>`;
+    };
+    const EXSEL = (cur) => `<div class="spv-exsel"><span class="spv-w">Example state · preview only</span><label for="exs" style="font-size:12.5px;font-weight:600">Show the Exploring page as</label><select id="exs">${J(['No role chosen', 'Founder track', 'Investor track', 'Advisor track', 'Partner track', 'Discovery finished'].map((t) => `<option${t === cur ? ' selected="selected"' : ''}>${t}</option>`))}</select><span class="spv-why">The step and copy are the ones a visitor in that state sees.</span></div>`;
+    const EXPLORING = (k, pv, h) => {
+      const s = XS[k];
+      return shell('x', `${pv ? NOTE_X + EXSEL('Founder track') : ''}${XHEAD(s, pv)}${NEXT(s)}<div class="g"><div class="c8" style="display:flex;flex-direction:column;gap:16px">${XCHAT(s, pv)}</div><div class="c4">${STAND(s, pv)}</div></div>${k === 'founder' ? LANES : ''}`, { pv: pv ? 'Exploring' : null, sw: 'No company yet', ini: pv ? 'IC' : s.ini, h: h || 980 });
+    };
+
+    /* ---------- phone ---------- */
+    const PPV = (label) => `<div class="spv-ppv" role="region" aria-label="Preview shell"><div class="spv-r"><span style="display:flex;align-items:center;gap:6px">${shield}<span class="spv-chip">Previewing · ${label}</span></span><button type="button" class="spv-back">Back to HQ</button></div><span class="spv-say">Chrome only. Writes go out as the Super Admin.</span></div>`;
+    const phTop = (t) => `<div class="pt"><button type="button" class="pi" aria-label="Open menu">☰</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, o) => {
+      o = o || {};
+      return `<div class="${CV}" style="width:390px;height:${o.h || 844}px;position:relative;overflow:hidden;display:flex;flex-direction:column">${o.pv ? PPV(o.pv) : o.hq ? HQBAR(o.fv) : ''}${phTop(t)}<main class="pbd" style="overflow:hidden;padding-bottom:${o.stk ? 90 : 28}px">${body}</main>${o.stk ? `<div class="spv-sticky">${o.stk}</div>` : ''}${o.over || ''}</div>`;
+    };
+    const STEP = (n, t) => `<div class="spv-stepbar">${N(n)}<b>${t}</b></div>`;
+    const tilesPhone = (pv) => `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${J(TILES_M.map((t) => pv ? `<div class="spv-tile spv-tna"><span class="eye">${t[0]}</span>${NA()}</div>` : tileM(t)))}</div>`;
+    const HQBAR = (fv) => `<div class="spv-ppv" role="region" aria-label="Preview shell"><div class="spv-r"><span style="display:flex;align-items:center;gap:6px">${shield}<b>Super Admin Mode</b></span><button type="button" class="spv-back${fv ? ' fv' : ''}" aria-haspopup="menu" style="background:rgba(255,255,255,.16);color:#fff">${eye} Preview shell ▾</button></div></div>`;
+
+    let html = '';
+
+    /* ======================= SPV00 · overview and content rules ======================= */
+    if (B === 'SPV00') html = `<div class="${CV} doc"><div><span class="eye">Studio Home · previews · #8730 · overview</span><h2 style="font-size:22px;margin-top:4px">One route, two screens, two audiences: what an HQ-held preview shows and what a member sees</h2></div>
+      <div class="cols"><div><h3>The route (numbered on every board)</h3><ul>
+      <li>${N(1)} HQ · Preview shell → Founder (desktop SPV05, phone SPV20).</li>
+      <li>${N(2)} Founder Studio in preview: first screen, existing conversation, eligibility, navigation (SPV01, SPV03, phone SPV21–SPV22).</li>
+      <li>${N(3)} Preview shell → Exploring, with the example state picked (SPV10, phone SPV23).</li>
+      <li>${N(4)} Back to HQ from any page; focus returns to the Preview shell trigger (SPV06, phone SPV24).</li>
+      <li>The same two screens as actual members: Founder (SPV02, phone SPV25), Exploring in four states (SPV11–SPV13, SPV31, phones SPV26–SPV27).</li></ul>
+      <h3 style="margin-top:12px">Rules</h3><ul><li>Everything in a preview is derived from the role on screen, never from the operator’s own account.</li><li>A question is product copy, so it may be shown as a labelled <b>Example</b>. An answer is personal, so none is shown and none is invented.</li><li>Every enabled link opens a page the previewed role can use. A page that role cannot open draws no link.</li><li>Back to HQ stays in the bar on every page, at every width.</li></ul></div>
+      <div><h3>Content rules</h3><table class="spv-mx"><thead><tr><th>Piece</th><th>HQ-held preview</th><th>Actual member</th></tr></thead><tbody>
+      <tr><td><b>Interview questions</b></td><td>${EX()} from the previewed role’s bank, first two only</td><td>The member’s next question</td></tr>
+      <tr><td><b>Answers, existing conversation</b></td><td>${WH()} the operator’s HQ conversation stays in HQ; no example answers</td><td>Their own thread</td></tr>
+      <tr><td><b>Next up links</b></td><td>The previewed role’s pages, labelled Example</td><td>Same pages, their own questions</td></tr>
+      <tr><td><b>Applicability</b></td><td>From the role: Founder applies; Exploring is Not applicable</td><td>Same rule</td></tr>
+      <tr><td><b>Figures</b></td><td>${NA('Not applicable in preview')}, never 0</td><td>Value, Not recorded or Unavailable</td></tr>
+      <tr><td><b>Composer</b></td><td>Off: “Answers are not saved in a preview”</td><td>On</td></tr>
+      <tr><td><b>Greeting</b></td><td>“Welcome”, no name</td><td>“Welcome, [first name]”</td></tr>
+      <tr><td><b>Exit</b></td><td>Back to HQ in the bar</td><td>—</td></tr></tbody></table></div></div></div>`;
+
+    /* ======================= SPV05 · step 1 · HQ preview menu ======================= */
+    else if (B === 'SPV05') html = `<div class="${CV}" style="width:1440px;height:520px;position:relative"><div class="spv-pv" role="region" aria-label="Preview shell">${shield}<b>Super Admin Mode</b><button type="button" class="spv-trig" aria-haspopup="menu" aria-expanded="true">${eye} Preview shell ▾</button></div>
+      <div class="spv-menu" role="menu" aria-label="Preview shell"><div class="spv-mh">Preview shell · this browser only</div>${J([['HQ', 'The eleven-row shell.', 1], ['HQ’s own accounts', 'The eight-row Admin shell over accounts HQ holds directly (Subsidiary S20).'], ['Founder', 'The founder shell. Interview questions show as examples.', 0, 1], ['Investor', 'The investor shell.'], ['Partner', 'The operating partner shell.'], ['Advisor', 'The advisor shell.'], ['Exploring', 'The exploring shell. Pick the visitor state to show.']].map((o) => `<button type="button" role="menuitemradio" aria-checked="${o[2] ? 'true' : 'false'}"${o[3] ? ' class="spv-fv"' : ''}>${o[0]}<span>${o[1]}</span></button>`))}<div class="spv-mf">Not impersonation. To act as a person, use View As on their row in Team: a typed reason, the authenticator, 30 minutes, recorded in Security.</div></div>
+      <div class="spv-hq" style="padding-left:590px"><div style="display:flex;align-items:center;gap:10px">${N(1)}<b>Pick the shell to preview</b></div>
+      ${ANN('<b>Step 1.</b> The menu is main’s (<code>lib/previewShells.js</code>); only the Founder and Exploring lines gain a second sentence. Arrow keys move, Enter picks Founder, Escape closes and returns focus to the trigger.')}<div class="spv-pane spv-dsh" style="height:250px;justify-content:center;align-items:center"><span class="spv-why">HQ home as shipped, not redrawn</span></div></div></div>`;
+
+    /* ======================= SPV01 · step 2 · Founder preview desktop ======================= */
+    else if (B === 'SPV01' || B === 'SPV32') html = FOUNDER_P();
+
+    /* ======================= SPV02 · Founder member desktop ======================= */
+    else if (B === 'SPV02') html = FOUNDER_M();
+
+    /* ======================= SPV03 · existing conversation compared ======================= */
+    else if (B === 'SPV03') html = `<div class="${CV} crop" style="width:1400px"><div style="display:flex;align-items:center;gap:10px">${N(2)}<b>Existing conversation · the same panel three ways</b></div><div class="g">
+      <div class="c4" style="display:flex;flex-direction:column;gap:10px"><span class="eye">On main today · replaced</span><section class="spv-chat spv-one" aria-label="On main today"><div class="spv-main"><div class="spv-ch"><h2><span class="spv-e" aria-hidden="true">E</span>Eadwyn</h2></div><div class="spv-thr"><div class="spv-bub"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Oversight</small>How often do you review portfolio health across the studio?</div></div><div class="spv-bub"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Governance</small>What conditions should trigger an immediate escalation to you?</div></div><div class="spv-nx"><b>Proposed · Oversight</b><a href="#">Open Admin →</a></div></div></div></section>
+      ${ANN('The Worker picks the bank from <code>users.role</code> (<code>personaFor</code>, <code>routes/advisor.ts</code>), so a Super Admin previewing Founder is asked the admin bank and offered <code>/admin</code> links. The page also showed the operator’s own answers.')}</div>
+      <div class="c4" style="display:flex;flex-direction:column;gap:10px"><span class="eye">Founder preview · proposed</span>${CHAT_P({ one: true })}</div>
+      <div class="c4" style="display:flex;flex-direction:column;gap:10px"><span class="eye">[Maya Ruiz] · actual member</span><section class="spv-chat spv-one" aria-label="Member conversation"><div class="spv-main"><div class="spv-ch"><h2><span class="spv-e" aria-hidden="true">E</span>Eadwyn</h2><span class="mo mu" style="font-size:12px">18 of 41 answered</span></div><div class="spv-thr"><span class="spv-day">Today · [Northwind Labs]</span>${bub('Product', 'And what is consistently breaking, or where do users churn / get confused?')}${me('[Teams stall at the CSV import step; 3 of 10 trial teams stopped there.]')}${bub('Product · asking now', 'What is the next big bet on the product roadmap, and why now?')}</div><div class="spv-cmp"><span class="spv-in">Type your answer…</span><button type="button" class="btn p">Send</button></div></div></section>
+      ${ANN('Her thread picks up where she left it. Nothing about her is ever drawn in an operator’s preview; the operator reaches her thread only through View As (typed reason, 30 minutes, recorded).')}</div></div></div>`;
+
+    /* ======================= SPV06 · step 4 · back to HQ ======================= */
+    else if (B === 'SPV06') html = `<div class="${CV}" style="width:1440px;height:420px;position:relative"><div class="spv-pv" role="region" aria-label="Preview shell">${shield}<b>Super Admin Mode</b><button type="button" class="spv-trig fv" aria-haspopup="menu" aria-expanded="false">${eye} Preview shell ▾</button></div>
+      <div class="spv-hq"><div style="display:flex;align-items:center;gap:10px">${N(4)}<b>Back in HQ</b></div><div class="spv-toast" role="status">Preview ended. You are back in HQ. ${TB('proposed · #8730')}</div><div class="spv-pane spv-dsh" style="height:190px;justify-content:center;align-items:center"><span class="spv-why">HQ home as shipped, not redrawn</span></div>
+      ${ANN('<b>Step 4.</b> Back to HQ is <code>choose(home.key)</code> on main. Proposed: focus moves to the Preview shell trigger (outlined) and a polite status says the preview ended. The chip and the sentence leave the bar. Nothing the operator typed in the preview was saved, so there is nothing to discard.', 'position:absolute;left:560px;top:58px;width:560px')}</div></div>`;
+
+    /* ======================= Exploring desktop ======================= */
+    else if (B === 'SPV10') html = EXPLORING('founder', true, 1320);
+    else if (B === 'SPV11') html = EXPLORING('none', false, 760);
+    else if (B === 'SPV12') html = EXPLORING('founder', false, 1000);
+    else if (B === 'SPV13') html = EXPLORING('investor', false, 760);
+
+    /* ======================= SPV31 · one next step per state ======================= */
+    else if (B === 'SPV31') html = `<div class="${CV} crop" style="width:1400px"><div style="display:flex;align-items:center;gap:10px"><b style="font-size:16px">Exploring · the one next step for each state</b>${TO('Q2 · A, profiling waits for membership')}${TO('Q3 · A, member-only pages listed without links')}</div>
+      <table class="spv-mx"><thead><tr><th>State</th><th>What main records</th><th>The one next step (final copy)</th><th>Where it goes</th><th>Can an Exploring account open it?</th></tr></thead><tbody>
+      <tr><td><b>No role chosen</b><br>${NONE('None chosen yet')}</td><td>No <code>suggested_role</code> in <code>user_role_review</code>; Eadwyn serves the role question</td><td><b>Tell Eadwyn which role you are exploring</b><br><span class="spv-btnx">Answer in Eadwyn</span></td><td><code>#studio-chat</code> on <code>/exploring</code></td><td>${OK('Yes')}</td></tr>
+      <tr><td><b>Founder track</b></td><td><code>suggested_role = founder</code></td><td><b>Apply to the Spin-Out Lab</b><br><span class="spv-btnx">Apply to the Spin-Out Lab</span><br><span class="spv-why">Discovery questions continue in Eadwyn, without a second button.</span></td><td><code>/spinout-lab</code></td><td>${OK('Yes · any signed-in account')}</td></tr>
+      <tr><td><b>Investor, Advisor or Partner track · discovery open</b></td><td><code>suggested_role</code> set; 12-question discovery bank not finished (<code>/advisor/progress</code>)</td><td><b>Answer the investor discovery questions</b> (advisor, partner likewise)<br><span class="spv-btnx">Continue with Eadwyn</span></td><td><code>#studio-chat</code></td><td>${OK('Yes')}</td></tr>
+      <tr><td><b>Track chosen · discovery finished</b></td><td>Progress says complete</td><td><b>Nothing is needed from you now</b><br>No button; “Review your answers in Eadwyn” as a link</td><td><code>#studio-chat</code></td><td>${OK('Yes')}</td></tr>
+      <tr><td><b>Profiling, every state</b><br>${NA('Not applicable while exploring')}</td><td><code>/advisor/progress</code> counts the fit bank of the suggested role, but a still-exploring visitor is only ever asked the discovery bank (<code>workingBankFor</code>), so the ring could never move; with no role it says <code>applicable:false</code> while the Fit card said “Complete your profiling to unlock”</td><td>No step. “Skills, work values, archetype and Axal Fit are asked once your membership agreement is signed. Nothing here is waiting on you.”</td><td>—</td><td>— ${TB('progress returns applicable:false while exploring · #8730')}</td></tr>
+      <tr><td><b>Eadwyn unavailable</b><br>${UN()}</td><td><code>onAvailabilityChange(false)</code></td><td>The step stays. A role or discovery step reads “Eadwyn is unavailable right now. Try again in a few minutes.” with Retry; Apply stays live</td><td>—</td><td>—</td></tr></tbody></table>
+      <span class="eye" style="margin-top:4px">Links removed from the Exploring page</span>
+      <table class="spv-mx"><thead><tr><th>Link on main</th><th>Goes to</th><th>What an Exploring account gets</th><th>Now</th></tr></thead><tbody>
+      <tr><td>Validate · log interviews</td><td><code>/validate</code></td><td><code>labRoles(['admin','founder'])</code>: RoleGuard sends it back to <code>/exploring</code>. Only a preview passes, because <code>labRoles</code> adds the preview’s view mode.</td><td>Listed under Opens with membership, no link</td></tr>
+      <tr><td>Build · this week · Research · ask the library</td><td><code>/build</code>, <code>/research/ask</code></td><td>Same bounce</td><td>Same</td></tr>
+      <tr><td>Company record</td><td><code>/studio</code></td><td>Dashboard redirects a non-Lab account to <code>/exploring</code></td><td>Same</td></tr>
+      <tr><td>Next up “Open Profile →” on discovery questions</td><td><code>/explorer/profile</code></td><td>No such route: NotFoundPage</td><td>No Open link; the question is answered in Eadwyn ${TB('discovery bank page_target · #8730')}</td></tr>
+      <tr><td>Role option “I advisor founders”</td><td>—</td><td>Copy error in <code>ROLE_DETECTOR</code></td><td>“I advise founders” ${TB('mapRoleAnswer matches “advisor” · #8730')}</td></tr></tbody></table></div>`;
+
+    /* ======================= SPV30 · states ======================= */
+    else if (B === 'SPV30') html = `<div class="${CV} crop" style="width:1400px"><b style="font-size:16px">States · Founder preview and members</b><div class="g">
+      <section class="spv-pane c4" aria-busy="true" aria-labelledby="s1"><h3 id="s1">Loading · preview</h3>${HELD_HQ}<span class="spv-sk" style="height:44px"></span><span class="spv-sk" style="height:44px;width:80%"></span><span class="spv-sk" style="height:36px"></span><p class="spv-why">The withheld line draws at once; it needs no read. Screen readers hear “Loading examples”.</p></section>
+      <section class="spv-pane c4" aria-labelledby="s2"><h3 id="s2">Examples could not be read · preview</h3>${HELD_HQ}<div class="spv-held" role="status" style="margin-left:0">${UN()}<span>The founder question examples could not be read. This is not a claim that the bank is empty.</span></div><div>${RETRY}</div><p class="spv-why">The composer stays off and Back to HQ stays in the bar.</p></section>
+      <section class="spv-pane c4" aria-labelledby="s3"><h3 id="s3">Progress could not be read · member</h3><div class="spv-tile"><span class="eye">Questions answered</span><span class="spv-v spv-dash" aria-hidden="true">!</span>${UN()}<span class="spv-s">Eadwyn’s progress could not be read. This is not a claim that nothing is answered.</span><div>${RETRY}</div></div><p class="spv-why">Never drawn as 0. The chat stays open, because only a progress read that says complete may collapse it.</p></section>
+      <section class="spv-pane c4" aria-labelledby="s4"><h3 id="s4">Confirmed empty · member, first visit</h3><div class="spv-tile"><span class="eye">Questions answered</span><span class="spv-v">0 of 41</span><span class="spv-s">a measured 0</span></div><div class="spv-bub"><span class="spv-e" aria-hidden="true">E</span><div class="spv-tx"><small>Company</small>Confirm your company / project name.</div></div><p class="spv-why">The same first question the preview shows as an example.</p></section>
+      <section class="spv-pane c4" aria-labelledby="s5"><h3 id="s5">Eadwyn unavailable · member</h3><div class="spv-held" role="status" style="margin-left:0">${UN()}<span>Eadwyn is unavailable right now. Try again in a few minutes. Your answers so far are kept.</span></div><div>${RETRY}</div><p class="spv-why">The Studio figures and Next up links still draw.</p></section>
+      <section class="spv-pane c4" aria-labelledby="s6"><h3 id="s6">Write refused · preview</h3><div class="spv-held" role="alert" style="margin-left:0"><span class="spv-c">⊘ Refused</span><span>Answers are not saved in a preview. Back to HQ to keep working as yourself.</span></div><p class="spv-why">If a send reaches the Worker anyway, it is refused (403) and nothing is written. ${TB('advisor writes refuse a founder or exploring preview · #8730')}</p></section></div></div>`;
+
+    /* ======================= phones ======================= */
+    else if (B === 'SPV20') html = phone('HQ', `${STEP(1, 'Pick the shell to preview')}<div class="spv-pane spv-dsh" style="height:300px;justify-content:center;align-items:center"><span class="spv-why">HQ home as shipped</span></div>`, {
+      hq: true, over: `<div class="dim" aria-hidden="true"></div><div class="spv-sheet" role="dialog" aria-labelledby="psh"><div class="spv-grab" aria-hidden="true"></div><div class="spv-mh" id="psh">Preview shell · this browser only</div>${J([['HQ', 'The eleven-row shell.', 1], ['Founder', 'Interview questions show as examples.'], ['Investor', 'The investor shell.'], ['Partner', 'The operating partner shell.'], ['Advisor', 'The advisor shell.'], ['Exploring', 'Pick the visitor state to show.']].map((o) => `<button type="button" role="menuitemradio" aria-checked="${o[2] ? 'true' : 'false'}">${o[0]}<span>${o[1]}</span></button>`))}<div class="spv-mf">Not impersonation. To act as a person, use View As on their row in Team.</div></div>`
+    });
+    else if (B === 'SPV21') html = phone('Studio', `${STEP(2, 'Founder · first screen')}${NOTE_F}<h1 style="font-size:22px;font-weight:800">Studio <span class="spv-ph">Founder</span></h1>${CHAT_P({ one: true })}`, { pv: 'Founder' });
+    else if (B === 'SPV22') html = phone('Studio', `${STEP(2, 'Founder · further down')}<div class="spv-nx spv-dx"><div class="spv-t"><span class="eye">Customer research</span>${EX()}</div><b>One-sentence ICP today: who you sell to, at what stage, for which job.</b><a href="#" style="min-height:44px;display:flex;align-items:center">Open Customer research →</a></div>${tilesPhone(true)}<p class="spv-why">These six figures are a founder’s own. HQ holds no founder record, so none is drawn here, not even 0.</p><section class="spv-pane spv-dsh" aria-labelledby="fpp"><h2 id="fpp">Founder profile</h2>${NA('Not applicable in preview')}<p class="spv-why">A founder’s own answers. Profiling applies to the Founder role: four modules.</p></section>`, { pv: 'Founder' });
+    else if (B === 'SPV23') html = phone('Studio', `${STEP(3, 'Exploring · example state')}${EXSEL('Founder track')}<h1 style="font-size:22px;font-weight:800">Welcome <span class="spv-ph spv-sky">◎ Founder · under review</span></h1>${NEXT(XS.founder, true)}${STAND(XS.founder, true)}`, { pv: 'Exploring', stk: '<a href="#" class="btn p">Apply to the Spin-Out Lab</a>' });
+    else if (B === 'SPV24') html = phone('HQ', `${STEP(4, 'Back in HQ')}<div class="spv-toast" role="status">Preview ended. You are back in HQ.</div><div class="spv-pane spv-dsh" style="height:300px;justify-content:center;align-items:center"><span class="spv-why">HQ home as shipped</span></div>${ANN('Back to HQ is a 44px button in the preview bar on every page. Focus lands on the menu button that opens Preview shell.')}`, { hq: true, fv: true });
+    else if (B === 'SPV25') html = phone('Studio', `<h1 style="font-size:22px;font-weight:800">Studio <span class="spv-ph">Validate</span></h1><section class="spv-chat spv-one" id="studio-chat" aria-labelledby="ec"><div class="spv-main"><div class="spv-ch"><h2 id="ec"><span class="spv-e" aria-hidden="true">E</span>Eadwyn</h2><span class="mo mu" style="font-size:12px">18 of 41</span></div><div class="spv-thr"><span class="spv-day">Today · [Northwind Labs]</span>${me('[Teams stall at the CSV import step; 3 of 10 trial teams stopped there.]')}${bub('Product · asking now', 'What is the next big bet on the product roadmap, and why now?')}</div><div class="spv-cmp"><span class="spv-in">Type your answer…</span><button type="button" class="btn p" style="min-height:44px">Send</button></div></div></section>${tilesPhone(false)}`);
+    else if (B === 'SPV26') html = phone('Studio', `<h1 style="font-size:22px;font-weight:800">Welcome, [Theo] <span class="spv-ph spv-sky">◎ Exploring</span></h1>${NEXT(XS.none)}${XCHAT(XS.none, false)}${STAND(XS.none)}`, { h: 1000 });
+    else if (B === 'SPV27') html = phone('Studio', `<h1 style="font-size:22px;font-weight:800">Welcome, [Priya] <span class="spv-ph spv-sky">◎ Founder · under review</span></h1>${NEXT(XS.founder, true)}${STAND(XS.founder)}<section class="spv-pane" aria-labelledby="an2"><h2 id="an2">Available now</h2><ul class="spv-lane"><li><a href="#">Spin-Out Lab</a><span>The 28-day programme.</span></li><li><a href="#">Email</a><span>Your Axal inbox.</span></li></ul><h2>Opens with membership</h2><ul class="spv-lane spv-later"><li><b>Validate · Build · Research · Company record</b><span>Once your agreement is signed.</span></li></ul></section>`, { h: 1060, stk: '<a href="#" class="btn p">Apply to the Spin-Out Lab</a>' });
+
+    /* ======================= SPV40 · headings and focus order ======================= */
+    else if (B === 'SPV40') html = `<div class="${CV} doc"><div><span class="eye">Studio Home · previews · #8730 · accessibility</span><h2 style="font-size:22px;margin-top:4px">Headings, focus order and what is announced</h2></div>
+      <div class="cols"><div><h3>Founder Studio (preview and member)</h3><ul>
+      <li>h1 “Studio” with the phase or “Founder” chip; the Example chip reads “Preview” to assistive tech after the heading.</li><li>h2 “Eadwyn · founder interview” (member: “Eadwyn”), h2 “Next up”, visually hidden h2 “Venture summary”, h2 “Founder profile”.</li></ul>
+      <h3 style="margin-top:10px">Focus order · preview</h3><ul><li><span class="spv-fo">1</span>Skip to content <span class="spv-fo">2</span>Preview shell <span class="spv-fo">3</span>Back to HQ <span class="spv-fo">4</span>company switcher <span class="spv-fo">5</span>sidebar <span class="spv-fo">6</span>“View As a founder from Team” <span class="spv-fo">7</span>Conversation tab <span class="spv-fo">8</span>Next up links <span class="spv-fo">9</span>Eadwyn rail.</li><li>The off composer and Send keep <code>aria-disabled</code> and stay focusable, so the reason under them is read.</li><li>The preview bar is a labelled region; Back to HQ is reachable in two Tabs from the top of every page.</li></ul>
+      <h3 style="margin-top:10px">Announced</h3><ul><li>Example question bubbles start “Example · founder question bank”. Withheld lines are notes, not alerts.</li><li>Back to HQ: polite status “Preview ended. You are back in HQ.”; focus to the Preview shell trigger.</li></ul></div>
+      <div><h3>Exploring</h3><ul><li>h1 “Welcome, [first name]” (preview: “Welcome”), h2 for the next step, h2 “Eadwyn”, h2 “Where things stand”, h2 “Available now” and “Opens with membership”.</li><li>The example state select is labelled “Show the Exploring page as”; changing it moves no focus.</li></ul>
+      <h3 style="margin-top:10px">Focus order · Exploring</h3><ul><li><span class="spv-fo">1</span>Preview bar (preview only) <span class="spv-fo">2</span>example state <span class="spv-fo">3</span>the next step’s one action <span class="spv-fo">4</span>Eadwyn role options or composer <span class="spv-fo">5</span>Where things stand <span class="spv-fo">6</span>Available now links.</li><li>Answer in Eadwyn and Continue with Eadwyn move focus to the composer or the first role option.</li></ul>
+      <h3 style="margin-top:10px">Shapes, not colour</h3><ul><li>Example: dashed violet border and the word. Withheld: lock and the word. Not applicable: dashed ring and the word. Unavailable: “!” and the word. Each reads in greyscale.</li><li>Phone: every target 44px; the next step’s action is the sticky bar; Back to HQ is a 44px button.</li></ul></div></div></div>`;
+
+    /* ======================= SPVH · handoff ======================= */
+    else if (B === 'SPVH') html = `<div class="${CV} doc"><div><span class="eye">Studio Home · previews · #8730 · handoff</span><h2 style="font-size:22px;margin-top:4px">What was checked, what ships as frontend, what needs the backend, and where each acceptance item is answered</h2></div>
+      <div class="cols"><div><h3>Checked on main (f66e8faa25)</h3><ul>
+      <li><code>routes/advisor.ts</code>: <code>personaFor</code> reads <code>users.role</code> only; admin gets the admin bank (oversight, operations, governance, <code>page_target /admin</code>). <code>applyExploringOverlay</code> swaps in <code>suggested_role</code> for bank choice; <code>workingBankFor</code> gives a still-exploring visitor only the 12-question discovery bank, while <code>/progress</code> counts <code>profilingBankFor</code> (the fit bank), empty for admin and no-role visitors.</li>
+      <li><code>components/profile/ProfileFitSection.jsx</code>: <code>CompletionBody</code> says “Profiling questions don’t apply to your account type” on <code>applicable:false</code>; <code>FitBody</code> says “Complete your profiling to unlock” whenever fit is empty. Both on one page.</li>
+      <li><code>components/advisor/StudioInterview.jsx</code>, <code>pages/founder/FounderStudioHome.jsx</code>, <code>founderStudioModel.js</code> (six summary tiles), <code>pages/ExploringDashboard.jsx</code> (<code>LANE_COPY</code>).</li>
+      <li><code>lib/previewShells.js</code> and <code>App.jsx</code> <code>PortalSwitcher</code>: the chip, the sentence, Back to HQ. <code>labRoles</code> adds the preview’s view mode, so links bounce a real Exploring account but not a preview. <code>/explorer/profile</code> has no route.</li>
+      <li><code>util/investorPreview.ts</code>: only the investor preview sends <code>X-Axal-Preview-Shell</code>; <code>pages/advisor/AdvisorPreviewNotice.jsx</code> is the line-above-the-page pattern reused here.</li></ul>
+      <h3 style="margin-top:12px">Backend required (◇ #8730)</h3><ul><li>An example read: the first questions of a role’s bank, no answers, for an HQ preview. Until it exists the preview draws the withheld line and no examples (SPV30).</li><li>Advisor writes refuse a Founder or Exploring preview header, as D5915 does for Investor.</li><li><code>/progress</code> returns <code>applicable:false</code> for a still-exploring visitor.</li><li>Discovery bank <code>page_target</code> that exists; “I advise founders” with <code>mapRoleAnswer</code> updated.</li></ul>
+      <h3 style="margin-top:12px">Owner picks drawn (⚑, option A)</h3><ul><li>Q1 A: the preview shows the first two questions as labelled examples (B: withheld only).</li><li>Q2 A: profiling is Not applicable while exploring (B: ask fit questions before membership).</li><li>Q3 A: member-only pages listed under Opens with membership without links (B: let Exploring founders open them).</li></ul></div>
+      <div><h3>Acceptance mapped</h3><table class="spv-mx"><tbody>
+      <tr><td><b>Questions, calls to action and applicability from the displayed role; labelled examples or a withheld state</b></td><td>SPV01, SPV03, SPV10, SPV21–SPV23, SPV00 rules, SPV30</td></tr>
+      <tr><td><b>Exploring: one coherent next step per state, profiling inapplicable included; every enabled link usable by the role</b></td><td>SPV11, SPV12, SPV13, SPV31, SPV26, SPV27</td></tr>
+      <tr><td><b>HQ → Founder → Exploring → HQ: first screen, conversation, eligibility, navigation, desktop and phone; members alongside</b></td><td>Desktop SPV05 → SPV01 → SPV03 → SPV10 → SPV06; phone SPV20 → SPV24; members SPV02, SPV25–SPV27</td></tr>
+      <tr><td><b>Preview notice and Back to HQ accessible</b></td><td>Every preview board; SPV40</td></tr></tbody></table>
+      <h3 style="margin-top:12px">Frontend only</h3><ul><li>Preview notices, the example and withheld blocks, the off composer, the Not applicable tiles, the example state select, the Exploring next step and lanes, Fit and Completion agreeing, the Back to HQ status and focus.</li></ul>
+      <h3 style="margin-top:12px">Preserved</h3><ul><li>Main’s preview menu, chip, sentence and Back to HQ (drawn solid, not as a gradient); Studio’s summary tiles; <code>LANE_COPY</code> sentences; Eadwyn as the one rail.</li></ul>
+      <h3 style="margin-top:12px">Open</h3><ul><li>Member fixtures: repeat this route with real Founder and Exploring accounts once #8688 has them.</li></ul></div></div></div>`;
+
+    if (!html) html = '<div>unknown board</div>';
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => x.indexOf('spv-') === 0 ? x : 'nwi-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

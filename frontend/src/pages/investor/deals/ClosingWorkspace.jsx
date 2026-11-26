@@ -1,5 +1,6 @@
 // D6866 (#6866, canvas D6158 DX17 to DX26): one deal's closing workspace at /deals/closing?deal=<id> — Checklist, Paper, Conditions, Transfer and Audit tabs.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { closingsApi } from '../../../lib/api/closings';
 import { dealStaffApi } from '../../../lib/api/dealStaff';
@@ -462,9 +463,15 @@ export function CaptableCard({ card }) {
  * An admin's In Portfolio links to the venture's Portfolio page and names
  * the position; anyone else (the founder) reads the label only. Closing
  * creates no position: an Admin records one in Portfolio, naming the line.
+ * D6889 part 2 (#7938): on a line that is Not in Portfolio, an Admin's
+ * Record position opens the Portfolio form filled in from the line, and the
+ * form returns here once the position is saved, when the line reads In
+ * Portfolio. The founder sees the label only, as before.
  */
 function PortfolioTable({ portfolio, isAdmin, company, currency }) {
   const href = company.state === 'ready' ? company.value : null;
+  const location = useLocation();
+  const back = `${location.pathname}${location.search}`;
   return (
     <div className="min-w-0 space-y-2 lg:col-span-8" data-testid="portfolio-lines">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -484,6 +491,13 @@ function PortfolioTable({ portfolio, isAdmin, company, currency }) {
                   {isAdmin && r.positionUid && href
                     ? <a href={href} className="inline-flex min-h-[44px] items-center gap-1 font-semibold text-axal-violet-deep underline-offset-2 hover:underline dark:text-violet-300 md:min-h-0" data-testid={`portfolio-link-${r.uid}`}><StatusWord status={r.status} /><span className="sr-only">Open the position in Portfolio</span><span aria-hidden="true">›</span></a>
                     : <StatusWord status={r.status} testid={`portfolio-status-${r.uid}`} />}
+                  {isAdmin && !r.inPortfolio && r.prefill ? (
+                    <div className="mt-1">
+                      <Link to="/portfolio/positions" state={{ prefill: { ...r.prefill, return_to: back } }}
+                        className="inline-flex min-h-[44px] items-center rounded-md border border-axal-violet-deep px-2.5 text-[12px] font-semibold text-axal-violet-deep hover:bg-violet-50 dark:border-violet-300 dark:text-violet-300 dark:hover:bg-violet-950/40 md:min-h-[32px]"
+                        data-testid={`portfolio-record-${r.uid}`}>Record position<span className="sr-only"> for {r.name}</span></Link>
+                    </div>
+                  ) : null}
                   {isAdmin && r.positionUid ? (
                     <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                       Position <span className="break-all font-mono">{r.positionUid}</span>
@@ -497,7 +511,7 @@ function PortfolioTable({ portfolio, isAdmin, company, currency }) {
         </div>
       )}
       <p className="text-[11px] text-gray-500 dark:text-gray-400">{isAdmin
-        ? 'A line is In Portfolio when a position names it. Record a position in Portfolio and name the line it came from; a position that names no line is not matched by venture or amount.'
+        ? 'A line is In Portfolio when a position names it. Record position opens Portfolio with the line filled in; a position that names no line is not matched by venture or amount.'
         : 'A line is In Portfolio when an Admin recorded a position that names it.'}</p>
     </div>
   );

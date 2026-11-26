@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Export Disclosure · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.ps-tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:6px;border:1px dashed var(--amE);color:var(--amT);background:var(--amBg);font:700 10.5px var(--mo);letter-spacing:.01em;white-space:nowrap}
+.ps-later{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:6px;border:1px dotted var(--hair2);color:var(--mu);font:600 10.5px var(--mo);white-space:nowrap}
+.ps-nr{color:var(--mu);font-style:italic;font-weight:500}
+.ps-sample{font:600 10.5px var(--mo);color:var(--mu);letter-spacing:.02em}
+.ps-shell{display:grid;grid-template-columns:200px minmax(0,1fr) 44px;min-height:900px}
+.ps-main{display:flex;flex-direction:column;min-width:0}
+.ps-body{display:flex;flex-direction:column;gap:18px;padding:22px 28px 32px;position:relative}
+.ps-ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.ps-ph h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ps-ph p{font-size:13px;color:var(--mu);margin-top:4px}
+.ps-ph .ps-act{display:flex;gap:8px;align-items:center}
+.ps-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ps-tabs a{padding:9px 12px 11px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.ps-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ps-tabs .ps-sep{flex:1}
+.ps-card{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ps-card.lav{background:var(--lav);border-color:var(--lavE)}
+.ps-card.amb{background:var(--amBg);border-color:var(--amE)}
+.ps-card.neg{background:var(--negBg);border-color:var(--negE)}
+.ps-card.dash{border-style:dashed;background:transparent}
+.ps-ch{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ps-ch h2{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.ps-ch h3{font-size:13px;font-weight:800}
+.ps-ch .ps-r{display:flex;gap:6px;align-items:center}
+.ps-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.ps-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.ps-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.ps-hero{display:grid;grid-template-columns:420px minmax(0,1fr);gap:22px;align-items:stretch}
+.ps-kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:0;font-size:12.5px}
+.ps-kv dt,.ps-kv dd{padding:7px 0;border-bottom:1px solid var(--hair)}
+.ps-kv dt{color:var(--mu)}
+.ps-kv dd{font-weight:600}
+.ps-li{display:flex;flex-direction:column}
+.ps-li>li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-li>li:first-child{border-top:0}
+.ps-li small{display:block;color:var(--mu);font-size:11.5px;margin-top:1px}
+.ps-next{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;border:1.5px solid var(--vi);background:var(--card)}
+.ps-next b{font-size:15px}
+.ps-next p{font-size:12.5px;color:var(--mu);margin-top:2px}
+.ps-next .btn{margin-left:auto}
+.ps-num{font:700 22px var(--mo);letter-spacing:-.02em}
+.ps-stat{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.ps-stat small{font-size:11.5px;color:var(--mu)}
+.ps-stat em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.ps-steps{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.ps-steps span{flex:1;text-align:center;padding:8px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.ps-steps span+span{border-left:0}
+.ps-steps span:first-child{border-radius:8px 0 0 8px}.ps-steps span:last-child{border-radius:0 8px 8px 0}
+.ps-steps span.done{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.ps-steps span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.ps-chips{display:flex;gap:6px;flex-wrap:wrap}
+.ps-chip{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.ps-chip.on{border-color:var(--vi);background:var(--lav);color:var(--vt)}
+.ps-chip[aria-disabled=true]{opacity:.55;border-style:dashed}
+.ps-src{display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.ps-src.ok{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.ps-src.st{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.ps-price{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;border:1px solid var(--hair);background:var(--card)}
+.ps-price .ps-pl{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.ps-price b.mo{font:700 16px var(--mo)}
+.ps-price.reading{border-style:dashed}
+.ps-price.unav{border-color:var(--amE);background:var(--amBg)}
+.ps-price.stale{border-color:var(--amE);border-style:dashed}
+.ps-price.ok{border-color:var(--posE)}
+.ps-price.met{border-color:var(--lavE);background:var(--lav)}
+.ps-price p{font-size:12px;color:var(--mu);line-height:1.45}
+.ps-bar{height:6px;border-radius:3px;background:var(--hair);overflow:hidden}
+.ps-bar i{display:block;height:100%;background:var(--vi);border-radius:3px}
+.ps-ol{display:flex;flex-direction:column;gap:6px}
+.ps-ol li{display:grid;grid-template-columns:22px 28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:12.5px}
+.ps-ol li .ps-h{color:var(--mu);font:700 13px var(--mo);text-align:center}
+.ps-ol li .ps-n{font:700 11px var(--mo);color:var(--mu)}
+.ps-ol li small{display:block;color:var(--mu);font-size:11.5px}
+.ps-slide{position:relative;overflow:hidden;border-radius:6px;flex:none}
+.ps-slide .ps-sin{position:absolute;left:0;top:0;width:960px;height:540px;transform-origin:0 0;font-family:'Space Grotesk',system-ui,sans-serif}
+.ps-th{background:#0f1d2e;color:#e8eef5}
+.ps-th .ps-ac{color:#2dd4bf}
+.ps-gridov{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,rgba(124,58,237,.16) 1px,transparent 1px),linear-gradient(to bottom,rgba(124,58,237,.16) 1px,transparent 1px);background-size:calc(100%/12) calc(100%/6)}
+.ps-sel{position:absolute;border:2px solid #7c3aed;border-radius:3px;box-shadow:0 0 0 3px rgba(124,58,237,.18)}
+.ps-sel .ps-sl{position:absolute;top:-22px;left:-2px;background:#7c3aed;color:#fff;font:700 10.5px var(--mo);padding:2px 7px;border-radius:4px 4px 0 0;white-space:nowrap}
+.ps-guide{position:absolute;background:#f43f5e}
+.ps-held{position:absolute;border:2px dashed #0ea5e9;border-radius:3px}
+.ps-held span{position:absolute;bottom:-21px;left:-2px;background:#0ea5e9;color:#fff;font:700 10.5px var(--sg);padding:2px 7px;border-radius:0 0 4px 4px;white-space:nowrap}
+.ps-ed{display:grid;grid-template-columns:56px minmax(0,1fr);min-height:900px}
+.ps-rail{background:var(--card);border-right:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0}
+.ps-rail .ps-ri{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font:700 11px var(--sg);color:var(--mu);border:1px solid transparent}
+.ps-rail .ps-ri.on{background:var(--lav);color:var(--vt);border-color:var(--lavE)}
+.ps-rail .ps-lg{width:30px;height:30px;border-radius:8px;background:var(--vi);margin-bottom:8px}
+.ps-tool{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--hair);min-height:56px}
+.ps-tool .ps-dt{display:flex;flex-direction:column;min-width:0;margin-right:8px}
+.ps-tool .ps-dt b{font-size:14px;font-weight:800;white-space:nowrap}
+.ps-tool .ps-dt span{font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.ps-tool .ps-sp{flex:1}
+.ps-tool .ps-vs{display:inline-flex;align-items:center;gap:6px;padding:0 10px;min-height:30px;border-radius:8px;border:1px solid var(--hair);font:600 12px var(--sg);white-space:nowrap}
+.ps-ibtn{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--hair);background:var(--card);font:700 13px var(--sg);color:var(--ink)}
+.ps-ibtn[aria-disabled=true]{opacity:.4}
+.ps-div{width:1px;height:24px;background:var(--hair)}
+.ps-cols{display:grid;grid-template-columns:232px minmax(0,1fr) 330px;flex:1;min-height:0;overflow:hidden}
+.ps-left{background:var(--card);border-right:1px solid var(--hair);padding:12px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.ps-left .ps-sec{font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding:6px 4px 2px;display:flex;justify-content:space-between}
+.ps-th2{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:start;padding:5px;border-radius:9px;border:1px solid transparent}
+.ps-th2.on{border-color:var(--vi);background:var(--lav)}
+.ps-th2 .ps-tn{font:700 10.5px var(--mo);color:var(--mu);padding-top:3px}
+.ps-th2 .ps-tm{display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:10.5px;color:var(--mu)}
+.ps-th2.hid{opacity:.5}
+.ps-center{background:var(--stage);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:22px 22px 14px;gap:12px;position:relative;min-width:0}
+.ps-ctx{display:flex;align-items:center;gap:4px;padding:5px;border-radius:10px;background:var(--card);border:1px solid var(--hair);box-shadow:0 6px 18px rgba(24,24,27,.08)}
+.ps-ctx .btn{min-height:28px}
+.ps-notes{width:100%;background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--mu)}
+.ps-right{background:var(--card);border-left:1px solid var(--hair);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.ps-rt{display:flex;border-bottom:1px solid var(--hair);padding:0 10px}
+.ps-rt a{padding:11px 10px;font:600 12.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ps-rt a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ps-rb{padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ps-fld{display:flex;flex-direction:column;gap:5px;font-size:12px}
+.ps-fld label{font-weight:700;font-size:11.5px;color:var(--mu)}
+.ps-in{min-height:32px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:12.5px}
+.ps-in.ps-ta{min-height:64px;align-items:flex-start;padding:8px 10px;line-height:1.45}
+.ps-in.foc{border-color:var(--vi);box-shadow:0 0 0 3px var(--lav)}
+.ps-in.ro{background:var(--raised);color:var(--mu);border-style:dashed}
+.ps-seg{display:inline-flex;border:1px solid var(--hair2);border-radius:8px;overflow:hidden}
+.ps-seg span{padding:5px 10px;font:600 11.5px var(--sg);color:var(--mu);border-left:1px solid var(--hair2)}
+.ps-seg span:first-child{border-left:0}
+.ps-seg span.on{background:var(--ink);color:var(--card)}
+.ps-banner{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.ps-banner.amb{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.ps-banner.neg{background:var(--negBg);color:var(--neg);border-color:var(--negE)}
+.ps-banner.lav{background:var(--lav);color:var(--vt);border-color:var(--lavE)}
+.ps-banner b{color:var(--ink)}
+.ps-banner .ps-r{margin-left:auto;display:flex;gap:6px}
+.ps-prop{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav)}
+.ps-prop.ps-dim{background:var(--raised);border-color:var(--hair)}
+.ps-prop .ps-pr{display:flex;gap:6px;flex-wrap:wrap}
+.ps-quote{font-size:12.5px;line-height:1.5;padding:8px 10px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 8px 8px 0}
+.ps-quote.old{border-left-color:var(--hair2);color:var(--mu);text-decoration:line-through}
+.ps-sheet{position:absolute;inset:0;background:rgba(24,24,27,.38);display:flex;align-items:flex-start;justify-content:center;padding-top:70px;z-index:3}
+.ps-dlg{width:720px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden}
+.ps-dlg .ps-dh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--hair)}
+.ps-dlg .ps-dh h2{font-size:15px;font-weight:800}
+.ps-dlg .ps-db{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.ps-dlg .ps-df{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--hair);background:var(--raised)}
+.ps-arow{display:grid;grid-template-columns:120px minmax(0,1fr) 150px 110px;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-arow:first-child{border-top:0}
+.ps-arow .mo{font-size:11.5px}
+.ps-chk{display:flex;flex-direction:column}
+.ps-chk>li{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-chk>li:first-child{border-top:0}
+.ps-chk small{display:block;color:var(--mu);font-size:11.5px;margin-top:2px}
+.ps-grp{display:flex;flex-direction:column;gap:6px}
+.ps-grp h3{font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.ps-share{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:20px;align-items:start}
+.ps-tog{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-tog:first-child{border-top:0}
+.ps-tog small{display:block;color:var(--mu);font-size:11.5px}
+.ps-sw{width:34px;height:20px;border-radius:999px;background:var(--hair2);position:relative;flex:none}
+.ps-sw::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+.ps-sw.on{background:var(--vi)}
+.ps-sw.on::after{left:17px}
+.ps-sw.ps-lk{opacity:.6}
+.ps-recv{border:1px solid var(--hair);border-radius:14px;background:var(--raised);padding:14px;display:flex;flex-direction:column;gap:10px}
+.ps-browser{border:1px solid var(--hair2);border-radius:10px;overflow:hidden;background:#fff}
+.ps-browser .ps-bu{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f1f0f5;border-bottom:1px solid var(--hair2);font:500 10.5px var(--mo);color:#5f5a6b}
+.ps-browser .ps-bu i{width:8px;height:8px;border-radius:50%;background:#d3d0dc;display:inline-block}
+.ps-wm{position:absolute;right:10px;bottom:8px;font:600 10px var(--mo);color:rgba(232,238,245,.55)}
+.ps-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ps-tbl th{text-align:left;font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair)}
+.ps-tbl td{padding:10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.ps-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.ps-tbl tr.on td{background:var(--lav)}
+.ps-tbl .n{text-align:right;font-family:var(--mo)}
+.ps-spark{display:flex;align-items:flex-end;gap:3px;height:150px}
+.ps-spark i{flex:1;background:var(--vi);border-radius:2px 2px 0 0;opacity:.85}
+.ps-spark i.z{background:var(--hair2);height:2px!important}
+.ps-spark i.f{background:#0ea5e9}
+.ps-hb{display:grid;grid-template-columns:150px minmax(0,1fr) 70px;gap:10px;align-items:center;font-size:12px;padding:4px 0}
+.ps-hb .ps-bar{height:10px}
+.ps-hb .ps-bar i.nr{background:transparent;border:1px dashed var(--hair2);height:8px}
+.ps-tl{display:flex;flex-direction:column}
+.ps-tl li{display:grid;grid-template-columns:110px 14px minmax(0,1fr);gap:10px;align-items:start;padding:7px 0;font-size:12.5px}
+.ps-tl li .ps-w{font:500 11px var(--mo);color:var(--mu);padding-top:1px}
+.ps-tl li .ps-d{width:10px;height:10px;border-radius:50%;background:var(--vi);margin-top:4px}
+.ps-tl li .ps-d.o{background:transparent;border:2px solid var(--hair2)}
+.ps-abs{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:12px;border:1px solid var(--hair);background:var(--card);min-height:170px}
+.ps-abs .ps-big{font:700 26px var(--mo)}
+.ps-abs p{font-size:12px;color:var(--mu);line-height:1.45}
+.ps-mx{width:100%;border-collapse:collapse;font-size:12px}
+.ps-mx th,.ps-mx td{padding:8px 10px;border:1px solid var(--hair);text-align:left;vertical-align:top}
+.ps-mx thead th{background:var(--raised);font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.ps-mx tbody th{font-weight:800;white-space:nowrap}
+.ps-phone{width:390px;height:844px;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ps-pst{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font:700 13px var(--sg)}
+.ps-ptop{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px 10px;border-bottom:1px solid var(--hair);background:var(--card)}
+.ps-ptop b{font-size:15px}
+.ps-pbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:1px solid var(--hair);background:var(--card);font:700 15px var(--sg)}
+.ps-pbody{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ps-pfoot{padding:10px 14px 28px;border-top:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;gap:8px}
+.ps-pfoot .btn{min-height:48px;width:100%}
+.ps-ptabs{display:flex;gap:6px;overflow:hidden;padding:0 0 2px}
+.ps-ptabs span{padding:7px 12px;border-radius:999px;border:1px solid var(--hair2);font:600 12.5px var(--sg);white-space:nowrap;background:var(--card)}
+.ps-ptabs span.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.ps-psheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--hair);box-shadow:0 -14px 40px rgba(0,0,0,.14);padding:10px 16px 30px;display:flex;flex-direction:column;gap:10px}
+.ps-psheet .ps-grab{width:40px;height:5px;border-radius:3px;background:var(--hair2);align-self:center}
+.ps-tok{display:grid;grid-template-columns:150px minmax(0,1fr) 120px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #ececf1;font-size:12.5px}
+.ps-sw2{width:28px;height:28px;border-radius:7px;border:1px solid rgba(0,0,0,.12)}
+.ps-road{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.ps-road .ps-card{gap:8px}
+.ps-road ol{display:flex;flex-direction:column;gap:6px;font-size:12px;padding-left:16px;list-style:decimal}
+.ps-cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ps-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;font-size:12px}
+.ps-cmp>div.mine{border-color:var(--vi)}
+.ps-jr{display:flex;gap:0;align-items:stretch}
+.ps-jr>div{flex:1;border:1px solid #ececf1;border-left:0;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:12px;background:#fff}
+.ps-jr>div:first-child{border-left:1px solid #ececf1;border-radius:10px 0 0 10px}
+.ps-jr>div:last-child{border-radius:0 10px 10px 0}
+.ps-jr b{font-size:12.5px}
+.ps-jr .ps-n{font:700 10.5px var(--mo);color:#7c3aed}
+.ps-skel{background:var(--skel);border-radius:6px}
+/* #8771 Pitch · Export disclosure and PowerPoint editability (PTX) */
+.ptx-eng{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:6px;border:1px dashed #7c3aed;color:#6d28d9;background:#f4f0fe;font:700 10.5px var(--mo);white-space:nowrap;vertical-align:middle}
+.ptx-flag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:6px;border:1px dashed #d97706;color:#92400e;background:#fffbeb;font:700 10.5px var(--mo);white-space:nowrap;vertical-align:middle}
+.ptx-pin{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#d97706;color:#fff;font:800 10.5px var(--mo);flex:none;vertical-align:middle}
+.ptx-th{background:#10231a;color:#eef5ef}
+.ptx-paper{background:#fff;color:#0f2a3d;box-shadow:inset 0 0 0 1px #e2e8f0}
+.ptx-dlg{width:1180px}
+.ptx-dlg .ps-dh h2{font-size:17px}
+.ptx-cols{display:grid;grid-template-columns:440px minmax(0,1fr);border-bottom:1px solid var(--hair)}
+.ptx-left{display:flex;flex-direction:column;gap:16px;padding:16px 18px;border-right:1px solid var(--hair)}
+.ptx-left section{display:flex;flex-direction:column;gap:8px}
+.ptx-left h3,.ptx-pv h3{font-size:12.5px;font-weight:800;letter-spacing:-.005em}
+.ptx-rcs{display:flex;flex-direction:column;gap:8px}
+.ptx-rc{display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--hair2);border-radius:10px;background:var(--card)}
+.ptx-rc b{font-size:13px;display:block}
+.ptx-rc small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4;margin-top:2px}
+.ptx-rc.on{border-color:var(--vi);background:var(--lav);box-shadow:0 0 0 1px var(--vi)}
+.ptx-rc.fv{outline:2px solid var(--vi);outline-offset:2px}
+.ptx-rd{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--hair2);background:var(--card);margin-top:1px;flex:none;display:inline-block}
+.ptx-rc.on .ptx-rd,.ptx-fmt.on .ptx-rd{border:5px solid var(--vi)}
+.ptx-custom{font-size:11.5px;color:var(--mu);display:flex;gap:6px;align-items:center}
+.ptx-fmts{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ptx-fmt{display:grid;grid-template-columns:18px 132px minmax(0,1fr);gap:8px;align-items:center;padding:7px 10px;border-top:1px solid var(--hair);font-size:12.5px}
+.ptx-fmt:first-child{border-top:0}
+.ptx-fmt small{font-size:11.5px;color:var(--mu);line-height:1.35}
+.ptx-fmt.on{background:var(--lav)}
+.ptx-dl{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ptx-dl li{display:grid;grid-template-columns:118px auto;gap:4px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--hair);font-size:12px}
+.ptx-dl li:first-child{border-top:0}
+.ptx-dl-l{font-weight:700}
+.ptx-dl-d{grid-column:1/-1;color:var(--mu);font-size:11.5px;line-height:1.4}
+.ptx-dl-d:empty{display:none}
+.ptx-dlp{background:var(--card)}
+.ptx-tg{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;font-size:12.5px;padding:2px 0}
+.ptx-tg small{display:block;color:var(--mu);font-size:11.5px}
+.ptx-sw{width:34px;height:20px;border-radius:10px;background:var(--hair2);position:relative;display:inline-block}
+.ptx-sw i{position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+.ptx-sw.on{background:var(--vi)}
+.ptx-sw.on i{left:17px}
+.ptx-pv{background:var(--raised);padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ptx-pvh{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.ptx-pvh p{font-size:12px;color:var(--mu);margin-top:2px}
+.ptx-strip{display:flex;flex-wrap:wrap;gap:10px 8px}
+.ptx-strip figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.ptx-strip figcaption{font:600 10px var(--mo);color:var(--mu)}
+.ptx-tw{position:relative}
+.ptx-mk{position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:4px;background:#ecfdf5;color:#047857;font:800 9px var(--mo);font-style:normal;display:grid;place-items:center;border:1px solid #a7f3d0}
+.ptx-mk.pic{background:#fffbeb;color:#92400e;border-color:#fcd34d}
+.ptx-facts{display:grid;grid-template-columns:110px minmax(0,1fr);font-size:12px;background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:2px 12px}
+.ptx-facts dt,.ptx-facts dd{padding:7px 0;border-top:1px solid var(--hair)}
+.ptx-facts dt:first-of-type,.ptx-facts dt:first-of-type + dd{border-top:0}
+.ptx-facts dt{color:var(--mu)}
+.ptx-facts dd{font-weight:600}
+.ptx-big{display:grid;grid-template-columns:420px minmax(0,1fr);gap:14px;align-items:start}
+.ptx-big > div:first-child{display:flex;flex-direction:column;gap:8px}
+.ptx-mini .ptx-strip{gap:8px 6px}
+.ptx-spn{background:var(--card);border:1px solid var(--hair);border-radius:8px;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:3px;line-height:1.45}
+.ptx-spn b{font-size:11px;font-family:var(--mo);color:var(--mu);font-weight:700;letter-spacing:.02em}
+.ptx-ov{position:absolute;border:1.5px dashed #a7f3d0;border-radius:4px}
+.ptx-ov span{position:absolute;left:-1px;top:-17px;background:#047857;color:#fff;font:700 9.5px var(--mo);padding:1px 5px;border-radius:3px;white-space:nowrap}
+.ptx-ov.pic{border-color:#fcd34d}
+.ptx-ov.pic span{background:#92400e}
+.ptx-et{width:100%;border-collapse:collapse;font-size:12px;background:var(--card);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ptx-et th{text-align:left;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:7px 10px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.ptx-et td{padding:7px 10px;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.4}
+.ptx-et tr:last-child td{border-bottom:0}
+.ptx-et tr.hl td{background:#fffbeb}
+.ptx-et td:nth-child(3){white-space:nowrap}
+.ptx-foot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:end;padding:12px 18px;background:var(--raised)}
+.ptx-fl{display:flex;flex-direction:column;gap:8px;min-width:0}
+.ptx-fb{display:flex;gap:8px}
+.ptx-gate{border:1px solid var(--amE);background:var(--amBg);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.ptx-gm{font-size:12px}
+.ptx-ack{border:1px solid var(--amE);background:var(--amBg);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.ptx-ack p{font-size:12px;line-height:1.45}
+.ptx-cb{display:flex;gap:8px;align-items:center;font-weight:700;font-size:12.5px}
+.ptx-box{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--hair2);background:var(--card);display:inline-grid;place-items:center;font:800 11px var(--sg);color:#fff;flex:none}
+.ptx-box.on{background:var(--vi);border-color:var(--vi)}
+.ptx-res{display:flex;flex-direction:column;gap:12px}
+.ptx-res h3{font-size:14px;font-weight:800}
+.ptx-kv{grid-template-columns:130px minmax(0,1fr)}
+.ptx-dlr{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.ptx-chk{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:12.5px;padding:10px 12px;background:var(--lav);border:1px solid var(--lavE);border-radius:10px}
+.ptx-chk a{font-weight:700}
+.ptx-chk b{width:100%}
+.ptx-today{display:grid;grid-template-columns:560px minmax(0,1fr);gap:22px;align-items:start}
+.ptx-g2m{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ptx-mf{position:relative;border:1px solid var(--hair);border-radius:10px;padding:8px 12px;display:flex;flex-direction:column;gap:1px;font-size:13px}
+.ptx-mf small{font-size:11.5px;color:var(--mu)}
+.ptx-mf.on{border-color:var(--vi);background:var(--lav)}
+.ptx-mf .ptx-pin{position:absolute;right:8px;top:8px}
+.ptx-cbm{display:flex;gap:8px;align-items:center;font-size:12.5px}
+.ptx-mph{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.ptx-ann{display:flex;flex-direction:column;gap:10px}
+.ptx-ann li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;background:var(--card);border:1px solid var(--amE);border-radius:10px;padding:10px 12px}
+.ptx-ann b{font-size:13px}
+.ptx-ann p{font-size:12px;color:var(--mu);line-height:1.5;margin-top:2px}
+.ptx-p{font-size:12.5px;line-height:1.45}
+.ptx-skr{display:flex;gap:6px}
+.ptx-skr i{flex:1;height:44px;border-radius:6px;background:var(--skel)}
+.ptx-ht{width:100%;border-collapse:collapse;font-size:12px}
+.ptx-ht th{text-align:left;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:9px 10px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.ptx-ht td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle;white-space:nowrap}
+.ptx-ht tr:last-child td{border-bottom:0}
+.ptx-pres{background:#0b1220;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.ptx-pnotes{background:#111827;border-radius:8px;padding:9px 10px;color:#e5e7eb;font-size:12.5px;line-height:1.5}
+.ptx-pnotes span{display:block;font:700 10.5px var(--mo);letter-spacing:.07em;color:#9ca3af;margin-bottom:3px}
+.ptx-brw{border:1px solid var(--hair);border-radius:8px;padding:5px 10px;font-size:11px;color:var(--mu);background:var(--raised)}
+.ptx-agree{display:flex;gap:10px;align-items:center;font-size:12.5px;background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 14px}
+.ptx-step{align-self:flex-start;font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 8px}
+.ptx-pm{display:flex;flex-direction:column;gap:6px;font-size:12px;background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 12px}
+.ptx-pm div{display:grid;grid-template-columns:92px minmax(0,1fr);gap:8px;align-items:center}
+.ps-phone .ptx-rc{padding:9px 10px}
+.ps-phone .ptx-fmt{grid-template-columns:18px 104px minmax(0,1fr);padding:9px 10px;min-height:48px}
+.ps-phone .ptx-res .ps-kv{grid-template-columns:96px minmax(0,1fr);font-size:11.5px}
+.ps-phone .ptx-kv dt,.ps-phone .ptx-kv dd{padding:5px 0}
+.ptx-ftl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ptx-ft{border:1px solid var(--hair2);border-radius:10px;padding:8px 11px;display:flex;flex-direction:column;gap:1px;font-size:13px;background:var(--card)}
+.ptx-ft small{font-size:11.5px;color:var(--mu);line-height:1.35}
+.ptx-ft.on{border-color:var(--vi);background:var(--lav);box-shadow:0 0 0 1px var(--vi)}
+.ptx-dg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ptx-dc{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:4px}
+.ptx-dc > div{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px}
+.ptx-dc p{font-size:11.5px;color:var(--mu);line-height:1.4}
+.ptx-ov span{left:auto;top:auto;right:2px;bottom:2px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "PTX01", "options": ["PTX00", "PTX01", "PTX02", "PTX03", "PTX03B", "PTX04", "PTX05", "PTX06", "PTX07", "PTX08", "PTX09", "PTX11", "PTX12", "PTX10A", "PTX10B", "PTX10C", "PTX10D", "PTX10E", "PTX10F"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'PTX01';
+    const dark = false;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', stage: '#070c16' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1', stage: '#e9e8ef' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      q: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.4 1.8c-.4.2-.6.5-.6 1V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="10" r=".9" fill="currentColor"/>'),
+      dot: SV('<circle cx="6" cy="6" r="4" fill="currentColor"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      off: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      zero: SV('<rect x="2" y="5" width="8" height="2" rx="1" fill="currentColor"/>'),
+      wifi: SV('<path d="M1.5 4.5a6.5 6.5 0 0 1 9 0M3.3 6.5a4 4 0 0 1 5.4 0" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><path d="M1.5 1.5l9 9" stroke="currentColor" stroke-width="1.4"/>')
+    };
+    /* one state vocabulary: the word always carries the meaning, the shape repeats it, colour never alone */
+    const S = {
+      'Version saved': ['ok', 'ok'], 'All changes saved': ['ok', 'ok'], Passed: ['ok', 'ok'], Accepted: ['ok', 'ok'], Active: ['ok', 'ok'], 'Signed': ['ok', 'ok'], Done: ['ok', 'ok'], Connected: ['ok', 'ok'], 'Confirmed · no charge': ['ok', 'ok'], Fresh: ['ok', 'ok'],
+      'Unsaved changes': ['pd', 'dot'], 'Saving…': ['pd', 'pd'], 'Draft · on this device': ['pd', 'dot'], Proposed: ['pd', 'dot'], Running: ['pd', 'pd'], 'Reading price…': ['un', 'pd'], 'In progress': ['pd', 'half'], 'Confirmed · metered': ['pd', 'dot'],
+      'To fix': ['fl', 'fl'], Failed: ['fl', 'fl'], Refused: ['fl', 'fl'], Mismatch: ['fl', 'fl'], Withdrawn: ['ni', 'off'], Expired: ['ni', 'nd'],
+      'Worth a look': ['xar', 'ar'], Conflict: ['xar', 'ar'], Stale: ['xst', 'pd'], 'Quote expired': ['xst', 'pd'], 'Needs approval': ['xar', 'ar'], 'Not Done': ['xar', 'half'], Offline: ['xar', 'wifi'], 'Price unavailable': ['xar', 'q'],
+      "Couldn't check": ['un', 'q'], Unreadable: ['un', 'q'], 'Checking…': ['un', 'q'],
+      'Not recorded': ['ni', 'nd'], 'Tracking off': ['ni', 'off'], 'Measured zero': ['mz', 'zero'], 'Read-only': ['ni', 'lk'], 'Coming later': ['ni', 'nd'], 'Not switched on': ['ni', 'off'], 'Not checked': ['ni', 'nd']
+    };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NR = '<span class="ps-nr">Not recorded</span>';
+    const ENG = (t) => '<span class="ps-tag" title="Requires engineering">◇ Requires engineering' + (t ? ' · ' + t : '') + '</span>';
+    const LATER = (t) => '<span class="ps-later" title="Not on main yet">Coming later' + (t ? ' · ' + t : '') + '</span>';
+    const src = (t, c) => '<span class="ps-src ' + (c || '') + '">' + t + '</span>';
+    const btn = (t, c, x) => '<button type="button" class="btn ' + (c || '') + '"' + (x || '') + '>' + t + '</button>';
+    const SAMPLE = '<span class="ps-sample">Sample data · [Atlas Orchard] and every person and figure are fictional</span>';
+    const at = (c1, c2, r1, r2, inner, sty) => '<div style="position:absolute;left:' + ((c1 - 1) * 80) + 'px;top:' + ((r1 - 1) * 90) + 'px;width:' + ((c2 - c1 + 1) * 80) + 'px;height:' + ((r2 - r1 + 1) * 90) + 'px;padding:14px 18px;' + (sty || '') + '">' + inner + '</div>';
+    /* ---------- shells ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const side = () => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%;color:var(--ink)" aria-haspopup="listbox"><span>[Atlas Orchard]</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Raise' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account menu">MR</span></div></div>';
+    const TABS = ['Overview', 'Decks', 'Script & rehearsal', 'Review', 'Share & analytics', 'Notes'];
+    const tabs = (cur) => '<nav class="ps-tabs" aria-label="Pitch">' + J(TABS.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '<span class="ps-sep"></span></nav>';
+    const phead = (cur, sub, act) => '<div class="ps-ph"><div><span class="eye">Raise › Pitch</span><h1>' + (sub || '[Atlas Orchard] · Seed deck') + '</h1></div><div class="ps-act">' + (act || btn('▶ Present', 'gh') + btn('Open editor', '')) + '</div></div>' + tabs(cur);
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="ps-shell" style="min-height:' + (o.h || 900) + 'px">' + side() + '<div class="ps-main">' + top + '<main class="ps-body">' + body + '</main></div><aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>' + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 1100) + 'px;padding:22px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">' + inner + '</div>';
+    const box = (t, inner, o) => { o = o || {}; return '<section class="ps-card ' + (o.c || '') + '"' + (o.span ? ' style="grid-column:span ' + o.span + '"' : '') + '><div class="ps-ch"><h3>' + t + '</h3>' + (o.r ? '<span class="ps-r">' + o.r + '</span>' : '') + '</div>' + inner + '</section>'; };
+    const banner = (c, inner, act) => '<div class="ps-banner ' + c + '" role="status">' + inner + '<span class="ps-r">' + (act || '') + '</span></div>';
+    const phone = (title, body, foot, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ps-phone"><div class="ps-pst"><span>9:41</span><span>●●● ▮</span></div><div class="ps-ptop"><a href="#" class="ps-pbtn" aria-label="Back">‹</a><b>' + title + '</b><a href="#" class="ps-pbtn" aria-label="More">⋯</a></div>' + (o.banner || '') + '<div class="ps-pbody">' + body + '</div>' + (foot ? '<div class="ps-pfoot">' + foot + '</div>' : '') + (o.sheet || '') + '</div></div>'; };
+    const ptabs = (cur) => '<div class="ps-ptabs">' + J(['Overview', 'Decks', 'Review', 'Share', 'Script'].map(t => '<span class="' + (t === cur ? 'on' : '') + '">' + t + '</span>')) + '</div>';
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+
+    /* ================= #8771 · Export disclosure and PowerPoint editability ================= */
+    const ENGT = (t) => '<span class="ptx-eng">◇ ' + t + '</span>';
+    const FLAG = (t) => '<span class="ptx-flag">⚑ ' + t + '</span>';
+    const PIN = (n) => '<span class="ptx-pin" aria-hidden="true">' + n + '</span>';
+    const mo = (t) => '<span class="mo">' + t + '</span>';
+    const DECK = '[Atlas Orchard] · Seed deck';
+    const SAVED = 'Wed 25 Nov 2026, 16:40';
+    const PRIV = '“If they ask about the bridge: [Harrow Seed] offered [$250k] on a SAFE. Don’t name a valuation yet.”';
+
+    /* ---------- the fictional deck, in its own theme ---------- */
+    const T1 = (t, sz) => '<div style="font:800 ' + (sz || 34) + 'px var(--sg);letter-spacing:-.02em;line-height:1.08">' + t + '</div>';
+    const TX = (t) => '<div style="font:500 19px var(--sg);line-height:1.45;color:#c9d5e1">' + t + '</div>';
+    const SM = (t) => '<div style="font:500 13px var(--mo);color:#8aa0b6">' + t + '</div>';
+    const cols = (vals, lab) => '<div style="display:flex;align-items:flex-end;gap:10px;height:250px">' + J(vals.map((v, i) => '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%"><div style="width:100%;height:' + v + '%;background:' + (i === vals.length - 1 ? '#86efac' : 'rgba(134,239,172,.4)') + ';border-radius:4px 4px 0 0"></div><span style="font:500 13px var(--mo);color:#8aa0b6">' + lab[i] + '</span></div>')) + '</div>';
+    const SLIDES = {
+      cover: () => '<div style="position:absolute;right:0;top:0;width:430px;height:540px;background:#24452f">' + J([[60, 120], [180, 90], [300, 140], [110, 280], [250, 300], [360, 330]].map(p => '<div style="position:absolute;left:' + p[0] + 'px;top:' + p[1] + 'px;width:70px;height:70px;border-radius:50%;background:#3f7a52"></div>')) + '<div style="position:absolute;left:16px;bottom:14px;font:500 12px var(--mo);color:#cfe9d6">photo · orchard rows · JPEG</div></div>' + at(1, 7, 2, 4, '<div style="font:700 15px var(--mo);color:#86efac;letter-spacing:.08em">SEED · 2026</div><div style="font:800 56px var(--sg);letter-spacing:-.03em;line-height:1;margin-top:14px">[Atlas Orchard]</div><div style="font:500 22px var(--sg);color:#b6c4d3;margin-top:16px;line-height:1.3">Yield records growers can show their insurer</div>') + at(1, 7, 6, 6, SM('Confidential · prepared for investors')),
+      problem: () => at(1, 12, 1, 1, T1('Frost costs growers a season they can’t prove')) + at(1, 7, 2, 5, TX('Insurers ask for block-level yield history. Most growers keep it in notebooks and spreadsheets that no adjuster accepts.')),
+      traction: () => at(1, 12, 1, 1, T1('Traction since the first harvest')) + at(1, 4, 2, 5, '<div style="display:flex;flex-direction:column;gap:22px"><div><div style="font:800 44px var(--sg);color:#86efac">[$34.2k]</div><div style="font:500 15px var(--sg);color:#b6c4d3">MRR</div></div><div><div style="font:800 44px var(--sg)">[38]</div><div style="font:500 15px var(--sg);color:#b6c4d3">paying customers</div></div></div>') + at(5, 12, 2, 5, SM('MRR BY MONTH ($K)') + cols([30, 42, 55, 68, 82, 96], ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'])),
+      market: () => at(1, 12, 1, 1, T1('Market')) + at(1, 7, 2, 5, '<div style="position:relative;height:330px"><div style="position:absolute;left:0;top:0;width:330px;height:330px;border-radius:50%;border:2px solid rgba(134,239,172,.35)"></div><div style="position:absolute;left:60px;top:90px;width:210px;height:210px;border-radius:50%;border:2px solid rgba(134,239,172,.55)"></div><div style="position:absolute;left:115px;top:190px;width:100px;height:100px;border-radius:50%;background:rgba(134,239,172,.6)"></div></div>') + at(8, 12, 2, 5, '<div style="display:flex;flex-direction:column;gap:14px"><div>' + SM('SAM') + '<div style="font:800 34px var(--sg)">[$310M]</div></div><div>' + SM('TYPED · NO SOURCE') + '</div></div>'),
+      whynow: () => at(1, 12, 1, 2, T1('Why now: orchard insurers started pricing frost risk by the block, and growers need yield records they can show them', 30)) + at(1, 8, 3, 5, TX('Two of the five largest crop insurers moved to block-level frost pricing in 2026.')),
+      product: () => at(1, 5, 1, 1, T1('Product')) + at(6, 12, 1, 5, '<div style="height:100%;border-radius:10px;background:#e8eef5;display:grid;place-items:center;color:#475569;font:600 14px var(--mo)">screenshot · PNG</div>') + at(1, 5, 2, 5, TX('Every block’s yield, frost hours and spray log in one record an adjuster can open.')),
+      biz: () => at(1, 12, 1, 1, T1('Business model')) + at(1, 8, 2, 5, '<svg width="600" height="280" viewBox="0 0 600 280"><polyline points="10,240 110,210 210,180 310,150 410,110 510,70" fill="none" stroke="#86efac" stroke-width="5"/></svg>') + at(9, 12, 2, 5, TX('[$90] per block per season. Gross margin by quarter.')),
+      gtm: () => at(1, 12, 1, 1, T1('Go-to-market')) + at(1, 12, 3, 4, '<div style="display:flex;gap:26px;align-items:center">' + J(['Co-ops', 'Insurers', 'Growers'].map((x, i) => (i ? '<span style="font:700 30px var(--sg);color:#86efac">→</span>' : '') + '<div style="border:2px solid rgba(134,239,172,.6);border-radius:12px;padding:20px 30px;font:700 22px var(--sg)">' + x + '</div>')) + '</div>'),
+      comp: () => at(1, 12, 1, 1, T1('Competition')) + at(1, 12, 2, 5, '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">' + J(['Spreadsheets', 'Farm ERPs', '[Atlas Orchard]'].map(x => '<div style="border:1px solid rgba(182,196,211,.35);border-radius:10px;padding:16px;font:600 18px var(--sg)">' + x + '</div>')) + '</div>'),
+      team: () => at(1, 12, 1, 1, T1('Team')) + at(1, 12, 2, 5, '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">' + J([['MR', '[Maya Ruiz]', 'CEO'], ['NB', '[Noah Brandt]', 'CTO'], ['JO', '[Jun Ota]', 'Agronomy']].map(x => '<div style="display:flex;flex-direction:column;gap:8px"><div style="width:72px;height:72px;border-radius:50%;background:#24452f;display:grid;place-items:center;font:700 22px var(--sg);color:#86efac">' + x[0] + '</div><div style="font:700 20px var(--sg)">' + x[1] + '</div><div style="font:500 15px var(--sg);color:#b6c4d3">' + x[2] + '</div></div>')) + '</div>'),
+      ask: () => at(1, 8, 2, 4, '<div style="font:700 15px var(--mo);color:#86efac;letter-spacing:.08em">THE ASK</div><div style="font:800 56px var(--sg);letter-spacing:-.03em;margin-top:12px">[$1.8M] Seed</div><div style="font:500 22px var(--sg);color:#b6c4d3;margin-top:12px">18 months to 400 paying growers</div>'),
+      appx: () => at(1, 12, 1, 1, T1('Appendix')) + at(1, 12, 2, 5, TX('Pilot terms · data handling · frost model notes')),
+    };
+    const CARDS = [['cover', 'Cover'], ['problem', 'Problem'], ['traction', 'Traction'], ['market', 'Market'], ['whynow', 'Why now'], ['product', 'Product'], ['biz', 'Business model'], ['gtm', 'Go-to-market'], ['comp', 'Competition'], ['team', 'Team'], ['ask', 'The ask'], ['appx', 'Appendix']];
+    const NOTED = [2, 3, 4, 5, 7, 8, 9, 10, 11];
+    const slide = (k, w, o) => { o = o || {}; const h = Math.round(w * 9 / 16); return '<div class="ps-slide ptx-th" style="width:' + w + 'px;height:' + h + 'px" role="img" aria-label="Card ' + k + '"><div class="ps-sin" style="transform:scale(' + (w / 960).toFixed(4) + ')">' + SLIDES[k]() + '</div>' + (o.over || '') + '</div>'; };
+    /* a white document page: the Sources appendix and the PDF notes pages */
+    const paper = (w, kind) => { const h = Math.round(w * 9 / 16); const sc = (w / 960).toFixed(4); const inner = kind === 'src'
+      ? '<div style="font:800 34px var(--sg);color:#0f2a3d">Sources</div><div style="margin-top:18px;display:flex;flex-direction:column;gap:10px;font:500 17px var(--sg);color:#334155">' + J(['Card 3 (Traction) · MRR: Grow › MRR · measured · date not recorded', 'Card 3 (Traction) · Paying customers: Grow › Customers · measured · date not recorded', 'Card 7 (Business model) · Gross margin: Finance › Margin · 30 Oct 2026', 'Card 7 (Business model) · Price per block: Build › Offer · 12 Nov 2026', 'Card 10 (Team) · Team size: Build › Team · 24 Nov 2026'].map(x => '<div>• ' + x + '</div>')) + '</div>'
+      : '<div style="font:700 14px var(--mo);color:#64748b;letter-spacing:.08em">SPEAKER NOTES · CARDS ' + (kind === 'n1' ? '1–6' : '7–12') + '</div><div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px 26px">' + J((kind === 'n1' ? [1, 2, 3, 4, 5, 6] : [7, 8, 9, 10, 11, 12]).map(n => '<div style="font:500 15px var(--sg);color:' + (NOTED.indexOf(n) > -1 ? '#0f2a3d' : '#94a3b8') + ';line-height:1.4"><b style="font-family:var(--mo)">' + n + '</b> · ' + (n === 11 ? PRIV : NOTED.indexOf(n) > -1 ? 'What I say on ' + CARDS[n - 1][1].toLowerCase() + '…' : 'No notes on this card.') + '</div>')) + '</div>';
+      return '<div class="ps-slide ptx-paper" style="width:' + w + 'px;height:' + h + 'px" role="img" aria-label="' + (kind === 'src' ? 'Sources appendix page' : 'Speaker notes page') + '"><div class="ps-sin" style="transform:scale(' + sc + ');padding:44px 52px;font-family:var(--sg)">' + inner + '</div></div>'; };
+
+    /* ---------- pieces of the export dialog ---------- */
+    const PRESETS = {
+      inv: ['Investor copy', 'A clean deck for someone outside the venture. No speaker notes; the Sources appendix stays, as on an investor link.'],
+      work: ['Working copy', 'For a colleague who edits or presents it. Speaker notes and the Sources appendix are in the file.'],
+    };
+    const presetCards = (cur, o) => { o = o || {}; return '<div class="ptx-rcs" role="radiogroup" aria-labelledby="ptx-h-who">' + J(['inv', 'work'].map(k => '<div class="ptx-rc' + (k === cur ? ' on' : '') + (o.focus === k ? ' fv' : '') + '" role="radio" aria-checked="' + (k === cur) + '" tabindex="' + (k === cur ? 0 : -1) + '"><span class="ptx-rd" aria-hidden="true"></span><div><b>' + PRESETS[k][0] + '</b><small>' + PRESETS[k][1] + '</small></div></div>')) + (cur === 'custom' ? '<div class="ptx-custom">' + st('Proposed', 'Custom') + ' Your own choice of notes and appendix. Neither preset applies.</div>' : '') + '</div>'; };
+    const FMTS = [
+      ['pdf', 'PDF', 'Every card as a page at its own size · text stays text'],
+      ['pptx', 'PowerPoint', 'Editable text, shapes and most charts · some charts as pictures'],
+      ['gs', 'Google Slides', 'The same editable file, made in your Drive'],
+      ['html', 'HTML', 'One file, offline'],
+      ['odp', 'Slides-suite file (.odp)', 'Editable in LibreOffice and other open suites'],
+    ];
+    const fmtList = (cur, o) => { o = o || {}; return '<div class="ptx-fmts" role="radiogroup" aria-labelledby="ptx-h-fmt">' + J(FMTS.filter(f => !o.only || o.only.indexOf(f[0]) > -1).map(f => '<div class="ptx-fmt' + (f[0] === cur ? ' on' : '') + '" role="radio" aria-checked="' + (f[0] === cur) + '"><span class="ptx-rd" aria-hidden="true"></span><b>' + f[1] + '</b><small>' + f[2] + '</small></div>')) + '</div>'; };
+    const fmtTiles = (cur) => '<div class="ptx-ftl" role="radiogroup" aria-labelledby="ptx-h-fmt">' + J(FMTS.map(f => '<div class="ptx-ft' + (f[0] === cur ? ' on' : '') + '" role="radio" aria-checked="' + (f[0] === cur) + '"><b>' + f[1] + '</b><small>' + f[2] + '</small></div>')) + '</div>';
+    const sw = (on, label, sub, o) => { o = o || {}; return '<div class="ptx-tg"><span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span><span class="ptx-sw' + (on ? ' on' : '') + '" role="switch" aria-checked="' + on + '" aria-label="' + label + '"><i></i></span></div>'; };
+    const IN = (t) => st('Version saved', t || 'In the file');
+    const OUT = (t) => '<span class="stt ni">' + SH.off + (t || 'Stays in Axal VC') + '</span>';
+    const drow = (label, chip, detail) => '<li><span class="ptx-dl-l">' + label + '</span><span>' + chip + '</span><span class="ptx-dl-d">' + detail + '</span></li>';
+    const leaves = (notes, srcs, fmt) => '<ul class="ptx-dl" aria-labelledby="ptx-h-leave">'
+      + drow('12 cards of v7', IN(), 'No hidden card in v7; a hidden card is in no export.')
+      + drow('Speaker notes', notes ? IN() : OUT(), notes ? (fmt === 'pdf' ? 'Notes from 9 cards, six cards a page, after the cards. Card 11’s note is one of them.' : 'Notes from 9 cards, as each slide’s speaker notes. Card 11’s note is one of them.') : 'Notes on 9 cards stay here, card 11’s among them. ' + (fmt === 'pdf' ? 'No notes pages.' : 'Every slide’s speaker notes are empty.'))
+      + drow('Sources appendix', srcs ? IN(fmt === 'pdf' ? 'Page 13' : 'Slide 13') : OUT(), srcs ? '5 figures with their source and grade. 2 have no source date in v7. Card 4’s SAM [$310M] has no recorded source, so it is not listed.' : 'No Sources page. Figures keep their values on the cards.')
+      + drow('Footer', IN(), 'Your plan’s footer and page numbers, as on every export.')
+      + '</ul>';
+    const leavesGrid = (notes, srcs, fmt) => { const cell = (l, chip, d) => '<div class="ptx-dc"><div><b>' + l + '</b>' + chip + '</div><p>' + d + '</p></div>'; return '<div class="ptx-dg" aria-labelledby="ptx-h-leave">'
+      + cell('12 cards of v7', IN(), 'No hidden card in v7. A hidden card is in no export.')
+      + cell('Speaker notes', notes ? IN() : OUT(), notes ? 'Notes from 9 cards, ' + (fmt === 'pdf' ? 'six cards a page after the cards' : 'as each slide’s speaker notes') + '. Card 11’s note is one of them.' : 'Notes on 9 cards stay here, card 11’s among them. ' + (fmt === 'pdf' ? 'No notes pages.' : 'Every slide’s notes are empty.'))
+      + cell('Sources appendix', srcs ? IN(fmt === 'pdf' ? (notes ? 'Page 15' : 'Page 13') : 'Slide 13') : OUT(), srcs ? '5 figures with source and grade; 2 have no source date in v7. Card 4’s SAM [$310M] has no recorded source and is not listed.' : 'No Sources page. Figures keep their values on the cards.')
+      + cell('Footer', IN(), 'Your plan’s footer and page numbers, as on every export.')
+      + '</div>'; };
+    const thumbs = (n, w, extra, tail) => '<div class="ptx-strip">' + J(CARDS.slice(0, n).map((c, i) => '<figure><div class="ptx-tw">' + slide(c[0], w) + (extra ? extra(i + 1) : '') + '</div><figcaption>' + (i + 1) + '</figcaption></figure>')) + (tail || '') + '</div>';
+    const pageThumb = (kind, w, n, cap) => '<figure><div class="ptx-tw">' + paper(w, kind) + '</div><figcaption>' + n + (cap ? ' · ' + cap : '') + '</figcaption></figure>';
+    const pvHead = (fmt, notes, srcs) => { const pages = fmt === 'pdf' ? 12 + (notes ? 2 : 0) + (srcs ? 1 : 0) : 12 + (srcs ? 1 : 0); return '<div class="ptx-pvh"><div><h3 id="ptx-h-pv">Preview · ' + (fmt === 'pdf' ? 'PDF' : 'PowerPoint') + '</h3><p>' + mo(pages + (fmt === 'pdf' ? ' pages' : ' slides')) + ' · ' + mo('16:9') + ' · ' + mo(fmt === 'pdf' ? '1920 × 1080 px' : '13.33 × 7.5 in') + '</p></div><span class="mo mu" style="font-size:11px">from v7’s own cards</span></div>'; };
+    const facts = (rows) => '<dl class="ptx-facts">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl>';
+    const pdfPreview = (notes, srcs) => pvHead('pdf', notes, srcs)
+      + '<div class="ptx-strip">' + J(CARDS.map((c, i) => '<figure><div class="ptx-tw">' + slide(c[0], 92) + '</div><figcaption>' + (i + 1) + '</figcaption></figure>')) + (notes ? pageThumb('n1', 92, 13, 'notes') + pageThumb('n2', 92, 14, 'notes') : '') + (srcs ? pageThumb('src', 92, notes ? 15 : 13, 'sources') : '') + '</div>'
+      + facts([['Pages', notes ? '12 cards, 2 notes pages, ' + (srcs ? '1 Sources page' : 'no Sources page') : '12 cards' + (srcs ? ', then the Sources page' : '') + ' · no notes pages'], ['Size', '1920 × 1080 px, the deck’s 16:9'], ['Text', 'Stays text, fonts embedded, links live; a PDF that fails this check is never handed out'], ['Pictures', '5 photos and screenshots as placed, crop kept'], ['Speaker notes', notes ? 'Pages 13 and 14' : 'Not in this file']]);
+    const EDIT = [
+      ['Text boxes', '33', 'Editable', 'Title, body and figures on all 12 cards, each in its own box at The Grid’s place'],
+      ['Charts', '2', 'Editable', 'Cards 3 and 7 · native charts; their numbers open in PowerPoint’s data sheet'],
+      ['Chart as a picture', '1', 'Picture', 'Card 4 · Market circles has no PowerPoint chart. Its numbers can’t be edited in the file'],
+      ['Pictures', '5', 'Picture', 'Cards 1, 6 and 10 · crop and focus point kept'],
+      ['Diagram', '1', 'Editable', 'Card 8 · native shapes and arrows; the words are text'],
+      ['Long title', '1', 'Smaller', 'Card 5 · may be written at a smaller size to fit its box, down to 40%. It stays text'],
+    ];
+    const chipFor = (k) => k === 'Editable' ? st('Version saved', 'Editable') : k === 'Picture' ? '<span class="stt xar">' + SH.ar + 'Picture</span>' : '<span class="stt ni">' + SH.nd + 'Smaller</span>';
+    const editTable = (o) => { o = o || {}; return '<table class="ptx-et" aria-label="What is editable in the PowerPoint file"><thead><tr><th>In v7</th><th>#</th><th>In PowerPoint</th><th>Where</th></tr></thead><tbody>' + J(EDIT.map(r => '<tr' + (o.hl === r[0] ? ' class="hl"' : '') + '><td><b>' + r[0] + '</b></td><td class="mo">' + r[1] + '</td><td>' + chipFor(r[2]) + '</td><td>' + r[3] + '</td></tr>')) + '</tbody></table>'; };
+    const ovl = (l, t, w, h, lab, c) => '<div class="ptx-ov ' + (c || '') + '" style="left:' + l + '%;top:' + t + '%;width:' + w + '%;height:' + h + '%"><span>' + lab + '</span></div>';
+    const pptxPreview = (notes, srcs, o) => { o = o || {}; return pvHead('pptx', notes, srcs)
+      + '<div class="ptx-big"><div>' + slide(o.card || 'market', 420, { over: o.card === 'ask' ? ovl(1, 12, 64, 50, 'Text', '') : ovl(1, 2, 98, 15, 'Text', '') + ovl(1, 19, 56, 64, 'Picture of the chart', 'pic') + ovl(66, 19, 33, 50, 'Text', '') }) + '<div class="ptx-spn"><b>Speaker notes · slide ' + (o.card === 'ask' ? '11' : '4') + '</b>' + (notes ? (o.card === 'ask' ? PRIV : '“Say the SAM is our own estimate; source to come.”') : '<span class="ps-nr">Empty in this file</span>') + '</div></div><div class="ptx-mini">' + thumbs(12, 54, (n) => n === 4 ? '<i class="ptx-mk pic" title="Chart as a picture">▣</i>' : (n === 3 || n === 7 || n === 8) ? '<i class="ptx-mk" title="Native chart or shapes">✓</i>' : '', srcs ? '<figure><div class="ptx-tw">' + paper(54, 'src') + '</div><figcaption>13</figcaption></figure>' : '') + '</div></div>'
+      + editTable({ hl: o.hl }); };
+    const gate = () => '<div class="ptx-gate" role="alertdialog" aria-label="Before you export"><div class="ps-ch"><b style="font-size:12.5px">Before you export · v7 checked</b>' + st('Worth a look', '1 warning') + '</div><p>Card 4 · “SAM [$310M]” has no source. Investors see the figure without one.</p><div style="display:flex;gap:8px;align-items:center">' + btn('Export anyway', 'bsm') + '<a href="#" style="font-size:12px;font-weight:700">Fix card 4 first ›</a></div></div>';
+    const ackBox = (checked) => '<div class="ptx-ack" role="group" aria-labelledby="ptx-ack-h"><b id="ptx-ack-h">Speaker notes leave Axal VC in this file</b><p>Notes from 9 cards go into this copy, including card 11’s: ' + PRIV + ' Anyone you give the file to can read them.</p><label class="ptx-cb"><span class="ptx-box' + (checked ? ' on' : '') + '" role="checkbox" aria-checked="' + checked + '" tabindex="0">' + (checked ? '✓' : '') + '</span>I’m giving this copy to someone who works on the deck</label></div>';
+    const lastLine = '<span class="mo mu" style="font-size:11px">Last exported Fri 20 Nov 2026 · PowerPoint · v4 · by [Maya Ruiz] · notes and appendix Not recorded</span>';
+    const exportDlg = (o) => {
+      const pre = o.preset; const fmt = o.fmt; const notes = pre === 'work' || o.notes === true; const srcs = o.srcs !== false;
+      const left = '<div class="ptx-left">'
+        + '<section><h3 id="ptx-h-who">1 · Who it is for</h3>' + presetCards(pre, { focus: o.focus }) + '</section>'
+        + '<section><h3 id="ptx-h-fmt">2 · Format</h3>' + fmtTiles(fmt) + '</section>'
+        + '<section><h3>3 · Version</h3><div class="ps-in" style="justify-content:space-between"><span class="mo">v7 · saved 25 Nov 2026, 16:40 · current</span><span aria-hidden="true">▾</span></div><small class="mu" style="font-size:11.5px">Frozen. Draft edits after 16:40 are not in this file.</small></section>'
+        + '<section><h3>4 · Include</h3>' + sw(notes, 'Include speaker notes', pre === 'work' ? 'On for a working copy' : 'Off for an investor copy') + sw(srcs, 'Include a Sources appendix', 'On for both copies') + '<small class="mu" style="font-size:11.5px">Changing either makes this a Custom copy.</small></section>'
+        + '</div>';
+      const right = '<section class="ptx-pv" aria-labelledby="ptx-h-pv">' + (fmt === 'pdf' ? pdfPreview(notes, srcs) : pptxPreview(notes, srcs, o)) + '<h3 id="ptx-h-leave">What leaves Axal VC in this file</h3>' + leavesGrid(notes, srcs, fmt) + '</section>';
+      const foot = '<div class="ptx-foot"><div class="ptx-fl">' + (o.gate ? gate() : '') + (pre === 'work' ? '<span class="stt xar" role="status" style="align-self:flex-start">' + SH.ar + 'v7 checked · 1 warning confirmed (card 4’s SAM)</span>' + ackBox(!!o.ack) : '') + '<p class="mu" style="font-size:12px">This makes a file of v7 and records the export: format, version, ' + (o.tagRec === false ? '' : 'what was included ') + 'and the file’s fingerprint. Nothing is shared. ' + (o.tagRec === false ? '' : ENGT('#8771 record notes and appendix')) + '</p>' + lastLine + '</div><div class="ptx-fb">' + ((pre === 'work' && !o.ack) || o.gate ? '<span id="ptx-why" class="mu" style="font-size:11.5px;align-self:center;max-width:200px;text-align:right">' + (o.gate ? 'Confirm or fix the warning first' : 'Tick the acknowledgment first') + '</span>' : '') + btn('Cancel', 'gh') + btn('Export ' + (fmt === 'pdf' ? 'PDF' : 'PowerPoint') + (pre === 'work' ? ' · working copy' : ' · investor copy'), 'p', (pre === 'work' && !o.ack) || o.gate ? ' aria-disabled="true" aria-describedby="ptx-why" style="opacity:.5"' : '') + '</div></div>';
+      return '<div class="ps-sheet" style="padding-top:28px"><div class="ps-dlg ptx-dlg" role="dialog" aria-modal="true" aria-labelledby="ptx-h-dlg"><div class="ps-dh"><div><h2 id="ptx-h-dlg">Export v7</h2><span class="mu" style="font-size:12px">' + DECK + ' · saved ' + SAVED + '</span></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ptx-cols">' + left + right + '</div>' + foot + '</div></div>';
+    };
+    const under = () => phead('Overview') + '<div class="ps-card" style="height:420px"></div>';
+    const dlgPage = (o, h) => page(under(), { h: h, overlay: exportDlg(o) });
+
+    /* ---------- completed export ---------- */
+    const done = (o) => { o = o || {}; return '<div class="ptx-res" role="status" aria-labelledby="ptx-h-done"><div class="ps-ch"><h3 id="ptx-h-done" tabindex="-1">Exported PowerPoint of v7 · investor copy</h3>' + st('Done', 'Recorded 14:12') + '</div>'
+      + '<dl class="ps-kv ptx-kv"><dt>Version</dt><dd>' + mo('v7') + ' · frozen ' + mo('25 Nov 2026, 16:40') + ' · 12 cards</dd><dt>File</dt><dd>' + mo('Atlas-Orchard-Seed-deck-v7.pptx') + ' · ' + mo('13 slides · 16:9') + '</dd><dt>Speaker notes</dt><dd>Not included · every slide’s notes are empty</dd><dt>Sources appendix</dt><dd>Included · slide 13 · 5 figures</dd><dt>Fingerprint</dt><dd>' + mo('SHA-256 9c41d0…e07a') + '</dd><dt>Recorded</dt><dd>' + mo('Thu 26 Nov 2026, 14:12') + ' · by [Maya Ruiz] · in this venture’s export history</dd>'
+      + '<dt>In the file</dt><dd>33 text boxes · 2 native charts · 1 chart as a picture (card 4) · 5 pictures · 1 diagram as shapes · card 5’s title at 70% ' + ENGT('#8771 writer report') + '</dd></dl>'
+      + '<div class="ptx-dlr"><span>' + st('Done', 'Downloaded to this device') + '</span>' + btn('Download again', '') + '<span class="mu" style="font-size:11.5px">Kept 30 days, for you and the venture’s founders</span>' + ENGT('#8771 keep the file') + FLAG('Q3 A') + '</div>'
+      + '<div class="ptx-chk"><b>Check v7 before you send it</b><a href="#">Open v7 in Present ›</a><a href="#">Preview v7 as an investor link ›</a></div></div>'; };
+
+    /* ---------- boards ---------- */
+    let html;
+    if (B === 'PTX00') {
+      const fm = [['PDF', 'Every card, as it prints'], ['PowerPoint', 'One picture per card'], ['Google Slides', 'Created in your Drive, editable'], ['HTML', 'One file, offline'], ['Slides-suite file (.odp)', 'Editable in LibreOffice and other open suites']];
+      const mainDlg = '<div class="ps-dlg" style="width:560px;flex:none" role="img" aria-label="The export dialog on main"><div class="ps-dh"><h2>Export v7</h2><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ps-db"><div class="ptx-g2m">' + J(fm.map((f, i) => '<div class="ptx-mf' + (i === 0 ? ' on' : '') + '"><b>' + f[0] + '</b><small>' + f[1] + '</small>' + (i === 1 ? PIN(1) : '') + '</div>')) + '</div><div class="ps-tog" style="border:0"><span>Version</span><span class="ps-in mo" style="font-size:11.5px">v7 · saved 25 Nov · current ▾</span></div><div class="ptx-cbm"><span class="ptx-box on">✓</span>Include speaker notes ' + PIN(2) + '</div><div class="ptx-cbm"><span class="ptx-box on">✓</span>Include a Sources appendix</div><small class="mu">In the PDF, the notes are a page after the cards, and the Sources appendix is the last page.</small><p class="mu" style="font-size:12px">This makes a file of v7 and records the export in this venture’s history: the format, the version and the file’s fingerprint. Nothing is shared. ' + PIN(4) + '</p><span class="mo mu" style="font-size:11px">Last exported 20 Nov · PowerPoint · v4 · by [Maya Ruiz]</span></div><div class="ps-df">' + btn('Cancel', 'gh') + btn('Export PDF', 'p') + '</div></div>';
+      const phoneNote = '<div class="ptx-mph"><b style="font-size:12.5px">Phone editor · card 11 notes</b><div class="ps-in ps-ta" style="color:var(--mu)">What you will say on this card. Only you see these. ' + PIN(3) + '</div></div>';
+      const linkInc = '<div class="ptx-mph"><b style="font-size:12.5px">Share › investor link · What is included</b>' + J([['Figures with chips', 1], ['Sources appendix', 1], ['Speaker notes', 0], ['Scorecard and Product-market fit bands', 0], ['Cap-table totals', 0], ['Team photos', 0]].map(x => '<div class="ptx-cbm"><span class="ptx-box' + (x[1] ? ' on' : '') + '">' + (x[1] ? '✓' : '') + '</span>' + x[0] + (x[0] === 'Speaker notes' ? ' ' + PIN(2) : '') + '</div>')) + '</div>';
+      const notes = [
+        ['1', 'PowerPoint says “One picture per card”.', '<code>presentExportModel.js</code> L308. The writer has made an editable file since D1574 (#3821): <code>pptxEditable.ts</code> writes text boxes, native charts for 9 chart types, native diagram shapes and pictures; a chart type with no native chart is a picture or text.'],
+        ['2', 'Two defaults disagree.', 'The file export starts with speaker notes and the appendix on (<code>ExportDialog.jsx</code> L69–70). An investor link starts with notes off and the appendix on (<code>shareModel.js</code> <code>DEFAULT_INCLUDE</code>). There is no preset; the choice is two bare checkboxes.'],
+        ['3', '“Only you see these.” is not true.', '<code>editorModel.js</code> L26, on the phone editor and the desktop notes field. Anyone who can open the deck reads its notes, and the default export takes them out of Axal VC.'],
+        ['4', 'Nothing records what was included.', '<code>deck_exports</code> keeps the version, format, fingerprint, who and when (migrations 537, 754). Notes and appendix are not stored, so the v4 PowerPoint from 20 Nov cannot say whether its notes went out. The file is handed to the browser once; there is no stored copy to download again.'],
+        ['5', 'No preview before export.', 'The dialog shows no pages, slide size, notes location or editability. The investor-link dialog already previews what its recipient gets (D6061).'],
+      ];
+      html = crop('<span class="eye">Today on main · 7553cd37b9 · what the walkthrough of 26 Nov found</span><div class="ptx-today">' + mainDlg + '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' + phoneNote + linkInc + '<ol class="ptx-ann">' + J(notes.map(n => '<li>' + PIN(n[0]) + '<div><b>' + n[1] + '</b><p>' + n[2] + '</p></div></li>')) + '</ol></div></div>', 1400);
+    }
+    else if (B === 'PTX01') html = dlgPage({ preset: 'inv', fmt: 'pdf' }, 1000);
+    else if (B === 'PTX02') html = dlgPage({ preset: 'inv', fmt: 'pptx', gate: true, hl: 'Chart as a picture' }, 1240);
+    else if (B === 'PTX03') html = dlgPage({ preset: 'work', fmt: 'pptx', card: 'ask', ack: false }, 1300);
+    else if (B === 'PTX03B') html = crop('<span class="eye">Working copy · PDF · the page plan</span><div class="ptx-pv" style="border:1px solid var(--hair)">' + pdfPreview(true, true) + '</div><div class="ps-g2"><div>' + paper(560, 'n2') + '<p class="mu" style="font-size:12px;margin-top:6px">Page 14 · cards 7 to 12. A card with no notes says so; it is never left out silently.</p></div><div>' + paper(560, 'src') + '<p class="mu" style="font-size:12px;margin-top:6px">Page 15 · Sources. Card 4’s SAM has no source and is not listed; preflight warns about it before export.</p></div></div>', 1240);
+    else if (B === 'PTX04') {
+      const col = (h, sub, body) => '<section class="ps-card"><div><h3 style="font-size:13px;font-weight:800">' + h + '</h3><small class="mu" style="font-size:11.5px">' + sub + '</small></div>' + body + '</section>';
+      html = crop('<span class="eye">A private note stays out of the investor copy · card 11, The ask</span><div class="ps-g3">'
+        + col('In the editor', 'Desktop notes field, proposed helper', slide('ask', 400) + '<div class="ps-fld"><label style="font-size:11.5px;font-weight:700">Speaker notes</label><div class="ps-in ps-ta">' + PRIV + '</div><small class="mu" style="font-size:11.5px">People who can open this deck in Axal VC see these notes. They leave Axal VC only in an export or link that includes them.</small></div>')
+        + col('Investor copy · PDF and PowerPoint', 'Speaker notes not included', slide('ask', 400) + '<div class="ptx-spn"><b>PowerPoint · speaker notes · slide 11</b><span class="ps-nr">Empty in this file</span></div><div class="ptx-spn"><b>PDF</b>13 pages · no notes pages</div>' + st('Done', 'The note is not in this file'))
+        + col('Working copy · for [Noah Brandt]', 'Speaker notes included, acknowledged', slide('ask', 400) + '<div class="ptx-spn"><b>PowerPoint · speaker notes · slide 11</b>' + PRIV + '</div><div class="ptx-spn"><b>PDF</b>15 pages · the note is on page 14</div>' + '<span class="stt xar">' + SH.ar + 'In the file · acknowledged 14:20</span>')
+        + '</div>', 1400);
+    }
+    else if (B === 'PTX05') html = page(under(), { h: 1000, overlay: '<div class="ps-sheet" style="padding-top:40px"><div class="ps-dlg" style="width:760px" role="dialog" aria-modal="true" aria-labelledby="ptx-h-done"><div class="ps-dh"><div><h2>Export v7</h2><span class="mu" style="font-size:12px">' + DECK + ' · saved ' + SAVED + '</span></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ps-db">' + done() + '</div><div class="ps-df">' + btn('Export another copy', 'gh') + btn('Close', '') + '</div></div></div>' });
+    else if (B === 'PTX06') {
+      const tile = (h, chip, body, act) => '<section class="ps-card"><div class="ps-ch"><h3>' + h + '</h3>' + chip + '</div>' + body + (act ? '<div style="display:flex;gap:8px;flex-wrap:wrap">' + act + '</div>' : '') + '</section>';
+      html = crop('<span class="eye">Export states · one message each, and what the founder can do</span><div class="ps-g3">'
+        + tile('Checking v7', st('Checking…'), '<p class="ptx-p">Checking before export · slide 4 of 12</p><div class="ptx-skr"><i></i><i></i><i></i></div><p class="mu ptx-p">The preview waits for the check. Export stays off until it ends.</p>')
+        + tile('Version could not be read', st('Unreadable'), '<p class="ptx-p" style="color:var(--neg);font-weight:600">This version’s content could not be read, so it could not be checked.</p><p class="mu ptx-p">No preview, no counts: nothing is drawn as 0 slides.</p>', btn('Try again', ''))
+        + tile('A warning to confirm', st('Worth a look', '1 warning'), '<p class="ptx-p">Card 4 · “SAM [$310M]” has no source.</p><p class="mu ptx-p">Export anyway confirms this warning only. It does not export by itself.</p>', btn('Export anyway', '') + '<a href="#" style="font-size:12px;font-weight:700;align-self:center">Fix card 4 first ›</a>')
+        + tile('Exporting', st('Running', 'Exporting PowerPoint…'), '<div class="ps-bar" role="progressbar" aria-label="Exporting"><i style="width:60%"></i></div><p class="mu ptx-p">Picturing the Market circles chart on card 4. Settings and version are locked while it runs.</p>')
+        + tile('The file could not be produced', st('Failed'), '<p class="ptx-p" style="font-weight:600">The PowerPoint file could not be produced. Try again in a moment. Nothing was shared.</p><span class="mo mu" style="font-size:11px">Reference: chart_shot_failed · slide 4 · 2 tries</span><p class="mu ptx-p">Investor copy, PowerPoint and v7 are kept.</p>', btn('Try again', 'p'))
+        + tile('The export could not be recorded', st('Refused', 'Not recorded'), '<p class="ptx-p" style="font-weight:600">The export could not be recorded, so no file was made. Try again in a moment. Nothing was shared.</p>', btn('Try again', ''))
+        + tile('Read-only', st('Read-only'), '<p class="ptx-p">You can read this deck. Exports are made by the venture’s founders.</p><p class="mu ptx-p">Super Admin [Iris Chen]: Present and the investor-link preview still open.</p>')
+        + tile('Export history unavailable', st('Unreadable', 'Unavailable'), '<p class="ptx-p">The export history could not be read.</p><p class="mu ptx-p">Never shown as “No export recorded yet”. Exporting still works.</p>', btn('Try again', 'gh'))
+        + tile('No export yet', '<span class="stt ni">' + SH.nd + 'None</span>', '<p class="ptx-p">No export recorded yet.</p><p class="mu ptx-p">Confirmed empty: the history was read and has no rows for this venture.</p>')
+        + '</div>', 1400);
+    }
+    else if (B === 'PTX07') {
+      const rows = [
+        ['Thu 26 Nov, 14:20', 'v7', 'PowerPoint', st('Proposed', 'Working copy'), 'Included', 'Included', '51d2a8…3b90', '[Maya Ruiz]', btn('Download again', 'bsm')],
+        ['Thu 26 Nov, 14:12', 'v7', 'PowerPoint', st('Version saved', 'Investor copy'), 'Not included', 'Included', '9c41d0…e07a', '[Maya Ruiz]', btn('Download again', 'bsm')],
+        ['Fri 20 Nov, 11:05', 'v4', 'PowerPoint', NR, NR, NR, '0a7e33…4c12', '[Maya Ruiz]', '<span class="mu" style="font-size:11.5px">File not kept</span>'],
+        ['Wed 18 Nov, 09:30', 'v4', 'PDF', NR, NR, NR, 'e2b905…77d1', '[Noah Brandt]', '<span class="mu" style="font-size:11.5px">File not kept</span>'],
+      ];
+      html = crop('<div class="ps-ch"><div><span class="eye">Share & analytics › Exports · ' + DECK + '</span><h2 style="font-size:18px;font-weight:800;margin-top:4px">Export history</h2></div><span>' + ENGT('#8771 notes, appendix and file columns') + '</span></div><section class="ps-card" style="padding:0"><table class="ptx-ht"><thead><tr><th>When</th><th>Version</th><th>Format</th><th>Copy</th><th>Speaker notes</th><th>Sources appendix</th><th>Fingerprint</th><th>By</th><th>File</th></tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map((c, i) => '<td' + (i === 0 || i === 1 || i === 6 ? ' class="mo"' : '') + '>' + c + '</td>')) + '</tr>')) + '</tbody></table></section><p class="mu" style="font-size:12px">Rows from before this change say Not recorded for what was included: main kept only the version, format and fingerprint. They are never shown as “not included”. 4 exports · newest first · up to 50, as <code>GET /api/decks/:id/exports</code> returns them.</p>' + SAMPLE, 1300);
+    }
+    else if (B === 'PTX08') {
+      const col = (h, sub, body, chip) => '<section class="ps-card"><div class="ps-ch"><div><h3 style="font-size:13px;font-weight:800">' + h + '</h3><small class="mu" style="font-size:11.5px">' + sub + '</small></div>' + chip + '</div>' + body + '</section>';
+      html = crop('<span class="eye">The same v7 in Present, on an investor link and in the exported file</span><div class="ps-g3">'
+        + col('Present · presenter view', 'Opened from “Open v7 in Present”', '<div class="ptx-pres">' + slide('ask', 380) + '<div class="ptx-pnotes"><span>NOTES</span>' + PRIV + '</div><div class="mo" style="color:#9ca3af;font-size:11px;display:flex;justify-content:space-between"><span>11 / 12</span><span>00:12:40</span></div></div><p class="mu" style="font-size:11.5px">Notes are on the presenter’s own screen. The audience view shows the card only.</p>', st('Version saved', 'v7'))
+        + col('Investor link · what [Lena Okafor] will receive', 'The Share dialog’s preview (D6061)', '<div class="ptx-brw"><span class="mo">axal.vc/d/q7P2…</span></div>' + slide('ask', 380) + '<div class="ptx-spn"><b>Included</b><span class="mo">v7 · 12 cards · appendix included · speaker notes hidden</span></div>', st('Version saved', 'v7'))
+        + col('Investor copy · PowerPoint', 'Atlas-Orchard-Seed-deck-v7.pptx · 14:12', slide('ask', 380) + '<div class="ptx-spn"><b>Speaker notes · slide 11</b><span class="ps-nr">Empty in this file</span></div><div class="ptx-spn"><b>Slides</b><span class="mo">13 · 12 cards + Sources · 16:9</span></div>', st('Version saved', 'v7'))
+        + '</div><div class="ptx-agree" role="status">' + st('Done', 'Same version') + '<span>All three read <b class="mo">v7, saved 25 Nov 2026, 16:40</b>, 12 cards in the same order. Card 11’s note appears only in Present, to the presenter.</span></div>', 1400);
+    }
+    else if (B === 'PTX09') {
+      html = dk('<h1>What each format really contains</h1><p>Every line below is read from the writer on main (7553cd37b9), not from the dialog’s old labels. The dialog’s format lines and the preview come from this table.</p>'
+        + tbl(['Format', 'Native and editable', 'Falls back to', 'Size', 'Speaker notes', 'Sources appendix', 'Read from'], [
+          ['PDF', 'Text stays text, fonts embedded, links live, tagged for PDF/UA. Not meant for editing.', 'A PDF that fails the page-size, font, text or link check is refused, never handed out.', '1920 × 1080 px at 16:9; 1440 × 1080 at 4:3', 'Pages after the cards, six cards a page; “No notes on this card.” where empty', 'The last page', '<code>pdfExport.ts</code>, <code>PrintExtras.jsx</code>'],
+          ['PowerPoint', 'Text and metric boxes, 9 chart types as native charts, diagrams as native shapes, pictures with their crop, decor as shapes, locks and groups.', 'A chart with no native type: a picture of it, or its type and series as text (30 pictures at most). An image that cannot be fetched or is WebP: a sentence in its place. Long text: written smaller, down to 40%.', '13.33 × 7.5 in (16:9) for every deck', 'Each slide’s speaker notes; empty when not included', 'The last slide', '<code>pptxEditable.ts</code>, <code>pptxChart.ts</code>, <code>pptx.ts</code>'],
+          ['Google Slides', 'The same editable PowerPoint file, uploaded to your Drive and converted by Google.', 'If Google keeps it as PowerPoint, the dialog says so. Charts Google cannot picture go in as text, and are counted.', 'As PowerPoint', 'As PowerPoint', 'As PowerPoint', '<code>deck_exports.ts</code>, <code>driveCreate.ts</code>'],
+          ['HTML', 'One self-contained file, pictures embedded.', 'An image that cannot be fetched says so on its card.', 'The deck’s aspect', 'Under each card', 'The last card', '<code>offlineHtml.ts</code>'],
+          ['.odp', 'Editable in LibreOffice and other open suites, at The Grid’s placement.', 'As the .odp writer draws it.', 'The deck’s aspect', 'Each slide’s notes', 'The last slide', '<code>odp.ts</code>'],
+        ])
+        + '<h2>Native chart types in PowerPoint</h2><p>line, projection, columns, waterfall, nested bars, stacked, percent bar, ranked bars, funnel (<code>NATIVE_CHART_TYPES</code>). Cohort heatmap, timeline, metric tiles, comparison table and market circles are pictures or text. The client keeps a copy of this list for the preview, guarded by a drift test.</p>'
+        + '<h2>The fixture to open for real ' + ENGT('#8771 file check') + '</h2><p>One fictional 6-card deck exported to PDF and PowerPoint, then opened in PowerPoint, Keynote, Google Slides and a PDF reader. Each row is checked by a person and recorded with the file’s fingerprint; until then it reads Not recorded.</p>'
+        + tbl(['Fixture item', 'PDF should show', 'PowerPoint should show', 'Checked'], [
+          ['Text box', 'Selectable text in the embedded font', 'An editable text box at its place', NR],
+          ['Columns chart (native)', 'The chart as drawn', 'A chart whose numbers open in the data sheet', NR],
+          ['Market circles chart', 'The chart as drawn', 'A picture of the chart, not editable, named “Chart …”', NR],
+          ['Image with a crop', 'The cropped picture', 'A picture with the same crop, re-croppable', NR],
+          ['Speaker notes', 'Notes pages only when included', 'Speaker notes only when included; empty otherwise', NR],
+          ['Figure with no source', 'On the card; not in Sources', 'On the slide; not in Sources', NR],
+          ['Long title', 'Wrapped as on screen', 'Smaller text that fits its box, still editable', NR],
+          ['Slide size and projector', '1920 × 1080; 18 pt body legible at 3 m', '13.33 × 7.5 in; nothing clipped at the edges', NR],
+        ]));
+    }
+    else if (B === 'PTX11') {
+      html = dk('<h1>Headings, focus order and announcements</h1>'
+        + '<h2>Heading structure · desktop dialog</h2>' + tbl(['Level', 'Text'], [['h1', '[Atlas Orchard] · Seed deck (the page, unchanged)'], ['h2', 'Export v7 (the dialog’s name)'], ['h3', '1 · Who it is for · 2 · Format · 3 · Version · 4 · What leaves Axal VC · Preview · PDF or Preview · PowerPoint'], ['h3', 'After export: Exported PowerPoint of v7 · investor copy (focus moves here)']])
+        + '<h2>Focus order</h2>' + tbl(['#', 'Stop', 'Keys'], [['1', 'Close', 'Esc also closes, unless an export is running'], ['2', 'Who it is for · the checked preset', 'Arrows move between Investor copy and Working copy'], ['3', 'Format · the checked format', 'Arrows; Google Slides and the others in the same group'], ['4', 'Version', 'Select'], ['5', 'Include speaker notes', 'Space; changing either switch makes the copy Custom'], ['6', 'Include a Sources appendix', 'Space'], ['7', 'Preview · slide list', 'One stop; arrows move between slides, Enter enlarges'], ['8', 'Export anyway (when a warning is open)', 'Confirms the warning only'], ['9', 'Acknowledgment checkbox (working copy)', 'Space'], ['10', 'Cancel', ''], ['11', 'Export …', 'Disabled with its reason while checking, unconfirmed or unacknowledged']])
+        + '<h2>Announced</h2><p>Changing the copy says, politely: “Investor copy. Speaker notes not included. Sources appendix included, page 13.” Export start: “Exporting PowerPoint of v7.” Done: focus moves to the result heading. A failure is an alert and focus goes to Try again; the settings are kept.</p>'
+        + '<h2>Never colour alone</h2><p>In the file is a tick with words; Stays in Axal VC a struck circle; Picture a triangle; Not recorded a hollow circle in italics; Unavailable a question mark. Switches carry role switch and their label; the preview thumbnails carry their page number as text.</p>'
+        + '<h2>Phone · 390</h2><p>A full-height sheet with the same order; targets are 48 px; the preview folds under one line (“13 slides · 16:9 · notes not included”) that opens it; the primary action sits in the sticky footer.</p>');
+    }
+    else if (B === 'PTX12') {
+      html = dk('<h1>Handoff · #8771</h1><p>Checked against main 7553cd37b9 on Thu 26 Nov 2026. Extends Pitch Studio v2’s export (PD17) inside the same Pitch shell; nothing else on the page changes.</p>'
+        + '<h2>Checked on main</h2>' + tbl(['File', 'What it shows'], [
+          ['<code>frontend/src/pages/raise/pitch/ExportDialog.jsx</code>', 'Five formats, a version select, two checkboxes both on by default (L69–70), the preflight gate with Export anyway (D4598), the last-export line, failure with a reference line (#3655). No preview, no preset, no retry button.'],
+          ['<code>presentExportModel.js</code>', '“One picture per card” for PowerPoint (L308); OPTIONS_WHERE; whatExportDoes; exportFileName <code>…-v7.pptx</code>.'],
+          ['<code>editorModel.js</code>', 'NOTES_PLACEHOLDER “What you will say on this card. Only you see these.” (L26), on desktop and phone.'],
+          ['<code>shareModel.js</code>', 'Investor links default to notes off, appendix on (DEFAULT_INCLUDE); the Share dialog already previews what the recipient gets.'],
+          ['<code>cloudflare-worker/src/services/decks/pptxEditable.ts</code>', 'The editable writer since D1574: text boxes, native charts, diagram shapes, pictures; chart pictures or text as fallback; FIT_FLOOR 0.4; slide 13.33 × 7.5 in; speaker notes only when asked. It counts native, pictured, as text, placed and not placed, but the route returns none of it.'],
+          ['<code>cloudflare-worker/src/routes/deck_exports.ts</code>', 'Records each PDF/PowerPoint in deck_exports before handing it out and sends X-Content-SHA256; GET /exports lists version, format, fingerprint, who, when.'],
+          ['<code>sql/migrations/537, 754</code>', 'deck_exports has no notes, appendix or stored-file columns.'],
+          ['<code>pdfExport.ts</code>, <code>PrintExtras.jsx</code>', 'PDF at the deck’s aspect with a fidelity check; notes pages six cards a page; Sources last.'],
+        ])
+        + '<h2>Requires engineering ' + ENGT('#8771') + '</h2>' + tbl(['Item', 'Detail', 'Boards'], [
+          ['Record what was included', 'A migration adds notes, appendix and copy (investor, working, custom) to deck_exports; the export routes record them; GET /exports returns them. Older rows read Not recorded.', 'PTX01–05, PTX07'],
+          ['Return the writer’s report', 'PowerPoint, .odp and Google Slides answer with the counts the writer already keeps (native, pictured, as text, not placed, smallest text scale), and the ledger keeps them.', 'PTX05'],
+          ['Keep the file to download again', 'Only with Q3 A: the exact bytes, 30 days, readable by the venture’s founders, by export id.', 'PTX05, PTX07'],
+          ['The real-file check', 'A fixture deck exported and opened in PowerPoint, Keynote, Google Slides and a PDF reader; results recorded with the fingerprint.', 'PTX09'],
+        ])
+        + '<h2>Pending the owner · option A drawn</h2>' + tbl(['', 'Question', 'A (drawn)', 'B'], [
+          [FLAG('Q1'), 'Does the investor copy carry the Sources appendix?', 'Yes, as an investor link does today', 'No; the appendix is a working-copy item'],
+          [FLAG('Q2'), 'Which copy is picked when the dialog opens?', 'Investor copy, every time', 'The last copy this founder exported'],
+          [FLAG('Q3'), 'How is a lost file recovered?', 'Keep it 30 days; Download again', 'Export the same version again; a new fingerprint'],
+          [FLAG('Q4'), 'When is the notes acknowledgment asked?', 'On every export that includes notes', 'Once per deck'],
+        ])
+        + '<h2>Frontend only</h2><p>The two presets and Custom; new format lines; What leaves Axal VC; the PDF page plan (cards, notes pages at six a page, Sources) and the PowerPoint editability table from v7’s own blocks, with a copy of NATIVE_CHART_TYPES; the notes acknowledgment; the new notes helper on desktop and phone; the completed panel (version, settings, fingerprint from X-Content-SHA256); Try again that keeps the settings; links to Present and the investor-link preview for the same version.</p>'
+        + '<h2>Preserved</h2><p>The five formats, the version select, the preflight gate and Export anyway, the Google connect states, failure sentences and reference lines, “Nothing is shared”, the ledger’s last-export line, the Pitch shell and Eadwyn as the one rail.</p>'
+        + '<h2>Acceptance mapped to boards</h2>' + tbl(['Acceptance item', 'Boards'], [
+          ['Investor-copy preset and an explicit working-copy preset', 'PTX01, PTX02, PTX03, PTX10B'],
+          ['Which notes, appendices and source details leave, per format', 'PTX01, PTX02, PTX03, PTX03B, PTX10C'],
+          ['Correct the editor promise', 'PTX04, PTX10A (today: PTX00)'],
+          ['Preview the output before saving', 'PTX01, PTX02, PTX03, PTX03B, PTX10C'],
+          ['Format descriptions grounded in native elements and fallbacks', 'PTX02, PTX09'],
+          ['Verify a fixture by opening the real PDF/PPTX', 'PTX09 (◇ the file check)'],
+          ['Completed export: frozen version, disclosure settings, download/recovery', 'PTX05, PTX07, PTX10E'],
+          ['Same version in Present and the recipient preview', 'PTX08, PTX05'],
+          ['Phone notes helper, warning acknowledgment, retry, private note kept out', 'PTX10A, PTX02, PTX03, PTX10D, PTX06, PTX10F, PTX04'],
+        ])
+        + '<h2>Open</h2><p>Whether HTML and .odp get the same presets (drawn: yes, same switches); whether Google Slides should name the PowerPoint fallbacks after Google converts the file.</p>');
+    }
+    else {
+      const sheetHead = (t, sub) => '<div><b style="font-size:17px">' + t + '</b>' + (sub ? '<div class="mu" style="font-size:12px">' + sub + '</div>' : '') + '</div>';
+      const stepTag = (n, t) => '<span class="ptx-step">Step ' + n + ' · ' + t + '</span>';
+      const MOB = {
+      PTX10A: () => phone('Card 11 · The ask', stepTag(1, 'Notes helper') + slide('ask', 362) + '<div class="ps-fld"><label style="font-size:12px;font-weight:700">Speaker notes</label><div class="ps-in ps-ta foc" style="font-size:14px;min-height:110px">' + PRIV + '</div><small class="mu" style="font-size:12px;line-height:1.45">People who can open this deck in Axal VC see these notes. They leave Axal VC only in an export or link that includes them.</small><a href="#" style="font-size:12.5px;font-weight:700">Where notes go ›</a></div><p class="mu" style="font-size:12px">Notes and order only on a phone. Edit layouts on a larger screen.</p>', btn('Export…', 'p')),
+      PTX10B: () => phone('Export v7', stepTag(2, 'Who it is for') + sheetHead('Who it is for', DECK + ' · v7, saved 25 Nov') + presetCards('inv') + '<b style="font-size:13px">Format</b>' + fmtList('pptx', { only: ['pdf', 'pptx', 'gs'] }) + '<span class="mu" style="font-size:11.5px">HTML and .odp below</span>', btn('Next · what leaves', 'p')),
+      PTX10C: () => phone('Export v7', stepTag(3, 'What leaves') + sheetHead('Investor copy · PowerPoint') + '<button type="button" class="disc" aria-expanded="false" style="width:100%"><b>Preview</b><span>13 slides · 16:9 · notes not included</span><i aria-hidden="true">▾</i></button><ul class="ptx-dl ptx-dlp">' + drow('12 cards of v7', IN(), '') + drow('Speaker notes', OUT(), 'Notes on 9 cards stay here') + drow('Sources appendix', IN('Slide 13'), '5 figures; card 4’s SAM is not listed') + '</ul><div class="ptx-pm">' + J([['Editable', '33 text boxes · 2 charts · 1 diagram'], ['Picture', '1 chart (card 4) · 5 photos'], ['Smaller', 'Card 5’s long title']].map(r => '<div>' + chipFor(r[0]) + '<span>' + r[1] + '</span></div>')) + '</div>' + '<div class="ptx-gate ptx-gm" role="status"><div class="ps-ch"><b>v7 checked</b>' + st('Worth a look', '1 warning') + '</div><p>Card 4 · “SAM [$310M]” has no source.</p><b style="color:var(--amT)">Exporting with the warnings above confirmed.</b></div>', btn('Export PowerPoint · investor copy', 'p')),
+      PTX10D: () => phone('Export v7', stepTag('3b', 'Working copy') + sheetHead('Working copy · PowerPoint', 'For [Noah Brandt]') + '<ul class="ptx-dl ptx-dlp">' + drow('Speaker notes', IN(), '9 cards, as speaker notes') + drow('Sources appendix', IN('Slide 13'), '5 figures') + '</ul>' + ackBox(true), btn('Export PowerPoint · working copy', 'p')),
+      PTX10E: () => phone('Export v7', stepTag(4, 'Done') + done().replace('<h3 id="ptx-h-done" tabindex="-1">Exported PowerPoint of v7 · investor copy</h3>', '<h3 id="ptx-h-done" tabindex="-1">Exported · investor copy</h3>'), btn('Close', '')),
+      PTX10F: () => phone('Export v7', stepTag(4, 'Failed') + '<div class="ps-card neg" role="alert"><b style="font-size:14px">The PowerPoint file could not be produced.</b><p style="font-size:12.5px">Try again in a moment. Nothing was shared.</p><span class="mo mu" style="font-size:11px">Reference: chart_shot_failed · slide 4 · 2 tries</span></div><ul class="ptx-dl ptx-dlp">' + drow('Kept', st('Version saved', 'Investor copy'), 'PowerPoint · v7 · notes not included · Sources included') + '</ul><p class="mu" style="font-size:12px">Nothing was recorded and no file was made. Try again uses the same settings.</p>', btn('Try again', 'p') + btn('Change settings', 'gh')),
+    };
+      html = MOB[B] ? MOB[B]() : dk('<h1>Unknown board</h1>');
+    }
+
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

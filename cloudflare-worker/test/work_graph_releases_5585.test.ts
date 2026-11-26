@@ -33,7 +33,7 @@ import {
 const read = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const SCHEMA = read('202611140007_5581_work_graph_revisions.sql') + read('202611140122_5581_work_graph_lease_events.sql')
   + read('202611140924_5581_work_graph_integrity.sql') + read('202611182125_5585_work_graph_releases.sql')
-  + read('202611190940_5585_work_graph_release_takedowns.sql');
+  + read('202611190940_5585_work_graph_release_takedowns.sql') + read('202611260837_5585_release_render_ceiling.sql');
 
 WORK_GRAPH_DEPS.now = () => new Date('2026-11-18T21:30:00Z');
 let n = 0;
@@ -306,7 +306,7 @@ test('3b. render approval, a withdrawal, a change request and a revoked reviewer
   const ev = c.p.evidence.rev;
   await approveAll(w, m.manifestUid, m.digest, 'm1', ['code', 'contract', 'investor_pitch'], ev);
   // A render approval of the same digest is a separate decision and never authorizes publication.
-  assert.ok((await decideRelease(w.env, CTX, decision(m.manifestUid, m.digest, 'marketing', 'render', { purpose: 'render' }))).ok);
+  assert.ok((await decideRelease(w.env, CTX, decision(m.manifestUid, m.digest, 'marketing', 'render', { purpose: 'render', renderCeilingMicrousd: 5_000_000 }))).ok);
   let r = await publish(w, c.line, m.manifestUid, null, 'p1');
   assert.equal(!r.ok && r.code, 'approval_required');
   assert.ok(!r.ok && r.ids.includes('marketing'));

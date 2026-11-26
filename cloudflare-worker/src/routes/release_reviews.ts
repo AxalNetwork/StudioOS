@@ -9,8 +9,11 @@
  *                                                and (part 11) `people`: the authors' names, only for people linked to the
  *                                                company, never an email
  *   POST /manifests/:manifest/decisions   { tenant_id, company_id, digest, audience, profile, authority, decision,
- *                                           approval_ref?, citations?, disclosure_ref?, rights_ref?, idempotency_key }
+ *                                           approval_ref?, citations?, disclosure_ref?, rights_ref?, idempotency_key,
+ *                                           purpose?, render_ceiling_microusd? }
  *                                         decision: approve | reject | request_changes | withdraw (their own)
+ *                                         purpose: publish (default) | render (part 15, D5585-p15: a render
+ *                                         approval states its ceiling and authorizes #5586 to admit a render)
  *   POST /attestations                    { tenant_id, company_id, revision_uid, digest, requirement, evidence_ref,
  *                                           authority, idempotency_key }
  *
@@ -132,16 +135,18 @@ r.post('/manifests/:manifest/decisions', async (c) => {
   const base = {
     tenant_id: scope.tenantId, company_id: scope.companyId, manifest_uid: uid.slice(0, 80), digest: b.digest, profile: b.profile,
     authority: typeof b.authority === 'string' ? b.authority.slice(0, 40) : null, decision: b.decision, idempotency_key: b.idempotency_key,
+    purpose: b.purpose === undefined ? 'publish' : typeof b.purpose === 'string' ? b.purpose.slice(0, 20) : null,
   };
   const out = async (outcome: string, extra: Record<string, unknown> = {}) => audit(c, user, 'work_graph_release_review_decide', { ...base, outcome, ...extra });
   if (!UID.test(uid)) { await out('malformed'); return refused(c, { code: 'malformed', ids: [] }); }
   const g = await gate(c.env, scope, Number(user.id));
   if (!g.ok) { await out(g.code); return refused(c, { code: g.code, ids: [uid] }); }
   const res = await decideRelease(c.env, g.rc.ctx, {
-    manifestUid: uid, digest: b.digest, audience: b.audience, purpose: 'publish', profile: b.profile, authority: b.authority,
+    manifestUid: uid, digest: b.digest, audience: b.audience, purpose: b.purpose === undefined ? 'publish' : b.purpose, profile: b.profile, authority: b.authority,
     decision: b.decision, reviewer: { kind: 'person', userId: Number(user.id) },
     approvalRef: b.approval_ref ?? `release_review:${uid}`, citations: b.citations ?? [],
     disclosureRef: b.disclosure_ref ?? null, rightsRef: b.rights_ref ?? null, idempotencyKey: b.idempotency_key,
+    renderCeilingMicrousd: b.render_ceiling_microusd ?? null,
   });
   if (!res.ok) { await out(res.code, { ids: res.ids.slice(0, 20) }); return refused(c, res); }
   await out('recorded', { decision_id: res.decisionId, replayed: res.replayed });
