@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  FIX, LIBFAKETIME, MAX_FILES, OFFSETS, clockEnv, dateBound, failureKeys, groupBySuite, main, parseOffset, suiteCommands,
+  BUDGET_MS, FIX, LIBFAKETIME, MAX_FILES, OFFSETS, clockEnv, dateBound, failureKeys, groupBySuite, main, parseOffset, suiteCommands,
 } from '../../scripts/future-clock-changed.mjs';
 import {
   breakDate, futureClockLogLines, futureClockSummary, repoTestPath, safeTestName, tapFailures, withFutureClockRunLine,
@@ -166,9 +166,10 @@ test('main: fails ahead and passes now fails the step with file, test, offset an
     ]);
     assert.ok(errors.every((e) => e.endsWith(FIX)));
     assert.ok(logs.some((l) => /fails on today's clock too, left to the suite: scripts\/lib\/broken\.test\.mjs › always/.test(l)));
-    // Only the files that failed ahead run again on the real clock.
+    // One file per run, and only a file that failed ahead runs again on the real clock.
+    assert.ok(calls.every((c) => c.ran.length === 1));
     const realRuns = calls.filter((c) => c.label === null);
-    assert.deepEqual(realRuns.map((c) => c.ran), [['scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs'], ['scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs', 'scripts/lib/sat.test.mjs']]);
+    assert.deepEqual(realRuns.map((c) => c.ran[0]), ['scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs', 'scripts/lib/broken.test.mjs', 'scripts/lib/promo.test.mjs', 'scripts/lib/sat.test.mjs']);
     const text = readFileSync(summary, 'utf8');
     assert.match(text, /\| `scripts\/lib\/sat\.test\.mjs` \| not on a Saturday \| \+9d 11h \| `node scripts\/future-clock-changed\.mjs --offset '\+9d 11h' scripts\/lib\/sat\.test\.mjs` \|/);
     // Failing on both clocks alone is the suite's to report.
@@ -177,6 +178,39 @@ test('main: fails ahead and passes now fails the step with file, test, offset an
     const before = calls.length;
     assert.equal(main([], { root: dir, env: {}, log: quiet, error: quiet, sh, check: () => ({ status: 1 }), diff: () => ['scripts/lib/promo.test.mjs'] }), 1);
     assert.equal(calls.length, before);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+
+test('the step stops starting runs once its budget is spent; started runs finish and the rest are named for the nightly', () => {
+  // Owner answer A on #7124 (2026-11-26): about 150 s, then the nightly covers the rest, exit 0.
+  // Mutations checked: the budget check before each file dropped → every file runs; the offset-level check dropped →
+  // the second offset's clock proof still runs; `>=` turned to `>` → the run at exactly the budget starts.
+  assert.equal(BUDGET_MS, 150_000);
+  const dir = fixtureRoot({ 'scripts/lib/a.test.mjs': '', 'scripts/lib/b.test.mjs': '', 'scripts/lib/c.test.mjs': '' });
+  try {
+    let t = 0;
+    const { sh: inner, calls } = fakeShell((label, f) => (f === 'scripts/lib/b.test.mjs' && label === '+7d' ? ['expired'] : []));
+    const sh = (command, env) => { t += 60_000; return inner(command, env); };  // each run takes a minute
+    let proofs = 0;
+    const logs = [];
+    const status = main([], { root: dir, env: {}, log: (s) => logs.push(s), error: (s) => logs.push(s), sh, check: () => { proofs++; return { status: 0 }; },
+      diff: () => ['scripts/lib/a.test.mjs', 'scripts/lib/b.test.mjs', 'scripts/lib/c.test.mjs'], now: () => t, budgetMs: 150_000 });
+    // a (60 s), b ahead (120 s) fails, b today (180 s) still runs to decide it; c would start at 180 s, past the budget.
+    assert.deepEqual(calls.map((c) => [c.label, c.ran[0]]), [['+7d', 'scripts/lib/a.test.mjs'], ['+7d', 'scripts/lib/b.test.mjs'], [null, 'scripts/lib/b.test.mjs']]);
+    assert.equal(proofs, 1, 'the second offset is not even clock-checked');
+    assert.equal(status, 1, 'the date-bound test found inside the budget still fails the step');
+    const note = logs.find((l) => /budget was spent/.test(l));
+    assert.match(note, /the 150 s budget was spent; 4 run\(s\) not started, the nightly future-clock run covers them \(D7124\)/);
+    assert.match(note, /scripts\/lib\/c\.test\.mjs \+7d, scripts\/lib\/a\.test\.mjs \+9d 11h/);
+    // Within the budget nothing is skipped and nothing is said about it; a run at exactly the budget does not start.
+    t = 0; calls.length = 0;
+    const quietLogs = [];
+    assert.equal(main([], { root: dir, env: {}, log: (s) => quietLogs.push(s), error: quiet, sh, check: () => ({ status: 0 }), diff: () => ['scripts/lib/a.test.mjs'], now: () => t, budgetMs: 10 * 60_000 }), 0);
+    assert.equal(calls.length, 2);
+    assert.ok(!quietLogs.some((l) => /budget/.test(l)));
+    t = 0; calls.length = 0;
+    assert.equal(main([], { root: dir, env: {}, log: quiet, error: quiet, sh, check: () => ({ status: 0 }), diff: () => ['scripts/lib/a.test.mjs'], now: () => t, budgetMs: 60_000 }), 0);
+    assert.deepEqual(calls.map((c) => c.label), ['+7d'], 'the second run would start at exactly 60 s and does not');
   } finally { rmSync(dir, { recursive: true }); }
 });
 

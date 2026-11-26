@@ -46,6 +46,12 @@ export const OFFSETS = Object.freeze([
 /** Above this many changed test files the nightly covers them; the step runs none. */
 export const MAX_FILES = 40;
 
+/**
+ * The step's wall-clock budget (owner answer A on #7124, 2026-11-26). No new run starts after it is spent; a run
+ * already started finishes, with its today's-clock check. Changed Worker test files took 202-987 s under libfaketime.
+ */
+export const BUDGET_MS = 150_000;
+
 export const LIBFAKETIME = '/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1';
 
 export const FIX = "Freeze the clock in the test (`t.mock.timers.enable({ apis: ['Date'], now })`) or pass `nowMs` into the code under test.";
@@ -162,6 +168,9 @@ export function main(argv, {
   diff = (base) => changedFiles(root, base),
   lib = env.FUTURE_CLOCK_LIBFAKETIME || LIBFAKETIME,
   reporter = join(here, 'lib', 'failedTestsReporter.mjs'),
+  // Monotonic, which libfaketime leaves alone here (FAKETIME_DONT_FAKE_MONOTONIC), so the budget holds under it too.
+  now = () => performance.now(),
+  budgetMs = BUDGET_MS,
 } = {}) {
   const args = [...argv];
   const list = args.includes('--list');
@@ -192,7 +201,14 @@ export function main(argv, {
   if (list) { log(tests.join('\n')); return 0; }
 
   const found = [];
+  const notStarted = [];
+  const started = now();
+  // One file per run, every file at the first offset before any at the second, so the budget stops between files.
   for (const offset of offsets.length ? offsets : OFFSETS) {
+    if (now() - started >= budgetMs) {
+      for (const g of groups) for (const file of g.files) notStarted.push(`${file} ${offset.label}`);
+      continue;
+    }
     const proof = check(clockEnv(env, offset, lib));
     if (proof.status !== 0) {
       error(`::error::the clock did not move ${offset.label} for every reader; nothing was tested (D7124)`);
@@ -200,19 +216,24 @@ export function main(argv, {
     }
     for (const g of groups) {
       log(`\nfuture-clock-changed: ${g.files.length} file(s) of ${g.key}, clock ${offset.label}`);
-      const ahead = runFiles({ ...g, offset, root, env, sh, reporter, lib });
-      if (ahead.status === 0) continue;
-      const aheadKeys = failureKeys(ahead, g.files);
-      const failedFiles = g.files.filter((f) => [...aheadKeys].some((k) => k.startsWith(`${f}\u0000`)));
-      log(`future-clock-changed: ${failedFiles.length} file(s) failed ${offset.label} ahead; running them on today's clock`);
-      const nowKeys = failureKeys(runFiles({ ...g, files: failedFiles, offset: null, root, env, sh, reporter, lib }), failedFiles);
-      const bound = dateBound(aheadKeys, nowKeys);
-      const boundKeys = new Set(bound.map((f) => `${f.file}\u0000${f.test}`));
-      for (const k of [...aheadKeys].filter((key) => !boundKeys.has(key))) {
-        log(`future-clock-changed: fails on today's clock too, left to the suite: ${k.replace('\u0000', ' › ')}`);
+      for (const file of g.files) {
+        if (now() - started >= budgetMs) { notStarted.push(`${file} ${offset.label}`); continue; }
+        const ahead = runFiles({ ...g, files: [file], offset, root, env, sh, reporter, lib });
+        if (ahead.status === 0) continue;
+        const aheadKeys = failureKeys(ahead, [file]);
+        log(`future-clock-changed: ${file} failed ${offset.label} ahead; running it on today's clock`);
+        const nowKeys = failureKeys(runFiles({ ...g, files: [file], offset: null, root, env, sh, reporter, lib }), [file]);
+        const bound = dateBound(aheadKeys, nowKeys);
+        const boundKeys = new Set(bound.map((f) => `${f.file}\u0000${f.test}`));
+        for (const k of [...aheadKeys].filter((key) => !boundKeys.has(key))) {
+          log(`future-clock-changed: fails on today's clock too, left to the suite: ${k.replace('\u0000', ' › ')}`);
+        }
+        for (const f of bound) found.push({ ...f, offset: offset.label });
       }
-      for (const f of bound) found.push({ ...f, offset: offset.label });
     }
+  }
+  if (notStarted.length) {
+    log(`\nfuture-clock-changed: the ${Math.round(budgetMs / 1000)} s budget was spent; ${notStarted.length} run(s) not started, the nightly future-clock run covers them (D7124): ${notStarted.join(', ')}`);
   }
   if (!found.length) { log('\nfuture-clock-changed: every changed test passes with the clock moved ahead'); return 0; }
   const lines = found.map((f) => `${f.file} › ${f.test}: fails with the clock ${f.offset} ahead and passes on today's clock.`);
