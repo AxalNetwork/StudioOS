@@ -12,6 +12,8 @@
  *   6. Names: every admin read names the ids it returns; the line has no name; a project of another company is not named;
  *      the reviewer read names only people linked to the reviewer's company; no email anywhere.
  *   7. Not counted: every live decision is either counted or has exactly one reason, the one the counting rule gives.
+ *   8. Attesters (part 14, D5585-p14): each pinned piece lists the attestations at its pinned digest, oldest first, and
+ *      the read names each attester; another digest's or another tenant's attestation is neither listed nor named.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/work_graph_release_admin_reads_5585.test.ts
@@ -403,4 +405,55 @@ test('7. not counted: every live decision is counted or has exactly one reason, 
     assert.deepEqual(after.release.missingApprovals, ['code']);
     assert.equal(after.release.notCounted.find((d: any) => d.reviewerUserId === BOB).reason, 'authority_not_held');
   } finally { RELEASE_ADMIN_DEPS.authorities = realA; RELEASE_ADMIN_DEPS.revokedUsers = realR; }
+});
+
+test('8. attesters: each piece lists the attestations at its pinned digest and the read names who attested; nothing else', async () => {
+  const w = fresh();
+  const env = envOf(w);
+  const { website, copy, line } = await publicLine(w);
+  const m = await cut(w, line, [[website, 'code'], [copy, 'marketing']], 'm-att');
+  // Written directly, as the store would hold them: R1 attested the website at a digest it is not pinned at, R2 the
+  // same revision under another tenant, and R3 the copy at its pinned digest (a second claims review).
+  const att = w.db.prepare(
+    `INSERT INTO work_graph_release_attestations (tenant_id, company_id, revision_uid, digest, requirement, evidence_ref, authority,
+       actor_kind, actor_user_id, agent_run_id, idempotency_key, request_hash, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'person', ?, NULL, ?, ?, ?)`,
+  );
+  clock.t += 60_000;
+  att.run(7, 70, website.rev, 'd'.repeat(64), 'pr_validated', 'ev:old', null, R1, 'att-old', 'e'.repeat(64), new Date(clock.t).toISOString());
+  att.run(8, 80, website.rev, website.digest, 'ci_passed', 'ev:other', null, R2, 'att-other', 'e'.repeat(64), new Date(clock.t).toISOString());
+  att.run(7, 70, copy.rev, copy.digest, 'claims_review', 'ev:second', 'brand_owner', R3, 'att-second', 'e'.repeat(64), new Date(clock.t).toISOString());
+
+  const man = await ok(env, `/manifests/${m.manifestUid}?${Q}`);
+  const byAsset = new Map(man.release.components.map((c: any) => [c.asset, c]));
+  const web: any = byAsset.get(website.asset), cp: any = byAsset.get(copy.asset);
+  assert.deepEqual(web.attestations.map((a: any) => [a.requirement, a.actorKind, a.userId, a.agentRunId, a.evidenceRef, a.authority]), [
+    ['pr_validated', 'agent', BOB, 'run_ci', `ev:${website.key}:pr_validated`, null],
+    ['ci_passed', 'agent', BOB, 'run_ci', `ev:${website.key}:ci_passed`, null],
+  ]);
+  assert.deepEqual(cp.attestations.map((a: any) => [a.requirement, a.actorKind, a.userId, a.evidenceRef, a.authority]), [
+    ['brand_rights', 'person', CAROL, `ev:${copy.key}:brand_rights`, 'brand_owner'],
+    ['claims_review', 'person', CAROL, `ev:${copy.key}:claims_review`, 'brand_owner'],
+    ['claims_review', 'person', R3, 'ev:second', 'brand_owner'],
+  ]);
+  for (const c of [web, cp]) {
+    assert.deepEqual(c.missingAttestations, []);
+    for (const a of c.attestations) { assert.ok(Number.isSafeInteger(a.id) && a.id > 0); assert.match(a.at, /^\d{4}-\d{2}-\d{2}T/); }
+    const ids = c.attestations.map((a: any) => a.id);
+    assert.deepEqual(ids, [...ids].sort((a: number, b: number) => a - b), 'oldest first');
+  }
+  // Every attester is named; the attesters of another digest or another tenant are not even keyed.
+  assert.equal(man.people[CAROL]?.name, `P${CAROL}`);
+  assert.equal(man.people[BOB]?.name, 'Bob B.', 'the person the CI run acted for');
+  assert.equal(man.people[R3]?.name, `P${R3}`);
+  assert.equal(R1 in man.people, false);
+  assert.equal(R2 in man.people, false);
+  assert.doesNotMatch(JSON.stringify(man), /ev:old|ev:other/);
+  noEmail(man, 'manifest');
+
+  // A piece with no attestation at its pinned digest lists none and still names its requirements as missing.
+  const bare = await piece(w, 'pub-bare', 'code', 'public');
+  const m2 = await cut(w, line, [[bare, 'code']], 'm-bare');
+  const c2 = (await ok(env, `/manifests/${m2.manifestUid}?${Q}`)).release.components[0];
+  assert.deepEqual([c2.attestations, c2.missingAttestations], [[], ['pr_validated', 'ci_passed']]);
 });

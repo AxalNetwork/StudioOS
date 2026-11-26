@@ -798,6 +798,34 @@ async function recipientOf(env: Env, updateId: number, userId: number) {
     .bind(updateId, userId).first<any>();
 }
 
+/**
+ * D6215: support entries recorded against an update's asks, keyed by ask uid.
+ * The founder sees who promised, the support kind and the promised, delivered,
+ * withdrawn and cancelled dates. A promise with no promised date reads its
+ * recorded day.
+ */
+async function founderAskPromises(env: Env, updateId: number, projectId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT s.ask_uid, s.kind, s.promised_at, s.delivered_at, s.withdrawn_at, s.cancelled_at, s.created_at,
+            usr.name AS investor
+       FROM portfolio_support_entries s
+       JOIN update_asks a ON a.uid = s.ask_uid
+       LEFT JOIN users usr ON usr.id = s.recorded_by
+      WHERE a.update_id = ? AND s.project_id = ?
+      ORDER BY s.id`,
+  ).bind(updateId, projectId).all<any>();
+  if (!Array.isArray(rows.results)) throw new Error('ask promises unreadable');
+  const byAsk = new Map<string, any[]>();
+  for (const x of rows.results) {
+    byAsk.set(x.ask_uid, [...(byAsk.get(x.ask_uid) || []), {
+      investor: x.investor || null, kind: x.kind,
+      promised_at: x.promised_at || (x.created_at ? String(x.created_at).slice(0, 10) : null),
+      delivered_at: x.delivered_at ?? null, withdrawn_at: x.withdrawn_at ?? null, cancelled_at: x.cancelled_at ?? null,
+    }]);
+  }
+  return byAsk;
+}
+
 // Report detail reads asks without recording an open of the sent update.
 r.get('/:uid/asks', async (c) => {
   try {
@@ -864,6 +892,10 @@ r.get('/:uid/page', async (c) => {
     for (const x of replies.results || []) byAsk.set(x.ask_uid, [...(byAsk.get(x.ask_uid) || []), x]);
     const rounds = await latestRounds(c.env, asks.map((a: any) => Number(a.id)))
       .catch((e) => { console.warn('[portfolio-updates] reminder rounds unreadable', e); return null; });
+    // D6215: the promises recipients recorded against these asks, for the
+    // author only. Investor, kind and dates; never hours, outcome or summary.
+    const promised = await founderAskPromises(c.env, u.id, u.project_id)
+      .catch((e) => { console.warn('[portfolio-updates] ask promises unreadable', e); return null; });
     const count = (a: Audience) => (recipients.results || []).filter((x: any) => x.audience === a).length;
     return c.json({
       uid: u.uid, project_id: u.project_id, audience: cleanAudience(jload(u.audience_json, {})), sent_at: u.sent_at, ...shape,
@@ -879,11 +911,13 @@ r.get('/:uid/page', async (c) => {
           // D4645-p2: the latest reminder round's recorded progress; null when
           // it was never asked again, absent when the rounds were unreadable.
           ...(rounds ? { reminder: (raw && rounds.get(Number(raw.id))) || null } : {}),
+          ...(promised ? { promises: promised.get(a.uid) || [] } : {}),
         };
       }),
       recipients: (recipients.results || []).map((x) => ({ ...x, replied: !!x.replied })),
       network: { sent: network?.sent ?? 0, opened: network?.opened ?? 0, replied: network?.replied ?? 0 },
       reminders_readable: rounds != null,
+      promises_readable: promised != null,
       sent_to: { investors: count('investor'), team: count('team'), network: network?.sent ?? 0 },
     });
   } catch (e) { return mapError(c, e); }

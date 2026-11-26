@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Admin · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Studio home · Admin · #8728</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Admin Studio: the overdue decision first, one resumable setup row, and an Approvals landing that keeps the filter and returns to Studio</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Admin Studio home (/studio) for a territory administrator at the start of the day, in the shipped admin shell with no Worker AI rail (D598). Needs a decision comes first and holds only time-sensitive exceptions, worst first: here one overdue application with its lane, age, owner and one action. Totals move to At a glance; the eleven unanswered admin-bank questions and the open Eadwyn chat collapse into one Setup row with Resume setup. The action opens the Approvals Inbox at /admin/approvals?age=past, the filter main already reads, using its own words (Overdue · over 72 hours, Age: Over 72 hours); the landing shows the chip, Filters · 1, the result count, the scope and a Studio crumb, and Back restores Studio with focus on the action. Variants cover an all-clear territory, a locally unavailable queue, partial, loading, suspended and two-exception states, phone at 390 and dark. States follow Platform States; violet dashed ◇ tags mark data or backend work; amber ⚑ tags mark owner decisions, option A drawn; dark pills are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main f66e8faa25 · [Tom Becker], [Lisbon Studio], [Rui Matos], [Inês Duarte], [Marta Silva] and every figure are fictional · the S7 gate date is a synthetic variant</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home Admin Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SAD-00', 'Route and before state', 'The three steps shared by desktop and phone (Studio → filtered Approvals → back to Studio), the fixture every board uses, and what the 26 Nov audit measured on main.', [W('SAD00')]],
+      ['SAD-01', 'Step 1 · Studio at the start of the day', 'Needs a decision is the first section: 1 overdue · over 72 hours, [Rui Matos]’s Spin-Out Lab application, waiting 4 d 2 h, unassigned, and one primary action. The two on-time items are one quiet line. At a glance holds the totals; Setup is one row with 11 answers remaining. At 390 the action sits inside the first screen.', [F('SAD01', false, 900), P('SAD01P', '1 · Studio'), P('SAD01Q', '1c · Studio scrolled')]],
+      ['SAD-02', 'Resume setup', 'The one resumable action opens Eadwyn in place under the Setup row; focus moves to the answer field. Nothing above waits on it.', [F('SAD02', false, 1340), P('SAD02P', '1b · Setup open')]],
+      ['SAD-03', 'Step 2 · Approvals, filtered', 'The Inbox at /admin/approvals?age=past: crumb Studio › Approvals, scope chip, strip Overdue 1, chip Age: Over 72 hours, Filters · 1, 1 result and the one row. The two items under 72 hours are named as hidden by the filter.', [F('SAD03', false, 900), P('SAD03P', '2 · Approvals filtered')]],
+      ['SAD-04', 'Step 3 · Back to Studio', 'Browser Back, the crumb or ‹ Studio returns to /studio with scroll restored and focus on Review overdue in Approvals.', [F('SAD04', false, 900), P('SAD04P', '3 · Back · focus restored')]],
+      ['SAD-05', 'All-clear territory', 'Value 0: every lane answered with nothing open, so Studio may say nothing needs a decision. Setup stays one optional row.', [F('SAD10', false, 900), P('SAD10P', 'All clear')]],
+      ['SAD-06', 'Queue unavailable here', 'The approval read failed while the rest of Studio read normally: Unavailable with Try again and Open Approvals, never 0 and never all clear. The Approvals tile says the same.', [F('SAD11', false, 900), P('SAD11P', 'Queue unavailable')]],
+      ['SAD-07', 'Decision card states', 'Loading, unavailable, partial (one lane unreadable), 0 overdue with 2 on time, overdue in two lanes with lane links, suspended territory, two exceptions ordered by orderNeedsDecision, and all clear.', [C('SAD12', false, 1400, 1240)]],
+      ['SAD-08', 'Approvals landing states', 'Loading with the chip already shown, failed with the filter kept, filtered to nothing, partial lane, a lane carried from Studio, and a direct visit without the crumb.', [C('SAD13', false, 1400, 720)]],
+      ['SAD-09', 'Dark mode', 'Studio’s first screen on desktop and at 390 on the dark tokens.', [F('SAD14', false, 900), P('SAD14P', 'Dark')]],
+      ['SAD-10', 'Headings and focus order', 'Heading outline and landmarks for Studio and the landing, keyboard order on both, how Back restores focus, and phone rules.', [W('SAD20')]],
+      ['SAD-11', 'Exact labels', 'Studio words mapped to the Inbox’s chips, strip and band words, the address and the Worker predicate (24 h and 72 h thresholds).', [W('SAD21')]],
+      ['SAD-12', 'Handoff', 'Checked on main with files, frontend-only work, ◇ backend items, ⚑ owner questions with option A drawn, and every acceptance item mapped to its boards.', [W('SAD30')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

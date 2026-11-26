@@ -22,6 +22,8 @@ import Sheet from '../../ui/Sheet.jsx';
 import AddToResearch from './AddToResearch.jsx';
 import { canAddToResearch } from './researchComparisons.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
+import { citationRoom, withheldPassage } from './roomLibraryModel.js';
+import { CitationRoomFacts, OpenInRoom } from './RoomLibrary.jsx';
 
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
@@ -724,33 +726,52 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                           <Eyebrow className="!text-[9px]">{g.label}</Eyebrow>
                           {phone ? (
                             <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={g.key === 'cited' ? `ask-source-buttons-${t.uid}` : undefined}>
-                              {g.items.map(({ ct, i }) => (
-                                <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
-                                  onClick={() => setOpenCite({ t, i })}
-                                  className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
-                                  {`[${ct.n || i + 1}] `}{ct.title || 'Untitled document'}
-                                </button>
-                              ))}
+                              {g.items.map(({ ct, i }) => {
+                                const room = citationRoom(ct, items);
+                                return (
+                                  <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
+                                    onClick={() => setOpenCite({ t, i })}
+                                    className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                                    {`[${ct.n || i + 1}] `}{(room?.nameless ? room.title : ct.title) || 'Untitled document'}
+                                    {room ? <span className="block truncate text-[10.5px] font-normal text-gray-600 dark:text-gray-400" data-testid={`ask-source-room-${t.uid}-${i}`}>{room.lost ? room.reasonWords : room.chip}</span> : null}
+                                  </button>
+                                );
+                              })}
                             </div>
                           ) : (
                             <ol className="mt-1.5 space-y-1.5">
                               {g.items.map(({ ct, i }) => {
                                 const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids, libraryRevisions)];
+                                // D6913 part 3 (RS-15): a room file says which room it came from; once the room no longer
+                                // reaches it, it says why, and its passage is no longer shown.
+                                const room = citationRoom(ct, items);
                                 return (
                                   <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <Pill tone={g.key === 'cited' ? 'cite' : 'neutral'} className="!text-[9.5px]">
-                                        {`[${ct.n || i + 1}] `}{ct.title}
+                                        {`[${ct.n || i + 1}] `}{room?.nameless ? room.title : ct.title}
                                         {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
                                       </Pill>
+                                      {room && !room.lost ? (
+                                        <span className="text-[10px] font-semibold text-axal-violet dark:text-violet-300" title="Where this file came from" data-testid={`ask-source-room-${t.uid}-${i}`}>
+                                          <span aria-hidden="true">▣ </span>{room.chip}{room.added ? ` · added ${room.added}` : ''}
+                                        </span>
+                                      ) : null}
+                                      {room?.lost ? (
+                                        <Pill tone="neutral" className="!text-[9.5px]" data-testid={`ask-source-room-${t.uid}-${i}`}><span aria-hidden="true">⊘</span> No longer available</Pill>
+                                      ) : null}
                                       {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
                                       {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
                                       <button type="button" className="text-[11px] font-semibold text-axal-violet underline dark:text-violet-300"
                                         data-testid={`ask-source-inspect-${t.uid}-${i}`} onClick={() => setOpenCite({ t, i })}>
-                                        Open passage<span className="sr-only">{` [${ct.n || i + 1}] ${ct.title || 'Untitled document'}`}</span>
+                                        Open passage<span className="sr-only">{` [${ct.n || i + 1}] ${(room?.nameless ? room.title : ct.title) || 'Untitled document'}`}</span>
                                       </button>
                                     </div>
-                                    {ct.passage ? (
+                                    {room?.lost ? (
+                                      <p className="mt-1 text-[10.5px] text-gray-700 dark:text-gray-300" data-testid={`ask-passage-withheld-${t.uid}-${i}`}>
+                                        {room.reasonWords} {withheldPassage(t.created_at)}
+                                      </p>
+                                    ) : ct.passage ? (
                                       <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
                                         {ct.passage}{ct.passage_truncated ? '…' : ''}
                                       </blockquote>
@@ -870,8 +891,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         const ct = openCite.t.citations?.[openCite.i] || {};
         const availKey = citationAvailability(ct, libraryUids, libraryRevisions);
         const avail = CITATION_AVAILABILITY[availKey];
+        const room = citationRoom(ct, items);
         return (
-          <Sheet label="Source" eyebrow={`${ct.cited === true ? 'Cited source' : 'Retrieved passage'} ${ct.n || openCite.i + 1}`} title={ct.title || 'Untitled document'}
+          <Sheet label="Source" eyebrow={`${ct.cited === true ? 'Cited source' : 'Retrieved passage'} ${ct.n || openCite.i + 1}`} title={(room?.nameless ? room.title : ct.title) || 'Untitled document'}
             onClose={() => setOpenCite(null)} phone="sheet" width={480} testId="ask-source-sheet">
             <p className="text-[12px] text-gray-600 dark:text-gray-400">
               {[ct.page != null ? `page ${ct.page}` : null, ct.chunk != null ? `passage ${ct.chunk + 1}` : null].filter(Boolean).join(' · ') || 'Page not recorded'}
@@ -884,18 +906,20 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
               <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="ask-source-sheet-uncited">The answer does not cite this passage. It was retrieved as context, not offered as support.</p>
             )}
             {avail ? <Pill tone={avail.tone} className="mt-2 !text-[10px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
-            {ct.passage ? (
+            <CitationRoomFacts room={room} answeredAt={openCite.t.created_at} />
+            {room?.lost ? null : ct.passage ? (
               <blockquote className="mt-3 border-l-2 border-violet-500 pl-3 text-[13px] leading-relaxed text-gray-800 dark:text-gray-200" data-testid="ask-source-sheet-passage">
                 {ct.passage}{ct.passage_truncated ? '…' : ''}
               </blockquote>
             ) : <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>}
-            {availKey === 'changed' ? (
+            {availKey === 'changed' && !room?.lost ? (
               <p className="mt-2 text-[11.5px] text-gray-700 dark:text-gray-300" data-testid="ask-source-sheet-changed">The document was indexed again after this answer. The passage above is the version the answer read; the document may now say something else.</p>
             ) : null}
             {availKey === 'gone' ? (
               <p className="mt-2 text-[11.5px] text-gray-700 dark:text-gray-300" data-testid="ask-source-sheet-gone">The document is no longer in your library, so only the passage recorded with this answer remains.</p>
             ) : null}
-            {ct.document_uid && availKey !== 'gone' ? (
+            <OpenInRoom room={room} />
+            {ct.document_uid && availKey !== 'gone' && !room ? (
               <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`} data-testid="ask-source-sheet-open"
                 className="mt-4 flex min-h-[44px] items-center justify-center rounded-[10px] border border-axal-hairline text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100">
                 Open in Library

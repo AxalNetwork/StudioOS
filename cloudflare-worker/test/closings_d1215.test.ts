@@ -370,12 +370,25 @@ test('POST /api/positions is position.record and records the closing line it ser
   const body = { project_id: PROJECT, round_name: 'Seed', invested_amount: 250000.5 };
   assert.equal((await call(db, 'POST', '/api/positions', PARTNER, body)).status, 403);
   assert.equal((await call(db, 'POST', '/api/positions', ADMIN, body, true)).status, 403, 'a support session never records a position');
+  // D6889 part 2: only a received line is recorded.
+  const early = await call(db, 'POST', '/api/positions', ADMIN, { ...body, closing_line_uid: lines[INV_A] });
+  assert.deepEqual([early.status, early.body?.code], [409, 'closing_line_not_received']);
+  db.prepare("UPDATE closing_lines SET status = 'received' WHERE uid = ?").run(lines[INV_A]);
   const ok = await call(db, 'POST', '/api/positions', ADMIN, { ...body, closing_line_uid: lines[INV_A] });
   assert.equal(ok.status, 201, ok.text);
   assert.equal(ok.body.closing_line_uid, lines[INV_A]);
   const wrong = await call(db, 'POST', '/api/positions', ADMIN, { ...body, project_id: OTHER_PROJECT, closing_line_uid: lines[INV_A] });
   assert.deepEqual([wrong.status, wrong.body?.code], [404, 'closing_line_not_found']);
+  // D6889 part 2: a second position for the same line is refused, naming the one that holds it.
+  const again = await call(db, 'POST', '/api/positions', ADMIN, { ...body, closing_line_uid: lines[INV_A] });
+  assert.deepEqual([again.status, again.body?.code, again.body?.position_uid], [409, 'closing_line_already_recorded', ok.body.uid]);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM portfolio_positions WHERE closing_line_uid = ?').get(lines[INV_A]) as any).n, 1);
+  // The closing read then says the line is in Portfolio, by the link and nothing else.
+  const read = await call(db, 'GET', `/api/closings/${(db.prepare('SELECT c.uid FROM closings c JOIN closing_lines l ON l.closing_id = c.id WHERE l.uid = ?').get(lines[INV_A]) as any).uid}`, ADMIN);
+  const mine = read.body.lines.find((l: any) => l.uid === lines[INV_A]);
+  assert.deepEqual([mine.in_portfolio, mine.portfolio_position_uid], [true, ok.body.uid]);
   assert.equal((await call(db, 'POST', '/api/positions', ADMIN, body)).status, 201, 'with no line, as before');
+  assert.equal((await call(db, 'POST', '/api/positions', ADMIN, body)).status, 201, 'positions that name no line are never refused as duplicates');
 });
 
 test('index.ts mounts /api/closings, and the desk before the /api/admin catch-all that would shadow it', () => {

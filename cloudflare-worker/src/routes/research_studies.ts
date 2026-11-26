@@ -84,7 +84,8 @@ export const ORIGIN_COUNTRIES_MAX = 20;
  * merges second imports the first one's constant (D7719).
  */
 export const STATISTICAL_UNITS = ['enterprise', 'establishment', 'legal_unit', 'household', 'consumer_unit', 'person'] as const;
-export const INDUSTRY_SCHEMES = ['isic_rev4', 'nace_rev2', 'naics_2022'] as const;
+// D7927: County Business Patterns is coded in NAICS 2017 through reference year 2023.
+export const INDUSTRY_SCHEMES = ['isic_rev4', 'nace_rev2', 'naics_2017', 'naics_2022'] as const;
 
 /** Where the origin's Markets filters are returned, and the label that travels with them. */
 export const ORIGIN_FILTERS_KEY = 'markets_company_location_filters';

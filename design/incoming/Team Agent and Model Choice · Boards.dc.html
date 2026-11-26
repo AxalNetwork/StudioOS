@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Agent and Model Choice · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Team · AI agents · #8769 · from the 26 Nov walkthrough · related #4119 #4121 #7078</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Team: choose an agent and a model by the work, its readiness and what a run is expected to cost</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Company settings › Team (/account/companies/:uid/settings/team), People and agents, the agent profile and Add an AI agent (Who, Skills, Model and cap), in the Team page as shipped. Rows and profiles lead with what an agent does, its skills and whether it can run now, then sponsor and cap; the named personas, their story and values stay one press away. Models are grouped by the work they are listed for; a run estimate appears only with its basis (D4121’s cost estimate), and raw token prices stay on demand. Team coverage gets its own words for zero mapped categories and for loading. Platform States (D5129): Unavailable, Not recorded and a measured 0 never look alike. Shell follows #3704; Eadwyn is the one shared rail (#5130). A violet dashed ◇ marks backend work, a grey dashed ▹ frontend-only work and an amber ⚑ an owner decision; none is product copy. Steps of each route are numbered.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked on main 7553cd37b9 · [Maya Ruiz], [Noah Brandt], [Atlas Orchard], skills’ readiness, spend and estimates are fictional sample data; personas, model ids and catalogue prices are as main lists them.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Team Agent and Model Choice Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['TM-0', 'Today on main', 'The roster row named by its motto, the profile with skills eighth, the Who step searchable by name with “0 skills · cost per run Not recorded”, the flat model list with $ per 1M tokens, and the coverage sentence printed over eight empty rows.', [C('TMM00', false, 1200, 1293)]],
+      ['TM-1', 'Roster · desktop 1440', 'Step 1. Each row: agent, what it does (area, skills, modules), whether it can run now, sponsor, this month against the cap; the name opens the profile and ⋯ opens a real menu. Team coverage with two people gaps below.', [F('TMM01', false, 1330)]],
+      ['TM-2', 'Agent profile', 'Step 2. Readiness, what Tessaly does, skills with readiness and her last accepted output, sponsor and cap with the cost per run and its run count, permissions; story and values behind About Tessaly.', [F('TMM02', false, 1060)]],
+      ['TM-3', 'Add an AI agent · Who', 'Step 3. Search by name or work, Good for first; cards lead with the work and how many published skills fit it, then values and risk. About opens the persona story. Tessaly is already on the team.', [F('TMM03', false, 1000)]],
+      ['TM-4', 'Add an AI agent · Skills', 'Step 4. Two skills picked for Ryssa, each with what it makes, its token cost and its readiness for the team. B: with no skill, Next stays off and says why (⚑ Q2, option A).', [F('TMM04', 'A · Two skills', 900), C('TMM04B', 'B · Zero skills', 1180, 931)]],
+      ['TM-5', 'Add an AI agent · Model and cap', 'Step 5. Models suited to research: two eligible with different strengths and estimates per 100 runs, one whose estimate is unavailable with Try again, one not allowed on this team; the rest grouped by work. The estimate’s basis, sponsor and cap with its run count.', [F('TMM05', false, 1240)]],
+      ['TM-6', 'Token prices on demand', 'Show token prices adds input and output prices to each row; where each figure comes from.', [C('TMM06', false, 1180, 761)]],
+      ['TM-7', 'Agent states and control names', 'Engine off for the team, with the second fact on each row; active, paused, no skills, engine off and not read with their accessible names; the ⋯ menu; which state wins.', [C('TMM07', false, 1200, 1198)]],
+      ['TM-8', 'Loading, failure, empty, read-only', 'Roster loading, unavailable with retry, confirmed empty, read-only member, plan locked; models loading, unavailable, estimates working out, none allowed on this team.', [C('TMM08', false, 1200, 731)]],
+      ['TM-9', 'Team coverage states', 'Loading, zero mapped categories, unavailable with retry, and the value state with people gaps, with the sentence rules.', [C('TMM09', false, 1200, 994)]],
+      ['TM-10', 'Phone 390 · the route', '1 roster; 2 profile; 3 Who; 4 Skills; 5 Model and cap with the choice and cap kept in the bottom bar; 6 token prices; 7 coverage loading and zero.', [P('TMM10A', '1 · Roster'), P('TMM10B', '2 · Profile'), P('TMM10C', '3 · Who'), P('TMM10D', '4 · Skills'), P('TMM10E', '5 · Model and cap'), P('TMM10F', '6 · Token prices'), P('TMM10G', '7 · Coverage')]],
+      ['TM-11', 'Keyboard order, headings and names', 'Tab stops numbered on the roster and listed for Model and cap; heading outline; announcements and target sizes.', [C('TMM11', false, 1200, 561)]],
+      ['TM-H', 'Handoff', 'Checked on main with files, preserved, frontend only, three ◇ backend items on #8769, four ⚑ owner decisions with option A drawn, and every acceptance criterion mapped to its board.', [W('TMM12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

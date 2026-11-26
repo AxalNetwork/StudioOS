@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { scanSource, entriesOf, parseAllowlist, compareAllowlist, compareGrowth, needsBaseCheck, readMainAllowlist, scanTree, main as clockMain } from '../../scripts/check-test-clock.mjs';
+import { scanSource, entriesOf, parseAllowlist, compareAllowlist, compareGrowth, needsBaseCheck, readMainAllowlist, readBaseAllowlist, scanTree, main as clockMain } from '../../scripts/check-test-clock.mjs';
 const scan = (s) => scanSource(s, 'frontend/test/fixture.test.mjs');
 
 test('date flags real reads with exact line numbers, including bare Date calls', () => {
@@ -100,6 +100,46 @@ test('a shallow checkout fetches main; a missing main list fails closed', () => 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+
+// #8779: main removes a line after a pull request's merge commit was built. The tree still holds it, the fresh main
+// does not, and growth was measured against main: every in-flight run failed on a line it never added.
+test('growth is measured against the tree\'s own base, so main shrinking under a pull request is not growth', () => {
+  const root = mkdtempSync(join(tmpdir(), 'clock-race-'));
+  const git = (cwd, args) => { const r = spawnSync('git', args, { cwd, encoding: 'utf8' });assert.equal(r.status, 0, r.stderr);return r.stdout; };
+  const id = ['-c', 'user.name=Clock Fixture', '-c', 'user.email=clock@example.invalid'];
+  try {
+    const seed = join(root, 'seed');const remote = join(root, 'remote.git');const checkout = join(root, 'checkout');
+    mkdirSync(seed);git(root, ['init', '--bare', '--initial-branch=main', remote]);git(seed, ['init', '--initial-branch=main']);
+    mkdirSync(join(seed, 'scripts'));mkdirSync(join(seed, 'frontend/test'), { recursive: true });
+    writeFileSync(join(seed, 'package.json'), JSON.stringify({ scripts: Object.fromEntries(['test:frontend','test:worker','test:meeting-bot','test:retention'].map((key) => [key, "node --test 'frontend/test/*.test.mjs'"])) }));
+    writeFileSync(join(seed, 'frontend/test/a.test.mjs'), 'Date.now();');writeFileSync(join(seed, 'frontend/test/b.test.mjs'), 'Date.now();');
+    writeFileSync(join(seed, 'scripts/test-clock-allowlist.txt'), 'date frontend/test/a.test.mjs\ndate frontend/test/b.test.mjs\n');
+    git(seed, ['add', '.']);git(seed, [...id, 'commit', '-m', 'base']);const base = git(seed, ['rev-parse', 'HEAD']).trim();
+    // The pull request: a change of its own, built on the base.
+    git(seed, ['checkout', '-b', 'pr']);writeFileSync(join(seed, 'README.md'), 'pr\n');git(seed, ['add', '.']);git(seed, [...id, 'commit', '-m', 'pr']);
+    // GitHub's merge commit for the run: base first, the pull request second.
+    git(seed, ['checkout', '-b', 'merge', base]);git(seed, [...id, 'merge', '--no-ff', '--no-edit', 'pr']);
+    // Main moves on: b's clock read is fixed and its line removed.
+    git(seed, ['checkout', 'main']);writeFileSync(join(seed, 'frontend/test/b.test.mjs'), 'export {};');
+    writeFileSync(join(seed, 'scripts/test-clock-allowlist.txt'), 'date frontend/test/a.test.mjs\n');git(seed, ['add', '.']);git(seed, [...id, 'commit', '-m', 'shrink']);
+    git(seed, ['remote', 'add', 'origin', remote]);git(seed, ['push', 'origin', 'main', 'merge', 'pr']);
+    git(root, ['clone', '--depth=1', '--branch=merge', `file://${remote}`, checkout]);
+    // Measured against main the run fails; against its own base it passes.
+    assert.deepEqual(compareGrowth(parseAllowlist(git(checkout, ['show', 'HEAD:scripts/test-clock-allowlist.txt'])), readMainAllowlist(checkout)),
+      ['allowlist growth is forbidden: date frontend/test/b.test.mjs']);
+    assert.equal(readBaseAllowlist(checkout, { GITHUB_EVENT_NAME: 'pull_request' }).base, base);
+    assert.equal(clockMain(checkout, { CI: 'true', GITHUB_EVENT_NAME: 'pull_request' }), 0);
+    // A line the pull request adds is still growth.
+    writeFileSync(join(checkout, 'frontend/test/c.test.mjs'), 'Date.now();');
+    writeFileSync(join(checkout, 'scripts/test-clock-allowlist.txt'), 'date frontend/test/a.test.mjs\ndate frontend/test/b.test.mjs\ndate frontend/test/c.test.mjs\n');
+    assert.equal(clockMain(checkout, { CI: 'true', GITHUB_EVENT_NAME: 'pull_request' }), 1);
+    // Only pull-request and queue runs have a base of their own; any other event is measured against main.
+    assert.equal(readBaseAllowlist(checkout, { GITHUB_EVENT_NAME: 'workflow_dispatch' }), null);
+    // A single-parent pull request checkout (its head, not GitHub's merge) has no base to trust: main is used.
+    const head = join(root, 'head');git(root, ['clone', '--depth=1', '--branch=pr', `file://${remote}`, head]);
+    assert.equal(readBaseAllowlist(head, { GITHUB_EVENT_NAME: 'pull_request' }), null);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('adjacent CommonJS, JSX and typed module helpers are scanned with the suite', () => {
   const root = mkdtempSync(join(tmpdir(), 'clock-helper-'));

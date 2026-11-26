@@ -24,11 +24,11 @@ export function plannerSubmission(env, mode='submit'){
  if(s.event==='push'?(env.GITHUB_REF!=='refs/heads/main'||s.queueBaseSha!==null||!Number.isSafeInteger(s.planArtifactId)||s.planArtifactId<=0):(s.queueBaseSha!==event.merge_group?.base_sha||s.sourceSha!==event.merge_group?.head_sha||s.planArtifactId!==null))throw new Error('planner_event_mismatch');
  if(mode==='metadata')return {artifact_id:s.planArtifactId??''};
  const root=resolve(env.CAPACITY_SOURCE_ROOT),scripts=JSON.parse(plannerFile(resolve(root,'package.json'),256*1024)).scripts;
- let plan;
- if(s.event==='push'){
-  const path=resolve(env.CAPACITY_PLAN_FILE);
-  plan=plannerFile(path,8*1024*1024);
- }else plan=JSON.stringify(buildPlan(scripts,{},root),null,2)+'\n';
+ // D8693: one plan per run on both events. The equal-weight plan of the candidate's own checkout is what every hosted
+ // suite part writes; a push's uploaded artifact must be those bytes exactly, so a delegated shard runs the files of
+ // the hosted part of the same name.
+ const plan=JSON.stringify(buildPlan(scripts,{},root),null,2)+'\n';
+ if(s.event==='push'&&plannerFile(resolve(env.CAPACITY_PLAN_FILE),8*1024*1024)!==plan)throw new Error('planner_plan_not_equal_weight');
  validatePlan(JSON.parse(plan),scripts,root);
  if('sha256:'+createHash('sha256').update(plan).digest('hex')!==s.planDigest)throw new Error('planner_digest_mismatch');
  return {submission:s,plan};

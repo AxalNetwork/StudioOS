@@ -162,7 +162,10 @@ jobs:
   # D7108 part 2 (#7108): never in the merge queue. There the part list is
   # always the full nine (prTier), so `suite` lists it literally and each part
   # computes the same equal-weight plan from its own checkout: no runner hop
-  # before the matrix. On a pull request and a push this job is unchanged.
+  # before the matrix. D8693 (#8693): on a pull request and a push this job
+  # writes that same equal-weight plan, so its `suite-plan` artifact (what the
+  # capacity pilot submits, the planner checks and a delegated Worker shard
+  # runs) holds, part for part, the files of the hosted part of the same name.
   plan:
     name: suite plan
     needs: verified
@@ -180,18 +183,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
-      - name: Newest main timing artifact, or equal weights
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
           parts=$(node --input-type=module -e '
             import { tierFor } from "./scripts/lib/prTier.mjs";
             const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
@@ -229,9 +227,10 @@ jobs:
       actions: read
       id-token: write
     # Exact local preparation pin; publication and activation remain held under #5719.
-    # D8335: the pin must be a commit on main. cb63d3997d is #8234's merge commit and carries the reviewed planner
-    # (blob 4f7dfaca) byte for byte. The first pin, 19927c89, became unreachable when its branch was deleted.
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    # D8335: the pin must be a commit on main. 3d41671dfe is #8658's merge commit and carries the reviewed D8626
+    # planner (blob 40b0b0fa) byte for byte. The previous pin, cb63d3997d (#8234, blob 4f7dfaca), submitted on main
+    # pushes only. The first pin, 19927c89, became unreachable when its branch was deleted.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
     with:
       submission: ${{ needs.plan.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
@@ -285,7 +284,7 @@ jobs:
       contents: read
       actions: read
       id-token: write
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
     with:
       submission: ${{ needs.route.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
@@ -475,8 +474,8 @@ jobs:
   # parts' traces. Advisory: neither `landing` nor `gate` needs it, so its
   # failure never blocks a merge. It runs in the queue on purpose, because a
   # push that `verified` skips has no traces of its own: the queue run on the
-  # same SHA carries them (a pull request's `plan` job reads its
-  # test-timings.json; the queue plans with equal weights, D7108 part 2).
+  # same SHA carries them (github-alerts' future-clock plan reads its
+  # test-timings.json; every ci.yml plan is equal-weight, D8693).
   test-deps:
     name: test deps
     needs: suite
@@ -1048,6 +1047,12 @@ jobs:
       - name: Public journey (local Worker, fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/public_journey.spec.js --retries=0 --trace off
+      # #6250 (D6250-p2): the issued fund report printed — print media and Letter/A4 PDFs of a long report, light
+      # and dark, read back with pdfjs: only the document, black on white, nothing clipped, events and the figures
+      # column kept whole. Same docs/ and fixtures pattern as the steps above; no trace is recorded.
+      - name: Fund report print (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/report_print_6250.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

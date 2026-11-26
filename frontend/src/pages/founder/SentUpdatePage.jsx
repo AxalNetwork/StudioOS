@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
 import { ASK_LABELS, metricText, periodTitle } from './ShareUpdateSheet';
+import { KIND_LABEL } from '../portfolio/valueAddModel';
 
 /**
  * `/updates/:uid` — a sent update (D654, #1466), to `Cycle Action`'s
@@ -17,6 +18,10 @@ import { ASK_LABELS, metricText, periodTitle } from './ShareUpdateSheet';
  * waiting, not confirmed, not delivered or no longer due. "Check delivery"
  * resumes and reconciles that round; it never re-sends a reminder whose outcome
  * is unknown unless the author asks for exactly that.
+ *
+ * Each ask also lists the support recipients promised against it (D6215):
+ * "[Investor] promised support · [kind] · [date]", then Delivered, Withdrawn
+ * or Cancelled with its date. Hours and outcome are never sent here.
  *
  * A RECIPIENT sees what their audience may read — the Worker decides it: the
  * Axal network gets the asks only unless the founder included the metrics —
@@ -164,6 +169,20 @@ export async function pressAskAgain(api, askUid, body = {}) {
   }
 }
 
+/**
+ * D6215: one recorded promise against an ask, as the author reads it. The
+ * first line is the promise; a later Delivered, Withdrawn or Cancelled follows.
+ */
+export function promiseLines(p) {
+  const kind = KIND_LABEL[p.kind] || 'Other';
+  const when = (v) => dayMon(v) || String(v).slice(0, 10);
+  const lines = [`${p.investor || 'An investor'} promised support · ${kind}${p.promised_at ? ` · ${when(p.promised_at)}` : ''}`];
+  if (p.delivered_at) lines.push(`Delivered ${when(p.delivered_at)}`);
+  else if (p.withdrawn_at) lines.push(`Withdrawn ${when(p.withdrawn_at)}`);
+  else if (p.cancelled_at) lines.push(`Cancelled ${when(p.cancelled_at)}`);
+  return lines;
+}
+
 const ROW = 'flex items-start justify-between gap-3 border-b border-axal-hairline py-2.5 text-[12.5px] dark:border-gray-800';
 const LINK = 'text-[12.5px] font-bold text-violet-700 dark:text-violet-300';
 const PRIMARY = 'rounded-lg bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50 dark:bg-violet-600';
@@ -261,6 +280,19 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, onChec
                   </div>
                 );
               })}
+              {author && !searching && (a.promises || []).map((p, i) => {
+                const [line, later] = promiseLines(p);
+                return (
+                  <div key={`promise-${i}`} className={ROW} data-testid="sent-promise">
+                    <span className="min-w-0">
+                      <span className="block font-semibold">{line}</span>
+                      {later && <span className="block text-axal-muted">{later}</span>}
+                      <span className="block text-[11.5px] text-axal-muted">From their support ledger. Hours and outcome are not shown here.</span>
+                    </span>
+                    <span className={VIOLET}>Promise</span>
+                  </div>
+                );
+              })}
               {author && all.length === 0 && !onCall && (
                 <div className={ROW} data-testid="sent-noreply">
                   <span className="text-axal-muted">{a.can_ask_again ? 'No replies after 14 days.' : 'No replies yet.'}</span>
@@ -293,6 +325,7 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, onChec
           <p className="mt-1 text-[11.5px] text-axal-faint" data-testid="sent-reminder-guarantee">A reminder reaches each recipient once per round in the in-app inbox. Email and push follow each person's notification settings and are not guaranteed exactly once.</p>
         )}
         {author && data.reminders_readable === false && <p className="mt-1 text-[11.5px] text-axal-faint">Reminder progress: Unreadable.</p>}
+        {author && data.promises_readable === false && <p className="mt-1 text-[11.5px] text-axal-faint" data-testid="sent-promises-unavailable">Promises against these asks: Unavailable. They could not be read.</p>}
       </Card>}
       {author && filter !== 'replies' && (
         <Card padding="lg">
