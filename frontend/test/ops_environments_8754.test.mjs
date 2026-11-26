@@ -22,10 +22,11 @@ export const MOVED = Object.freeze([
   ['magic-link-insert-probe.yml', 'probe', 'production-monitoring'],
   ['admin-drift.yml', 'check', 'production-monitoring'],
   ['github-alerts.yml', 'file-backup', 'production-monitoring'],
+  ['pr-overlap.yml', 'report', 'production-monitoring'], // the owner's answer on #8754, 2026-11-26
 ]);
 /** Restores, drills and sensitive mutations: every job of these that names an environment names production-ops. */
 export const KEPT = Object.freeze(['dr-drill.yml', 'schema-rehearsal.yml', 'branch-provision.yml', 'agent-gateway-keys.yml',
-  'agent-stage-a.yml', 'gateway-live-check.yml', 'file-recovery.yml', 'pr-overlap.yml']);
+  'agent-stage-a.yml', 'gateway-live-check.yml', 'file-recovery.yml']);
 const AUTOMATIC = ['production-backup', 'production-monitoring'];
 
 test('each moved job names its environment and runs from main only', () => {

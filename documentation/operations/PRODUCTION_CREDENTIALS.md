@@ -19,9 +19,9 @@ The compute preview remains subject to its existing owner-gated setup. Before en
 | Environment | Secret names its jobs read |
 | --- | --- |
 | `production` | `CLOUDFLARE_API_TOKEN`, `MERGE_CONTROL_CLOUDFLARE_API_TOKEN`, `MEETING_BOT_CLOUDFLARE_API_TOKEN`, `ARCHIVE_OBSERVER_CLOUDFLARE_API_TOKEN` |
-| `production-ops` | `CLOUDFLARE_API_TOKEN`, the `DR_COPY_*`, `FILE_RECOVERY_*`, `FILE_DR_COPY_*` and `FILE_DR_PREVIEW_*` keys, `BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET`, `WORKGRAPH_INGEST_TOKEN` |
+| `production-ops` | `CLOUDFLARE_API_TOKEN`, the `DR_COPY_*`, `FILE_RECOVERY_*`, `FILE_DR_COPY_*` and `FILE_DR_PREVIEW_*` keys, `BRANCH_SECRET_BUNDLE`, `HQ_RPC_SECRET` |
 | `production-backup` (D8754) | `CLOUDFLARE_API_TOKEN` (D1 Write for export, R2 Write on `studioos-backups`), `CLOUDFLARE_ACCOUNT_ID`, `PAGER_WEBHOOK_URL`, the `DR_COPY_*` keys; variables `DR_SECOND_COPY_ENABLED`, `DR_AGE_RECIPIENT`, `DR_COPY_BUCKET`, `DR_COPY_ENDPOINT`, `DR_COPY_REGION` |
-| `production-monitoring` (D8754) | `CLOUDFLARE_API_TOKEN` (D1 Read only), `CLOUDFLARE_ACCOUNT_ID`, `MAGIC_PROBE_EMAIL`, `ADMIN_DRIFT_READ_TOKEN`, `FILE_RECOVERY_HEALTH_*`, `SLACK_GITHUB_WEBHOOK_URL` |
+| `production-monitoring` (D8754) | `CLOUDFLARE_API_TOKEN` (D1 Read only), `CLOUDFLARE_ACCOUNT_ID`, `MAGIC_PROBE_EMAIL`, `ADMIN_DRIFT_READ_TOKEN`, `FILE_RECOVERY_HEALTH_*`, `WORKGRAPH_INGEST_TOKEN`. `SLACK_GITHUB_WEBHOOK_URL` stays a repository secret (the owner's choice, 2026-11-26) |
 | `preview` | `PR_PREVIEW_CLOUDFLARE_API_TOKEN` (Workers Scripts edit only, D7146). It stays under this name until the repository `CLOUDFLARE_API_TOKEN` is deleted, so a missing environment secret cannot fall back to the production token |
 
 The pull-request preview used to look up an environment named `pr-preview`, which was never created (#7424). It now looks up and enters `preview`. Its first run after merge fails, with a message, until `PR_PREVIEW_CLOUDFLARE_API_TOKEN` is added to `preview`.
@@ -92,7 +92,7 @@ The inventory includes the application-only `WORKGRAPH_INGEST_TOKEN`, because th
 | `magic-link-insert-probe.yml` | `probe` | schedule, manual | `production-monitoring` |
 | `meeting-bot-deploy.yml` | `deploy` | main push, manual | `production` |
 | `merge-control-deploy.yml` | `deploy` | main push, manual | `production` |
-| `pr-overlap.yml` | `report` | schedule, manual | `production-ops` |
+| `pr-overlap.yml` | `report` | schedule, manual | `production-monitoring` |
 | `schema-rehearsal.yml` | `rehearse` | manual | `production-ops` |
 
 Run `npm run test:guards` when editing the inventory or any workflow. The guard checks all workflow files, catches unlisted consuming jobs and missing listed jobs, matches each job's credential set and environment, and forbids listed secrets in PR-triggered workflows. The exception is restricted to the existing deploy/delete jobs and generic token in `pr-preview.yml`. The #7146 migration has removed both consumers from `pr-preview.yml`; neither remains in the inventory. The historical exception has no current caller.
