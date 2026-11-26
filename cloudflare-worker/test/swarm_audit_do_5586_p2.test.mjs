@@ -17,7 +17,9 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 // The Durable Object's instance label in Miniflare (a fixture label).
 const DO_LABEL = 'swarm-audit-5586';
 const root = process.cwd();
-const MIGRATION = readFileSync(new URL('../sql/migrations/202611252031_5586_swarm_admission_events.sql', import.meta.url), 'utf8');
+// The table as D5586-p2 created it, then D5585-p15's rebuild with the render approval codes, applied in order on D1.
+const MIGRATION = ['202611252031_5586_swarm_admission_events.sql', '202611260840_5585_swarm_admission_events_render_codes.sql']
+  .map((f) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8')).join('\n');
 
 /** The migration's statements, one per `prepare`: a trigger ends at its `END;`, anything else at a line ending `;`. */
 function statements(sql) {

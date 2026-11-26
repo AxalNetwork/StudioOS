@@ -148,7 +148,9 @@ export const KIND_PROFILES: Readonly<Record<AssetKind, readonly ProfileName[]>> 
 export const EFFECT_TARGETS = ['github_pr', 'stream', 'signed_document', 'website_cdn', 'external_distribution'] as const;
 export type EffectTarget = (typeof EFFECT_TARGETS)[number];
 
-export const WORK_GRAPH_RELEASE_LIMITS = Object.freeze({ maxComponents: 32, maxEffects: 8, maxCitations: 32 });
+export const WORK_GRAPH_RELEASE_LIMITS = Object.freeze({ maxComponents: 32, maxEffects: 8, maxCitations: 32,
+  /** Part 15: the largest render ceiling an approval may state (USD 100,000), so a typo cannot authorize without bound. */
+  maxRenderCeilingMicrousd: 100_000_000_000 });
 export type WorkGraphReleaseLimits = typeof WORK_GRAPH_RELEASE_LIMITS;
 
 /** The caller's resolved context: D5579's scope and revocations, plus each person's authorities (the route resolves them). */
@@ -496,6 +498,11 @@ export interface DecideInput {
   citations?: string[];
   disclosureRef?: string | null;
   rightsRef?: string | null;
+  /**
+   * Part 15 (D5585-p15): the most a render this approval authorizes may spend, in micro-USD. Required on a `render`
+   * approval and refused anywhere else: #5586's swarm admission admits a render of a pinned piece only within it.
+   */
+  renderCeilingMicrousd?: number | null;
   idempotencyKey: string;
 }
 export type DecideResult = { ok: true; decisionId: number; replayed: boolean; cost: Cost } | ReleaseRefusal;
@@ -513,7 +520,11 @@ export async function readManifest(env: Pick<Env, 'DB'>, m: Meter, manifestUid: 
   ).bind(manifestUid));
 }
 
-export async function decideRelease(env: Pick<Env, 'DB'>, ctx: ReleaseContext, input: DecideInput, limits: WorkGraphReleaseLimits = WORK_GRAPH_RELEASE_LIMITS): Promise<DecideResult> {
+/**
+ * `retry` is internal: an insert that fails is re-read once, to answer a concurrent writer's row as a replay. A second
+ * failure throws instead of recursing (part 15: a row the store refuses, say by a trigger, no longer loops forever).
+ */
+export async function decideRelease(env: Pick<Env, 'DB'>, ctx: ReleaseContext, input: DecideInput, limits: WorkGraphReleaseLimits = WORK_GRAPH_RELEASE_LIMITS, retry = true): Promise<DecideResult> {
   const m = new Meter(env);
   const citations = input?.citations ?? [];
   if (!keyOk(input?.idempotencyKey) || typeof input.manifestUid !== 'string' || !HEX64.test(String(input.digest))
@@ -522,7 +533,9 @@ export async function decideRelease(env: Pick<Env, 'DB'>, ctx: ReleaseContext, i
     || !['approve', 'reject', 'request_changes', 'withdraw'].includes(input.decision) || !actorOk(input.reviewer)
     || !refOk(input.approvalRef) || !Array.isArray(citations) || citations.length > limits.maxCitations
     || citations.some((c) => typeof c !== 'string' || c.length > 80)
-    || (input.disclosureRef != null && !refOk(input.disclosureRef)) || (input.rightsRef != null && !refOk(input.rightsRef))) {
+    || (input.disclosureRef != null && !refOk(input.disclosureRef)) || (input.rightsRef != null && !refOk(input.rightsRef))
+    || (input.renderCeilingMicrousd != null && (!Number.isSafeInteger(input.renderCeilingMicrousd) || input.renderCeilingMicrousd <= 0
+      || input.renderCeilingMicrousd > limits.maxRenderCeilingMicrousd || input.purpose !== 'render' || input.decision !== 'approve'))) {
     return m.refuse('malformed', [String(input?.manifestUid)]);
   }
   const man = await readManifest(env, m, input.manifestUid);
@@ -556,6 +569,8 @@ export async function decideRelease(env: Pick<Env, 'DB'>, ctx: ReleaseContext, i
     if (input.purpose === 'publish' && ((needs.citations && !citations.length) || (needs.rights && !input.rightsRef) || (needs.disclosure && !input.disclosureRef))) {
       return m.refuse('approval_incomplete', [man.manifest_uid, input.profile]);
     }
+    // Part 15: a render approval says how much it authorizes.
+    if (input.purpose === 'render' && input.renderCeilingMicrousd == null) return m.refuse('approval_incomplete', [man.manifest_uid, input.profile, 'render_ceiling']);
     // Part 12: no approval, publish or render, of a manifest whose pinned render #5586 did not admit and settle.
     const gaps = await renderGapsOf(env, m, ctx, body);
     if (gaps.length) return m.refuse('render_unadmitted', [man.manifest_uid, ...renderGapIds(gaps)]);
@@ -573,13 +588,14 @@ export async function decideRelease(env: Pick<Env, 'DB'>, ctx: ReleaseContext, i
     await m.run(env.DB.prepare(
       `INSERT INTO work_graph_release_decisions (tenant_id, company_id, project_id, manifest_uid, manifest_digest, audience,
          purpose, profile, authority, decision, reviewer_user_id, approval_ref, citations_json, disclosure_ref, rights_ref,
-         idempotency_key, request_hash, decided_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         render_ceiling_microusd, idempotency_key, request_hash, decided_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(man.tenant_id, man.company_id, man.project_id, man.manifest_uid, man.manifest_digest, man.audience, input.purpose,
       input.profile, input.authority, input.decision, input.reviewer.userId, input.approvalRef, JSON.stringify(citations),
-      input.disclosureRef ?? null, input.rightsRef ?? null, input.idempotencyKey, hash, at));
+      input.disclosureRef ?? null, input.rightsRef ?? null, input.renderCeilingMicrousd ?? null, input.idempotencyKey, hash, at));
   } catch (e) {
-    const raced = await decideRelease(env, ctx, input, limits);
+    if (!retry) throw e;
+    const raced = await decideRelease(env, ctx, input, limits, false);
     if (raced.ok) return raced;
     throw e;
   }
