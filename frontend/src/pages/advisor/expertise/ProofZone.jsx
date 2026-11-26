@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
+import { StateChip } from '../../../ui/Honesty';
 import { api } from '../../../lib/api';
 import {
   ASK_REFUSALS, Field, MoreRows, NothingYet, Pill, SaveNote, StaleNote, Unrecorded, ZoneBody, ZoneHeading,
@@ -371,15 +372,14 @@ export default function ProofZone() {
   const attested = state.items.filter((p) => p.attested);
   const selfStated = state.items.filter((p) => !p.attested);
   const awaiting = state.items.filter((p) => (p.consents || []).some((c) => c.state === 'pending'));
-  const reconfirm = state.items.filter((p) => proofCardState(p).state === 'needs_reconfirmation');
   // D392 — the chips are the strip's counts, as views.
   const PROOF_VIEWS = { attested: attested, awaiting: awaiting, self: selfStated };
   const shown = PROOF_VIEWS[view] || state.items;
-  // D4689: every figure is the whole list. The Worker counts confirmed,
-  // awaiting and self-stated; it does not count claims needing
-  // reconfirmation, so that tile has a figure only while every claim is on
-  // screen, and reads Not recorded otherwise.
-  const whole = counts?.total == null || state.items.length >= Number(counts.total);
+  // D4689: every figure is the whole list. D7807 (#7807): so is Needs
+  // reconfirmation, which the Worker counts in the same read as the others,
+  // and the tile reads that figure on any page size. It is never counted off
+  // the page: a count that did not come back is Unavailable, never 0.
+  const reconfirmCount = Number.isInteger(counts?.needs_reconfirmation) ? counts.needs_reconfirmation : null;
 
   const addForm = (
     <Card padding="lg">
@@ -450,12 +450,14 @@ export default function ProofZone() {
           {[
             { label: 'Confirmed', value: String(counts?.attested ?? attested.length), note: 'by the person named' },
             { label: 'Awaiting an answer', value: String(counts?.awaiting ?? awaiting.length), note: 'asked, no answer yet' },
-            { label: 'Needs reconfirmation', value: whole ? String(reconfirm.length) : null, note: 'an earlier answer no longer counts' },
+            { label: 'Needs reconfirmation', value: reconfirmCount == null ? null : String(reconfirmCount), unread: reconfirmCount == null, testid: 'advisor-proof-reconfirm-count', note: 'an earlier answer no longer counts' },
             { label: 'Not confirmed', value: String(counts?.self_stated ?? selfStated.length), note: 'no current confirmation' },
           ].map((s) => (
             <Card key={s.label} padding="md">
               <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{s.label}</div>
-              <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value === null ? <Unrecorded /> : s.value}</div>
+              <div className="mt-1 text-[15px] font-extrabold tabular-nums" data-testid={s.testid}>
+                {s.unread ? <StateChip kind="unavailable" /> : s.value === null ? <Unrecorded /> : s.value}
+              </div>
               <div className="mt-0.5 text-[10px] text-axal-muted">{s.note}</div>
             </Card>
           ))}

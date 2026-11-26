@@ -20,15 +20,17 @@ test('D6039: the two windows select open filings and obligations for active vent
       CREATE TABLE users (id INTEGER, founder_id INTEGER, is_active INTEGER);
       CREATE TABLE projects (id INTEGER, founder_id INTEGER, entity_id INTEGER, deleted_at TEXT);
       CREATE TABLE project_members (project_id INTEGER, user_id INTEGER, status TEXT, role TEXT);
-      CREATE TABLE formation_steps (id INTEGER, project_id INTEGER, title TEXT, due_date TEXT, state TEXT);
+      CREATE TABLE formation_steps (id INTEGER, project_id INTEGER, title TEXT, due_date TEXT, state TEXT, pack_item_key TEXT);
+      CREATE TABLE compliance_events (id INTEGER, project_id INTEGER, company_id INTEGER, title TEXT, due_date TEXT, completion_status TEXT, pack_item_key TEXT);
+      CREATE TABLE company_profiles (id INTEGER, uid TEXT);
       CREATE TABLE entity_obligations (id INTEGER, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT);
       INSERT INTO users VALUES (1, 11, 1), (2, 22, 1), (3, NULL, 1), (4, NULL, 0), (5, NULL, 1), (6, NULL, 1);
       INSERT INTO projects VALUES (7, 11, 30, NULL), (8, 22, 30, NULL), (10, 22, 40, '2026-11-01');
       INSERT INTO project_members VALUES (7, 1, 'accepted', 'owner'), (7, 3, 'accepted', 'cofounder'),
         (8, 3, 'accepted', 'cofounder'), (7, 4, 'accepted', 'cofounder'), (7, 5, 'accepted', 'advisor'), (7, 6, 'pending', 'cofounder');
-      INSERT INTO formation_steps VALUES (12, 7, 'First filing', '2026-11-20', 'todo'),
-        (13, 7, 'Filed', '2026-11-20', 'done'), (14, 7, 'Undated', NULL, 'doing'),
-        (15, 7, 'Outside window', '2026-12-05', 'todo'), (16, 10, 'Removed venture', '2026-11-20', 'todo');
+      INSERT INTO formation_steps VALUES (12, 7, 'First filing', '2026-11-20', 'todo', NULL),
+        (13, 7, 'Filed', '2026-11-20', 'done', NULL), (14, 7, 'Undated', NULL, 'doing', NULL),
+        (15, 7, 'Outside window', '2026-12-05', 'todo', NULL), (16, 10, 'Removed venture', '2026-11-20', 'todo', NULL);
       INSERT INTO entity_obligations VALUES (12, 30, 'Annual filing', '2026-12-04', 'open'),
         (17, 30, 'Waived', '2026-11-20', 'waived'), (18, 50, 'Unlinked entity', '2026-11-20', 'open');
     `);
@@ -42,6 +44,7 @@ test('D6039: the two windows select open filings and obligations for active vent
     ]);
     assert.equal((await filingReminderCandidates(env, '2026-11-20', 7)).length, 2);
     db.exec(readFileSync(new URL('../sql/migrations/202611150130_6039_filing_reminder_deliveries.sql', import.meta.url), 'utf8'));
+    db.exec(readFileSync(new URL('../sql/migrations/202611260037_6039_filing_reminder_company_claims.sql', import.meta.url), 'utf8'));
     const deliver: Parameters<typeof sendFilingReminders>[3] = async (_env, args) => args.userId === 2 ? null : 100;
     const concurrent = await Promise.all([sendFilingReminders(env, '2026-11-20', 14, deliver), sendFilingReminders(env, '2026-11-20', 14, deliver)]);
     assert.equal(concurrent[0] + concurrent[1], 4);

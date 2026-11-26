@@ -162,7 +162,10 @@ jobs:
   # D7108 part 2 (#7108): never in the merge queue. There the part list is
   # always the full nine (prTier), so `suite` lists it literally and each part
   # computes the same equal-weight plan from its own checkout: no runner hop
-  # before the matrix. On a pull request and a push this job is unchanged.
+  # before the matrix. D8693 (#8693): on a pull request and a push this job
+  # writes that same equal-weight plan, so its `suite-plan` artifact (what the
+  # capacity pilot submits, the planner checks and a delegated Worker shard
+  # runs) holds, part for part, the files of the hosted part of the same name.
   plan:
     name: suite plan
     needs: verified
@@ -180,18 +183,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
-      - name: Newest main timing artifact, or equal weights
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
           parts=$(node --input-type=module -e '
             import { tierFor } from "./scripts/lib/prTier.mjs";
             const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
@@ -229,11 +227,66 @@ jobs:
       actions: read
       id-token: write
     # Exact local preparation pin; publication and activation remain held under #5719.
-    # D8335: the pin must be a commit on main. cb63d3997d is #8234's merge commit and carries the reviewed planner
-    # (blob 4f7dfaca) byte for byte. The first pin, 19927c89, became unreachable when its branch was deleted.
-    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875
+    # D8335: the pin must be a commit on main. 3d41671dfe is #8658's merge commit and carries the reviewed D8626
+    # planner (blob 40b0b0fa) byte for byte. The previous pin, cb63d3997d (#8234, blob 4f7dfaca), submitted on main
+    # pushes only. The first pin, 19927c89, became unreachable when its branch was deleted.
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
     with:
       submission: ${{ needs.plan.outputs.capacity_submission }}
+      executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+      child_workflow_sha: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
+
+  # D8626 (#8626): merge-queue routing, off unless vars.CI_CAPACITY_QUEUE_ROUTING is 'true' as well as
+  # CI_CAPACITY_ENABLED. That variable is switched on only in the same change that makes main's ruleset require the
+  # coordinator's App-owned `ci-capacity/full-suite` (S39's consumer cutover, #7909), and capacity-submission.mjs
+  # refuses to prepare a submission until the live ruleset does. When it is off (every pull request, every push,
+  # and the queue today) both jobs are skipped before they start and `suite` runs exactly as before.
+  route:
+    name: capacity route submission
+    if: ${{ github.event_name == 'merge_group' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && vars.CI_CAPACITY_QUEUE_ROUTING == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      capacity_submission: ${{ steps.capacity.outputs.capacity_submission }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # Metadata only: no OIDC, no waiting. A refusal or an error leaves the output empty and the queue hosted.
+      - name: Prepare the merge-queue capacity submission
+        id: capacity
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
+          CI_CAPACITY_QUEUE_ROUTING: ${{ vars.CI_CAPACITY_QUEUE_ROUTING }}
+          CI_CAPACITY_EXECUTOR_SHA: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
+          CI_CAPACITY_CHILD_WORKFLOW_SHA: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
+          CI_CAPACITY_FULL_SUITE_APP_ID: ${{ vars.CI_CAPACITY_FULL_SUITE_APP_ID }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+          CAPACITY_SOURCE_ROOT: ${{ github.workspace }}
+        run: node scripts/ci/capacity-submission.mjs
+
+  # D8626: the trusted planner, at the same reviewed pin as `capacity-submit` (D8335: a main commit). Its
+  # `accepted` output is the only thing that lets a Worker part skip its tests. The planner revision pinned today
+  # submits on main pushes only, so until a later PR moves both pins this job ends with `accepted` unset.
+  capacity-route:
+    name: capacity route
+    needs: route
+    if: ${{ !cancelled() && github.event_name == 'merge_group' && github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' && vars.CI_CAPACITY_QUEUE_ROUTING == 'true' && needs.route.outputs.capacity_submission != '' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88
+    with:
+      submission: ${{ needs.route.outputs.capacity_submission }}
       executor_sha: ${{ vars.CI_CAPACITY_EXECUTOR_SHA }}
       child_workflow_sha: ${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}
 
@@ -241,7 +294,9 @@ jobs:
     name: suite (${{ matrix.part }})
     # D8435: no `plan` here. On a pull request the parts used to wait for the plan
     # job to find a runner and finish before they were even created.
-    needs: [verified]
+    # D8626: `capacity-route` is skipped before it starts unless queue routing is on, so
+    # only a routed queue candidate waits for it, and then all nine parts do (one job).
+    needs: [verified, capacity-route]
     # Runs whenever `verified` found nothing (always on a PR and in the queue,
     # where `verified` is skipped, and when its lookup failed).
     if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
@@ -250,6 +305,13 @@ jobs:
       contents: read
       actions: write
       checks: read
+    # D8626: a Worker part the coordinator accepted runs there, not here, and reports through the App-owned
+    # `ci-capacity/full-suite`. Only that exact `accepted` output routes a part; anything else runs it hosted. The
+    # steps are unchanged (runner-benchmark.yml mirrors them, D5611): test-drift-parts.mjs reads these two values
+    # and, for a routed Worker part only, says where it runs instead of running it.
+    env:
+      CAPACITY_ROUTED: ${{ github.event_name == 'merge_group' && needs.capacity-route.outputs.accepted == 'true' && startsWith(matrix.part, 'worker-') }}
+      CAPACITY_REQUEST_ID: ${{ needs.capacity-route.outputs.request_id }}
     # D7881: only the optional Mac part reserves time for its bounded handoff
     # and a complete hosted fallback. The queue's existing bound is 90 minutes.
     timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 83 || 50 }}
@@ -412,8 +474,8 @@ jobs:
   # parts' traces. Advisory: neither `landing` nor `gate` needs it, so its
   # failure never blocks a merge. It runs in the queue on purpose, because a
   # push that `verified` skips has no traces of its own: the queue run on the
-  # same SHA carries them (a pull request's `plan` job reads its
-  # test-timings.json; the queue plans with equal weights, D7108 part 2).
+  # same SHA carries them (github-alerts' future-clock plan reads its
+  # test-timings.json; every ci.yml plan is equal-weight, D8693).
   test-deps:
     name: test deps
     needs: suite
@@ -768,7 +830,7 @@ jobs:
     # A skipped required check would count as passed. The draft run must
     # publish a different context so the full-suite context stays pending.
     name: "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'test:drift (draft fast tier)' || 'test:drift (full suite)' }}"
-    needs: [verified, plan, suite]
+    needs: [verified, plan, capacity-route, suite]
     # Always, never skipped: a skipped required check reports as passed. This
     # job decides, and it passes only when every part passed — or, on a push
     # to main only, when the merge queue already passed this exact commit.
@@ -785,7 +847,22 @@ jobs:
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
           PLAN: ${{ needs.plan.result }}
+          ROUTED: ${{ needs.capacity-route.outputs.accepted }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
+          # D8626: a routed candidate's Worker parts ran in the coordinator, so `suite` passing here proves only
+          # the hosted parts. This context may pass for it only while main's live rules require the App-owned
+          # ci-capacity/full-suite, which carries the Worker result. Read again here: the rules can change after
+          # the route job read them, and a submission alone must never be what lets a candidate land.
+          if [ "$EVENT" = "merge_group" ] && [ "$ROUTED" = "true" ]; then
+            required=$(gh api "repos/$REPO/rules/branches/main" --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | select(.context == "ci-capacity/full-suite" and ((.integration_id // 0) > 0))] | length' || echo 0)
+            if [ "${required:-0}" -lt 1 ]; then
+              echo "::error::The Worker parts were routed to the capacity coordinator, but main does not require ci-capacity/full-suite from its App."
+              exit 1
+            fi
+            echo "The Worker parts were routed; main requires ci-capacity/full-suite, which carries their result."
+          fi
           if [ "$EVENT" = "push" ] && [ -n "$VERIFIED_RUN" ] && [ "$SUITE" = "skipped" ]; then
             echo "The merge queue passed the full suite on this commit: $VERIFIED_RUN"
             exit 0
@@ -958,12 +1035,24 @@ jobs:
       - name: Expertise axe and phone navigation (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/expertise_axe_7517.spec.js --retries=0 --trace off
+      # #7808 (D7808): the company switcher's accessible name (D7661) with no company, a failed read and a company,
+      # and an axe scan of the Worker rail with its Not recorded line (D7662), light and dark. Same docs/ and
+      # fixtures pattern as the step above; no axe rule is disabled and no trace is recorded.
+      - name: Switcher name and rail absent colour (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/switcher_rail_7808.spec.js --retries=0 --trace off
       # #8537 (D8537): the public journey at 1440 and 390 — Pricing to sign-up and back to the plan's checkout, a Grow
       # action through sign-in and back, a session that ended back in by the email link. The local Worker in
       # tests/e2e/_helpers.js serves the docs/ built above and keeps the sign-in links in an outbox; no email, no account.
       - name: Public journey (local Worker, fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/public_journey.spec.js --retries=0 --trace off
+      # #6250 (D6250-p2): the issued fund report printed — print media and Letter/A4 PDFs of a long report, light
+      # and dark, read back with pdfjs: only the document, black on white, nothing clipped, events and the figures
+      # column kept whole. Same docs/ and fixtures pattern as the steps above; no trace is recorded.
+      - name: Fund report print (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/report_print_6250.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Lovable Handoff Privacy · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · Prototype / MVP · #8773 · follows Build in Lovable (D1082, #2947) and Build v2</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Build in Lovable: say exactly what the privacy check covered, offer an alias, and show the text that leaves before it leaves</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Build › Prototype / MVP › From Lovable, in the Build v2 frame as shipped, with the shared Eadwyn rail. The dialog becomes two steps: Prepare, where nothing leaves Axal VC, and Review and open, which names the destination (lovable.dev), how the text travels, the exact text, what Axal VC records, and puts Copy beside Open. The check result never certifies that no names are present: it lists the five things the check looks for and what it does not cover. A venture named after a person is offered a neutral alias for this prompt; the draft stays recoverable. Every edit is checked again and refusals keep main’s behaviour: the kind of detail, never the words, and nothing opened. States follow Platform States (D5129) with Unavailable on screen. Violet dashed ◇ tags mark Worker work on #8773; amber ⚑ tags mark owner questions Q1 to Q4, drawn as option A. Neither tag is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026, 14:31 to 14:36 UTC · checked on main 7553cd37b9 · [Atlas Orchard], [Maya Ruiz], [Noah Brandt], [Project Kestrel], [Lena Park], the must-haves and every figure are fictional sample data.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build Lovable Handoff Privacy Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LP-0', 'Today on main', 'The walkthrough case: a venture whose display name is its founder’s name, in line 1 of the draft, under “Privacy check passed. No names, emails or interview quotes are in the prompt.” Six numbered findings from the code.', [F('BLP00', false, 960)]],
+      ['LP-1', 'Step 1 · Prototype / MVP', 'The entry stays inside From Lovable and says what it does: Prepare a Lovable prompt. Opening Lovable is a later press.', [F('BLP01', false, 900)]],
+      ['LP-2', 'Step 2 · Prepare · clean prompt', '[Atlas Orchard], a regular product name. Step line (nothing leaves), What this tests, the line-1 venture notice with Use an alias, the drafted prompt with line numbers, and the check: “No matches for the five checks below”, each check named, then what it does not cover.', [F('BLP02', false, 1330)]],
+      ['LP-3', 'Step 2 · Prepare · founder-named venture', '[Maya Ruiz] in line 1 matches a member of the venture (◇ member names). Review waits for one choice: keep the name or use a neutral alias (⚑ Q1, Q2). Then the alias applied: line 1 rewritten, checked again, the draft one click away.', [F('BLP03', false, 1500), C('BLP03B', 'Alias applied', 1160, 1295)]],
+      ['LP-4', 'Step 2 · Prepare · a prompt requiring a change', 'The founder typed an interviewee’s name. Main’s refusal is kept: the kind of detail, never the words, and Review stays off. The line is marked (◇ finding line).', [F('BLP04', false, 1340)]],
+      ['LP-5', 'Step 2 · Prepare · a manually edited prompt', 'Edited · 2 lines, Compare with the draft, Restore the draft. The check names the time it ran on this exact text.', [F('BLP05', false, 1480)]],
+      ['LP-6', 'Step 3 · Review what will be sent', 'Destination, how it travels, how the venture is named, the exact read-only text with its count and check time, what does not go, what Axal VC records, and Copy beside Open with the same disclosure.', [F('BLP06', false, 1010)]],
+      ['LP-7', 'Step 4 · After the press', 'Opened (with the popup fallback and Bring it back), Copied instead (nothing recorded), and refused by the launch’s own re-check with the text kept.', [C('BLP07', false, 1940, 913)]],
+      ['LP-8', 'States', 'Loading, draft failed with Try again, check Unavailable with Check again, changed since the check, no must-haves recorded, too long, support session read only, a reader who cannot write, venture not found.', [C('BLP08', false, 1440, 924)]],
+      ['LP-9', 'Phone 390 × 844', 'A full-height sheet, steps 1 to 6: Prototype / MVP, a founder-named venture choosing, alias applied then a change needed, fixed and checked again, Review what will be sent, Opened.', [P('BLP09A', false), P('BLP09B', false), P('BLP09C', false), P('BLP09D', false), P('BLP09E', false), P('BLP09F', false)]],
+      ['LP-10', 'Accessibility', 'Status announcements (one polite region, role=alert for refusals), focus order for both steps, headings and other rules.', [C('BLP10', false, 1440, 882)]],
+      ['LP-11', 'Every Lovable path and the tests', 'Prototype / MVP, a Validate experiment and Build Plan › Send to… › Lovable, Copy and Open, today and proposed; the test cases with fictional inputs.', [C('BLP11', false, 1540, 612)]],
+      ['LP-H', 'Handoff', 'Checked on main with files, preserved, frontend only, the three ◇ Worker items, four ⚑ owner questions with option A drawn, and every acceptance item mapped to its boards.', [W('BLP12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

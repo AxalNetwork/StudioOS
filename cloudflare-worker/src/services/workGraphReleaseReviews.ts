@@ -20,7 +20,7 @@ import type { Scope } from './workGraphContracts';
 import type { Cost } from './workGraphRevisions';
 import { Meter, POLICY_PROFILES, takedownsCovering, type Audience, type ManifestBody, type ProfileName, type ReleaseContext } from './workGraphReleases';
 import { resolveReleaseAuthorities } from './workGraphReleaseAuthorities';
-import { RELEASE_ADMIN_DEPS } from './workGraphReleaseAdmin';
+import { RELEASE_ADMIN_DEPS, type ReleaseAdminEnv } from './workGraphReleaseAdmin';
 import { releasePeople } from './workGraphReleaseDirectory';
 
 export const REVIEW_LIMITS = Object.freeze({
@@ -38,13 +38,15 @@ export interface ReviewerContext {
 }
 
 /** One reviewer's context: their own authorities in the scope (nobody else's), and the scope's revoked people. */
-export async function reviewerContext(env: Pick<Env, 'DB'>, scope: Scope, userId: number): Promise<ReviewerContext> {
-  const [held, revokedUserIds] = await Promise.all([
+export async function reviewerContext(env: ReleaseAdminEnv, scope: Scope, userId: number): Promise<ReviewerContext> {
+  const [held, revokedUserIds, renderAdmissions] = await Promise.all([
     resolveReleaseAuthorities(env, { tenantId: scope.tenantId, companyId: scope.companyId, userId }),
     RELEASE_ADMIN_DEPS.revokedUsers(env, scope),
+    // Part 12 (D5585-p12): the swarm state behind `render_unadmitted`, read from the coordinator (part 13); null is not read.
+    RELEASE_ADMIN_DEPS.renderAdmissions(env, scope),
   ]);
   return {
-    ctx: { scope, authorities: new Map([[userId, held]]), revokedUserIds },
+    ctx: { scope, authorities: new Map([[userId, held]]), revokedUserIds, renderAdmissions },
     held,
     revoked: revokedUserIds.has(userId),
   };

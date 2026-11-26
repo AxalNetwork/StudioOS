@@ -27,6 +27,7 @@
  */
 import type { Env } from '../types';
 import type { Scope } from './workGraphContracts';
+import { swarmSnapshotFor } from './agents/workspaceAdmissionClient';
 import type { Cost } from './workGraphRevisions';
 import { EFFECT_TARGETS, Meter, type ReleaseContext } from './workGraphReleases';
 import { RELEASE_RETRACT_KIND } from './workGraphReleaseDelivery';
@@ -34,6 +35,8 @@ import { drainReleaseEffects, releaseDeliveryEnabled, type ReleaseDrainResult } 
 import type { ReleaseDistributionChannels } from './workGraphReleaseDistribution';
 import type { DeliveryStatus } from './workGraphEffects';
 import { releaseAuthoritiesForScope, revokedReleaseUsers } from './workGraphReleaseAuthorities';
+import type { SwarmState } from './agents/swarmAdmission';
+import { UNNAMED, lineNameFields, lineNamesOf } from './workGraphReleaseLineNames';
 
 /** The value of `WORK_GRAPH_RELEASE_ADMIN` that turns the routes on. Unset, or anything else, is off. */
 export const RELEASE_ADMIN_ON = 'on';
@@ -60,6 +63,7 @@ export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Objec
   queue_full: 'The tenant’s release outbox is full. Wait for the drain to catch up.',
   taken_down: 'A takedown covers this release or one of its pieces, so it cannot go out again.',
   not_published: 'Only a manifest this line has published can be re-pinned.',
+  render_unadmitted: 'A pinned render was not admitted and settled within its render budget by swarm admission, so this release cannot be approved or published. The release status names the reason.',
   is_head: 'That manifest is already what the line’s pointer names.',
   tombstoned: 'A pinned piece was tombstoned and cannot be re-pinned.',
   person_required: 'Only a person can do this.',
@@ -74,8 +78,12 @@ export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Objec
   agent_review: 'Only a person can decide on a release.',
   self_approval: 'The author of a manifest cannot approve it.',
   approval_incomplete: 'This policy profile needs its approval to name the evidence, rights or disclosure it relied on.',
+  // Part 16 (D5585-p16): a line's name.
+  line_name_invalid: 'A line name is 1 to 120 characters of text, with no control or text-direction characters.',
+  stale_line_name: 'The line’s name has changed since you loaded it. Reload the line and rename it again.',
 });
-export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503 });
+export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503,
+  line_name_invalid: 400 });
 
 export const RELEASE_DRAIN_LIMITS = Object.freeze({
   /** Effects one scheduled drain delivers at most. */
@@ -88,6 +96,9 @@ export const RELEASE_DRAIN_LIMITS = Object.freeze({
 
 /** The effect kinds a release drain handles: one publish kind per target, and the retraction. */
 export const RELEASE_EFFECT_KINDS: readonly string[] = Object.freeze([...EFFECT_TARGETS.map((t) => `release_${t}`), RELEASE_RETRACT_KIND]);
+
+/** What the admin and reviewer contexts read: D1, and (part 13) the admission coordinator's binding, which may be absent. */
+export type ReleaseAdminEnv = Pick<Env, 'DB' | 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>;
 
 export const RELEASE_ADMIN_DEPS = {
   /**
@@ -103,6 +114,17 @@ export const RELEASE_ADMIN_DEPS = {
    */
   revokedUsers: (env: Pick<Env, 'DB'>, scope: Scope): Promise<ReadonlySet<number>> =>
     revokedReleaseUsers(env, { tenantId: scope.tenantId, companyId: scope.companyId }),
+  /**
+   * Part 12 (D5585-p12): #5586's swarm admission state, which says whether each pinned render was admitted and settled
+   * within its reserve. Part 13 (D5585-p13) reads it from the `WorkspaceAdmission` coordinator (#5586 part 3) through
+   * `swarmSnapshotFor`, for the scope's own venture only. Any refusal (no binding, the object unreachable, a scope it
+   * cannot name) answers null, "not read", so a manifest that pins a render is refused `render_unadmitted`
+   * (`admission_unverified`), never treated as admitted. Replaceable in tests.
+   */
+  renderAdmissions: async (env: ReleaseAdminEnv, scope: Scope): Promise<SwarmState | null> => {
+    const r = await swarmSnapshotFor(env, scope);
+    return r.ok ? r.value : null;
+  },
 };
 
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
@@ -115,9 +137,10 @@ export function scopeFrom(tenant: unknown, company: unknown): Scope | null {
 }
 
 /** The context a Super Admin acts in: the named scope, the authorities resolved for it and its revoked people. */
-export async function releaseAdminContext(env: Pick<Env, 'DB'>, scope: Scope): Promise<ReleaseContext> {
-  const [authorities, revokedUserIds] = await Promise.all([RELEASE_ADMIN_DEPS.authorities(env, scope), RELEASE_ADMIN_DEPS.revokedUsers(env, scope)]);
-  return { scope, authorities, revokedUserIds };
+export async function releaseAdminContext(env: ReleaseAdminEnv, scope: Scope): Promise<ReleaseContext> {
+  const [authorities, revokedUserIds, renderAdmissions] = await Promise.all([RELEASE_ADMIN_DEPS.authorities(env, scope),
+    RELEASE_ADMIN_DEPS.revokedUsers(env, scope), RELEASE_ADMIN_DEPS.renderAdmissions(env, scope)]);
+  return { scope, authorities, revokedUserIds, renderAdmissions };
 }
 
 export const listLimit = (v: unknown) => {
@@ -125,18 +148,17 @@ export const listLimit = (v: unknown) => {
   return Number.isSafeInteger(n) && n > 0 ? Math.min(n, RELEASE_DRAIN_LIMITS.listMax) : RELEASE_DRAIN_LIMITS.listMax;
 };
 
-/**
- * Part 11 (D5585-p11): a release line has no name of its own. It is a `composite` asset, and neither
- * `work_graph_assets` nor `work_graph_release_lines` has a name or title column; a line is its uid, audience and
- * project. Every read says so (`lineName: null`, `lineNameReason: 'not_recorded'`) rather than inventing one.
- */
-export const LINE_NAME_NOT_RECORDED = { lineName: null, lineNameReason: 'not_recorded' } as const;
+// Part 11 (D5585-p11): a release line had no name of its own, and every read said so (`lineName: null`,
+// `lineNameReason: 'not_recorded'`) rather than inventing one. Part 16 (D5585-p16) gives a line a name a Super Admin
+// sets (`workGraphReleaseLineNames.ts`, `lineNameFields`); an unnamed line still reads exactly so.
 
 export interface ReleaseLineItem {
   lineAssetUid: string; projectId: number | null; audience: string; createdByUserId: number; createdAt: string;
   headManifestUid: string | null; headSeq: number; manifests: number;
-  /** Part 11: always null, with its reason (`LINE_NAME_NOT_RECORDED`). */
-  lineName: null; lineNameReason: 'not_recorded';
+  /** Part 16: the name a Super Admin gave the line; null with `not_recorded` while it has none. */
+  lineName: string | null; lineNameReason: 'not_recorded' | null;
+  /** Part 16: the `seq` of that name, 0 when never named: what a rename names as `expected_seq`. */
+  lineNameSeq: number;
   /** Part 11: the name of the line's project, when it names one of this company's projects that is not deleted. */
   projectName: string | null;
 }
@@ -155,11 +177,12 @@ export async function listReleaseLines(env: Pick<Env, 'DB'>, scope: Scope, limit
       ORDER BY l.created_at DESC, l.line_asset_uid
       LIMIT ?`,
   ).bind(scope.tenantId, scope.companyId, limit));
+  const names = await lineNamesOf(env, m, scope, rows.map((r) => r.line_asset_uid));
   return {
     lines: rows.map((r) => ({
       lineAssetUid: r.line_asset_uid, projectId: r.project_id, audience: r.audience, createdByUserId: r.created_by_user_id,
       createdAt: r.created_at, headManifestUid: r.head_revision_uid, headSeq: Number(r.head_seq), manifests: Number(r.manifests),
-      ...LINE_NAME_NOT_RECORDED, projectName: r.project_name ?? null,
+      ...lineNameFields(names.get(r.line_asset_uid) ?? UNNAMED), projectName: r.project_name ?? null,
     })),
     cost: { ...m.cost },
   };

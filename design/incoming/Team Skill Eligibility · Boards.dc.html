@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Skill Eligibility · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Team · Skills · #8768</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · One skill eligibility rule across the directory, an existing agent and the new-agent wizard</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A founder looking for a runway forecast meets the same skill in four places: the Finance directory, the skill page, an existing agent’s Add skills drawer and the Add an AI agent wizard. Today each answers differently (main lists drafts to writers, drops other roles’ skills silently, and lets the wizard advance with nothing). These boards give every entry point one answer from the Worker: Listed, Published, Can attach, Attached, Blocked by policy or Couldn’t be read, each a word, a glyph and a border, with counts and a recovery action. Natural fit sorts and labels; it never excludes (D4116). Published versions, Axal’s golden-case bar and the sponsor’s tool approval stay the gates; nothing attaches, publishes or grants by itself. Platform States (D5129): Not recorded and Couldn’t be read are never 0 or an empty list. A violet dashed ◇ marks backend work (#8768); an amber ⚑ marks the owner question, with option A drawn. Shell, Team page and cards follow main and Skill Library v2 (SK-09, SK-10); Eadwyn stays the one rail.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 (routes/team_skills.ts, services/agents/skillLinks.ts, pages/team/SkillSheets.jsx, SkillsTab.jsx) · [Atlas Orchard], [Maya Ruiz], [Noah Brandt], [Iris Chen], [Atlas runway forecast] and every count, date and cost are fictional; agent personas and skill names are main’s</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Team Skill Eligibility Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['TMS-0', 'The one eligibility rule', 'Six states with a word, a glyph and a border; the checks in order (attachCheck without the role gate, ◇ #8768); and where each entry point stands on main today versus these boards.', [C('TMS00', false, 1400, 760)]],
+      ['TMS-A', 'Route A · Finance directory → skill page (desktop)', '① Team › Skills › Finance: area row with counts, keyboard search (/), Show and Sort; counts Listed 7 · Published 6 · Draft 1 · 14 Axal drafts by count only (⚑ Q1) · Couldn’t be read 0; cards with the job, Needs, You get, Run cost Not recorded, state and “Your 3 agents” line; the company draft says why and links the published alternative. ② Cash runway snapshot: the job, required inputs, output, steps, and every agent’s state — Tessaly Attached, Kade Can attach outside its natural fit, Vesta Blocked by mercury.read with the sponsor and Settings as recovery. One primary: Assign to agents. ③ Assign to agents lists every agent the editor manages with the same states: Tessaly locked as Attached, Kade ticked with its run-cost change, Vesta Blocked with the recovery.', [F('TMS01', '① Finance directory', 1530), F('TMS02', '② Skill page · published', 1000), C('TMS17', '③ Assign to agents', 640, 740)]],
+      ['TMS-B', 'Route B · A draft and its published alternative', 'Rolling cash flow forecast in the founder preview with Super Admin authority: Draft · no published version, Readiness Needs evaluation, why no agent can take it (version_not_published, the golden-case bar), and the published alternative in Finance as the primary action. No Assign.', [F('TMS03', '① Draft skill page', 1000)]],
+      ['TMS-C', 'Route C · An existing agent: Add skills to Vesta', 'Vesta’s role is Legal; main’s drawer said “No other skill of this role yet”. ① Every published skill Vesta can take, natural fit (Legal, Finance) first: counts 31 · 25 · 0 · 6 · 0, 2 picks in the tray, three Finance skills Blocked by mercury.read with one recovery line, other areas collapsed. ② Legal filter: a draft-only area (20 listed, 0 published) said plainly, picks kept, Show Finance as the way on. ③ Details inside the drawer and back with the selection and focus kept.', [F('TMS04', '① Drawer over the Team page', 1120), C('TMS05', '② Draft-only area · Legal', 640, 840), C('TMS06', '③ Details, then back', 640, 720)]],
+      ['TMS-D', 'Route D · New agent wizard, Skills step', '① Add an AI agent, Step 2 of 3 for Ryssa: the same rule for an agent not yet added (persona fit, the sponsor’s approved read tools); three most used of her natural fit picked; four Blocked by stripe.read with the Settings recovery; the tools step 3 will ask for; cost estimate. ② Empty-eligible: every published skill needs a tool the sponsor hasn’t approved — said, with counts and recovery, and Next reads “with no skills”.', [F('TMS07', '① Skills step', 1120), C('TMS08', '② Nothing eligible', 680, 720)]],
+      ['TMS-S', 'States', 'Loading (counts “—”), failure with retry (never “No skills”), confirmed empty area, eligibility unavailable (no Can attach shown, Add off), partial company read, read-only member, a refusal at save after a race (skill_suspended), offline with picks kept.', [C('TMS09', false, 1400, 500)]],
+      ['TMS-P', 'Phone 390', 'Route A: search “runway” in Finance and the skill page with every agent’s state. Route C: the Add skills sheet with the tray. Route D: the wizard step. Route B: the draft with its published alternative. One column, 44 px targets, the action in a bottom bar.', [P('TMS10', 'A① Directory · search'), P('TMS11', 'A② Skill page'), P('TMS12', 'C① Add skills to Vesta'), P('TMS13', 'D① Wizard · Skills'), P('TMS14', 'B① Draft and alternative')]],
+      ['TMS-K', 'Card copy, keyboard and headings', 'Final card anatomy and words, the job line before and after (routing clauses removed, ◇ for the store), the listbox keyboard model, heading structure and focus order for each surface.', [C('TMS15', false, 1400, 680)]],
+      ['TMS-H', 'Handoff', 'Checked on main with files, acceptance mapped to boards, preserved, frontend only, backend required (◇ #8768, #4536), the owner question with option A drawn, open questions.', [W('TMS16')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

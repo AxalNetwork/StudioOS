@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Operating Partner · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Operating Partner · Studio home · #8733 · audit #8689 · real-role qualification #8688</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Operating Partner Studio: open the exact engagement from the firm feed, and see every kind of alert</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/studio for a member holding the Operating Partner licence, inside the Partner Studio frame as shipped (masthead, firm line, Eadwyn, the locked profile band, then the firm tiles, the operating brief and the firm feed). Today the feed keeps the first six lines after grouping by kind, so six blocked clients hide a milestone due tomorrow and a renewal, and every action opens a whole zone. These boards keep six rows but reserve one per kind present, count every kind in chips above the rows, expand in place, and send each alert to the engagement, person or retainer it is about, with a way back to the feed and a fallback when the item is gone. Platform States (D5129): Unavailable, Not recorded and a measured 0 never look alike. Shell follows #3704; Eadwyn is the one shared rail (#5130). A violet dashed ◇ marks backend work, a grey dashed ▹ frontend-only work and an amber ⚑ an owner decision; none is product copy. Steps of each route are numbered.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked on main f66e8faa25 · [Sara Holm], [Holm &amp; Vale Partners], the clients, people, uids and amounts are fictional sample data.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home Operating Partner Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['OP-0', 'Today on main', 'Scenario B as built: six blocked engagements fill all six rows; the due milestone and the renewal are read but not shown; each action opens all of Delivery · Health; “Open the feed” also goes to Health.', [C('SOP00', false, 1200, 749)]],
+      ['OP-1', 'Studio home · a mixed week', 'Scenario A, desktop 1440: the frame, the five firm tiles and the operating brief as shipped, then the firm feed with six alerts of five kinds, each naming its client and opening that item.', [F('SOP01', false, 1798)]],
+      ['OP-2', 'Overflow · eight alerts', 'Scenario B, the audit’s test: six blocked, one milestone due tomorrow, one renewal. Six rows with one reserved per kind; kind chips count all eight; the disclosure names the two hidden.', [C('SOP02', false, 1200, 1099)]],
+      ['OP-3', 'Expanded list across kinds', 'Show all 8 alerts expands in place, grouped by kind, with each row’s destination printed for review; then one kind pressed (Renewing, Due this week).', [C('SOP03', 'A · All eight', 1200, 1181), C('SOP04', 'B · Filtered by kind', 1200, 631)]],
+      ['OP-4', 'Destinations', 'Blocked opens the engagement’s Sheet on Board; due opens Health narrowed to the engagement; over cap opens Capacity narrowed to the person; a renewal opens that retainer’s sheet. Each says where it came from and links back.', [F('SOP05', 'A · Blocked → Engagement Sheet', 573), C('SOP06', 'B · Due, over cap, renewal', 1200, 1117)]],
+      ['OP-5', 'Return, removed item, partial data', 'Back to the feed with the view kept and focus on the action used, or on the alert now in its place; an engagement, person or retainer that is gone; a read that did not answer.', [C('SOP07', 'A · Return from a detail', 1200, 1569), C('SOP08', 'B · Removed or not this firm’s', 1200, 821), C('SOP09', 'C · Partial data', 1200, 1335)]],
+      ['OP-6', 'Module states', 'Loading, unavailable with retry, confirmed empty with zero counts in words, refused in role preview, not recorded with no firm attached.', [C('SOP10', false, 1200, 793)]],
+      ['OP-7', 'Phone 390 · the route', 'Step 1 Studio top with the jump link; 2 the six-row summary; 3 Show all, then Renewing; 4 the engagement opens; 5 back on Studio with focus kept; 6 not on your board.', [P('SOP11A', '1 · Studio top'), P('SOP11B', '2 · Feed summary'), P('SOP11C', '3 · All, then Renewing'), P('SOP11D', '4 · Engagement'), P('SOP11E', '5 · Return'), P('SOP11F', '6 · Not on your board')]],
+      ['OP-8', 'Keyboard order and headings', 'The summary with its tab stops numbered, the heading outline, expansion and return focus, live regions and target sizes.', [C('SOP12', false, 1200, 876)]],
+      ['OP-H', 'Handoff', 'Checked on main with files, preserved, the one ◇ backend item, frontend only, three ⚑ owner decisions with option A drawn, and every acceptance criterion mapped to its board.', [W('SOP13')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

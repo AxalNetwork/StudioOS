@@ -446,3 +446,21 @@ test('a founder ask prefills a fixed company and writes only after confirmation'
     assert.match(view.text('va-founder-ask-receipt'), /Support recorded.*Back to the report/);
   } finally { await view.close(); }
 });
+
+test('D6215: a capital ask the Worker places on a round call records nothing and points at the call', async () => {
+  const view = await mount(desk({
+    'POST /api/portfolio-support': () => json({ error: 'ask_on_round_call', detail: 'This ask lands on a round call. Promise support on the call.', call_uid: 'call-9' }, 409),
+  }), {
+    pathname: '/portfolio/value-add',
+    state: { founderAsk: { uid: 'ask-cap', kind: 'fundraising', label: 'Capital',
+      updateUid: 'u2', text: 'Funds that lead', projectUid: 'northwind', reportKey: '1' } },
+  });
+  try {
+    await view.submit('va-log-support');
+    await view.submit('va-log-support');
+    assert.match(view.text('va-form-error'), /lands on a round call, so nothing was recorded here/);
+    assert.match(view.text('va-founder-ask-call'), /Open the round call/);
+    assert.ok(view.hrefs().includes('/round-calls/call-9'));
+    assert.equal(view.all('va-founder-ask-receipt').length, 0);
+  } finally { await view.close(); }
+});

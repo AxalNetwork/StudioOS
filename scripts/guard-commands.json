@@ -150,6 +150,14 @@
     ]
   },
   {
+    "id": "stripe-idempotency",
+    "command": [
+      "node",
+      "scripts/build-stripe-inventory.mjs",
+      "--check"
+    ]
+  },
+  {
     "id": "check-regulated-wording",
     "command": [
       "node",
@@ -193,6 +201,13 @@
     ]
   },
   {
+    "id": "check-ai-gateways",
+    "command": [
+      "node",
+      "scripts/check-ai-gateways.mjs"
+    ]
+  },
+  {
     "id": "check-scanner-ignore-parity",
     "command": [
       "node",
@@ -229,6 +244,14 @@
     ],
     "requires": [
       "generated"
+    ]
+  },
+  {
+    "id": "coverage-matrix",
+    "command": [
+      "node",
+      "scripts/ci/coverage-matrix.mjs",
+      "--check"
     ]
   },
   {
@@ -450,6 +473,17 @@
       "--import",
       "./cloudflare-worker/test/_ts-loader.mjs",
       "scripts/check-skill-library.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-model-inventory",
+    "command": [
+      "node",
+      "scripts/build-model-inventory.mjs",
+      "--check"
     ],
     "requires": [
       "generated"

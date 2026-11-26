@@ -222,6 +222,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['facebook_page_links', 'p', 'cascade'],
   ['facebook_proposals', 'p', 'cascade'],
   ['filing_reminder_deliveries', 'p', 'left'],
+  ['filing_reminder_event_deliveries', 'c', 'company'],
   ['financial_events', 'pc', 'left'],
   ['financial_models', 'p', 'cleanup'],
   ['financial_statement_pins', 'p', 'cascade'],
@@ -293,6 +294,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['okr_dependencies', 'p', 'left'],
   ['outreach_sequences', 'p', 'cascade'],
   ['pain_group_aliases', 'p', 'cascade'],
+  ['pain_grouping_proposals', 'p', 'cascade'],
   ['pain_groups', 'p', 'cascade'],
   ['perks', 'c', 'company'],
   ['pitch_deck_proposals', 'p', 'cleanup'],
@@ -396,6 +398,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['spinout_lab_enrollment_events', 'p', 'left'],
   ['spinout_lab_enrollments', 'p', 'left'],
   ['stage_norms', 'p', 'cascade'],
+  ['swarm_admission_events', 'c', 'company'],
   ['task_comments', 'p', 'refuses'],
   ['task_labels', 'p', 'refuses'],
   ['task_milestones', 'p', 'refuses'],
@@ -450,10 +453,12 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['work_graph_holds', 'c', 'company'],
   ['work_graph_integrity_events', 'c', 'company'],
   ['work_graph_lease_events', 'pc', 'left'],
+  ['work_graph_media_uploads', 'c', 'company'],
   ['work_graph_release_attestations', 'c', 'company'],
   ['work_graph_release_authority_events', 'c', 'company'],
   ['work_graph_release_decisions', 'pc', 'left'],
   ['work_graph_release_deliveries', 'c', 'company'],
+  ['work_graph_release_line_names', 'c', 'company'],
   ['work_graph_release_lines', 'pc', 'left'],
   ['work_graph_release_manifests', 'pc', 'left'],
   ['work_graph_release_takedowns', 'pc', 'left'],
@@ -582,6 +587,7 @@ export const VENTURE_SPACE_STORES: readonly Store[] = Object.freeze([PROJECTS, .
  */
 export const NOT_STORES: Readonly<Record<string, string>> = Object.freeze({
   'refused/': 'a key name recorded on a refused draw; no object is written under it',
+  'projects/': 'a Google Cloud resource name (projects/{gcp project}/locations/…/jobs/…) the Cloud Run Jobs adapter builds from operator config (D5571 part 2); not a storage key, and its project is a GCP project, not a venture',
 });
 
 /** The D1 tables a schema says must be listed (a `project_id` or `company_id` column) that the inventory lacks. */

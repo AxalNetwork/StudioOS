@@ -2451,6 +2451,16 @@ const studioos = {
             taskFailed('grow daily', e instanceof Error ? e.message : 'error');
           }
         }
+        // D6039: filing reminders use the scheduled UTC day and claim each delivery.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 35) {
+          try {
+            const { sendFilingReminders } = await import('./services/filingReminders');
+            const sent = await sendFilingReminders(env, now.toISOString().slice(0, 10));
+            if (sent) cronSummary.push(`filing reminders sent=${sent}`);
+          } catch (e) {
+            taskFailed('filing reminders', e instanceof Error ? e.name : 'error');
+          }
+        }
         // D1539 (#3789) — the deck card blob prune: a blob no version names,
         // first written over an hour ago, goes (at most 500 a run).
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
@@ -3504,6 +3514,8 @@ export { AiGovernor } from './durable-objects/ai-governor';
 export { DeckRemote } from './durable-objects/deck-remote';
 // D5581 part 2 (#5581): WorkGraph leases, bound as WORK_GRAPH_LEASE; kept apart from #5618's Merge Control.
 export { WorkGraphLease } from './durable-objects/work-graph-lease';
+// D5586 part 3 (#5586): #5570's admission coordinator, bound as WORKSPACE_ADMISSION.
+export { WorkspaceAdmission } from './durable-objects/workspace-admission';
 
 // D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Investor · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Studio home · Investor · #8731 · role audit 26 Nov (#8727 to #8733) · continues Investor Studio Home v2 (IHS)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor Studio: the Funds and Usage &amp; quota cards each say where they go, and go there</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Two cards on /studio for a member holding the Investor licence: Funds (fund_commitment) and Usage &amp; quota (usage_quota). Today the no-commitment card says “See Axal Fund I” and opens /funds, which is the GP back office (“Run my fund”) or its locked Institutional surface; Usage &amp; quota says “Open account” and opens Pricing. Proposed: every card state has one action whose label names the heading it opens — Axal VC Fund › Fund and terms, Axal VC Fund › My commitment (opening it links an unlinked commitment, as the LP portal read already does), or Pricing › Investor. Drawn for three fixtures (LP only, GP only, LP and GP) at 1440 and 390 with numbered steps and Back, plus unavailable, loading and the administrator preview, which still withholds both cards. The look, shell (#3704) and tiles are Investor Studio Home v2’s; Eadwyn stays the one rail. A violet dashed ◇ marks backend work and an amber ⚑ an owner decision, drawn as option A; neither is product copy, nor are the grey dashed → destination tags.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main f66e8faa25 · [Lena Sato], [Sato Ventures], [Sato Ventures Fund I], plan prices and every amount are fictional; Axal Fund I is named as the brief names it</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home Investor Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SIV-0', 'Routes, fixtures and the label table', 'Every card state with its label and destination heading today and proposed, the source line on main, and the six numbered routes the boards follow.', [W('SIV00')]],
+      ['SIV-1', 'Before · source-confirmed on main', 'Each card beside the heading it opens today. “See Axal Fund I” lands on Run my fund or the locked Institutional surface; “Open the LP workspace” names a heading nobody sees; “Open account” lands on Pricing, beside a second Compare plans link.', [C('SIV01', false, 1200, 1071)]],
+      ['SIV-2', 'Funds card · every state', 'A no commitment → See Axal VC Fund terms (⚑ Q1, A drawn). B needs linking → Link my commitment. C linked and D linked with one more under the email → Open My commitment, one action. E unavailable with Try again and no link, F loading, G administrator preview.', [C('SIV02', false, 1200, 1100)]],
+      ['SIV-3', 'Destination headers', 'What each label opens: Axal VC Fund › Fund and terms, › My commitment after linking, › My commitment, and its Unreadable state; Pricing › Investor (⚑ Q2 A) and Usage (Q2 B, with what it lacks). Run my fund is never a destination of these cards.', [C('SIV03', false, 1200, 1366)]],
+      ['SIV-4', 'LP only · desktop', 'Step 1 the linked Funds card on Studio, steps 2 and 3 Axal VC Fund with My commitment focused, step 4 Back to Studio.', [F('SIV04', '1 · Studio', 1060), F('SIV05', '2–4 · Axal VC Fund › My commitment', 685)]],
+      ['SIV-5', 'GP only · desktop', 'No LP commitment: the card says so, notes a fund you run is under Fund, and opens the fund brief. Steps 2 and 3 land on Axal VC Fund › Fund and terms with the invitation standing.', [F('SIV06', '1 · Studio', 991), F('SIV07', '2–4 · Axal VC Fund › Fund and terms', 735)]],
+      ['SIV-6', 'LP and GP · desktop', 'The card lists the Axal Fund I commitment only (lp_holdings), opens My commitment; Fund in the sidebar still opens Run my fund for their own fund.', [F('SIV08', false, 1141)]],
+      ['SIV-7', 'Usage &amp; quota', 'The card shows plan quotas, so it opens plans: Compare investor plans → Pricing › Investor (⚑ Q2, A drawn). Plan status unreadable, both reads failed, loading, not the investor account and preview. Option B, Open usage, needs the quotas on Usage first (◇).', [C('SIV09', false, 1200, 1025)]],
+      ['SIV-8', 'Administrator preview (HQ)', 'Preserved: every investor tile withheld, no link drawn, Customise offered.', [F('SIV10', false, 685)]],
+      ['SIV-9', 'Phone 390 × 844', 'R1 LP only: 1 Funds and Usage, 3 Axal VC Fund › My commitment with ‹ Studio. R2 and R3: no commitment and needs linking, 3 Fund and terms. R4: Usage ready and partial, 3 Pricing › Investor. R6: Funds and Usage unreadable, and the destination’s own Retry.', [P('SIV11', '1 · LP only, Studio'), P('SIV12', '3 · My commitment'), P('SIV13', '1 · No commitment, needs linking'), P('SIV14', '3 · Fund and terms'), P('SIV15', '1 · Usage ready and partial'), P('SIV16', '3 · Pricing › Investor'), P('SIV17', 'Unreadable')]],
+      ['SIV-10', 'Dark', 'The Funds states and the Usage &amp; quota board on the dark tokens; words and glyphs unchanged.', [C('SIV18', 'Funds', 1200, 784), C('SIV19D', 'Usage &amp; quota', 1200, 1025)]],
+      ['SIV-11', 'Headings and focus order', 'Studio and each destination: h1, the section the hash names becoming a focused h2, the one card link, Try again, ‹ Studio first on phone.', [C('SIV19', false, 1200, 490)]],
+      ['SIV-12', 'Engineering handoff', 'Checked on main with files, acceptance mapped to boards, ⚑ Q1 and Q2 with option A drawn and the fund-name question, frontend-only work, and ◇ (none for option A).', [W('SIV20')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Feature to Evidence · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · #8775 · continues Build v2 (#4846)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Carry one validated feature from evidence to a named builder, a Lovable prototype, a dated test and proof the founder can accept for Pitch</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">One continuous founder path across Solution design, Prototype / MVP, Lovable, Progress and Raise › Evidence, in the Build v2 shell. The feature stays one record: making it a must-have keeps its pain theme, hypothesis, success bar and project. An empty owner list says why and offers the project team, an invite, an agent with a person reviewing, or no owner. Prepared, Sent, Returned, Tested and Accepted are different words with different sources; a linked address never makes anything Tested. Every stop says whether the work is in Axal, leaves Axal, or lives outside it. States follow Platform States (D5129): a failed read says Unavailable. One primary action per screen. Eadwyn is the shared rail (#5130). Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner’s three questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · [Atlas Orchard], [Maya Ruiz], [Noah Brandt], [Iris Chen], [Theo] and every feature, figure, address and date are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build Feature to Evidence Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BLV-00', 'Journey', 'The seven steps on desktop and 390, where the work is at each (in Axal, leaves Axal, outside Axal), what records each step on main, and the words for each state of the work with what certifies it.', [W('BLV00')]],
+      ['BLV-01', 'Step 1 · the first feature', 'Build overview with one primary: Make [Customer intake form] a must-have, the Worker’s focus. The figure strip and the feature’s trail from evidence to pitch, each stop with where the work is.', [F('BLV01', false, 1040)]],
+      ['BLV-02', 'Step 2 · make it a must-have', 'A · The feature record: the evidence it carries (P1, 14 quotes, H2 and its success bar, project) and Carry it forward with Make it a must-have and Add to roadmap. B · The review: what is carried and not typed again, what you add, the roadmap link, and what the write does. C · Prototype / MVP after the promotion, with Choose a builder next.', [F('BLV02', 'A · Feature record', 1180), C('BLV02B', 'B · Make it a must-have', 720, 760), F('BLV03', 'C · On Prototype / MVP', 1040)]],
+      ['BLV-03', 'Step 3 · builder and reviewer', 'A · The empty owner list explained: owners are company members and the company has none linked; four ways forward. B · Option A: the project team and its agents, with a person as reviewer. C · An agent builds, a person reviews, and what stays with the person.', [F('BLV04', 'A · No one to choose', 1080), F('BLV05', 'B · Project team', 1080), F('BLV05B', 'C · Agent with a reviewer', 1080)]],
+      ['BLV-04', 'Step 4 · the brief leaves Axal', 'A · Build in Lovable in main’s words, with a strip that says when the work leaves Axal and where it lives after. B · The privacy check refuses the prompt; Copy and Open wait. C · Sent: the brief is out, the prototype lives in Lovable, and the link box waits.', [F('BLV06', 'A · Edit and open', 1180), F('BLV06B', 'B · Privacy refusal', 1180), F('BLV07', 'C · Sent, waiting', 1080)]],
+      ['BLV-05', 'Steps 5 and 6 · back in, then tested', 'A · The prototype is linked and live-checked; Returned is not tested. B · Record the test: a done session and a finding that supports H2; the Tested rule main already uses.', [F('BLV08', 'A · Returned', 1140), F('BLV09', 'B · Record the test', 1120)]],
+      ['BLV-06', 'The accepted plan, qualified', 'Progress for the accepted item: each stage with its source, Not recorded where nothing reports it, and the chain from evidence to a deliverable address and a dated test result.', [F('BLV10', false, 1080)]],
+      ['BLV-07', 'Step 7 · offer the proof to Pitch', 'A · Raise › Evidence › Waiting for review: the prototype test with its provenance beside a must-have that exists today; Accept or Dismiss per item. B · On a Pitch slide: the accepted proof as a source, placed only by the founder’s Save.', [F('BLV11', 'A · Waiting for review', 1180), C('BLV11B', 'B · Pitch deck sources', 1100, 250)]],
+      ['BLV-08', 'States, read only and the manual path', 'A · Loading, Unavailable reads, pending evidence, the prompt over its limit, an address that did not answer, waiting for the prototype. B · Super Admin preview, read only, no write control drawn. C · No team member and no external tool: the same path reaches Pitch.', [C('BLV12', 'A · States', 1400, 570), F('BLV13', 'B · Read only', 1060), F('BLV14', 'C · No team, no Lovable', 1120)]],
+      ['BLV-09', 'Phone 390 · the first-task path', 'Six numbered steps: the first feature, make it a must-have, who builds it, the Lovable brief at full height, bring it back then test, offer the proof. Targets 44px, primaries 48px.', [P('BLV20', '1 · First feature'), P('BLV21', '2 · Must-have'), P('BLV22', '3 · Who builds it'), P('BLV23', '4 · Lovable brief'), P('BLV24', '5 · Back in, test'), P('BLV25', '6 · Offer to Pitch')]],
+      ['BLV-10', 'Dark', 'The qualified chain on the dark tokens; every state keeps its word and glyph.', [F('BLV30', false, 1080)]],
+      ['BLV-11', 'Findings and handoff', 'What main does today, file by file; the acceptance items mapped to boards; frontend, Worker field and new Worker work; the owner’s three questions; accessibility.', [W('BLV40')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
