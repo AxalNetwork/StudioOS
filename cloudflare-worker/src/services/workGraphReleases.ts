@@ -602,8 +602,26 @@ export interface ComponentState extends ManifestComponent {
    */
   reasons: ('superseded' | 'input_changed' | 'tombstoned' | 'repinned' | 'taken_down')[];
   missingAttestations: Requirement[];
+  /**
+   * Part 14 (D5585-p14): the attestations that count for this piece, the ones recorded at its pinned digest, oldest
+   * first. An attestation of another revision or another digest is not here. `userId` is the person who attested, or
+   * the person an agent run (a CI check) acted for.
+   */
+  attestations: ComponentAttestation[];
   /** Part 12: whether this piece, when it is a render, meets `render_admitted`; null when it is not a render. */
   render: RenderAdmission | null;
+}
+/** Part 14: one attestation of a pinned piece, at its pinned digest. */
+export interface ComponentAttestation {
+  id: number;
+  requirement: Requirement;
+  /** Where the evidence lives (a PR and commit, a CI run, a rights record): ids only, as recorded. */
+  evidenceRef: string;
+  authority: string | null;
+  actorKind: 'person' | 'agent';
+  userId: number;
+  agentRunId: string | null;
+  at: string;
 }
 /** Part 12: one pinned render that does not meet `render_admitted`, with #5586's own reason. */
 export interface RenderGap extends RenderAdmission { asset: string; revision: string; role: string; gap: NonNullable<RenderAdmission['gap']> }
@@ -721,9 +739,14 @@ export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseConte
         AND d.head_revision_uid IS NOT e.to_revision_uid`,
   ).bind(JSON.stringify(revs)));
   const staleSet = new Set(stale.map((s) => s.from_revision_uid));
-  const atts = await m.all<{ revision_uid: string; digest: string; requirement: Requirement }>(env.DB.prepare(
-    `SELECT DISTINCT revision_uid, digest, requirement FROM work_graph_release_attestations
-      WHERE tenant_id = ? AND company_id = ? AND revision_uid IN (SELECT value FROM json_each(?))`,
+  const atts = await m.all<{
+    id: number; revision_uid: string; digest: string; requirement: Requirement; evidence_ref: string; authority: string | null;
+    actor_kind: 'person' | 'agent'; actor_user_id: number; agent_run_id: string | null; created_at: string;
+  }>(env.DB.prepare(
+    `SELECT id, revision_uid, digest, requirement, evidence_ref, authority, actor_kind, actor_user_id, agent_run_id, created_at
+       FROM work_graph_release_attestations
+      WHERE tenant_id = ? AND company_id = ? AND revision_uid IN (SELECT value FROM json_each(?))
+      ORDER BY created_at, id`,
   ).bind(man.tenant_id, man.company_id, JSON.stringify(revs)));
 
   let status: ComponentStatus = 'current';
@@ -746,10 +769,15 @@ export async function evaluate(env: Pick<Env, 'DB'>, m: Meter, ctx: ReleaseConte
     }
     if (downRevs.has(c.revision)) reasons.push('taken_down');
     status = worse(status, s);
-    const have = new Set(atts.filter((a) => a.revision_uid === c.revision && a.digest === c.digest).map((a) => a.requirement));
+    const counted = atts.filter((a) => a.revision_uid === c.revision && a.digest === c.digest);
+    const have = new Set(counted.map((a) => a.requirement));
     const missingAttestations = [...new Set(c.profiles.flatMap((p) => POLICY_PROFILES[p].requirements))].filter((q) => !have.has(q));
+    const attestations: ComponentAttestation[] = counted.map((a) => ({
+      id: Number(a.id), requirement: a.requirement, evidenceRef: a.evidence_ref, authority: a.authority ?? null,
+      actorKind: a.actor_kind, userId: Number(a.actor_user_id), agentRunId: a.agent_run_id ?? null, at: a.created_at,
+    }));
     const render = r ? renderAdmissionOf(r, ctx.renderAdmissions) : null;
-    return { ...c, headRevisionUid: r?.head_revision_uid ?? null, status: s, reasons, missingAttestations, render };
+    return { ...c, headRevisionUid: r?.head_revision_uid ?? null, status: s, reasons, missingAttestations, attestations, render };
   });
   const renderGaps = renderGapsFrom(body.components, now, ctx);
 
