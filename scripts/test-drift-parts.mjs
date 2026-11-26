@@ -14,6 +14,7 @@
  * the current package command with explicit files. No node count sharding.
  * --list prints names only; local npm run test:drift remains unchanged.
  * --plan --equal-weights reads no timings file (D7108 part 2: merge_group).
+ * D8693: every plan ci.yml writes, on every event, is `--plan --equal-weights`.
  *
  * D6464 (#6464): under merge_group only, a node:test command also writes its
  * failed tests (lib/failedTestsReporter.mjs). When it fails and every failed

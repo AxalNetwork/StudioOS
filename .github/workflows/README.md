@@ -330,6 +330,10 @@ D5609 (#5609): `ci.yml` and `github-alerts.yml` consume generated suite-plan
 artifacts and compact name outputs. Missing main timings use equal weights.
 D7108 part 2: in the merge queue `ci.yml` runs no `plan` job; each suite part
 writes the equal-weight plan itself (`--plan --equal-weights`) from its commit.
+D8693: off the queue, `ci.yml`'s `plan` job (and the runner benchmark's copy of
+it) writes that same equal-weight plan, so a push's `suite-plan` artifact holds
+the files of each hosted part of the same name. Only the future-clock plan in
+`github-alerts.yml` still reads main timings.
 
 D5675: the meeting-bot deploy verifies the exact deployed preview revision and signed synthetic callback before normal production promotion; missing preflight stops promotion.
 `release-rehearsal.yml` (D5501) checks release admission fixtures and profiles

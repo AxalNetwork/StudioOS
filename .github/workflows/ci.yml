@@ -162,7 +162,10 @@ jobs:
   # D7108 part 2 (#7108): never in the merge queue. There the part list is
   # always the full nine (prTier), so `suite` lists it literally and each part
   # computes the same equal-weight plan from its own checkout: no runner hop
-  # before the matrix. On a pull request and a push this job is unchanged.
+  # before the matrix. D8693 (#8693): on a pull request and a push this job
+  # writes that same equal-weight plan, so its `suite-plan` artifact (what the
+  # capacity pilot submits, the planner checks and a delegated Worker shard
+  # runs) holds, part for part, the files of the hosted part of the same name.
   plan:
     name: suite plan
     needs: verified
@@ -180,18 +183,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
-      - name: Newest main timing artifact, or equal weights
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
           parts=$(node --input-type=module -e '
             import { tierFor } from "./scripts/lib/prTier.mjs";
             const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
@@ -476,8 +474,8 @@ jobs:
   # parts' traces. Advisory: neither `landing` nor `gate` needs it, so its
   # failure never blocks a merge. It runs in the queue on purpose, because a
   # push that `verified` skips has no traces of its own: the queue run on the
-  # same SHA carries them (a pull request's `plan` job reads its
-  # test-timings.json; the queue plans with equal weights, D7108 part 2).
+  # same SHA carries them (github-alerts' future-clock plan reads its
+  # test-timings.json; every ci.yml plan is equal-weight, D8693).
   test-deps:
     name: test deps
     needs: suite
