@@ -14,6 +14,8 @@
 -- The owner approved the rebuild on 2026-11-26. Nothing writes the table yet (no caller mounts the coordinator's
 -- audit copy), so it holds no rows in production. The copy in step 2 keeps whatever a preview database holds. Rollback
 -- reverts the Worker: the wider CHECK accepts every row the narrower one did.
+--
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611260840_5585_swarm_admission_events_render_codes.fix.sql
 
 CREATE TABLE IF NOT EXISTS swarm_admission_events_next (
   tenant_id INTEGER NOT NULL CHECK (tenant_id >= 0),

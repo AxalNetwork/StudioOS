@@ -6,7 +6,10 @@
 -- on insert. A CHECK on an added column cannot read the other columns of an existing table without a rebuild.
 --
 -- Additive: one nullable column and one trigger. No row is written or changed. The table stays append-only through
--- its existing triggers. Rollback reverts the Worker; the column stays and is read by nothing.
+-- its existing triggers. Rollback reverts the Worker; the column stays and is read by nothing. A rolled-back Worker
+-- would write render approvals without a ceiling, which the trigger refuses: the forward fix drops the trigger.
+--
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611260837_5585_release_render_ceiling.fix.sql
 
 ALTER TABLE work_graph_release_decisions ADD COLUMN render_ceiling_microusd INTEGER
   CHECK (render_ceiling_microusd IS NULL OR render_ceiling_microusd > 0);
