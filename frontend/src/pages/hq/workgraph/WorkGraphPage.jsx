@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../../ui';
 import { adminWorkgraphApi } from '../../../lib/api/adminWorkgraph.js';
+import AdminBoardFrame from '../../admin/AdminBoardFrame';
 import {
   TABS, tabOf, ACTIONS, actionOf, RISK_CLASSES, riskClassOf, NOT_RECORDED, sourceLabel, scanTime, scanStamp, ageWords,
   pageState, workOf, summary, countWords, pairGroups, conflictWords, hunkWords, mergeWords, checksWords, queueWords, baseWords,
@@ -59,7 +60,12 @@ function useInFlight() {
 export default function WorkGraphPage() {
   const { pathname } = useLocation();
   const { read, error, reload } = useInFlight();
-  return <WorkGraphView tab={tabOf(pathname)} state={pageState(read, error)} onRetry={reload} />;
+  // The WorkGraph canvas (WG-01) docks Eadwyn's rail beside the three tabs; the frame is the page's outermost element.
+  return (
+    <AdminBoardFrame workspace="WorkGraph" note="Eadwyn reads the WorkGraph scan on this page. Nothing here blocks, labels or merges." data-testid="hq-workgraph-frame">
+      <WorkGraphView tab={tabOf(pathname)} state={pageState(read, error)} onRetry={reload} />
+    </AdminBoardFrame>
+  );
 }
 
 const Ext = ({ href, children, className = '' }) => (href
