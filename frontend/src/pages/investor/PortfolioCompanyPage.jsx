@@ -231,6 +231,16 @@ function CompanyWorkspace({ uid, tab }) {
   // D4817 part 9: which Ask or Waive is open, and on which period; who may act is the company read's.
   const [act, setAct] = useState(null);
   const access = accessOf(reads.owed.state === 'ok' ? reads.owed.value : null);
+  // D4818 part 3: an Ask or Waive re-reads the company, which replaces the
+  // control the Sheet would give focus back to; focus goes to the obligation
+  // card that now carries the record (or the read's Retry) instead of the page.
+  const actedOn = useRef(false);
+  useEffect(() => {
+    if (!actedOn.current || reads.owed.state === 'loading' || typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+    actedOn.current = false;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    document.querySelector('[data-testid="report-obligation"], [data-testid="report-obligation-none"], [data-testid="button-retry-company-owed"]')?.focus?.();
+  }, [reads.owed]);
 
   // The old Terms address: replaced by Financials, at Ownership & rights, keeping the query.
   const terms = tab === 'terms';
@@ -271,7 +281,7 @@ function CompanyWorkspace({ uid, tab }) {
           <p className="pf-co-route" data-testid="company-reports-route">{holding.text}{holding.own ? ` · ${holding.own}` : ''}</p>
           {ownedBlock((c) => (
             <>
-              <ReportAsk company={c} access={access} act={act} setAct={setAct} onChanged={() => retry('owed')} />
+              <ReportAsk company={c} access={access} act={act} setAct={setAct} onChanged={() => { actedOn.current = true; retry('owed'); }} />
               <Timeline company={c} onChanged={() => retry('owed')} onAct={(kind, periodUid) => setAct({ kind, uid: periodUid })} canAct={access.can} />
             </>
           ), 'The reports owed to you', 'company-owed-none')}

@@ -21,7 +21,9 @@ import './reportAsk.css';
  *      confirm, which names the act, the company and the period.
  *   3. Receipt: what the Worker stored, from its answer alone. A refusal keeps
  *      the Review open, with the company and period still chosen, and shows
- *      the Worker's own sentence and code.
+ *      the Worker's own sentence and code. The Review and the Receipt are one
+ *      Sheet swapping its view, so `focusKey` moves focus into the Receipt
+ *      (D4818 part 3) rather than leaving it on the confirm that went away.
  *   4. Afterwards the company is read again, and the period reads as asked or
  *      waived from that read — who and when — never from the press.
  *
@@ -46,7 +48,7 @@ function Facts({ rows, testid }) {
 export function ReportObligation({ company, period, access, onAct, others = 0 }) {
   if (!period) {
     return (
-      <section className="pf-card" data-testid="report-obligation-none">
+      <section className="pf-card" tabIndex={-1} data-testid="report-obligation-none">
         <h2 className="pf-h2">Reporting obligation</h2>
         <p className="pf-note">No period is open: every period owed to you so far was received or waived. Nothing is due to ask for.</p>
       </section>
@@ -55,7 +57,7 @@ export function ReportObligation({ company, period, access, onAct, others = 0 })
   const o = obligationOf(company, period);
   const can = actionsOf(period, access);
   return (
-    <section className="pf-card pf-ask-card" aria-labelledby={`pf-ask-${period.uid}`} data-testid="report-obligation">
+    <section className="pf-card pf-ask-card" tabIndex={-1} aria-labelledby={`pf-ask-${period.uid}`} data-testid="report-obligation">
       <div className="pf-card-head">
         <h2 className="pf-h2" id={`pf-ask-${period.uid}`}>{o.title}</h2>
         <Pill pill={o.pill} testId="report-obligation-pill" />
@@ -101,7 +103,7 @@ export function ReportActionSheet({ kind, company, period, onClose }) {
   if (step === 'receipt') {
     const r = receiptOf(kind, answer, company, period);
     return (
-      <Sheet label={r.title} eyebrow={`Receipt · ${company?.name || 'Company'}`} title={r.title} onClose={close} width={520} phone="sheet" testId="report-receipt"
+      <Sheet label={r.title} eyebrow={`Receipt · ${company?.name || 'Company'}`} title={r.title} onClose={close} width={520} phone="sheet" testId="report-receipt" focusKey={step}
         footer={<div className="pf-ask-foot"><button type="button" className="pf-btn is-primary" onClick={close} data-testid="report-receipt-done">Done</button></div>}>
         <div className="pf-ask-body">
           <p className="pf-ask-step">Step 2 of 2 · Receipt</p>
@@ -113,7 +115,7 @@ export function ReportActionSheet({ kind, company, period, onClose }) {
     );
   }
   return (
-    <Sheet label={review.title} eyebrow={`Review · ${company?.name || 'Company'} · ${periodWord(period?.label)}`} title={review.title} onClose={close} width={520} phone="sheet" testId={`report-review-${kind}`}
+    <Sheet label={review.title} eyebrow={`Review · ${company?.name || 'Company'} · ${periodWord(period?.label)}`} title={review.title} onClose={close} width={520} phone="sheet" testId={`report-review-${kind}`} focusKey={step}
       footer={(
         <div className="pf-ask-foot">
           <button type="button" className="pf-btn" onClick={close} disabled={busy} data-testid="report-review-cancel">Cancel</button>
