@@ -458,6 +458,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['work_graph_release_authority_events', 'c', 'company'],
   ['work_graph_release_decisions', 'pc', 'left'],
   ['work_graph_release_deliveries', 'c', 'company'],
+  ['work_graph_release_line_names', 'c', 'company'],
   ['work_graph_release_lines', 'pc', 'left'],
   ['work_graph_release_manifests', 'pc', 'left'],
   ['work_graph_release_takedowns', 'pc', 'left'],
