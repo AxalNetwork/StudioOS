@@ -328,7 +328,7 @@ const jobDigest=job=>createHash('sha256').update(JSON.stringify(job)).digest('he
 test('D7909 literal pinned caller leaves the ordinary hosted graph and queue matrix independent',()=>{
  const current=yaml(readFileSync('.github/workflows/ci.yml','utf8')),caller=current.jobs['capacity-submit'];
  // D8335 (#8335): a main commit. The first pin (19927c89) lived only on the merged branch and stopped resolving when it was deleted.
- assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@cb63d3997d5770892934932b3c7a534485a8a875');
+ assert.equal(caller.uses,'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@3d41671dfe12dee4d5872e8909fe920041069a88');
  assert.equal(caller.needs,'plan');assert.equal(caller.permissions['id-token'],'write');
  for(const guard of ["github.event_name == 'push'","github.event_name != 'merge_group'","vars.CI_CAPACITY_ENABLED == 'true'","github.repository == 'AxalNetwork/StudioOS'","needs.plan.outputs.capacity_submission != ''"])assert.ok(caller.if.includes(guard),guard);
  for(const [name,digest] of Object.entries(BASE_JOB_DIGESTS)){
@@ -339,10 +339,9 @@ test('D7909 literal pinned caller leaves the ordinary hosted graph and queue mat
  assert.equal(caller.with.submission,'${{ needs.plan.outputs.capacity_submission }}');
  assert.equal(caller.with.executor_sha,'${{ vars.CI_CAPACITY_EXECUTOR_SHA }}');
  assert.equal(caller.with.child_workflow_sha,'${{ vars.CI_CAPACITY_CHILD_WORKFLOW_SHA }}');
- // D8335: the pin names a main commit, so a planner change lands first and its pin moves in a later PR. The pin
- // cb63d399 holds blob 4f7dfaca (the first pin, 19927c89, held the same). D8626 prepares the next revision below: it
- // adds the merge-queue gate and the `accepted` output. Until the pin moves to the commit that lands it, both
- // callers run 4f7dfaca, which submits on main pushes only, so a queue candidate's `accepted` stays unset.
+ // D8335: the pin names a main commit, so a planner change lands first and its pin moves in a later PR. D8626's
+ // revision (the merge-queue gate and the `accepted` output) landed in #8658 as 3d41671d, which holds blob 40b0b0fa,
+ // the same bytes as the planner below; both callers pin it. The earlier pin, cb63d399, held 4f7dfaca.
  assert.equal(execFileSync('git',['hash-object','.github/workflows/capacity-planner.yml'],{encoding:'utf8'}).trim(),'40b0b0fa262c0ee6a9161176e609effe57ed9950','the prepared planner is the reviewed D8626 revision');
  assert.equal(current.jobs['capacity-route'].uses,caller.uses,'the queue caller pins the same reviewed planner as the push caller');
  const config=readFileSync('wrangler.merge-control.toml','utf8');
