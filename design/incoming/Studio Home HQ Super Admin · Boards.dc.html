@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home HQ Super Admin · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ › Home · Studio Home by profile · #8727 · audit #8689 · qualification #8688</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ home for the Super Admin on duty: escalations first, a pending read is never a failure, and each source retries on its own</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">HQ home is the Super Admin’s first screen (/hq). It keeps the shipped HQ shell, the rose scope bar, the tiles, the subsidiary cards and the licensing feed, and changes the order and the reads: the h1 is “HQ home”, the first section asks “What needs my attention?”, escalations are read on their own (GET /api/admin/escalations?status=open, already on main) beside the overview, and each source has its own Reading, value, All clear and Unavailable state with its own Try again. The same first viewport is drawn for a pending read, a confirmed zero, two escalations and a failed read, with the other indicators usable in each. The path from an escalation to its existing destination, HQ Support’s Queue, is numbered ① ② ③. Work, which is not switched on, sits last with one sentence and no filters. States follow Platform States (D5129): Unavailable is never drawn as 0, and every state has a word and a glyph. Grey dashed boxes are annotations (announcements); the violet dashed ◇ tag marks the one proposed Worker change; amber ⚑ tags mark owner picks, option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026, 09:14 UTC · checked against main f66e8faa25 · every person ([Iris Chen], [Camille Durand], [Tom Becker]), subsidiary, branch code and figure (6 licences, 1,450 seats, 2 escalations) is bracketed and fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home HQ Super Admin Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SHQ00', 'The whole page · two escalations · desktop 1440', 'Scope bar, h1 HQ home, What needs my attention? (escalations and other signals), Platform, Subsidiary health, Licensing events, and My tasks last: Work is not switched on, one sentence, no Show or Due filters (⚑ Q1).', [F('SHQ00', false, 1800)]],
+      ['SHQ01', 'First viewport × 4 · desktop 1440', 'The same first viewport for the four escalation results. The overview has loaded in each, so the other signals and the Platform tiles stay usable. ① an escalation row and ② Answer on Support start the route to Support.', [F('SHQ01', 'Pending · Reading the escalations…', 900), F('SHQ02', 'Confirmed zero · All clear (⚑ Q2)', 900), F('SHQ03', 'Two escalations · ① row ② Answer on Support', 900), F('SHQ04', 'Failed read · Unavailable, Try again, announced once', 900)]],
+      ['SHQ05', 'Cold load, slow, failure → retry · desktop 1440', 'Cold load (both reads pending, no disabled switcher); escalations slow at 8 s; Try again reads only the escalation card; it succeeds or fails again (alert after the action); and the other direction: the overview failed while escalations stayed current, shown by branch code.', [F('SHQ05', 'Cold load · both reads pending', 900), F('SHQ05B', 'Slow · still reading at 8 s', 900), F('SHQ06', 'Retry · only this card reads again', 900), F('SHQ06B', 'Retry succeeded', 900), F('SHQ06C', 'Retry failed · alert after the action', 900), F('SHQ06D', 'Overview failed · escalations unaffected', 900)]],
+      ['SHQ07', '③ The destination · HQ Support Queue · desktop 1440', 'The existing Support page (D5034) on its default Queue tab: Action required and HQ escalations in SLA bands. ③ Review opens the existing decision sheet (D205); nothing is answered from Home.', [F('SHQ07', '③ Review on Support', 900)]],
+      ['SHQ10', 'Phone 390', 'The same order at 390 with 44 px targets: pending, confirmed zero, two escalations (① row ② Answer on Support), failed, retrying, cold load, slow, and ③ Support’s Queue.', [P('SHQ10', 'Pending'), P('SHQ10B', 'Confirmed zero · All clear'), P('SHQ10C', '① ② Two escalations'), P('SHQ10D', 'Failed · Try again'), P('SHQ10E', 'Retrying this card'), P('SHQ10F', 'Cold load'), P('SHQ10G', 'Slow · 8 s'), P('SHQ10H', '③ Support · Queue')]],
+      ['SHQ12', 'Dark · desktop 1440', 'SHQ03 on the dark tokens: every state keeps its word, glyph and border.', [F('SHQ12', false, 900)]],
+      ['SHQ20', 'Headings, keyboard order and announcements', 'The heading outline, the keyboard order (escalations before anything switched off), the literal status announcements and the copy rules (no ticket, migration or table references).', [W('SHQ20')]],
+      ['SHQ-H', 'Handoff', 'What main does today (files and routes), the one ◇ proposed Worker change, the two ⚑ owner picks, the frontend-only work, and each acceptance criterion mapped to its boards.', [W('SHQH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Connector Scope · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · Connect a tool, Overview, Operating systems · #8774 · extends Build v2 (D4846) and D686 §5.4 (#1597)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Connector scope: what is connected to your account, to the company and to this venture, and what actually feeds Build</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Build’s Connect a tool, Overview and Operating systems › Tools for a founder whose GitHub is connected to their account but whose venture cannot see delivery evidence. One ladder names the three scopes main already records (the account’s connection, the company it is turned on for, the venture’s company and chosen repositories); a module is said to receive data only when all three hold. The owner repairs a missing link in place and returns to the setup; anyone else is told whose action it needs. Disconnect says how far it reaches, Scope → Review → Result. Shell, state words and the Eadwyn rail are Build v2’s; states follow Platform States (D5129): Not linked, None chosen, Stale with an age and No items never look alike, each with a word and a glyph. Violet dashed ◇ tags mark Worker work on #8774; amber ⚑ tags mark the owner’s three questions, drawn at option A. Routes are numbered step 1 to 3 on desktop and phone.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · [Atlas Orchard], [Atlas Orchard, Inc.], [Ruiz Ventures LLC], [Maya Ruiz], [Noah Brandt], [Iris Chen], the GitHub logins, repositories, counts and dates are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build Connector Scope Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BLS00', 'Today on main · frontend + Worker reading', 'What the 26 Nov walkthrough saw and the code that draws it: the Overview reason, the Connect a tool banner, the GitHub row’s static “Feeds …” with Disconnect, the disconnect line, and Operating systems’ Company not linked yet. Then the three scopes main records and who may change each.', [W('BLS00')]],
+      ['BLS01', 'Step 1 · Connect a tool, GitHub on the account, venture not in a company (owner) · frontend only', 'The lightbox over Overview. The ladder: 1 Your account ✓ Connected, 2 Company ○ Not linked, 3 Project waiting. The GitHub row says “feeds nothing in [Atlas Orchard] until it is in a company” (pill Account only) instead of “Feeds …”; Disconnect moves into Details. One primary action: Link to a company…, offered because [Maya Ruiz] owns the venture.', [F('BLS01', false, 1160)]],
+      ['BLS02', 'Step 2 · Link the venture to a company, then back to the setup · frontend only (the route exists)', 'A · The link dialog in Build, on POST /api/projects/:id/move: the owner’s companies as radios, what changes, nothing syncs yet. B · The result back in Connect a tool: linked, and the next step is Use GitHub for [Atlas Orchard, Inc.] (PUT /:uid/companies, already on main).', [F('BLS02', 'A · Link dialog', 1000), C('BLS02B', 'B · Back in the setup, step 3 next', 800, 526)]],
+      ['BLS03', 'Step 3 · Bound, no repository chosen: choose what GitHub reads · frontend only', 'The GitHub sync view (D686) with the venture fixed: ladder 1 ✓, 2 ✓ On for this company, 3 – None chosen. Repositories with Selected / Not selected; “What will feed after sync” lists modules from githubFeeds.ts as After sync, never with counts. Sync selected is the one primary.', [F('BLS03', false, 1180)]],
+      ['BLS04', 'Healthy · what feeds now, and the last successful read · frontend (◇ per-venture read)', 'After the sync: the honest banner, the ladder all ✓, the last successful read of [Atlas Orchard] with date, source and repositories (◇ project on the sync log), and each module’s count. Company creation reads No items: a measured zero. Stop or disconnect… opens BLS07.', [F('BLS04', false, 1160)]],
+      ['BLS05', 'Failing · sign-in expired, the read is Stale with its age · frontend (◇ stale field)', 'The connection fails; the ladder shows it at the account. The last good read stays, marked Stale · 3 days, and each module keeps what it brought with that word. One primary: Reconnect.', [F('BLS05', false, 1160)]],
+      ['BLS06', 'Other users · the owner action named, and read only · frontend only', 'A · [Noah Brandt], a co-founder, has GitHub on his own account but cannot link [Atlas Orchard]: the panel names [Maya Ruiz] as the venture’s owner and what she must do; Copy link to this setup (⚑ Q2 A). B · Operating systems › Tools for a co-founder who does not own the connection: feeds and dates readable, repository names hidden, no Reconnect, Choose or Disconnect.', [F('BLS06', 'A · Co-founder, cannot link', 1100), F('BLS06B', 'B · Read only, not the connection’s owner', 1000)]],
+      ['BLS07', 'Stop or disconnect · Scope → Review → Result · frontend only (◇ clear project)', 'A · Scope: Stop using GitHub for [Atlas Orchard, Inc.] (PUT /:uid/companies without it) or Disconnect GitHub from your account (DELETE, every company); Review names what stops and what stays; Result. B · The account-wide review, naming both companies it serves. ⚑ Q1 A.', [C('BLS07', 'A · Scoped stop', 1440, 464), C('BLS07B', 'B · Account-wide review', 660, 376)]],
+      ['BLS08', 'Overview across the states · frontend (◇ reasons on the read)', 'A · Overview for the unbound venture: one Needs attention row with Link to a company, module footers saying GitHub is not feeding this venture, and the activity strip saying why nothing landed. B · The five states × Overview, Connect a tool and Operating systems › Tools, in the same words, with the board for each.', [F('BLS08', 'A · Overview, venture not in a company', 1000), C('BLS08B', 'B · Five states × three surfaces', 1480, 500)]],
+      ['BLS09', 'Operating systems › Tools · frontend (◇ reasons, ◇ per-venture read)', 'A · Healthy: the Code system row with its last good read and repositories, what it feeds [Atlas Orchard], and the latest syncs. B · The Code row in each state: Company not linked yet → Link to a company; No repository chosen → Choose repositories; Connected → Manage; Failing with Stale → Reconnect; read only → no action.', [F('BLS09', 'A · Healthy', 1000), C('BLS09B', 'B · Code system in five states', 1440, 441)]],
+      ['BLS10', 'States · frontend only', 'Loading in the ladder’s shape; the company could not be read (never Not linked); refused for a non-member; a measured zero; sync history unreadable (Last read Not recorded); linking saving, slug_taken and a 409; repository refusals in the Worker’s words; Super Admin preview asks first.', [C('BLS10', false, 1440, 786)]],
+      ['BLS11', 'Phone 390 · frontend only (◇ where marked)', 'A · Step 1, ladder and Link. B · Step 2, the link as a bottom sheet. C · Step 3, choose repositories. D · Healthy, last read and feeds. E · Stop or disconnect, scope sheet. F · Co-founder: the owner named. 44px targets, no table wider than the screen.', [P('BLS11A', 'A · Step 1'), P('BLS11B', 'B · Step 2, link'), P('BLS11C', 'C · Step 3, repositories'), P('BLS11D', 'D · Healthy'), P('BLS11E', 'E · Stop or disconnect'), P('BLS11F', 'F · Co-founder')]],
+      ['BLS12', 'Handoff', 'Acceptance mapped to boards, what was checked on main, frontend-only work, what needs the Worker (◇ #8774), the owner’s three questions (⚑, drawn at A), headings and focus order, accessibility.', [W('BLS12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

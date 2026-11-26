@@ -15,4 +15,5 @@ than once. A fix never deletes rows.
 | --- | --- |
 | `202611260837_5585_release_render_ceiling.fix.sql` | D5585-p15: drops the render ceiling pairing trigger, so a rolled-back Worker can record render approvals again. |
 | `202611260840_5585_swarm_admission_events_render_codes.fix.sql` | D5585-p15: re-creates the rebuilt audit table's index and append-only triggers. |
+| `202611260844_7927_census_cbp_source.fix.sql` | D7927: keeps the `census-cbp` source disabled, so a rolled-back Worker that has no importer for it imports nothing. |
 | `202611261004_5585_release_line_names.fix.sql` | D5585-p16: re-creates the line names table's index and its four triggers. |
