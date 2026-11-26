@@ -6,6 +6,7 @@
 -- https://creativecommons.org/publicdomain/zero/1.0/ (CC0); the Census Data API terms of service
 -- (https://www.census.gov/data/developers/about/terms-of-service.html, page last revised 2026-04-14) ask that content
 -- not be modified while still claimed as the Census Bureau's, and that no endorsement be implied.
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611260844_7927_census_cbp_source.fix.sql
 INSERT OR IGNORE INTO research_market_sources
 (id, name, source_url, dataset_or_edition, methodology_url, license_or_usage_note, refresh_policy, enabled)
 VALUES
