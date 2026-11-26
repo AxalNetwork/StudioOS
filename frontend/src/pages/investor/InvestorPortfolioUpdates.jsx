@@ -470,7 +470,10 @@ export default function InvestorPortfolioUpdates() {
     >
       {settings && <PortfolioReportingSettings onClose={book=>{setSettings(false);setFilter('rules');if(book)setRuleBook(book);}} onSaved={(note,book)=>{setSettings(false);setFilter('rules');setSettingsNote(note);if(book)setRuleBook(book);setRulesRefresh(n=>n+1);retry('compliance');}} />}
       {settingsNote&&<p role="status">{settingsNote}</p>}
-      {chaseNote ? <p className="pf-partial" role="status" data-testid="status-chase-note">{chaseNote}</p> : null}
+      {/* D4818 part 3: the live region is in the page before the chase is pressed, so its outcome is announced. */}
+      <div className="pf-live" role="status" data-testid="region-chase-note">
+        {chaseNote ? <p className="pf-partial" data-testid="status-chase-note">{chaseNote}</p> : null}
+      </div>
       <section className="pf-tiles pf-tiles-4" aria-label="This period" data-testid="reports-tiles">
         <SummaryTile label="Received" value={inbox.state === 'ok' ? `${received} of ${rows.length}` : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? `for ${inbox.period || 'the period measured'}` : 'Reporting source'} />
         <SummaryTile label="Not received" tone={inbox.state === 'ok' && rows.length - received > 0 ? 'late' : null} value={inbox.state === 'ok' ? String(rows.length - received) : inbox.state === 'loading' ? 'Reading…' : 'Unreadable'} note={inbox.state === 'ok' ? (inbox.inProgress ? 'period still in progress' : 'period complete') : 'Reporting source'} />
