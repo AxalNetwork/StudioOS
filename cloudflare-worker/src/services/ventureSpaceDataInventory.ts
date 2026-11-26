@@ -583,6 +583,7 @@ export const VENTURE_SPACE_STORES: readonly Store[] = Object.freeze([PROJECTS, .
  */
 export const NOT_STORES: Readonly<Record<string, string>> = Object.freeze({
   'refused/': 'a key name recorded on a refused draw; no object is written under it',
+  'projects/': 'a Google Cloud resource name (projects/{gcp project}/locations/…/jobs/…) the Cloud Run Jobs adapter builds from operator config (D5571 part 2); not a storage key, and its project is a GCP project, not a venture',
 });
 
 /** The D1 tables a schema says must be listed (a `project_id` or `company_id` column) that the inventory lacks. */
