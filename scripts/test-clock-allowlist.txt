@@ -439,7 +439,6 @@ date frontend/test/licences_ledger_d4819.test.mjs
 date frontend/test/meeting_bot_ui_d886.test.mjs
 date frontend/test/my_events_drawers_d1035.test.mjs
 date frontend/test/my_events_host_header_d1036.test.mjs
-date frontend/test/my_events_phone_d1037.test.mjs
 date frontend/test/my_events_tabs_d1034.test.mjs
 date frontend/test/partner_home_p2_d394.test.mjs
 date frontend/test/persona_segments_d1006.test.mjs
