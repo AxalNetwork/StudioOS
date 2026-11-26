@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Home Advisor · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Advisor · Studio home · #8732 · platform audit #8689 · real-role qualification #8688</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Advisor Studio: open the booked session shown in Today, and come back to the same day</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/studio for a member holding the Advisor licence. The shipped Studio stays as it is: the header with Customise as its one primary, Eadwyn’s advisor interview, the locked profile band and the five modules, with no side rail. Only the Today card changes. Each booked session becomes one link to the Calendar item drawer that main already has (/calendar/item/advisor_booking/:id, read from the Worker with its own refusal), and closing it returns focus to the same row. Open availability gets its own label, chip and action, so it never reads as a booking. Partial, Stale and Unavailable follow the Platform States words (D5129) and are never drawn as an empty day. A violet dashed ◇ marks backend work, an amber ⚑ an owner decision with option A drawn, and a dotted ＋ a frontend-only change; none of them is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026, 09:10 Berlin time · checked on main f66e8faa25 · [Dr. Jonas Weber], [Weber Advisory], [Maya Ruiz], [Theo Lindqvist], [Ana Duarte], [Lena Park], the bookings, links and amounts are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Studio Home Advisor Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SAV-0', 'Advisor Studio · Today in place · desktop 1440', 'The shipped Advisor Studio with the redesigned Today card: the day line names the date, the start of the window and the zone; two confirmed sessions on the same day with the same topic lead with their time and person; the open slot is dashed, marked ◌ Not booked and offers Manage availability. Open calendar stays on the card.', [F('SAV00', false, 1357)]],
+      ['SAV-1', 'Route A · open a booked session · desktop', '1 · Tab to the first booked row and press Enter. 2 · The Calendar item drawer for that booking, over Calendar: When in the advisor’s zone, Where with Join from 15 minutes before, People, Open booking, the founder’s notes as the preparation context, Copies, and “No cancel here”. 3 · Close returns to Studio with focus on the same row.', [C('SAV01', '1 · Today, focus on the row', 1200, 536), F('SAV02', '2 · Session drawer', 994), C('SAV03', '3 · Back on Today, focus returned', 1200, 517)]],
+      ['SAV-2', 'Bookings and availability: time, status and action labels', 'Row anatomy for a confirmed session, a request awaiting the advisor’s answer, an open slot and a session already under way (⚑ 3), with the label table: time, status and action words for each kind and where each goes.', [C('SAV04', false, 1300, 696)]],
+      ['SAV-3', 'When the detail cannot open', 'A · The Worker could not read the item (503): Try again, plus a dated fallback from what Today read and the day in Calendar. B · The booking is no longer the advisor’s (404): the refusal on main, with the same fallback. C · Stale: the tab was left since 09:10, the booking was cancelled since; the drawer says it changed.', [C('SAV05A', 'A · Unreadable', 1200, 608), C('SAV05B', 'B · Not a party', 1200, 608), C('SAV05C', 'C · Stale and changed', 1300, 777)]],
+      ['SAV-4', 'Today states', 'Loading; a partial read with the bookings still visible and Retry for the failed source; a cancelled booking (⚑ 2, option A); an empty day that still leads to Calendar; every source unavailable; Stale with Refresh.', [C('SAV06A', 'Loading', 760, 320), C('SAV06B', 'Partial', 760, 506), C('SAV06C', 'Cancelled booking · ⚑ 2', 760, 578), C('SAV06D', 'Empty day', 760, 367), C('SAV06E', 'Unavailable', 760, 248), C('SAV06F', 'Stale', 760, 541)]],
+      ['SAV-5', 'Phone 390 · the same route', '1 · Today with 44 px rows and the focus order. 2 · The session as a full-height sheet with Back. 3 · Back on Today, focus on the same row. Then the partial read with a cancelled booking, the unreadable sheet with its dated fallback, and an empty and a stale day.', [P('SAV07A', '1 · Today'), P('SAV07B', '2 · Session sheet'), P('SAV07C', '3 · Back on Today'), P('SAV07D', 'Partial and cancelled'), P('SAV07E', 'Unreadable · dated fallback'), P('SAV07F', 'Empty and stale')]],
+      ['SAV-6', 'Dark', 'Today with a partial read and the focus ring, and the session drawer, on the dark tokens; the phone sheet in dark. Every state keeps its word and glyph.', [C('SAV08A', 'Desktop', 1300, 928), P('SAV08B', 'Phone sheet')]],
+      ['SAV-7', 'Keyboard, headings and dates', 'Focus order inside Today, the heading structure of the page and the drawer, keyboard activation, Escape and focus return, how dates and times are written in the browser’s zone, and the live regions.', [C('SAV09', false, 1300, 642)]],
+      ['SAV-H', 'Handoff', 'Checked on main with files, what is preserved, frontend only, the two ◇ backend items, the three ⚑ owner decisions with option A drawn, each acceptance item mapped to its boards, and the open questions.', [W('SAV10')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Export Disclosure · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Raise · Pitch · #8771 · export disclosure · extends Pitch Studio v2 (PD17)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · say exactly what leaves in an exported deck, and what stays editable, before a founder sends the file</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The export dialog on Raise › Pitch, opened from the deck card or the editor’s Export. A founder picks who the file is for first: an Investor copy (no speaker notes, the Sources appendix as on an investor link) or a Working copy for a colleague (notes and appendix, with an acknowledgment that names the private note going out). Before exporting, the dialog previews the file from the version’s own cards: page or slide count, 16:9 size, notes pages or speaker notes, the appendix and which figures it lists, and for PowerPoint what is native and editable and what falls back to a picture, all read from the writer on main. A completed export names the frozen version, what was included, the fingerprint and a way to get the file again, and links to the same version in Present and the investor-link preview. The editor’s “Only you see these.” is corrected. Platform States words and glyphs (D5129); Eadwyn stays the one rail (#5130). Violet dashed ◇ tags mark backend work for #8771; amber ⚑ tags mark owner questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · [Atlas Orchard] · Seed deck (v7, 12 cards), [Maya Ruiz], [Noah Brandt], [Lena Okafor], [Harrow Seed], [Iris Chen] and every figure and fingerprint are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Pitch Export Disclosure Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['0', 'Today on main', 'The dialog as main draws it, the phone notes promise and the investor-link defaults, with the five things the 26 Nov walkthrough found, each checked in the code.', [C('PTX00', false, 1444, 862)]],
+      ['1', 'Step 1 · Investor copy · PDF', 'Investor copy picked when the dialog opens (Q2 A). The preview shows 13 pages at 1920 × 1080: 12 cards, then the Sources page, and no notes pages. What leaves Axal VC is listed card by card: notes stay here, and the appendix lists 5 figures but not card 4’s SAM, which has no source.', [F('PTX01', false, 1000)]],
+      ['2', 'Step 2 · Investor copy · PowerPoint', '13 slides at 13.33 × 7.5 in, with what is editable read from the writer: 33 text boxes, 2 native charts and 1 diagram as shapes. Card 4’s Market circles chart becomes a picture, and card 5’s long title may be set smaller. Speaker notes are empty. The preflight warning must be confirmed before Export is enabled.', [F('PTX02', false, 1240)]],
+      ['3', 'Step 3 · Working copy for a colleague', 'PowerPoint with notes and the appendix. The acknowledgment quotes card 11’s private note, and Export stays off until it is ticked (Q4 A). The PDF version of the same copy has 15 pages: 12 cards, 2 notes pages at six cards a page, then Sources.', [F('PTX03', 'A · Working copy · PowerPoint', 1300), C('PTX03B', 'B · Working copy · PDF page plan', 1284, 824)]],
+      ['4', 'A private note stays out', 'Card 11’s note in the editor with the corrected helper, missing from the investor copy in both formats, and present in the acknowledged working copy.', [C('PTX04', false, 1444, 560)]],
+      ['5', 'Step 4 · Completed export', 'Shows the frozen v7, the file name and slide count, which notes and appendix went in, the fingerprint and who recorded it, and what the writer made. Download again (Q3 A). Links to the same v7 in Present and as an investor link.', [F('PTX05', false, 1000)]],
+      ['6', 'States', 'Checking, version unreadable, a warning to confirm, exporting, failed with a reference and Try again (settings kept), not recorded, read-only, history Unavailable (never “No export yet”), and confirmed empty.', [C('PTX06', false, 1444, 640)]],
+      ['7', 'Export history', 'Each export with its version, format, copy, notes, appendix, fingerprint, author and file. Rows from before this change say Not recorded for what was included.', [C('PTX07', false, 1344, 368)]],
+      ['8', 'Same version in Present and the investor link', 'v7’s card 11 in the presenter view (the note is on the presenter’s screen only), in the investor-link preview (notes hidden), and in the exported investor copy (notes empty).', [C('PTX08', false, 1444, 590)]],
+      ['9', 'What each format really contains', 'PDF, PowerPoint, Google Slides, HTML and .odp, read from the writers: native elements, fallbacks, size, notes and appendix. Also the fixture to open in real apps, with each check Not recorded until a person does it.', [W('PTX09')]],
+      ['P', 'Phone · 390', 'Steps 1 to 4 at 390 × 844: the notes helper, who it is for, what leaves (preview folded, warning confirmed), the working-copy acknowledgment, done, and failed with Try again.', [P('PTX10A', '1 · Notes helper'), P('PTX10B', '2 · Who it is for'), P('PTX10C', '3 · What leaves'), P('PTX10D', '3b · Working copy'), P('PTX10E', '4 · Done'), P('PTX10F', '4 · Failed, retry')]],
+      ['A11y', 'Headings, focus order, announcements', 'The heading outline, 11 focus stops, what is announced, the shapes that carry each state, and the phone order.', [W('PTX11')]],
+      ['Handoff', 'Handoff', 'What was checked on main with files, backend work (◇ #8771), owner questions Q1 to Q4 (⚑, option A drawn), what is frontend only and what is kept, each acceptance item mapped to its boards, and what is still open.', [W('PTX12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
