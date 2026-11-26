@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Roadmap Shortcut · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · Product roadmap · #8776 · continues Build v2 Roadmap and Team (#6034)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">From Now, Next and Later to quarters, dependencies and scenarios, and back to the same place</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Product roadmap (/build/product-roadmap) is the Now, Next and Later board. Its shortcut to /build/roadmap is drawn as what it opens: “Quarters, dependencies and scenarios”, a page whose h1 matches the link, which says how one item’s horizon, quarter, links and what-ifs relate, keeps the selected venture, lands on By quarter (or on the exact item it came from) and returns to the view, column and card the founder left. At zero items each page has one first action. Same shell, cards and Platform States words as Build v2 Roadmap and Team (BD25 to BD30); Eadwyn is the one shared rail. Steps of each route are numbered on BLR00. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner’s three questions, drawn as option A; grey “main ·” tags quote what main does today.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · venture [Atlas Orchard] (project 412), [Maya Ruiz], [Noah Brandt] and the three releases [Block map], [Harvest log], [Yield forecast] are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build Roadmap Shortcut Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BLR-0', 'Route, labels, headings, focus', 'Route 1 → 4 from the board and route 1B → 4B from one item, each step with its URL and board. The labels table puts main’s words beside the drawn ones; the heading outline and keyboard focus order for both pages.', [C('BLR00', false, 1400, 980)]],
+      ['BLR-1', 'Step 1 · Product roadmap, the Now / Next / Later view', 'A · The board as main draws it with three releases; the link above it is renamed to its destination, “Quarters, dependencies and scenarios ›”, with one line on what it shows (focus drawn on the link). B · Step 1B: the item sheet of [Harvest log] shows its column and quarter together and links “See its quarter, links and scenarios”.', [F('BLR01', 'A · Board, the link focused', 900), F('BLR01B', 'B · Step 1B · item sheet', 900)]],
+      ['BLR-2', 'Step 2 · The landing', 'A · h1 equal to the link, Back to Product roadmap, the venture kept, “How this relates to Now, Next and Later”, the counts, and By quarter as the first view (Q4 2026, Q1 2027, an empty Q2 2027, No quarter recorded). Each row carries its horizon, so Now, Next and Later stay visible. B · Step 2B: arrived from [Harvest log]: the row is highlighted, focused and labelled; Back names the item.', [F('BLR02', 'A · From the board', 1060), F('BLR02B', 'B · Step 2B · from [Harvest log]', 1080)]],
+      ['BLR-3', 'Step 3 · Dependencies and Scenarios', 'The same page and h1 with ?view=. A · the chain [Block map] → [Harvest log] → [Yield forecast], both links Unresolved; Edit dependency links is the one primary. B · one saved scenario [Forecast first], compared and never applied; New scenario is the primary.', [F('BLR03', 'A · Dependencies', 1060), F('BLR03B', 'B · Scenarios', 980)]],
+      ['BLR-4', 'Step 4 · Back, as left', 'Back (link or browser) returns to Product roadmap for [Atlas Orchard] with the Board view and focus on [Harvest log], read from the URL. Main keeps the view in component state, so today Back lands on Board, Now.', [F('BLR04', false, 900)]],
+      ['BLR-5', 'Empty · one first action', 'A · Product roadmap with no items: Add item, and no link until there is something to place (as main). B · /build/roadmap reached from the checklist with no items: one action, Add the first item, in Product roadmap, instead of main’s third editor.', [F('BLR05', 'A · Product roadmap, zero', 820), F('BLR05B', 'B · The landing, zero', 840)]],
+      ['BLR-6', 'States', 'Loading, failure with retry (Unavailable, never 0), confirmed empty for Dependencies and Scenarios, read only, a project in the link that is not the reader’s, no venture yet, and a failed save.', [C('BLR06', false, 1400, 640)]],
+      ['BLR-7', 'Phone 390', 'A · Step 1: the link as a full-width row under Board / Timeline. B · Step 2: Back, h1, the relation folded open, three views, quarters. C · Step 2B from [Harvest log]. D · Step 4: back on Next with the card focused. E · zero items, one action. Targets 44px, primary 48px.', [P('BLR07A', 'A · Step 1'), P('BLR07B', 'B · Step 2'), P('BLR07C', 'C · Step 2B'), P('BLR07D', 'D · Step 4 · Back'), P('BLR07E', 'E · Zero')]],
+      ['BLR-8', 'Handoff', 'Checked on main with files, acceptance mapped to boards, ◇ backend work, ⚑ owner questions with option A drawn, frontend-only work, what is preserved, accessibility.', [W('BLR08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
