@@ -186,6 +186,10 @@ test('the ZIP reader returns a stored or deflated entry and refuses a missing, a
   assert.equal(await reason(buildZip([{ name: 'cbp23us.txt', content: 'a' }, { name: 'CBP23US.TXT', content: 'b' }]), /^cbp23us\.txt$/i), 'ambiguous_entry');
   assert.equal(await reason(stored, /^cbp23us\.txt$/, 10), 'entry_too_large');
   assert.equal(await reason(deflated, /^cbp23us\.txt$/, 10), 'entry_too_large');
+  // An archive that under-declares its entry's size is still stopped while inflating, not after.
+  const lying = deflated.slice(), lv = new DataView(lying.buffer), cd = lv.getUint32(lying.length - 6, true);
+  lv.setUint32(cd + 24, 10, true);
+  assert.equal(await reason(lying, /^cbp23us\.txt$/, 20), 'entry_too_large');
   const flipped = stored.slice(); flipped[60] ^= 0xff;
   assert.equal(await reason(flipped), 'checksum_mismatch');
 });
