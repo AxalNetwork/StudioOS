@@ -2749,6 +2749,21 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
 
 
+## Landed 2026-11-26 — Learning: nine canvases from the 25 November production audit (#8662 to #8670)
+
+Nine board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-26 from the Learning briefs that followed the 25 November browser audit of axal.vc, each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A. Release work stays with #8288; the umbrella is #3726.
+
+- **`Learning Home and Catalogue`** (LHM00 onward): Home and catalogue navigation (#8662, D8662).
+- **`Learning Course Cards`** (LCC00 onward): Course cards (#8663, D8663).
+- **`Learning Course Overview`** (LCO00 onward): Course overview and syllabus (#8664, D8664).
+- **`Learning Lesson Reader`** (LRD00 onward): Lesson reader (#8665, D8665).
+- **`Learning Exercise Workspace`** (LEW00 onward): Exercise workspace and marking criteria (#8666, D8666).
+- **`Learning Exam Readiness`** (LEX00 onward): Exam readiness, draft preview and attempts (#8667, D8667).
+- **`Learning Personal Learning`** (LPL00 onward): My Learning, plan and assigned programs (#8668, D8668).
+- **`Learning Studio`** (LST00 onward): Studio inventory, authoring and member preview (#8669, D8669).
+- **`Learning Media Articles and Events`** (LMA00 onward): Media, articles and events (#8670, D8670).
+
+All nine use one catalogue: the observed production course "Evidence-based pitch narratives" with its ten lessons and its exam "What can you substantiate?". Every learner, other title and figure is bracketed sample content. Each file is the canvas export as published; no value was edited. None is built yet.
 ## Landed 2026-11-26 — Studio home by role: seven canvases from the 26 November role audit (#8727 to #8733)
 
 Seven board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-26 from the Studio home briefs of the 26 November role audit (#8689), each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A. Real-role qualification stays with #8688.

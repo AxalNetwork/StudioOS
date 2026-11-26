@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Exercise Workspace · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · Exercise workspace · LEW · #8666</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning — the exercise workspace: deliverable first, readable marking criteria, distinct submission and review states</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The exercise page (/learning/exercises/:slug, opened as lesson 7 of Evidence-based pitch narratives) for the Pitch decision memo. The deliverable, the 2,000-character limit, the 30-minute suggested time and the route to the editor come first. The task, case, five requested headings and marking criteria are tabs beside a fixed answer column on desktop, and sheets over the editor on phones. The five criteria scored 0 to 3 are a semantic matrix at 1440 and one section per criterion at 390, with the pass rule (11 of 15 and R3 at least 2) stated in words. First attempt, draft, submitting, submitted, needs work, accepted, save failure and submit failure are separate states, and only a persisted action may claim the answer was saved (on this device) or submitted. States follow Platform States (D5129), with Unavailable on screen. Violet dashed ◇ tags mark data or backend work (#8288 or proposed); amber ⚑ tags mark owner questions with option A drawn. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · [Maya Ruiz], [Northwind Labs], [Kestrel Freight], the claims, the criteria wording and the memo text are fictional; states other than the observed first attempt are labelled Synthetic</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="13">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Exercise Workspace Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LEW-00', 'Journey, states and key', 'The route from the course to an accepted memo with numbered steps shared by the desktop and phone boards, the exercise states, the read states and the annotation key.', [W('LEW00')]],
+      ['LEW-01', 'Before · axal.vc 25 Nov', 'What production showed: the rubric as one paragraph of pipes, and on a phone Submit, Not submitted yet and No review yet above the instructions, with the answer several screens down.', [C('LEW01', false, 1200, 760), P('LEW01M', 'Before · 390')]],
+      ['LEW-02', 'Desktop · first attempt', 'Deliverable band first with the one primary, Start your answer. Task tab beside an empty answer column with the counter at 0 / 2,000 and the reason Submit is not yet available.', [F('LEW02', false, 1150)]],
+      ['LEW-03', 'Desktop · drafting beside the criteria', 'A restored draft with the counter and the device-save line. The Marking criteria tab shows the matrix while the editor stays in view; the primary is now Submit for review.', [F('LEW03', false, 1250)]],
+      ['LEW-04', 'Marking criteria and the renderer', 'The semantic matrix (five criteria × scores 0–3, caption, row and column headers, R3 minimum in words), the per-criterion phone layout, and the content-renderer change for existing pipe-table rubrics.', [C('LEW04', false, 1200, 1100), C('LEW04B', 'Phone layout · all five criteria', 390, 1700), C('LEW04C', 'Renderer change · remark-gfm + RubricTable', 1300, 620)]],
+      ['LEW-05', 'Submission validation', 'What blocks (empty, over 2,000), what only advises (a heading not found), the route’s refusals (400, 409) and a timeout that reads before offering a retry.', [C('LEW05', false, 1300, 640)]],
+      ['LEW-06', 'States: submit, review, revise', 'Eight component variants side by side, then the Submitted, Needs work and Accepted pages.', [C('LEW06', 'Eight states', 1400, 620), F('LEW06B', 'Submitted · awaiting review', 1260), F('LEW06C', 'Needs work · revise', 1400), F('LEW06D', 'Accepted', 1300)]],
+      ['LEW-07', 'Review feedback · Q1', 'Option A, drawn everywhere: status and written feedback, which main records. Option B: per-criterion scores, proposed.', [C('LEW07', false, 1300, 560)]],
+      ['LEW-08', 'Phone 390 × 844', 'Numbered with the desktop route: start, editor with a visible counter, criteria and headings as sheets over the editor, submitted, needs work, a double failure and accepted.', [P('LEW08A', '1 · Start'), P('LEW08B', '2 · Draft'), P('LEW08C', '3 · Criteria sheet'), P('LEW08D', 'Headings sheet'), P('LEW08E', '4 · Submitted'), P('LEW08F', '5 · Needs work'), P('LEW08G', 'Save and submit failure'), P('LEW08H', '6 · Accepted')]],
+      ['LEW-09', 'Loading, empty, error, retry', 'Loading, Unavailable with Retry, no such exercise, offline, author preview, no instructions, no criteria and a table that cannot be laid out.', [C('LEW09', false, 1400, 640)]],
+      ['LEW-10', 'Dark mode', 'The drafting board and the phone criteria sheet (R3 to R5) on the dark tokens.', [F('LEW10', false, 1250), P('LEW10M', 'Criteria sheet · dark')]],
+      ['LEW-11', 'Accessibility', 'Focus order at both sizes, accessible names, counter announcements and wrapping of long titles.', [C('LEW11', false, 1300, 900)]],
+      ['LEW-12', 'Handoff', 'Checked on main, frontend only, data and backend (◇), owner questions (⚑), the acceptance checklist mapped to boards and coordination with #8288 and the sibling canvases.', [W('LEW12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
