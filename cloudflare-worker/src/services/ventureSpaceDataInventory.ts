@@ -294,6 +294,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['okr_dependencies', 'p', 'left'],
   ['outreach_sequences', 'p', 'cascade'],
   ['pain_group_aliases', 'p', 'cascade'],
+  ['pain_grouping_proposals', 'p', 'cascade'],
   ['pain_groups', 'p', 'cascade'],
   ['perks', 'c', 'company'],
   ['pitch_deck_proposals', 'p', 'cleanup'],

@@ -87,3 +87,24 @@ export function reservationRow(r, timeZone, nowMs) {
     reason: s.state === 'cancelled' ? s.cancelled?.reason || null : null,
   };
 }
+
+/**
+ * D7120 part 3: the member's own calendar entry for a seat. Offered while the seat is reserved, the session is not
+ * cancelled, and the member did not choose "No calendar entry". The line says what the entry shows: never anyone else.
+ */
+export function calendarEntry(r) {
+  const s = r?.session || {};
+  if (r?.status !== 'reserved' || s.state === 'cancelled' || !r?.calendar || r.calendar === 'none') return null;
+  return {
+    note: r.calendar === 'named'
+      ? 'Your calendar shows the session’s title. It lists no one else.'
+      : 'Your calendar shows “Private appointment”, with no description. It lists no one else.',
+  };
+}
+export function calendarRefusal(e) {
+  // The download is a raw fetch: its refusal carries `code` itself (`refusalError`), not `data`.
+  switch (codeOf(e) || e?.code || null) {
+    case 'calendar_entry_not_found': return 'There is no calendar entry for this seat any more. Your seat is unchanged.';
+    default: return 'The calendar entry couldn’t be downloaded. Your seat is unchanged; try again.';
+  }
+}

@@ -15,15 +15,18 @@ import { SWARM_AUDIT_ACTIONS, SWARM_AUDIT_CODES, SWARM_AUDIT_OUTCOMES, createAud
   readSwarmAdmissionEvents, scopedSwarmState, type FlushResult } from '../src/services/agents/swarmAudit.ts';
 import { V7, V8, facts, ok, policy, refused, request, swarmWorld } from './_swarm_world_5586.ts';
 
-const MIGRATION = '202611252031_5586_swarm_admission_events.sql';
-const SQL = readFileSync(new URL(`../sql/migrations/${MIGRATION}`, import.meta.url), 'utf8');
+const migration = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
+// The table's current definition: D5585-p15 rebuilt it with the render approval codes. The schema applies both files
+// in order, as a deploy does; the vocabulary is read from the rebuild, the table's definition now.
+const SQL = migration('202611260840_5585_swarm_admission_events_render_codes.sql');
+const SCHEMA = migration('202611252031_5586_swarm_admission_events.sql') + SQL;
 const SOURCE = readFileSync(new URL('../src/services/agents/swarmAdmission.ts', import.meta.url), 'utf8');
 const CTX7 = { scope: { tenantId: 7, companyId: 70, projectId: null } };
 const SCOPE7 = { tenantId: 7, companyId: 70, projectId: null };
 const SCOPE8 = { tenantId: 8, companyId: 80, projectId: null };
 
 function d1() {
-  const { DB, db } = makeD1(SQL);
+  const { DB, db } = makeD1(SCHEMA);
   const fail = { batch: 0 };
   const wrapped = { prepare: (s: string) => DB.prepare(s), batch: async (st: unknown[]) => { if (fail.batch > 0) { fail.batch--; throw new Error('D1 down'); } return DB.batch(st); } };
   const rows = () => db.prepare('SELECT * FROM swarm_admission_events ORDER BY seq').all() as Record<string, unknown>[];
