@@ -21,9 +21,9 @@ test('admin-drift.yml runs weekly and on dispatch only, from main', () => {
   assert.match(workflow.jobs.check.if, /github\.ref == 'refs\/heads\/main'/);
 });
 
-test('the reading job holds the read-only token in production-ops and no write permission', () => {
+test('the reading job holds the read-only token in production-monitoring (D8754) and no write permission', () => {
   const check = workflow.jobs.check;
-  assert.deepEqual(check.environment, { name: 'production-ops', deployment: false });
+  assert.deepEqual(check.environment, { name: 'production-monitoring', deployment: false });
   assert.deepEqual(check.permissions, { contents: 'read' });
   const text = JSON.stringify(check);
   assert.deepEqual([...text.matchAll(/secrets\.([A-Z_]+)/g)].map(m => m[1]), ['ADMIN_DRIFT_READ_TOKEN']);

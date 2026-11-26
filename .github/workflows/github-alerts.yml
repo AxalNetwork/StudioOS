@@ -348,6 +348,8 @@ jobs:
 
   file-backup:
     name: File recovery heartbeat
+    # D8754: the home D8069 left to the owner. Read-only monitoring, main only, no reviewer.
+    environment: production-monitoring
     if: >-
       github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
       vars.FILE_RECOVERY_ENABLED == 'true' &&

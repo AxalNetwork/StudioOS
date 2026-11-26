@@ -17,7 +17,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `agent-provenance.yml` | Agent provenance | provenance (advisory, conditional) | — | provenance (advisory, conditional) | — | — | — |
 | `agent-stage-a.yml` | Agent Stage A (hosted lifecycle, stubbed inference) | — | — | — | — | — | `workflow_dispatch` · one hosted lifecycle per path, then teardown (advisory, conditional)<br>sweep this run's Stage A resources (advisory, conditional) |
 | `archive-observer-deploy.yml` | Archive observer deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
-| `backup-d1.yml` | Daily D1 Backup → R2 | — | — | — | — | backup (advisory) | `workflow_dispatch` · backup (advisory) |
+| `backup-d1.yml` | Daily D1 Backup → R2 | — | — | — | — | backup (advisory, conditional) | `workflow_dispatch` · backup (advisory, conditional) |
 | `beta-readiness-reaudit.yml` | Beta Readiness Re-audit Reminder | — | — | — | — | open-tracking-issue (advisory) | `workflow_dispatch` · open-tracking-issue (advisory) |
 | `branch-provision.yml` | Provision a branch | — | — | — | — | — | `workflow_dispatch` · provision ${{ inputs.code }} (advisory) |
 | `build-worker-contracts.yml` | Build Worker contracts | Build connector and mapping contracts (advisory, conditional) | — | — | — | — | — |
@@ -55,7 +55,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `landing-policy.yml` | Landing policy | landing policy (advisory)<br>privileged label (advisory, conditional) | — | — | — | — | — |
 | `lfs-budget.yml` | LFS budget | — | — | — | — | Check LFS bandwidth vs 250 GB plan (advisory) | `workflow_dispatch` · Check LFS bandwidth vs 250 GB plan (advisory) |
 | `macbook-worker.yml` | MacBook Worker | — | — | — | — | — | `workflow_dispatch` · Worker shard on MacBook (advisory, conditional) |
-| `magic-link-insert-probe.yml` | magic-link insert probe | — | — | — | — | magic-link insert (advisory) | `workflow_dispatch` · magic-link insert (advisory) |
+| `magic-link-insert-probe.yml` | magic-link insert probe | — | — | — | — | magic-link insert (advisory, conditional) | `workflow_dispatch` · magic-link insert (advisory, conditional) |
 | `magic-link-probe.yml` | magic-link round-trip probe | — | — | — | — | magic-link round trip (advisory) | `workflow_dispatch` · magic-link round trip (advisory) |
 | `mcp-worker-contracts.yml` | MCP Worker contracts | MCP OAuth and deployment contracts (advisory, conditional) | — | — | — | — | — |
 | `meeting-bot-deploy.yml` | Meeting bot deploy | — | — | — | deploy (advisory, conditional) | — | `workflow_dispatch` · deploy (advisory, conditional) |
