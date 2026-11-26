@@ -128,7 +128,7 @@ test('1. admitted and settled within its reserve: approvable and publishable, wi
   assert.equal(byRole.website, null, 'code is not a render');
   for (const d of await approveAll(w, ctx, r.m, 'ok')) assert.ok(d.ok, JSON.stringify(d));
   // The separate render approval is tied to the same budgets, and records like any decision.
-  const render = await decideRelease(w.env, ctx, decision(r.m.manifestUid, r.m.digest, 'marketing', 'ok-render', { purpose: 'render' }));
+  const render = await decideRelease(w.env, ctx, decision(r.m.manifestUid, r.m.digest, 'marketing', 'ok-render', { purpose: 'render', renderCeilingMicrousd: 5_000_000 }));
   assert.ok(render.ok, JSON.stringify(render));
   const pub = await publish(w, r.line, r.m.manifestUid, null, 'pub-ok', ctx, [{ target: 'stream', ref: 'vid-campaign' }]);
   assert.ok(pub.ok, JSON.stringify(pub));
@@ -146,7 +146,7 @@ test('2. no swarm state passed: admission_unverified, refused at approval and at
   assert.deepEqual(!refused.ok && refused.ids, ids);
   assert.deepEqual([...ids].sort(), [r.m.manifestUid, r.video.asset, r.video.rev, 'admission_unverified', r.brand.asset, r.brand.rev, 'admission_unverified'].sort());
   for (const purpose of ['publish', 'render'] as const) {
-    const d = await decideRelease(w.env, CTX, decision(r.m.manifestUid, r.m.digest, 'code', `nv-${purpose}`, { purpose }));
+    const d = await decideRelease(w.env, CTX, decision(r.m.manifestUid, r.m.digest, 'code', `nv-${purpose}`, { purpose, ...(purpose === 'render' ? { renderCeilingMicrousd: 5_000_000 } : {}) }));
     assert.equal(!d.ok && d.code, 'render_unadmitted', purpose);
   }
   // Asking for changes is never blocked: only an approval needs the render admitted.

@@ -9,6 +9,7 @@ and is not kept in sync.
 | `schema_baseline.sql` | The production-derived schema for bootstrapping a fresh database. |
 | `migrations/` | **Forward-only, numbered (up to 799) or stamped `YYYYMMDDHHMM_` (D4106), and the thing that actually runs.** |
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
+| `forward-fixes/` | The rehearsed forward fix a `manual` migration names (`-- forward-fix:`, D8532). Not migrations: nothing applies them on deploy. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
 | `migrations/716_deck_area_batches.sql` | D1502 (#3753): a deck generation run (`deck_area_batches`, one active per deck, `idem_key` unique) and its steps (`deck_area_batch_steps`), under one quote and one parent hold. |
 

@@ -110,9 +110,11 @@ const queryScope = (c: Context): Scope | null => scopeFrom(c.req.query('tenant_i
 /**
  * Part 11: every person a release evaluation names — its author, the reviewers who count and those who do not. Whoever
  * asked for changes (`changesRequestedBy`) is among the latter: their live decision is `changes_requested` there.
+ * Part 14 (D5585-p14): and every attester of a pinned piece, or the person an attesting agent run acted for.
  */
 const releasePeopleIds = (rel: ReleaseState | null): number[] => (rel ? [
   rel.authorUserId, ...rel.approvals.map((a) => a.reviewerUserId), ...rel.notCounted.map((d) => d.reviewerUserId),
+  ...rel.components.flatMap((c) => c.attestations.map((a) => a.userId)),
 ] : []);
 
 /** Part 11: the names of the people an answer names, and the statement it cost. */
