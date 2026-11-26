@@ -76,7 +76,8 @@ const COPY = {
     placeholders: ['Name', 'email', 'CEO, CTO, …', '40%', '12 Mar 2026'],
   },
   'company-creation': {
-    title: 'Add filing', cta: 'Add filing', sub: 'A filing with its jurisdiction, due date and proof.', foot: null,
+    title: 'Add filing', cta: 'Add filing', sub: 'A filing with its jurisdiction, due date and proof.',
+    foot: 'For open filings with a due date, founders get in-app reminders 14 days before and on the due date.',
     labels: ['Filing', 'Jurisdiction', 'Due', 'For', 'State', 'Proof', 'Upload the confirmation when filed'],
     chips: { kind: [['Formation', 'EIN', '83(b) election', 'Annual report', 'Franchise tax', 'Other'], '83b'], jurisdiction: [['Federal', 'Other'], 'Federal'], state: [['Upcoming', 'Filed', 'Due soon'], 'upcoming'] },
     placeholders: ['11 Nov'],
@@ -127,7 +128,7 @@ test('7: each Build form draws the canvas copy, with decisions 8 and 10\'s words
     ["{ value: 'agreement', label: 'Draft the co-founder agreement', meta: 'in the legal engine', checked: true }", "{ value: 'agreement', label: 'Draft the co-founder agreement from the split', meta: 'e-signature', checked: true }"],
     ["{ kind: 'CH', name: 'kind', k: 'Filing', opts: FILING, def: 2 }", "{ kind: 'CH', name: 'kind', k: 'Filing', opts: FILING, def: 0 }"],
     ["{ kind: 'CH', name: 'column', k: 'Column', opts: COLUMN, def: 1 }", "{ kind: 'CH', name: 'column', k: 'Column', opts: COLUMN, def: 0 }"],
-    ["  // No foot: no job sends filing reminders (decision 8).", "  foot: 'Reminders 14 days before.',\n  // No foot: no job sends filing reminders (decision 8)."],
+    ["foot: 'For open filings with a due date, founders get in-app reminders 14 days before and on the due date.'", "foot: 'Reminders seven days before.'"],
   ]);
 });
 

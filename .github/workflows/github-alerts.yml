@@ -61,11 +61,13 @@ jobs:
     concurrency:
       group: github-health-main-red
       queue: max
+    # pull-requests: read lets a new PR failure's owner slot come from the task its PR links (D6387 part 2).
     permissions:
       contents: read
       actions: read
       checks: read
       issues: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

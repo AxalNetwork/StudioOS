@@ -14,6 +14,7 @@ export const typeformApi = {
   check: project => request('/typeform/form/check', { method: 'POST', body: JSON.stringify({ project }) }),
   syncStatus: project => request(`/typeform/sync?${qs(project)}`),
   sync: (project, backfill = false) => request('/typeform/sync', { method: 'POST', body: JSON.stringify({ project, backfill }) }),
+  reconcile: project => request('/typeform/sync/reconcile', { method: 'POST', body: JSON.stringify({ project }) }),
   mappings: project => request(`/typeform/mappings?${qs(project)}`),
   setMappings: (project, mappings, expected_mapping_revision) => request('/typeform/mappings', { method: 'PUT', body: JSON.stringify({ project, mappings, expected_mapping_revision }) }),
   evidenceMapping: (project, data) => request('/typeform/validate/evidence-mapping', { method: 'PUT', body: JSON.stringify({ project, ...data }) }),

@@ -2451,6 +2451,16 @@ const studioos = {
             taskFailed('grow daily', e instanceof Error ? e.message : 'error');
           }
         }
+        // D6039: filing reminders use the scheduled UTC day and claim each delivery.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 35) {
+          try {
+            const { sendFilingReminders } = await import('./services/filingReminders');
+            const sent = await sendFilingReminders(env, now.toISOString().slice(0, 10));
+            if (sent) cronSummary.push(`filing reminders sent=${sent}`);
+          } catch (e) {
+            taskFailed('filing reminders', e instanceof Error ? e.name : 'error');
+          }
+        }
         // D1539 (#3789) — the deck card blob prune: a blob no version names,
         // first written over an hour ago, goes (at most 500 a run).
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
