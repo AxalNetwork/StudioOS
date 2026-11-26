@@ -215,7 +215,7 @@ test('#6460 the real CI planner gives drafts only rest and preserves all nine pa
   assert.match(ci, /types: \[opened, synchronize, reopened, ready_for_review\]/);
   const planner = ci.match(/id: plan\n(?:[^\n]*\n)*? {8}run: \|\n((?: {10}[^\n]*\n)+)/)[1];
   const code = planner.replace(/^ {10}/gm, '').replace(
-    'node scripts/test-drift-parts.mjs --plan test-timings.json',
+    'node scripts/test-drift-parts.mjs --plan --equal-weights',
     `printf '%s' '${JSON.stringify(plan.parts.map(part => part.name))}'`,
   ).replace('>> "$GITHUB_OUTPUT"', '');
   for (const [EVENT, DRAFT, expected] of [
@@ -262,10 +262,11 @@ test('#6674 the timing selector has clean stdout on a fresh checkout', () => {
   }
 });
 
-test('#6674 all three planners use the same timing download step', () => {
-  for (const workflow of ['ci', 'github-alerts', 'runner-benchmark']) {
-    const yaml = readFileSync(`.github/workflows/${workflow}.yml`, 'utf8');
-    assert.match(yaml, /run: bash scripts\/ci\/download-test-timings\.sh/);
+test('#6674 the timing-weighted planner uses the timing download step; the equal-weight ones download nothing', () => {
+  assert.match(readFileSync('.github/workflows/github-alerts.yml', 'utf8'), /run: bash scripts\/ci\/download-test-timings\.sh/);
+  // D8693: ci.yml plans with equal weights on every event, and the runner benchmark mirrors its plan job.
+  for (const workflow of ['ci', 'runner-benchmark']) {
+    assert.doesNotMatch(readFileSync(`.github/workflows/${workflow}.yml`, 'utf8'), /download-test-timings|--plan test-timings/, workflow);
   }
 });
 

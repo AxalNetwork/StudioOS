@@ -63,7 +63,8 @@ test('an eligible credit is marked: 201, one active row, one audit row with no n
   const a = audits(db, 'mercury_not_ours_marked');
   assert.equal(a.length, 1);
   assert.deepEqual(JSON.parse(a[0].details), { transaction_uid: t.uid, mark_uid: r.body.uid, reason: 'duplicate' });
-  assert.doesNotMatch(a[0].details, /Second copy|4471/);
+  // The note's own words: the row also holds a random hex mark_uid, which can contain "4471" (#8765).
+  assert.doesNotMatch(a[0].details, /Second copy|4471-fixture/);
 });
 
 test('refused: a debit, an internal transfer, a pending line, an unregistered account, an unknown uid, a bad reason or note, a second mark, a live match', async () => {

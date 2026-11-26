@@ -2053,7 +2053,7 @@ const buildFiling = {
   key: 'filing', cta: 'Add filing', button: 'Add filing',
   title: 'Add filing',
   sub: 'A filing with its jurisdiction, due date and proof.',
-  // No foot: no job sends filing reminders (decision 8).
+  foot: 'For open filings with a due date, founders get in-app reminders 14 days before and on the due date.',
   fields: [...filingFields, proofField],
   toBody: filingBody,
   loadOptions: buildOptions('company-creation', (read) => ({

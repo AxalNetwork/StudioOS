@@ -2749,6 +2749,37 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 Not built yet. Addresses and codes are fictional; Apple sign-in waits on #6957.
 
 
+## Landed 2026-11-26 — Studio home by role: seven canvases from the 26 November role audit (#8727 to #8733)
+
+Seven board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-26 from the Studio home briefs of the 26 November role audit (#8689), each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A. Real-role qualification stays with #8688.
+
+- **`Studio Home HQ Super Admin`** (SHQ00 onward, 23 frames): escalations that tell loading, failure and a confirmed-empty queue apart, with actionable work ahead of unavailable task controls (#8727, D8727).
+- **`Studio Home Admin`** (SAD00 onward, 21 frames): the overdue decision on the first screen, opening Approvals with its queue filter kept (#8728, D8728).
+- **`Studio Home Founder`** (SFD00 onward, 24 frames): the active venture and its next action on the first phone screen (#8729, D8729).
+- **`Studio Home Previews`** (SPV00 onward, 23 frames): Founder and Exploring previews without HQ interview questions or Admin links, and one answer on profiling while Exploring (#8730, D8730).
+- **`Studio Home Investor`** (SIV00 onward, 22 frames): card actions that open the fund terms, the investor's commitment and investor plans (#8731, D8731).
+- **`Studio Home Advisor`** (SAV00 onward, 24 frames): a booked session in Today opens that booking (#8732, D8732).
+- **`Studio Home Operating Partner`** (SOP00 onward, 19 frames): an alert opens its engagement, and alerts past the first six are reachable (#8733, D8733).
+
+Cast: founder [Maya Ruiz], Super Admin [Iris Chen], Admin [Tom Becker], investor [Lena Sato], advisor [Dr. Jonas Weber], operating partner [Sara Holm]; "Atlas Orchard" and "Axal Fund I" are the briefs' own names. Every other person, venture and figure is bracketed sample content. Each file is the canvas export as published; no value was edited. None is built yet.
+
+## Landed 2026-11-26 — Team, Pitch and Build: ten canvases from the 26 November browser walkthrough (#8767 to #8776)
+
+Ten board sets from the same canvas, drawn on 2026-11-26 from the briefs that followed the authenticated browser walkthrough of axal.vc, each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A.
+
+- **`Team Task Assignment`** (TMA00 onward, 40 frames): assigning "Draft a first-pass runway analysis" from a named agent, through draft, proposal and human review, and what to say when execution is off (#8767, D8767).
+- **`Team Skill Eligibility`** (TMS00 onward, 18 frames): one eligibility rule in the skill directory, the existing-agent picker and the new-agent wizard (#8768, D8768).
+- **`Team Agent and Model Choice`** (TMM00 onward, 20 frames): choosing an agent and a model by job, readiness and expected cost (#8769, D8769).
+- **`Pitch Template Composition`** (PTP00 onward, 24 frames): template previews that keep their composition, theme and type at small sizes (#8770, D8770).
+- **`Pitch Export Disclosure`** (PTX00 onward, 19 frames): what a PDF or PowerPoint export includes and what stays editable, before a founder sends it (#8771, D8771).
+- **`Pitch Preflight Repair`** (PTF00 onward, 22 frames): a preflight finding that opens the exact slide element and is rechecked on the same version (#8772, D8772).
+- **`Build Lovable Handoff Privacy`** (BLP00 onward, 19 frames): the outgoing Lovable prompt, a neutral alias and accurate privacy-check wording (#8773, D8773).
+- **`Build Connector Scope`** (BLS00 onward, 23 frames): account, company and project scope before Build promises that connected tools feed it (#8774, D8774).
+- **`Build Feature to Evidence`** (BLV00 onward, 27 frames): a validated feature through must-have, builder and reviewer, Lovable prototype and test result to evidence for Pitch (#8775, D8775).
+- **`Build Roadmap Shortcut`** (BLR00 onward, 17 frames): the Now/Next/Later entry and the roadmap view it opens, kept distinct from quarterly objectives (#8776, D8776).
+
+Founder [Maya Ruiz] and venture [Atlas Orchard] run through all ten; the Pitch canvases share one clearly marked fictional deck, the Team canvases one set of agents and skills, and the Build canvases one feature and project. Every person, agent and figure is bracketed sample content. Each file is the canvas export as published; no value was edited. None is built yet.
+
 ## Landed 2026-11-21 — HQ AI agents: capability policies, execution budgets and the agent registry (#8070, #8071, #8080)
 
 Three addenda to the landed `HQ AI Agents` canvas (D4137, SA0 to SA9), drawn on 2026-11-21 from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards. Landed at the owner's request before the briefs' questions were answered; each open question is drawn as option A.

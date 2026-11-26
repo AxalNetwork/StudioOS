@@ -213,17 +213,19 @@ function ReportAsks({ updateUid, row }) {
           <ul className="pf-required">
             {read.value.asks.map((ask) => {
               const [label, kind] = ASK_WORDS[ask.kind] || ['Support', 'other'];
+              // D6215 (owner, 2026-11-16): a capital ask on a round call is answered on the call.
+              const call = ask.kind === 'capital' && ask.link_ref ? `/round-calls/${encodeURIComponent(ask.link_ref)}` : null;
               return <li key={ask.uid} data-testid={`report-ask-${ask.uid}`}>
                 <div><strong>{label}</strong><p>{ask.text}</p>
-                  <p className="pf-muted">{ask.support_state ? `Your support · ${titleCase(ask.support_state)}` : ask.answered ? 'Answered' : 'No answer recorded'}</p>
-                  {ask.kind === 'capital' ? (ask.link_ref
-                    ? <Link className="pf-btn" to={`/round-calls/${encodeURIComponent(ask.link_ref)}`}>Open the round call</Link>
-                    : <p className="pf-muted">{ask.link_reason || 'No round call is available.'}</p>) : null}
+                  <p className="pf-muted">{call ? 'Replies to this ask go to the round call.' : ask.support_state ? `Your support · ${titleCase(ask.support_state)}` : ask.answered ? 'Answered' : 'No answer recorded'}</p>
+                  {ask.kind === 'capital' && !call ? <p className="pf-muted">{ask.link_reason || 'No open round call is linked to this ask.'}</p> : null}
                 </div>
-                {!ask.support_state && row.uid ? <Link className="pf-btn is-primary" to="/portfolio/value-add"
-                  state={{ founderAsk: { uid: ask.uid, kind, label, updateUid, text: ask.text, projectUid: row.uid, reportKey: row.key } }}>
-                  Promise support
-                </Link> : null}
+                {call ? <Link className="pf-btn is-primary" to={call} data-testid={`report-ask-call-${ask.uid}`}>Promise support</Link>
+                  : ask.support_state ? <Link className="pf-btn" to="/portfolio/value-add">View the entry</Link>
+                  : row.uid ? <Link className="pf-btn is-primary" to="/portfolio/value-add"
+                    state={{ founderAsk: { uid: ask.uid, kind, label, updateUid, text: ask.text, projectUid: row.uid, reportKey: row.key } }}>
+                    Promise support
+                  </Link> : null}
               </li>;
             })}
           </ul>

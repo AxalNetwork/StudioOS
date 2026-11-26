@@ -19,7 +19,10 @@ import { createSwarmAdmission, swarmOf, ventureKey, type SwarmAudit, type SwarmS
 export const SWARM_AUDIT_ACTIONS = ['request', 'promote', 'settle', 'withdraw', 'revoke', 'audit_gap'] as const;
 export const SWARM_AUDIT_OUTCOMES = ['applied', 'queued', 'refused', 'dropped'] as const;
 export const SWARM_AUDIT_CODES = ['swarm_halted', 'wrong_tenant', 'agent_revoked', 'agent_unverified', 'modality_not_allowed',
-  'provider_not_allowed', 'model_not_allowed', 'revision_unverified', 'stale_revision', 'budget_unverified', 'budget_exhausted',
+  'provider_not_allowed', 'model_not_allowed', 'revision_unverified', 'stale_revision',
+  // #5585 part 15 (D5585-p15): a render's release approval; 202611260840_5585_swarm_admission_events_render_codes.sql.
+  'render_approval_unverified', 'render_unapproved', 'render_over_approved',
+  'budget_unverified', 'budget_exhausted',
   'storage_unverified', 'storage_quota_exhausted', 'no_capacity', 'venture_capacity', 'modality_capacity', 'publication_in_flight',
   'audit_dropped'] as const;
 /** Entries per D1 batch; one flush writes pages until it has caught up or a page fails. */

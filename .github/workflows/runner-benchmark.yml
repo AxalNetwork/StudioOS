@@ -20,18 +20,14 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
-      - name: Newest main timing artifact, or equal weights
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: bash scripts/ci/download-test-timings.sh
+      # D8693: the same steps as ci.yml's `plan` job (runner_lanes_5611), which writes the equal-weight plan.
       - name: Generate the exact-once plan
         id: plan
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
           parts=$(node --input-type=module -e '
             import { tierFor } from "./scripts/lib/prTier.mjs";
             const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
