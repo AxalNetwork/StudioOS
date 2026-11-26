@@ -36,8 +36,8 @@ async function companyAdmins(env: Env, companyId: number): Promise<number[]> {
  * Select only open records due on a reminder date, collecting each active recipient once per filing and window.
  * Three sources: a venture's formation steps and entity obligations (its founders), and a company's own
  * compliance events with no project (its admins, D6039 part 2). A company event whose pack item key (D6713) is
- * also on a live venture's formation step is that step's reminder, so the event is left out; the ledger's
- * unique pack item index holds the same rule if both ever arrive.
+ * also on a live venture's formation step is that step's reminder, so the event is left out; the pack item
+ * claim (`filing_reminder_pack_claims`) holds the same rule if both ever arrive.
  */
 export async function filingReminderCandidates(env: Env, today: string, leadDays: number) {
   const futureDueDate = remindOn(today, -leadDays);
@@ -89,17 +89,42 @@ function reminderLink(filing: DueFiling): string {
     : `/build/company-creation/${filing.source}-${filing.id}?project_id=${filing.project_id}`;
 }
 
+/**
+ * The source row's ledger claim, in one batch after the pack item claim when the filing has a key. The ledger
+ * row is written only while the pack claim names this source row, so a claim won by the other source (or a
+ * rerun's existing rows) leaves nothing new and nothing is sent.
+ */
+function claimStatements(env: Env, filing: DueFiling & { userId: number; reminderDate: string }): D1PreparedStatement[] {
+  const when = [filing.userId, filing.due_date, filing.reminderDate] as const;
+  // Obligations carry no pack item key; a step or event without one claims only its own ledger row.
+  const key = filing.source === 'obligation' ? null : filing.pack_item_key;
+  const owns = [key, key, ...when, filing.source, filing.id] as const;
+  const ledger = filing.source === 'event'
+    ? env.DB.prepare(
+      `INSERT OR IGNORE INTO filing_reminder_event_deliveries (event_id, user_id, due_date, reminder_date, company_id, pack_item_key)
+       SELECT ?, ?, ?, ?, ?, ?
+        WHERE ? IS NULL OR EXISTS (SELECT 1 FROM filing_reminder_pack_claims WHERE pack_item_key = ? AND user_id = ?
+          AND due_date = ? AND reminder_date = ? AND source = ? AND filing_id = ?)`,
+    ).bind(filing.id, ...when, filing.company_id, key, ...owns)
+    : env.DB.prepare(
+      `INSERT OR IGNORE INTO filing_reminder_deliveries (source, filing_id, user_id, due_date, reminder_date, project_id)
+       SELECT ?, ?, ?, ?, ?, ?
+        WHERE ? IS NULL OR EXISTS (SELECT 1 FROM filing_reminder_pack_claims WHERE pack_item_key = ? AND user_id = ?
+          AND due_date = ? AND reminder_date = ? AND source = ? AND filing_id = ?)`,
+    ).bind(filing.source, filing.id, ...when, filing.project_id, ...owns);
+  if (key == null) return [ledger];
+  return [env.DB.prepare(
+    `INSERT OR IGNORE INTO filing_reminder_pack_claims (pack_item_key, user_id, due_date, reminder_date, source, filing_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(key, ...when, filing.source, filing.id), ledger];
+}
+
 /** The scheduler supplies the approved lead time. Claim each recipient before invoking notify. */
 export async function sendFilingReminders(env: Env, today: string, leadDays = FILING_REMINDER_LEAD_DAYS, deliver = notify): Promise<number> {
   let sent = 0;
   for (const filing of await filingReminderCandidates(env, today, leadDays)) {
-    const identity = [filing.source, filing.id, filing.userId, filing.due_date, filing.reminderDate] as const;
-    // INSERT OR IGNORE honours both keys: the source row's, and one per pack item across sources.
-    const claim = await env.DB.prepare(
-      `INSERT OR IGNORE INTO filing_reminder_deliveries
-        (source, filing_id, user_id, due_date, reminder_date, project_id, company_id, pack_item_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(...identity, filing.project_id, filing.company_id, filing.pack_item_key).run();
-    if (!claim.meta?.changes) continue;
+    const results = await env.DB.batch(claimStatements(env, filing));
+    if (!results.at(-1)?.meta?.changes) continue;
     const notification = await deliver(env, {
       userId: filing.userId,
       type: 'filing_reminder',
@@ -110,10 +135,16 @@ export async function sendFilingReminders(env: Env, today: string, leadDays = FI
       category: 'compliance',
     });
     if (notification == null) continue;
-    await env.DB.prepare(
-      `UPDATE filing_reminder_deliveries SET sent_at = CURRENT_TIMESTAMP
-        WHERE source = ? AND filing_id = ? AND user_id = ? AND due_date = ? AND reminder_date = ?`,
-    ).bind(...identity).run();
+    const when = [filing.userId, filing.due_date, filing.reminderDate] as const;
+    await (filing.source === 'event'
+      ? env.DB.prepare(
+        `UPDATE filing_reminder_event_deliveries SET sent_at = CURRENT_TIMESTAMP
+          WHERE event_id = ? AND user_id = ? AND due_date = ? AND reminder_date = ?`,
+      ).bind(filing.id, ...when)
+      : env.DB.prepare(
+        `UPDATE filing_reminder_deliveries SET sent_at = CURRENT_TIMESTAMP
+          WHERE source = ? AND filing_id = ? AND user_id = ? AND due_date = ? AND reminder_date = ?`,
+      ).bind(filing.source, filing.id, ...when)).run();
     sent += 1;
   }
   return sent;

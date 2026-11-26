@@ -42,8 +42,11 @@ async function registered(companyOnly: boolean) {
   return { db, env, sent, deliver, close: () => db.close() };
 }
 
-const ledger = (db: any) => db.prepare(`SELECT source, user_id, project_id, company_id, pack_item_key, reminder_date, sent_at IS NOT NULL AS sent
-  FROM filing_reminder_deliveries ORDER BY reminder_date, source, user_id`).all().map((r: any) => ({ ...r }));
+const rows = (db: any, sql: string) => db.prepare(sql).all().map((r: any) => ({ ...r }));
+const events = (db: any) => rows(db, `SELECT event_id IS NOT NULL AS event, user_id, company_id, pack_item_key, reminder_date, sent_at IS NOT NULL AS sent
+  FROM filing_reminder_event_deliveries ORDER BY reminder_date, user_id`);
+const claims = (db: any) => rows(db, 'SELECT source, user_id, reminder_date FROM filing_reminder_pack_claims ORDER BY reminder_date, user_id');
+const steps = (db: any) => rows(db, 'SELECT source, user_id, project_id, reminder_date FROM filing_reminder_deliveries ORDER BY reminder_date, user_id');
 
 test('a company-only pack item reminds the company admins once per window, and the pack says so', async () => {
   const f = await registered(true);
@@ -63,12 +66,17 @@ test('a company-only pack item reminds the company admins once per window, and t
     assert.equal(await sendFilingReminders(f.env, DUE, 14, f.deliver), 2, 'the due day is its own window');
     assert.equal(await sendFilingReminders(f.env, DUE, 14, f.deliver), 0);
     const key = '6713:us_de_ccorp:annual_report';
-    assert.deepEqual(ledger(f.db), [
-      { source: 'event', user_id: 6713, project_id: null, company_id: 6713, pack_item_key: key, reminder_date: LEAD, sent: 1 },
-      { source: 'event', user_id: 6715, project_id: null, company_id: 6713, pack_item_key: key, reminder_date: LEAD, sent: 1 },
-      { source: 'event', user_id: 6713, project_id: null, company_id: 6713, pack_item_key: key, reminder_date: DUE, sent: 1 },
-      { source: 'event', user_id: 6715, project_id: null, company_id: 6713, pack_item_key: key, reminder_date: DUE, sent: 1 },
+    assert.deepEqual(events(f.db), [
+      { event: 1, user_id: 6713, company_id: 6713, pack_item_key: key, reminder_date: LEAD, sent: 1 },
+      { event: 1, user_id: 6715, company_id: 6713, pack_item_key: key, reminder_date: LEAD, sent: 1 },
+      { event: 1, user_id: 6713, company_id: 6713, pack_item_key: key, reminder_date: DUE, sent: 1 },
+      { event: 1, user_id: 6715, company_id: 6713, pack_item_key: key, reminder_date: DUE, sent: 1 },
     ]);
+    assert.deepEqual(claims(f.db), [
+      { source: 'event', user_id: 6713, reminder_date: LEAD }, { source: 'event', user_id: 6715, reminder_date: LEAD },
+      { source: 'event', user_id: 6713, reminder_date: DUE }, { source: 'event', user_id: 6715, reminder_date: DUE },
+    ]);
+    assert.deepEqual(steps(f.db), [], 'the venture ledger is untouched');
     f.db.exec("UPDATE compliance_events SET completion_status = 'completed'");
     assert.equal((await filingReminderCandidates(f.env, DUE, 14)).length, 0, 'a completed event is not reminded');
     f.db.exec("UPDATE compliance_events SET completion_status = 'snoozed'");
@@ -83,9 +91,12 @@ test('a project pack item seeded as a step and an event is reminded once, throug
     assert.equal(f.db.prepare('SELECT count(*) AS n FROM compliance_events WHERE pack_item_key IS NOT NULL AND project_id IS NULL').get()!.n, 1);
     const candidates = await filingReminderCandidates(f.env, LEAD, 14);
     assert.deepEqual(candidates.map(c => [c.source, c.userId]), [['step', 6713]]);
-    assert.equal(await sendFilingReminders(f.env, LEAD, 14, f.deliver), 1);
+    const concurrent = await Promise.all([sendFilingReminders(f.env, LEAD, 14, f.deliver), sendFilingReminders(f.env, LEAD, 14, f.deliver)]);
+    assert.equal(concurrent[0] + concurrent[1], 1, 'two concurrent runs send it once');
     assert.equal(await sendFilingReminders(f.env, LEAD, 14, f.deliver), 0);
     assert.deepEqual(f.sent.map(s => s.userId), [6713]);
+    assert.deepEqual(claims(f.db), [{ source: 'step', user_id: 6713, reminder_date: LEAD }]);
+    assert.deepEqual(steps(f.db), [{ source: 'step', user_id: 6713, project_id: 6713, reminder_date: LEAD }]);
     assert.match(f.sent[0].link, /^\/build\/company-creation\/step-\d+\?project_id=6713$/);
     // A done step still owns the item: the company's copy does not take over.
     f.db.exec("UPDATE formation_steps SET state = 'done'");
@@ -93,7 +104,7 @@ test('a project pack item seeded as a step and an event is reminded once, throug
   } finally { f.close(); }
 });
 
-test('the ledger refuses a second reminder for one pack item, recipient and day from the other source', async () => {
+test('the pack item claim refuses a second reminder for one item, recipient and day from the other source', async () => {
   const f = await registered(false);
   try {
     assert.equal(await sendFilingReminders(f.env, LEAD, 14, f.deliver), 1);
@@ -103,6 +114,8 @@ test('the ledger refuses a second reminder for one pack item, recipient and day 
     assert.deepEqual((await filingReminderCandidates(f.env, LEAD, 14)).map(c => [c.source, c.userId]), [['event', 6713], ['event', 6715]]);
     assert.equal(await sendFilingReminders(f.env, LEAD, 14, f.deliver), 1);
     assert.deepEqual(f.sent.map(s => s.userId), [6713, 6715]);
-    assert.deepEqual(ledger(f.db).map((r: any) => [r.source, r.user_id]), [['event', 6715], ['step', 6713]]);
+    assert.deepEqual(claims(f.db).map((r: any) => [r.source, r.user_id]), [['step', 6713], ['event', 6715]]);
+    assert.deepEqual(events(f.db).map((r: any) => r.user_id), [6715], 'no event row for the founder the step already reminded');
+    assert.equal(await sendFilingReminders(f.env, LEAD, 14, f.deliver), 0, 'a rerun sends nothing');
   } finally { f.close(); }
 });

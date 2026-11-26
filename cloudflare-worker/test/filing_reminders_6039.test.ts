@@ -44,12 +44,7 @@ test('D6039: the two windows select open filings and obligations for active vent
     ]);
     assert.equal((await filingReminderCandidates(env, '2026-11-20', 7)).length, 2);
     db.exec(readFileSync(new URL('../sql/migrations/202611150130_6039_filing_reminder_deliveries.sql', import.meta.url), 'utf8'));
-    db.exec(`INSERT INTO filing_reminder_deliveries VALUES ('step', 99, 1, '2026-11-01', '2026-11-01', 7, '2026-11-01 05:35:00')`);
-    db.exec(readFileSync(new URL('../sql/migrations/202611252325_6039_filing_reminder_company_events.sql', import.meta.url), 'utf8'));
-    assert.deepEqual({ ...db.prepare('SELECT * FROM filing_reminder_deliveries').get() }, {
-      source: 'step', filing_id: 99, user_id: 1, due_date: '2026-11-01', reminder_date: '2026-11-01', project_id: 7,
-      sent_at: '2026-11-01 05:35:00', company_id: null, pack_item_key: null }, 'the rebuild keeps every row and its sent time');
-    db.exec('DELETE FROM filing_reminder_deliveries');
+    db.exec(readFileSync(new URL('../sql/migrations/202611260037_6039_filing_reminder_company_claims.sql', import.meta.url), 'utf8'));
     const deliver: Parameters<typeof sendFilingReminders>[3] = async (_env, args) => args.userId === 2 ? null : 100;
     const concurrent = await Promise.all([sendFilingReminders(env, '2026-11-20', 14, deliver), sendFilingReminders(env, '2026-11-20', 14, deliver)]);
     assert.equal(concurrent[0] + concurrent[1], 4);
