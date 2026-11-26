@@ -1,0 +1,169 @@
+{
+  "$comment": "D8694: the hand-kept half of documentation/operations/CI_COVERAGE.md. Every map and list is in key order (D4134): insert at its place. A check is file#job, suite:<test:drift step> or guard:<test:guards id>; every job named needs a level in jobs. A gap is an open issue listed in issues, or an empty list (none filed). Run node scripts/ci/coverage-matrix.mjs after a change.",
+  "folders": {
+    "agent-compute": {
+      "checks": ["agent-compute-image.yml#image", "suite:test:worker"],
+      "gaps": []
+    },
+    "attached_assets": {
+      "checks": ["ci.yml#fast"],
+      "gaps": []
+    },
+    "backend": {
+      "checks": ["ci.yml#dev-backend"],
+      "gaps": []
+    },
+    "cloudflare-archive-observer": {
+      "checks": ["suite:test:frontend", "suite:test:worker"],
+      "gaps": []
+    },
+    "cloudflare-worker": {
+      "checks": ["build-worker-contracts.yml#contracts", "channel-worker-contracts.yml#contracts", "ci.yml#drift", "ci.yml#worker", "github-alerts.yml#future-clock-part", "mcp-worker-contracts.yml#contracts", "meeting-worker-contracts.yml#contracts", "post-deploy-smoke.yml#smoke", "release-rehearsal.yml#rehearse", "round-call-worker-contracts.yml#contracts", "suite:test:types", "suite:test:worker"],
+      "gaps": []
+    },
+    "cloudflare-worker-tail": {
+      "checks": ["suite:test:worker"],
+      "gaps": []
+    },
+    "cloudflare-worker/sql": {
+      "checks": ["ci.yml#fast", "cloudflare-worker-deploy.yml#schema-drift", "guard:check-migration-declarations", "guard:check-schema-pair-drift", "guard:check-sql-migrations", "migration-immutability.yml#gate", "schema-rehearsal.yml#rehearse"],
+      "gaps": []
+    },
+    "design": {
+      "checks": ["ci.yml#fast", "guard:check-folder-docs"],
+      "gaps": []
+    },
+    "docs": {
+      "checks": ["cloudflare-worker-deploy.yml#spa-smoke", "guard:check-bundle-budget", "guard:check-docs-assets-closure", "post-deploy-smoke.yml#smoke"],
+      "gaps": []
+    },
+    "documentation": {
+      "checks": ["guard:build-route-map", "guard:check-decision-appends", "guard:check-decision-ids", "guard:check-folder-docs"],
+      "gaps": []
+    },
+    "engineering-notifications": {
+      "checks": ["cloudflare-heartbeat-5671.yml#observe", "suite:test:frontend"],
+      "gaps": []
+    },
+    "engineering-slack": {
+      "checks": ["suite:test:frontend"],
+      "gaps": []
+    },
+    "frontend": {
+      "checks": ["ci.yml#frontend", "ci.yml#og-tags", "ci.yml#visual", "cloudflare-worker-deploy.yml#spa-smoke", "deck-visual.yml#visual", "form-lightbox-contracts.yml#contracts", "github-alerts.yml#future-clock-part", "pr-preview.yml#login-e2e", "record-page-contracts.yml#contracts", "suite:lint:undef", "suite:node scripts/check-dark-mode.mjs", "suite:test:frontend", "suite:test:types:frontend"],
+      "gaps": []
+    },
+    "infra": {
+      "checks": ["included-compute-canary.yml#canary", "macbook-worker.yml#worker", "runner-benchmark.yml#benchmark"],
+      "gaps": ["#7888", "#7905"]
+    },
+    "meeting-bot": {
+      "checks": ["meeting-bot-image.yml#validate", "meeting-worker-contracts.yml#contracts", "suite:test:meeting-bot"],
+      "gaps": ["#3588"]
+    },
+    "merge-control": {
+      "checks": ["suite:test:merge-control"],
+      "gaps": []
+    },
+    "scripts": {
+      "checks": ["agent-provenance.yml#provenance", "claude-review.yml#selftest", "ownership.yml#ownership", "release-alpha-rename.yml#rename", "release-draft.yml#draft", "release-rehearsal.yml#release-window", "suite:test:guards", "suite:test:retention"],
+      "gaps": []
+    }
+  },
+  "issues": {
+    "#3588": "Meeting bot: the live check on Google Meet and Zoom",
+    "#7888": "CI runners: prove added parallel capacity, runner drain and growth",
+    "#7905": "CI runners: job-identity isolation before any self-hosted execution",
+    "#8512": "Stripe webhook: prove one delivery end to end",
+    "#8522": "AI usage: one metadata contract every model call writes",
+    "#8524": "eSign: a browser test that signs an envelope and downloads the signed PDF",
+    "#8531": "DR drill: a monthly drill that passes, with a file restore",
+    "#8536": "Transactional email: one delivery contract with tested failure states",
+    "#8691": "Account journey: the revoked-seat browser step fails intermittently"
+  },
+  "jobs": {
+    "agent-compute-image.yml#image": "unit",
+    "agent-provenance.yml#provenance": "unit",
+    "agent-stage-a.yml#stage-a": "staging",
+    "backup-d1.yml#backup": "production",
+    "build-worker-contracts.yml#contracts": "unit",
+    "channel-worker-contracts.yml#contracts": "unit",
+    "ci.yml#dev-backend": "unit",
+    "ci.yml#drift": "unit",
+    "ci.yml#fast": "unit",
+    "ci.yml#frontend": "unit",
+    "ci.yml#og-tags": "unit",
+    "ci.yml#visual": "browser",
+    "ci.yml#worker": "unit",
+    "claude-review.yml#selftest": "unit",
+    "cloudflare-heartbeat-5671.yml#observe": "production",
+    "cloudflare-worker-deploy.yml#schema-drift": "production",
+    "cloudflare-worker-deploy.yml#spa-smoke": "production",
+    "deck-visual.yml#visual": "browser",
+    "dr-drill.yml#drill": "production",
+    "dr-drill.yml#independent-file-drill": "staging",
+    "file-recovery.yml#snapshot": "production",
+    "file-recovery.yml#synthetic-proof": "staging",
+    "form-lightbox-contracts.yml#contracts": "unit",
+    "gateway-live-check.yml#live-check": "pilot",
+    "github-alerts.yml#future-clock-part": "unit",
+    "included-compute-canary.yml#canary": "unit",
+    "macbook-worker.yml#worker": "unit",
+    "magic-link-insert-probe.yml#probe": "production",
+    "magic-link-probe.yml#probe": "production",
+    "mcp-worker-contracts.yml#contracts": "unit",
+    "meeting-bot-image.yml#validate": "unit",
+    "meeting-worker-contracts.yml#contracts": "unit",
+    "migration-immutability.yml#gate": "unit",
+    "ownership.yml#ownership": "unit",
+    "post-deploy-smoke.yml#smoke": "production",
+    "pr-preview.yml#login-e2e": "browser",
+    "prompt-eval-gate.yml#gate": "unit",
+    "record-page-contracts.yml#contracts": "unit",
+    "release-alpha-rename.yml#rename": "unit",
+    "release-draft.yml#draft": "unit",
+    "release-rehearsal.yml#rehearse": "unit",
+    "release-rehearsal.yml#release-window": "unit",
+    "round-call-worker-contracts.yml#contracts": "unit",
+    "runner-benchmark.yml#benchmark": "unit",
+    "schema-rehearsal.yml#rehearse": "staging"
+  },
+  "services": {
+    "accounts": {
+      "checks": ["ci.yml#visual", "guard:build-auth-inventory", "guard:build-company-scope-inventory", "magic-link-insert-probe.yml#probe", "magic-link-probe.yml#probe", "pr-preview.yml#login-e2e", "suite:test:frontend", "suite:test:worker"],
+      "gaps": ["#8691"],
+      "name": "Accounts and sign-in",
+      "tests": ["cloudflare-worker/test/account_*.test.ts", "cloudflare-worker/test/auth_*.test.ts", "cloudflare-worker/test/magic_link*.test.ts", "frontend/test/magic_link*.test.mjs", "frontend/tests/visual/account_journey_8529.spec.mjs"]
+    },
+    "ai": {
+      "checks": ["agent-stage-a.yml#stage-a", "gateway-live-check.yml#live-check", "guard:check-ai-gateways", "guard:check-model-coverage", "guard:check-skill-eval-cases", "post-deploy-smoke.yml#smoke", "prompt-eval-gate.yml#gate", "suite:test:frontend", "suite:test:worker"],
+      "gaps": ["#8522"],
+      "name": "AI (model calls and usage)",
+      "tests": ["cloudflare-worker/test/aiRouter*.test.*", "cloudflare-worker/test/ai_usage*.test.ts", "frontend/test/airail*.test.mjs"]
+    },
+    "billing": {
+      "checks": ["guard:check-money-cents", "guard:stripe-idempotency", "post-deploy-smoke.yml#smoke", "suite:test:retention", "suite:test:worker"],
+      "gaps": ["#8512"],
+      "name": "Billing (Stripe)",
+      "tests": ["cloudflare-worker/test/*stripe*.test.ts", "cloudflare-worker/test/billing_*.test.ts", "scripts/lib/stripeReconciliation.test.mjs"]
+    },
+    "disaster-recovery": {
+      "checks": ["backup-d1.yml#backup", "dr-drill.yml#drill", "dr-drill.yml#independent-file-drill", "file-recovery.yml#snapshot", "file-recovery.yml#synthetic-proof", "suite:test:frontend"],
+      "gaps": ["#8531"],
+      "name": "Disaster recovery",
+      "tests": ["frontend/test/d1_backup*.test.mjs", "frontend/test/dr_*.test.mjs", "frontend/test/restore_d1*.test.mjs"]
+    },
+    "email": {
+      "checks": ["magic-link-insert-probe.yml#probe", "magic-link-probe.yml#probe", "suite:test:worker"],
+      "gaps": ["#8536"],
+      "name": "Transactional email",
+      "tests": ["cloudflare-worker/test/email_delivery_contract_8536*.test.ts", "cloudflare-worker/test/mail_*.test.ts"]
+    },
+    "esign": {
+      "checks": ["suite:test:frontend", "suite:test:worker"],
+      "gaps": ["#8524"],
+      "name": "eSign",
+      "tests": ["cloudflare-worker/test/esign*.test.ts", "frontend/test/esign*.test.mjs", "frontend/tests/e2e/esign_signer_journey.spec.js"]
+    }
+  }
+}

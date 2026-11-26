@@ -28,7 +28,10 @@
  * DELETION. One page's absence never means deletion. Only
  * `reconcileTypeformDeletions` concludes a provider deletion: an explicit
  * `included_response_ids` lookup of the held ids must miss an id twice, at
- * least `RECONCILE_CONFIRM_MS` apart.
+ * least `RECONCILE_CONFIRM_MS` apart. A run makes at most
+ * `reconcileLookupsPerRun` lookups and keeps its place
+ * (`reconcile_after_id`, D5828 part 4), so a long history is covered over
+ * several runs and every held id is reached, never only the first ones.
  *
  * SELECTION (D5828 part 2). The venture's `typeform_form_bindings` row
  * (#5827) is the only selection. A sync row runs only while that binding
@@ -50,7 +53,7 @@ import { retractTypeformReviews } from './reviewCleanup';
 import { TypeformReadError, answerFor, formFields, responseHead, responsesLink, typeformRead, RESPONSE_ID, type FetchLike, type FormField, type ReadTarget, type TypeformErrorCode, type TypeformRegion } from './api';
 import { qualifyingAnswer, typeformMapping, MAX_MAPPINGS, type MappingRule } from './mappings';
 
-export const SYNC_LIMITS = Object.freeze({ pageSize: 200, pagesPerRun: 10, reconcileBatch: 25, reconcileMax: 1000 });
+export const SYNC_LIMITS = Object.freeze({ pageSize: 200, pagesPerRun: 10, reconcileBatch: 25, reconcileLookupsPerRun: 8 });
 export const LEASE_MS = 5 * 60_000;
 export const OVERLAP_MS = 24 * 3600_000;
 export const RECONCILE_CONFIRM_MS = 3600_000;
@@ -73,8 +76,8 @@ export interface ImportDeps {
   now: () => number;
   /** This run's lease owner. */
   runId: string;
-  /** Smaller pages for fixtures; production uses `SYNC_LIMITS`. */
-  limits?: Partial<{ pageSize: number; pagesPerRun: number }>;
+  /** Smaller pages and passes for fixtures; production uses `SYNC_LIMITS`, which these can lower but never raise. */
+  limits?: Partial<{ pageSize: number; pagesPerRun: number; reconcileBatch: number; reconcileLookupsPerRun: number }>;
 }
 export interface SyncKey { integrationId: number; projectId: number; formId: string }
 export type SyncOutcome = 'ok' | 'partly' | 'busy' | 'stopped' | 'not_found' | 'not_selected' | 'not_stored' | TypeformErrorCode;
@@ -86,7 +89,7 @@ export interface SyncResult {
 
 interface SyncRow {
   id: number; integration_id: number; project_id: number; form_id: string; status: string; sync_state: string;
-  checkpoint_submitted_at: string | null; retry_after: string | null; region: string | null;
+  checkpoint_submitted_at: string | null; retry_after: string | null; region: string | null; reconcile_after_id: number | null;
   provider_key: string; integration_status: string; selected: number;
 }
 interface ActiveMapping { id: number; field_id: string; field_type: string; rule: MappingRule; keep_text: boolean; signature: string }
@@ -98,7 +101,7 @@ export const ledgerKey = (formId: string, projectId: number, responseId: string,
 async function loadSync(env: Env, key: SyncKey): Promise<SyncRow | null> {
   return env.DB.prepare(
     `SELECT s.id, s.integration_id, s.project_id, s.form_id, s.status, s.sync_state, s.checkpoint_submitted_at, s.retry_after,
-            s.region, i.provider_key, i.status AS integration_status,
+            s.region, s.reconcile_after_id, i.provider_key, i.status AS integration_status,
             EXISTS (SELECT 1 FROM typeform_form_bindings b
                      WHERE b.project_id = s.project_id AND b.integration_id = s.integration_id AND b.form_id = s.form_id) AS selected
        FROM typeform_form_syncs s JOIN integrations i ON i.id = s.integration_id
@@ -308,7 +311,12 @@ async function unlinkAnswers(env: Env, integrationId: number, responseRowId: num
   ];
 }
 
-export interface ReconcileResult { outcome: SyncOutcome; checked: number; missing_once: number; provider_deleted: number; reappeared: number }
+export interface ReconcileResult {
+  /** `partly`: the run's lookup bound was reached mid-pass; the next run continues where this one stopped. */
+  outcome: SyncOutcome; lookups: number; checked: number; missing_once: number; provider_deleted: number; reappeared: number;
+}
+
+const clampLimit = (want: number | undefined, max: number) => Math.min(max, Math.max(1, Math.floor(want ?? max) || 1));
 
 /**
  * Provider-deletion reconciliation, within what the Responses API documents:
@@ -316,25 +324,40 @@ export interface ReconcileResult { outcome: SyncOutcome; checked: number; missin
  * lookup misses is marked; a second miss at least `RECONCILE_CONFIRM_MS`
  * later marks it `provider_deleted` and removes its answers. A failed or
  * malformed lookup concludes nothing.
+ *
+ * BOUNDED (D5828 part 4). One run makes at most `reconcileLookupsPerRun`
+ * lookups of `reconcileBatch` ids, in local row order, starting after the
+ * sync row's `reconcile_after_id`. After each lookup's writes have resolved,
+ * and only while this run holds the lease, the cursor moves to the last id of
+ * that lookup. A run that reaches the end of the held ids finishes the pass:
+ * the cursor is cleared and `last_reconciled_at` set. A run cut short by the
+ * bound is `partly`; one that fails mid-pass keeps the cursor where the last
+ * whole lookup put it, so the retry re-asks only what was not concluded.
  */
 export async function reconcileTypeformDeletions(env: Env, deps: ImportDeps, key: SyncKey): Promise<ReconcileResult> {
   const now = deps.now(); const nowIso = iso(now);
   const row = await loadSync(env, key);
-  const out: ReconcileResult = { outcome: 'ok', checked: 0, missing_once: 0, provider_deleted: 0, reappeared: 0 };
+  const out: ReconcileResult = { outcome: 'ok', lookups: 0, checked: 0, missing_once: 0, provider_deleted: 0, reappeared: 0 };
   const refused = await admit(env, row, now);
   if (refused) return { ...out, outcome: refused };
   const sync = row as SyncRow;
   if (!(await takeLease(env, sync.id, deps.runId, now))) return { ...out, outcome: 'busy' };
+  const batchSize = clampLimit(deps.limits?.reconcileBatch, SYNC_LIMITS.reconcileBatch);
+  const lookupsPerRun = clampLimit(deps.limits?.reconcileLookupsPerRun, SYNC_LIMITS.reconcileLookupsPerRun);
   try {
     const t = await target(env, deps, sync);
+    const start = Number(sync.reconcile_after_id ?? 0) || 0;
+    // One more than the bound reads whether this run's slice is the pass's last.
     const held = (await env.DB.prepare(
-      "SELECT id, response_id, upstream_missing_at FROM typeform_responses WHERE sync_id = ? AND status = 'active' ORDER BY id LIMIT ?",
-    ).bind(sync.id, SYNC_LIMITS.reconcileMax).all<{ id: number; response_id: string; upstream_missing_at: string | null }>()).results || [];
-    for (let i = 0; i < held.length; i += SYNC_LIMITS.reconcileBatch) {
-      const batch = held.slice(i, i + SYNC_LIMITS.reconcileBatch);
+      "SELECT id, response_id, upstream_missing_at FROM typeform_responses WHERE sync_id = ? AND status = 'active' AND id > ? ORDER BY id LIMIT ?",
+    ).bind(sync.id, start, batchSize * lookupsPerRun + 1).all<{ id: number; response_id: string; upstream_missing_at: string | null }>()).results || [];
+    const slice = held.slice(0, batchSize * lookupsPerRun);
+    for (let i = 0; i < slice.length; i += batchSize) {
+      const batch = slice.slice(i, i + batchSize);
       const page = await typeformRead(deps.fetch, t, 'responses.list', {
-        included_response_ids: batch.map((r) => r.response_id).join(','), page_size: String(SYNC_LIMITS.reconcileBatch), response_type: 'completed,partial',
+        included_response_ids: batch.map((r) => r.response_id).join(','), page_size: String(batchSize), response_type: 'completed,partial',
       });
+      out.lookups += 1;
       if (!Array.isArray(page?.items)) throw new TypeformReadError('unreadable');
       const present = new Set(page.items.map((it: any) => responseHead(it)?.response_id).filter(Boolean));
       for (const r of batch) {
@@ -355,8 +378,16 @@ export async function reconcileTypeformDeletions(env: Env, deps: ImportDeps, key
           out.provider_deleted += 1;
         }
       }
+      // Every write of this lookup has resolved: only now may the cursor move.
+      await env.DB.prepare('UPDATE typeform_form_syncs SET reconcile_after_id = ? WHERE id = ? AND lease_owner = ?')
+        .bind(batch[batch.length - 1].id, sync.id, deps.runId).run();
     }
-    await env.DB.prepare('UPDATE typeform_form_syncs SET last_reconciled_at = ?, updated_at = ? WHERE id = ?').bind(nowIso, nowIso, sync.id).run();
+    if (held.length > slice.length) {
+      out.outcome = 'partly';
+    } else {
+      await env.DB.prepare('UPDATE typeform_form_syncs SET reconcile_after_id = NULL, last_reconciled_at = ?, updated_at = ? WHERE id = ? AND lease_owner = ?')
+        .bind(nowIso, nowIso, sync.id, deps.runId).run();
+    }
   } catch (e) {
     if (e instanceof TypeformSessionBusy) { out.outcome = 'busy'; return out; }
     const f = failure(e, now);
@@ -454,6 +485,8 @@ export async function setTypeformMappings(env: Env, syncId: number, fields: Form
 
 export interface TypeformFormStatus {
   state: string; active: boolean; last_synced_at: string | null; checkpoint: string | null; link: string | null;
+  /** D5828 part 4: when the last whole deletion-reconcile pass finished (null: none has), and whether one is part way. */
+  last_reconciled_at: string | null; reconcile_in_progress: boolean;
   completed: number; partial: number; qualifying: number; withdrawn: number; provider_deleted: number;
   /** D5828 part 3: ids and status only; a field's title never leaves the Worker. */
   needs_remap: Array<{ field_id: string; status: string }>;
@@ -468,7 +501,7 @@ export async function typeformFormStatus(env: Env, scope: Scope, formId: string)
   const id = await syncIdFor(env, scope, formId);
   if (id == null) return null;
   const s = await env.DB.prepare(
-    'SELECT status, sync_state, last_synced_at, checkpoint_submitted_at, form_id, region FROM typeform_form_syncs WHERE id = ?',
+    'SELECT status, sync_state, last_synced_at, checkpoint_submitted_at, form_id, region, last_reconciled_at, reconcile_after_id FROM typeform_form_syncs WHERE id = ?',
   ).bind(id).first<any>();
   const c = await env.DB.prepare(
     `SELECT COUNT(DISTINCT CASE WHEN response_type = 'completed' AND status <> 'provider_deleted' THEN response_id END) AS completed,
@@ -486,6 +519,7 @@ export async function typeformFormStatus(env: Env, scope: Scope, formId: string)
   return {
     state: s.sync_state, active: s.status === 'active', last_synced_at: s.last_synced_at, checkpoint: s.checkpoint_submitted_at,
     link: responsesLink(validatedRegion(s.region), s.form_id),
+    last_reconciled_at: s.last_reconciled_at ?? null, reconcile_in_progress: s.reconcile_after_id != null,
     completed: Number(c?.completed ?? 0), partial: Number(c?.partial ?? 0), qualifying: Number(q?.n ?? 0),
     withdrawn: Number(c?.withdrawn ?? 0), provider_deleted: Number(c?.provider_deleted ?? 0),
     needs_remap: remap.map((r: any) => ({ field_id: r.field_id, status: r.status })),

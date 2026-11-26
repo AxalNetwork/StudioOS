@@ -1286,6 +1286,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/storage">Storage</StripLink>
           <StripLink to="/admin/platform/meeting-bots">Meeting bots</StripLink>
+          <StripLink to="/admin/workgraph/in-flight">WorkGraph</StripLink>
           <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin/platform/bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin/platform/promo-codes">Promo codes</StripLink>

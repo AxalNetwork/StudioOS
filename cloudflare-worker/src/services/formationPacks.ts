@@ -30,8 +30,10 @@ export function packDue(rule: PackRule | null, today: string, registeredOn: stri
 
 /** Reads pinned versions for a case and the published current version for legacy calendar doors. */
 export async function formationPack(env: Env, formKey: string, options: {
-  versionId?: number | null; today: string; registeredOn?: string | null; projectId?: number | null;
+  versionId?: number | null; today: string; registeredOn?: string | null; projectId?: number | null; companyId?: number | null;
 }): Promise<ObligationPackItem[]> {
+  // D6039 part 2: a dated item is reminded through its venture's formation step or its company's compliance event.
+  const covered = options.projectId != null || options.companyId != null;
   const versionId = options.versionId ?? (await currentVersion(env))?.id;
   if (!versionId) return [];
   const form = await env.DB.prepare(`SELECT f.id, j.country FROM formation_entity_forms f JOIN formation_jurisdictions j ON j.id = f.jurisdiction_id AND j.version_id = f.version_id WHERE f.version_id = ? AND f.form_key = ?`)
@@ -52,7 +54,7 @@ export async function formationPack(env: Env, formKey: string, options: {
       kind: kinds.has(row.event_kind) && !(row.event_kind === 'franchise_tax' && form.country !== 'US') ? row.event_kind : 'other',
       recurrence: cadences.has(row.recurrence) ? row.recurrence : 'one_time', rule,
       source_id: row.source_id ?? null, checked_on: row.checked_on ?? null, due_date: due,
-      reminders: options.projectId != null && due != null };
+      reminders: covered && due != null };
   });
   // v1 copied these legacy definitions as provisional facts. Expose their labels,
   // but never promote an unsourced deadline to a recorded legal obligation.
@@ -71,18 +73,20 @@ export async function formationPack(env: Env, formKey: string, options: {
       phase: 'ongoing', kind: kinds.has(spec.event_type) && !(spec.event_type === 'franchise_tax' && form.country !== 'US') ? spec.event_type : 'other',
       recurrence: cadences.has(spec.recurrence) ? spec.recurrence : 'one_time', rule,
       source_id: fact.source_id ?? null, checked_on: fact.checked_on ?? null, due_date: due,
-      reminders: options.projectId != null && due != null });
+      reminders: covered && due != null });
   }
   return out;
 }
 
 /** Statements run after the guarded case transition and its company-link statements, in the same batch. */
 export async function registrationPackStatements(env: Env, caseId: number, revision: number, seedToken: string, registeredOn: string | null): Promise<D1PreparedStatement[]> {
-  const subject = await env.DB.prepare(`SELECT form_key, catalogue_version_id, project_id, user_id, track FROM formation_cases WHERE id = ?`)
-    .bind(caseId).first<{ form_key: string | null; catalogue_version_id: number | null; project_id: number | null; user_id: number; track: string }>();
+  const subject = await env.DB.prepare(`SELECT c.form_key, c.catalogue_version_id, c.project_id, c.user_id, c.track,
+      COALESCE(c.company_id, p.company_id) AS company_id
+    FROM formation_cases c LEFT JOIN projects p ON p.id = c.project_id WHERE c.id = ?`)
+    .bind(caseId).first<{ form_key: string | null; catalogue_version_id: number | null; project_id: number | null; company_id: number | null; user_id: number; track: string }>();
   if (!subject || subject.track !== 'v2' || !subject.form_key || subject.catalogue_version_id == null) return [];
   const items = await formationPack(env, subject.form_key, { versionId: subject.catalogue_version_id,
-    today: registeredOn ?? new Date().toISOString().slice(0, 10), registeredOn, projectId: subject.project_id });
+    today: registeredOn ?? new Date().toISOString().slice(0, 10), registeredOn, projectId: subject.project_id, companyId: subject.company_id });
   const statements: D1PreparedStatement[] = [];
   for (const item of items) {
     const key = `${caseId}:${subject.form_key}:${item.key}`;

@@ -27,6 +27,7 @@ import { mintDownloadToken } from '../signedDownload';
 import { customKpis, KPI_KEYS, KPI_LABEL, CUSTOM_PREFIX } from '../growKpis';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row, Store } from './types';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
+import { filingReminderDates, filingReminderHistory } from '../filingReminders';
 import {
   SYSTEM_ACTION_LABEL, SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, disconnectedReason, systemActionIntent, systemStateOf, type SystemState,
 } from '../systemsState';
@@ -1371,7 +1372,22 @@ const companyCreation: ModuleSpec = {
         return { a: label, c: done ? 'Done' : 'Open', tone };
       }) };
     } },
-    { key: 'reminders', title: 'Reminders', async read() { return notRecorded('No reminder is sent for filings.'); } },
+    { key: 'reminders', title: 'Reminders', async read(ctx, id) {
+      const f = await filingOf(ctx, id);
+      if (f.source === 'lab') return notRecorded('Lab filings do not use venture reminders.');
+      const dates = filingReminderDates(f.due);
+      const history = await filingReminderHistory(ctx.env, ctx.projectId, f.source, numericId(id, f.source + '-'));
+      const rows: Row[] = history.map(({ sent_at }) => ({ a: 'Sent', b: stampText(sent_at) ?? undefined, tone: 'ok' }));
+      if (!dates.length) return { rows: [...rows, ...notRecorded('No due date recorded.').rows] };
+      if (!f.done && (f.source === 'step' || f.status === 'open')) {
+        const today = new Date().toISOString().slice(0, 10);
+        const sentDays = new Set(history.filter(({ due_date }) => due_date === f.due).map(({ reminder_date }) => reminder_date));
+        for (const date of dates) {
+          if (date >= today && !sentDays.has(date)) rows.push({ a: 'Scheduled', b: dateText(date) ?? undefined, tone: 'grey' });
+        }
+      }
+      return rows.length ? { rows } : notRecorded('No reminders were sent or are scheduled for this filing.');
+    } },
     { key: 'linked', title: 'Linked', side: true, async read(ctx, id) {
       const f = await filingOf(ctx, id);
       const rows: Row[] = [];

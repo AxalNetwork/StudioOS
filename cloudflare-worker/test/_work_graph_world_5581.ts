@@ -19,7 +19,8 @@ const read = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, impor
 export const SCHEMA = read('202611140007_5581_work_graph_revisions.sql')
   + read('202611140122_5581_work_graph_lease_events.sql')
   + read('202611140924_5581_work_graph_integrity.sql')
-  + read('202611220358_5583_media_blob_classes.sql');
+  + read('202611220358_5583_media_blob_classes.sql')
+  + read('202611252327_5583_media_multipart_uploads.sql');
 
 export const T0 = Date.parse('2026-11-14T09:30:00Z');
 export const clock = { t: T0 };
@@ -44,10 +45,21 @@ const hexToBuf = (hex: string) => new Uint8Array(hex.match(/../g)!.map((h) => pa
 
 interface Stored { bytes: Uint8Array; sha256: string | null; customMetadata: Record<string, string>; uploaded: Date }
 
-/** R2, in memory: put checks `sha256` like R2 does and keeps it as the object's checksum; list pages by key. */
+/** A stream that yields `bytes` in uneven chunks, as R2's body does, so a hash fed from it must chain chunks. */
+const chunked = (bytes: Uint8Array, size = 1000) => new ReadableStream<Uint8Array>({
+  start(c) { for (let i = 0; i < bytes.byteLength; i += size) c.enqueue(bytes.slice(i, i + size)); c.close(); },
+});
+interface Upload { key: string; parts: Map<number, { bytes: Uint8Array; etag: string }>; state: 'open' | 'completed' | 'aborted'; customMetadata: Record<string, string> }
+
+/**
+ * R2, in memory: put checks `sha256` like R2 does and keeps it as the object's checksum; list pages by key. D5583
+ * part 3 adds multipart uploads the way R2 keeps them: parts are invisible until `complete`, which needs every
+ * part's current etag; a completed multipart object has no SHA-256 checksum.
+ */
 export class FakeR2 {
   objects = new Map<string, Stored>();
-  ops = { put: 0, head: 0, get: 0, delete: 0, list: 0 };
+  uploads = new Map<string, Upload>();
+  ops = { put: 0, head: 0, get: 0, delete: 0, list: 0, mpCreate: 0, mpPart: 0, mpComplete: 0, mpAbort: 0 };
   /** The next put's body arrives torn: only its first half reaches the bucket. */
   tearNext = false;
   private view(key: string, o: Stored) {
@@ -55,7 +67,52 @@ export class FakeR2 {
       key, size: o.bytes.byteLength, uploaded: o.uploaded, customMetadata: { ...o.customMetadata },
       checksums: { sha256: o.sha256 ? hexToBuf(o.sha256) : undefined },
       arrayBuffer: async () => o.bytes.slice().buffer,
+      get body() { return chunked(o.bytes); },
     };
+  }
+  async createMultipartUpload(key: string, opts: { customMetadata?: Record<string, string> } = {}) {
+    this.ops.mpCreate++;
+    const id = `r2u${this.uploads.size + 1}`;
+    this.uploads.set(id, { key, parts: new Map(), state: 'open', customMetadata: { ...(opts.customMetadata ?? {}) } });
+    return this.resumeMultipartUpload(key, id);
+  }
+  resumeMultipartUpload(key: string, uploadId: string) {
+    const open = () => {
+      const u = this.uploads.get(uploadId);
+      if (!u || u.key !== key || u.state !== 'open') throw new Error('multipart: upload is not open');
+      return u;
+    };
+    return {
+      key, uploadId,
+      uploadPart: async (partNumber: number, value: Uint8Array) => {
+        this.ops.mpPart++;
+        const u = open();
+        const bytes = new Uint8Array(value).slice();
+        const etag = (await sha256Hex(bytes)).slice(0, 32);
+        u.parts.set(partNumber, { bytes, etag });
+        return { partNumber, etag };
+      },
+      complete: async (parts: { partNumber: number; etag: string }[]) => {
+        this.ops.mpComplete++;
+        const u = open();
+        const chunks = parts.map((p, i) => {
+          const stored = u.parts.get(p.partNumber);
+          if (p.partNumber !== i + 1 || !stored || stored.etag !== p.etag) throw new Error('multipart: InvalidPart');
+          return stored.bytes;
+        });
+        const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0));
+        let at = 0; for (const c of chunks) { bytes.set(c, at); at += c.byteLength; }
+        u.state = 'completed';
+        const o: Stored = { bytes, sha256: null, customMetadata: u.customMetadata, uploaded: new Date(clock.t) };
+        this.objects.set(key, o);
+        return this.view(key, o);
+      },
+      abort: async () => { this.ops.mpAbort++; const u = open(); u.state = 'aborted'; u.parts.clear(); },
+    };
+  }
+  /** Test hook: another body lands under an acknowledged part number (a lost race), with its own etag. */
+  replacePart(uploadId: string, partNumber: number, bytes: Uint8Array) {
+    this.uploads.get(uploadId)!.parts.set(partNumber, { bytes, etag: `other${partNumber}` });
   }
   async put(key: string, value: Uint8Array, opts: { sha256?: string; customMetadata?: Record<string, string> } = {}) {
     this.ops.put++;
