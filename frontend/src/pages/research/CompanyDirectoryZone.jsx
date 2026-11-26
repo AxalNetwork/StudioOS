@@ -31,6 +31,13 @@
 // currency under a note. A half-typed or reversed year range sends nothing and
 // keeps the last valid results. One native link per company; the checkbox is
 // apart. Below 1024px the rows are cards, with a filter sheet and a selection sheet.
+//
+// D7813 (#7813): the header row's Export is this page's scoped export
+// (`companyDirectoryExport.js`, D7172's `view.scoped`): "Export this page · N
+// rows", a hover naming the search, filters, sort and page, ten columns with
+// the stored attribution, and a file named for the page, row count and day.
+// The Directory and Saved analyses tabs take arrow keys, Home and End, with one
+// tab stop, and each names its tab panel.
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
@@ -51,6 +58,8 @@ import {
 } from './companyDirectoryState.js';
 import { canAddToResearch } from './researchComparisons.js';
 import { ReviewSelection, SelectionBar, SelectionHint } from './CompanySelection.jsx';
+import { exportFileName, exportView } from '../../lib/csvExport.js';
+import { COMPANY_CSV_HEADER, companyCsvCells, companyExport } from './companyDirectoryExport.js';
 
 import { CompanyPublisherProvider, SourceDetails, PublisherBoundary } from './CompanySource.jsx';
 
@@ -651,6 +660,23 @@ function Directory({ role, zoneActions, onTotal }) {
   useEffect(() => { load(); }, [load]);
   const state = listState(read);
 
+  // D7813: the page's scoped export. The rows are the page on screen, the
+  // criteria are the ones that read it (`applied`), and the header row draws
+  // this label and runs this click. A new read drops the last Downloaded note.
+  const ctl = companyExport({ state, data: read.data, filters: applied });
+  const [exportNote, setExportNote] = useState(null);
+  useEffect(() => { setExportNote(null); }, [key, state]);
+  const runExport = () => {
+    if (ctl.disabled) return;
+    const rows = (read.data?.items || []).map(companyCsvCells);
+    let ok = false;
+    try { ok = exportView({ scope: null, zone: ctl.zone, header: COMPANY_CSV_HEADER, rows }); } catch { ok = false; }
+    setExportNote(ok
+      ? { ok: true, text: `Downloaded ${exportFileName({ scope: null, zone: ctl.zone, count: rows.length })}` }
+      : { ok: false, text: 'The file could not be written. The rows are still on screen.' });
+  };
+  const scoped = { ...ctl, onClick: runExport };
+
   // D5157: the selection is kept across pages and filters, by uid with its
   // name (D7177: and the page it was ticked on, for Review selection; only Clear
   // and Remove change it). D7179: in this tab's session, keyed by the member
@@ -724,7 +750,9 @@ function Directory({ role, zoneActions, onTotal }) {
   );
   return (
     <>
-      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(read.data?.items || [])} /> : null}
+      {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(scoped)} /> : null}
+      <p role="status" data-testid="company-export-note"
+        className={!exportNote ? 'sr-only' : `text-[11.5px] font-semibold ${exportNote.ok ? 'text-emerald-800 dark:text-emerald-200' : 'text-red-700 dark:text-red-300'}`}>{exportNote?.text || ''}</p>
       <SearchRow filters={filters} onChange={change} compact={compact} onOpenFilters={() => setSheet(true)} filtersOpener={filtersOpener} />
       {compact ? null : filterPanel(false)}
       {compact && yearNote ? <p className="text-[11.5px] font-semibold text-red-700 dark:text-red-300">{yearNote}</p> : null}
@@ -765,6 +793,16 @@ const TABS = [
   { key: 'directory', label: 'Directory' },
   { key: 'analyses', label: 'Saved analyses' },
 ];
+
+/** D7813: the ids a tab and its panel name each other by. */
+export const tabId = (key) => `companies-tab-${key}`;
+export const panelId = (key) => `companies-panel-${key}`;
+
+/** D7813 (RS-17 E): the tab a key moves to from tab `i` — arrows wrap, Home and End go to the ends; else null. */
+export function tabKeyTarget(key, i, n = TABS.length) {
+  const to = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 }[key];
+  return to == null ? null : to;
+}
 
 /**
  * D593 (the C0 board): the Directory tab carries the directory's size, from
@@ -816,6 +854,15 @@ function CompanyDirectoryZoneBody({ role = 'founder', zoneActions = null }) {
     if (key === 'directory') { next.delete('tab'); next.delete('market'); next.delete('website'); } else next.set('tab', key);
     setParams(next, { replace: true });
   };
+  // D7813: one tab stop (the selected tab); arrows, Home and End move and select.
+  const tabRefs = useRef([]);
+  const onTabKey = (e, i) => {
+    const to = tabKeyTarget(e.key, i);
+    if (to == null) return;
+    e.preventDefault();
+    pick(TABS[to].key);
+    tabRefs.current[to]?.focus();
+  };
   return (
     <div data-testid="company-directory" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -829,8 +876,10 @@ function CompanyDirectoryZoneBody({ role = 'founder', zoneActions = null }) {
       </div>
       <div className="flex flex-wrap items-end gap-x-3 border-b border-axal-hairline dark:border-gray-800">
         <div role="tablist" aria-label="Companies" className="flex gap-1">
-          {TABS.map((t) => (
-            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => pick(t.key)}
+          {TABS.map((t, i) => (
+            <button key={t.key} type="button" role="tab" id={tabId(t.key)} aria-controls={panelId(t.key)} aria-selected={tab === t.key}
+              tabIndex={tab === t.key ? 0 : -1} ref={(node) => { tabRefs.current[i] = node; }}
+              onClick={() => pick(t.key)} onKeyDown={(e) => onTabKey(e, i)}
               className={`-mb-px min-h-[44px] border-b-2 px-3 py-2 text-[12.5px] font-semibold lg:min-h-0 ${tab === t.key ? 'border-violet-700 text-violet-800 dark:text-violet-200' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>
               {t.key === 'directory' ? directoryTabLabel(total) : t.label}
             </button>
@@ -838,18 +887,23 @@ function CompanyDirectoryZoneBody({ role = 'founder', zoneActions = null }) {
         </div>
         {total != null ? <span className="pb-2 text-[11px] text-axal-faint dark:text-gray-500">The tab count is the whole directory, not your results</span> : null}
       </div>
-      {tab === 'directory' ? (
-        <>
-          <Directory role={role} zoneActions={zoneActions} onTotal={onTotal} />
-          <p className="text-[11px] leading-relaxed text-axal-faint dark:text-gray-500">
-            <strong>Source boundary:</strong> <PublisherBoundary attribution />. Website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
-          </p>
-        </>
-      ) : (
-        <Suspense fallback={<Card><p className="text-[12.5px] text-axal-muted">Loading saved analyses…</p></Card>}>
-          <CompetitorAnalysis chromeless role={role} linkToDossier />
-        </Suspense>
-      )}
+      {/* D7813: each tab names its panel; the panel not shown stays an empty, hidden tabpanel so both names resolve. */}
+      {TABS.map((t) => (
+        <div key={t.key} role="tabpanel" id={panelId(t.key)} aria-labelledby={tabId(t.key)} hidden={tab !== t.key} className="space-y-4">
+          {tab !== t.key ? null : t.key === 'directory' ? (
+            <>
+              <Directory role={role} zoneActions={zoneActions} onTotal={onTotal} />
+              <p className="text-[11px] leading-relaxed text-axal-faint dark:text-gray-500">
+                <strong>Source boundary:</strong> <PublisherBoundary attribution />. Website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
+              </p>
+            </>
+          ) : (
+            <Suspense fallback={<Card><p className="text-[12.5px] text-axal-muted">Loading saved analyses…</p></Card>}>
+              <CompetitorAnalysis chromeless role={role} linkToDossier />
+            </Suspense>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

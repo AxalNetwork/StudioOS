@@ -53,6 +53,7 @@ import type { Env, User } from '../types';
 import { requireAuth, canViewLpData } from '../auth';
 import { isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { receivedInvestorUpdate } from '../services/portfolioAskAccess';
+import { updateAskLinks } from '../services/roundCalls';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { investorActiveCompany, investorHeldProjectIds } from './_investorProjectScope';
 import { supportBookIds } from '../services/profileWriteGates';
@@ -480,11 +481,19 @@ r.post('/', async (c) => {
       if (!isInvestor(user) || await isSupportSession(c)) return c.json({ detail: 'Forbidden' }, 403);
       const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
       const ask = await c.env.DB.prepare(
-        `SELECT u.id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id
+        `SELECT u.id, a.kind, a.link_ref FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id
           WHERE a.uid = ? AND u.project_id = ? AND u.sent_at IS NOT NULL AND (u.kind IS NULL OR u.kind <> 'report')`,
-      ).bind(askUid, proj.id).first<{ id: number }>();
+      ).bind(askUid, proj.id).first<{ id: number; kind: string; link_ref: string | null }>();
       if (!held?.includes(proj.id) || !ask || !(await receivedInvestorUpdate(c.env, ask.id, user.id))) {
         return c.json({ detail: 'Ask not found' }, 404);
+      }
+      // D6215 (owner, 2026-11-16): a capital ask that lands on a round call the
+      // caller can open is answered on that call, not as a Value-add promise.
+      if (ask.kind === 'capital') {
+        const [linked] = await updateAskLinks(c.env, [{ kind: ask.kind, link_ref: ask.link_ref }], user, false, 'investor');
+        if (linked?.link_ref) {
+          return c.json({ error: 'ask_on_round_call', detail: 'This ask lands on a round call. Promise support on the call.', call_uid: linked.link_ref }, 409);
+        }
       }
     }
 

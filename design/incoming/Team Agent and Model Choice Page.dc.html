@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Agent and Model Choice · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.tmm-sh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px;position:relative}
+.tmm-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tmm-mu{color:var(--mu)}
+.tmm-mo{font-family:var(--mo);font-size:12px}
+.tmm-sm{font-size:12px;color:var(--mu);line-height:1.45}
+.tmm-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tmm-col{display:flex;flex-direction:column;gap:6px}
+.tmm-hd{display:flex;align-items:flex-start;gap:12px}
+.tmm-hd h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.tmm-eb{font:600 11px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.tmm-tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tmm-tabs a{display:flex;align-items:center;height:42px;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--mu)!important;font-size:13.5px;white-space:nowrap}
+.tmm-tabs a[aria-current=page]{border-color:var(--vi);color:var(--ink)!important;font-weight:700}
+.tmm-card{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.tmm-card>header{display:flex;align-items:center;gap:10px}
+.tmm-card h2{font-size:15px;font-weight:800}
+.tmm-card h3,.tmm-h3{font-size:13px;font-weight:800}
+.tmm-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border-radius:9px;font:700 13px var(--sg);white-space:nowrap;border:1px solid var(--hair2);background:var(--card);color:var(--ink)}
+.tmm-btn.p{background:var(--vi);border-color:var(--vi);color:#fff}
+.tmm-btn.p[aria-disabled=true]{background:var(--hair2);border-color:var(--hair2);color:var(--mu);cursor:default}
+.tmm-btn.sm{min-height:30px;padding:0 10px;font-size:12px}
+.tmm-btn.t{border-color:transparent;background:transparent;color:var(--vt);padding:0 6px}
+.tmm-btn.dg{color:var(--neg);border-color:var(--negE)}
+.tmm-btn.ic{width:34px;padding:0}
+.tmm-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid transparent;white-space:nowrap}
+.tmm-pill svg{flex:none}
+.tmm-ok{background:var(--posBg);color:var(--pos);border-color:var(--posE)}
+.tmm-am{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.tmm-off{background:var(--raised);color:var(--mu);border-color:var(--hair2);border-style:dashed}
+.tmm-nr{background:transparent;color:var(--mu);border-color:var(--hair2)}
+.tmm-un{background:var(--negBg);color:var(--neg);border-color:var(--negE)}
+.tmm-est{background:var(--card);color:var(--ink);border:1px dotted var(--mu)}
+.tmm-arch{display:inline-block;align-self:flex-start;padding:1px 8px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font-size:11px;font-weight:600}
+.tmm-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);font-size:11.5px;color:var(--ink)}
+.tmm-av{position:relative;display:inline-grid;place-items:center;flex:none;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:700 11px var(--mo)}
+.tmm-av i{position:absolute;right:-4px;bottom:-4px;width:12px;height:12px;border-radius:999px;background:var(--vi);border:1.5px solid var(--card)}
+.tmm-pav{display:inline-grid;place-items:center;flex:none;border-radius:999px;background:var(--raised);border:1px solid var(--hair2);font:700 10px var(--mo);color:var(--ink)}
+.tmm-be{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border:1px dashed #7c3aed;border-radius:6px;color:#6d28d9;background:#faf7ff;font:600 10.5px var(--mo);letter-spacing:.02em;white-space:nowrap}
+.tmm-pol{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border:1px dashed #d97706;border-radius:6px;color:#92400e;background:#fffbeb;font:600 10.5px var(--mo);white-space:nowrap}
+.tmm-fe{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border:1px dashed #9ca3af;border-radius:6px;color:#4b5563;background:#f9fafb;font:600 10.5px var(--mo);white-space:nowrap}
+.tmm-n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:#18181b;color:#fff;font:700 11px var(--mo);flex:none}
+.tmm-k{position:absolute;z-index:6;display:grid;place-items:center;min-width:20px;height:20px;padding:0 4px;border-radius:6px;background:#0f766e;color:#fff;font:700 10.5px var(--mo)}
+.tmm-ann{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;background:#fcfcfd;font-size:12px;line-height:1.5;color:#3f3a47}
+.tmm-ann b{color:var(--ink)}
+.tmm-ann ul{display:flex;flex-direction:column;gap:4px}
+.tmm-ann li{padding-left:12px;position:relative}
+.tmm-ann li:before{content:'›';position:absolute;left:0;color:var(--mu)}
+.tmm-tbl{display:flex;flex-direction:column}
+.tmm-th,.tmm-tr{display:grid;gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--hair)}
+.tmm-th{padding:6px 4px;font:600 10.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.tmm-tr:last-child{border-bottom:0}
+.tmm-tr.sel{background:var(--lav)}
+.tmm-name{display:flex;align-items:center;gap:10px;min-width:0}
+.tmm-name b{font-size:13.5px;font-weight:800}
+.tmm-dim{position:absolute;inset:0;background:var(--dim);z-index:4}
+.tmm-sheet{position:absolute;top:0;right:0;bottom:0;width:640px;background:var(--card);border-left:1px solid var(--hair);z-index:5;display:flex;flex-direction:column;box-shadow:-12px 0 30px rgba(24,24,27,.12)}
+.tmm-sheet>header{display:flex;align-items:flex-start;gap:12px;padding:16px 20px;border-bottom:1px solid var(--hair)}
+.tmm-sheet>header h2{font-size:18px;font-weight:800}
+.tmm-sheet .bdy{padding:16px 20px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;overflow:hidden}
+.tmm-sheet>footer{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--hair);background:var(--card)}
+.tmm-step{display:flex;align-items:center;gap:14px}
+.tmm-step li{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+.tmm-step span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;font:700 11px var(--mo);background:var(--raised);color:var(--mu);border:1px solid var(--hair)}
+.tmm-step .on span{background:var(--vi);color:#fff;border-color:var(--vi)}
+.tmm-step .dn span{background:var(--pos);color:#fff;border-color:var(--pos)}
+.tmm-sec{display:flex;flex-direction:column;gap:8px}
+.tmm-sec>h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.tmm-box{border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.tmm-li{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--hair);min-width:0}
+.tmm-li:last-child{border-bottom:0}
+.tmm-li .g{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.tmm-li .g b{font-size:13px}
+.tmm-rad{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.tmm-rad.on{border:2px solid var(--vi);background:var(--lav);padding:10px 11px}
+.tmm-rad.nal{background:var(--raised)}
+.tmm-rad .o{width:16px;height:16px;border-radius:999px;border:2px solid var(--hair2);flex:none;margin-top:2px;background:var(--card)}
+.tmm-rad.on .o{border:5px solid var(--vi)}
+.tmm-rad .g{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.tmm-rad .c{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;flex:none}
+.tmm-ck{width:16px;height:16px;border-radius:4px;border:2px solid var(--hair2);flex:none;display:grid;place-items:center;background:var(--card);color:#fff}
+.tmm-ck.on{background:var(--vi);border-color:var(--vi)}
+.tmm-disc{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-weight:700;font-size:13px;width:100%;text-align:left;color:var(--ink)}
+.tmm-disc .r{margin-left:auto;font-weight:500;color:var(--mu);font-size:12px}
+.tmm-field{display:flex;align-items:center;min-height:38px;padding:0 11px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);font-size:13px}
+.tmm-note{border-radius:10px;padding:9px 12px;background:var(--lav);font-size:12.5px;line-height:1.5}
+.tmm-warn{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--negE);background:var(--negBg);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--ink)}
+.tmm-warn svg{color:var(--neg);margin-top:2px}
+.tmm-amb{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--amE);background:var(--amBg);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--ink)}
+.tmm-amb svg{color:var(--amD);margin-top:2px}
+.tmm-sk{display:block;border-radius:6px;background:var(--skel)}
+.tmm-bar{height:8px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.tmm-bar i{display:block;height:100%;background:var(--vi)}
+.tmm-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tmm-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.tmm-pc{display:flex;flex-direction:column;gap:8px;border:1px solid var(--hair);border-radius:12px;padding:12px;background:var(--card)}
+.tmm-pc.on{border:2px solid var(--vi);background:#faf8ff;padding:11px}
+.tmm-pc .t2{display:flex;gap:10px;align-items:flex-start}
+.tmm-kv{display:grid;grid-template-columns:118px minmax(0,1fr);gap:4px 10px;font-size:12.5px}
+.tmm-kv dt{color:var(--mu);font:600 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;padding-top:2px}
+.tmm-ph{width:390px;height:844px;position:relative;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+.tmm-ph .pbd{flex:1;overflow:hidden}
+.tmm-ph .tmm-btn{min-height:44px}
+.tmm-ph .tmm-btn.sm{min-height:40px}
+.tmm-pbar{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:8px;padding:10px 16px 22px;background:var(--card);border-top:1px solid var(--hair);z-index:3}
+.tmm-pbar .tmm-btn{flex:1}
+.tmm-pcard{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.tmm-tbl2{width:100%;border-collapse:collapse;font-size:12px}
+.tmm-tbl2 th{font:600 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);text-align:left;padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:bottom}
+.tmm-tbl2 td{padding:7px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+.tmm-tbl2 tr:last-child td{border-bottom:0}
+.tmm-doc{background:var(--card);padding:28px 32px;display:flex;flex-direction:column;gap:16px;font-size:12.5px;line-height:1.5}
+.tmm-doc h2{font-size:18px;font-weight:800}
+.tmm-doc h3{font-size:13.5px;font-weight:800;margin-top:4px}
+.tmm-doc ul{display:flex;flex-direction:column;gap:4px}
+.tmm-doc li{padding-left:14px;position:relative}
+.tmm-doc li:before{content:'•';position:absolute;left:2px;color:var(--mu)}
+.tmm-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.tmm-bdt{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px 28px}
+.tmm-panel{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px;display:flex;flex-direction:column;gap:10px;position:relative}
+.tmm-panel>.tmm-eb{display:flex;gap:8px;align-items:center}
+.tmm-cov{display:grid;grid-template-columns:150px 120px 130px minmax(0,1fr);gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tmm-cov.h{border-top:0;font:600 10.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.tmm-focus{outline:2px solid var(--vi);outline-offset:2px}
+.tmm-be,.tmm-pol,.tmm-fe{align-self:flex-start;width:fit-content}
+.tmm-tbl2 tbody th{font-weight:600;text-transform:none;letter-spacing:0;color:var(--ink);vertical-align:top}
+.tmm-pill{width:fit-content}
+.tmm-ph .tmm-rad{flex-wrap:wrap}.tmm-ph .tmm-rad .c{flex-basis:100%;flex-direction:row;align-items:center;text-align:left;padding-left:26px;gap:8px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "TMM01", "options": ["TMM00", "TMM01", "TMM02", "TMM03", "TMM04", "TMM04B", "TMM05", "TMM06", "TMM07", "TMM08", "TMM09", "TMM11", "TMM12", "TMM10A", "TMM10B", "TMM10C", "TMM10D", "TMM10E", "TMM10F", "TMM10G"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'TMM01';
+    const J = a => a.join('');
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+
+    /* ---------- icons (aria-hidden) ---------- */
+    const SV = (d, z, sw) => '<svg aria-hidden="true" width="' + (z || 14) + '" height="' + (z || 14) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (sw || 2) + '" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex:none">' + d + '</svg>';
+    const I = {
+      bell: SV('<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/>', 16, 1.8),
+      ok: SV('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 12, 2.6),
+      pz: SV('<path d="M8 5v14M16 5v14"/>', 11, 2.8),
+      off: SV('<path d="M12 3v8"/><path d="M6.4 7.4a8 8 0 1 0 11.2 0"/>', 11, 2.4),
+      nos: SV('<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/>', 11, 2.2),
+      nr: SV('<circle cx="12" cy="12" r="8"/><path d="M8.5 12h7"/>', 11, 2.2),
+      un: SV('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 20L20 4"/>', 11, 2.2),
+      half: SV('<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>', 11, 2),
+      ref: SV('<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>', 11, 2.2),
+      lim: SV('<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.1"/>', 11, 2.4),
+      est: SV('<path d="M4 9c2.5-2 5.5-2 8 0s5.5 2 8 0M4 15c2.5-2 5.5-2 8 0s5.5 2 8 0"/>', 11, 2.2),
+      lock: SV('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>', 11, 2.2),
+      info: SV('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.1"/>', 15, 2),
+      err: SV('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v6M12 16.5v.1"/>', 15, 2),
+      chev: SV('<path d="M9 6l6 6-6 6"/>', 13),
+      down: SV('<path d="M6 9l6 6 6-6"/>', 13),
+      up: SV('<path d="M6 15l6-6 6 6"/>', 13),
+      x: SV('<path d="M6 6l12 12M18 6L6 18"/>', 16),
+      more: SV('<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>', 16, 2.4),
+      search: SV('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>', 13),
+      back: SV('<path d="M15 6l-6 6 6 6"/>', 18),
+      ck: SV('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 11, 3.2)
+    };
+
+    /* ---------- annotations and atoms ---------- */
+    const BE = t => '<span class="tmm-be" title="Annotation: backend required (not product copy)">◇ ' + t + '</span>';
+    const POL = t => '<span class="tmm-pol" title="Annotation: owner decision (not product copy)">⚑ ' + t + '</span>';
+    const FE = t => '<span class="tmm-fe" title="Annotation: frontend only (not product copy)">▹ ' + t + '</span>';
+    const N = n => '<span class="tmm-n" aria-hidden="true">' + n + '</span>';
+    const KI = n => '<span class="tmm-k" aria-hidden="true" style="position:static">' + n + '</span>';
+    const K = (n, x, y) => '<span class="tmm-k" aria-hidden="true" style="left:' + x + 'px;top:' + y + 'px">' + n + '</span>';
+    const btn = (t, k, ex) => '<button type="button" class="tmm-btn' + (k ? ' ' + k : '') + '"' + (ex || '') + '>' + t + '</button>';
+    const lnk = (t, ex) => '<a href="#"' + (ex || '') + '>' + t + '</a>';
+    const sk = (w, h) => '<span class="tmm-sk" style="width:' + w + ';height:' + (h || 12) + 'px"></span>';
+    const mo = t => '<span class="tmm-mo">' + t + '</span>';
+    const sm = t => '<span class="tmm-sm">' + t + '</span>';
+    const pill = (k, g, t) => '<span class="tmm-pill tmm-' + k + '">' + (g ? I[g] : '') + t + '</span>';
+    const READY = t => pill('ok', 'ok', t || 'Ready to run');
+    const PAUSED = t => pill('am', 'pz', t || 'Paused');
+    const NOSK = t => pill('off', 'nos', t || 'No skills yet');
+    const OFF = t => pill('off', 'off', t || 'Off for this team');
+    const NRC = t => pill('nr', 'nr', t || 'Not recorded');
+    const UNA = t => pill('un', 'un', t || 'Unavailable');
+    const LIM = t => pill('am', 'lim', t || 'Runs with limits');
+    const EST = t => pill('est', null, t || 'Estimate');
+    const REF = t => pill('nr', 'ref', t || 'Refused');
+    const ann = (title, items) => '<aside class="tmm-ann" aria-label="Annotation"><b>' + title + '</b><ul style="margin-top:4px">' + J(items.map(i => '<li>' + i + '</li>')) + '</ul></aside>';
+    const av = (ini, z) => '<span class="tmm-av" role="img" aria-label="Portrait" style="width:' + (z || 32) + 'px;height:' + (z || 32) + 'px;border-radius:' + Math.round((z || 32) * 0.28) + 'px;font-size:' + Math.max(9, Math.round((z || 32) * 0.3)) + 'px">' + ini + '<i aria-hidden="true"></i></span>';
+    const pav = (ini, z) => '<span class="tmm-pav" aria-hidden="true" style="width:' + (z || 24) + 'px;height:' + (z || 24) + 'px">' + ini + '</span>';
+    const arch = t => '<span class="tmm-arch">' + t + '</span>';
+    const bar = pct => '<span class="tmm-bar" role="img" aria-label="' + pct + '% of the cap used" style="display:block;width:100%"><i style="width:' + pct + '%"></i></span>';
+    const ck = on => '<span class="tmm-ck' + (on ? ' on' : '') + '" aria-hidden="true">' + (on ? I.ck : '') + '</span>';
+    const warn = (t, retry) => '<div role="alert" class="tmm-warn">' + I.err + '<div class="tmm-col" style="gap:6px;align-items:flex-start"><span>' + t + '</span>' + (retry === false ? '' : btn('Try again', 'sm')) + '</div></div>';
+    const amb = t => '<div role="status" class="tmm-amb">' + I.info + '<div>' + t + '</div></div>';
+
+    /* ---------- sample data (fictional; one set, used on every board) ---------- */
+    const CO = '[Atlas Orchard]';
+    const MR = '[Maya Ruiz]', NB = '[Noah Brandt]';
+    const AG = {
+      tes: { n: 'Tessaly', ini: 'TE', ar: 'Systems Builder', tag: 'What do the instruments say?', area: 'Finance', works: 'Works in Finance, Raise', model: 'gpt-oss-120b', sp: MR, spi: 'MR', spend: '$3.84', cap: '$25', pct: 15, skills: ['Cash runway snapshot', 'Monthly investor update', 'Board meeting brief'], ready: '2 ready · 1 runs with limits', last: '2 h ago' },
+      ves: { n: 'Vesta', ini: 'VE', ar: 'Accountability Anchor', tag: 'No gate opens without its seal.', area: 'Legal', works: 'Works in Legal', model: 'nemotron-3-120b-a12b', sp: NB, spi: 'NB', spend: '$20.00', cap: '$20', pct: 100, skills: ['Contract clause extraction', 'Contract risk issue spotting'], ready: '2 skills ready once resumed', last: 'Mon 23 Nov' },
+      kad: { n: 'Kade', ini: 'KA', ar: 'Growth Catalyst', tag: 'Raise the banner and see who comes.', area: 'Marketing', works: 'Works in Grow', model: 'llama-3.3-70b-instruct-fp8-fast', sp: MR, spi: 'MR', spend: '$0.00', cap: '$10', pct: 0, skills: [], ready: 'Can’t run a skill until one is added', last: null }
+    };
+    const RY = { n: 'Ryssa', ini: 'RY', ar: 'Thesis-Driven Backer', tag: 'What would have to be true?', fit: 'Capital · Finance' };
+    const M = {
+      gpt: { id: 'gpt-oss-120b', what: 'Reasons step by step · reads up to 128k tokens', per100: '≈ $0.20 per 100 runs', runs: 'about 10,100 runs', inp: '$0.4375', out: '$0.9375' },
+      kim: { id: 'kimi-k2.6', what: 'Reasons step by step · also reads images · up to 262k tokens', per100: '≈ $0.73 per 100 runs', runs: 'about 2,700 runs', inp: '$1.1875', out: '$5.00' },
+      nem: { id: 'nemotron-3-120b-a12b', what: 'Reasons step by step · context size not recorded', inp: '$0.625', out: '$1.875' },
+      dsf: { id: 'deepseek-v4-flash-0731', what: 'Reasons step by step · up to 1M tokens', inp: '$0.55', out: '$1.65' }
+    };
+
+    /* ---------- shell ---------- */
+    const FNAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const side = () => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%">' + CO + ' ▾</button></div><nav aria-label="Workspace">' + J(FNAV.map(t => '<a href="#"' + (t === 'Team' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const top = () => '<div class="tb"><div class="srch">' + I.search + 'Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + I.bell + '</button><span class="av" role="img" aria-label="Account: ' + MR + '">MR</span></div></div>';
+    const spine = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about this team" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px"><div class="tmm-sh" style="height:' + (o.h || 900) + 'px;overflow:hidden">' + side() + '<div class="mn">' + top() + '<main class="bd" style="gap:16px">' + body + '</main></div>' + spine + (o.sheet ? '<div class="tmm-dim" aria-hidden="true"></div>' + o.sheet : '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';box-sizing:border-box;width:' + (w || 1200) + 'px;padding:24px;display:flex;flex-direction:column;gap:16px">' + inner + '</div>';
+    const bhead = (k, t, s) => '<header class="tmm-col" style="gap:4px"><span class="tmm-eb">' + k + '</span><h2 style="font-size:20px;font-weight:800;letter-spacing:-.01em">' + t + '</h2>' + (s ? '<p class="tmm-sm" style="max-width:1000px;font-size:13px">' + s + '</p>' : '') + '</header>';
+    const phone = (title, body, barHtml, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:390px"><div class="tmm-ph"><div class="pt"><button type="button" class="pi" aria-label="' + (o.backLabel || 'Back to Team') + '">' + (o.close ? I.x : I.back) + '</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn about this team" style="font-size:14px"><span style="display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#7c3aed;color:#fff">E</span></button></div><div class="pbd" style="padding:14px 16px ' + (barHtml ? (o.barH || 140) : 24) + 'px;display:flex;flex-direction:column;gap:12px">' + body + '</div>' + (barHtml ? '<div class="tmm-pbar">' + barHtml + '</div>' : '') + (o.over || '') + '</div></div>'; };
+
+    const teamHead = () => '<p class="tmm-sm" style="font-size:12.5px">' + CO + ' settings / <b style="color:var(--ink)">Team</b></p><div class="tmm-hd"><div class="tmm-col" style="gap:2px;flex:1"><span class="tmm-eb">Company · ' + CO + '</span><h1>Team</h1><p class="tmm-mu">The people and AI agents working on ' + CO + '. Agents propose; people decide.</p></div><div class="tmm-row">' + btn('<span style="display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#7c3aed;color:#fff;font-size:11px">E</span>Ask', '', ' aria-label="Ask Eadwyn: Team · ' + CO + '"') + btn('Add to team ' + I.down, 'p', ' aria-haspopup="menu" aria-expanded="false"') + '</div></div>'
+      + '<nav class="tmm-tabs" aria-label="Team views">' + J(['People and agents', 'Skills', 'Roles and rule books', 'Approvals', 'Settings'].map((t, i) => '<a href="#"' + (i === 0 ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+
+    /* ---------- roster ---------- */
+    const GRID = 'grid-template-columns:minmax(0,1.35fr) minmax(0,1.6fr) minmax(0,1.45fr) minmax(0,1fr) minmax(0,1fr) 44px';
+    const rowState = (a, st) => {
+      if (st === 'off') return OFF() + sm(a === AG.ves ? 'Also paused · cap reached' : a === AG.kad ? 'Also no skills yet' : 'Skills ready once switched on');
+      if (a === AG.ves) return PAUSED('Paused · cap reached') + sm('Resumes Tue 1 Dec') + '<span>' + btn('Raise Vesta’s cap', 't sm') + '</span>';
+      if (a === AG.kad) return NOSK() + sm('Can’t run until a skill is added') + '<span>' + btn('Add skills for Kade', 't sm') + '</span>';
+      return READY() + sm(a.ready);
+    };
+    const doesCell = a => '<span class="tmm-col" style="gap:3px;min-width:0"><span style="font-weight:700">' + a.area + ' · ' + (a.skills.length ? a.skills.length + ' skill' + (a.skills.length === 1 ? '' : 's') : '0 skills') + '</span>' + (a.skills.length ? sm(a.skills.slice(0, 2).join(', ') + (a.skills.length > 2 ? ', +' + (a.skills.length - 2) : '')) : sm('No skills yet')) + sm(a.works) + '</span>';
+    const rosterRow = (a, st, sel) => '<div role="row" class="tmm-tr' + (sel ? ' sel' : '') + '" style="' + GRID + '">'
+      + '<span role="rowheader" class="tmm-name">' + av(a.ini, 34) + '<span class="tmm-col" style="gap:3px;min-width:0"><a href="#" aria-label="' + a.n + ', AI agent, ' + a.area + ': open profile" style="color:var(--ink)!important"><b>' + a.n + '</b></a>' + '<span>' + arch(a.ar) + '</span></span></span>'
+      + '<span role="cell">' + doesCell(a) + '</span>'
+      + '<span role="cell" class="tmm-col" style="gap:3px;align-items:flex-start">' + rowState(a, st) + '</span>'
+      + '<span role="cell" class="tmm-row" style="gap:6px;flex-wrap:nowrap">' + pav(a.spi) + '<span>' + a.sp + '</span></span>'
+      + '<span role="cell" class="tmm-col" style="gap:4px">' + mo(a.spend + ' of ' + a.cap) + bar(a.pct) + '</span>'
+      + '<span role="cell" style="display:flex;justify-content:flex-end">' + btn(I.more, 'ic', ' aria-label="More actions for ' + a.n + '" aria-haspopup="menu"') + '</span></div>';
+    const roster = (st, o) => { o = o || {}; return '<section class="tmm-card" aria-labelledby="ag-h"><header><h2 id="ag-h">AI agents</h2>' + mo('3') + '<span style="margin-left:auto">' + lnk('Skills library ›') + '</span></header>'
+      + (st === 'off' ? amb('<b>AI agents are not switched on for this team.</b> Goals and plans appear once they are. The roster, skills and caps below can still be prepared.') : '')
+      + '<div role="table" aria-label="AI agents on ' + CO + '" class="tmm-tbl"><div role="row" class="tmm-th" style="' + GRID + '">' + J(['Agent', 'What it does', 'Can it run now', 'Sponsor', 'This month', '<span class="tmm-sr">Actions</span>'].map(c => '<span role="columnheader">' + c + '</span>')) + '</div>'
+      + rosterRow(AG.tes, st, o.sel) + rosterRow(AG.ves, st) + rosterRow(AG.kad, st) + '</div>'
+      + '<p class="tmm-sm">Agents propose; a named person accepts. Nothing is written without Accept. A paused agent keeps its history and its open proposals.</p></section>'; };
+
+    /* ---------- coverage ---------- */
+    const AX = ['Product', 'Engineering', 'Design', 'GTM / Sales', 'Marketing / Brand', 'Finance / Ops', 'Legal / Compliance', 'Capital / Network'];
+    const COVV = { 'Product': ['Proficient', null], 'Engineering': ['Advanced', null], 'Finance / Ops': [null, 'Working'], 'Legal / Compliance': [null, 'Working'] };
+    const gap = '<span class="tmm-pill tmm-am">' + I.lim + 'People gap · covered only by an agent</span>';
+    const covRows = (mode) => '<div role="table" aria-label="Team coverage"><div role="row" class="tmm-cov h"><span role="columnheader">Category</span><span role="columnheader">People</span><span role="columnheader">Agent</span><span role="columnheader"><span class="tmm-sr">Gap</span></span></div>'
+      + J(AX.map(x => { const v = mode === 'zero' ? [null, null] : (COVV[x] || [null, null]); return '<div role="row" class="tmm-cov"><span role="rowheader" style="font-weight:700">' + x + '</span><span role="cell">' + (v[0] || '<span class="tmm-mu">No level recorded</span>') + '</span><span role="cell">' + (v[1] ? 'Agent · ' + v[1] : '<span class="tmm-mu">No agent mapped</span>') + '</span><span role="cell">' + (!v[0] && v[1] ? gap : '') + '</span></div>'; })) + '</div>';
+    const EB = (t, x) => '<div class="tmm-col" style="gap:6px"><span class="tmm-eb">' + t + '</span>' + x + '</div>';
+    const covCard = (mode, o) => { o = o || {}; const head = '<header><h2>Team coverage</h2><span class="tmm-sm" style="margin-left:auto">People and agents on the same eight categories</span></header>';
+      if (mode === 'loading') return '<section class="tmm-card" aria-busy="true">' + head + '<p class="tmm-sm" role="status">Reading team coverage…</p>' + J([0, 1, 2, 3].map(() => sk('100%', 18))) + '</section>';
+      if (mode === 'un') return '<section class="tmm-card">' + head + warn('Team coverage could not be read. This is not a claim that no category is covered.') + '</section>';
+      if (mode === 'zero') return '<section class="tmm-card">' + head + '<div class="tmm-col" style="gap:6px"><p style="font-size:13px"><b>No category is mapped yet.</b> Nobody on this team, person or agent, has a recorded level in any of the eight categories.</p>' + sm('People get levels from their /studio assessment. Agents get them from the skills they are given.') + '<div class="tmm-row">' + btn('Add skills to an agent', 'sm') + btn('Show the eight categories ' + I.down, 't sm', ' aria-expanded="false"') + '</div></div>' + (o.rows ? covRows('zero') : '') + '</section>';
+      return '<section class="tmm-card">' + head + '<p style="font-size:13px"><b>2 people gaps: Finance / Ops and Legal / Compliance are covered only by an agent.</b> 2 categories have a person; 4 have no one mapped.</p>' + covRows('val') + '</section>'; };
+
+    /* ---------- the Add-an-agent sheet ---------- */
+    const stepper = at => '<ol class="tmm-step" aria-label="Add an AI agent">' + J(['Who', 'Skills', 'Model and cap'].map((s, i) => '<li class="' + (i < at ? 'dn' : i === at ? 'on' : '') + '"' + (i === at ? ' aria-current="step"' : '') + '><span>' + (i < at ? '✓' : i + 1) + '</span>' + s + '</li>')) + '</ol>';
+    const sheet = (title, sub, body, foot, o) => { o = o || {}; return '<section class="tmm-sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t"' + (o.w ? ' style="width:' + o.w + 'px"' : '') + '><header><div class="tmm-col" style="gap:3px;flex:1">' + (o.pre || '') + '<h2 id="sh-t">' + title + '</h2>' + (sub ? '<span class="tmm-sm">' + sub + '</span>' : '') + '</div>' + (o.hdr || '') + btn(I.x, 'ic', ' aria-label="Close"') + '</header><div class="bdy">' + body + '</div>' + (foot ? '<footer>' + foot + '</footer>' : '') + '</section>'; };
+    const idLine = (t) => '<div class="tmm-row" style="gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)">' + av(RY.ini, 36) + '<span class="tmm-col" style="gap:2px;flex:1"><span class="tmm-row" style="gap:6px"><b style="font-size:13.5px">Ryssa</b>' + arch(RY.ar) + '</span>' + sm(t) + '</span></div>';
+
+    /* Who: job-first persona cards */
+    const pcard = (p, o) => { o = o || {}; return '<article class="tmm-pc' + (o.on ? ' on' : '') + '" role="radio" aria-checked="' + (o.on ? 'true' : 'false') + '"' + (o.team ? ' aria-disabled="true"' : '') + ' tabindex="' + (o.team ? '-1' : '0') + '" aria-label="' + p.n + ', ' + p.ar + '. Good for ' + p.fit.replace(' · ', ' and ') + (o.team ? '. Already on your team' : '') + '"' + (o.team ? ' style="opacity:.72"' : '') + '>'
+      + '<div class="t2">' + av(p.ini, 44) + '<div class="tmm-col" style="gap:3px;flex:1;min-width:0"><span class="tmm-row" style="gap:6px"><b style="font-size:14.5px">' + p.n + '</b>' + arch(p.ar) + (o.on ? '<span class="tmm-pill" style="background:#7c3aed;color:#fff">Chosen</span>' : '') + (o.team ? '<span class="tmm-pill tmm-ok">' + I.ok + 'On your team</span>' : '') + '</span>'
+      + '<span style="font-size:12.5px"><b>Good for</b> ' + p.fit + '</span><span style="font-size:12.5px"><b>Skills</b> ' + p.sk + ' published fit this work</span></div></div>'
+      + '<div class="tmm-row" style="gap:5px">' + J(p.vals.map(v => '<span class="tmm-chip">' + v + '</span>')) + '<span class="tmm-sm">· Risk ' + p.risk + '</span></div>'
+      + '<div class="tmm-row" style="border-top:1px solid var(--hair);padding-top:8px">' + sm('Cost per run comes with a model') + '<span style="margin-left:auto" class="tmm-row">' + btn('About ' + p.n, 't sm', ' aria-label="About ' + p.n + ': story and values"') + (o.team ? '' : btn('Compare', 'sm', ' aria-pressed="false" aria-label="Compare ' + p.n + '"')) + '</span></div></article>'; };
+    const PC = [
+      { n: 'Ryssa', ini: 'RY', ar: 'Thesis-Driven Backer', fit: 'Capital · Finance', sk: '6', vals: ['Ambition', 'Curiosity', 'Integrity'], risk: 'Bold, 4 of 5' },
+      { n: 'Sylva', ini: 'SY', ar: 'The Missionary', fit: 'Capital · GTM', sk: '5', vals: ['Stewardship', 'Collaboration', 'Resilience'], risk: 'Cautious, 2 of 5' },
+      { n: 'Solen', ini: 'SO', ar: 'Hands-On Partner', fit: 'Capital · Legal', sk: '5', vals: ['Stewardship', 'Collaboration', 'Integrity'], risk: 'Balanced, 3 of 5' },
+      { n: 'Tessaly', ini: 'TE', ar: 'Systems Builder', fit: 'Finance · Capital', sk: '6', vals: ['Curiosity', 'Stewardship', 'Integrity'], risk: 'Balanced, 3 of 5' }
+    ];
+    const whoBody = (phone) => (phone ? '' : stepper(0)) + '<p class="tmm-sm" style="font-size:12.5px">Choose who joins ' + CO + ' by the work you need. Each agent is a named character; you give skills next. A named person accepts everything an agent proposes.</p>'
+      + '<div class="tmm-row" role="search"><span class="tmm-field" style="flex:1;min-width:' + (phone ? '100%' : '200px') + ';gap:6px;color:var(--mu)">' + I.search + '<span><span style="color:var(--ink)">research</span></span></span>' + (phone ? '' : '<span class="tmm-field" style="gap:6px">Good for: Capital ' + I.down + '</span><span class="tmm-field" style="gap:6px">Value ' + I.down + '</span><span class="tmm-field" style="gap:6px">Risk ' + I.down + '</span>') + '</div>'
+      + (phone ? '<div class="tmm-row" style="gap:6px;flex-wrap:nowrap;overflow:hidden">' + btn('Good for: Capital ' + I.down, 'sm') + btn('Value ' + I.down, 'sm') + btn('Risk ' + I.down, 'sm') + '</div>' : '')
+      + '<div class="tmm-row">' + mo('4 of 16 agents · Good for Capital · “research” matches work, not mottos') + '</div>'
+      + '<div role="radiogroup" aria-label="Who joins" class="' + (phone ? 'tmm-col' : 'tmm-grid2') + '" style="gap:10px">' + pcard(PC[0], { on: true }) + pcard(PC[1]) + (phone ? '' : pcard(PC[2]) + pcard(PC[3], { team: true })) + '</div>';
+
+    /* Skills */
+    const skRow = (on, name, src, makes, rd, cost) => '<label class="tmm-li" style="align-items:flex-start;cursor:pointer">' + ck(on) + '<span class="g"><span class="tmm-row" style="gap:6px"><b>' + name + '</b><span class="tmm-chip">' + src + '</span></span><span class="tmm-sm">Makes ' + makes + ' · ' + cost + '</span><span class="tmm-row" style="gap:6px">' + rd + '</span></span></label>';
+    const SKL = [
+      [true, '[Market research brief]', 'Company · v2', 'a brief', NRC('Readiness not recorded') + sm('no preflight for company skills yet'), '+≈1.3k tokens on runs that use it'],
+      [true, 'Customer interview summary', 'Axal · v3', 'a brief', LIM('Runs with limits') + sm('Interviews: 3 of 7 recorded'), '+≈0.9k tokens'],
+      [false, 'Monthly investor update', 'Axal · v4', 'a draft', READY('Ready for ' + CO), '+≈1.1k tokens']
+    ];
+    const skillsBody = (zero, phone) => (phone ? '' : stepper(1)) + idLine('Capital · ' + (zero ? '0 skills' : '2 skills') + ' · ' + RY.tag)
+      + '<p class="tmm-sm" style="font-size:12.5px">Skills decide what Ryssa can do. A run uses one skill, so more skills widen her work without making any one run dearer.</p>'
+      + (phone ? '' : '<div class="tmm-row">' + BE('#8769 readiness before the agent exists') + FE('cross-area list: #8768') + '</div>') + '<div class="tmm-box" role="group" aria-label="Skills for Ryssa">' + J(SKL.map((s, i) => skRow(zero ? false : s[0], s[1], s[2], s[3], s[4], s[5]))) + '</div>'
+      + (zero ? '<div role="status" id="zero-why" class="tmm-amb">' + I.info + '<div><b>Ryssa can’t run without a skill.</b> Choose at least one to continue. If this area has none you can use, ' + lnk('see skills from every area') + '.</div></div>'
+        : '<div class="tmm-col" style="gap:3px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px"><b style="font-size:13px">Coverage with these skills</b><span style="font-size:12.5px">Capital / Network · Working</span><span style="font-size:12.5px">Product · Aware</span>' + sm('Cost per run comes on the next step, for each model you could choose.') + '</div>');
+
+    /* Model and cap */
+    const mrad = (m, o) => { o = o || {}; const right = o.na ? '<span class="tmm-pill tmm-nr">' + I.lock + 'Not allowed on this team</span>' + sm('Allowed models: Team › Settings')
+        : o.un ? UNA('Estimate unavailable') + '<span>' + btn('Try again', 't sm', ' aria-label="Try the estimate for ' + m.id + ' again"') + '</span>'
+          : EST(m.per100) + sm('$20 cap ≈ ' + m.runs);
+      return '<div class="tmm-rad' + (o.on ? ' on' : '') + (o.na ? ' nal' : '') + '" role="radio" aria-checked="' + (o.on ? 'true' : 'false') + '"' + (o.na ? ' aria-disabled="true"' : '') + ' tabindex="' + (o.on ? '0' : '-1') + '" aria-label="' + m.id + '. ' + m.what + '. ' + (o.na ? 'Not allowed on this team' : o.un ? 'Estimate unavailable' : 'Estimate ' + m.per100.replace('≈ ', 'about ')) + '"><span class="o" aria-hidden="true"></span><span class="g"><b style="font-size:13px" class="tmm-mo">' + m.id + '</b>' + sm(m.what) + (o.prices ? '<span class="tmm-mo" style="color:var(--mu);font-size:11.5px">Input ' + m.inp + ' · Output ' + m.out + ' per 1M tokens</span>' : '') + '</span><span class="c">' + right + '</span></div>'; };
+    const grpHead = (t, s) => '<div class="tmm-col" style="gap:1px"><h4 style="font-size:12.5px;font-weight:800">' + t + '</h4>' + (s ? sm(s) : '') + '</div>';
+    const modelList = (o) => { o = o || {}; return '<div class="tmm-sec"><h3>Model ' + (o.tags ? BE('#8769 work groups on /roles') : '') + '</h3>'
+      + '<div role="radiogroup" aria-label="Model for Ryssa" class="tmm-col" style="gap:8px">' + grpHead('Suited to research', 'Matches the work of [Market research brief] and Customer interview summary')
+      + mrad(M.gpt, { on: true, prices: o.prices }) + mrad(M.kim, { prices: o.prices }) + mrad(M.nem, { un: true, prices: o.prices }) + (o.short ? '' : mrad(M.dsf, { na: true, prices: o.prices })) + '</div>'
+      + '<div class="tmm-row">' + btn((o.prices ? 'Hide token prices ' + I.up : 'Show token prices ' + I.down), 't sm', ' aria-expanded="' + (o.prices ? 'true' : 'false') + '" aria-controls="tok"') + (o.tags ? FE('prices on demand') : '') + '</div>'
+      + (o.short ? '' : '<button type="button" class="tmm-disc" aria-expanded="false">' + I.chev + 'Other models this team allows<span class="r">Writing 3 · Numbers 2 · Planning 1</span></button>') + '</div>'; };
+    const estBasis = '<details class="tmm-col" open style="gap:4px;padding:10px 12px;border:1px dotted var(--mu);border-radius:10px;font-size:12px"><summary style="font-weight:700;cursor:pointer">How the estimate is worked out</summary><span>Ryssa’s instructions (≈1.1k tokens), a typical request (400) and her larger skill (≈1.3k) go in; a typical proposal (800) comes out; priced at what you pay. A longer brief costs more. Before each run, the hold shows the most it can take.</span></details>';
+    const capBlock = (o) => { o = o || {}; return '<div class="tmm-sec"><h3>Sponsor and monthly cap</h3><div class="tmm-row" style="gap:8px">' + pav('MR', 28) + '<span>You (' + MR + ')</span>' + sm('· Ryssa runs as you and is paid from your AI tokens') + '</div>'
+      + '<label class="tmm-col" style="gap:4px"><span style="font-weight:700;font-size:12.5px">Monthly cap</span><span class="tmm-row" style="gap:10px"><span class="tmm-field" style="width:140px">$ <span style="margin-left:6px">20</span></span>' + sm('At gpt-oss-120b’s estimate, about 10,100 runs.') + '</span>' + sm('Must be more than $0. Runs pause when the cap is reached. You can raise it later.') + '</label></div>'; };
+    const keepBlock = '<button type="button" class="tmm-disc" aria-expanded="false">' + I.chev + 'Area of work, rule book and read-only tools<span class="r">Capital · rule book v1 · 0 tools</span></button>';
+    const modelBody = (o) => { o = o || {}; return stepper(2) + idLine('Capital · 2 skills · [Market research brief], Customer interview summary') + modelList(o) + estBasis + capBlock() + keepBlock
+      + '<div class="tmm-note">Everything Ryssa makes is a proposal. A named person accepts it in Approvals.</div>'; };
+    const addFoot = (step, dis) => btn(step ? 'Back' : 'Cancel') + btn(['Next: skills', 'Next: model and cap', 'Add Ryssa to ' + CO][step], 'p', dis ? ' aria-disabled="true" aria-describedby="zero-why"' : '');
+
+    /* ---------- profile ---------- */
+    const profSkills = '<div class="tmm-box">'
+      + '<div class="tmm-li"><span class="g"><b>Cash runway snapshot</b>' + sm('Makes a brief · last accepted Thu 19 Nov by ' + MR) + '</span>' + READY('Ready') + lnk('See the last output', ' aria-label="See Tessaly’s last Cash runway snapshot"') + '</div>'
+      + '<div class="tmm-li"><span class="g"><b>Monthly investor update</b>' + sm('Makes a draft · Revenue for October is not recorded') + '</span>' + LIM() + lnk('Open the gap', ' aria-label="Open the missing revenue record"') + '</div>'
+      + '<div class="tmm-li"><span class="g"><b>Board meeting brief</b>' + sm('Makes a brief · no output yet') + '</span>' + READY('Ready') + '<span class="tmm-sm" style="width:118px"></span></div></div>';
+    const profBody = (o) => { o = o || {}; return '<div class="tmm-row" style="gap:6px">' + READY() + '<span class="tmm-sm">2 ready · 1 runs with limits</span></div>'
+      + '<div class="tmm-sec"><h3>What Tessaly does</h3><dl class="tmm-kv"><dt>Area of work</dt><dd>Finance · ' + AG.tes.works + '</dd><dt>Makes</dt><dd>Briefs and drafts, as proposals</dd><dt>Model</dt><dd>' + mo('gpt-oss-120b') + '</dd></dl></div>'
+      + '<div class="tmm-sec"><h3>Skills · 3 ' + (o.tags ? BE('#8769 readiness for every skill') : '') + '<span style="margin-left:auto">' + btn('Add skills', 'sm') + '</span></h3>' + profSkills + '</div>'
+      + '<div class="tmm-sec"><h3>Sponsor and cap</h3><dl class="tmm-kv"><dt>Sponsor</dt><dd class="tmm-row" style="gap:6px">' + pav('MR', 22) + MR + '</dd><dt>This month</dt><dd class="tmm-col" style="gap:4px">' + mo('$3.84 of $25 · resets Tue 1 Dec') + bar(15) + '</dd><dt>Cost per run</dt><dd class="tmm-row" style="gap:6px">' + EST('≈ $0.17–$0.21 per 100 runs') + sm('$25 cap ≈ 11,900 runs at the dearest skill') + '</dd></dl></div>'
+      + '<div class="tmm-sec"><h3>Permissions</h3><div class="tmm-box"><div class="tmm-li"><span class="g"><b>Finance</b></span>' + sm('Read ✓ · Propose: proposals only · Auto —') + '</div><div class="tmm-li"><span class="g"><b>Raise</b></span>' + sm('Read ✓ · Propose: proposals only · Auto —') + '</div></div>' + sm('Auto is off for every module in v1.') + '</div>'
+      + '<button type="button" class="tmm-disc" aria-expanded="false" aria-controls="about">' + I.chev + 'About Tessaly: story and values<span class="r">“What do the instruments say?”</span></button>'
+      + '<button type="button" class="tmm-disc" aria-expanded="false">' + I.chev + 'Proposals, activity, memory and duties<span class="r">last 50 events</span></button>'; };
+    const profSheet = (o) => sheet('Tessaly<span class="tmm-sr">, AI agent, Finance</span>', 'AI agent · ' + arch('Systems Builder') + ' · Platform model ' + mo('gpt-oss-120b'), profBody(o),
+      btn('Pause Tessaly') + btn('Remove', 'dg') + btn('Change sponsor') + btn('Edit cap', 'p'), { pre: '<div class="tmm-row" style="gap:10px">' + N(2) + av('TE', 44) + '</div>' });
+
+    /* ---------- boards ---------- */
+    let html;
+
+    if (B === 'TMM00') {
+      const p1 = '<div class="tmm-panel"><span class="tmm-eb">A · Roster row · <code>AgentsCard.jsx</code></span><div class="tmm-row" style="gap:10px">' + av('TE', 32) + '<span class="tmm-col" style="gap:2px;flex:1"><b>Tessaly</b>' + arch('Systems Builder') + sm('What do the instruments say?') + '</span>' + sm('Platform model · gpt-oss-120b') + '<span class="tmm-pill tmm-ok">Active</span>' + btn(I.more, 'ic') + '</div>'
+        + ann('As shipped', ['The ⋯ button’s accessible name is <b>“Actions for the What do the instruments say? agent”</b>: the motto, not the name (<code>roleOrUnrecorded</code> = the tagline).', 'It says <code>aria-haspopup="menu"</code> but opens the profile.', 'No skills, readiness or area of work in the row; <b>Active</b> is shown when the team’s engine is off and when the agent has 0 skills.']) + '</div>';
+      const p2 = '<div class="tmm-panel"><span class="tmm-eb">B · Profile order · <code>AgentProfileSheet.jsx</code></span><ol class="tmm-col" style="gap:4px;font-size:12.5px">' + J(['1 · Persona card: values, risk, natural fit', '2 · Story and goal', '3 · Values bars and risk', '4 · Permissions', '5 · Budget', '6 · Proposals', '7 · Activity · last 50', '8 · Skills and Values (<code>AgentSkillsCard</code>)', '9 · Memory and duties'].map(t => '<li class="tmm-row" style="gap:6px">' + t + '</li>')) + '</ol>'
+        + ann('As shipped', ['Story and values come before what the agent can do; skills are eighth.', 'The skill cost line (D4121) is there, but below everything else.']) + '</div>';
+      const p3 = '<div class="tmm-panel"><span class="tmm-eb">C · Add an AI agent · Who · <code>AddAgentSheet.jsx</code></span><div class="tmm-row">' + '<span class="tmm-field" style="flex:1;color:var(--mu)">Search by name</span><span class="tmm-field">Top core value</span><span class="tmm-field">Natural fit</span><span class="tmm-field">Risk</span>' + mo('16 agents') + '</div>'
+        + '<div class="tmm-pc"><div class="t2">' + av('RY', 40) + '<div class="tmm-col" style="gap:2px"><b>Ryssa</b>' + arch('Thesis-Driven Backer') + '<i class="tmm-sm">“What would have to be true?”</i></div></div>' + sm('Core values · Risk · Natural fit') + '<span class="tmm-row">' + mo('0 skills · cost per run') + NRC() + '</span></div>'
+        + ann('As shipped', ['16 personas, searchable by name only; filters are value, natural fit and risk.', 'Every card says “0 skills · cost per run Not recorded” before any choice.', 'Step 2 is always passable: <code>ready = step === 1 ? true</code>, so a zero-skill setup reaches Model and cap.']) + '</div>';
+      const p4 = '<div class="tmm-panel"><span class="tmm-eb">D · Model and cap · <code>AddAgentSheet.jsx</code></span><div class="tmm-col" style="gap:6px">' + J([['llama-3.3-70b-instruct-fp8-fast', '$0.36625', '$2.81625'], ['gpt-oss-120b', '$0.4375', '$0.9375'], ['kimi-k2.6', '$1.1875', '$5'], ['deepseek-v4-pro-0813', '$1.65', '$4.95']].map(t => '<div class="tmm-rad" style="padding:7px 10px"><span class="o"></span><span class="g"><b class="tmm-mo" style="font-size:12px">' + t[0] + ' · Text Generation</b><span class="tmm-mo tmm-mu" style="font-size:11px">Input ' + t[1] + ' / 1M tokens · Output ' + t[2] + ' / 1M tokens</span></span></div>')) + sm('… every chat model in the catalogue, flat') + '</div>'
+        + ann('As shipped', ['Models come from <code>GET /api/teams/roles</code> (<code>agentModels</code>): id, catalogue kind and billed $ per 1M tokens, ungrouped.', 'Plan-locked models and models the team’s allowlist excludes (D4422) are listed anyway; the add then refuses <code>model_not_offered</code>.', '<code>draftCostEstimate</code> runs only when a model is set, and the Skills step comes before the model, so the estimate never shows; the hold reads Not recorded (no <code>hold_microusd</code>).']) + '</div>';
+      const p5 = '<div class="tmm-panel" style="grid-column:1 / -1"><span class="tmm-eb">E · Team coverage · <code>TeamCoverageCard.jsx</code></span><p style="font-size:13px">Every category with an agent on it also has a person on it.</p>'
+        + '<div class="tmm-grid2" style="gap:4px 24px">' + J(AX.map(x => '<div class="tmm-row" style="font-size:12px;border-top:1px solid var(--hair);padding:4px 0"><b style="width:150px">' + x + '</b><span class="tmm-mu" style="width:110px">Not recorded</span><span class="tmm-mu">—</span></div>')) + '</div>'
+        + ann('As shipped', ['<code>coverageSummary()</code> returns null when there is no people gap, and the card then prints the sentence above, also when all eight rows have no level at all.', 'While loading, and when the route is off, the card is not drawn at all (<code>return null</code>).']) + '</div>';
+      html = crop(bhead('TMM00 · Today on main 7553cd37b9', 'What the 26 Nov walkthrough saw, as main builds it', 'Reconstructed from the files named on each panel with the canvas’s sample team. Nothing here is proposed.') + '<div class="tmm-grid2" style="gap:16px">' + p1 + p2 + p3 + p4 + p5 + '</div>');
+    }
+
+    else if (B === 'TMM01') {
+      html = page(teamHead() + '<div class="tmm-row" style="gap:8px">' + N(1) + sm('Team › People and agents. Each row leads with what the agent does and whether it can run now, then sponsor and cap. The name opens the profile; ⋯ opens a real menu.') + '</div>'
+        + roster('val') + '<div class="tmm-row">' + BE('#8769 skill_count and readiness on the list') + FE('row order, names and menu') + POL('Q1 readiness in the row: A summary') + '</div>'
+        + covCard('val') + '<section class="tmm-card" aria-labelledby="pp-h"><header><h2 id="pp-h">People</h2>' + mo('2') + '</header><div class="tmm-row" style="gap:10px">' + pav('MR', 30) + '<b>' + MR + '</b>' + sm('Owner') + '<span style="width:40px"></span>' + pav('NB', 30) + '<b>' + NB + '</b>' + sm('Co-founder · Admin') + '</div></section>', { h: 1330 });
+    }
+
+    else if (B === 'TMM02') {
+      html = page(teamHead() + roster('val', { sel: true }), { h: 1060, sheet: profSheet({ tags: true }) });
+    }
+
+    else if (B === 'TMM03') {
+      html = page(teamHead() + roster('val'), { h: 1000, sheet: sheet('Add an AI agent', 'Step 1 of 3 · Choose who joins ' + CO, whoBody(false), addFoot(0), { pre: N(3) }) });
+    }
+
+    else if (B === 'TMM04') {
+      html = page(teamHead() + roster('val'), { h: 900, sheet: sheet('Add an AI agent', 'Step 2 of 3 · Choose skills for Ryssa', skillsBody(false), addFoot(1), { pre: N(4) }) });
+    }
+
+    else if (B === 'TMM04B') {
+      const s = '<div class="cv" style="' + VARS + ';width:640px;height:780px;position:relative">' + sheet('Add an AI agent', 'Step 2 of 3 · Choose skills for Ryssa', skillsBody(true), addFoot(1, true), { w: 640 }).replace('class="tmm-sheet"', 'class="tmm-sheet" style="position:absolute;inset:0;width:auto;box-shadow:none"') + '</div>';
+      html = crop(bhead('TMM04B · Zero skills', 'Next stays off until Ryssa has a skill', 'On main a zero-skill setup reaches Model and cap. Here Next: model and cap is aria-disabled and described by the status line, which also offers the cross-area list (#8768).') + '<div class="tmm-row" style="align-items:flex-start;gap:20px">' + s + '<div class="tmm-col" style="gap:10px;flex:1">' + POL('Q2 zero-skill add · A block (drawn)') + ann('Option A, drawn', ['Next is <code>aria-disabled</code>, focusable, and announces “Ryssa can’t run without a skill. Choose at least one to continue.”', 'If the library cannot be read, the step says Unavailable with Try again and Next stays off: nothing is added that could never run.']) + ann('Option B', ['Allow the add, with the agent saved as <b>No skills yet</b> and the roster’s Add skills fix (TMM07).']) + FE('the gate is the sheet’s <code>ready</code> rule') + '</div></div>', 1180);
+    }
+
+    else if (B === 'TMM05') {
+      html = page(teamHead() + roster('val'), { h: 1240, sheet: sheet('Add an AI agent', 'Step 3 of 3 · Model and cap for Ryssa', modelBody({ tags: true }), addFoot(2), { pre: N(5) }) });
+    }
+
+    else if (B === 'TMM06') {
+      const s = '<div class="cv" style="' + VARS + ';width:640px;position:relative;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 20px;display:flex;flex-direction:column;gap:12px">' + modelList({ prices: true }) + sm('What you pay per million tokens, as the catalogue lists it today.') + '</div>';
+      html = crop(bhead('TMM06 · Token prices on demand', 'Raw prices stay one press away', 'Show token prices adds each model’s input and output price to its row, as a person pays them. The estimate leads; the price list is for people who want it. The same control is on phone (TMM10F).') + '<div class="tmm-row" style="align-items:flex-start;gap:20px">' + s + '<div class="tmm-col" style="gap:10px;flex:1">' + ann('Where each figure comes from', ['Input and output: <code>input_usd_per_million</code> and <code>output_usd_per_million</code> from <code>agentModels</code> (billed rate). A missing price reads Not recorded, never $0.', 'Estimate: <code>GET /api/teams/:scope/:id/cost-estimate?model=&amp;role=&amp;persona=&amp;skills=&amp;cap_microusd=</code> (D4121), read once per listed model. Its <code>est_usd_per_run</code> × 100 is the “per 100 runs” figure; <code>monthly_at_cap</code> is the runs line.', 'Unavailable: that read answered <code>{ available: false }</code> or failed; Try again re-reads that one model only.']) + FE('per 100 runs wording') + POL('Q3 show per 100 runs: A yes') + '</div></div>', 1180);
+    }
+
+    else if (B === 'TMM07') {
+      const r = (vis, a, st, pr) => '<tr><td>' + vis + '</td><td>' + st + '</td><td class="tmm-mo" style="font-size:11.5px">' + a + '</td><td style="font-size:12px">' + pr + '</td></tr>';
+      html = crop(bhead('TMM07 · Agent states', 'Active, paused, engine off and no skills, with their control names', 'Each state has its own word and glyph. The row link and the ⋯ button always use the displayed name and say what they open. Engine off is read from the team’s engine (<code>agentEngineApi.engine</code>), not from the agent’s status.')
+        + '<span class="tmm-eb">A · Engine off for this team</span>' + roster('off')
+        + '<table class="tmm-tbl2" style="background:var(--card);border:1px solid var(--hair);border-radius:12px"><caption class="tmm-sr">States and accessible names</caption><thead><tr><th scope="col">State</th><th scope="col">Pill and line</th><th scope="col">Accessible names (row link · ⋯ button)</th><th scope="col">Profile header and fix</th></tr></thead><tbody>'
+        + r('<b>Active, ready</b>', '“Tessaly, AI agent, Finance: open profile” · “More actions for Tessaly”', READY() + ' ' + sm('2 ready · 1 runs with limits'), 'Ready to run · Pause Tessaly')
+        + r('<b>Paused</b> · cap reached', '“Vesta, AI agent, Legal: open profile” · “More actions for Vesta”', PAUSED('Paused · cap reached') + ' ' + sm('Resumes Tue 1 Dec'), '“Raise Vesta’s cap” opens Edit cap (D4387)')
+        + r('<b>No skills</b>', '“Kade, AI agent, Marketing: open profile” · “More actions for Kade”', NOSK() + ' ' + sm('Can’t run until a skill is added'), '“Add skills for Kade” opens Add skills')
+        + r('<b>Engine off</b> (team)', 'Same names; the pill is read as “Off for this team”', OFF() + ' ' + sm('AI agents are not switched on for this team.'), 'Banner above the table; no per-row fix')
+        + r('<b>Status not read</b>', 'Same names', NRC('Can it run: not recorded') + ' ' + sm('never “Active” by default'), 'Not recorded until the read answers')
+        + '</tbody></table>'
+        + '<div class="tmm-grid2"><div class="tmm-panel"><span class="tmm-eb">B · The ⋯ menu</span><div class="tmm-box" role="menu" aria-label="More actions for Tessaly" style="width:260px">' + J(['Open Tessaly’s profile', 'Add skills for Tessaly', 'Edit Tessaly’s cap', 'Change Tessaly’s sponsor', 'Pause Tessaly'].map(t => '<div class="tmm-li" role="menuitem" style="padding:8px 12px">' + t + '</div>')) + '</div>' + sm('A reader (no manage) sees only “Open Tessaly’s profile”.') + '</div>'
+        + '<div class="tmm-panel"><span class="tmm-eb">C · Priority when several apply</span><ol class="tmm-col" style="gap:4px;font-size:12.5px"><li>1 · Engine off for the team (or HQ’s platform pause banner, D4162)</li><li>2 · Paused, with its reason (cap, sponsor left, manual, AI off)</li><li>3 · No skills yet</li><li>4 · Ready to run, or Runs with limits</li></ol>' + sm('One pill per row; the line under it can name a second fact (“Paused · also no skills”).') + '</div></div>'
+        + '<div class="tmm-row">' + BE('#8769 skill_count on the list') + FE('engine read joined to the roster') + '</div>', 1200);
+    }
+
+    else if (B === 'TMM08') {
+      const cell = (t, inner) => '<div class="tmm-panel"><span class="tmm-eb">' + t + '</span>' + inner + '</div>';
+      html = crop(bhead('TMM08 · Loading, failure, empty and read-only', 'The roster and the model step in every state', 'Not recorded and Unavailable are never drawn as 0 or as an empty list; a failed read says so and offers Try again.')
+        + '<div class="tmm-grid3">'
+        + cell('A · Roster loading', '<p class="tmm-sm" role="status">Reading…</p>' + sk('100%', 40) + sk('100%', 40) + sk('100%', 40))
+        + cell('B · Roster unavailable', warn('AI agents could not be read. That is not the same as having none.'))
+        + cell('C · Confirmed empty', '<div class="tmm-col" style="align-items:center;text-align:center;gap:8px;padding:10px;border:1px dashed var(--hair2);border-radius:10px">' + sm('No agent works here yet. Add one for the work you need, like a research brief or a runway note. It only proposes; you decide.') + btn('Add an AI agent', 'p') + '</div>')
+        + cell('D · Read-only member', '<div class="tmm-row" style="gap:8px">' + av('TE', 28) + '<b>Tessaly</b>' + READY() + '</div>' + sm('No Add to team, no ⋯ actions but Open profile. The cap is shown; Edit cap is not.') + REF('Managing agents: editors only'))
+        + cell('E · Plan locked', amb('AI agents come with a paid Founder plan. ' + lnk('See plans')))
+        + cell('F · Models loading', '<p class="tmm-sm" role="status">Reading the models your team allows…</p>' + sk('100%', 46) + sk('100%', 46))
+        + cell('G · Models unavailable', warn('The models offered on your plan could not be read. That is not the same as none.') + sm('Add Ryssa stays off; the cap and sponsor are kept.'))
+        + cell('H · Estimates working out', '<div class="tmm-rad on"><span class="o"></span><span class="g"><b class="tmm-mo">gpt-oss-120b</b>' + sm('Reasons step by step · reads up to 128k tokens') + '</span><span class="c">' + sk('110px', 14) + sm('Working out the cost…') + '</span></div>')
+        + cell('I · None allowed here', amb('<b>No model is allowed for this team.</b> An editor sets the allowed models in Team › Settings. ' + lnk('Open Settings')) + sm('Shown when the allowlist (D4422) leaves no offered model.'))
+        + '</div>', 1200);
+    }
+
+    else if (B === 'TMM09') {
+      html = crop(bhead('TMM09 · Team coverage states', 'Zero mapped categories and loading get their own words', 'The summary sentence is chosen by what the rows hold, never by the absence of a people gap alone.')
+        + '<div class="tmm-grid2">' + EB('A · Loading', covCard('loading')) + EB('B · Zero mapped categories', covCard('zero')) + EB('C · Unavailable', covCard('un')) + '<div class="tmm-col" style="gap:10px">' + ann('Sentence rules (frontend only)', ['All eight rows with no level and no agent → “No category is mapped yet…”.', 'At least one people gap → “N people gaps: … covered only by an agent.” (as today), plus the count line.', 'Agents mapped and every one also has a person → “Every category with an agent on it also has a person on it.” (today’s sentence, now only in this case).', 'Some rows not read → Partial · 6 of 8 categories read, never “No level”.', 'Loading → “Reading team coverage…” with four skeleton rows, instead of drawing nothing.']) + FE('coverageSummary and the card’s loading branch') + '</div></div>'
+        + EB('D · Value, with people gaps (TMM01)', covCard('val')), 1200);
+    }
+
+    else if (B === 'TMM11') {
+      html = crop(bhead('TMM11 · Keyboard order, headings and accessible names', 'Roster and Model and cap', 'Numbers are tab stops, in order. Radio groups take one stop and arrow keys move inside them.')
+        + '<div class="tmm-grid2" style="align-items:start"><div class="tmm-panel"><span class="tmm-eb">Roster · order</span><div class="tmm-row" style="gap:8px"><b>Team</b><span style="margin-left:auto" class="tmm-row">' + KI(1) + btn('Ask') + KI(2) + btn('Add to team ' + I.down, 'p') + '</span></div>'
+        + '<div class="tmm-row" style="gap:8px;font-size:12.5px">' + KI(3) + '<span>Tabs: one stop, ←→ move</span><span style="margin-left:auto" class="tmm-row">' + KI(4) + lnk('Skills library ›') + '</span></div>'
+        + '<div class="tmm-tbl">' + J([[AG.tes, 5, null, 6], [AG.ves, 7, 'Raise Vesta’s cap', 9], [AG.kad, 10, 'Add skills for Kade', 12]].map(r => '<div class="tmm-tr" style="grid-template-columns:minmax(0,1fr) auto auto"><span class="tmm-name">' + KI(r[1]) + av(r[0].ini, 28) + '<b style="text-decoration:underline">' + r[0].n + '</b></span><span class="tmm-row" style="gap:6px">' + (r[2] ? KI(r[1] + 1) + btn(r[2], 't sm') : '') + '</span><span class="tmm-row" style="gap:6px">' + KI(r[3]) + btn(I.more, 'ic') + '</span></div>')) + '</div>'
+        + '<ol class="tmm-col tmm-sm" style="gap:3px"><li>5 “Tessaly, AI agent, Finance: open profile” · 6 “More actions for Tessaly”</li><li>7 “Vesta, AI agent, Legal: open profile” · 8 “Raise Vesta’s cap” · 9 “More actions for Vesta”</li><li>10 “Kade, AI agent, Marketing: open profile” · 11 “Add skills for Kade” · 12 “More actions for Kade”</li><li>13 onward: Team coverage’s actions, then People</li><li>Esc closes the ⋯ menu and the profile; focus returns to the control that opened it.</li></ol></div>'
+        + '<div class="tmm-panel"><span class="tmm-eb">Model and cap · order</span><ol class="tmm-col tmm-sm" style="gap:3px"><li>1 Close · 2 the model group (one stop; ↑↓ move, Space selects; a not-allowed model is skipped)</li><li>3 “Try the estimate for nemotron-3-120b-a12b again”</li><li>4 Show token prices (aria-expanded) · 5 Other models this team allows</li><li>6 How the estimate is worked out · 7 Monthly cap (input, labelled, described by the runs line)</li><li>8 Area of work, rule book and tools · 9 Back · 10 Add Ryssa to ' + CO + '</li></ol>'
+        + '<span class="tmm-eb" style="margin-top:6px">Heading outline</span><ul class="tmm-col tmm-sm" style="gap:2px"><li>h1 Team</li><li>h2 AI agents · h2 Team coverage · h2 People</li><li>Sheet: h2 Add an AI agent (dialog name) · h3 Model · h4 Suited to research · h3 Sponsor and monthly cap</li><li>Profile: h2 Tessaly (+ “, AI agent, Finance”) · h3 What Tessaly does · h3 Skills · h3 Sponsor and cap · h3 Permissions</li></ul>'
+        + '<span class="tmm-eb" style="margin-top:6px">Announcements</span><ul class="tmm-col tmm-sm" style="gap:2px"><li>A radio reads its model, what it is for and its estimate or why there is none.</li><li>Status pills carry words; glyphs are hidden. An estimate change is announced politely once it settles.</li><li>Targets are 44 px on phone; focus returns to the row link when the profile closes.</li></ul></div></div>', 1200);
+    }
+
+    else if (B === 'TMM12') {
+      const L = (t, b) => '<h3>' + t + '</h3>' + b;
+      const ul = a => '<ul>' + J(a.map(x => '<li>' + x + '</li>')) + '</ul>';
+      html = '<div class="cv" style="' + VARS + ';width:1200px"><div class="tmm-doc"><span class="tmm-eb">Handoff · #8769 · checked on main 7553cd37b9</span><h2>Team · Choosing an agent and model</h2>'
+        + '<div class="tmm-bdt"><div class="tmm-col" style="gap:8px">'
+        + L('Checked on main', ul(['<code>pages/team/AgentsCard.jsx</code>: row ⋯ is named “Actions for the {tagline} agent” and opens the profile; no skills or readiness; Active pill from <code>status</code> only.', '<code>pages/team/AgentProfileSheet.jsx</code>: persona card, story, values, then permissions, budget, proposals, activity; <code>AgentSkillsCard</code> after them.', '<code>pages/team/AddAgentSheet.jsx</code>: 16 personas, search by name; step 2 always passable; model list flat with $/1M tokens; hold Not recorded.', '<code>pages/team/SkillSheets.jsx</code> <code>SkillsStep</code>: <code>draftCostEstimate</code> only with a model, which is chosen a step later.', '<code>routes/team_skills.ts</code> <code>GET /:scope/:id/cost-estimate</code> and <code>services/agents/runCost.ts</code> (D4121): the per-run estimate and its basis exist.', '<code>services/agents/modelOffers.ts</code> <code>agentModels</code>: id, label, kind, beta, plan_locked, billed prices; no work grouping. <code>services/ai/modelUseCases.ts</code> <code>USE_KINDS</code> lists models by job (Research: gpt-oss-120b, nemotron-3-120b-a12b, kimi-k2.6, deepseek-v4-flash-0731).', '<code>routes/team_agents.ts</code> <code>/:scope/:id/allowlists</code> (D4422) and the add route’s <code>allowlistRefusal</code>; <code>/agents/:uid/skills/:slug/readiness</code> (first ten skills only).', '<code>pages/team/TeamCoverageCard.jsx</code> + <code>skillsModel.coverageSummary</code>: the “every category…” sentence whenever there is no people gap; nothing drawn while loading.']))
+        + L('Preserved', ul(['The 16 named personas, portraits, archetypes, taglines, story and values: behind “About {name}” on cards and the profile.', 'Three steps, Compare, rule book, read-only tools, sponsor, cap above $0, Approvals copy, D4387 fixes, D5129 words.']))
+        + L('Frontend only ▹', ul(['Roster column order, named row link and real ⋯ menu; engine state joined to rows.', 'Profile order; Who cards lead with Good for and skill counts (from the library read); search matches work.', 'Skills gate (⚑ Q2 A); estimate read per listed model on step 3; per 100 runs wording; token prices disclosure; phone sticky choice bar.', 'Coverage sentence rules and loading state.']))
+        + '</div><div class="tmm-col" style="gap:8px">'
+        + L('Requires engineering ◇ #8769', ul(['<code>/roles</code> models carry the jobs they are listed for (from <code>USE_KINDS</code>), <code>capabilities</code> and <code>context_window</code>, filtered by the team’s allowlist and plan, so the step can group by work.', 'The agents list carries <code>skill_count</code> and a readiness summary (ready / with limits / not ready / not recorded) per agent.', 'Readiness for a draft agent (before it exists) and for company skills; until then those read Not recorded.']))
+        + L('Pending the owner ⚑ (option A drawn)', ul(['Q1 Readiness in the roster row. A: one summary pill and line. B: a column per skill.', 'Q2 Zero-skill add. A: Next stays off until one skill is chosen. B: allow, saved as No skills yet.', 'Q3 Small estimates. A: “≈ $0.20 per 100 runs” beside the cap’s run count. B: keep “< $0.01 per run”.', 'Q4 Sample outputs for personas not yet added. A: show what each skill makes (its output label) and the agent’s own last accepted output only. B: HQ-written example outputs, marked as examples.']))
+        + L('Acceptance → boards', ul(['Lead with what it does, skills and readiness, then sponsor and cap; story kept: TMM01, TMM02, TMM03, TMM10A–C.', 'Actions named with the agent’s name and what they open: TMM07, TMM11.', 'Models grouped by work; estimate only with a basis; raw prices on demand; choice and cap on phone: TMM05, TMM06, TMM10E–F.', 'Zero mapped categories and loading: TMM09 (coverage), TMM10G.', 'Active, paused, engine-off and no-skills with accessible names: TMM07, TMM11. Zero-skill setup: TMM04B.']))
+        + L('Sample data', '<p>' + MR + ', ' + NB + ', ' + CO + ', the skills’ readiness, spend and estimates are fictional. Personas, model ids and catalogue prices are as main lists them. Design only.</p>')
+        + '</div></div></div></div>';
+    }
+
+    /* ---------- phone 390 ---------- */
+    else if (B === 'TMM10A') {
+      const card = (a) => '<div class="tmm-pcard"><div class="tmm-row" style="gap:10px;flex-wrap:nowrap">' + av(a.ini, 36) + '<span class="tmm-col" style="gap:2px;flex:1;min-width:0"><a href="#" aria-label="' + a.n + ', AI agent, ' + a.area + ': open profile" style="color:var(--ink)!important"><b style="font-size:14px">' + a.n + '</b></a><span>' + arch(a.ar) + '</span></span>' + btn(I.more, 'ic', ' aria-label="More actions for ' + a.n + '" style="width:44px;height:44px"') + '</div>'
+        + '<span style="font-size:12.5px;font-weight:700">' + a.area + ' · ' + a.skills.length + ' skill' + (a.skills.length === 1 ? '' : 's') + '</span><div class="tmm-row" style="gap:6px">' + (a === AG.ves ? PAUSED('Paused · cap reached') : a === AG.kad ? NOSK() : READY()) + '</div><span class="tmm-row" style="gap:6px;font-size:12px">' + pav(a.spi, 20) + a.sp + ' · ' + mo(a.spend + ' of ' + a.cap) + '</span></div>';
+      html = phone('Team', '<span class="tmm-row" style="gap:6px">' + N(1) + '<b style="font-size:20px">Team</b><span style="margin-left:auto">' + btn('Add to team', 'p sm') + '</span></span><div class="tmm-row" style="gap:14px;border-bottom:1px solid var(--hair);font-size:13px;flex-wrap:nowrap;overflow:hidden"><a href="#" aria-current="page" style="color:var(--ink)!important;font-weight:700;border-bottom:2px solid var(--vi);padding:8px 0">People and agents</a><a href="#" style="color:var(--mu)!important;padding:8px 0">Skills</a><a href="#" style="color:var(--mu)!important;padding:8px 0">Roles</a></div><h2 style="font-size:15px;font-weight:800">AI agents · 3</h2>' + card(AG.tes) + card(AG.ves) + card(AG.kad), null, { backLabel: 'Back to ' + CO });
+    }
+
+    else if (B === 'TMM10B') {
+      html = phone('Tessaly', '<span class="tmm-row" style="gap:8px">' + N(2) + av('TE', 40) + '<span class="tmm-col" style="gap:2px"><b style="font-size:17px">Tessaly</b>' + arch('Systems Builder') + '</span></span><div class="tmm-row" style="gap:6px">' + READY() + sm('2 ready · 1 runs with limits') + '</div>'
+        + '<dl class="tmm-kv" style="grid-template-columns:96px minmax(0,1fr)"><dt>Does</dt><dd>Finance · Works in Finance, Raise</dd><dt>Model</dt><dd>' + mo('gpt-oss-120b') + '</dd></dl>'
+        + '<h3 class="tmm-h3">Skills · 3</h3><div class="tmm-box"><div class="tmm-li"><span class="g"><b>Cash runway snapshot</b>' + sm('Makes a brief') + '</span>' + READY('Ready') + '</div><div class="tmm-li"><span class="g"><b>Monthly investor update</b>' + sm('Revenue for Oct not recorded') + '</span>' + LIM('With limits') + '</div><div class="tmm-li"><span class="g"><b>Board meeting brief</b>' + sm('Makes a brief') + '</span>' + READY('Ready') + '</div></div>'
+        + '<h3 class="tmm-h3">Sponsor and cap</h3><span class="tmm-row" style="gap:6px;font-size:12.5px">' + pav('MR', 22) + MR + '</span>' + mo('$3.84 of $25 · resets Tue 1 Dec') + bar(15) + '<span class="tmm-row" style="gap:6px">' + EST('≈ $0.17–$0.21 per 100 runs') + '</span>'
+        + '<button type="button" class="tmm-disc" aria-expanded="false" style="min-height:44px">' + I.chev + 'About Tessaly: story and values</button>', btn('Pause Tessaly') + btn('Edit cap', 'p'), { barH: 96 }).replace('class="tmm-pbar"', 'class="tmm-pbar" style="flex-direction:row"');
+    }
+
+    else if (B === 'TMM10C') {
+      html = phone('Add an AI agent', '<span class="tmm-row" style="gap:6px">' + N(3) + mo('Step 1 of 3 · Who') + '</span>' + whoBody(true), btn('Next: skills', 'p'), { close: true, backLabel: 'Close Add an AI agent', barH: 90 });
+    }
+
+    else if (B === 'TMM10D') {
+      html = phone('Add an AI agent', '<span class="tmm-row" style="gap:6px">' + N(4) + mo('Step 2 of 3 · Skills') + '</span>' + skillsBody(false, true), '<div class="tmm-row" style="flex-wrap:nowrap">' + btn('Back') + btn('Next: model and cap', 'p') + '</div>', { close: true, backLabel: 'Close Add an AI agent', barH: 90 });
+    }
+
+    else if (B === 'TMM10E') {
+      html = phone('Add an AI agent', '<span class="tmm-row" style="gap:6px">' + N(5) + mo('Step 3 of 3 · Model and cap') + '</span>' + modelList({ short: true }).replace('<div class="tmm-row">', '<div class="tmm-row" style="min-height:44px">') + '<label class="tmm-col" style="gap:4px"><span style="font-weight:700;font-size:12.5px">Monthly cap</span><span class="tmm-field" style="width:140px;min-height:44px">$ <span style="margin-left:6px">20</span></span></label>',
+        '<span class="tmm-sm" role="status" style="color:var(--ink)"><b class="tmm-mo">gpt-oss-120b</b> · ≈ $0.20 per 100 runs · cap $20 ≈ 10,100 runs</span><div class="tmm-row" style="flex-wrap:nowrap">' + btn('Back') + btn('Add Ryssa', 'p', ' aria-label="Add Ryssa to ' + CO + '"') + '</div>', { close: true, backLabel: 'Close Add an AI agent', barH: 120 });
+    }
+
+    else if (B === 'TMM10F') {
+      const over = '<div class="tmm-dim" aria-hidden="true"></div><section role="dialog" aria-modal="true" aria-labelledby="tp" style="position:absolute;left:0;right:0;bottom:0;z-index:5;background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px 26px;display:flex;flex-direction:column;gap:10px"><div class="tmm-row"><h2 id="tp" style="font-size:16px;font-weight:800">' + N(6) + ' Token prices</h2><span style="margin-left:auto">' + btn(I.x, 'ic', ' aria-label="Close token prices" style="width:44px;height:44px"') + '</span></div>' + sm('Suited to research · what you pay per 1M tokens')
+        + J([M.gpt, M.kim, M.nem, M.dsf].map(m => '<div class="tmm-li" style="padding:8px 0"><span class="g"><b class="tmm-mo">' + m.id + '</b><span class="tmm-mo tmm-mu" style="font-size:11.5px">In ' + m.inp + ' · Out ' + m.out + '</span></span><span class="tmm-sm">' + (m.per100 ? m.per100.replace(' per 100 runs', ' /100') : m === M.nem ? 'Unavailable' : 'Not allowed') + '</span></div>')) + sm('Estimates are worked out as on the Model step; How the estimate is worked out sits under the list.') + '</section>';
+      html = phone('Add an AI agent', mo('Step 3 of 3 · Model and cap') + modelList({ short: true }), null, { close: true, over: over });
+    }
+
+    else if (B === 'TMM10G') {
+      html = phone('Team', '<span class="tmm-row" style="gap:6px">' + N(7) + '<b style="font-size:15px">Team coverage</b></span>' + '<div class="tmm-pcard" aria-busy="true"><b style="font-size:13px">Loading</b><p class="tmm-sm" role="status">Reading team coverage…</p>' + sk('100%', 16) + sk('100%', 16) + sk('80%', 16) + '</div>'
+        + '<div class="tmm-pcard"><b style="font-size:13px">No category is mapped yet.</b>' + sm('Nobody on this team, person or agent, has a recorded level in any of the eight categories. People get levels from their /studio assessment; agents from their skills.') + btn('Add skills to an agent', 'sm') + btn('Show the eight categories ' + I.down, 't sm', ' aria-expanded="false"') + '</div>'
+        + '<div class="tmm-pcard"><b style="font-size:13px">With a people gap</b>' + sm('2 people gaps: Finance / Ops and Legal / Compliance are covered only by an agent.') + J(['Finance / Ops', 'Legal / Compliance'].map(x => '<div class="tmm-row" style="font-size:12.5px;border-top:1px solid var(--hair);padding-top:6px"><b style="flex:1">' + x + '</b>' + sm('Agent · Working') + '</div>')) + '</div>', null, { backLabel: 'Back to ' + CO });
+    }
+
+    else html = crop('<p>Unknown board ' + B + '</p>');
+
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

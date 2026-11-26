@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Preflight Repair · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Pitch · Check before you send · #8772 · extends #3661 (PF1–PF5) and #4598</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Pitch preflight: from a finding to the exact slide element, the repair in the draft, and the recheck on the version that is sent</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The editor’s “Check before you send” panel and the check inside Export, in the Pitch Studio v2 editor as landed. Today two metric tiles on one slide read “Slide 3 · Metric” with the same words, Export prints “Nothing to fix” above three warnings, the draft check is labelled v7, and Export has no way to the element. These boards name each element (slide, kind, its own label and value), group one problem across several elements while keeping each finding, return from the repair to the same row, say what was checked (your draft or a saved version) and which export is allowed, and keep “Nothing to fix” for a genuinely clean result. Platform States words and shapes (D5129); blockers are never dismissible; nothing is rewritten by the check. Violet dashed ◇ marks backend work; amber ⚑ marks the owner’s picks, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · [Atlas Orchard], its deck, [Maya Ruiz], [Investor A] and every figure are fictional sample data (no brackets on the slides, because the check flags bracketed text).</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Pitch Preflight Repair Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PTF-0', 'Today on main', 'The draft check in the editor and the check in Export v7 as built, with what the code does: identical rows for two tiles, “Nothing to fix” above three warnings, the draft labelled v7, no way from Export to the element, two stale tiles collapsed into one row, and the recipient line that drops a missing date.', [C('PTF00', false, 1440, 742)]],
+      ['PTF-1', 'Desktop 1440 · steps 1 to 4: finding, element, repair, back', '1 The panel on the draft: 1 blocker, 3 warnings, slide 3’s two tiles under one heading, each its own row. 2 Show on slide selects the MRR tile, numbered as in the panel, and the inspector offers the repair. 3 Bound again in the draft: the date is added, the value kept, v7 untouched. 4 Back to the check: re-checked, “Fixed since the last check”, focus on the next row.', [F('PTF01', '1 · The check, on your draft', 1340), F('PTF02', '2 · Show on slide', 900), F('PTF03', '3 · Repaired in your draft', 900), F('PTF04', '4 · Back to the same check', 1170)]],
+      ['PTF-2', 'Desktop 1440 · steps 5 to 8: version, export, recipient', '5 Export v7 checks the saved version: no blockers, 3 warnings named, export after confirming, and what the draft differs by. 6 The draft re-checked clean, then Save version 8. 7 Export v8: checked as saved, Nothing to fix, Export PDF. 8 The recipient’s tile source lines on v7 today, v7 proposed and v8.', [F('PTF05', '5 · Export v7 with warnings', 1010), F('PTF06', '6 · Clean draft, save v8', 900), F('PTF07', '7 · Export v8, nothing to fix', 900), C('PTF08', '8 · What the recipient sees', 1440, 521)]],
+      ['PTF-3', 'A finding, named, and grouping', 'Row anatomy in six parts, the grouping rule (one heading, one row per element, ids unchanged) and how duplicate reports collapse.', [C('PTF09', false, 1440, 701)]],
+      ['PTF-4', 'Tests: stale metrics, layout failures', 'Fixture B: both tiles changed in their store, one row each with then and now, one refresh for both, instead of one whole-slide row. Blockers: the clipped title drawn as exported, and two overlapping blocks, neither dismissible.', [C('PTF10', 'Two stale metrics on one slide', 1200, 1005), C('PTF11', 'Structural and layout failures', 1200, 961)]],
+      ['PTF-5', 'Check states and the headline', 'Checking, one slide couldn’t be checked, the version unreadable (Unavailable, Try again), out of date, read-only, not checked; then the headline, export rule and announcement for each result.', [C('PTF12', 'States', 1200, 693), C('PTF13', 'Headline, export, announcement', 1200, 487)]],
+      ['PTF-6', 'Keyboard, headings, live regions', 'Focus order in the panel and on the slide, the return to the same row, heading outline, row names and the one polite status per check.', [C('PTF14', false, 1200, 485)]],
+      ['PTF-7', 'Phone 390 · the route', '1 The check as a full screen; 2 Show on slide with the finding card; 3 the repair sheet; 4 back to the check, re-checked; 5 Export v7 with its warnings confirmed; 6 Export v8, nothing to fix.', [P('PTF15A', '1 · The check'), P('PTF15B', '2 · Show on slide'), P('PTF15C', '3 · Repair'), P('PTF15D', '4 · Back to the check'), P('PTF15E', '5 · Export v7'), P('PTF15F', '6 · Export v8')]],
+      ['PTF-H', 'Handoff', 'Checked on main with files, frontend only, the one ◇ backend item, three ⚑ owner decisions with option A drawn, acceptance mapped to boards, and what is preserved.', [W('PTF16')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -119,6 +119,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
+  ['cloudflare-worker/sql/forward-fixes', 'the rehearsed forward fix a manual migration names (D8532, D5585-p15)'],
   ['cloudflare-worker/test',          'what the worker guarantees'],
   ['scripts',                         'build, deploy and the CI guards'],
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],

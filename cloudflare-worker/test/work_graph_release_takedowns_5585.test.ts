@@ -475,5 +475,5 @@ test('10. append-only tables, a missing adapter dead-letters, a retraction of no
     `UPDATE work_graph_release_deliveries SET outcome = 'withheld'`, `DELETE FROM work_graph_release_deliveries`,
   ]) assert.throws(() => w.db.exec(sql), /D5585 part 2/, sql);
   // Render approvals are recorded apart and still never publish (part 1), whatever this part adds.
-  assert.ok((await decideRelease(w.env, CTX, decision(m.manifestUid, m.digest, 'marketing', 'render', { purpose: 'render' }))).ok);
+  assert.ok((await decideRelease(w.env, CTX, decision(m.manifestUid, m.digest, 'marketing', 'render', { purpose: 'render', renderCeilingMicrousd: 5_000_000 }))).ok);
 });

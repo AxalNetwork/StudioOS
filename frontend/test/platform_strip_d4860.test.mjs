@@ -171,7 +171,8 @@ test('the strip is grouped by domain in the overview\'s groups and order, each g
 test('ownership: Monitoring and Telegram are Platform\'s, at addresses outside it, and say so; Integration keys is its own row', () => {
   // Mutation checked: outsidePlatform reduced to `route.startsWith('/admin/platform')` → '/admin/platformx' reads inside.
   const outside = HQ_STRIPS.Platform.filter((i) => outsidePlatform(i.route)).map((i) => i.label);
-  assert.deepEqual(outside, ['Monitoring', 'Telegram']);
+  // D5580 part 5: the WorkGraph is Platform's too, at the owner's route A outside /admin/platform.
+  assert.deepEqual(outside, ['Monitoring', 'WorkGraph', 'Telegram']);
   assert.equal(outsidePlatform('/admin/platform'), false);
   assert.equal(outsidePlatform('/admin/platformx'), true);
   assert.equal(outsidePlatform('/admin/integration-keys#github'), true);

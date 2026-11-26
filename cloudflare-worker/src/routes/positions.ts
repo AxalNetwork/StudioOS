@@ -883,12 +883,17 @@ r.post('/', async (c) => {
     const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number }>();
     if (!proj) return c.json({ detail: 'Project not found' }, 404);
     // D1215: the closing line this position records, when one is named: a line of a closing on this venture.
+    // D6889 part 2 (#7938): only a received line, and only once. The Record position form names the line, and
+    // the line then reads In Portfolio; nothing matches a line to a position by venture or amount.
     const lineUid = body.closing_line_uid == null || body.closing_line_uid === '' ? null : String(body.closing_line_uid);
     if (lineUid !== null) {
       const line = await c.env.DB.prepare(
-        'SELECT 1 AS yes FROM closing_lines l JOIN closings cl ON cl.id = l.closing_id WHERE l.uid = ? AND cl.project_id = ?'
-      ).bind(lineUid, projectId).first();
+        'SELECT l.status FROM closing_lines l JOIN closings cl ON cl.id = l.closing_id WHERE l.uid = ? AND cl.project_id = ?'
+      ).bind(lineUid, projectId).first<{ status: string }>();
       if (!line) return c.json({ detail: 'No closing line of this venture has that id.', code: 'closing_line_not_found' }, 404);
+      if (line.status !== 'received') {
+        return c.json({ detail: 'Only a received closing line can be recorded as a position. Nothing was recorded.', code: 'closing_line_not_received' }, 409);
+      }
     }
     const uid = newUid();
     const values = [
@@ -902,10 +907,18 @@ r.post('/', async (c) => {
         `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(...values).run()
+      // One position per line, decided in the insert itself, so two saves at once cannot both land.
       : await c.env.DB.prepare(
         `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at, closing_line_uid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(...values, lineUid).run();
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM portfolio_positions WHERE closing_line_uid = ?)`
+      ).bind(...values, lineUid, lineUid).run();
+    if (lineUid !== null && !Number((ins as any).meta?.changes ?? 0)) {
+      const held = await c.env.DB.prepare('SELECT uid FROM portfolio_positions WHERE closing_line_uid = ? ORDER BY id LIMIT 1')
+        .bind(lineUid).first<{ uid: string }>();
+      return c.json({ detail: 'This closing line already has a position in Portfolio. Nothing was recorded.', code: 'closing_line_already_recorded',
+        position_uid: held?.uid ?? null }, 409);
+    }
     const x = await c.env.DB.prepare('SELECT * FROM portfolio_positions WHERE id = ?').bind((ins as any).meta?.last_row_id).first<PositionRow>();
     return c.json(x, 201);
   } catch (e) { return mapError(c, e); }

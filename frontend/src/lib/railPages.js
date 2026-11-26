@@ -389,6 +389,11 @@ const SUPER = [
   // so its key is off the canvas; its own canvas (BNK1) gives the rail's sentence.
   off('/admin/platform/bank-accounts', key(SA, 'Platform', 'Bank accounts')),
   own('/admin/platform/promo-codes', key(SA, 'Platform', 'Promo codes')),
+  // D5580 part 5 (#5580): the WorkGraph's three tabs dock one rail. The AIRail canvas draws no board for it,
+  // so its key is off the canvas; its own canvas (WG-01) draws the rail.
+  off('/admin/workgraph/in-flight', key(SA, 'Platform', 'WorkGraph')),
+  alias('/admin/workgraph/pairs', key(SA, 'Platform', 'WorkGraph'), 'The WorkGraph’s PR pairs tab docks its Work in flight rail.'),
+  alias('/admin/workgraph/evidence', key(SA, 'Platform', 'WorkGraph'), 'The WorkGraph’s PR evidence tab docks its Work in flight rail.'),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),
   own('/admin/platform/allowances', key(SA, 'Platform', 'AI allowances')),
   alias('/admin/platform/ai-usage', key(SA, 'Platform', 'AI allowances'), 'HQ › AI usage (D791) is AI allowances’ platform-wide read, and docks the same rail.'),
