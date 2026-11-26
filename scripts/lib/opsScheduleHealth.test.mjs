@@ -90,7 +90,9 @@ function fixture() {
     const m = path.match(/\/issues\/(\d+)$/);
     if (m && init.method === 'PATCH') {
       const row = rows[Number(m[1]) - 1];
-      Object.assign(row, JSON.parse(init.body));
+      // Only the fields the monitor writes: body, labels, state and state_reason.
+      const patch = JSON.parse(init.body);
+      for (const key of ['body', 'labels', 'state', 'state_reason']) if (key in patch) row[key] = patch[key];
       return structuredClone(row);
     }
     if (m) return structuredClone(rows[Number(m[1]) - 1]);
