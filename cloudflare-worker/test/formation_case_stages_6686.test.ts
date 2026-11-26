@@ -16,6 +16,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
+import { formationScreeningFixture } from './_formation_screening_fixture.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { RECORDED_STAGES, STAGES, ensureCaseForOrder, transition } from '../src/services/formationCase.ts';
@@ -80,7 +81,7 @@ test('a stage left twice keeps its first completion; the later pass is in the ti
 test('stages before paid write no record; entering paid opens the first', async () => {
   const db = fresh();
   db.exec(`INSERT INTO formation_cases (id, uid, user_id, intent, project_id, track, path, stage) VALUES (70, 'v2a', ${FOUNDER}, 'convert_project', 1, 'v2', 'simple', 'draft')`);
-  const env: any = { DB: d1Over(db) };
+  const env: any = { TOKENS: formationScreeningFixture(db, 70), DB: d1Over(db) };
   for (const to of ['options_shown', 'chosen', 'structure_review', 'details', 'quoted'] as const) {
     assert.equal((await transition(env, 70, to, { party: 'founder', userId: FOUNDER })).ok, true, to);
   }
