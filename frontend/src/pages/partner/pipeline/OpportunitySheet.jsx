@@ -19,6 +19,10 @@
  * (`refreshKey`, Try again) keeps the tab and any editor a zone mounts in it (`editors`), and a source that fails
  * on refresh keeps its last good record rather than dropping its tab. A first read that fails is Unreadable inside
  * the sheet, with Try again.
+ *
+ * WHO OPENS IT (#9110, D9110). Leads' Draft proposal (`needId`); Open opportunity in the Proposals, Negotiations
+ * and Retainers sheets (`quoteId`, `quoteId`, `engagementId`), which closes that sheet first; and a Recent movement
+ * or All movement row on `/pipeline` (`needId`, on Activity).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '../../../ui';
@@ -32,6 +36,8 @@ import { activityRows } from './commandCentre';
 
 export const OPPORTUNITY_TABS = Object.freeze(['Overview', 'Activity', 'Fit', 'Proposal', 'Terms', 'Engagement']);
 export const LOAD_FAILED = 'This opportunity could not be read.';
+/** #9110: the Open opportunity action a zone's own sheet draws beside its ×, one look in every zone (44px target). */
+export const OPEN_OPPORTUNITY_CLASS = 'inline-flex min-h-[44px] items-center rounded-lg border border-[#fde68a] bg-[#fffbf2] px-3 text-[12.5px] font-bold text-[#92400e] hover:border-[#b45309] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#b45309] dark:border-amber-900 dark:bg-[#2b210d] dark:text-amber-300 dark:hover:border-amber-600';
 const CORE = ['leads', 'proposals', 'negotiations', 'retainers'];
 const SOURCE_LABEL = { leads: 'Leads', proposals: 'Proposals', negotiations: 'Negotiations', retainers: 'Retainers' };
 
