@@ -44,7 +44,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { presentMetrics } from '../services/researchCompanyDirectory';
-import { loadFundSources, presentFund, type DirectoryRow as FundRow, type FundSourceRow } from '../services/researchFundDirectory';
+import { directoryColumns, loadFundSources, presentFund, type DirectoryRow as FundRow, type FundSourceRow } from '../services/researchFundDirectory';
 import {
   SOURCE_WITHDRAWN_MESSAGE, loadVehicleFacts, presentFact, rowProvenance, type FactRow, type ProposedField,
 } from '../services/researchFundProfile';
@@ -203,8 +203,8 @@ export async function directoryRows(env: Env, kind: Kind, uids: string[]): Promi
     ? await env.DB.prepare('SELECT * FROM research_company_directory WHERE uid IN (SELECT value FROM json_each(?))').bind(list).all<Row>()
     // The served funds, as `SERVED_FUNDS` defines them: none from a list taken down for its terms.
     : await env.DB.prepare(
-      `SELECT d.uid, d.name, d.website, d.linkedin, d.hq, d.fund_number, d.fund_size_cents, d.fund_date, d.quarter, d.fund_year,
-              d.sector_focus, d.notable_lps, d.eif_flag, d.eifo_flag, d.source_name, d.source_url, d.as_of
+      // D7744: the directory's column list, with each row's own size currency.
+      `SELECT ${directoryColumns('d')}
          FROM research_fund_directory d
         WHERE d.uid IN (SELECT value FROM json_each(?))
           AND NOT EXISTS (SELECT 1 FROM research_fund_sources s WHERE s.source_name = d.source_name AND s.verdict = 'not allowed')`
