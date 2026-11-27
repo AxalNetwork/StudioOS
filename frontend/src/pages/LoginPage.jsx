@@ -118,6 +118,11 @@ const MAGIC_ERROR_COPY = {
   limiter: 'We could not check the request limit, so the link was refused. This is a problem on our side — please try the link again in a moment.',
   inactive: 'Your Axal VC account is inactive. Contact support.',
   error: 'Something went wrong completing your sign-in. Please try again.',
+  // D8680 (#8680): not from /magic/verify. The link was accepted and its
+  // session probe failed in this tab (RequireAuth carries the code here), so
+  // the person learns the link worked and what to do, instead of a bare form.
+  session: 'Your link was accepted, but this browser did not keep you signed in. Check that cookies are allowed for this site, then send a new link.',
+  unreachable: 'Your link was accepted, but we could not load your account just now. This is a problem on our side. Send a new link, or try again in a moment.',
 };
 
 // Honor a `?next=` return path (e.g. a paid event invitation that bounced the
