@@ -396,6 +396,7 @@ import companyLegal from './routes/company_legal';
 import companyDocuments from './routes/company_documents';
 import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
+import { serveHashedAsset } from './util/hashedAssets';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
 // `/api/partner/…` singular, which is a free first segment: `/api/partners` is
 // the public firm directory and a different path, and `/api/pipeline/vote*`
@@ -2026,21 +2027,10 @@ const studioos = {
     // else. With MCP_SERVER_ENABLED off each of these paths answers 404 and
     // the provider is never built; every other path goes on exactly as before.
     if (isMcpPath(pathname)) return routeMcp(request, env, ctx);
-    if (request.method === 'GET' && env.ASSETS) {
-      if (pathname.startsWith('/assets/')) {
-        const assetRes = await env.ASSETS.fetch(request);
-        const ctype = assetRes.headers.get('content-type') || '';
-        if (/text\/html/i.test(ctype)) {
-          return new Response('Asset not found\n', {
-            status: 404,
-            headers: {
-              'content-type': 'text/plain; charset=utf-8',
-              'cache-control': 'no-store',
-            },
-          });
-        }
-        return assetRes;
-      }
+    // D9168 (#9168): a hashed file never changes, so a 200 or 304 is cached for a year as `immutable` and a page
+    // load stops revalidating ~70 preloaded chunks through the Worker. A miss stays `no-store`; HEAD is answered like GET.
+    if ((request.method === 'GET' || request.method === 'HEAD') && env.ASSETS) {
+      if (pathname.startsWith('/assets/')) return serveHashedAsset(await env.ASSETS.fetch(request));
     }
     // D1439 (#3914): a shared record link previews as itself. Before Hono, so
     // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
