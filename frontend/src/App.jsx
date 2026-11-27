@@ -1011,6 +1011,11 @@ function pageOwnsPreviewBanner(pathname, selectedKey) {
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
+  // D8730 (#8730, SPV06): Back to HQ returns focus to the Preview shell trigger and says, politely, that the
+  // preview ended. Picking any other shell clears the line.
+  const [ended, setEnded] = useState(false);
+  const triggerRef = useRef(null);
+  useEffect(() => { if (ended) triggerRef.current?.focus(); }, [ended]);
   // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
   // role, not a role: choosing it browses as admin with the HQ shell,
   // choosing "HQ's own accounts" browses as admin with the plain shell —
@@ -1028,6 +1033,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
   const { pathname } = useLocation();
   const pageBanner = pageOwnsPreviewBanner(pathname, selectedKey);
   const choose = (key) => {
+    setEnded(Boolean(previewing) && key === home?.key);
     if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
     else onViewModeChange(key);
@@ -1049,6 +1055,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
       ) : (
         <div className="ml-2 relative">
           <button
+            ref={triggerRef}
             onClick={() => setOpen(!open)}
             data-testid="preview-shell-trigger"
             className="flex items-center gap-2 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors"
@@ -1107,12 +1114,16 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
           <button
             type="button"
             onClick={() => choose(home.key)}
-            className="rounded-md bg-white/20 px-2 py-0.5 font-medium hover:bg-white/30"
+            className="min-h-11 rounded-md bg-white/20 px-3 py-0.5 font-medium hover:bg-white/30 sm:min-h-0 sm:px-2"
           >
             Back to {home.label}
           </button>
         </div>
       )}
+
+      <span role="status" aria-live="polite" className="ml-2 text-xs opacity-90" data-testid="preview-shell-ended">
+        {ended && !previewing && home ? `Preview ended. You are back in ${home.label}.` : ''}
+      </span>
 
     </div>
   );
