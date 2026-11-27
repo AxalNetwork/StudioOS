@@ -41,7 +41,7 @@ import type { Env, User } from '../types';
 import { notify } from './notify';
 import { heldLicences } from './accountLicences';
 import { investorHeldProjectIds } from '../routes/_investorProjectScope';
-import { updateFigures } from '../routes/portfolio_updates';
+import { updateFigures } from './portfolioUpdateFigures';
 import { ATTENTION_TYPE } from './portfolioAttentionAlerts';
 import { completedPeriod, periodBounds, periodCounts, reportDue } from './portfolioMetrics';
 import { readReportingRules } from './portfolioReportingRules';
