@@ -18,7 +18,6 @@ import { installDocument } from './_contracts_dom.mjs';
 import { ViewModeProvider } from '../src/contexts/ViewModeContext.js';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { api } from '../src/lib/api.js';
-import { dealFlowApi } from '../src/lib/api/dealFlow.js';
 import { dealStaffApi } from '../src/lib/api/dealStaff.js';
 import { dealWorkroomApi } from '../src/lib/api/dealWorkroom.js';
 import { MoveToDiligenceDialog, PassDialog } from '../src/pages/investor/dealflow/StageDialogs.jsx';
