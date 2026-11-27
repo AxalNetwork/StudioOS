@@ -62,7 +62,7 @@ import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine }
 import usePreflight from './usePreflight';
 import { isQualitative, markLabel } from './versionReviewModel';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
-import { gateOf, overlayOf, stepOf, workingDeck } from './preflightUiModel';
+import { gateOf, overlayOf, repairOf, stepOf, workingDeck } from './preflightUiModel';
 import PreflightOverlay from './PreflightOverlay';
 import {
   ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_HELPER, NOTES_PLACEHOLDER, NO_CARDS,
@@ -462,6 +462,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const gp = dirty ? gatePf : pf;
   const [gate, setGate] = useState(null);
   const [finding, setFinding] = useState(null);
+  // D8772 (PTF04): the finding the founder left the check from, and the order it was listed in, so Back focuses it (or the next).
+  const [returnTo, setReturnTo] = useState(null);
   const colours = cardColours(theme, kitData);
   // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
   const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
@@ -786,6 +788,20 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     setSheet(null); setGate(null); setFinding(row.id);
   };
   const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
+  // D8772 (PTF02–PTF04): the repair a source finding offers on its tile, in the draft, and the way back to the same check, re-run on the draft.
+  const stripRow = finding ? stripRows.find((r) => r.id === finding) || null : null;
+  const stripBlock = stripRow && Number.isInteger(stripRow.card) ? (cards[stripRow.card]?.blocks || []).find((b) => b?.id === stripRow.block) || null : null;
+  const repair = !readOnly && stripRow ? repairOf(stripRow, stripBlock, items) : null;
+  const runRepair = (r) => {
+    const c = stripRow ? cards[stripRow.card] : null;
+    if (!c || r?.state !== 'ready') return;
+    setCard(stripRow.card, { ...c, blocks: (c.blocks || []).map((b) => (b?.id === stripRow.block ? r.block : b)) }, { label: r.edit });
+  };
+  const backToCheck = () => {
+    setReturnTo({ id: finding, order: stripRows.map((r) => r.id) });
+    setFinding(null); setSheet('preflight');
+    if (!readOnly && !pf.current && !pf.running) pf.run();
+  };
   const gateView = gate && !gp.running && gp.current ? gateOf(gp.groups, gate) : null;
   useEffect(() => {
     if (!gate || gp.running) return;
@@ -807,7 +823,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     <>
       {!readOnly ? <AiOffBanner state={off} /> : null}
       {finding && !sheet && !gate ? (
-        <FindingStrip rows={stripRows} id={finding} onStep={show} onBack={() => { setFinding(null); setSheet('preflight'); }} onClose={() => setFinding(null)} />
+        <FindingStrip rows={stripRows} id={finding} repair={repair} onRepair={runRepair} onStep={show} onBack={backToCheck} onClose={() => setFinding(null)} />
       ) : null}
       {/* D1370 (#3661, PF3): the finding drawn on its slide, as it was checked. */}
       {finding && !sheet && !gate && pf.snapshot ? (() => {
@@ -974,7 +990,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <StageSheet deckId={base.deck.id} readOnly={readOnly} dirty={dirty} onReordered={saved} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'preflight' ? (
-        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
+        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} draft={dirty} returnTo={returnTo} onReturned={() => setReturnTo(null)} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
           onTokens={onTokens} onProposals={onProposals} onOpenAsk={onOpenAsk} onShow={show} onClose={() => setSheet(null)} />
       ) : null}
       {gate && (gp.running || gateView?.open) ? (
