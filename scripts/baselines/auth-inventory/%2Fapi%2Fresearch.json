@@ -123,7 +123,7 @@
     "kind": "oauth_callback",
     "state": "verified",
     "test": "cloudflare-worker/test/authz_research_d4570.test.ts",
-    "note": "The OAuth return carries no session: the gate is the state, HMAC-signed, stored, single-use and expiring (consumeSheetsState), naming who started Connect, who must be a Super Admin. No, unsigned, forged, never-issued, expired or spent state, or the state of an admin who is not the Super Admin or of a founder, redirects to the error page with no code exchange and no token stored."
+    "note": "The OAuth return carries no session: the gate is the state, HMAC-signed, stored, single-use and expiring (consumeSheetsState), naming who started Connect, who must be an active Super Admin, and bound to the browser that started Connect by an HttpOnly cookie holding its nonce, checked before the state is spent (D9151). No, unsigned, forged, never-issued, expired or spent state, a state brought back without its binding cookie, the state of an admin who is not the Super Admin, of a founder, or of a Super Admin disabled since Connect, redirects to the error page with no code exchange and no token stored."
   },
   "GET /api/research/geographies/:code": {
     "review": "record_without_ownership_check",

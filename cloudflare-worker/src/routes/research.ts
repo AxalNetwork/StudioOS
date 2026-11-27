@@ -44,7 +44,7 @@ import { LETTER_INSTRUCTION_FULL, LP_SUMMARY_INSTRUCTION, holdToMaterial, letter
 import { COMPANY_INSTRUCTION, FOUNDING_INSTRUCTION, companyMaterial, foundingMaterial } from '../services/buildRecordDrafts';
 import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
 import type { Env } from '../types';
-import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
+import { authCookieDomainAttr, hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemanticOutcome, deleteChunkedEntity, researchNamespace, type SearchHit } from '../services/vectorize';
@@ -81,6 +81,7 @@ import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner
 import {
   googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
   makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
+  sheetsStateBound, sheetsStateCookie, sheetsStateNonce,
   saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink,
   parseSpreadsheetRef, fundsAppBase, SUGGESTED_SHEET_URL,
   SheetSyncError, readSyncFields, readResolutions, readIdempotencyKey,
@@ -4445,29 +4446,41 @@ research.post('/funds/sheet/connect', async (c) => {
   const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
   const state = await makeSheetsState(c.env, user.id);
   const url = buildSheetsAuthUrl(c.env, state, loginHint);
+  // D9151: bind the state to this browser; the callback refuses a state that comes back without it.
+  c.header('Set-Cookie', sheetsStateCookie(sheetsStateNonce(state), authCookieDomainAttr(c)), { append: true });
   return c.json({ redirect_url: url, auth_url: url });
 });
 
 research.get('/funds/sheet/callback', async (c) => {
   const dest = `${fundsAppBase(c.env)}/research/funds`;
-  const fail = (reason: string) => new Response(null, {
-    status: 302,
-    headers: { Location: `${dest}?sheets=error&reason=${encodeURIComponent(reason.slice(0, 80))}` },
-  });
+  // D9151: every answer clears the binding cookie, with the Domain Connect sets and without it, so a state is tried
+  // at most once in this browser too.
+  const back = (location: string) => {
+    const headers = new Headers({ Location: location });
+    const dom = authCookieDomainAttr(c);
+    headers.append('Set-Cookie', sheetsStateCookie(null, dom));
+    if (dom) headers.append('Set-Cookie', sheetsStateCookie(null, ''));
+    return new Response(null, { status: 302, headers });
+  };
+  const fail = (reason: string) => back(`${dest}?sheets=error&reason=${encodeURIComponent(reason.slice(0, 80))}`);
   try {
     const url = new URL(c.req.url);
     const code = url.searchParams.get('code');
     const stateRaw = url.searchParams.get('state');
     const error = url.searchParams.get('error');
     if (error || !code || !stateRaw) return fail(error || 'invalid_state');
+    // D9151: the state must come back to the browser that started Connect. Checked before the state is spent, so a
+    // state brought back elsewhere neither lands a token nor uses up the Super Admin's own attempt.
+    if (!sheetsStateBound(c.req.header('cookie'), stateRaw)) return fail('invalid_state');
     const userId = await consumeSheetsState(c.env, stateRaw);
     if (!userId) return fail('invalid_state');
     // The state names who started Connect. Connect is super-admin only, so a
-    // leftover or forged nonce for anyone else must not land a refresh token.
+    // leftover or forged nonce for anyone else must not land a refresh token,
+    // nor one for an account disabled since it started Connect (D9151).
     const row = await c.env.DB.prepare(
-      'SELECT id, role FROM users WHERE id = ?',
-    ).bind(userId).first<{ id: number; role: string }>();
-    if (!row) return fail('forbidden');
+      'SELECT id, role, is_active FROM users WHERE id = ?',
+    ).bind(userId).first<{ id: number; role: string; is_active: number | null }>();
+    if (!row || !Number(row.is_active)) return fail('forbidden');
     const actor = await hydrateSuperAdmin(c.env, row as any);
     if (!isSuperAdmin(actor as any)) return fail('forbidden');
     const tokens = await exchangeSheetsCode(c.env, code);
@@ -4480,10 +4493,7 @@ research.get('/funds/sheet/callback', async (c) => {
       googleEmail: info.email || null,
       googleSub: String(info.id || ''),
     });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `${dest}?sheets=connected` },
-    });
+    return back(`${dest}?sheets=connected`);
   } catch (e: any) {
     const msg = String(e?.message || e);
     console.error('[SHEETS:callback]', msg);

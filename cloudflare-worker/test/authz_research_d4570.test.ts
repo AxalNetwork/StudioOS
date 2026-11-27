@@ -4,7 +4,7 @@
 // mounted in the Worker's order (market data, markets, sectors, client prep, then research.ts with its collections),
 // with the Worker's own table of refusal statuses. Three groups:
 //
-//   * A member's own records (24 routes): Library documents, saved Ask answers, benchmarks, collections, zone
+//   * A member's own records (21 routes): Library documents, saved Ask answers, benchmarks, collections, zone
 //     drafts, fund dossiers and their quarterly reports, market readings, brief notes and proposal attachments.
 //     Each is read and written only `WHERE ... owner_user_id = <the caller>`, so every other account gets the
 //     answer a missing record gets: 404, naming nothing, changing nothing. That includes an admin and the Super
@@ -33,7 +33,7 @@ import researchSectors, { sectorSlug } from '../src/routes/research_sectors.ts';
 import researchClientPrep from '../src/routes/research_client_prep.ts';
 import research from '../src/routes/research.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { makeSheetsState } from '../src/services/fundSheets.ts';
+import { makeSheetsState, SHEETS_STATE_COOKIE, sheetsStateNonce } from '../src/services/fundSheets.ts';
 import { SECTORS } from '../src/services/market_intel/aggregator.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { memKV } from './_mem_kv.mjs';
@@ -186,11 +186,12 @@ function fixture() {
     // A fixture OAuth client, so the callback reaches its gate; every Google call goes to the fake fetch.
     GOOGLE_SHEETS_CLIENT_ID: 'fixture-client', GOOGLE_SHEETS_CLIENT_SECRET: 'fixture-secret',
   };
-  async function call(who: number | null, method: string, path: string, body?: unknown) {
+  async function call(who: number | null, method: string, path: string, body?: unknown, cookie?: string) {
     const read = method === 'GET' || method === 'DELETE';
     const res = await app.fetch(new Request(`https://unit.test${path}`, {
       method, redirect: 'manual',
-      headers: { ...(who ? { authorization: `Bearer ${sessions[who]}` } : {}), ...(read ? {} : { 'content-type': 'application/json' }) },
+      headers: { ...(who ? { authorization: `Bearer ${sessions[who]}` } : {}), ...(read ? {} : { 'content-type': 'application/json' }),
+        ...(cookie ? { cookie } : {}) },
       body: read ? undefined : JSON.stringify(body ?? {}),
     // A fresh limiter per request: this suite is about gates, and the limiter would otherwise answer 429 first.
     }), { ...env, RATE_LIMITS: memKV() }, ctx);
@@ -198,7 +199,7 @@ function fixture() {
     const text = await res.text();
     let json: any = null;
     try { json = JSON.parse(text); } catch { json = null; }
-    return { status: res.status, text, json, location: res.headers.get('location') };
+    return { status: res.status, text, json, location: res.headers.get('location'), setCookies: res.headers.getSetCookie() };
   }
   const TABLES = ['research_documents', 'advisor_client_document_shares', 'research_ask_answers', 'research_benchmarks',
     'research_benchmark_constituents', 'research_collections', 'research_collection_documents', 'research_zone_drafts',
@@ -325,38 +326,74 @@ test('#4570 slice 10: the catalogue is read by every signed-in account; Companie
   assert.equal(f.snapshot(), before, 'a catalogue read changed a row');
 });
 
-test('#4570 slice 10: the Sheets callback lands a token only for a Super Admin\'s own unspent, signed state', async () => {
+test('#4570 slice 10: the Sheets callback lands a token only for a Super Admin\'s own unspent, signed state, back in the browser that started Connect (D9151)', async () => {
   const f = fixture();
   const cb = (state: string | null) => `/api/research/funds/sheet/callback?code=fixture-code${state === null ? '' : `&state=${encodeURIComponent(state)}`}`;
+  const bound = (state: string | null) => `${SHEETS_STATE_COOKIE}=${sheetsStateNonce(state) ?? 'none'}`;
   const tokens = () => f.db.prepare('SELECT user_id FROM google_sheets_oauth_tokens ORDER BY user_id').all().map((x: any) => x.user_id);
+  const cleared = (r: { setCookies: string[] }) => r.setCookies.some((v) => v.startsWith(`${SHEETS_STATE_COOKIE}=;`) && /Max-Age=0/.test(v));
+
+  // Connect binds the state it hands out to this browser: the cookie holds the state's nonce, for the state's lifetime.
+  const connect = await f.call(SUPER, 'POST', '/api/research/funds/sheet/connect');
+  assert.equal(connect.status, 200, connect.text.slice(0, 160));
+  const issued = new URL(connect.json.redirect_url).searchParams.get('state');
+  const set = connect.setCookies.find((v) => v.startsWith(`${SHEETS_STATE_COOKIE}=`));
+  assert.equal(set, `${SHEETS_STATE_COOKIE}=${sheetsStateNonce(issued)}; HttpOnly; Secure; SameSite=Lax; Path=/api/research/funds/sheet; Max-Age=600`);
+
   const superState = await makeSheetsState(f.env, SUPER);
   const [nonce] = superState.split('.');
-  const refused: [string, string | null, number | null][] = [
-    ['no state', null, null],
-    ['an unsigned nonce', nonce, null],
-    ['a forged signature', `${nonce}.${'A'.repeat(43)}`, null],
-    ['a signed nonce never issued', await makeSheetsState({ ...f.env, DB: { prepare: () => ({ bind: () => ({ run: async () => ({}) }) }) } } as any, SUPER), null],
-    ['an admin who is not the Super Admin', await makeSheetsState(f.env, ADMIN), null],
-    ['a founder', await makeSheetsState(f.env, OWNER), null],
+  // Each of these is refused for its own reason even with a matching binding cookie.
+  const refused: [string, string | null][] = [
+    ['no state', null],
+    ['an unsigned nonce', nonce],
+    ['a forged signature', `${nonce}.${'A'.repeat(43)}`],
+    ['a signed nonce never issued', await makeSheetsState({ ...f.env, DB: { prepare: () => ({ bind: () => ({ run: async () => ({}) }) }) } } as any, SUPER)],
+    ['an admin who is not the Super Admin', await makeSheetsState(f.env, ADMIN)],
+    ['a founder', await makeSheetsState(f.env, OWNER)],
   ];
   const expired = await makeSheetsState(f.env, SUPER);
   f.db.prepare("UPDATE oauth_state_tokens SET expires_at = '2020-01-01T00:00:00.000Z' WHERE state = ?").run(expired.split('.')[0]);
-  refused.push(['an expired state', expired, null]);
+  refused.push(['an expired state', expired]);
   for (const [why, state] of refused) {
     for (const who of [null, SUPER]) {
-      const r = await f.call(who, 'GET', cb(state));
+      const r = await f.call(who, 'GET', cb(state), undefined, bound(state));
       assert.equal(r.status, 302, why);
       assert.match(String(r.location), /\?sheets=error&reason=/, `${why}: ${r.location}`);
+      assert.ok(cleared(r), `${why}: the binding cookie is not cleared`);
       assert.deepEqual(tokens(), [], `${why}: a token landed`);
       assert.deepEqual(outbound.splice(0), [], `${why}: the code was exchanged`);
     }
   }
-  // The rightful state lands one token, on the Super Admin, whoever's browser carries it back; it is spent.
-  const ok = await f.call(null, 'GET', cb(superState));
+
+  // The Super Admin's own valid state, brought back without its binding or with another state's, is refused as
+  // invalid_state, exchanges nothing, and is not spent: the Super Admin's own browser can still finish.
+  const other = await makeSheetsState(f.env, SUPER);
+  for (const [why, cookie] of [['no binding cookie', undefined], ['another state\'s binding', bound(other)],
+    ['a binding of the wrong length', `${SHEETS_STATE_COOKIE}=${nonce}x`], ['the nonce under another cookie\'s name', `studioos_other=${nonce}`]] as [string, string | undefined][]) {
+    const r = await f.call(null, 'GET', cb(superState), undefined, cookie);
+    assert.match(String(r.location), /\?sheets=error&reason=invalid_state$/, `${why}: ${r.location}`);
+    assert.deepEqual(tokens(), [], `${why}: a token landed`);
+    assert.deepEqual(outbound.splice(0), [], `${why}: the code was exchanged`);
+  }
+  assert.ok(f.db.prepare('SELECT 1 FROM oauth_state_tokens WHERE state = ?').get(nonce), 'an unbound attempt spent the state');
+
+  // A Super Admin disabled after starting Connect lands nothing.
+  const late = await makeSheetsState(f.env, SUPER);
+  f.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(SUPER);
+  const disabled = await f.call(null, 'GET', cb(late), undefined, bound(late));
+  f.db.prepare('UPDATE users SET is_active = 1 WHERE id = ?').run(SUPER);
+  assert.match(String(disabled.location), /\?sheets=error&reason=forbidden$/, String(disabled.location));
+  assert.deepEqual(tokens(), [], 'a disabled Super Admin\'s state landed a token');
+  assert.deepEqual(outbound.splice(0), [], 'a disabled Super Admin\'s code was exchanged');
+
+  // The rightful state, back in the browser that started Connect (another cookie beside it is fine), lands one
+  // token on the Super Admin, clears the binding, and is spent.
+  const ok = await f.call(null, 'GET', cb(superState), undefined, `other=1; ${bound(superState)}`);
   assert.match(String(ok.location), /\?sheets=connected$/);
+  assert.ok(cleared(ok), 'the binding cookie is not cleared on success');
   assert.deepEqual(tokens(), [SUPER]);
   assert.ok(outbound.splice(0).some((u) => u.includes('oauth2.googleapis.com/token')), 'the rightful code is exchanged');
-  const again = await f.call(null, 'GET', cb(superState));
+  const again = await f.call(null, 'GET', cb(superState), undefined, bound(superState));
   assert.match(String(again.location), /reason=invalid_state/, 'a state is spent on first use');
   assert.deepEqual(outbound.splice(0), []);
 });

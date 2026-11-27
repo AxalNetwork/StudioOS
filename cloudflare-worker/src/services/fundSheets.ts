@@ -203,6 +203,49 @@ export async function makeSheetsState(env: Env, userId: number): Promise<string>
   return `${nonce}.${sig}`;
 }
 
+/**
+ * D9151 (#9151): the browser binding of a Connect. The signed state names WHO started Connect; only this cookie,
+ * set on the browser that started it, proves the consent screen is finished in that same browser (login CSRF, as
+ * D722 for Google sign-in). It holds the state's nonce, is HttpOnly, Secure and SameSite=Lax, lives as long as the
+ * state, and is scoped to the Sheets OAuth paths with the session cookie's Domain, because Connect answers on the
+ * host the SPA runs on and Google returns to the registered callback host.
+ */
+export const SHEETS_STATE_COOKIE = 'studioos_sheets_state';
+const SHEETS_COOKIE_PATH = '/api/research/funds/sheet';
+
+/** The Set-Cookie value binding a state's nonce to this browser, or clearing it (`nonce` null). */
+export function sheetsStateCookie(nonce: string | null, domainAttr: string): string {
+  return `${SHEETS_STATE_COOKIE}=${nonce ?? ''}; HttpOnly; Secure; SameSite=Lax; Path=${SHEETS_COOKIE_PATH}${domainAttr}; Max-Age=${nonce ? STATE_TTL_SECONDS : 0}`;
+}
+
+/** The nonce a state string carries (before its signature), or null when it carries none. */
+export function sheetsStateNonce(raw: string | null | undefined): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const i = raw.indexOf('.');
+  return i > 0 ? raw.slice(0, i) : null;
+}
+
+/**
+ * True when one of the request's binding cookies carries this state's nonce. Every value under the name is tried (a
+ * host-only cookie can sit beside the Domain one), each compared in constant time.
+ */
+export function sheetsStateBound(cookieHeader: string | null | undefined, raw: string | null | undefined): boolean {
+  const nonce = sheetsStateNonce(raw);
+  if (!nonce) return false;
+  let bound = false;
+  for (const part of (cookieHeader || '').split(';')) {
+    const t = part.trim();
+    const eq = t.indexOf('=');
+    if (eq <= 0 || t.slice(0, eq) !== SHEETS_STATE_COOKIE) continue;
+    const value = t.slice(eq + 1);
+    if (value.length !== nonce.length) continue;
+    let diff = 0;
+    for (let j = 0; j < value.length; j++) diff |= value.charCodeAt(j) ^ nonce.charCodeAt(j);
+    if (diff === 0) bound = true;
+  }
+  return bound;
+}
+
 export async function consumeSheetsState(env: Env, raw: string | null | undefined): Promise<number | null> {
   if (!raw || typeof raw !== 'string') return null;
   const i = raw.indexOf('.');
