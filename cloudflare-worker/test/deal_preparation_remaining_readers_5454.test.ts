@@ -58,13 +58,15 @@ import dd from '../src/routes/dd.ts';
 import { dealProject, investorsMaySee } from '../src/services/ventureScoring/access.ts';
 import { collectScope } from '../src/services/ventureScoring/collectors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { randomBytes } from 'node:crypto';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const D5454 = read('cloudflare-worker/sql/migrations/202611150148_5454_deal_preparations.sql');
 const EXTRA = ['435_connector_companies', '249_project_metrics', '442_raise_cycle_stores', '626_venture_score_access', '463_raise_record_stores', '339_dd_section_signoff', '620_dd_case_lifecycle', '622_dd_documents_due_reminders', '623_dd_team_templates']
   .map((m) => read(`cloudflare-worker/sql/migrations/${m}.sql`));
-const SECRET = 'synthetic-5454-remaining-'.repeat(3);
+// A fresh signing key per run, never a literal (a literal trips the secret scan).
+const SECRET = randomBytes(32).toString('hex');
 
 /** Deals by what their preparation metadata makes them. Venture 10 holds five, WITHDRAWN alone is venture 30 and
  *  PRIVATE_ROW alone is venture 20, so a venture can be reached through one class only. */
