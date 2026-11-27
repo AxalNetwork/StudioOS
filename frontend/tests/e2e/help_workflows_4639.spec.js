@@ -1,6 +1,21 @@
 // #4639: real Help pages, role filtering and task destinations with synthetic account data.
 // Browser traffic to providers and the Worker is intercepted; no remote account is needed.
-import { test, expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+import { startLocalWorker } from './_helpers.js';
+
+// #9039: served the built SPA by `startLocalWorker()` (_helpers.js), so CI runs this with no preview and no account.
+// Every /api/* answer still comes from the page.route fixture below; the local Worker only serves docs/.
+const test = base.extend({
+  localWorker: [async ({}, use) => {
+    const worker = await startLocalWorker();
+    await use(worker);
+    await worker.close();
+  }, { scope: 'worker' }],
+  baseURL: async ({ localWorker }, use) => use(localWorker.origin),
+});
+// The built SPA registers its service worker (src/lib/pwa.js); a request it makes skips page.route and would reach the
+// local Worker signed out, so a 401 there sends the page to /login. Blocked, as integrations.spec.js does.
+test.use({ serviceWorkers: 'block' });
 
 async function useFixture(page, baseURL, role) {
   const user = role ? {
