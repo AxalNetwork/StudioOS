@@ -12,8 +12,8 @@ import { reportError } from '../../../lib/log';
 import { accreditationWord, fundRelation, kycWord } from './firmSettingsModel.js';
 import { seatDate, seatState } from '../../ColleagueSeatsPanel.jsx';
 
-/** One read: `{ kind: 'loading' | 'ok' | 'failed', data, error }`, with retry. */
-export function useRead(load, scope) {
+/** One read: `{ kind: 'loading' | 'ok' | 'failed', data, error }`, with retry. `report(error)` names its own scope (check-frontend-logging). */
+export function useRead(load, report) {
   const [read, setRead] = useState({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -21,7 +21,7 @@ export function useRead(load, scope) {
     setRead({ kind: 'loading' });
     Promise.resolve().then(load).then(
       (data) => { if (alive) setRead({ kind: 'ok', data }); },
-      (error) => { reportError(scope, error); if (alive) setRead({ kind: 'failed', error }); },
+      (error) => { report(error); if (alive) setRead({ kind: 'failed', error }); },
     );
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +63,7 @@ function Failed({ what, claim, onRetry }) {
 const NR = <DataState state="not_recorded" />;
 
 export function IdentityBlock({ client, profileRead }) {
-  const [kyc, retry] = useRead(() => client.kycStatus(), 'FirmSettings:kyc');
+  const [kyc, retry] = useRead(() => client.kycStatus(), (e) => reportError('FirmSettings:kyc', e));
   const accreditation = profileRead.status === 'ready' ? accreditationWord(profileRead.profile?.accreditation_status) : null;
   return (
     <Block id="firm-status-identity" title="Identity and accreditation" link={{ to: '/trust/me', label: 'Open Trust' }}>
@@ -109,7 +109,7 @@ export function LicencesBlock({ read, retry }) {
 }
 
 export function FundsBlock({ client }) {
-  const [read, retry] = useRead(() => client.fundsList(), 'FirmSettings:funds');
+  const [read, retry] = useRead(() => client.fundsList(), (e) => reportError('FirmSettings:funds', e));
   const items = read.kind === 'ok' && Array.isArray(read.data?.items) ? read.data.items : null;
   return (
     <Block id="firm-status-funds" title="Funds" link={{ to: '/funds', label: 'Open Funds' }}>

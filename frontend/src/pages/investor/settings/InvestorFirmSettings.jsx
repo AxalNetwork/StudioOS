@@ -181,8 +181,8 @@ export default function InvestorFirmSettings({ companyLink, client = firmSetting
   const [attempt, setAttempt] = useState(0);
   const [read, setRead] = useState({ status: 'loading' });
   // The licences and seats reads are shared by the status blocks and Team seats.
-  const [licencesRead, retryLicences] = useRead(() => client.licences(), 'FirmSettings:licences');
-  const [seatsRead, retrySeats] = useRead(() => client.seats(), 'FirmSettings:seats');
+  const [licencesRead, retryLicences] = useRead(() => client.licences(), (e) => reportError('FirmSettings:licences', e));
+  const [seatsRead, retrySeats] = useRead(() => client.seats(), (e) => reportError('FirmSettings:seats', e));
   const licences = useMemo(() => ({ read: licencesRead, retry: retryLicences }), [licencesRead, retryLicences]);
   const seats = useMemo(() => ({ read: seatsRead, retry: retrySeats }), [seatsRead, retrySeats]);
   const included = seatsIncluded(licencesRead);
