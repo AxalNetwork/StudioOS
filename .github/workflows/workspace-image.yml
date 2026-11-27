@@ -34,8 +34,12 @@ jobs:
       - name: Build separate candidate image (no publication)
         run: docker build --tag studioos-workspace-s39:local workspace-engine/container
       - name: Run isolated synthetic coding and teardown journeys
+        env:
+          WORKSPACE_EVIDENCE_DIR: ${{ runner.temp }}/workspace-5566-evidence
         run: node workspace-engine/test/local-synthetic.mjs
       - name: Generate SBOM and fail closed on high or critical vulnerabilities
+        env:
+          WORKSPACE_SCAN_DIR: ${{ runner.temp }}/workspace-image-scan
         run: node workspace-engine/test/scan-image.mjs
       - name: Retain bounded evidence only
         if: always()
@@ -45,8 +49,8 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: |
-            /tmp/workspace-image-scan/sbom.cdx.json
-            /tmp/workspace-image-scan/vulnerabilities.json
-            /tmp/workspace-image-scan/provenance.json
-            /tmp/s39-workspace-5566-evidence/result.json
-            /tmp/s39-workspace-5566-evidence/signed-synthetic-manifest.json
+            ${{ runner.temp }}/workspace-image-scan/sbom.cdx.json
+            ${{ runner.temp }}/workspace-image-scan/vulnerabilities.json
+            ${{ runner.temp }}/workspace-image-scan/provenance.json
+            ${{ runner.temp }}/workspace-5566-evidence/result.json
+            ${{ runner.temp }}/workspace-5566-evidence/signed-synthetic-manifest.json

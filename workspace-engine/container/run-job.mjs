@@ -1,7 +1,7 @@
 /** D5566: one bounded, pre-authorized materialization; exact local Git bundle SHA, scoped commands and unsigned output. */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { constants, existsSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { constants, existsSync, fstatSync, mkdirSync, openSync, closeSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const ROOT = '/workspace/repo', SCRATCH = '/workspace/tmp';
@@ -30,13 +30,20 @@ function inventory(dir = ROOT, prefix = '', found = new Map()) {
     if (!prefix && entry.name === '.git') continue;
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (!pathOk(relative) || entry.isSymbolicLink()) throw Object.assign(Error('unsafe_tree'), { code: 'unsafe_tree' });
-    const file = join(dir, entry.name), st = lstatSync(file);
-    if (st.isDirectory()) inventory(file, relative, found);
-    else if (st.isFile()) {
+    const file = join(dir, entry.name);
+    if (entry.isDirectory()) { inventory(file, relative, found); continue; }
+    if (!entry.isFile()) throw Object.assign(Error('unsafe_tree'), { code: 'unsafe_tree' });
+    // Open first (never following a link), then check the descriptor itself: no window between check and read.
+    let fd;
+    try { fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW); } catch { throw Object.assign(Error('unsafe_tree'), { code: 'unsafe_tree' }); }
+    try {
+      const st = fstatSync(fd);
+      if (!st.isFile()) throw Object.assign(Error('unsafe_tree'), { code: 'unsafe_tree' });
       if (st.size > LIMIT || found.size >= 2000) throw Object.assign(Error('tree_limit'), { code: 'tree_limit' });
-      const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-      try { found.set(relative, { sha256: digest(readFileSync(fd)), size: st.size }); } finally { closeSync(fd); }
-    } else throw Object.assign(Error('unsafe_tree'), { code: 'unsafe_tree' });
+      const bytes = readFileSync(fd);
+      if (bytes.length > LIMIT) throw Object.assign(Error('tree_limit'), { code: 'tree_limit' });
+      found.set(relative, { sha256: digest(bytes), size: bytes.length });
+    } finally { closeSync(fd); }
   }
   return found;
 }
@@ -57,8 +64,10 @@ async function main() {
   const job = JSON.parse(input); validate(job);
   mkdirSync(SCRATCH, { recursive: true });
   const bundle = '/workspace/input.bundle';
-  if (existsSync(ROOT) || existsSync(bundle)) throw Object.assign(Error('workspace_not_empty'), { code: 'workspace_not_empty' });
-  writeFileSync(bundle, Buffer.from(job.bundle_b64, 'base64'), { flag: 'wx', mode: 0o400 });
+  if (existsSync(ROOT)) throw Object.assign(Error('workspace_not_empty'), { code: 'workspace_not_empty' });
+  // 'wx' creates the bundle or fails if anything is already there: the check and the write are one step.
+  try { writeFileSync(bundle, Buffer.from(job.bundle_b64, 'base64'), { flag: 'wx', mode: 0o400 }); }
+  catch (e) { if (e && e.code === 'EEXIST') throw Object.assign(Error('workspace_not_empty'), { code: 'workspace_not_empty' }); throw e; }
   const deadline = Date.now() + job.max_duration_s * 1000;
   await run(['git', '-c', 'core.hooksPath=/dev/null', 'clone', '--no-local', '--no-checkout', bundle, ROOT], '/workspace', deadline);
   await run(['git', '-c', 'core.hooksPath=/dev/null', 'checkout', '--detach', job.base_sha], ROOT, deadline);

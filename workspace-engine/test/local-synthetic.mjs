@@ -4,12 +4,14 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign, verify } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const image = process.env.WORKSPACE_TEST_IMAGE || 'studioos-workspace-s39:local';
 const dir = mkdtempSync(join(tmpdir(), 'workspace-5566-'));
-const evidence = process.env.WORKSPACE_EVIDENCE_DIR || '/tmp/s39-workspace-5566-evidence';
-mkdirSync(evidence, { recursive: true });
+// Evidence goes to the caller's directory (the workflow passes one under $RUNNER_TEMP), else a fresh private
+// temporary directory: never a fixed, guessable path in the shared temp dir.
+const evidence = process.env.WORKSPACE_EVIDENCE_DIR ? resolve(process.env.WORKSPACE_EVIDENCE_DIR) : mkdtempSync(join(tmpdir(), 'workspace-5566-evidence-'));
+mkdirSync(evidence, { recursive: true, mode: 0o700 });
 const dockerEnv = { ...process.env, BUILDX_CONFIG: '/tmp/s39-docker-buildx' };
 for (const key of ['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']) delete dockerEnv[key];
 const docker = args => execFileSync('docker', ['--host=unix:///var/run/docker.sock', ...args], { env: dockerEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 });

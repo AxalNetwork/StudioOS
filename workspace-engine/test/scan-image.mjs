@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /** D5566: pinned Trivy SBOM/vulnerability evidence; no publish, account credentials or admission override. */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, rmSync, openSync, closeSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, openSync, closeSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 const scanner = 'aquasec/trivy@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08'; // 0.67.2
 const env = { ...process.env }; for (const name of ['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']) delete env[name];
 const image = process.env.WORKSPACE_IMAGE || 'studioos-workspace-s39:local';
 if (!/^[a-z0-9][a-z0-9/_.:@-]{0,250}$/.test(image)) throw Error('Invalid image reference');
-const out = resolve(process.env.WORKSPACE_SCAN_DIR || '/tmp/workspace-image-scan'); mkdirSync(out, { recursive: true });
+// The caller's directory (the workflow passes one under $RUNNER_TEMP), else a fresh private temporary directory.
+const out = process.env.WORKSPACE_SCAN_DIR ? resolve(process.env.WORKSPACE_SCAN_DIR) : mkdtempSync(join(tmpdir(), 'workspace-image-scan-'));
+mkdirSync(out, { recursive: true, mode: 0o700 });
 const docker = args => execFileSync('docker', ['--host=unix:///var/run/docker.sock', ...args], { env, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 4 * 1024 * 1024 });
 try {
   const fd = openSync(out + '/image.tar', 'w', 0o600);
