@@ -7,6 +7,8 @@
  *   sha256OfStream hashes a ReadableStream chunk by chunk with bounded memory: the runtime's native
  *                  `crypto.DigestStream` where it exists (Workers), this implementation otherwise. Returns the digest
  *                  and the number of bytes read.
+ *   verifyingStream D5583 part 4: passes a stream through while hashing it, holding back the last chunk until the
+ *                  byte count and digest are the declared ones; otherwise the stream errors instead of closing.
  *
  * FIPS 180-4, checked against `crypto.subtle.digest` in `work_graph_media_multipart_5583.test.ts`. Pure: no I/O.
  */
@@ -136,4 +138,49 @@ export async function sha256OfStream(stream: ReadableStream<Uint8Array>): Promis
     h.update(value);
   }
   return { hex: h.hex(), bytes };
+}
+
+export type StreamCheck = { ok: true; bytes: number } | { ok: false; detail: 'size' | 'digest'; bytes: number };
+
+/**
+ * D5583 part 4: pass a stream through while hashing it, for bytes served without ever sitting in memory whole. The
+ * last chunk seen is held back until the end: it is released only when the byte count and SHA-256 equal `expect`, so
+ * a reader never receives a complete body whose digest is wrong. On a mismatch (or more bytes than declared, caught
+ * as soon as they arrive) `onEnd` is told why and the stream errors instead of closing. Memory: one held chunk.
+ */
+export function verifyingStream(
+  source: ReadableStream<Uint8Array>, expect: { hex: string; bytes: number }, onEnd: (check: StreamCheck) => Promise<void>,
+): ReadableStream<Uint8Array> {
+  const Native = (crypto as unknown as { DigestStream?: new (algorithm: string) => DigestStreamLike })?.DigestStream;
+  const native = typeof Native === 'function' ? new Native('SHA-256') : null;
+  const writer = native ? native.getWriter() : null;
+  const h = native ? null : new Sha256();
+  let seen = 0;
+  let held: Uint8Array | null = null;
+  const hexOf = async () => {
+    if (!writer || !native) return h!.hex();
+    await writer.close();
+    return [...new Uint8Array(await native.digest)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  };
+  return source.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    async transform(chunk, controller) {
+      seen += chunk.byteLength;
+      if (seen > expect.bytes) {
+        await onEnd({ ok: false, detail: 'size', bytes: seen });
+        throw new Error('verifyingStream: more bytes than declared');
+      }
+      if (writer) await writer.write(chunk); else h!.update(chunk);
+      if (held) controller.enqueue(held);
+      held = chunk;
+    },
+    async flush(controller) {
+      const hex = await hexOf();
+      if (seen !== expect.bytes || hex !== expect.hex) {
+        await onEnd({ ok: false, detail: seen !== expect.bytes ? 'size' : 'digest', bytes: seen });
+        throw new Error('verifyingStream: the bytes do not match their digest');
+      }
+      await onEnd({ ok: true, bytes: seen });
+      if (held) controller.enqueue(held);
+    },
+  }));
 }
