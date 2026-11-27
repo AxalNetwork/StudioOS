@@ -21,8 +21,9 @@
  * THE SCHEDULE (D1120). A grant under the signed-schedule rule waits on
  * `schedule_signed` until the studio signs its schedule. The send builds the
  * schedule from the grant's terms (`services/programSchedule.ts`), sends it
- * through e-sign to the licence's principal administrator, and stores the
- * envelope's uuid as `schedule_contract_uid`. The envelope's completion sets
+ * through e-sign to the licence's principal administrator, and names the
+ * envelope on the grant's `program_schedule` agreement version (D5048; read
+ * back through `withScheduleEnvelopes`, D9026). The envelope's completion sets
  * `schedule_signed_at` once (`onProgramScheduleEnvelopeCompleted`, called from
  * the e-sign completion block and the DocuSign poller).
  *
@@ -67,7 +68,7 @@ import { offerRefusal } from '../services/programGrantStates';
 import { createAndSendEnvelope } from './esign';
 import { sha256Hex } from '../services/pdf';
 import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument, voidSupersededSchedules } from '../services/programSchedule';
-import { agreementsOfLicence, scheduleAgreementSentStatements, scheduleAgreementsSupersededStatements } from '../services/programAgreements';
+import { agreementsOfLicence, scheduleAgreementSentStatements, scheduleAgreementsSupersededStatements, withScheduleEnvelopes } from '../services/programAgreements';
 import {
   alreadyHolds, freezeHoldingStatements, holdingsOf, isMissingPolicyStore, latestPolicy, legalWaitingByProgram, programLegalStatus,
   replacementOnTermsChangeStatement, requirementFor, syncLegalGate, type Holding, type Policy,
@@ -123,9 +124,11 @@ async function licenceByUid(env: Env, uid: string) {
     .bind(uid).first<LicenceLite>();
 }
 
+/** One grant, with its schedule envelope read from its current agreement version (D9026). */
 async function grantRow(env: Env, licenceId: number, programKey: string) {
-  return await env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? AND program_key = ?')
+  const row = await env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? AND program_key = ?')
     .bind(licenceId, programKey).first<Record<string, any>>();
+  return row ? (await withScheduleEnvelopes(env, [row]))[0] : null;
 }
 
 /**
@@ -239,8 +242,8 @@ r.get('/licences/:uid', async (c) => {
     await requireSuperAdmin(c);
     const licence = await licenceByUid(c.env, c.req.param('uid'));
     if (!licence) return refuse(c, 404, 'not_found', 'There is no such licence.');
-    const rows = ((await c.env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? ORDER BY id').bind(licence.id)
-      .all<Record<string, any>>()).results || []);
+    const rows = await withScheduleEnvelopes(c.env, ((await c.env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? ORDER BY id').bind(licence.id)
+      .all<Record<string, any>>()).results || []));
     const t = today();
     // D5052: the frozen agreement policy's gate, so an unsigned required agreement never reads as in force here.
     const waiting = await legalWaitingByProgram(c.env, licence as LicenceLite & { id: number }, t);
@@ -608,12 +611,13 @@ r.post('/licences/:uid/:program/schedule/send', async (c) => {
     if (existing.schedule_signed_at) {
       return refuse(c, 409, 'already_signed', 'This grant’s schedule is already signed.', { signed_at: existing.schedule_signed_at });
     }
-    if (existing.schedule_contract_uid) {
+    // D9026: the envelope out for signature is the grant's current schedule agreement version's.
+    if (existing.schedule_envelope_uuid) {
       const env = await c.env.DB.prepare('SELECT status FROM esign_envelopes WHERE envelope_uuid = ?')
-        .bind(existing.schedule_contract_uid).first<{ status: string }>();
+        .bind(existing.schedule_envelope_uuid).first<{ status: string }>();
       if (!env || !SCHEDULE_DEAD.has(String(env.status))) {
         return refuse(c, 409, 'already_sent', 'This grant’s schedule is already out for signature. It can be sent again only once that envelope is voided or declined.', {
-          contract_uid: existing.schedule_contract_uid, envelope_status: env?.status ?? null,
+          contract_uid: existing.schedule_envelope_uuid, envelope_status: env?.status ?? null,
         });
       }
     }
@@ -667,7 +671,8 @@ r.post('/licences/:uid/:program/schedule/send', async (c) => {
       }),
       programEvent(c.env, licence.id, admin.id, {
         action: 'schedule_sent', program_key: programKey, revision,
-        changed: [{ key: 'schedule_contract_uid', before: existing.schedule_contract_uid ?? null, after: sent.envelope_uuid }], reason,
+        // The history keeps the key it has always used; `before` is the envelope the agreement rows named (D9026).
+        changed: [{ key: 'schedule_contract_uid', before: existing.schedule_envelope_uuid ?? null, after: sent.envelope_uuid }], reason,
       }, reason),
       queuePushStatement(c.env, licence.id),
       clearGuard(c.env),

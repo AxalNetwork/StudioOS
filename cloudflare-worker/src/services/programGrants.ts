@@ -16,6 +16,7 @@
  */
 import type { Env } from '../types';
 import { isRegistryKey } from './programRegistry';
+import { withScheduleEnvelopes } from './programAgreements';
 
 export type ProgramReadiness = 'yes' | 'hq' | 'notready';
 export const PROGRAMS: Array<{ key: string; name: string; group: string; readiness: ProgramReadiness }> = [
@@ -181,6 +182,8 @@ export type ScheduleStatus = 'not_sent' | 'sent' | 'signed' | 'amendment_needed'
  * D4805 (#4805): a signature belongs to one terms revision. When the terms moved on after a signature
  * (`signed_revision` is set and `schedule_signed_at` is not), the grant waits on an amendment:
  * `amendment_needed` until the new revision's schedule is sent, `sent` after.
+ * D9026: the envelope it is given is the presented one, from the grant's current schedule agreement version
+ * (`presentGrant` passes `schedule_envelope_uuid`), never the grant row's column.
  */
 export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown; signed_revision?: unknown }): ScheduleStatus {
   if (row.schedule_signed_at) return 'signed';
@@ -236,10 +239,11 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
     effective_end: end,
     in_force: row.state === 'granted' && waiting.length === 0,
     waiting_on: waiting,
-    // D1120: not sent, sent (an envelope is named) or signed (its time is set).
+    // D1120: not sent, sent (an envelope is named) or signed (its time is set). D9026: the envelope is the
+    // grant's current schedule agreement version (`withScheduleEnvelopes`); a row read without it names none.
     schedule: {
-      status: scheduleStatus(row),
-      contract_uid: (row.schedule_contract_uid ?? null) as string | null,
+      status: scheduleStatus({ schedule_contract_uid: row.schedule_envelope_uuid ?? null, schedule_signed_at: row.schedule_signed_at, signed_revision: row.signed_revision }),
+      contract_uid: (row.schedule_envelope_uuid ?? null) as string | null,
       signed_at: (row.schedule_signed_at ?? null) as string | null,
       // D4805: the revision of the terms now in force, and the newest the studio signed (null: none yet).
       revision: Number(row.terms_revision ?? 1),
@@ -337,7 +341,8 @@ export async function readGrid(env: Env, today: string, legalWaiting?: Map<numbe
     `SELECT id, uid, licence_ref, brand_name, kind, status, renews_on FROM territory_licences
       WHERE status NOT IN ('draft', 'terminated') ORDER BY licence_ref, id`,
   ).all<LicenceLite>()).results || []);
-  const grants = ((await env.DB.prepare('SELECT * FROM program_grants ORDER BY id').all<Record<string, any>>()).results || []);
+  // D9026: each grant's schedule envelope from its current agreement version.
+  const grants = await withScheduleEnvelopes(env, ((await env.DB.prepare('SELECT * FROM program_grants ORDER BY id').all<Record<string, any>>()).results || []));
   const byLicence = new Map<number, Grant[]>();
   const lic = new Map(licences.map((l) => [l.id, l]));
   for (const g of grants) {

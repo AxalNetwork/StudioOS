@@ -22,9 +22,12 @@
  * required, one was sent, one was executed, and the program is legally in force. `program_grants.state` holds
  * only the first.
  *
- * `program_grants.schedule_contract_uid` stays the read-through for the schedule's envelope until its callers
- * move here; the schedule send, a terms change and the completion hook write this table in the same batch as
- * they write the grant (`routes/admin_program_grants.ts`, `services/programSchedule.ts`).
+ * A GRANT'S SCHEDULE ENVELOPE IS READ FROM HERE (D9026). The schedule send, a terms change and the completion
+ * hook write this table in the same batch as they write the grant (`routes/admin_program_grants.ts`,
+ * `services/programSchedule.ts`), and every reader takes the envelope from the grant's current `program_schedule`
+ * version through the `program_grant_schedule_envelopes` view (`scheduleEnvelopes`, `withScheduleEnvelopes`).
+ * The column the grant still carries is written as before, for the Worker one version back, and read by nothing
+ * but that view's legacy fallback until the drop migration (D9026 §4).
  */
 import type { Env } from '../types';
 
@@ -246,6 +249,28 @@ export function transitionStatements(env: Env, o: {
 }
 
 // ─────────────────────────────────────────────── reads
+
+/**
+ * D9026: each grant's schedule envelope, from its current `program_schedule` agreement version (migration
+ * 202611272239's view; a grant with no version at all keeps its legacy value). Keyed by grant id; a grant with no
+ * envelope named maps to null. Throws on a failed read, as the grant reads do.
+ */
+export async function scheduleEnvelopes(env: Env, grantIds: number[]): Promise<Map<number, string | null>> {
+  const ids = [...new Set(grantIds.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))];
+  const out = new Map<number, string | null>(ids.map((id) => [id, null]));
+  if (!ids.length) return out;
+  const q = await env.DB.prepare(
+    'SELECT grant_id, envelope_uuid FROM program_grant_schedule_envelopes WHERE grant_id IN (SELECT value FROM json_each(?))',
+  ).bind(JSON.stringify(ids)).all<{ grant_id: number; envelope_uuid: string | null }>();
+  for (const r of q.results || []) out.set(Number(r.grant_id), r.envelope_uuid ?? null);
+  return out;
+}
+
+/** D9026: grant rows with `schedule_envelope_uuid`, the envelope `presentGrant` names as the schedule's contract. */
+export async function withScheduleEnvelopes<T extends Record<string, any>>(env: Env, rows: T[]): Promise<Array<T & { schedule_envelope_uuid: string | null }>> {
+  const envelopes = await scheduleEnvelopes(env, rows.map((r) => Number(r.id)));
+  return rows.map((r) => ({ ...r, schedule_envelope_uuid: envelopes.get(Number(r.id)) ?? null }));
+}
 
 export async function agreementsOfLicence(env: Env, licenceUid: string): Promise<AgreementRow[]> {
   const q = await env.DB.prepare('SELECT * FROM licence_program_agreements WHERE licence_uid = ? ORDER BY slot_key, id DESC')
