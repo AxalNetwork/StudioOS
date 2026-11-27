@@ -371,7 +371,7 @@ test('5. pending: only what an authority the person holds can decide, not their 
   // Nothing held, nothing pending: not for BOB, and not for a linked Super Admin.
   assert.deepEqual((await pending(env, BOB)).pending, []);
   link(w, 70, SUPER);
-  assert.deepEqual(await pending(env, SUPER), { ok: true, scope: { tenantId: 7, companyId: 70, projectId: null }, authorities: [], pending: [], people: {}, cost: { d1Statements: 0, d1Batches: 0 } });
+  assert.deepEqual(await pending(env, SUPER), { ok: true, scope: { tenantId: 7, companyId: 70, projectId: null }, authorities: [], pending: [], renderPending: [], people: {}, cost: { d1Statements: 0, d1Batches: 0 } });
 
   await grant(w, BOB, 'maintainer');
   await grant(w, CAROL, 'brand_owner');
