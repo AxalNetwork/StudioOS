@@ -40,7 +40,12 @@ addresses are `../dealPageModel.js` (D1148).
   as a count and a total, and the withdraw reason's check.
 - `DealWorkTabs.jsx` — D1153 (#3058, part 5): Diligence (DL7), Documents and
   data room (DL8, DL9), Terms (DL10) and Commitment and closing (DL11–DL13),
-  each change behind an in-page dialog.
+  each change behind an in-page dialog. D5914: Withdraw is drawn in the DX14
+  shell (`../../components/deals/DealActionDialog.jsx`).
+- `DealCommitDialog.jsx` — D5914 (#5914, DE14): Commit and Change amount in the
+  DX14 shell: the amount in the deal's currency, the firm, the route
+  preference, a note and the confirmation; Return to HQ in Super Admin
+  Investor preview. `DealRoomPage.jsx` re-exports it as `CommitModal`.
 - `DealDeck.jsx` and `dealDeckModel.js` — D6165 (#6165): the deck the
   venture granted this investor on this deal (D1587's `GET
   /api/deals/:id/deck`). `DealDeckCard`, on Overview and on Documents, shows
