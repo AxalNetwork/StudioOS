@@ -18,7 +18,6 @@ building blocks.
 | `brand/` | Brand builder; `brand/templates/` holds the landing-page previews. |
 | `checkout/` | D1048 (#2451): the checkout sheet that opens in place to buy a plan, and its pure model; see its README. |
 | `cofounder/` | Co-founder agreement and matching. |
-| `command-center/` | Founder command-centre widgets. |
 | `discovery/` | Customer-discovery tooling. |
 | `hqReview/` | HQ review pieces from the Ops canvas (D634): a review comment with Delete beside Resolve, and an identity field masked until Show, whose showing the Worker logs. Their words live in `hqReviewCopy.js`. |
 | `deals/` | The deal room's screens from the Ops canvas (D630): joining and leaving with the quota, the Invitations, Transfers and References tabs, and a syndicate's close drawer. `/deals` and `/deals/:dealId` both mount them, and their words live in `dealRoomCopy.js`. |

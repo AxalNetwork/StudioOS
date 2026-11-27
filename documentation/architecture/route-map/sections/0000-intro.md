@@ -15,9 +15,9 @@ matching. Comparisons are source-level; the app was not run.
 **Corpus:** 107 canonical `*.dc.html` canvases at `design/canvases/` (top level
 only), as counted by the P−1 audit. Canvases that have landed in
 `design/incoming/` since are NOT in that 107; part 5 below holds the rows for
-the ones that have graduated out of the queue. `uploads/` holds 3 stale duplicates and `scraps/` holds images — both
-excluded. Also outside the 107, in `canvases/shared/`: 2 standalone pitch-deck
-HTMLs and 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
+the ones that have graduated out of the queue. `uploads/` and `scraps/` hold images — both
+excluded (the stale duplicates and standalone pitch-deck exports were deleted
+on 2026-11-27). Also outside the 107, in `canvases/shared/`: 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 `fund-model.js`) — every canvas references the runtime as a relative
 `support.js` rather than inlining it — plus `assets/`. (This sentence said "at
 the root" until 2026-09-07; the root of `design/canvases/` holds only its
