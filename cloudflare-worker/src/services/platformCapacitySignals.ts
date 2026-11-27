@@ -13,6 +13,11 @@
  *          indexed count over `ai_budget_reservations` against
  *          `ai_usage_logs.reservation_uid` (`readSettlementSignal`).
  *
+ * D9032 adds, for the alert sweep only (`readIncidentSignals`), three of HQ ·
+ * Platform's detected incidents: the cron failure streak, the Stripe webhook
+ * refusal streak and new dead letters. The last keeps one KV mark
+ * (`DLQ_MARK_KEY`) and is the only part of this file that writes.
+ *
  * Not read, with why (`SIGNALS_NOT_READ_HERE`): #4572, #4568, #4571, #4556 and
  * #4591 shipped no record the Worker can read. They are listed, not invented.
  *
@@ -38,6 +43,10 @@ import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { readRestoreDrill, DRILL_STALE_AFTER_DAYS } from './backup';
 import { levelFor, withTimeout, READ_TIMEOUT_MS, type Metric, type Thresholds } from './platformCapacity';
+import {
+  readCronStreaks, readWebhookHealth, CRON_FAILURE_STREAK, CRON_STREAK_READ, DLQ_HIGH, WEBHOOK_FAILURE_CRITICAL,
+  WEBHOOK_FAILURE_STREAK, WEBHOOK_STREAK_READ,
+} from './platformHealth';
 
 const HOUR_S = 3_600;
 const DAY_S = 86_400;
@@ -343,6 +352,141 @@ export async function readRestoreSignal(env: Partial<Env>, now: Date, timeoutMs 
   }
   const ageS = Math.max(0, Math.floor((now.getTime() - Date.parse(drill.at)) / 1000));
   return measured(b, ageS, drill.at, levelFor(ageS, RESTORE_AGE_THRESHOLDS));
+}
+
+// ── D9032: HQ · Platform's detected incidents, as alert episodes ────────────
+//
+// Three of the incidents `platformHealth.ts` derives on a page read (§7.1-§7.3)
+// also notify through the capacity episodes, so nobody has to open the page.
+// They are read by the 15-minute sweep only (`readIncidentSignals`), never by
+// the capacity read the page draws, and they are not snapshotted: a streak or
+// an arrival has no daily trend, and with no measured history an unreadable
+// source holds an open episode and opens none. Every threshold is the one
+// `platformHealth.ts` already uses; none is new.
+
+/** §7.1: `CRON_FAILURE_STREAK` runs in a row is the page's `high`. There is no critical level. */
+export const CRON_STREAK_THRESHOLDS: Thresholds = {
+  warning: CRON_FAILURE_STREAK, critical: Number.MAX_SAFE_INTEGER, hysteresis: 0,
+  basis: `A scheduled job whose latest ${CRON_FAILURE_STREAK} runs failed in a row (platformHealth.ts CRON_FAILURE_STREAK, §7.1, D9032).`,
+};
+/** §7.2: the page's `high` and `critical` refusal streaks. */
+export const WEBHOOK_STREAK_THRESHOLDS: Thresholds = {
+  warning: WEBHOOK_FAILURE_STREAK, critical: WEBHOOK_FAILURE_CRITICAL, hysteresis: 0,
+  basis: `The Stripe webhook refused ${WEBHOOK_FAILURE_STREAK} deliveries in a row; critical at ${WEBHOOK_FAILURE_CRITICAL} (platformHealth.ts, §7.2, D9032).`,
+};
+/** §7.3: one dead letter is the page's `medium`, `DLQ_HIGH` its `high`. */
+export const NEW_DEAD_LETTER_THRESHOLDS: Thresholds = {
+  warning: 1, critical: DLQ_HIGH, hysteresis: 0,
+  basis: `Any new dead letter still waiting is a warning; ${DLQ_HIGH} is critical (platformHealth.ts DLQ_HIGH, §7.3, D9032).`,
+};
+/**
+ * Where the dead-letter watch keeps its mark: the highest id of each table
+ * already accounted for. It moves up only on a sweep that finds no new letter
+ * waiting, so an episode stays open while its letters wait and clears when they
+ * are replayed or discarded.
+ */
+export const DLQ_MARK_KEY = 'platform-capacity:dlq:mark';
+
+type DlqMark = { legacy: number; mirror: number };
+function parseMark(raw: unknown): DlqMark | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const p = JSON.parse(raw);
+    const ok = (v: unknown) => Number.isSafeInteger(v) && (v as number) >= 0;
+    return p && ok(p.legacy) && ok(p.mirror) ? { legacy: p.legacy, mirror: p.mirror } : null;
+  } catch { return null; }
+}
+
+/** §7.1: the longest failure streak of any declared trigger, from `cron_run_history`. */
+export async function readCronStreakSignal(env: Partial<Env>, now: Date, timeoutMs = READ_TIMEOUT_MS): Promise<Metric> {
+  const b: Base = {
+    key: 'incidents.cron.failure_streak', label: 'Scheduled job failing runs in a row',
+    source: 'cron_run_history, the latest runs of each declared trigger (platformHealth.ts readCronStreaks, D4854)',
+    unit: 'count', scope: 'deployment', thresholds: CRON_STREAK_THRESHOLDS,
+    window: `The latest ${CRON_STREAK_READ} runs of each trigger; the value is the longest streak of any one.`,
+    sampling: 'Read on each 15-minute sweep; not sampled.',
+  };
+  try {
+    const c = await withTimeout(readCronStreaks(env as Env, now), timeoutMs);
+    if (!c.available) return unavailable(b, c.reason);
+    const top = c.streaks.reduce((n, s) => Math.max(n, s.consecutive_failures), 0);
+    return measured(b, top, now.toISOString(), levelFor(top, CRON_STREAK_THRESHOLDS));
+  } catch {
+    return unavailable(b, 'The recent runs of each scheduled job did not answer in time.');
+  }
+}
+
+/** §7.2: refused Stripe webhook deliveries in a row, from the request log. */
+export async function readWebhookStreakSignal(env: Partial<Env>, now: Date, timeoutMs = READ_TIMEOUT_MS): Promise<Metric> {
+  const b: Base = {
+    key: 'incidents.webhook.refusal_streak', label: 'Stripe webhook deliveries refused in a row',
+    source: 'activity_logs for the Stripe webhook path (platformHealth.ts readWebhookHealth, D4854)',
+    unit: 'count', scope: 'deployment', thresholds: WEBHOOK_STREAK_THRESHOLDS,
+    window: `The latest ${WEBHOOK_STREAK_READ} deliveries logged.`,
+    sampling: 'Read on each 15-minute sweep; not sampled.',
+  };
+  try {
+    const w = await withTimeout(readWebhookHealth(env as Env), timeoutMs);
+    if (!w.available) return unavailable(b, w.reason);
+    return measured(b, w.consecutive_failures, w.last_delivery_at ? sqlUtc(w.last_delivery_at) : null,
+      levelFor(w.consecutive_failures, WEBHOOK_STREAK_THRESHOLDS));
+  } catch {
+    return unavailable(b, 'The request log did not answer in time.');
+  }
+}
+
+/**
+ * §7.3: dead letters newer than the watch's mark that are still waiting, in
+ * both tables (`services/deadLetters.ts`). The `agent_run` letters in
+ * `cf_dlq_mirror` are left out: `agents/alerts.ts` already tells HQ about each
+ * batch of them. Each table is read in one statement, so a letter that arrives
+ * during the read is either counted or above the mark, never skipped.
+ */
+export async function readNewDeadLetterSignal(env: Partial<Env>, now: Date, timeoutMs = READ_TIMEOUT_MS): Promise<Metric> {
+  const b: Base = {
+    key: 'incidents.dlq.new_waiting', label: 'New dead letters waiting',
+    source: 'dead_letter_queue and cf_dlq_mirror above the watch mark, agent runs excluded (services/deadLetters.ts, D9032)',
+    unit: 'count', scope: 'deployment', thresholds: NEW_DEAD_LETTER_THRESHOLDS,
+    window: 'Letters that arrived since the last sweep that found none new waiting, and are still waiting.',
+    sampling: 'Read on each 15-minute sweep; not sampled. Agent-run letters are reported by the agent alerts instead.',
+  };
+  const db = env.DB as any;
+  const kv = env.RATE_LIMITS as any;
+  if (!db || typeof db.prepare !== 'function') return unavailable(b, 'The DB binding is not present on this Worker.');
+  if (!kv || typeof kv.get !== 'function') return unavailable(b, 'The KV binding that keeps the dead-letter watch mark is not present.');
+  try {
+    const mark = parseMark(await withTimeout(kv.get(DLQ_MARK_KEY), timeoutMs));
+    const [legacy, mirror]: any[] = await withTimeout(Promise.all([
+      db.prepare('SELECT MAX(id) AS top, COALESCE(SUM(CASE WHEN id > ? THEN 1 ELSE 0 END), 0) AS n FROM dead_letter_queue')
+        .bind(mark?.legacy ?? 0).first(),
+      db.prepare(`SELECT MAX(id) AS top, COALESCE(SUM(CASE WHEN id > ? AND job_type != 'agent_run' THEN 1 ELSE 0 END), 0) AS n FROM cf_dlq_mirror`)
+        .bind(mark?.mirror ?? 0).first(),
+    ]), timeoutMs);
+    const top: DlqMark = { legacy: Number(legacy?.top ?? 0) || 0, mirror: Number(mirror?.top ?? 0) || 0 };
+    if (!mark) {
+      // The first sweep sets the starting point: the backlog already waiting is
+      // the page's figure (§7.3), not a new arrival.
+      await withTimeout(kv.put(DLQ_MARK_KEY, JSON.stringify(top)), timeoutMs);
+      return unavailable(b, 'The dead-letter watch set its starting point on this sweep; new letters are counted from the next one.');
+    }
+    const n = Number(legacy?.n) + Number(mirror?.n);
+    if (!Number.isSafeInteger(n) || n < 0) return unavailable(b, 'The dead-letter tables answered without a count.');
+    if (n === 0 && (top.legacy > mark.legacy || top.mirror > mark.mirror)) {
+      // Nothing new is waiting: what lies between the marks was replayed,
+      // discarded or is an agent run. A failed write moves it on the next sweep.
+      try { await withTimeout(kv.put(DLQ_MARK_KEY, JSON.stringify({ legacy: Math.max(top.legacy, mark.legacy), mirror: Math.max(top.mirror, mark.mirror) })), timeoutMs); } catch { /* next sweep */ }
+    }
+    return measured(b, n, now.toISOString(), levelFor(n, NEW_DEAD_LETTER_THRESHOLDS));
+  } catch (e) {
+    return unavailable(b, (e as Error)?.message === 'timeout' ? 'The dead-letter tables did not answer in time.' : 'The dead-letter tables or the watch mark could not be read.');
+  }
+}
+
+/** D9032: the three detected incidents the sweep turns into episodes. Each fails into its own state. */
+export async function readIncidentSignals(env: Partial<Env>, now: Date, timeoutMs = READ_TIMEOUT_MS): Promise<Metric[]> {
+  return Promise.all([
+    readCronStreakSignal(env, now, timeoutMs), readWebhookStreakSignal(env, now, timeoutMs), readNewDeadLetterSignal(env, now, timeoutMs),
+  ]);
 }
 
 /** Every part 3 signal. Each fails into its own state; none fails the read. */
