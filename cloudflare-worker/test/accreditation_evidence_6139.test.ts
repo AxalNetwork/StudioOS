@@ -66,7 +66,7 @@ async function fixture() {
   await ensureTrustSchema(env);
   const o = db.prepare('INSERT INTO legal_obligations (user_id, obligation_key, required, status, expires_at) VALUES (?, ?, 1, ?, ?)');
   o.run(INVESTOR, 'accreditation_v1', 'pending', null);
-  o.run(RENEWER, 'accreditation_v1', 'satisfied', new Date(Date.now() + 20 * DAY).toISOString());
+  o.run(RENEWER, 'accreditation_v1', 'satisfied', new Date(Date.now() + 20 * DAY).toISOString()); // clock-ok: relative
   return { db, env };
 }
 
@@ -281,7 +281,7 @@ test('accept: the one writer of accreditation_v1 satisfied, for the period HQ se
     await upload(env, INVESTOR, letter('registered_adviser_letter'));
     const id = (db.prepare('SELECT id FROM accreditation_evidence').get() as any).id;
     const path = `/kyc/admin/accreditation/${id}/decision`;
-    const before = Date.now();
+    const before = Date.now(); // clock-ok: relative
     const ok = await call(env, ADMIN, path, { method: 'POST', jti: 'afresh', body: { decision: 'accept' } });
     assert.equal(ok.status, 200, ok.text);
     assert.equal(ok.body.period_months, 18);
@@ -307,7 +307,7 @@ test('a reviewer never decides their own letter, and another admin\'s letter is 
   const { db, env } = await fixture();
   try {
     db.prepare("INSERT INTO legal_obligations (user_id, obligation_key, required, status) VALUES (?, 'accreditation_v1', 1, 'pending')").run(ADMIN);
-    const at = new Date().toISOString();
+    const at = new Date().toISOString(); // clock-ok: relative
     db.prepare(`INSERT INTO accreditation_evidence (id, user_id, basis, file_key, file_name, content_type, size_bytes, sha256, status, uploaded_at)
       VALUES (50, ?, 'cpa_letter', 'accreditation-evidence/2/x.pdf', 'x.pdf', 'application/pdf', 10, ?, 'submitted', ?)`).run(ADMIN, 'a'.repeat(64), at);
     const own = await call(env, ADMIN, '/kyc/admin/accreditation/50/decision', { method: 'POST', jti: 'afresh', body: { decision: 'accept' } });
@@ -343,7 +343,7 @@ test('an accepted letter whose period has passed reads expired; the stored lette
   const { db, env } = await fixture();
   try {
     // A minute ago, as an ISO string: on the same date it sorts ABOVE datetime('now') as text ('T' > ' ').
-    const lapsed = new Date(Date.now() - 60_000).toISOString();
+    const lapsed = new Date(Date.now() - 60_000).toISOString(); // clock-ok: relative
     db.prepare(`INSERT INTO accreditation_evidence (id, user_id, basis, file_key, file_name, content_type, size_bytes, sha256, status, uploaded_at, reviewed_by, reviewed_at, expires_at)
       VALUES (60, ?, 'cpa_letter', 'accreditation-evidence/3/z.pdf', 'z.pdf', 'application/pdf', 10, ?, 'accepted', '2025-01-01T00:00:00.000Z', ?, '2025-01-02T00:00:00.000Z', ?)`)
       .run(INVESTOR, 'c'.repeat(64), ADMIN, lapsed);
