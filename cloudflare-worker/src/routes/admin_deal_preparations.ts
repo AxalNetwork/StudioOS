@@ -10,19 +10,22 @@
  *   POST  /                     { company_id, project_id, operation_key, new_round?, content? }  create a private draft
  *   PATCH /:uid                 { expected_revision (or If-Match), operation_key, changes }       save a new revision
  *
- * WRITES ARE DISABLED. `PREPARATION_MUTATIONS_ENABLED` (D5454) is false for `create` and `edit`, so POST and PATCH
- * answer 403 `preparation_mutations_disabled` with nothing written. They are mounted so the contract, its refusals
- * and its client can be reviewed and tested now; enabling them is ADP-02's reviewed flag change, not this file.
+ * WRITES ARE ENABLED (D5456-p2). `PREPARATION_MUTATIONS_ENABLED` (D5454) is true for `create` and `edit`, so a
+ * platform admin creates and saves private drafts here. A draft owns no `deals` row and cannot go live until ADP-04's
+ * reviewed release (#5458); a capability that is switched off still answers 403 `preparation_mutations_disabled`.
  *
  * NO LEGACY PATH CHANGES HERE. `POST /api/deals`, `POST /api/deals/draft` and `PUT /api/deals/:id` are unchanged
- * (D5454 owner question Q4); a deal a preparation manages already refuses editorial terms on `PUT`.
+ * (D5454 Q4 = A): `/draft` stays the way to put a deal live today and retires with ADP-04's release. A deal a
+ * preparation manages already refuses editorial terms on `PUT`.
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import type { RouteMount } from '../util/routeRegistry';
 import { adminWritesFrozen, requireAdmin } from '../auth';
 import { refuse } from '../util/refusal';
-import { preparationCapabilities, readPreparationQueue, type PreparationCapability } from '../services/dealPreparation';
+import {
+  PREPARATION_MUTATIONS_ENABLED, preparationCapabilities, readPreparationQueue, type PreparationCapability,
+} from '../services/dealPreparation';
 import {
   createPreparationDraft, readPreparationDetail, readPreparationRevisions, savePreparationDraft, type Refusal,
 } from '../services/dealDraftStore';
@@ -73,7 +76,8 @@ async function capabilitiesOf(c: Context<{ Bindings: Env }>, user: User) {
 function writeRefusal(caps: Set<PreparationCapability>, cap: 'create' | 'edit'): Refusal | null {
   if (caps.has(cap)) return null;
   if (!caps.has('read')) return { ok: false, status: 403, code: 'not_permitted' };
-  return { ok: false, status: 403, code: 'preparation_mutations_disabled' };
+  if (!PREPARATION_MUTATIONS_ENABLED[cap]) return { ok: false, status: 403, code: 'preparation_mutations_disabled' };
+  return { ok: false, status: 403, code: cap === 'create' ? 'preparation_create_not_permitted' : 'preparation_edit_not_permitted' };
 }
 
 const clock = () => new Date();

@@ -1,7 +1,7 @@
 // D5456 (#5456, ADP-02) — private deal preparations for platform admins: the queue, one draft's authoring view,
-// its revision list, create and versioned save. Worker: routes/admin_deal_preparations.ts. Create and save answer
-// 403 `preparation_mutations_disabled` until ADP-02 enables them (D5454). Every save names the revision it started
-// from and an operation key; retry a lost response with the SAME key to learn its outcome.
+// its revision list, create and versioned save. Worker: routes/admin_deal_preparations.ts. Create and save are on
+// since D5456 part 2; the Draft Deal dialog (pages/investor/dealflow/StudioParts.jsx) uses them. Every save names the
+// revision it started from and an operation key; retry a lost response with the SAME key to learn its outcome.
 import { request } from '../api.js';
 
 const qs = (params) => {
