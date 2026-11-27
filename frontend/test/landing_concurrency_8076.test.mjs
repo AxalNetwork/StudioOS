@@ -79,6 +79,7 @@ function fixture({ queue = [], slots = {}, labels = {} } = {}) {
     readOrderedList: async () => [8, 5, 7].map((number) => ({ number, tier: 'T1', modelChanged: false })),
     readMainHealth: async () => ({ mainRuns: [{ event: 'push', head_branch: 'main', created_at: '2026-11-22T12:00:00Z', status: 'completed', conclusion: 'success' }], openAlertTitles: [], recentGroupRuns: groups }),
     readQueueState: async () => ({ freeQueueSlots: 5 }),
+    readRulesIssue: async () => ({ number: 6480, state: 'closed', state_reason: 'completed' }),
     readQueueEntries: async () => (typeof state.queue === 'function' ? state.queue() : state.queue),
     readOwningSlot: async (pull) => { const s = slots[pull.number] ?? 'S07'; if (s instanceof Error) throw s; return s; },
     readLandingDecision: async (number) => ({ mayQueue: true, pr: { number, head_sha: head }, report: { headSha: head, tier: 'T1' } }),
@@ -91,7 +92,7 @@ function fixture({ queue = [], slots = {}, labels = {} } = {}) {
     }),
   };
   const options = {
-    reader, repo, event: 'schedule', env: { LANDING_BOT_ENABLED: 'true', LANDING_BOT_FEED_PER_SWEEP: '5', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.25' },
+    reader, repo, event: 'schedule', env: { LANDING_BOT_FEEDER_ENABLED: 'true', LANDING_BOT_FEED_PER_SWEEP: '5', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.25' },
     readRemainingDaily: async () => 5,
     enqueue: async (e) => { state.writes.push(e.number); return { ...e, status: 'queued' }; },
     onHold: (h) => state.held.push(h),
