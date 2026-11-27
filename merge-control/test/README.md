@@ -15,5 +15,6 @@
 | `ci_capacity_compact_failed_8378.test.ts` | D8378: the bounded, indexed read of failed compact records against real SQLite and the real store; order, cursor, clamp, query plan and no writes. |
 | `ci_capacity_compact_8348.test.ts` | D8348: handoff of a passing request to a compact record against real SQLite and the real coordinator; atomicity, caps, sticky failure, cursored expiry and paging. |
 | `ci_capacity_compose_compact_7909.test.ts` | D7909-p8: composed signed outcomes, negative replay, fair publication, retention and runtime recovery against real SQLite. |
+| `manual_conflict_ingress_7109.test.ts` | D7109: the manual conflict check through the real webhook and repository object: off by default, one check per removal, adoption after an ambiguous POST, one dispatch per request through a failed dispatch and repeats, stale-button expiry and the kept webhook fields. |
 
 Wrangler local-runtime smoke checks and packaging are recorded in D5618.
