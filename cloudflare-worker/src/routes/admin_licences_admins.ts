@@ -13,6 +13,7 @@ import { refuse } from '../util/refusal';
 import { str, byUid, logEvent } from '../services/licenceLedgerCore';
 import { APPOINTABLE } from '../services/licenceTransitions';
 import type { Env } from '../types';
+import { normalizeEmail } from '../util/accountEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -90,8 +91,8 @@ r.post('/:uid/admins', async (c) => {
     // Resolve to an existing account, like the data room does. Assigning a
     // licence to an address nobody holds would create an administrator who
     // cannot sign in.
-    const u = await c.env.DB.prepare('SELECT id, email, role FROM users WHERE LOWER(email) = ?')
-      .bind(email).first<{ id: number; email: string; role: string }>();
+    const u = await c.env.DB.prepare('SELECT id, email, role FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1')
+      .bind(normalizeEmail(email)).first<{ id: number; email: string; role: string }>();
     if (!u) return c.json({ error: 'no account with that address' }, 404);
     // #4678: a licence in a state that cannot administer users gets no
     // administrator: neither the role nor the binding changes.

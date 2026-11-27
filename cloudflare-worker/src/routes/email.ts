@@ -4,6 +4,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { sendReferralInviteEmail } from '../services/email';
 import { bindingKey } from '../util/schemaBootstrap';
+import { normalizeEmail } from '../util/accountEmail';
 
 const email = new Hono<{ Bindings: Env }>();
 
@@ -84,10 +85,6 @@ async function backfillJoinedStatus(env: Env, senderUserId: number): Promise<voi
   }
 }
 
-function normalizeEmail(s: string): string {
-  return (s || '').trim().toLowerCase();
-}
-
 async function getSenderInfo(env: Env, userId: number): Promise<{ name: string; email: string; referral_code: string } | null> {
   const row: any = await env.DB.prepare(
     `SELECT name, email, referral_code FROM users WHERE id = ?`
@@ -148,7 +145,7 @@ email.post('/send-referral-invites', async (c) => {
   const placeholders = cleaned.map(() => '?').join(',');
   const existingUsers: any = await c.env.DB.prepare(
     `SELECT LOWER(email) AS email FROM users WHERE LOWER(email) IN (${placeholders})`
-  ).bind(...cleaned.map(c => c.email)).all();
+  ).bind(...cleaned.map(c => normalizeEmail(c.email))).all();
   const existingSet = new Set<string>((existingUsers?.results || []).map((r: any) => r.email));
 
   // Task #4 — permanent dedupe: any prior SUCCESSFUL invite from this

@@ -105,10 +105,8 @@ export async function hashInviteToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Normalize an email for matching/storage: trim + lowercase. */
-export function normalizeEmail(email: string | null | undefined): string {
-  return String(email || '').trim().toLowerCase();
-}
+/** Normalize an email for matching/storage: trim + lowercase. Lives in util (D9043); re-exported for existing callers. */
+export { normalizeEmail } from '../util/accountEmail';
 
 /** The accepted membership role for a user on a project, or null. */
 export async function getProjectMembershipRole(

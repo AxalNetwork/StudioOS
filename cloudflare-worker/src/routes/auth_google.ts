@@ -125,6 +125,7 @@ import {
   revokeStaleCrossIdentitySession,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { normalizeEmail } from '../util/accountEmail';
 // Task #9 follow-up — fresh Google signups land in 'exploring' too, same
 // as /register and magic-link. See exploringSchema.ts.
 import { ensureExploringSchema } from '../services/exploringSchema';
@@ -298,7 +299,7 @@ export function decideUnlinkAllowed(opts: {
   return { allowed, reason: allowed ? null : 'last_sign_in_path' };
 }
 
-export const __testing = { signState, verifyState };
+export const __testing = { signState, verifyState, resolveGoogleSignin };
 
 export function sanitizeRedirect(raw: unknown): string {
   // Only allow absolute paths on app.axal.vc; never a full URL (open-redirect
@@ -553,7 +554,9 @@ async function resolveGoogleSignin(
   identity: { sub: string; email: string; name?: string | null; hd?: string | null },
   opts: { lane?: string; expectedEmail?: string } = {},
 ): Promise<GoogleSigninResult> {
-  const { sub, email: googleEmail } = identity;
+  const { sub } = identity;
+  // D9043 — the address is matched and stored in its one normalised form.
+  const googleEmail = normalizeEmail(identity.email);
   // 1) lookup by google_sub via side-table join
   const bySub = (await sql`
     SELECT u.* FROM users u
@@ -562,12 +565,12 @@ async function resolveGoogleSignin(
   // 2/3) lookup by case-insensitive email, only when the sub is unknown
   const byEmail = bySub
     ? undefined
-    : (await sql`SELECT * FROM users WHERE LOWER(email) = ${googleEmail} LIMIT 1` as any[])[0] as any | undefined;
+    : (await sql`SELECT * FROM users WHERE LOWER(email) = ${googleEmail} ORDER BY id LIMIT 1` as any[])[0] as any | undefined;
   const decision = decideSigninAction(bySub, byEmail);
   const matched = bySub || byEmail;
 
-  const expected = String(opts.expectedEmail || '').trim().toLowerCase();
-  if (expected && expected !== googleEmail && expected !== String(matched?.email || '').toLowerCase()) {
+  const expected = normalizeEmail(opts.expectedEmail);
+  if (expected && expected !== googleEmail && expected !== normalizeEmail(matched?.email)) {
     return { ok: false, code: 'different_account' };
   }
   // A suspended account is refused before it is linked — /callback used to
@@ -762,7 +765,7 @@ authGoogle.get('/callback', async (c) => {
   if (!idt) return callbackError(c.env, 'exchange_failed', state.action);
 
   const sub = idt.sub;
-  const googleEmail = (idt.email || '').toLowerCase();
+  const googleEmail = normalizeEmail(idt.email);
   const googleEmailVerified = !!idt.email_verified;
   if (!googleEmail || !googleEmailVerified) {
     // Google should never return an unverified primary email for an
@@ -799,7 +802,7 @@ authGoogle.get('/callback', async (c) => {
       // ensure the no-op is the correct outcome here.
       await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${uid}, ${sub})`;
       const eh = await hashEmail(meRow.email);
-      const mismatch = googleEmail !== (meRow.email || '').toLowerCase();
+      const mismatch = googleEmail !== normalizeEmail(meRow.email);
       await sql`INSERT INTO activity_logs (action, details, actor, user_id)
                 VALUES ('google_account_linked',
                         ${`linked google_sub (email_mismatch=${mismatch})`},

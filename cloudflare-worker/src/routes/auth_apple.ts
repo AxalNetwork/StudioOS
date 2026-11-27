@@ -66,6 +66,7 @@ import {
   revokeStaleCrossIdentitySession,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { normalizeEmail } from '../util/accountEmail';
 import { ensureExploringSchema } from '../services/exploringSchema';
 import { recordSecurityEvent } from '../services/securityEvents';
 import { claimLpRowsAtSignIn } from '../services/lpClaim';
@@ -229,7 +230,9 @@ async function resolveAppleSignin(
     return { ok: true, user: bySub, newSignup: false };
   }
   if (!id.email) return { ok: false, code: 'email_missing' };
-  const byEmail = (await sql`SELECT * FROM users WHERE LOWER(email) = ${id.email} LIMIT 1` as any[])[0];
+  // D9043 — the address is matched and stored in its one normalised form.
+  const appleEmail = normalizeEmail(id.email);
+  const byEmail = (await sql`SELECT * FROM users WHERE LOWER(email) = ${appleEmail} ORDER BY id LIMIT 1` as any[])[0];
   if (byEmail && Number(byEmail.is_active ?? 1) === 0) {
     return { ok: false, code: 'account_inactive', userId: Number(byEmail.id) };
   }
@@ -254,7 +257,7 @@ async function resolveAppleSignin(
   await ensureExploringSchema(c.env);
   const user = (await sql`
     INSERT INTO users (email, name, role, email_verified)
-    VALUES (${id.email}, ${name}, 'exploring', true)
+    VALUES (${appleEmail}, ${name}, 'exploring', true)
     RETURNING *` as any[])[0];
   if (opts.lane) {
     try {
@@ -439,7 +442,7 @@ authApple.post('/callback', async (c) => {
       }
       await sql`INSERT OR IGNORE INTO user_apple_links (user_id, apple_sub, private_email) VALUES (${uid}, ${identity.sub}, ${identity.privateEmail ? 1 : 0})`;
       const eh = await hashEmail(me.email);
-      const mismatch = !!identity.email && identity.email !== String(me.email || '').toLowerCase();
+      const mismatch = !!identity.email && normalizeEmail(identity.email) !== normalizeEmail(me.email);
       await sql`INSERT INTO activity_logs (action, details, actor, user_id)
                 VALUES ('apple_account_linked', ${`linked apple_sub (email_mismatch=${mismatch}, relay=${identity.privateEmail})`}, ${eh}, ${uid})`;
       const back = sanitizeRedirect(state.redirect);
@@ -468,7 +471,7 @@ authApple.post('/callback', async (c) => {
   }
 });
 
-export const __testing = { signState, verifyState };
+export const __testing = { signState, verifyState, resolveAppleSignin };
 
 export const mount: RouteMount = { path: '/api/auth/apple', router: authApple };
 export default authApple;

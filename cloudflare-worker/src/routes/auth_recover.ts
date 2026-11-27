@@ -74,6 +74,7 @@ import { withDeadline } from '../util/deadline';
 import { refuse } from '../util/refusal';
 import { gcipSentence } from '../services/gcip';
 import { claimLpRowsAtSignIn } from '../services/lpClaim';
+import { normalizeEmail } from '../util/accountEmail';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -138,7 +139,7 @@ async function findUserByEmail(env: Env, email: string): Promise<any | null> {
   if (!email) return null;
   const sql = getSQL(env);
   try {
-    const rows = await sql`SELECT * FROM users WHERE email = ${email.toLowerCase().trim()}`;
+    const rows = await sql`SELECT * FROM users WHERE LOWER(email) = ${normalizeEmail(email)} ORDER BY id LIMIT 1`;
     return rows.length ? rows[0] : null;
   } finally { try { await sql.end(); } catch {} }
 }
@@ -1090,7 +1091,7 @@ recover.get('/trusted-contacts', async (c) => {
 recover.post('/trusted-contacts', async (c) => {
   const user = await requireAuth(c);
   const body = await readJson(c);
-  const email = String(body?.contact_email || '').toLowerCase().trim();
+  const email = normalizeEmail(body?.contact_email);
   const displayName = String(body?.display_name || '').slice(0, 200);
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
     return c.json({ error: 'invalid_email' }, 400);
@@ -1102,7 +1103,7 @@ recover.post('/trusted-contacts', async (c) => {
   let contactStatus: 'active' | 'pending_invite' = 'pending_invite';
   try {
     const sql = getSQL(c.env);
-    const r = await sql`SELECT id FROM users WHERE email = ${email} AND is_active = 1`;
+    const r = await sql`SELECT id FROM users WHERE LOWER(email) = ${email} AND is_active = 1 ORDER BY id LIMIT 1`;
     await sql.end();
     if (r.length) { contactUserId = Number(r[0].id); contactStatus = 'active'; }
   } catch {}

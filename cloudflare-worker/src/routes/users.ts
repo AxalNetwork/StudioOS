@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
+import { normalizeEmail } from '../util/accountEmail';
 
 const users = new Hono<{ Bindings: Env }>();
 
@@ -21,11 +22,14 @@ users.get('/', async (c) => {
 users.post('/', async (c) => {
   await requireAdmin(c);
   const data = await c.req.json();
+  // D9043 — one stored form per address, so `Jane@Example.com` and `jane@example.com` are one account.
+  const email = normalizeEmail(data?.email);
+  if (!email) return c.json({ error: 'Email required' }, 400);
   const sql = getSQL(c.env);
-  const existing = await sql`SELECT id FROM users WHERE email = ${data.email}`;
+  const existing = await sql`SELECT id FROM users WHERE LOWER(email) = ${email} ORDER BY id LIMIT 1`;
   if (existing.length > 0) { await sql.end(); return c.json({ error: 'User with this email already exists' }, 409); }
   const validRole = ['founder', 'partner', 'investor'].includes(data.role) ? data.role : 'partner';
-  const [user] = await sql`INSERT INTO users (email, name, role, founder_id, partner_id) VALUES (${data.email}, ${data.name}, ${validRole}, ${data.founder_id || null}, ${data.partner_id || null}) RETURNING id, uid, email, name, role, is_active, email_verified, created_at`;
+  const [user] = await sql`INSERT INTO users (email, name, role, founder_id, partner_id) VALUES (${email}, ${data.name}, ${validRole}, ${data.founder_id || null}, ${data.partner_id || null}) RETURNING id, uid, email, name, role, is_active, email_verified, created_at`;
   await sql.end();
   return c.json(user, 201);
 });
