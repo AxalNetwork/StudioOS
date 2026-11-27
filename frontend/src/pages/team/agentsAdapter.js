@@ -44,7 +44,7 @@
  */
 import { teamAgentsApi } from '../../lib/api/teamAgents.js';
 import { FLOOR, RULEBOOK_SECTIONS, refusalWords } from './teamModel.js';
-import { fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './skillsModel.js';
+import { fromWorkerEligible, fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './skillsModel.js';
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
@@ -218,8 +218,13 @@ export const importSkill = (kind, id, markdown) => (kind === 'company'
 export const agentSkills = (uid) => throughSkill(() => teamAgentsApi.agentSkills(uid));
 /** `PUT /api/teams/agents/:uid/skills { skills: [{ uid, version }] }` → the same shape. */
 export const setAgentSkills = (uid, skills) => throughSkill(() => teamAgentsApi.setAgentSkills(uid, skills));
-/** `GET /api/teams/agents/:uid/skills/available` → `{ skills }`, each with `blocked`. */
-export const availableSkills = (uid) => throughSkill(() => teamAgentsApi.availableSkills(uid));
+/**
+ * `GET /api/teams/agents/:uid/skills/available` → D8768: `{ skills, counts, areas }`, every published skill as a card
+ * with the Worker's `eligibility` (one rule at every picker; natural fit only sorts).
+ */
+export const availableSkills = async (uid) => shaped(await throughSkill(() => teamAgentsApi.availableSkills(uid)), fromWorkerEligible);
+/** D8768: `GET /api/teams/:scope/:id/skills/eligible?role=&persona=` → the same shape, for an agent not yet added, with `tools_to_grant`. */
+export const eligibleSkills = async (scope, id, draft) => shaped(await throughSkill(() => teamAgentsApi.eligibleSkills(scope, id, draft)), fromWorkerEligible);
 /** `GET /api/teams/skills/:uid/agents` → `{ agents }` the member can see. */
 export const skillAgents = (uid) => throughSkill(() => teamAgentsApi.skillAgents(uid));
 /** `GET /api/teams/skills/:uid/assignable` → `{ agents }`, each with `assigned` and `blocked`. */

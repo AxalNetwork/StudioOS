@@ -65,7 +65,7 @@ import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from '.
 import { gateOf, overlayOf, stepOf, workingDeck } from './preflightUiModel';
 import PreflightOverlay from './PreflightOverlay';
 import {
-  ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_PLACEHOLDER, NO_CARDS,
+  ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_HELPER, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
@@ -1444,7 +1444,8 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
       {card ? (
         <label className={`${CARD} flex flex-col gap-1.5 p-3`}>
           <span className={EYE}>Speaker notes · card {sel + 1}</span>
-          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck data-testid="pitch-editor-phone-notes" onChange={(e) => onNotes(e.target.value)} />
+          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck aria-describedby="pitch-editor-phone-notes-helper" data-testid="pitch-editor-phone-notes" onChange={(e) => onNotes(e.target.value)} />
+          <span id="pitch-editor-phone-notes-helper" className={MUTED} data-testid="pitch-editor-phone-notes-helper">{NOTES_HELPER}</span>
         </label>
       ) : null}
       {card && !readOnly && all.length ? (

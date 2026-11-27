@@ -473,13 +473,14 @@ const RECORD_CANVAS: Record<string, { id: string | number; facts: string[]; main
   // D8775 (#8775): each feature record also says what it carries; a must-have says who builds it and how far its proof is.
   'solution-design': { id: 1, facts: ['Pain theme', 'Hypothesis', 'Impact', 'Effort'], main: ['Description', 'Risks'], side: ['Appears in', 'Brief', 'Carried into its must-have'] },
   'prototype-mvp': { id: 1, facts: ['Owner', 'Due', 'Hypothesis', 'Tests run'], main: ['Test sessions', 'Findings'], side: ['Linked', 'Release checklist', 'Carried from the feature', 'Who builds it', 'Proof'] },
-  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date'], main: ['Dependencies', 'Feedback it answers'], side: ['GitHub'] },
+  // D8776 (#8776, BLR01B): the item shows its quarter beside its column; its key results and quarter view are a side section.
+  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date', 'Quarter'], main: ['Dependencies', 'Feedback it answers'], side: ['Quarter, links and scenarios', 'GitHub'] },
   'founding-team': { id: 'h-1', facts: ['Role', 'Equity', 'Vesting', 'Vested today'], main: ['Vesting timeline', 'Contributions'], side: ['Documents', 'Cap table'] },
   'company-creation': { id: 'step-2', facts: ['Filing', 'Jurisdiction', 'Due', 'Proof'], main: ['Steps', 'Reminders'], side: ['Linked'] },
   'operating-systems': { id: 'crm', facts: ['State', 'Last sync', 'Sync', 'Feeds'], main: ['Sync log', 'Permissions'], side: ['Companies'] },
 };
 
-test('test 1: each of the six records returns its canvas title, sub, four facts and section titles', async () => {
+test('test 1: each of the six records returns its canvas title, sub, facts (four, five on a roadmap item) and section titles', async () => {
   const db = recorded();
   for (const [slug, want] of Object.entries(RECORD_CANVAS)) {
     const r = await one(db, slug, want.id);

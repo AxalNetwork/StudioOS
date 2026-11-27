@@ -303,15 +303,23 @@ export const notesOf = (card) => card?.notes || NO_NOTES;
 
 export const EXPORT_TITLE = (v) => `Export ${versionLabel(v)}`;
 
+/**
+ * D8771 (#8771): each line says what the writer on main makes, never an older
+ * writer's. PowerPoint has been the editable file since D1574 (`pptxEditable.ts`:
+ * text boxes, native charts for nine types, diagram shapes and pictures; any
+ * other chart a picture or text), not "One picture per card"; the .odp
+ * (`odp.ts`) writes no native chart; the PDF is checked to keep its text as text
+ * (`pdfExport.checkDeckPdf`). `exportDisclosureModel` says the rest per version.
+ */
 export const FORMATS = [
-  { id: 'pdf', label: 'PDF', line: 'Every card, as it prints', available: true },
-  { id: 'pptx', label: 'PowerPoint', line: 'One picture per card', available: true },
+  { id: 'pdf', label: 'PDF', line: 'Every card as a page at the deck’s size · text stays text', available: true },
+  { id: 'pptx', label: 'PowerPoint', line: 'Editable text, shapes and most charts · some charts as pictures', available: true },
   // D904 (#2683): a new, editable presentation in the member's own Drive.
-  { id: 'google_slides', label: 'Google Slides', line: 'Created in your Drive, editable', available: true },
+  { id: 'google_slides', label: 'Google Slides', line: 'The same editable file, made in your Drive', available: true },
   { id: 'html', label: 'HTML', line: 'One file, offline', available: true },
   // D1604 (#3716, pd8b) on D1603's route (#3882): an editable OpenDocument
   // Presentation for LibreOffice Impress and the other open suites.
-  { id: 'odp', label: 'Slides-suite file (.odp)', line: 'Editable in LibreOffice and other open suites', available: true },
+  { id: 'odp', label: 'Slides-suite file (.odp)', line: 'Editable text and shapes in LibreOffice and other open suites · charts as pictures or text', available: true },
 ];
 
 const LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));

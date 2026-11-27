@@ -56,9 +56,11 @@
 // D1612 A2 (#3956), behind the same flag:
 //   GET  /api/teams/agents/:uid/skills            → { can_manage, skills: [{ uid, name, pinned_version, current_version, status,
 //                                                    tools: [{ key, label, approved }], taxonomy }], radar: { axes } | null, values: null }
-//   PUT  /api/teams/agents/:uid/skills            { skills: [{ uid, version? }] } → the same; 403 not_manager; 422 role_mismatch |
+//   PUT  /api/teams/agents/:uid/skills            { skills: [{ uid, version? }] } → the same; 403 not_manager; 422
 //                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired | skill_suspended
-//   GET  /api/teams/agents/:uid/skills/available  → { skills: [SkillCard + { assigned, pinned_version, blocked }] }
+//                                                    (D8768: no role gate; fit only sorts)
+//   GET  /api/teams/agents/:uid/skills/available  → { skills: [SkillCard + { eligibility, assigned, pinned_version, blocked }], counts, areas }
+//   GET  /api/teams/:scope/:id/skills/eligible    ?role=&persona= → the same for an agent not yet added, each with tools_to_grant (D8768)
 //   GET  /api/teams/skills/:uid/agents            → { agents: [{ uid, name, role_key, pinned_version, scope }] }
 //   GET  /api/teams/skills/:uid/assignable        → { agents: [{ uid, name, role_key, skill_count, assigned, blocked, scope }] }
 //   POST /api/teams/skills/:uid/assign            { agent_uids } → { added, refused: [{ agent_uid, code }] }, partial
@@ -145,6 +147,12 @@ export const teamAgentsApi = {
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),
   availableSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills/available`),
+  // D8768 (#8768): the same eligibility answer for an agent not yet added (the Add-an-agent wizard's Skills step).
+  eligibleSkills: (scope, id, { role, persona } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries({ role, persona })) if (v != null && v !== '') q.set(k, String(v));
+    return request(`${base(scope, id)}/skills/eligible?${q.toString()}`);
+  },
   skillAgents: (skillUid) => request(`/teams/skills/${enc(skillUid)}/agents`),
   assignable: (skillUid) => request(`/teams/skills/${enc(skillUid)}/assignable`),
   assignSkill: (skillUid, agentUids) => request(`/teams/skills/${enc(skillUid)}/assign`, { method: 'POST', body: JSON.stringify({ agent_uids: agentUids }) }),

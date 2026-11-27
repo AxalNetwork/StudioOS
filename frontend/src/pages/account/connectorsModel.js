@@ -837,7 +837,8 @@ export function projectCompany(project, companies) {
 
 /** The sentence above Build's list for a company it cannot connect for; null when it can. */
 export function companyBanner(scope) {
-  if (scope.state === 'none') return 'This project has no company, so connected tools cannot feed it.';
+  // D8774: say which scope is missing. The tools stay connected to the account; it is the venture that has no company.
+  if (scope.state === 'none') return 'This venture is not in a company yet, so no connected tool feeds it. Tools you connected stay on your account.';
   if (scope.state === 'outside') return 'You are not a member of this project\u2019s company, so you cannot connect tools for it.';
   if (scope.state === 'unreadable') return 'This project\u2019s company could not be read. Connected tools are listed, but connecting waits until it can be.';
   return null;
@@ -855,6 +856,123 @@ export function companiesWith(conn, companyId) {
   return [...new Set([...ids, Number(companyId)])];
 }
 
+/** D8774: the company set without the project's company, for "Stop using for {company}" (the PUT replaces the set). */
+export function companiesWithout(conn, companyId) {
+  return (Array.isArray(conn?.company_ids) ? conn.company_ids : []).map(Number).filter((id) => Number.isSafeInteger(id) && id !== Number(companyId));
+}
+
+/** Only GitHub records the one venture it feeds (`config.project_id`, `config.repositories`); other tools feed the company's ventures. */
+const VENTURE_BOUND = new Set(['github']);
+const repositoriesOf = (conn) => {
+  const cfg = conn?.config && typeof conn.config === 'object' ? conn.config : {};
+  return { bound: Number(cfg.project_id), repos: Array.isArray(cfg.repositories) ? cfg.repositories.filter((r) => typeof r === 'string') : [] };
+};
+
+/**
+ * D8774 (#8774): whether a connected tool feeds THIS venture, by the three
+ * scopes the Worker checks before a sync lands anything (`projectEnabled`,
+ * `syncGithub`): the account connection, the company it is turned on for, and
+ * for GitHub the venture and repositories it reads. Null when the sheet has
+ * no venture, the tool is not connected, or the scope cannot be told.
+ *   no_company     the venture is in no company: nothing can feed it.
+ *   company_off    connected to the account, not turned on for the venture's company.
+ *   other_venture  GitHub reads repositories for another venture.
+ *   no_repo        GitHub has no repository chosen for this venture.
+ *   effective      all three hold.
+ */
+export function ventureFeed(p, scope, projectId) {
+  if (!p?.connection || p.first_party || !scope || !projectId) return null;
+  if (scope.state === 'none') return 'no_company';
+  if (scope.state !== 'ok') return null;
+  if (servesCompany(p.connection, scope.companyId) === false) return 'company_off';
+  if (VENTURE_BOUND.has(p.key)) {
+    const { bound, repos } = repositoriesOf(p.connection);
+    if (Number.isSafeInteger(bound) && bound > 0 && bound !== Number(projectId)) return 'other_venture';
+    if (bound !== Number(projectId) || !repos.length) return 'no_repo';
+  }
+  return 'effective';
+}
+
+/**
+ * D8774 (BLS00, BLS01): the three scopes as three lines, so the account
+ * connection and the venture's feed are never read as one. Null when
+ * `ventureFeed` is.
+ */
+export function scopeLadder(p, scope, projectId, ventureName = null) {
+  const feed = ventureFeed(p, scope, projectId);
+  if (!feed) return null;
+  const company = scope.name || 'its company';
+  const account = toolState(p) === 'failing' ? `Connected · ${attentionReason(p.connection)}` : 'Connected';
+  const companyLine = feed === 'no_company' ? 'This venture is in no company yet' : feed === 'company_off' ? `Not turned on for ${company}` : `On for ${company}`;
+  const { repos } = repositoriesOf(p.connection);
+  const ventureLine = feed === 'no_company' || feed === 'company_off' ? 'Fed by nothing yet'
+    : feed === 'other_venture' ? 'Its repositories feed another venture'
+      : feed === 'no_repo' ? 'No repository chosen yet'
+        : VENTURE_BOUND.has(p.key) ? `Reads ${repos.length === 1 ? '1 repository' : `${repos.length} repositories`}` : `Fed through ${company}`;
+  return [
+    { key: 'account', label: 'Your account', value: account },
+    { key: 'company', label: 'Company', value: companyLine },
+    { key: 'venture', label: ventureName || 'This venture', value: ventureLine },
+  ];
+}
+
+/**
+ * D8774 (BLS01, BLS06 A): who may link a venture with no company. The move
+ * route (`POST /projects/:id/move`) takes the venture's owner or an admin; any
+ * other member is told who that is. Q2 option A: name the owner and copy a
+ * link to this setup (owner pending).
+ */
+export function ventureOwner(project, user) {
+  if (!project || typeof project !== 'object') return { canLink: false, name: null };
+  const fid = Number(project.founder_id);
+  const mine = !!user && (String(user.role || '').toLowerCase() === 'admin'
+    || (Number.isSafeInteger(fid) && fid > 0 && Number(user.founder_id) === fid));
+  const name = typeof project.founder?.name === 'string' && project.founder.name.trim() ? project.founder.name.trim() : null;
+  return { canLink: mine, name };
+}
+
+/** D8774: the words for a venture in no company: the owner's step, or whose step it is. */
+export function linkPrompt(owner, ventureName = null) {
+  const venture = ventureName || 'this venture';
+  if (owner?.canLink) return `Link ${venture} to a company and connected tools can feed it. You come back to this setup after.`;
+  return `Only ${owner?.name || 'the venture’s owner'} can link ${venture} to a company. Ask them to, from Build › Connect a tool; until then no connected tool feeds it.`;
+}
+
+/** The names of the companies a connection serves, from the member's memberships; ids the member cannot see are counted. */
+export function servedCompanyNames(conn, companies) {
+  const ids = (Array.isArray(conn?.company_ids) ? conn.company_ids : []).map(Number).filter(Number.isSafeInteger);
+  const list = Array.isArray(companies) ? companies : [];
+  const names = ids.map((id) => list.find((c) => Number(c?.id) === id)).map((c) => c?.company_name || c?.name || null);
+  const known = names.filter(Boolean);
+  const unnamed = names.length - known.length;
+  return unnamed ? [...known, unnamed === 1 ? '1 other company' : `${unnamed} other companies`] : known;
+}
+
+const andList = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * D8774 (BLS07, Q1 option A): the scoped stop comes first. It turns the tool
+ * off for the venture's company only; the account connection and its other
+ * companies stay. For GitHub the Worker lets go of the venture and its
+ * repositories in the same write (`releasedConfig` in `routes/integrations.ts`).
+ */
+export function stopForCompanyNote(p, scope, companies) {
+  const company = scope?.name || 'this company';
+  const others = servedCompanyNames({ company_ids: companiesWithout(p?.connection, scope?.companyId) }, companies);
+  const stays = others.length ? `stays connected to your account and keeps serving ${andList(others)}` : 'stays connected to your account and serves no other company';
+  const repos = VENTURE_BOUND.has(p?.key) ? ' The repositories chosen for this venture are let go.' : '';
+  return `${p?.display_name || 'The tool'} ${stays}. It stops feeding ${company}’s ventures.${repos} Data already in StudioOS stays.`;
+}
+
+/** D8774 (BLS07 B): the account-wide disconnect, naming every company it serves, said before the click. */
+export function accountDisconnectNote(p, companies) {
+  // A connection whose company set is not known says nothing about companies, rather than "none".
+  const known = Array.isArray(p?.connection?.company_ids);
+  const served = servedCompanyNames(p?.connection, companies);
+  const scope = !known ? '' : served.length ? ` It stops feeding every company it serves: ${andList(served)}.` : ' It serves no company now.';
+  return `This removes ${p?.display_name || 'the tool'} from your account.${scope} ${disconnectNote(p)}`;
+}
+
 /** The plan a locked tool needs, by its plan's name (#2182); never the canvas's placeholder "Pro". */
 export const UPGRADE_TIER = TIER_LABEL;
 
@@ -867,7 +985,9 @@ export const UPGRADE_TIER = TIER_LABEL;
  *   locked    → the real tier's pill and "Upgrade to Validate + Build" / "to Raise + Grow".
  *   soon      → "Will feed …", no action.
  */
-export function toolRow(p) {
+export function toolRow(p, ctx = null) {
+  const scoped = ctx ? scopedRow(p, ctx) : null;
+  if (scoped) return scoped;
   const s = toolState(p);
   const feeds = feedsLabel(p);
   const tier = UPGRADE_TIER[p.tier] || null;
@@ -892,6 +1012,38 @@ export function toolRow(p) {
   if (s === 'soon') return { state: s, pill: ['Coming soon', 'neutral'], detail: feeds ? `Will feed ${feeds}` : 'What it will feed is not recorded', action: null, actionLabel: null };
   if (s === 'unavailable') return { state: s, pill: [p.unreadable || p.connectionUnreadable ? 'Status unreadable' : 'Not set up here', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: null, actionLabel: null };
   return { state: s, pill: ['Not connected', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: 'connect', actionLabel: 'Connect' };
+}
+
+/**
+ * D8774 (BLS01, BLS03): a connected tool's row when it does not feed this
+ * venture. It never says "Feeds …" or offers Disconnect as its action then;
+ * Disconnect stays in the tool's Details. `ctx` is `{ scope, projectId,
+ * ventureName }`. Null when the tool feeds the venture (the plain row says so).
+ *   no_company     Account only; the banner holds the one action (Link to a company…).
+ *   company_off    "Use for {company}".
+ *   no_repo        Choose repositories, with what will feed after a sync (no counts).
+ *   other_venture  Choose repositories for this venture.
+ * A failing tool keeps its failing row unless its scope says it feeds nothing anyway.
+ */
+function scopedRow(p, { scope, projectId, ventureName = null } = {}) {
+  const feed = ventureFeed(p, scope, projectId);
+  if (!feed || feed === 'effective') return null;
+  const s = toolState(p);
+  const venture = ventureName || 'this venture';
+  const company = scope.name || 'this company';
+  const feeds = feedsLabel(p);
+  if (feed === 'no_company') {
+    return { state: s, feed, pill: ['Account only', 'neutral'], detail: `Connected to your account · feeds nothing in ${venture} until it is in a company`, action: null, actionLabel: null };
+  }
+  if (feed === 'company_off') {
+    return { state: s, feed, pill: ['Account only', 'neutral'], detail: `Connected to your account · not turned on for ${company}, so it feeds nothing here`, action: 'enable', actionLabel: `Use for ${company}` };
+  }
+  if (s === 'failing') return null;
+  const after = feeds ? ` · after a sync it will feed ${feeds}` : '';
+  if (feed === 'other_venture') {
+    return { state: s, feed, pill: ['Another venture', 'neutral'], detail: `On for ${company} · its repositories feed another venture, not ${venture}${after}`, action: 'choose', actionLabel: 'Choose repositories' };
+  }
+  return { state: s, feed, pill: ['Choose repositories', 'warn'], detail: `On for ${company} · no repository chosen for ${venture}, so nothing is read yet${after}`, action: 'choose', actionLabel: 'Choose repositories' };
 }
 
 /**
