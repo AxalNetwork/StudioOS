@@ -1,4 +1,8 @@
-/** D7700 (#7700): SAFE qualification remains bound to complete selected-document passages, never typed instrument terms. */
+/** D7700 (#7700): SAFE qualification remains bound to complete selected-document passages, never typed instrument terms.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7700: selected-document SAFE case
+ * shape, revised identity and complete maturity evidence.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

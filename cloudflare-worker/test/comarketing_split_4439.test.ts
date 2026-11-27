@@ -1,4 +1,8 @@
-/** D4439 (#4439): member role refusals precede every read/write; HQ keeps historical pitches. */
+/** D4439 (#4439): member role refusals precede every read/write; HQ keeps historical pitches.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4439: investor refuses every member
+ * read/write; partners/founders keep their existing access; HQ reads historical investor pitches.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): #3593: recording-safe chunk-error copy, SPA
+ * return links, deferred manual reload and unchanged idle recovery.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

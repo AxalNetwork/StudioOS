@@ -15,6 +15,12 @@
  * The reads are answered from `_portfolio.mjs`; the page is the built SPA
  * that `server.ts` serves, signed in as an investor (or an administrator,
  * where a check says so).
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D4818 (#4818, part 2): Portfolio's
+ * Overview, Positions and Performance at 1440, 1280, 834, 390 and 320, light and dark: zero
+ * serious or critical axe violations, no page wider than its window, one H1, the named local
+ * navigation, the skip link and the Tab path, 44px phone targets, one failed read retried alone,
+ * the mark-history Sheet's focus; no screenshots
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

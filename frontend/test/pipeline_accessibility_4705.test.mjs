@@ -1,4 +1,9 @@
-/** #4705: mounted studio Pipeline keyboard entry, form recovery and measured synthetic read counts. */
+/** #4705: mounted studio Pipeline keyboard entry, form recovery and measured synthetic read counts.
+ *
+ * From frontend/test/README.md (moved by #6472): `pipeline_accessibility_4705.test.mjs` checks
+ * native studio deal entry, shared creation-sheet semantics, associated fields, fixed failure
+ * copy, retained drafts and a synthetic API-call baseline (D4705).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

@@ -1,4 +1,9 @@
-/** D5952: real metric envelopes, missing values, exact period/currency joins and rendered states. */
+/** D5952: real metric envelopes, missing values, exact period/currency joins and rendered states.
+ *
+ * From frontend/test/README.md (moved by #6472): D5952: quarterly ledger metric states,
+ * currency/period joins, per-licence receipts and AI, automatic promo report and coverage
+ * metadata; rendered components over synthetic envelopes.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

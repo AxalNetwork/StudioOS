@@ -16,6 +16,12 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/usage_indexes_4568.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4568 (D4568):
+ * `usage_indexes_4568.test.ts` holds migration 202611070806's two partial indexes and `agentArea`
+ * to what they must not change: plans before and after, `chargedFor` against a reference model,
+ * identical money across a whole mix with and without the indexes, and the dependency matrix.
+ * `_d1_bench.ts`'s `indexControl` and `withoutCandidates` are its before-and-after measurements.
  */
 import test, { after as afterAll } from 'node:test';
 import assert from 'node:assert/strict';

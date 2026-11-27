@@ -28,6 +28,12 @@
  *
  *   npm run build                      (repo root)
  *   cd frontend && npx playwright test -c tests/visual/playwright.config.mjs login_journeys_6959
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #6959: /login's Sign In v2 journeys
+ * (#6958, D6957) on the desktop card at 1440 and the phone sheet under the iPhone 13, iPhone SE
+ * and Pixel 7 descriptors at 390 and 320 (Chromium, not Safari): three actions, the Email methods,
+ * Apple and Google returns through mocked callbacks, the sheet's focus, axe, keyboard-open and
+ * 200% text, destination continuity; screenshots only to `LOGIN_EVIDENCE_DIR`, no baselines.
  */
 import { test, expect, devices } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

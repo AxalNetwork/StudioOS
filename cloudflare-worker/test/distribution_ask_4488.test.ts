@@ -1,4 +1,8 @@
-/** D4488 (#4488): real migrated D1, mounted Distribution Ask and a synthetic AI; no network. */
+/** D4488 (#4488): real migrated D1, mounted Distribution Ask and a synthetic AI; no network.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4488 metered proposals,
+ * venture/allowance gates and safe acceptance without sends.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

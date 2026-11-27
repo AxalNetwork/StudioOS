@@ -3,6 +3,10 @@
  * existing vehicle catalogue, provenance, restrictions and member references.
  * Exercises committed SQL and real directory reads, with guard mutations held
  * only in memory; no test rewrites an applied migration or evidence snapshot.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7585: historical preservation, original
+ * verification dates, independent source citation, competing manager identities, country filters
+ * and in-memory guard mutations for the next worldwide import.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

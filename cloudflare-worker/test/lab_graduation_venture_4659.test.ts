@@ -17,6 +17,15 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/lab_graduation_venture_4659.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `lab_graduation_venture_4659.test.ts`
+ * (D4659) runs the Lab's routes and services on the migrated template. It covers: - the graduation
+ * view pinned to the catalog; - incorporation recorded before weeks 1–3, which is not graduation,
+ * and the credential issued once the rule is met; - several projects needing the founder's choice,
+ * and an older project never proving a step; - binding the only project, rename, deletion, and a
+ * live venture never switched; - the public lists naming the venture; - the migration's
+ * credential, single-project and needs-choice paths; - a held credential grandfathered until it is
+ * revoked.
  */
 import test, { after as afterAll } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,6 +1,13 @@
 /**
  * D1604 (#3716): the Pitch deck editor mounted on stubbed reads, for the v2
  * chrome and selection suites. Every venture, card and figure is synthetic.
+ *
+ * From frontend/test/README.md (moved by #6472): D1604's editor suites
+ * (`pitch_v2_chrome_d1604.test.mjs`, `pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck
+ * editor through `_pitch_editor_mount.mjs`: synthetic reads for every client the editor calls,
+ * restored on close. Its `onDocument` hook (D1515) runs after the synthetic document is installed
+ * and before the editor renders, so `pitch_editing_ops_d1515.test.mjs` can put a fake IndexedDB,
+ * kept across two mounts, and a keydown recorder on the window.
  */
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';

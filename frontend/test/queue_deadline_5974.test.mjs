@@ -1,4 +1,8 @@
-/** D5974: active native candidates, pending required checks, unreadable evidence and transition-only delivery. */
+/** D5974: active native candidates, pending required checks, unreadable evidence and transition-only delivery.
+ *
+ * From frontend/test/README.md (moved by #6472): D5974: active-candidate age, pending names,
+ * unknown evidence, native recheck and durable transition regressions.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { queueDeadlineState, parseDeadlineWarnShare, message, transition } from '../../scripts/lib/githubAlerts.mjs';

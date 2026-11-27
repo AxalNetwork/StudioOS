@@ -13,6 +13,9 @@
  * is not a GET. `as` signs in as 'investor' (the default), 'admin' (an
  * administrator in their own shell) or 'preview' (an administrator previewing
  * the Investor shell, D4817 part 8). Every name is made up.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): The reads those boards make, answered for
+ * that spec as the Worker answers them, signed in as an investor; made-up names
  */
 import { prepare } from './_editor.mjs';
 

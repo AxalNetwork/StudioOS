@@ -1,4 +1,8 @@
-/** D6057: PS04 inspector, actual section labels and document actions. */
+/** D6057: PS04 inspector, actual section labels and document actions.
+ *
+ * From frontend/test/README.md (moved by #6472): PS04 inspector mounting, section headings,
+ * document toolbar and preserved actions.
+ */
 import test from 'node:test';import assert from 'node:assert/strict';import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {MemoryRouter} from 'react-router-dom';
 import EditorInspector from '../src/pages/raise/pitch/EditorInspector.jsx';import CardsStrip from '../src/pages/raise/pitch/CardsStrip.jsx';import DeckToolbar from '../src/pages/raise/pitch/DeckToolbar.jsx';import {mountForm,h} from './_form_d695.mjs';
 const draw=x=>renderToStaticMarkup(h(MemoryRouter,null,x));

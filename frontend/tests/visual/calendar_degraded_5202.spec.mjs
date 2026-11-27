@@ -14,6 +14,11 @@
  *
  * The signed-in member and the session come from this folder's server (`server.ts`); `/api/calendar/*` is this
  * spec's own, because the local Worker has no Google or Outlook to fail. Nothing leaves 127.0.0.1.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #5202: one external calendar's read
+ * failing with a good credential — the agenda stands, the rail says Connected and "Events
+ * temporarily unavailable", and Retry re-reads that provider alone; desktop and phone, no
+ * screenshots
  */
 import { test, expect } from '@playwright/test';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';

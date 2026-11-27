@@ -1,4 +1,12 @@
-/** D895 (#2674): synthetic data, mounted Worker routes and the real migrated schema. */
+/** D895 (#2674): synthetic data, mounted Worker routes and the real migrated schema.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D895: `pitch_worker_d895.test.ts` mounts
+ * the deck, branding, NDA and pitch-link record routes over the migrated schema with synthetic
+ * data. It covers read-only admins, advisor denial, admitted cofounders, measured runway, absent
+ * versus zero review scores/counts, owner-plan export branding, live brand-kit selection,
+ * founder/Lab score separation, canonical pairwise NDA state and one activity row per completed
+ * write. `decks.autofill.test.ts` also checks AI-only coverage is zero.
+ */
 import test, { after } from 'node:test';
 import { deckPdf } from './_deck_pdf.ts';
 /** D1575 (#3822): the export checks the PDF it is answered, so the browser stand-in answers one that passes. */

@@ -1,4 +1,7 @@
 // D6209: real SQLite ownership and optimistic-concurrency checks for private Portfolio views.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): Private Portfolio views: SQLite
+// ownership, page isolation, optimistic writes, access refusals, validation and unreadable reads.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

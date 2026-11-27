@@ -1,3 +1,8 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D1355: official logo/button source pins,
+ * unchanged asset bytes, approved theme variants, minimum sizing and truthful sign-in/import entry
+ * points.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

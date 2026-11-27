@@ -12,6 +12,13 @@
  *     (the Worker's map, `_data_room_capabilities.mjs`), never from `role`.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/venture_context_5074.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): `venture_context_5074.test.mjs` checks D5074:
+ * every venture alias resolves to one context, the one `?project_id=` form, legacy redirects
+ * keeping the query and hash, the Data room on the shared context only, and its controls drawn
+ * from the Worker's capabilities. `_data_room_capabilities.mjs` holds those capability maps for
+ * fixtures; the Worker's `data_room_capabilities_5074.test.ts` pins them to
+ * `cloudflare-worker/src/services/dataRoomCapabilities.ts`.
  */
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';

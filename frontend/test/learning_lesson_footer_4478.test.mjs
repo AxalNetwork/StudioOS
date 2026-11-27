@@ -1,4 +1,7 @@
 // D4478: the real lesson footer, connection events, latest-position queue and empty reading.
+//
+// From frontend/test/README.md (moved by #6472): D4478: lesson position, completion reasons, live
+// offline/reconnect queue, source changes, refused progress writes and empty reading.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { act, createElement as h } from 'react';

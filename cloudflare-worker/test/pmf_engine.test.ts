@@ -8,6 +8,11 @@
  *
  * Run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *        --test cloudflare-worker/test/pmf_engine.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1144: `pmf_store_d1144.test.ts`
+ * exercises migration 598, signed change-only snapshots, scoped module/history/Re-score, checklist
+ * confidence and atomic audit/rollback on SQLite. `pmf_engine.test.ts` keeps the shared pure
+ * engine and collector contract.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

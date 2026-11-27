@@ -1,4 +1,8 @@
-/** D7886 (#7886): durable authority replaces a waiting parent; every receipt/source/child/queue identity is independently checked. */
+/** D7886 (#7886): durable authority replaces a waiting parent; every receipt/source/child/queue identity is independently checked.
+ *
+ * From frontend/test/README.md (moved by #6472): D7886: durable receipt bindings,
+ * source/queue/child provenance and fail-closed missing authority.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { admitRunnerJob, main, githubReadApi } from '../../scripts/ci/runner-admission.mjs';

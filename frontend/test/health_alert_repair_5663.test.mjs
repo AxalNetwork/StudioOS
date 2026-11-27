@@ -1,4 +1,7 @@
 // D5663: real episode effects exercised against paginated, fault-injected GitHub and Slack fakes.
+//
+// From frontend/test/README.md (moved by #6472): D5663: health episode concurrency, crash/retry
+// and future-clock evidence regressions.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

@@ -10,6 +10,10 @@
  * Each case below is one of those faults, written from the real source shape
  * that produced it. They are cheap to run and they are the only thing standing
  * between these checks and a slow slide back into noise.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `schema_guards.test.mjs` is the
+ * cross-cutting one: it walks the whole worker source and asserts repo-wide rules, and it is
+ * usually the file to extend when a new invariant needs holding.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

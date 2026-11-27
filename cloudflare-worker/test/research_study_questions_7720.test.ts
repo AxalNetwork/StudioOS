@@ -1,5 +1,10 @@
 /** D7720 (#7720): mounted authenticated routes over the complete migrated SQLite schema.
  * Evidence survives status changes/deletion; refusals and races leave no partial writes.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `research_study_questions_7720.test.ts`
+ * mounts study question and decision routes over the migrated schema: owner/support/archived
+ * gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch
+ * rollback.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -16,6 +16,13 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/d1_benchmark_4567.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4567 (D4567): `_d1_bench.ts` is the D1
+ * contention benchmark's harness. It meters every statement the Worker's own services issue over
+ * `_storage_schema.ts`'s migrated template, seeded with #4566's synthetic fixtures and with
+ * inference stubbed. It drives mixes A–E, closed loop or ramp, and checks the invariants
+ * afterwards. `d1_benchmark_4567.test.ts` is its tiny, deterministic CI case; `npm run bench:d1`
+ * runs it at scale.
  */
 import test, { after as afterAll } from 'node:test';
 import assert from 'node:assert/strict';

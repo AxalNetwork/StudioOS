@@ -8,6 +8,11 @@
  * its own call list. The guard answers free by default (zero usage), so the
  * test's figures for what a run cost and charged are its model's alone; the
  * guard's own price, hold and rows are `ai_guard_d763.test.mjs`'s to test.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_guard_stub.mjs` (D763) answers Llama
+ * Guard's calls on a stubbed `env.AI` and passes every other call through: the guard fails closed
+ * inside `run()`, so a stub that does not answer it refuses every member run. It answers free, so
+ * a test keeps its own run's figures.
  */
 export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
 

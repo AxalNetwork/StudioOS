@@ -1,4 +1,8 @@
-/** D7811: file-keyed debt ledger; shared helpers own new CSV escaping, private copies stay untouched. */
+/** D7811: file-keyed debt ledger; shared helpers own new CSV escaping, private copies stay untouched.
+ *
+ * From frontend/test/README.md (moved by #6472): D7811: file-keyed pending CSV copies and
+ * detection of new private escapers.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';

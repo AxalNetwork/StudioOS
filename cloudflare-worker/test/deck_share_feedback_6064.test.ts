@@ -16,6 +16,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_share_feedback_6064.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6064: the founder's feedback read:
+ * reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the
+ * cap, and a missing store read as empty.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -12,6 +12,11 @@
  * days from its due date and one closed; a few ledger rows from three of the
  * five stores; and a Trust Center block whose draft differs from what is
  * published. Every name and address is made up.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): What `server.ts` seeds for that spec,
+ * read through the real routes as a Super Admin: a failed restore drill, administrators without
+ * MFA, sessions, a deletion request near its date, ledger rows, a Trust Center draft, the backup
+ * heartbeats; made-up names
  */
 import { createJWT } from '../../../cloudflare-worker/src/auth.ts';
 

@@ -20,6 +20,11 @@
  *     "Show proofs of funds", "← Funds", the Funds table's Open and the Books
  *     view chips were under 44px; those chips showed which one is on by
  *     colour alone (no aria-pressed).
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D4812 (#4812, part 8): Fund Admin's
+ * workspaces, the Funds list and a fund's page at 1440, 390 and 320, light and dark: zero serious
+ * or critical axe violations, including with each dialog open; no page wider than its window; Fund
+ * scope, ⋯ and dialogs by keyboard; 44 px phone targets. No screenshots
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';

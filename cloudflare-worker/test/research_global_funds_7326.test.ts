@@ -5,6 +5,13 @@
  *
  * node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *   --test cloudflare-worker/test/research_global_funds_7326.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `research_global_funds_7326.test.ts`
+ * replays the worldwide manager import over the real fund migrations and through directory reads:
+ * preserves historical rows, reports, saved references, UID redirects and source reviews;
+ * suppresses duplicate managers, including declared vehicle-number suffixes and known legacy
+ * vehicle identities; preserves source takedowns and manual HQ mappings on replay; and verifies
+ * country facets, provenance and unknown financial/LP values.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

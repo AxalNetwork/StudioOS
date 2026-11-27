@@ -1,4 +1,8 @@
-/** D4557: real migrated SQL, canonical grants and the existing Workflow/proposal journey; all data synthetic. */
+/** D4557: real migrated SQL, canonical grants and the existing Workflow/proposal journey; all data synthetic.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4557: real broker/Workflow/proposal,
+ * scope, quota, callback and erasure journeys.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

@@ -50,6 +50,12 @@
  *                   The marker lives in the README, not in a list here, so
  *                   marking another README edits only that README. An unmarked
  *                   README is checked as before.
+ *                   #6472: an `index: none` README also fails a list item or a
+ *                   paragraph that opens with one of its folder's files (that
+ *                   belongs in the file's header comment) and a per-decision
+ *                   paragraph (`D4817 part 9 …`, `D717: …`; that belongs in
+ *                   the decision's `D<n>-p<k>.md`, D5615), so neither adding a
+ *                   test nor landing a part edits the README.
  *
  *   4. ONE VERSION — every README.md merges with `union` (`.gitattributes`), so
  *                   two branches appending at the same spot do not conflict in
@@ -64,7 +70,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { unionArtifacts } from './lib/readmeUnion.mjs';
-import { blockHoldsList, findBlock, folderListing, indexMode, perFileRows, renderList, withBlock } from './lib/folderFiles.mjs';
+import { blockHoldsList, findBlock, folderListing, indexMode, partNotes, perFileNotes, renderList, withBlock } from './lib/folderFiles.mjs';
 import { regularTextFile } from './local-files.mjs';
 
 const ROOT = resolve(process.cwd());
@@ -429,8 +435,21 @@ for (const file of readmes) {
   MARKED.set(dir, mode);
   if (mode === 'generated' && !gen) errors.push(`${file} says \`<!-- index: generated -->\` but holds no \`<!-- files:begin -->\` … \`<!-- files:end -->\` block to generate into (#6465)`);
   const names = readdirSync(join(ROOT, dir), { withFileTypes: true }).filter((e) => e.isFile() && e.name !== 'README.md').map((e) => e.name);
-  for (const r of perFileRows(text, names)) {
-    errors.push(`${file}:${r.line} has a hand-written row for \`${r.name}\`, but the README says \`<!-- index: ${mode} -->\`: ${mode === 'generated' ? 'the list is generated from each file\'s header' : 'it takes no per-file rows'} — delete the row (#6465)`);
+  // A row fails under either marker (#6465). An `index: none` README also takes no
+  // list item or paragraph opening with one file's name and no per-decision note
+  // (#6472); `index: generated` READMEs (scripts/, #6470) still carry such prose.
+  for (const r of perFileNotes(text, names)) {
+    if (r.kind === 'row') {
+      errors.push(`${file}:${r.line} has a hand-written row for \`${r.name}\`, but the README says \`<!-- index: ${mode} -->\`: ${mode === 'generated' ? 'the list is generated from each file\'s header' : 'it takes no per-file rows'} — delete the row (#6465)`);
+    } else if (mode === 'none') {
+      errors.push(`${file}:${r.line} opens a ${r.kind === 'item' ? 'list item' : 'paragraph'} with \`${r.name}\`, but the README says \`<!-- index: none -->\`: what one file is goes in that file's own header comment — move it there (#6472)`);
+    }
+  }
+  if (mode === 'none') {
+    for (const p of partNotes(text)) {
+      const where = p.part ? `D${p.id}-p${p.part}.md` : `D${p.id}.md (or the D${p.id}-p<k>.md of the part you are building)`;
+      errors.push(`${file}:${p.line} is a per-decision note (D${p.id}${p.part ? ` part ${p.part}` : ''}), but the README says \`<!-- index: none -->\`: it goes in documentation/architecture/decisions/${where} (D5615), and the README keeps one sentence that points to the decisions — move it there (#6472)`);
+    }
   }
 }
 

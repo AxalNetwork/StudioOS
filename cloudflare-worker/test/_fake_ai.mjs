@@ -25,6 +25,11 @@
  * The binding records every model call (`calls`, the guard's apart in
  * `guardCalls`) and answers each with fixed usage, so a test's charge is known.
  * Synthetic only: no real model id is called and nothing leaves the process.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_fake_ai.mjs` (D1511) is the fake
+ * Workers AI binding the deck v2 suites run on: recorded outputs, never a model, and each failure
+ * a real binding gives injected on demand (a 429, error 3040, a timeout, a guard block, bad JSON,
+ * over-capacity text, a non-image answer).
  */
 export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
 export const FAILURES = Object.freeze(['rate_limited', 'capacity', 'timeout', 'guard_block', 'bad_json', 'over_capacity_text', 'non_image']);

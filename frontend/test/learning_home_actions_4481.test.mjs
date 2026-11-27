@@ -1,4 +1,9 @@
-/** D4481: synthetic Learning home actions through the existing clients, on desktop and phone. */
+/** D4481: synthetic Learning home actions through the existing clients, on desktop and phone.
+ *
+ * From frontend/test/README.md (moved by #6472): D4481: desktop/phone Register and refusals, rapid
+ * double-click guards, Join and enrolled progress, Browse courses, phone primary and unknown seats
+ * through existing clients.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

@@ -1,4 +1,8 @@
-/** D4440 (#4440): real Worker reads/writes with the client's dirty choices, over baseline + migration 710. */
+/** D4440 (#4440): real Worker reads/writes with the client's dirty choices, over baseline + migration 710.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4440: client dirty choices against
+ * mounted Worker routes, terminal history, disconnected accounts and retained accepted copy.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

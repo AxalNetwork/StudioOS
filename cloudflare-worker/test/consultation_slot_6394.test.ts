@@ -1,4 +1,8 @@
-/** #6394: empty consultation slot input preserves the booking; invalid times cannot write a decision. */
+/** #6394: empty consultation slot input preserves the booking; invalid times cannot write a decision.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `consultation_slot_6394.test.ts` (#6394)
+ * exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

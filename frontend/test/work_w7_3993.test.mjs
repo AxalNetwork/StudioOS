@@ -1,4 +1,9 @@
 // #4418 / W7 #3993 — mounted interactions and the real HTTP client.
+//
+// From frontend/test/README.md (moved by #6472): #4418: W7 client/adapter routes and off blocks,
+// project item deep links, sheet writes, review filtering and latest failed-run opening; four
+// failing-first regressions from S1’s review (reload stability, waiting-run filtering, burn-up
+// refresh and refusal reset), plus missing-task text during a board reload.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

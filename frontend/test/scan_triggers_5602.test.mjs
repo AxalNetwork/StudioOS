@@ -1,4 +1,8 @@
-/** D5602: run real scan admission/artifact/alert paths on synthetic data; deliberately break their gates. */
+/** D5602: run real scan admission/artifact/alert paths on synthetic data; deliberately break their gates.
+ *
+ * From frontend/test/README.md (moved by #6472): `scan_triggers_5602.test.mjs` — D5602 admission,
+ * artifact fencing, real alert CLI transitions and mutation coverage.
+ */
 import test from 'node:test';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';

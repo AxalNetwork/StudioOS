@@ -1,4 +1,7 @@
 // D4487: campaign plans, their honest figures and the founder's explicit transitions.
+//
+// From frontend/test/README.md (moved by #6472): Campaign cards, full-page plan steps, status
+// actions, honest figures, confirmations and partial-save retries (D4487).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

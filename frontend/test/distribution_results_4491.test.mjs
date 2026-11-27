@@ -1,4 +1,8 @@
 // D4491 (#4491): Distribution Results — named missing reasons, the MRR boundary, the read-error card and the mounted read.
+//
+// From frontend/test/README.md (moved by #6472): D4491: Results' named Not recorded reasons,
+// cost-per-lead rounding, the MRR note and link, the read-error card with no raw error, the window
+// check and the CycleRoute line.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

@@ -1,3 +1,8 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D1123 extends the Lab desks, overview and
+ * operations tests for Formation scope, cohort details, structured admission and grant/refusal
+ * states.
+ */
 import LabAdmitDialog from '../src/pages/admin/lab/LabAdmitDialog.jsx';
 import { BranchGrant } from '../src/pages/admin/lab/LabGrantBoundary.jsx';
 import LabOnlyNotice from '../src/pages/admin/lab/LabOnlyNotice.jsx';

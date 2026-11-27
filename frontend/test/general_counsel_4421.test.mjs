@@ -1,4 +1,7 @@
 // D4421: disclaimer rendered on actual rule-book, queue, proposal and Ask surfaces; answered pills removed.
+//
+// From frontend/test/README.md (moved by #6472): #4421: rendered rule book, open/history queue,
+// proposal and Ask notices; answered payment/plan pills removed.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, {act} from 'react';

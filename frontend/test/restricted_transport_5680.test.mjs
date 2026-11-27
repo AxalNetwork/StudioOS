@@ -1,4 +1,7 @@
 // D5680: synthetic live-metadata refusal before restricted transport; no real channel or finding is used.
+//
+// From frontend/test/README.md (moved by #6472): D5680: synthetic external/unknown-sharing,
+// membership and privacy refusal before publication.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {restrictedTransport5680} from '../../engineering-slack/restricted-transport-5680.mjs';
 test('only a current private internal member destination receives the fixed restricted payload',async()=>{

@@ -6,6 +6,11 @@
  * the dark-mode pairs.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/build_states_bd14_6032.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D4846 part 2 (#6032): every Build state word maps
+ * to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each
+ * state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet
+ * tier and its layout; dark pairs.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,8 @@
-/** D4496: recorded cross-tab triggers, safe fixed copy, writer/AI separation and responsive states. */
+/** D4496: recorded cross-tab triggers, safe fixed copy, writer/AI separation and responsive states.
+ *
+ * From frontend/test/README.md (moved by #6472): D4496 cross-tab triggers, fixed error copy,
+ * manual/AI separation and responsive Overview.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

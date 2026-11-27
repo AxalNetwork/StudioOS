@@ -1,4 +1,9 @@
-/** #6094: native report printing uses an isolated light document and the admitted snapshot only. */
+/** #6094: native report printing uses an isolated light document and the admitted snapshot only.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): `report_print_6094.spec.mjs`: #6094
+ * native print document, audience boundary, light paper in both themes, cleanup/focus and print
+ * failure recovery.
+ */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';
 

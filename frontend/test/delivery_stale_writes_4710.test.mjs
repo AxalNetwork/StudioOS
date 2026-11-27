@@ -1,5 +1,9 @@
 /** #4710: mount each real Delivery zone against a stale-write API refusal; preserve input and announce the conflict.
  * Complements D5314's Worker tests. These synthetic UI fixtures do not establish cross-firm authorization or delivery.
+ *
+ * From frontend/test/README.md (moved by #6472): `delivery_stale_writes_4710.test.mjs` mounts all
+ * four Delivery zones through stale-edit refusals, preserving drafts and revision-aware retries; a
+ * stale Mark sent never claims success or retries on reload (D4710).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,7 @@
 // D4494: actual Inbox components and clients; proposal acceptance never crosses the Send boundary.
+//
+// From frontend/test/README.md (moved by #6472): D4494: real Inbox/composer behavior, actual
+// count/empty states, client requests, source alignment, and stale selection/search guards.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

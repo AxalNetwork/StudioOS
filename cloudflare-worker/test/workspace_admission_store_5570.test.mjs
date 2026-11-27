@@ -1,4 +1,9 @@
-/** D5570 part 2: real SQLite Durable Object transactions, restart, rollback, concurrency and settlement replay. */
+/** D5570 part 2: real SQLite Durable Object transactions, restart, rollback, concurrency and settlement replay.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart,
+ * concurrency and settlement identity (D5570 part 2).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';

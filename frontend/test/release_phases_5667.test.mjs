@@ -1,3 +1,8 @@
+/**
+ * From frontend/test/README.md (moved by #6472): `release_phases_5667.test.mjs` verifies
+ * release/target isolation, ordered receipt selection, phase failures and the existing publication
+ * relay boundary.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { releasePhases } from '../../engineering-notifications/release-policy-5667.mjs';

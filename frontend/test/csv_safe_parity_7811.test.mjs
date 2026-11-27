@@ -1,4 +1,8 @@
-/** D7811: shared literal expectations and cross-runtime parity, without changing existing exports. */
+/** D7811: shared literal expectations and cross-runtime parity, without changing existing exports.
+ *
+ * From frontend/test/README.md (moved by #6472): D7811: shared formula-safe literal cases and
+ * opt-in serialization parity.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { csvSafe, toSafeCsv, toCsv, csvCell } from '../src/lib/csvExport.js';

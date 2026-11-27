@@ -1,4 +1,10 @@
-/** D1271: the promo mirror and its writes belong to HQ's Super Admin. */
+/** D1271: the promo mirror and its writes belong to HQ's Super Admin.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `admin_promos_d1271.test.ts` checks all
+ * four HQ Super Admin promo gates, branch refusal even with an elevation row, stale/non-TOTP
+ * sessions, the production cool-off prefix, and successful billing-audited writes over canonical
+ * SQLite tables with Stripe stubbed.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

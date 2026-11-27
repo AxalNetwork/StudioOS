@@ -1,4 +1,8 @@
-/** #4862: focus evidence uses real stores, preserves zero and never treats a failed read as missing setup. */
+/** #4862: focus evidence uses real stores, preserves zero and never treats a failed read as missing setup.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4862: real-SQLite focus evidence,
+ * action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

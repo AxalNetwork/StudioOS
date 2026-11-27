@@ -1,4 +1,7 @@
 // D6370: reconcile complete run attempts to their dedicated private channel through the production outbox and Slack transport.
+//
+// From frontend/test/README.md (moved by #6472): D6370: dedicated private destinations, terminal
+// attempts, cursor rollback, replay, provider refusal and acknowledgement.
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';

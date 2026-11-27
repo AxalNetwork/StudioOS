@@ -1,4 +1,8 @@
-/** D6037: founding record and venture-scoped handoffs on desktop and phone. */
+/** D6037: founding record and venture-scoped handoffs on desktop and phone.
+ *
+ * From frontend/test/README.md (moved by #6472): The founding summary, honest missing states and
+ * venture-scoped handoffs.
+ */
 import test from 'node:test';import assert from 'node:assert/strict';import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {MemoryRouter} from 'react-router-dom';import FoundingTeamHome from '../src/pages/cycles/FoundingTeamHome.jsx';
 const founder={id:2,name:'Synthetic Founder',role:'Engineering',equity:60,vesting:'4y · no cliff',start:'2026-01-01',cliff:'1 Jan 2026',fully:'1 Jan 2030',vested_pct:20,agreement:'Awaiting',agreement_date:null,filing:{text:'Due 2026-11-29',href:'/build/company-creation/step-7?project=12'}};
 const facts={founders:[founder],option_pool_pct:10,option_pool_source:'model',unallocated_pct:30,cofounder_decision:{outcome:'solo',decided_at:'2026-10-01'},agreement_reason:'Individual signing status is not stored.',hiring:{state:'ok',rows:[]},contributions:{state:'ok',rows:[]}};

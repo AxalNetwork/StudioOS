@@ -1,4 +1,8 @@
-/** D4472 (#4472): all four mounted account licence routes, verbs, payload and encoded identifiers. */
+/** D4472 (#4472): all four mounted account licence routes, verbs, payload and encoded identifiers.
+ *
+ * From frontend/test/README.md (moved by #6472): D4472: account licence client paths, payload and
+ * verbs.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { accountLicencesApi as client } from '../src/lib/api/accountLicences.js';

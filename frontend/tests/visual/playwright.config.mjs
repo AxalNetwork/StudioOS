@@ -17,6 +17,9 @@
  *   npm run build                              (repo root: builds docs/)
  *   cd frontend && npx playwright test -c tests/visual/playwright.config.mjs
  *   … --update-snapshots                       (regenerate the baselines; review every PNG)
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): One worker, no retries, fixed viewport,
+ * UTC, reduced motion; starts `server.ts`
  */
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';

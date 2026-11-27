@@ -1,4 +1,8 @@
-/** D4557: synthetic SQLite/R2/VM world; actual broker, shared cryptography and Workflow functions. */
+/** D4557: synthetic SQLite/R2/VM world; actual broker, shared cryptography and Workflow functions.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4557: synthetic migrated SQL, R2, VM
+ * and canonical grant world.
+ */
 import { containmentFixture } from './_containment_fixture_5567.ts';
 import { world, AGENT, SPONSOR } from './_agent_engine_fixture.ts';
 import { fakeCapabilities, specFixture } from './_workspace_fake_5565.ts';

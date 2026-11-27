@@ -1,4 +1,9 @@
-/** #5218: actual New Deck/Gallery renderers, locks, lazy reads and structure on desktop and phone. */
+/** #5218: actual New Deck/Gallery renderers, locks, lazy reads and structure on desktop and phone.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #5218: New Deck and Gallery previews,
+ * saved versions, plan locks, template structure and visible-only loading at desktop and phone
+ * widths.
+ */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';
 

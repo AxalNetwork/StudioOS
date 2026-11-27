@@ -1,4 +1,8 @@
-/** #7587: only the hydrated HQ Super Admin can open an interview mail pack beyond the admin case restriction. Synthetic migrated SQLite and mounted route. */
+/** #7587: only the hydrated HQ Super Admin can open an interview mail pack beyond the admin case restriction. Synthetic migrated SQLite and mounted route.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7587: elevated HQ interview mail
+ * context, ordinary-admin and branch refusal, transcript exclusion and no invented address.
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

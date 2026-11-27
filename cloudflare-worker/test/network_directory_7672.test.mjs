@@ -1,4 +1,10 @@
-/** D7672 (#7672): source-only directory plans over migrated SQLite; synthetic records only. */
+/** D7672 (#7672): source-only directory plans over migrated SQLite; synthetic records only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `network_directory_7672.test.mjs`
+ * verifies the additive shared directory schema and offline planner with synthetic sources:
+ * identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed
+ * links and the no-membership/no-tie boundary.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

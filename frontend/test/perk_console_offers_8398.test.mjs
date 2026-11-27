@@ -1,4 +1,8 @@
-/** D8398: the partner console retains the Offers kit and leaves the two overlays untouched. */
+/** D8398: the partner console retains the Offers kit and leaves the two overlays untouched.
+ *
+ * From frontend/test/README.md (moved by #6472): D8398: partner console Offers controls, labels,
+ * typography and failed reads.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

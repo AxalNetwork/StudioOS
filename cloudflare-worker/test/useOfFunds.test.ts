@@ -5,6 +5,12 @@
 // storing JSON rather than a delimited string.
 //
 // Pure node:test — runs under `npm run test:drift` via the --strip-types list.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D1174 regressions live in the
+// use-of-funds, Raise card/record, financial integrity and access suites. Synthetic Mercury rows
+// prove accepted mappings, private owner/session/company scope, missing versus zero, and local
+// read failure; the provider is forbidden. Cash timing and the shared split reader are checked
+// against the actual Worker services.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

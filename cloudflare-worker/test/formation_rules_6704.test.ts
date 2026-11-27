@@ -1,4 +1,8 @@
-/** D6704 (#6704): fixture-only deterministic comparisons and immutable case evidence. */
+/** D6704 (#6704): fixture-only deterministic comparisons and immutable case evidence.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6704: deterministic fixture
+ * comparisons, append-only suggestions/choices/memos, flag and structure gates.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formationRules, type RuleCatalogue, type FormationAnswers } from '../src/services/formationRules.ts';

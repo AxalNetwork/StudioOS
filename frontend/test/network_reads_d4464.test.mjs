@@ -1,4 +1,8 @@
-/** D4464 (#4464): Network clients preserve filters and use the mounted summary read. */
+/** D4464 (#4464): Network clients preserve filters and use the mounted summary read.
+ *
+ * From frontend/test/README.md (moved by #6472): `network_reads_d4464.test.mjs` — Network book
+ * filter query arguments and the relationship summary client (#4464).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

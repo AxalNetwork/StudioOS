@@ -1,3 +1,7 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): Real SQLite tests of D1151 deal access,
+ * NDA masks, publication, aggregates and sourced sharing.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

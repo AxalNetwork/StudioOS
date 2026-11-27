@@ -1,4 +1,8 @@
-/** D7819 (#7819): canonical-schema public projections, review retention and independent freshness evidence. */
+/** D7819 (#7819): canonical-schema public projections, review retention and independent freshness evidence.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `research_company_read_7819.test.ts`
+ * verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

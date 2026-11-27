@@ -1,4 +1,9 @@
-/** #6315: built SPA confirmation, destination link and undo at desktop/phone widths; synthetic Mercury responses, no bank access. */
+/** #6315: built SPA confirmation, destination link and undo at desktop/phone widths; synthetic Mercury responses, no bank access.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #6315: built SPA Mercury confirmation,
+ * destination and undo at desktop/phone widths with synthetic source responses; no bank account is
+ * accessed.
+ */
 import {test,expect} from '@playwright/test';
 import {prepare} from './_editor.mjs';
 // #7247: the partner-network handler awaits `route.fetch()`; if the test ends while that request is in flight, the

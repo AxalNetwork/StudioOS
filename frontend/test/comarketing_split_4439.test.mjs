@@ -1,4 +1,8 @@
-/** D4439 (#4439): the same feature belongs to partner Offers and founder Partner network, never investor. */
+/** D4439 (#4439): the same feature belongs to partner Offers and founder Partner network, never investor.
+ *
+ * From frontend/test/README.md (moved by #6472): D4439: founder Partner network door and counted
+ * forward, partner Offers, investor guard and navigation, and visit attribution path.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

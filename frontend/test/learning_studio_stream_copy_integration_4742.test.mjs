@@ -20,6 +20,10 @@
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/learning_studio_stream_copy_integration_4742.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): #4742: Copy to Stream wired into the Studio
+ * (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid`
+ * drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

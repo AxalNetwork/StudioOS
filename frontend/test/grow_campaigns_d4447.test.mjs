@@ -1,4 +1,8 @@
-/** D4447 (#4447) — Grow campaign client requests use mounted routes and encode every path segment. */
+/** D4447 (#4447) — Grow campaign client requests use mounted routes and encode every path segment.
+ *
+ * From frontend/test/README.md (moved by #6472): D4447 (#4447): eight Grow campaign requests,
+ * encoded identifiers and project-bound write bodies.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';

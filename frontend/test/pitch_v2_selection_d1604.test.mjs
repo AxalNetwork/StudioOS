@@ -14,6 +14,13 @@
  *
  * The owner's rules: the Grid is central, and the editor shows tools only
  * when a card or area is selected. Every card and figure is synthetic.
+ *
+ * From frontend/test/README.md (moved by #6472): D1604's editor suites
+ * (`pitch_v2_chrome_d1604.test.mjs`, `pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck
+ * editor through `_pitch_editor_mount.mjs`: synthetic reads for every client the editor calls,
+ * restored on close. Its `onDocument` hook (D1515) runs after the synthetic document is installed
+ * and before the editor renders, so `pitch_editing_ops_d1515.test.mjs` can put a fake IndexedDB,
+ * kept across two mounts, and a keydown recorder on the window.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

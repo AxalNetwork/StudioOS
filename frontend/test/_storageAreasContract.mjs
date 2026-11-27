@@ -18,6 +18,10 @@
  * itself). WHO UPDATES IT: the task that adds or retires a storage area adds
  * or removes its one row here in the same PR, deliberately. No other suite
  * lists the catalogue.
+ *
+ * From frontend/test/README.md (moved by #6472): D5507: THE contract for the storage areas: key,
+ * kind and where its file opens, written by hand; read by the two suites below and the Worker's
+ * `usage_storage_d1169`.
  */
 
 /** [key, kind, where Open goes on the Storage page (null: no page opens it)]. */

@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D1263: request methods, project paging,
+ * snapshot/version guards and encoded evidence/claim paths.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { raiseEvidenceApi } from '../src/lib/api/raiseEvidence.js';

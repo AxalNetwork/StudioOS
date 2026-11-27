@@ -1,4 +1,7 @@
 // D5680: synthetic-only recipient, redaction and refusal tests; no real security ledger content is read.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D5680: synthetic authorization and
+// unavailable-reader behavior.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {securityTriage5680,deliverSecurityTriage5680,securityTriageCounts5680} from '../src/services/securityTriage5680';
 const input={kind:'gate',domain:'tenant_isolation',state:'firing',count:100,corroborated:true,caseId:'case_0123456789abcdef'} as const;

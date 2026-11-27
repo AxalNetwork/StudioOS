@@ -1,3 +1,7 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): D1602: migrated data-room source
+ * permissions, quotes, billed extraction, code readers, citations, stale versions and withdrawal.
+ */
 import { contractErrors } from '../src/contracts/validate.ts';
 /** D1602: migrated SQLite, real router/billing, synthetic files and a stubbed AI binding. */
 import test, { after } from 'node:test';

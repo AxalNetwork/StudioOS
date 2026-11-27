@@ -6,6 +6,12 @@
  * founder to Record a session; and the module page's Add link passes its
  * entry's `state`, so a `/new` page knows the page it opened over.
  * CycleRoute's `adding` mount is #1656's later part, after #1655's PR 2.
+ *
+ * From frontend/test/README.md (moved by #6472): `add_addresses_d695.test.mjs` pins every form's
+ * `key` and `cta`, the T, CH and CK kinds in `initialValues` and `validate` (each legacy form
+ * checked against the rules it had before), the four `/:slug/new` routes and Customer research's
+ * redirect, and the Add link's `state`. The helper resolves an extensionless or directory import
+ * in a mutated source as the loader hook does.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

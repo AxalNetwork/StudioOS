@@ -16,6 +16,14 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/authz_partner_d4570.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `authz_partner_d4570.test.ts` (#4570,
+ * D4570 part 9) asks the 43 `/api/partner` ledger routes (delivery, offers and product testing)
+ * through the mounted routers on the full schema. Another firm's partner gets 404, a founder,
+ * investor or advisor 403, an account with no firm 400, no credentials or a disabled account 401,
+ * with nothing named and no row or file changed; the firm's own partner then passes every gate. An
+ * unknown consent-link token answers 404 and writes nothing. Its first test fails if a ledger
+ * route under `/api/partner` is missing from it.
  */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,8 @@
-/** D6653: include credential-isolated independent file recovery fixtures in the standard Worker runner. */
+/** D6653: include credential-isolated independent file recovery fixtures in the standard Worker runner.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6653: include independent file recovery
+ * Python fixtures in the standard Worker runner.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

@@ -13,6 +13,10 @@
 // Baselines are made by CI in the pinned container, never on a laptop: the
 // workflow writes any missing one (`--update-snapshots=missing`) and commits
 // it to the PR's branch for review; after that every run compares.
+//
+// From frontend/tests/visual/README.md (moved by #6472): The screenshots (17 structures × themes ×
+// 2 aspects, and the one-click deck) and the axe checks (light, dark, the keyboard path, the Ask
+// dialog, phone and tablet).
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { ASPECTS, ONE_CLICK, STRUCTURES, THEMES, harness } from './harnessData.js';

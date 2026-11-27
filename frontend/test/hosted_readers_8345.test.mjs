@@ -1,4 +1,10 @@
-/** D8345: real JWT/HTTP-client/native-predicate composition; ALL provider, authority and engine facts are synthetic. */
+/** D8345: real JWT/HTTP-client/native-predicate composition; ALL provider, authority and engine facts are synthetic.
+ *
+ * From frontend/test/README.md (moved by #6472): `hosted_readers_8345.test.mjs` exercises trusted
+ * hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite
+ * budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and
+ * the default hosted execution boundary remains absent.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';

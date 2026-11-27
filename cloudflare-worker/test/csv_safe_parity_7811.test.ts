@@ -1,4 +1,8 @@
-/** D7811: the Worker runs the same literal case table as the opt-in frontend helper. */
+/** D7811: the Worker runs the same literal case table as the opt-in frontend helper.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7811: shared formula-safe CSV cases
+ * without changing legacy exports.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { csvSafe, toSafeCsv, toCsv } from '../src/services/csv.ts';

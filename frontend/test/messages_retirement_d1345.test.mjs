@@ -1,4 +1,8 @@
-/** D1345: the old address moves to Email once; former starters open scoped drafts. */
+/** D1345: the old address moves to Email once; former starters open scoped drafts.
+ *
+ * From frontend/test/README.md (moved by #6472): EM10 routing and acknowledgment, blocked storage,
+ * account isolation, GP fund selection, and retirement of old client calls.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

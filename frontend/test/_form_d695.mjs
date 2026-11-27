@@ -1,4 +1,8 @@
 // React DOM/effect harness and isolated source mutation imports for D695.
+//
+// From frontend/test/README.md (moved by #6472): `_form_d695.mjs` supplies a small React
+// DOM/effect harness and isolated source mutations. The tests drive real inputs, payloads, loaded
+// choices, refusals, done views, responsive page transitions and modal focus/Escape behavior.
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';

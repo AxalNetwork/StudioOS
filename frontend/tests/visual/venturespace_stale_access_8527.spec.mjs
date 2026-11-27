@@ -18,6 +18,11 @@
  *
  *   npm run build                                                   (repo root)
  *   cd frontend && npx playwright test -c tests/visual/playwright.config.mjs venturespace_stale_access_8527
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D8527 (#8527): a co-founder's
+ * VentureSpace settings while A revokes the seat, archives the company, moves the venture, a late
+ * read is released, B signs out for C, and Back — at 1440 and 390, two browser contexts on the
+ * real Worker
  */
 import { test, expect } from '@playwright/test';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';

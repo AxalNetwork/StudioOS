@@ -1,4 +1,8 @@
-/** D5567 part 5: synthetic owner-registry evidence for broker integration tests only. */
+/** D5567 part 5: synthetic owner-registry evidence for broker integration tests only.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_containment_fixture_5567.ts` supplies
+ * synthetic owner-registry evidence to broker integration tests; no live provider attestation.
+ */
 import type { ContainmentEvidence } from '../src/services/agents/workspaceContainment.ts';
 export function containmentFixture(verified_at: number): ContainmentEvidence {
  return { provider:'cloudflare',revision:'synthetic-owner-registry',source:'owner_registry',verified_at,

@@ -1,4 +1,8 @@
-/** D6424: recorded attention counts, unknown stale rule and failure states through the real rendered strip. */
+/** D6424: recorded attention counts, unknown stale rule and failure states through the real rendered strip.
+ *
+ * From frontend/test/README.md (moved by #6472): D6424: recorded stale/new/waiting badges, unset
+ * rule, firm setting and failed attention-source rendering.
+ */
 import test from 'node:test';import assert from 'node:assert/strict';import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {MemoryRouter} from 'react-router-dom';
 import {AttentionStrip} from '../src/pages/investor/dealflow/DealFlow.jsx';
 const read={kind:'ok',data:{items:[{deal_id:1},{deal_id:2}],sources:{}}};

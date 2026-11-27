@@ -1,4 +1,9 @@
-/** D5568: synthetic Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. */
+/** D5568: synthetic Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5568: synthetic read-only Git remote,
+ * revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM
+ * cipher; tests only, no network.
+ */
 import type { FetchedCommit, GitRemote, RepoAccess } from '../src/services/agents/workspaceGitCache.ts';
 import { sha256Hex } from '../src/services/agents/workspaceGitCache.ts';
 import type { CheckpointCipher, CheckpointObjectStore, CheckpointPointer, CheckpointPointerStore } from '../src/services/agents/workspaceCheckpoint.ts';

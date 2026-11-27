@@ -1,6 +1,11 @@
 /**
  * D696 PR 1: real renderer and callbacks, without a live route or Worker read.
  * node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_page_d696.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D696's record contracts live in
+ * `record_page_d696.test.mjs` (real rendering, parent callbacks, safe links and declared actions)
+ * and `persona_pdf_d696.test.mjs` (allowlisted content, dated download and one-page measured
+ * bounds).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

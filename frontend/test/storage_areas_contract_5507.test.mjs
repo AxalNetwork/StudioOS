@@ -31,6 +31,9 @@
  *     file failed.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/storage_areas_contract_5507.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D5507: the Usage card, the Storage page's places
+ * and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

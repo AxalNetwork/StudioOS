@@ -1,4 +1,8 @@
-/** D6397 (#6397): a navigation handoff opens the existing call preparation form once, with recorded scope and blank inputs. */
+/** D6397 (#6397): a navigation handoff opens the existing call preparation form once, with recorded scope and blank inputs.
+ *
+ * From frontend/test/README.md (moved by #6472): D6397: consume the scoped call-preparation
+ * navigation once, retaining blank amount/date and verified preview permission.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

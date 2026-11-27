@@ -1,4 +1,13 @@
-/** #3711: synthetic recordings only; recovery reuses durable work. */
+/** #3711: synthetic recordings only; recovery reuses durable work.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): No-audio legacy recovery,
+ * transcript-hash summary reuse and private stage failure diagnostics for #3711.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1456 (#4014): the existing record,
+ * recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed
+ * steps, creator-only safe bot details and migration 760 replay through the ledger. The engine
+ * fixture applies migration 760 from its SQL source.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fixture, seed, FOUNDER, call } from './_call_audio_fixture.ts';

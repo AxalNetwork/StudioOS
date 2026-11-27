@@ -1,4 +1,7 @@
 // D4478: the routed headers share the footer's completion state and route refusal.
+//
+// From frontend/test/README.md (moved by #6472): D4478: routed completion headers, empty reading
+// ledes, shared saving state, route refusals and no Learning assistant mounts.
 import test from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';

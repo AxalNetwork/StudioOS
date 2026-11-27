@@ -1,4 +1,10 @@
-/** D7316 (#7316): primary-register proof integrity, conservative admission and real-schema SQL replay. */
+/** D7316 (#7316): primary-register proof integrity, conservative admission and real-schema SQL replay.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7316 part 2: native registry
+ * identity/status and retained-hold admission; record/file hash tampering; shared-domain/name
+ * conflicts; immutable evidence and exact SQL ownership; real-schema insert-only replay, unknown
+ * metrics, and source-ledger overwrite refusal.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';

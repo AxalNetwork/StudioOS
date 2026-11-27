@@ -10,6 +10,11 @@
 //   - the routes, deep links and render sites that reach the steps are unchanged.
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/cycle_route_lazy_steps_d4574.test.mjs
+//
+// From frontend/test/README.md (moved by #6472): D4574 (#4574 H5): `lazyStep` draws its skeleton
+// then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a
+// dynamic import of a module that still exports it, and the cycle routes and render sites are
+// unchanged.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

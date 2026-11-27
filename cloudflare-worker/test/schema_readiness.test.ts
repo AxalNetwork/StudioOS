@@ -20,6 +20,11 @@
  *   node --experimental-strip-types --no-warnings \
  *     --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/schema_readiness.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `schema_readiness.test.ts` runs the real
+ * bootstraps against two recording D1 stubs and asserts each database gets its own DDL — the half
+ * `scripts/check-schema-readiness.mjs` cannot see, since reading the source tells you a `WeakMap`
+ * is there but not that it is consulted with the binding as its key.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

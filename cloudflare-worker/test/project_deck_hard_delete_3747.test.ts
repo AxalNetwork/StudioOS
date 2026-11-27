@@ -1,4 +1,9 @@
-/** #3747: real migrated SQLite, synthetic ventures and an in-memory R2 bucket. */
+/** #3747: real migrated SQLite, synthetic ventures and an in-memory R2 bucket.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #3747: migrated SQLite
+ * deck/share/note/image cleanup, venture isolation, 500-object R2 pages, rollback, durable retries
+ * and per-sweep schema discovery; synthetic records only.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

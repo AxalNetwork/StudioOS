@@ -1,4 +1,9 @@
-/** #5035 — exercise the mounted Support route with synthetic HQ and branch reads. */
+/** #5035 — exercise the mounted Support route with synthetic HQ and branch reads.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D5035: keyboard decisions and focus
+ * restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280
+ * pixels.
+ */
 import { test, expect } from '@playwright/test';
 import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 

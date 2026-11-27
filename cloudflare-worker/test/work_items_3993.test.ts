@@ -2,6 +2,12 @@
 // agent drafts, labels and milestones. Real SQLite and authenticated Hono, on
 // W1's fixture plus migration 763. No external provider; notify() is a stub
 // that records what it was asked to send.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D1614 W7 (#3993): per-project numbering
+// and the company 404, cleaned comment Markdown, mentions and their notices, an agent's comment
+// and cost, an agent that cannot close, review (approve, request changes with a comment), drafts
+// that need Accept (and a racing accept), labels and milestones with filters and sort, and
+// migration 763 over legacy rows, over real SQLite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

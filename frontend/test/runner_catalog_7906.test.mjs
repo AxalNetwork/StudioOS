@@ -1,4 +1,8 @@
-/** D7906: exercise the actual bootstrap catalog at the executor boundary, including unverified groups. */
+/** D7906: exercise the actual bootstrap catalog at the executor boundary, including unverified groups.
+ *
+ * From frontend/test/README.md (moved by #6472): D7906: real catalog translation, approved group
+ * refusal, exact pins and native shard limits.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';

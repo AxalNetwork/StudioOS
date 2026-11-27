@@ -1,4 +1,8 @@
-/** D4488 (#4488): mounted wizard acceptance preserves manual edits and saves only on explicit Save. */
+/** D4488 (#4488): mounted wizard acceptance preserves manual edits and saves only on explicit Save.
+ *
+ * From frontend/test/README.md (moved by #6472): Mounted campaign Ask acceptance, manual Save and
+ * canonical creative retries (D4488).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

@@ -19,6 +19,13 @@
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/authz_share_links_d4570.test.ts
+//
+// From cloudflare-worker/test/README.md (moved by #6472): `authz_share_links_d4570.test.ts`
+// (#4570, D4570 slice 3) asks the share-link routes through the real Worker on the migrated
+// schema: the cap table scenario and venture links and the scoring report link refuse a forged,
+// unstored, cross-kind, spent or revoked token and every account the link does not name, with
+// nothing of the record in the refusal and no view, open or audit row written; another founder or
+// an admin cannot revoke or mint the owner's link.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';

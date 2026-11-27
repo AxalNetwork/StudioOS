@@ -10,6 +10,10 @@
  *     offers no draft, and an unsaved period or unsaved developments say to save first.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/fund_zone_drafts_6242.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D6242: the LP summary's material is on the
+ * drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run
+ * words; the letter's Accept fills the unsaved editor and only Save draft writes.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

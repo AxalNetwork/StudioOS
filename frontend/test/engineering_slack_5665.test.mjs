@@ -1,4 +1,7 @@
 // D5665: complete fake sender lifecycle, busy itemized batches, restart/receipts and destination isolation.
+//
+// From frontend/test/README.md (moved by #6472): D5665: fake Slack busy lifecycle, item receipts,
+// privacy, pacing, retry and Workers restart.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

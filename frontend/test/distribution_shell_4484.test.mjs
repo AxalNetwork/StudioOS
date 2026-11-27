@@ -1,4 +1,7 @@
 // D4484: real router ranking, shared Distribution frame and honest Ask states.
+//
+// From frontend/test/README.md (moved by #6472): D4484: static Distribution routes, retained
+// records/Overview, module primary, tabs, honest Ask states and proposal callbacks.
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';

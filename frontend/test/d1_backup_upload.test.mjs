@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): Exercises large D1 exports with user and account
+ * R2 credentials, failed uploads, and redacted output (#7127).
+ */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

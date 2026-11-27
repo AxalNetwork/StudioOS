@@ -6,6 +6,10 @@
  *
  *   npm run build   (repo root)
  *   cd frontend && npx --no-install playwright test -c tests/visual/playwright.config.mjs build_overview_6028.spec.mjs
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): D6028 (#6028): Build Overview V2 at 1440,
+ * 768 and 390 in light and dark: one primary, no header Connect a tool, no horizontal scroll, and
+ * a failed part retrying alone.
  */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';

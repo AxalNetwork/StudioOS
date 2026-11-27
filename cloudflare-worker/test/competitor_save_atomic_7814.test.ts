@@ -1,4 +1,8 @@
-/** D7814: real transactional rollback, CAS refusal, immutable candidate evidence and whole-field validation. */
+/** D7814: real transactional rollback, CAS refusal, immutable candidate evidence and whole-field validation.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7814: transaction rollback, CAS,
+ * preserved evidence and whole-candidate validation.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

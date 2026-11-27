@@ -1,4 +1,8 @@
-/** D4438 (#4438) — mounted SEG7: scopes, the page blocks, unreadable/missing counts and waiting suggestions. */
+/** D4438 (#4438) — mounted SEG7: scopes, the page blocks, unreadable/missing counts and waiting suggestions.
+ *
+ * From frontend/test/README.md (moved by #6472): D4438: scope changes update SEG7, waiting
+ * suggestions, stale reply guards, failures and missing figures.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

@@ -13,6 +13,12 @@
  * a `//` comment. A trailing comment is deliberately left alone — a naive
  * stripper that chases inline `/*` markers eats string literals, and a mangled
  * file is a false accusation where a missed ban is merely a weaker test.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_codeOnly.mjs` gives a source-scanning
+ * test the code without the prose, plus `callArgs` for reading one call's arguments past the
+ * braces a regex chokes on — an assertion that bans a shape fails on the comment explaining why
+ * that shape is gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
+ * the first `)`.
  */
 export function codeOnly(src) {
   return String(src)

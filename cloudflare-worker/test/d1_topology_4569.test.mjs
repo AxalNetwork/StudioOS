@@ -21,6 +21,15 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/d1_topology_4569.test.mjs
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #4569 (D4569):
+ * `_topology_model_4569.mjs` is the synthetic topology model of D4569's options A (one D1) and D
+ * (balance homes keyed by the payer, with a directory, home markers and an outbox relay), over
+ * in-memory node:sqlite with `poc_` tables; a test of the design, imported by nothing in `src`.
+ * `d1_topology_4569.test.mjs` drives it at 1, 10 and 1,000 tenants with a hot member,
+ * cross-company work, scope and sponsor moves, a member move behind a stale cache, injected
+ * settlement faults, outages and concurrent same-key retries, asserts the financial invariants
+ * after each, and shows each guard and each check is load-bearing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,9 @@
-/** D7701 (#7701): data-preserving fund target expansion, over the complete migrated SQLite schema. */
+/** D7701 (#7701): data-preserving fund target expansion, over the complete migrated SQLite schema.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7701: data-preserving fund target CHECK
+ * expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT
+ * high-water marks on populated and empty tables.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

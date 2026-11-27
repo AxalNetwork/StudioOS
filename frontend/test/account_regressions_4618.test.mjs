@@ -23,6 +23,12 @@
  * was made to check it fails without that fix.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/account_regressions_4618.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D4618: the real Account page (and auto-reload
+ * card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and
+ * public-profile saves, session rows by status, Display name, the shared billing overview and its
+ * invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed
+ * connection list.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

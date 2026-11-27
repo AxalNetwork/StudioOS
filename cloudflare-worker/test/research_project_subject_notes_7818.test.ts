@@ -1,4 +1,9 @@
-/** D7818 (#7818): owner scope, revision refusal, private receipts, lifecycle and independent route mounts. */
+/** D7818 (#7818): owner scope, revision refusal, private receipts, lifecycle and independent route mounts.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `research_project_subject_notes_7818.test.ts` verifies the D7818 contract against synthetic
+ * inputs and the canonical migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

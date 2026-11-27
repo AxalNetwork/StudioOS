@@ -1,4 +1,9 @@
-/** D6557: mounted activity over real migrated SQLite, participant isolation, safe projections and independent source failures. */
+/** D6557: mounted activity over real migrated SQLite, participant isolation, safe projections and independent source failures.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6557: mounted recorded activity,
+ * owner/participant isolation, bounded ordering, safe labels, support refusal and independent
+ * unreadable sources.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

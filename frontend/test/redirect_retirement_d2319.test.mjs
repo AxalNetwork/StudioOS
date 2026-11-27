@@ -1,4 +1,7 @@
 // D2319 (#2319), #4415: retired aliases never mount or count; outside and used links survive.
+//
+// From frontend/test/README.md (moved by #6472): D2319 (#2319), #4415: retired aliases, protected
+// outside links and retained beacon groups.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

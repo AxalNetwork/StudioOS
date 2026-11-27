@@ -12,6 +12,11 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/fund_zone_drafts_d6242.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6242: the `funds/lps` and
+ * `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`,
+ * refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and
+ * write only the draft row.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

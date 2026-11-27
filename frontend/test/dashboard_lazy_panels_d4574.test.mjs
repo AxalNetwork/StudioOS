@@ -10,6 +10,10 @@
 //     the Admin's, with the same props.
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/dashboard_lazy_panels_d4574.test.mjs
+//
+// From frontend/test/README.md (moved by #6472): D4574 (#4574 H6): the Studio radar and Product
+// testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio`
+// keeps its route and mounts.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

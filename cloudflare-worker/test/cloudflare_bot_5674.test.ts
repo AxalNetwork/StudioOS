@@ -1,4 +1,8 @@
-/** D5674: recording-ledger projections, privacy, cause-aware routing and recovery qualification. */
+/** D5674: recording-ledger projections, privacy, cause-aware routing and recovery qualification.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5674: `cloudflare_bot_5674.test.ts`
+ * checks content-free stage routing, existing episode keys and evidence-qualified recovery.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync } from 'node:fs';

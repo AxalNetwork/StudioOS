@@ -6,6 +6,10 @@
  * recorded messages: `{ to, subject, text, links }`, `links` being every `http(s)://…` URL in the decoded body.
  * Matched by exact hostname, as `company_invitations.test.ts` does: a substring match would answer requests it was
  * never meant to.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): The server's outbox: the Worker's mailer
+ * runs, its two Gmail calls are answered by exact host and recorded, and `GET
+ * /__visual/outbox?to=` lists the messages; nothing is sent
  */
 const GMAIL_TOKEN_HOST = 'oauth2.googleapis.com';
 const GMAIL_SEND_HOST = 'gmail.googleapis.com';

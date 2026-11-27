@@ -1,4 +1,7 @@
 // D6318 (#6318) — PostHog and Mercury show what the Grow sync actually returned.
+//
+// From frontend/test/README.md (moved by #6472): D6318: PostHog and Mercury report incomplete and
+// completed syncs, including Mercury's in-place refresh.
 import './_cycleSteps.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';

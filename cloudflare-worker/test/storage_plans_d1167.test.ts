@@ -1,4 +1,10 @@
-/** D1167: owner's table, real entitlement SQL, and the mounted public projection. */
+/** D1167: owner's table, real entitlement SQL, and the mounted public projection.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1167: `storage_plans_d1167.test.ts`
+ * pins the owner's storage table, resolves effective plans and recorded persona/LP entitlements
+ * against canonical SQLite DDL, and holds the anonymous public plans projection and general
+ * catalogue to the same allowances, with read failures and privacy/read-only counterexamples.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

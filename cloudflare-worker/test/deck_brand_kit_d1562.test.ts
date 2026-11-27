@@ -4,6 +4,12 @@
  * rows only. No model is bound: Apply brand must never call one.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/deck_brand_kit_d1562.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `deck_brand_kit_d1562.test.ts` mounts
+ * `deck_brand_kit.ts` and `decks.ts` over the real migrated schema (migration 737) and checks the
+ * kit write, a font that is not offered, an image that is not a kept image of the venture, the kit
+ * read (`kit.deck`, `font_options`, `pick`), Apply brand as one new version with no model, and a
+ * contrast failure that writes nothing.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

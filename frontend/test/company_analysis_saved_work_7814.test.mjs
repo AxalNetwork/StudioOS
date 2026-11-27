@@ -1,4 +1,8 @@
-/** D7814: deferred reads across route changes, loaded-record saves and the mounted shared leave guard. */
+/** D7814: deferred reads across route changes, loaded-record saves and the mounted shared leave guard.
+ *
+ * From frontend/test/README.md (moved by #6472): D7814: late re-reads, loaded-record saves and
+ * mounted dirty/clean navigation guards.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

@@ -8,6 +8,10 @@
 // pinned @fontsource files, never a font host, so a screenshot depends on the
 // container alone. Nothing here is served by the app: it runs on the Vite dev
 // server the visual config starts. Every venture and figure is synthetic.
+//
+// From frontend/tests/visual/README.md (moved by #6472): The real `PitchEditor` (GridStage,
+// CardsStrip, AreaLightbox, InstructionBox, DeckToolbar, DeckMoreMenu, DeckAsk), mounted with its
+// reads stubbed and the fonts from the pinned `@fontsource` packages. No network.
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';

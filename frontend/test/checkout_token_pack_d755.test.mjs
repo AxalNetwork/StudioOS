@@ -2,6 +2,19 @@
  * D755 CR7 (#1985): isolated pack checkout and a receipt that only reads.
  * Provider calls are stubs. Every mutant runs the same scenario again after
  * restoration. Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/checkout_token_pack_d755.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D755 CR7 (#1985):
+ * `checkout_token_pack_d755.test.mjs` mounts the checkout and confirmation with stubbed API/Stripe
+ * modules, drives billing country, payment, redirects and bounded polling, and checks 14 scenarios
+ * against 31 isolated source mutations. Every mutant must fail its scenario and the restored
+ * source must pass. No real payment or credit write runs. `ai_topup_cart_d629.test.mjs` keeps the
+ * ordinary cart regression; the top-up cart path is retired.
+ *
+ * From frontend/test/README.md (moved by #6472): The CR7 suite also mounts `TokenPacksSection.jsx`
+ * with fixture public reads, covering Buy identifiers (including the environment fallback),
+ * visitor sign-in links, unavailable/unreadable/retry and cart exclusion. Shared-model
+ * regression/mutation checks keep ready packs authoritative over the deprecated product switch and
+ * centralize the UI destination without rejecting API endpoints.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

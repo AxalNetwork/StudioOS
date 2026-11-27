@@ -1,4 +1,8 @@
-/** D1263: real SQLite, production schema + migrations; all people/figures are synthetic. */
+/** D1263: real SQLite, production schema + migrations; all people/figures are synthetic.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1263: source dates/labels, founder
+ * decisions, privacy, refresh and atomic evidence trails over real SQLite.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

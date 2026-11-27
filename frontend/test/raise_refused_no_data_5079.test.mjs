@@ -20,6 +20,20 @@
  * Every venture, person and figure below is made up.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/raise_refused_no_data_5079.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): `raise_refused_no_data_5079.test.mjs` checks
+ * D5079: a refused authoritative read ends the rendering of authoritative data for that Raise
+ * tool. It mounts the real `CycleRoute` on a stubbed Worker whose module read succeeds while the
+ * tool's own read answers 403, and pins that the Cap table, Data room and Capital relationships
+ * pages then draw the tool's refusal and none of the module's card, records, Add, counts, Eadwyn
+ * bands or Evidence block — while an empty read still draws all of them, a 500 is still a failure
+ * and not a refusal, a Data room `summary` answer says it is not the room rather than drawing
+ * nothing, Capital relationships no longer calls a refusal unreadable, and the Cap table withholds
+ * its tool bar and Record an issuance and offers an admin the reason-gated door. Each guarded line
+ * is broken in a temporary copy of `frontend/src` and `frontend/test` (every other entry links to
+ * the checkout) and the file re-run there in a child process filtered to the tests that must then
+ * fail, because the refusal travels from a tool's read through `CycleRoute` into the module page.
+ * The checkout is never written to, so test files running in parallel never import a broken line.
  */
 import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts

@@ -11,6 +11,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/admin_programs_d954.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1119: `admin_programs_d954.test.ts`
+ * also checks part 4's six audit actions, claim window/kind counts, strategic requests, successful
+ * zeroes and independent failed reads against the migrated SQLite schema.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

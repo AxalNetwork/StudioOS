@@ -10,6 +10,10 @@
  *     through their React props.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/admin_lab_overview_d947.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D1123 extends the Lab desks, overview and
+ * operations tests for Formation scope, cohort details, structured admission and grant/refusal
+ * states.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -13,6 +13,10 @@
  * effects the broker would request once per accepted (non-duplicate) completion; nothing is billed or published.
  * The cache and log probes are enforced by this mock's sandbox (tenant prefixes); the file, ref and credential probes
  * are refused by the real contract code. Every value is synthetic.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5573: LOCAL MOCKED validation harness:
+ * synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567
+ * grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only.
  */
 import { containmentFixture } from './_containment_fixture_5567.ts';
 import { createHash } from 'node:crypto';

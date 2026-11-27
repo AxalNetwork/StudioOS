@@ -1,4 +1,9 @@
 // Synthetic record and isolated source mutations for D696. Never live user data.
+//
+// From frontend/test/README.md (moved by #6472): `_record_d696.mjs` supplies synthetic records and
+// isolated mutation imports. Each behavioral assertion group runs against the original source,
+// against changes it must reject, and again against the restored source; no checkout file is
+// changed by a mutation. No live API or personal data is used.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';

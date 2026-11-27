@@ -1,4 +1,8 @@
-/** D6428: include the synthetic-only Python recovery regressions in the standard Worker test runner. */
+/** D6428: include the synthetic-only Python recovery regressions in the standard Worker test runner.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D6428: runs synthetic-only Python
+ * recovery regressions through the standard Worker test suite.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

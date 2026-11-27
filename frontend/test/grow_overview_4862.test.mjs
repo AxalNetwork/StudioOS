@@ -1,4 +1,8 @@
-/** #4862: one Grow taxonomy and state-driven actions without turning unreadable sources into empty setup. */
+/** #4862: one Grow taxonomy and state-driven actions without turning unreadable sources into empty setup.
+ *
+ * From frontend/test/README.md (moved by #6472): #4862: taxonomy, context, primary actions, zero
+ * values, failed reads and read-only Grow states.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement as h } from 'react';

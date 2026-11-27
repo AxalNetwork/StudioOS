@@ -345,8 +345,12 @@ twice within a few lines (D1279). So:
 - Elsewhere, add one row per new file or folder, at the end of its table,
   unless the README carries `<!-- index: generated -->` or `<!-- index: none -->`
   (`documentation/architecture/decisions/README.md` does): such a README takes
-  no row, and the check fails one (#6465). Never rewrite another feature's row
-  or paragraph in a task PR.
+  no row, and the check fails one (#6465). An `index: none` README (the test
+  folders, `agents/`, the portfolio and contracts pages) also takes no list
+  item or paragraph that opens with one file's name, and no `D<n> part <k>`
+  paragraph: the file's header comment says what it is, and the part's note
+  goes in `decisions/D<n>-p<k>.md` (#6472). Never rewrite another feature's
+  row or paragraph in a task PR.
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
 

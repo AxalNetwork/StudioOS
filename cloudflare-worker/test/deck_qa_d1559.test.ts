@@ -7,6 +7,12 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_qa_d1559.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `deck_qa_d1559.test.ts` mounts
+ * `deck_qa.ts` and `cycle_raise.ts` over the real migrated schema (migration 736) and checks that
+ * no likely-question answer, founder's answer or kept note states a figure no binding carries,
+ * that real objections rank first, the founder-only gates, and the kept answers' write-back,
+ * staleness and refusals.
  */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';

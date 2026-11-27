@@ -1,4 +1,8 @@
 // D6381: an import attribute must not erase live uses through a later embedded import.
+//
+// From frontend/test/README.md (moved by #6472): D6381: attributed and side-effect imports
+// preserve real uses, offsets and newlines; unused bindings still fail, and the unchanged workflow
+// delivery regression stays clean.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';

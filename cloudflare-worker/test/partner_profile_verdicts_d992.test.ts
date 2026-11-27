@@ -1,4 +1,10 @@
-/** D992: verdict validation and explicit field clearing on the canonical SQLite schema. */
+/** D992: verdict validation and explicit field clearing on the canonical SQLite schema.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D992:
+ * `partner_profile_verdicts_d992.test.ts` holds profile verdict validation, explicit clearing,
+ * omission, audit recipients and route refusals to the full migrated SQLite schema; it also
+ * records the shared plan policy's admin exemption.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';

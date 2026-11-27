@@ -1,4 +1,8 @@
-/** D4557: running-image provenance, offline native API options, bounded readiness and confirmed termination. */
+/** D4557: running-image provenance, offline native API options, bounded readiness and confirmed termination.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4557: native adapter image, scheduling,
+ * readiness and stop faults.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createContainerVm, PYTHON_COMPUTE_INSTANCE, type ComputeInstance, type VmControl } from '../../agent-compute/vm.ts';

@@ -1,4 +1,9 @@
-/** D1433 (#3703): mode-safe checkouts and authenticated event receipts. No live Stripe calls. */
+/** D1433 (#3703): mode-safe checkouts and authenticated event receipts. No live Stripe calls.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1433 (#3703): mode-stamped catalogue,
+ * checkout readiness before provider calls, webhook receipts/retries/concurrency and signature
+ * timestamp boundaries; mocked Stripe only.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

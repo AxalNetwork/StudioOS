@@ -1,4 +1,8 @@
 // D2319 (#4415): retired aliases must not escape through Worker navigation or old search metadata.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): `redirect_links_d2319.test.ts` exercises
+// canonical checklist, calendar, promo, advisor CTA and stored search-result URLs after redirect
+// retirement (#4415).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

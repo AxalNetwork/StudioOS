@@ -1,4 +1,8 @@
-/** D4557: synthetic host lifecycle driven by real Workspace grants; no hosted isolation claims. */
+/** D4557: synthetic host lifecycle driven by real Workspace grants; no hosted isolation claims.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4557: persisted host lifecycle,
+ * cancellation, replay and artifact validation.
+ */
 import { containmentFixture } from './_containment_fixture_5567.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';

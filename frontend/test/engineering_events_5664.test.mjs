@@ -1,4 +1,7 @@
 // D5664: metadata-only signed ingress, durable ledger restart, semantic dedup and split/overlap convergence.
+//
+// From frontend/test/README.md (moved by #6472): D5664: signed metadata ingress, immutable
+// attempts, capped REST reconciliation and Workers SQLite restart.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

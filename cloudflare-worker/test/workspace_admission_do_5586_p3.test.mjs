@@ -6,6 +6,14 @@
  * `admission_unbound` without a binding, and still copies the swarm audit to D1.
  *
  *   node --test cloudflare-worker/test/workspace_admission_do_5586_p3.test.mjs
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `workspace_admission_do_5586_p3.test.mjs` reaches the real `WorkspaceAdmission` class through
+ * its binding with the typed client (Miniflare, real D1): #5570 admission and the swarm round-trip
+ * across a restart, another venture refused before any stub call and inside the object,
+ * `admission_unbound` without a binding, the audit still copied to D1 (D5586 part 3).
+ * `workspace_admission_client_5586_p3.test.ts` covers the client without a runtime and the
+ * wrangler.toml wiring.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,6 +1,11 @@
 /**
  * D7125 (#7125): `[alert] merge queue stalled` opens when one failure identity fails in candidates of two different
  * merge-queue chains, and names where it starts. The annotation half is `scripts/test-drift-parts.mjs`.
+ *
+ * From frontend/test/README.md (moved by #6472): D7125: the queue-stall alert opens only when one
+ * failure identity is in two merge-queue chains on three heads, names the base or the PR it starts
+ * at, replays 2026-11-17 (`fixtures/queue_stall_7125.json`), and `test-drift-parts.mjs` writes the
+ * escaped `ci-failure-id` annotations only under `merge_group`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

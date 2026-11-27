@@ -1,4 +1,9 @@
-/** D5504 (#5504): observable readiness with a real monotonic deadline. */
+/** D5504 (#5504): observable readiness with a real monotonic deadline.
+ *
+ * From frontend/test/README.md (moved by #6472): Waits for an observable predicate using a
+ * monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on
+ * timeout.
+ */
 import { performance } from 'node:perf_hooks';
 import { setImmediate } from 'node:timers/promises';
 

@@ -1,4 +1,8 @@
-/** D7902: verified expired Mac children and fixed, non-sensitive API diagnostics. */
+/** D7902: verified expired Mac children and fixed, non-sensitive API diagnostics.
+ *
+ * From frontend/test/README.md (moved by #6472): D7902: stale queued-child ownership/lease
+ * cleanup, pickup races and redacted API-status diagnostics.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { reclaimExpiredChild, delegateWorker, expectedTitle, GitHubRequestError, githubApi, main } from '../../scripts/ci/macbook-worker.mjs';

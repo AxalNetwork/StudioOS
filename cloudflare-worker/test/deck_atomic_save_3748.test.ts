@@ -1,4 +1,8 @@
-/** #3748 (N3): historical duplicate repair and atomic, stale-base deck saves. */
+/** #3748 (N3): historical duplicate repair and atomic, stale-base deck saves.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): #3748: migration 713 preserves duplicate
+ * deck payloads and enforces unique version/current rows.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -1,3 +1,7 @@
+/**
+ * From cloudflare-worker/test/README.md (moved by #6472): D6637: real migrated SQLite
+ * authorization, consent, failure and concurrency regressions.
+ */
 import {mutuallyAccepted,listShares} from '../src/services/mail/shares';
 /** D6637: mirrored propositions and unchanged response/credit consent, real migrated SQLite and mounted routes. Synthetic people only. */
 import test from 'node:test';import assert from 'node:assert/strict';import {Hono} from 'hono';import {SignJWT} from 'jose';

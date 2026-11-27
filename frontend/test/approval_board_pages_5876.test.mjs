@@ -1,4 +1,8 @@
-/** #5876: each mounted board keeps its count and active-page requests independent. */
+/** #5876: each mounted board keeps its count and active-page requests independent.
+ *
+ * From frontend/test/README.md (moved by #6472): Mounted regressions for lane counts and
+ * active-page reads (#5876).
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement as h } from 'react';

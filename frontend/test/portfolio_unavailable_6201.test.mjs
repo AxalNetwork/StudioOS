@@ -1,4 +1,9 @@
-/** D6201 (#6201): route unavailability preserves its reason, suppresses figures and chase rows. */
+/** D6201 (#6201): route unavailability preserves its reason, suppresses figures and chase rows.
+ *
+ * From frontend/test/README.md (moved by #6472): `portfolio_unavailable_6201.test.mjs` (D6201)
+ * keeps explicit route failure reasons on financial figures and reporting, and excludes failed
+ * reads from chase rows.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readOf, SHAPES, performanceOf, reportingFor, obligationRowsOf } from '../src/pages/portfolio/portfolioModel.js';

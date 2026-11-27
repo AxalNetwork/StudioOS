@@ -34,6 +34,15 @@
  * statement, or through `prepare`. Those builders are few and deliberate
  * (`sub_cutoff_restores_d190`, `user_column_cap_d189`); the copied pattern this
  * rule exists for is `db.exec(readFileSync(migration))` in a loop.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `_schema_budget.mjs` (D8467) is what
+ * keeps that true. `_ts-loader.mjs` imports it, so every Worker test process counts the whole
+ * migration files it executes; two chains' worth is allowed (one build of the schema, and as much
+ * again for cuts or for re-running a migration) and each one past that throws, naming the file and
+ * the helper to call instead. The shared build is not counted. `scripts/test-schema-replays.txt`
+ * lists the files that were over when the rule arrived; a file leaves that list by being fixed,
+ * and a new file is added only when it is about the build itself. `SCHEMA_REPLAY_REPORT=<file>`
+ * turns the refusal off and writes each file's count, one JSON line per test file.
  */
 import { DatabaseSync } from 'node:sqlite';
 import { appendFileSync, readFileSync, readdirSync, statSync } from 'node:fs';

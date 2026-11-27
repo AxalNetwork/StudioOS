@@ -8,6 +8,13 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/upstream_lease_d5338.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `upstream_lease_d5338.test.ts` (D5338)
+ * drives the shared upstream lease in the real `AiGovernor` class over a storage map that outlives
+ * the instance (`_ai_governor_fixture.ts`): several tenants and two products on one quota, a
+ * restart, an eviction and a deploy, an expired, late or duplicate release, a missing or failing
+ * binding, bounded waiting, retries counted against the same lease, a timeout keeping its slot as
+ * completion unknown, one charge per execution, and the publications caller passing the lease.
  */
 import test from 'node:test';
 import { readFileSync } from 'node:fs';

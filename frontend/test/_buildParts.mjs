@@ -5,6 +5,9 @@
  * names, and what its render function mounts. The full catalogue (every
  * module's complete, ordered list) is owned by one file,
  * `build_parts_contract_5507.test.mjs`, and nowhere else.
+ *
+ * From frontend/test/README.md (moved by #6472): D5507: a provider suite's view of `BUILD_PARTS`:
+ * the modules its key sits on, before/after a named neighbour, and what its part mounts.
  */
 import assert from 'node:assert/strict';
 import { BUILD_PARTS } from '../src/pages/cycles/buildParts.jsx';

@@ -1,4 +1,9 @@
-/** D7705 (#7705): real SQLite create/answer history, rollback and a source-level market-writer inventory. */
+/** D7705 (#7705): real SQLite create/answer history, rollback and a source-level market-writer inventory.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D7705: real-SQLite create/answer actor
+ * history, zero preservation, refused-answer fallback, atomic rollback and literal/dynamic writer
+ * inventory.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';

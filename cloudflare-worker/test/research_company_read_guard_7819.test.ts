@@ -1,4 +1,9 @@
-/** D7819 (#7819): prevent unreviewed new reads of the physical company directory. */
+/** D7819 (#7819): prevent unreviewed new reads of the physical company directory.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472):
+ * `research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs
+ * and the canonical migrated schema.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

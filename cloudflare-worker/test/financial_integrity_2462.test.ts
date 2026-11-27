@@ -24,6 +24,12 @@
  *      the project, so a null from the narrowed loader would let a founder
  *      reach a bound scenario with its project hidden — a cross-company leak.
  *      `projectForScenario` closes it with an explicit 404. (Appended below.)
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1174 regressions live in the
+ * use-of-funds, Raise card/record, financial integrity and access suites. Synthetic Mercury rows
+ * prove accepted mappings, private owner/session/company scope, missing versus zero, and local
+ * read failure; the provider is forbidden. Cash timing and the shared split reader are checked
+ * against the actual Worker services.
  */
 import test from 'node:test';
 import { readFileSync } from 'node:fs';

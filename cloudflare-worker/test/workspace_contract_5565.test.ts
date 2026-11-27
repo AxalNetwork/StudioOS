@@ -1,4 +1,9 @@
-/** D5565: strict broker specs, fake adapter contract, atomic pull leases and injected-clock fencing. */
+/** D5565: strict broker specs, fake adapter contract, atomic pull leases and injected-clock fencing.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5565: strict contract,
+ * capability/location refusals, fake lifecycle and deterministic
+ * lease/replay/revocation/generation/cleanup mutations.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';

@@ -1,6 +1,9 @@
 /**
  * D695 independent UI: real fields/saves and opt-in page/dialog behavior.
  * Routing/registry integration remains gated by #1652, #1655 and #1660.
+ *
+ * From frontend/test/README.md (moved by #6472): D695's independent form UI is exercised by
+ * `add_lightbox_d695.test.mjs`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

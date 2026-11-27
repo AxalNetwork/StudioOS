@@ -1,4 +1,9 @@
-/** D6135 (#6135): real investor wizard save failures, retries, retained progress and role-safe LP handoff. */
+/** D6135 (#6135): real investor wizard save failures, retries, retained progress and role-safe LP handoff.
+ *
+ * From frontend/test/README.md (moved by #6472): D6135: actual investor wizard
+ * failure/retry/continuation, retained progress and legacy steps, consent, unused-slider removal
+ * and role-safe fund handoff.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';

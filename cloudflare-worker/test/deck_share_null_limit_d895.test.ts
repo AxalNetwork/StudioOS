@@ -1,4 +1,10 @@
-/** D895 / migration 549: upgrade and real route claims, using synthetic data. */
+/** D895 / migration 549: upgrade and real route claims, using synthetic data.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `deck_share_null_limit_d895.test.ts`
+ * covers migration 549's data, index, foreign-key and sequence preservation, nullable fresh/legacy
+ * bootstraps, NULL module links, finite editor caps, concurrent claims and unchanged
+ * expiry/revocation/browser guards.
+ */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

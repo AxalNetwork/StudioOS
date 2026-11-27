@@ -1,4 +1,7 @@
 // D5672: existing role gate, source reuse and metadata-only missing-data behavior.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D5672: synthetic authorization and
+// unavailable-reader behavior.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {platformSignalSummary5672} from '../src/services/platformSignalSummary5672';
 test('reader refuses a product profile before any DB access and unavailable sources remain unavailable',async()=>{

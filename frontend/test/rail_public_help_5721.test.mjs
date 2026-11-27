@@ -1,4 +1,7 @@
 // D5721: public Help retains every member rail key without widening other routes' inferred audiences.
+//
+// From frontend/test/README.md (moved by #6472): D5721: public Help's signed-in rail audiences,
+// page keys and exact route boundary.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {railRoutes} from './_railRoutes.mjs';

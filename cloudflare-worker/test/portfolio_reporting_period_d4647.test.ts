@@ -23,6 +23,15 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/portfolio_reporting_period_d4647.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4647 (#4647):
+ * `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter-end default,
+ * `frontend/src/lib/reportingPeriod.js`, to the Worker — to `portfolioMetrics.ts`'s
+ * `completedPeriod` for which quarter and to `fundReportBuild.ts`'s `lastClosedQuarter` for its
+ * last day — every month across a leap year and two year boundaries, so the page cannot drift from
+ * either. It also holds the civil-date behaviour, because the old default read a local midnight
+ * and printed its UTC instant, which is the day before the quarter end for every reader east of
+ * UTC.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,4 +1,9 @@
-/** D7881 (#7881): the optional Mac handoff preserves CI authority, source admission, plans and bounded hosted recovery. */
+/** D7881 (#7881): the optional Mac handoff preserves CI authority, source admission, plans and bounded hosted recovery.
+ *
+ * From frontend/test/README.md (moved by #6472): D7881: trusted checkout ordering, plan selection,
+ * original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with
+ * mutation/restoration cases.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

@@ -1,4 +1,9 @@
-/** D1184: the real router and SQLite migrations. All data synthetic; no Mercury/network access. */
+/** D1184: the real router and SQLite migrations. All data synthetic; no Mercury/network access.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `bank_registry_d1184.test.ts` checks the
+ * registry’s audited Mercury association, masked resolver previews and source add validation over
+ * the real migrations, with all network access refused.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';

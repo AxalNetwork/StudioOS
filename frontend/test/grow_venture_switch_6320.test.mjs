@@ -1,4 +1,7 @@
 // D6320 (#6320) — connector rows, actions and sync notices belong to one Grow venture.
+//
+// From frontend/test/README.md (moved by #6472): D6320: Google and Mercury discard prior venture
+// state and ignore late responses.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

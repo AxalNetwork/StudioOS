@@ -1,4 +1,9 @@
-/** D1156: real SQL and routes with synthetic branch reports; never a provider call. */
+/** D1156: real SQL and routes with synthetic branch reports; never a provider call.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `program_usage_d1156.test.ts` exercises
+ * migration 601, count-only branch reports, newest-wins HQ storage, monthly source counts, partial
+ * failures, roles, throttling and the dated in-use read with synthetic SQLite records.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

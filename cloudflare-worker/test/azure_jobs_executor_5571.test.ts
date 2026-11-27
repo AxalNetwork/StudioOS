@@ -4,6 +4,12 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/azure_jobs_executor_5571.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D5571: disabled Azure Container Apps
+ * Jobs adapter on a synthetic ARM endpoint: digest-pinned secret-free template, fail-closed
+ * capabilities, ambiguous start located without a second start, status mapping,
+ * quota/revoked-identity/cross-region refusals; shared start reservations, durable refusal
+ * outcomes and pending-stop reconciliation.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

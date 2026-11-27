@@ -21,6 +21,15 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/lab_admission_evidence_4657.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `lab_admission_evidence_4657.test.ts`
+ * (D4657) runs the Lab's real routes and services on `_storage_schema.ts`'s migrated template. It
+ * covers: - `/start` refusing an account that was never admitted, a sanctioned one, a graduate and
+ * one whose cohort opens later; - an explicit legacy enrollment; - a retryable 503 for a read that
+ * fails; - milestones that need saved work from the founder's own project, and a replay that pays
+ * once; - the reconciler catching up a lost grant and unrecorded work; - the bounded cron walk; -
+ * the activation writing the enrollment, and the gate following it; - every completion rule run on
+ * the real schema.
  */
 import test, { after as afterAll } from 'node:test';
 import assert from 'node:assert/strict';

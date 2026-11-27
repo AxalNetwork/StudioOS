@@ -1,4 +1,8 @@
-/** D6003 (#6003): ICP forms round-trip Context and value evidence, including omitted-key edits. */
+/** D6003 (#6003): ICP forms round-trip Context and value evidence, including omitted-key edits.
+ *
+ * From frontend/test/README.md (moved by #6472): `icp_complete_6003.test.mjs` (D6003) renders and
+ * round-trips the missing five-step fields without blanking omitted values.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FORMS, EDITS } from '../src/pages/cycles/forms.js';

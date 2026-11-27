@@ -1,4 +1,8 @@
-/** #6393: refund counts include missing amounts without presenting them as zero-priced sessions. */
+/** #6393: refund counts include missing amounts without presenting them as zero-priced sessions.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `advisor_refund_amounts_6393.test.ts`
+ * (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

@@ -1,5 +1,9 @@
 /** #7771: the mounted Share menu offers only an admitted PDF, preserves the
- * Worker's filename/refusal, and cannot finish a download after unmount. */
+ * Worker's filename/refusal, and cannot finish a download after unmount.
+ *
+ * From frontend/test/README.md (moved by #6472): #7771: labelled Share menu availability on
+ * desktop/phone, PDF filename and blob, Worker refusals and abort on unmount.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

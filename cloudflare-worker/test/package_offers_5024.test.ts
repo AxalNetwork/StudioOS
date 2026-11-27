@@ -1,4 +1,12 @@
-/** Real SQLite/JWT regressions for atomic package offers, grants, legal freezes and retry (#5024). */
+/** Real SQLite/JWT regressions for atomic package offers, grants, legal freezes and retry (#5024).
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `package_offers_5024.test.ts` exercises
+ * real commercial package acceptance over the complete SQLite schema and authenticated routers:
+ * frozen prices and composition, grant conflicts, atomic rollback and competing decisions, policy
+ * versions and offer-bound agreements, normal branch delivery failure, and read-only historical
+ * contract values. Seeded HQ-only/unready items are refused without weakening Program Grants;
+ * successful cases publish a compatible test catalogue version only in the fixture.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

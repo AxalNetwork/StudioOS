@@ -1,4 +1,8 @@
-/** #6392: a partial profile save cannot reset recorded Investor Signals consent. */
+/** #6392: a partial profile save cannot reset recorded Investor Signals consent.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `investor_consent_6392.test.ts` (#6392)
+ * exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

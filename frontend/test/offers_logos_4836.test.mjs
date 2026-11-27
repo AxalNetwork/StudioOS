@@ -1,4 +1,9 @@
-/** D4836: Offers saves the programme once, then retries only its logo against the original uid and file. */
+/** D4836: Offers saves the programme once, then retries only its logo against the original uid and file.
+ *
+ * From frontend/test/README.md (moved by #6472): D4836: programme persistence, original-target
+ * logo-only retry/removal, refresh failure, overlapping/late operations, file associations and
+ * focus recovery.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

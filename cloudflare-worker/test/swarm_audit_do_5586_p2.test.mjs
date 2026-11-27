@@ -5,6 +5,11 @@
  * runtime restart, and after a D1 failure keeps the entries in the object's storage until the next call copies them.
  *
  *   node --test cloudflare-worker/test/swarm_audit_do_5586_p2.test.mjs
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `swarm_audit_do_5586_p2.test.mjs` hosts
+ * the audited swarm admission in a real SQLite Durable Object with a real D1: request, settle and
+ * a venture snapshot round-trip, the audit copy survives a D1 failure and a restart (D5586 part
+ * 2).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

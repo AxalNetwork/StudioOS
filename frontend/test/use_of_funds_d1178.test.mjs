@@ -4,6 +4,11 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_d1178.test.mjs
+//
+// From frontend/test/README.md (moved by #6472): D1180 retired the old Financials page and the
+// suite that mounted it (D1174's); `capital_model_retired_d1180.test.mjs` pins the retirement, and
+// Forecast's own suite (`use_of_funds_d1178.test.mjs`) holds the model. The cap-table suite also
+// exercises a `project_id` deep link.
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';

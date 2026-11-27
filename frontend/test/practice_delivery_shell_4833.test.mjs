@@ -17,6 +17,10 @@
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/practice_delivery_shell_4833.test.mjs
+ *
+ * From frontend/test/README.md (moved by #6472): D4833-p4: Delivery in the Practice v2 shell:
+ * PX-06's heading, line and header primary read from the canvas, the primary in every list state,
+ * no chips over an empty or unread list, the PX-06 A order, and the card's Client Sheet.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

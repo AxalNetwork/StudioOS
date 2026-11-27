@@ -1,4 +1,9 @@
-/** D6201 (#6201): failed Portfolio sub-reads never become successful empty sets. */
+/** D6201 (#6201): failed Portfolio sub-reads never become successful empty sets.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): `positions_unavailable_6201.test.ts`
+ * (D6201) checks each failed Portfolio distributions, KPI definition and submission read against
+ * real SQLite without successful empty-set fallbacks.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';

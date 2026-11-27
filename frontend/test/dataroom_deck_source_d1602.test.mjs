@@ -1,3 +1,7 @@
+/**
+ * From frontend/test/README.md (moved by #6472): D1602: owner controls, capability hiding, quote
+ * confirmation, failed saves, withdrawal and the deck-source client seam.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';

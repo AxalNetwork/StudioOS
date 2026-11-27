@@ -23,6 +23,10 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/account_concurrency_4618.test.ts
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D4618: two privacy, category or
+ * public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing),
+ * and two revokes of one session (revoked and counted once, the second already revoked).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

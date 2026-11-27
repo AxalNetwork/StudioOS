@@ -17,6 +17,13 @@
 //
 // Pure node:test — runs in the worker package's `npm test` alongside
 // auth_google.test.ts, telegram.redactCheck.test.ts, etc.
+//
+// From cloudflare-worker/test/README.md (moved by #6472): D895: `pitch_worker_d895.test.ts` mounts
+// the deck, branding, NDA and pitch-link record routes over the migrated schema with synthetic
+// data. It covers read-only admins, advisor denial, admitted cofounders, measured runway, absent
+// versus zero review scores/counts, owner-plan export branding, live brand-kit selection,
+// founder/Lab score separation, canonical pairwise NDA state and one activity row per completed
+// write. `decks.autofill.test.ts` also checks AI-only coverage is zero.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,5 +1,9 @@
 /** D971 (#2756): real SQLite tests of mounted Lab operations and D954 playbook writes.
  * Builds the baseline and migrations through 560; no string-matching database stub.
+ *
+ * From cloudflare-worker/test/README.md (moved by #6472): D1123 extends
+ * admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last
+ * event, absent vs unreadable, and admin-only reads.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

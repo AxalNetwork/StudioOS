@@ -34,6 +34,15 @@
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/authz_money_d4570.test.ts
+//
+// From cloudflare-worker/test/README.md (moved by #6472): `authz_money_d4570.test.ts` (#4570,
+// D4570 part 6) asks ten money routes through the real Worker on the migrated schema: a company's
+// receiving instructions and their reveal, a session charge on both mounts, an engagement invoice
+// and its mark-paid, an order's invoice PDF, a saved card's detach, an LPA signature and the
+// retired commitment withdraw. Every non-party, a co-founder, a withdrawn investor, another LP in
+// the same fund, an LP without KYC, an admin where the record is a member's, a support session, a
+// disabled party and no credentials are refused, with nothing named, no row changed, no reveal
+// recorded and no charge or detach sent; the rightful party then gets each answer.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';

@@ -1,4 +1,9 @@
-/** D7907 (#7907): the github-8 included-compute pool at the catalog, admission and executor boundaries, and the bounded canary. */
+/** D7907 (#7907): the github-8 included-compute pool at the catalog, admission and executor boundaries, and the bounded canary.
+ *
+ * From frontend/test/README.md (moved by #6472): D7907: the github-8 included-compute pool at the
+ * catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's
+ * source pin, report and workflow shape.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

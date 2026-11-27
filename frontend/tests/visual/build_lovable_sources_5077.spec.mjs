@@ -1,4 +1,10 @@
-/** #5077 BD8: real SPA, synthetic module reads; never launches a provider. */
+/** #5077 BD8: real SPA, synthetic module reads; never launches a provider.
+ *
+ * From frontend/tests/visual/README.md (moved by #6472): #5077 BD8: existing Lovable handoff
+ * inside Sources after core records; desktop/390px, light/dark, zero/populated, keyboard
+ * disclosure, retry, 44px target and card/page containment. Synthetic module reads; no provider
+ * launch or pixel baselines.
+ */
 import { test, expect } from '@playwright/test';
 import { prepare } from './_editor.mjs';
 test.setTimeout(60_000);

@@ -10,6 +10,12 @@
  * chip sets an empty options read leaves. Each body's keys are read against
  * the handler on `main` (`routes/cycle_validate.ts`, #1692's first PR).
  * Each group runs on `forms.js`, on mutants of it that must fail, and again.
+ *
+ * From frontend/test/README.md (moved by #6472): `add_forms_validate_d695.test.mjs` mounts
+ * Validate's five specs and their Edits against a stubbed write table, with PR 2b's registration,
+ * chip loaders, search and record-opened Edits. It reads each body's keys against
+ * `cloudflare-worker/src/routes/cycle_validate.ts` on `main`;
+ * `cloudflare-worker/test/cycle_forms_d695.test.ts` sends them through the real routes.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
