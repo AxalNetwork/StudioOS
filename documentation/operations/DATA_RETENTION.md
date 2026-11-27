@@ -62,3 +62,16 @@ The retention periods for generated assets are owner decision W (#3716), pending
 
 - `dataroom_deck_values` (#3881, migration 753) is still on draft PR #4025. It gets a row when it lands; it does not start `deck_`, so the guard would not ask for it.
 - A deck image's R2 object is not removed when its venture is deleted: the venture cascade removes the row, and the cleanup only reads rows. That is a separate sweep over `deck-images/<project>/` for ventures that no longer exist.
+
+## The monitoring log tables (D9033)
+
+D9033 (#9033). Four tables that grow with traffic. Each keeps 30 days, pruned at 03:00 UTC by the scheduled handler (`runLogPrune` in `cloudflare-worker/src/services/logRetention.ts`, beside `Jobs.cleanup`) on every deployment, in batches of 500 rows and at most 40 batches per table a night; a table with more is finished on the following nights. Each table is its own cron sub-task (`log prune <table>`) in `cron_run_history.task_outcomes`, done with the rows it deleted or failed. `POST /api/monitoring/cleanup` runs the same function.
+
+| Table | Holds | Kept | Pruned by | Personal data |
+|---|---|---|---|---|
+| `system_metrics` | one row per metered `/api/*` request and per queued job: name, value, labels | 30 days by `timestamp` | the 03:00 log prune | no user id; a label may carry a path, redacted by `util/pathRedaction.ts` |
+| `error_logs` | request and job errors: endpoint, status, message | 30 days by `created_at` | the 03:00 log prune | yes: `user_id` (#5510) |
+| `rate_limit_logs` | rate-limit decisions: endpoint, bucket, blocked | 30 days by `created_at` | the 03:00 log prune | yes: `user_id` (#5510) |
+| `cf_dlq_mirror` | dead letters of the Cloudflare job queue, with their payloads | 30 days by `received_at`, as `dead_letter_queue` (`Jobs.cleanup`) | the 03:00 log prune | a payload may name a person (an email job's log id, a member id) |
+
+Admin comparisons over longer periods read `analytics_snapshots`, written at 02:05 from the day's rollup, not `system_metrics`.
