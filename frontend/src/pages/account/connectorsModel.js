@@ -973,6 +973,87 @@ export function accountDisconnectNote(p, companies) {
   return `This removes ${p?.display_name || 'the tool'} from your account.${scope} ${disconnectNote(p)}`;
 }
 
+/**
+ * D8774 part 3 (BLS07): Review, the second of Scope → Review → Result. It says
+ * what stops, what stays and who acts, as label and value rows, before
+ * anything is sent. `choice` is 'stop' (Stop using for {company}: the existing
+ * `PUT /:uid/companies` without it) or 'account' (the existing `DELETE /:uid`).
+ * Counts are not in the connections list, so what stays is named, never
+ * counted. `actor` is the signed-in name, or null.
+ */
+export function disconnectReview(p, choice, { scope = null, companies = null, ventureName = null, actor = null } = {}) {
+  const tool = p?.display_name || 'The tool';
+  const who = actor ? `You, ${actor}.` : 'You.';
+  if (choice === 'stop') {
+    const company = scope?.name || 'this company';
+    const others = servedCompanyNames({ company_ids: companiesWithout(p?.connection, scope?.companyId) }, companies);
+    const { repos } = repositoriesOf(p?.connection);
+    const rows = [
+      ['Stops', `New items from ${tool} for ${company}’s ventures${ventureName ? `, ${ventureName} among them` : ''}.`],
+      ['Stays', `Items already in Build. ${tool} on your account${others.length ? `, and its use for ${andList(others)}` : ''}.`],
+    ];
+    if (VENTURE_BOUND.has(p?.key) && repos.length) rows.push(['Repositories', `${andList(repos)} ${repos.length === 1 ? 'is' : 'are'} let go for ${ventureName || 'this venture'}.`]);
+    rows.push(['Who', who]);
+    return { title: `Stop using ${tool} for ${company}?`, rows, button: `Stop using for ${company}` };
+  }
+  const known = Array.isArray(p?.connection?.company_ids);
+  const served = servedCompanyNames(p?.connection, companies);
+  return {
+    title: `Disconnect ${tool} from your account?`,
+    rows: [
+      ['Ends for', !known ? 'Every company it serves.' : served.length ? `${andList(served)}.` : 'No company: it serves none now.'],
+      ['Stops', 'Every sync of this connection, for every company it serves.'],
+      ['Stays', `Data already in StudioOS. Your ${tool} account itself.`],
+      ['Deleted', 'The stored credentials. Connecting again starts with signing in.'],
+      ['Who', who],
+    ],
+    button: 'Disconnect from your account',
+  };
+}
+
+const hhmmUtc = (at) => {
+  const d = at instanceof Date ? at : new Date(at);
+  return Number.isNaN(d.getTime()) ? null : `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+};
+
+/**
+ * D8774 part 3 (BLS07): Result, read when the write has returned. It is
+ * computed from the connection as it was before the write, so it can still
+ * name the companies that keep the tool.
+ */
+export function disconnectResult(p, choice, { scope = null, companies = null, ventureName = null, at = null } = {}) {
+  const tool = p?.display_name || 'The tool';
+  const done = at == null ? null : hhmmUtc(at);
+  const when = done ? `Done at ${done}.` : 'Done.';
+  if (choice === 'stop') {
+    const company = scope?.name || 'this company';
+    const others = servedCompanyNames({ company_ids: companiesWithout(p?.connection, scope?.companyId) }, companies);
+    const stays = others.length ? `${tool} stays connected to your account for ${andList(others)}.` : `${tool} stays connected to your account.`;
+    return { title: `${tool} no longer serves ${company}`, detail: `${when} ${stays} ${ventureName || 'This venture'} keeps what it already has.` };
+  }
+  return { title: `${tool} is disconnected from your account`, detail: `${when} Data already in StudioOS stays.` };
+}
+
+/**
+ * D8774 part 3 (BLS04, BLS05): the last successful read of this venture on
+ * Connect a tool's GitHub row, from Operating systems' Code system for the
+ * viewer's own connection (`parts.tools.code.systems`, owner "You"). Null
+ * when the read holds no such system.
+ */
+export function rowLastRead(tools, ventureName = null) {
+  const systems = Array.isArray(tools?.code?.systems) ? tools.code.systems : [];
+  const mine = systems.find((sys) => sys?.owner === 'You' && sys?.binding && typeof sys.binding === 'object');
+  if (!mine) return null;
+  const b = mine.binding;
+  const read = b.last_good_read && typeof b.last_good_read.at === 'string' ? b.last_good_read : null;
+  const venture = ventureName || 'this venture';
+  const text = read
+    ? `Last successful read of ${venture}: ${read.at} · ${read.source || 'source not recorded'}${read.partial ? ' (partly synced)' : ''}`
+    : `Last successful read of ${venture}: none yet`;
+  const stale = b.stale && Number.isSafeInteger(b.stale.hours) ? `Stale · ${b.stale.hours} h` : b.stale ? 'Stale' : null;
+  return { text, stale };
+}
+
 /** The plan a locked tool needs, by its plan's name (#2182); never the canvas's placeholder "Pro". */
 export const UPGRADE_TIER = TIER_LABEL;
 

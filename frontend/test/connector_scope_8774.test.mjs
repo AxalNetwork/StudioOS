@@ -173,6 +173,7 @@ test('Connect a tool, bound with no repository, healthy, failing and read only',
     await healthy.click('tool-action-github');
     assert.match(healthy.text(healthy.by('tool-stop-github')), /keeps serving Sample Ventures LLC/);
     assert.match(healthy.text(healthy.by('tool-confirm-account-github')), /every company it serves: Sample Orchard Inc\. and Sample Ventures LLC/);
+    await healthy.click('tool-review-github');
     await healthy.click('tool-confirm-stop-github');
     assert.deepEqual(calls, [['u-gh', [9]]], 'only this venture\'s company is turned off');
   } finally { connectorsApi.setCompanies = saved; await healthy.unmount(); }

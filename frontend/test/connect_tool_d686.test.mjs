@@ -182,12 +182,15 @@ test('the list: Try again syncs and says how it went, a tool with no sync falls 
     syncAnswer = null;
     assert.equal(m.by('tool-action-calendly'), undefined, 'the daily limit offers no retry');
     await m.click('tool-action-stripe');
-    // D8774: the account-wide disconnect says it is account-wide, then what stays.
-    assert.ok(m.text(m.by('tool-confirm-stripe')).startsWith('Disconnect Stripe from your account? This removes Stripe from your account. Data already in StudioOS stays.'), 'the confirm says what stays');
+    // D8774: the account-wide disconnect says it is account-wide, then what stays. Part 3 (BLS07): with no venture
+    // there is one thing to stop, so it opens on Review; Result follows the write.
+    assert.ok(m.text(m.by('tool-confirm-stripe')).startsWith('Disconnect Stripe from your account?'), 'the review names its scope');
+    assert.match(m.text(m.by('tool-review-rows-stripe')), /Stays Data already in StudioOS\. Your Stripe account itself\. Deleted The stored credentials\./, 'the review says what stays');
     assert.equal(calls.some((c) => c[0] === 'disconnect'), false, 'nothing is disconnected by the first click');
     await m.click('tool-confirm-disconnect-stripe');
     assert.deepEqual(calls.at(-1), ['disconnect', 'u-str']);
     assert.equal(reloads, 2);
+    assert.match(m.text(m.by('tool-result-stripe')), /Stripe is disconnected from your account Done at \d\d:\d\d UTC\. Data already in StudioOS stays\./);
     await m.click('tool-name-stripe');
     assert.ok(m.text().includes('On disconnect:'), 'the name opens the tool\'s detail');
   } finally {
