@@ -24,7 +24,9 @@
  *
  * D8071 (#8071), execution budgets (`services/agentBudgets.ts`):
  *   GET    /budgets                                            every agent's caps and use this period, the platform's workspace
- *                                                               figures, and the runs halted for budget
+ *                                                               figures, and the runs halted for budget. D9111 (#9111): each agent's
+ *                                                               workspace (scope_id, scope_name), each workspace's own ceilings
+ *                                                               (`workspaces`), and who set an agent's caps (`set_by`, a name)
  *   PUT    /budgets/agents/:uid  { tokens_cap?, minutes_cap?, prs_per_day_cap?, retries_per_task_cap?, reason }   null is no cap
  *   PUT    /budgets/tasks/:uid   { tokens_cap?, minutes_cap?, retries_cap?, reason }   null is the agent's cap
  *   PUT    /budgets/workspace    { scope_kind, scope_id, agents_cap?, live_agents_cap?, ai_spend_cap_cents?, compute_spend_cap_cents?, reason }
@@ -45,12 +47,14 @@ import {
   PAUSE_WORD, areaModelsOf, capacityCeilingsOf, capsOf, guardrailCounts, readPolicy, readToolsOf, reasonProblem, type Policy, type Problem,
 } from '../services/agents/aiPolicy';
 import { modelById } from '../services/ai/catalogue';
+import { personaOf } from '../services/agents/personas';
 import {
   CAPABILITY_REASON_MAX, capabilityMatrix, capabilityOf, capabilityReason, ceilingOf, expandCapabilities, grantStatement, liveGrants,
   readCapabilityPolicy, revokeStatement,
 } from '../services/agentCapabilities';
 import {
   aboveCeiling, agentBudgetView, agentCaps, agentCapsOf, haltedRuns, platformWorkspaceCaps, taskCapsOf, workspaceCapsOf, workspaceOwnCaps,
+  workspaceUsage,
 } from '../services/agentBudgets';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -279,12 +283,40 @@ r.put('/capabilities/enforcement', async (c) => {
 
 const budgetUnreadable = (c: any) => refuse(c, 503, { code: 'budget_unreadable', message: 'The agent budgets could not be read. Nothing was changed.' });
 
+/**
+ * D9111 (#9111): each agent also carries its name (the persona's, else first and last name, else null) and names
+ * its workspace (`scope_id`, `scope_name`), and `workspaces` lists each
+ * workspace's own four ceilings (null each: the platform figure applies) and its use this month (`workspaceUsage`:
+ * agents, live agents, AI spend (null when a charge is unrecorded), compute spend), so SA15 can draw "Agent budgets
+ * for <workspace>" and its ceilings from one read.
+ */
 async function budgetsView(c: any) {
   const agents = (await c.env.DB.prepare(
-    "SELECT id, uid, role_key, scope_kind FROM team_agents WHERE status <> 'removed' ORDER BY id LIMIT 500",
-  ).all()).results as { id: number; uid: string; role_key: string; scope_kind: string }[] ?? [];
-  const rows = await Promise.all(agents.map(async (a) => ({ agent_uid: a.uid, role_key: a.role_key, scope_kind: a.scope_kind, ...await agentBudgetView(c.env, a.id) })));
-  return { platform: await platformWorkspaceCaps(c.env), agents: rows, halted: await haltedRuns(c.env, null) };
+    `SELECT a.id, a.uid, a.role_key, a.scope_kind, a.persona_key, a.first_name, a.last_name,
+            CASE WHEN a.scope_kind = 'company' THEN a.company_id ELSE a.project_id END AS scope_id,
+            CASE WHEN a.scope_kind = 'company' THEN cp.company_name ELSE p.name END AS scope_name
+       FROM team_agents a
+       LEFT JOIN company_profiles cp ON a.scope_kind = 'company' AND cp.id = a.company_id
+       LEFT JOIN projects p ON a.scope_kind = 'project' AND p.id = a.project_id
+      WHERE a.status <> 'removed' ORDER BY a.id LIMIT 500`,
+  ).all()).results as {
+    id: number; uid: string; role_key: string; scope_kind: 'company' | 'project'; persona_key: string | null; first_name: string | null; last_name: string | null;
+    scope_id: number | null; scope_name: string | null;
+  }[] ?? [];
+  const nameOf = (a: (typeof agents)[number]) =>
+    personaOf(a.persona_key)?.name ?? ([a.first_name, a.last_name].map((x) => String(x ?? '').trim()).filter(Boolean).join(' ') || null);
+  const rows = await Promise.all(agents.map(async (a) => ({
+    agent_uid: a.uid, name: nameOf(a), role_key: a.role_key, scope_kind: a.scope_kind, scope_id: a.scope_id == null ? null : Number(a.scope_id), scope_name: a.scope_name ?? null,
+    ...await agentBudgetView(c.env, a.id),
+  })));
+  const scopes = new Map<string, { scope_kind: 'company' | 'project'; scope_id: number; scope_name: string | null }>();
+  for (const a of rows) if (a.scope_id != null) scopes.set(`${a.scope_kind}:${a.scope_id}`, { scope_kind: a.scope_kind, scope_id: a.scope_id, scope_name: a.scope_name });
+  const workspaces = await Promise.all([...scopes.values()].map(async (s) => {
+    const key = { kind: s.scope_kind, id: s.scope_id };
+    const [caps, used] = await Promise.all([workspaceOwnCaps(c.env, key), workspaceUsage(c.env, key)]);
+    return { ...s, caps, used };
+  }));
+  return { platform: await platformWorkspaceCaps(c.env), workspaces, agents: rows, halted: await haltedRuns(c.env, null) };
 }
 
 r.get('/budgets', async (c) => {

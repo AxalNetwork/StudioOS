@@ -8,6 +8,8 @@ import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
 // D1531 (#3742 E8, TM5m): its memory and scheduled duties.
 import { AgentDuties, AgentMemory } from './AgentMemory.jsx';
+// D9111 (#9111, SA17D): the agent's execution budget for its sponsor, read only (HQ sets the caps).
+import { SponsorBudgetCard } from '../hq/aiAgents/BudgetParts.jsx';
 import SponsorSheet from './SponsorSheet.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
@@ -246,6 +248,7 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
                 <div className="flex flex-col gap-5 border-t border-axal-hairline px-5 py-5 dark:border-gray-800">
                   <AgentMemory uid={a?.uid || uid} canManage={manage} />
                   <AgentDuties uid={a?.uid || uid} />
+                  <SponsorBudgetCard uid={a?.uid || uid} />
                 </div></> : null}
               </>
             )}
