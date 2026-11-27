@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { Search, ChevronRight, X, AlertTriangle, Info } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, X, AlertTriangle, Info } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from './sections';
 import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
@@ -23,8 +23,9 @@ import { usePageMeta } from '../../lib/seo';
 import { guideReviewFor, guideVerificationFor } from './guideGovernance';
 import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
 import {
-  SEARCH_MISS_IDLE_MS, appliesToLine, areaChips, areasForTerms, broaderTerms, goToTarget, guideOutline,
-  guideTicketDraft, inArea, moveSelection, publicGuides, resultArea, resultLine, searchGuides, searchSuggestions, ticketTitleFromSearch,
+  SEARCH_MISS_IDLE_MS, appliesToLine, areaChips, areasForTerms, broaderTerms, cleanQuery, goToTarget, guideHrefFor, guideOutline,
+  guideTicketDraft, inArea, isPlainClick, moveSelection, publicGuides, resultArea, resultLine, searchGuides, searchHref, searchScope,
+  searchSuggestions, ticketTitleFromSearch,
   TRACKER_WARNING, TRACKER_WARNING_ANCHOR, TRACKER_WARNING_LINK,
 } from './v2/helpV2';
 import HelpTicketSheet, { ADVISORY_URL, SECURITY_EMAIL } from './v2/HelpTicketSheet';
@@ -58,6 +59,13 @@ import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 //             same two endpoints as before (`v2/HelpTicketSheet.jsx`).
 //   HC8       every guide, with a role filter that dims (`v2/HelpDirectory.jsx`),
 //             at `/help?view=all`.
+//
+// D4640 (#4640) — the journey from a question to a guide and back: a result
+// keeps its search in both addresses (`/help?q=` behind it, `?q=` on the
+// guide), so Back, the guide's search and its related guides keep it; the
+// guide has a search at every width and a Get help block before "Did this
+// answer it?"; on a phone the results replace the browsing sections while a
+// query is typed; and the results say what the search reads.
 // ---------------------------------------------------------------------------
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
@@ -153,10 +161,10 @@ function HelpSearchBox({ query, setQuery, searchInputRef, label, placeholder, su
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className={`min-w-0 flex-1 bg-transparent ${compact ? 'min-h-[44px]' : 'min-h-[50px]'} text-[15px] text-gray-900 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-400`}
+          className={`min-w-0 flex-1 bg-transparent [&::-webkit-search-cancel-button]:appearance-none ${compact ? 'min-h-[44px]' : 'min-h-[50px]'} text-[15px] text-gray-900 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-400`}
         />
         {query ? (
-          <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+          <button type="button" onClick={() => { setQuery(''); searchInputRef?.current?.focus(); }} aria-label="Clear search" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
             <X size={15} />
           </button>
         ) : (
@@ -264,7 +272,7 @@ export function BrowseByTask({ sections }) {
  * HC3 — the results: the live line, area chips counting the results shown,
  * and the list the search field controls. Each result opens the guide's page.
  */
-export function SearchResults({ search, query, chip = 'all', onChip = () => {}, active = -1, onHover = () => {}, keyboardHelp = true }) {
+export function SearchResults({ search, query, chip = 'all', onChip = () => {}, active = -1, onHover = () => {}, keyboardHelp = true, onOpen = () => {}, scope = null }) {
   const chips = areaChips(search.results);
   const shown = inArea(search.results, chip);
   return (
@@ -306,7 +314,7 @@ export function SearchResults({ search, query, chip = 'all', onChip = () => {}, 
                   className={`border-b border-gray-100 last:border-b-0 dark:border-gray-800 ${i === active ? 'bg-violet-50 dark:bg-violet-950/40' : ''}`}
                   data-testid="help-result"
                 >
-                  <Link to={guideHref(r.anchor)} className="grid gap-1 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
+                  <Link to={guideHrefFor(r.anchor, query)} onClick={(e) => onOpen(e, r.anchor)} className="grid gap-1 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
                     <span className="min-w-0">
                       <b className="block text-[14px] font-bold text-gray-900 dark:text-gray-100">{highlight(r.subsectionTitle, query)}</b>
                       <span className="mt-0.5 block font-mono text-[10.5px] text-gray-500 dark:text-gray-400">{resultArea(r).title}</span>
@@ -326,6 +334,7 @@ export function SearchResults({ search, query, chip = 'all', onChip = () => {}, 
               <span>Showing the first 25. More guides match “{query}”: add a word to narrow them.</span>
             </div>
           )}
+          {scope && <SearchScope scope={scope} />}
         </div>
         {keyboardHelp && (
           <aside className="hidden gap-3 lg:grid">
@@ -348,6 +357,16 @@ export function SearchResults({ search, query, chip = 'all', onChip = () => {}, 
   );
 }
 
+/** D4640: what the search reads, and a link to the release notes it does not read. */
+export function SearchScope({ scope }) {
+  return (
+    <p className="mt-2.5 text-[12px] text-gray-500 dark:text-gray-400" data-testid="help-search-scope">
+      {scope.line}{' '}
+      {scope.notes && <Link to={guideHref(scope.notes.anchor)} className="font-bold text-violet-700 hover:underline dark:text-violet-300">{scope.notes.label} →</Link>}
+    </p>
+  );
+}
+
 /**
  * D7515: a result's verification, only where the ledger records one: the
  * first verified date (or the last, labelled as such) and Stale when the
@@ -366,7 +385,7 @@ export function ResultVerification({ anchor, verification }) {
 }
 
 /** HC4 — nothing found: broader terms that find something, the areas, and a ticket that carries the search. */
-export function NothingFound({ query, fuse, user, onQuery, onTicket, publicCount }) {
+export function NothingFound({ query, fuse, user, onQuery, onTicket, publicCount, chatAvailable = false, onOpenChat = () => {}, scope = null }) {
   const terms = useMemo(() => broaderTerms(query, fuse), [query, fuse]);
   const areas = useMemo(() => areasForTerms(terms, fuse), [terms, fuse]);
   const title = ticketTitleFromSearch(query);
@@ -415,9 +434,12 @@ export function NothingFound({ query, fuse, user, onQuery, onTicket, publicCount
         <b className="text-[13px] text-gray-900 dark:text-gray-100">Title: {title}</b>
         <span className="text-[12px] text-gray-600 dark:text-gray-300">You can edit the title and add a description before Submit.</span>
       </div>
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => onTicket(title)} className={SECONDARY_ACTION} data-testid="help-none-ticket">Open a ticket</button>
+        {chatAvailable && <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION} data-testid="help-none-chat">Message the team</button>}
+        <Link to="/status" className="inline-flex min-h-[40px] items-center px-2 text-[12.5px] font-bold text-violet-700 hover:underline dark:text-violet-300">Status page →</Link>
       </div>
+      {scope && <SearchScope scope={scope} />}
     </section>
   );
 }
@@ -449,6 +471,19 @@ function useHelpSearch({ role, query, setQuery, user }) {
     return () => clearTimeout(t);
   }, [user, trimmedQuery, search.results.length]);
 
+  // D4640: opening a result first writes the search into the home's own
+  // address, so Back returns to these results, then opens the guide with the
+  // search in its address. A click with a modifier is left to the browser.
+  const openGuide = (anchor) => {
+    navigate(searchHref(trimmedQuery), { replace: true });
+    navigate(guideHrefFor(anchor, trimmedQuery));
+  };
+  const onOpen = (e, anchor) => {
+    if (!isPlainClick(e)) return;
+    e.preventDefault();
+    openGuide(anchor);
+  };
+
   const onKeyDown = (e) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (!shown.length) return;
@@ -456,14 +491,14 @@ function useHelpSearch({ role, query, setQuery, user }) {
       setActive((i) => moveSelection(e.key, i, shown.length));
     } else if (e.key === 'Enter') {
       const r = shown[active];
-      if (r) { e.preventDefault(); navigate(guideHref(r.anchor)); }
+      if (r) { e.preventDefault(); openGuide(r.anchor); }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setQuery('');
     }
   };
   return {
-    fuse, trimmedQuery, search, chip, setChip: (c) => { setChip(c); setActive(-1); }, active, setActive, onKeyDown,
+    fuse, trimmedQuery, search, chip, setChip: (c) => { setChip(c); setActive(-1); }, active, setActive, onKeyDown, onOpen,
     activeId: active >= 0 && shown[active] ? `help-result-${active}` : null,
   };
 }
@@ -703,16 +738,65 @@ export function OwnerReview({ anchor, verification: given }) {
   );
 }
 
-function GuideSearch({ label }) {
+/**
+ * The guide's search: it starts from the search that found this guide
+ * (D4640), and Enter opens the Help home's results for what it holds, which is
+ * also how a reader changes topic. Drawn in the right column from 1024px and
+ * above the guide below that, each with its own id.
+ */
+export function GuideSearch({ label, id = 'help-guide-search', initial = '', testid = undefined }) {
   const navigate = useNavigate();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initial);
+  useEffect(() => { setQ(initial); }, [initial]);
   return (
-    <form role="search" onSubmit={(e) => { e.preventDefault(); if (q.trim()) navigate(`/help?q=${encodeURIComponent(q.trim())}`); }} className="flex items-center gap-2 rounded-[10px] border border-gray-200 bg-white px-3 dark:border-gray-700 dark:bg-gray-900">
-      <Search size={14} aria-hidden className="text-gray-400" />
-      <label htmlFor="help-guide-search" className="sr-only">{label}</label>
-      <input id="help-guide-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={label} className="min-h-[40px] min-w-0 flex-1 bg-transparent text-[13px] text-gray-900 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-400" />
+    <form role="search" aria-label={label} onSubmit={(e) => { e.preventDefault(); if (cleanQuery(q)) navigate(searchHref(q)); }} className="flex items-center gap-2 rounded-[10px] border border-gray-200 bg-white px-3 focus-within:ring-2 focus-within:ring-violet-500/40 dark:border-gray-700 dark:bg-gray-900" data-testid={testid}>
+      <Search size={14} aria-hidden className="shrink-0 text-gray-500 dark:text-gray-400" />
+      <label htmlFor={id} className="sr-only">{label}</label>
+      <input id={id} type="search" enterKeyHint="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={label} className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[14px] text-gray-900 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-400" />
+      <button type="submit" className="inline-flex min-h-[36px] shrink-0 items-center rounded-[8px] px-2 text-[12px] font-bold text-violet-700 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/40">Search</button>
     </form>
   );
+}
+
+/**
+ * D4640 — Get help, after the guide and before "Did this answer it?": the
+ * same safe routes as Still stuck? and the after-No next steps, in context.
+ * A ticket carries the guide's link and the search that led here, shown and
+ * editable in the sheet; nothing from the member's records is copied. Chat
+ * only for a plan the Worker serves; security stays private. Signed out: sign
+ * in to file a ticket, or the private advisory.
+ */
+export function GuideSupport({ user, query = '', onOpenTicket, onOpenChat, onSecurity, overall = null }) {
+  const q = cleanQuery(query);
+  const chatAvailable = canUseCustomerChat(user);
+  return (
+    <section id="get-help" aria-labelledby="help-guide-support" className={`${CARD} scroll-mt-6 grid gap-3 px-5 py-4`} data-testid="help-guide-support">
+      <h2 id="help-guide-support" className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Need more help with this?</h2>
+      <p className="max-w-[560px] text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-300">
+        {user
+          ? <>A ticket carries this guide’s link{q ? <> and your search, “{q}”</> : ''}. You see and edit it before Submit. Tickets may be mirrored to a public tracker: no secrets or confidential records.</>
+          : 'Sign in for account-specific support. Report a security concern privately, never in a ticket.'}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {user
+          ? <button type="button" onClick={onOpenTicket} className={SECONDARY_ACTION} data-testid="help-guide-support-ticket">Open a ticket</button>
+          : <Link to="/login?next=%2Fhelp%2Ftickets%3Fnew%3D1" className={SECONDARY_ACTION}>Sign in to open a ticket</Link>}
+        {chatAvailable && <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION} data-testid="help-guide-support-chat">Message the team</button>}
+        {user
+          ? <button type="button" onClick={onSecurity} className={SECONDARY_ACTION} data-testid="help-guide-support-security">Private security report</button>
+          : <a href={ADVISORY_URL} target="_blank" rel="noopener noreferrer" className={SECONDARY_ACTION}>Private security report ↗</a>}
+      </div>
+      <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <StatusLine overall={overall} />
+        <Link to="/status" className="text-xs font-bold text-violet-700 hover:underline dark:text-violet-300">Status page →</Link>
+      </div>
+    </section>
+  );
+}
+
+function GuideSupportLive(props) {
+  const overall = useOverallStatus();
+  return <GuideSupport {...props} overall={overall} />;
 }
 
 function OutlineNav({ outline }) {
@@ -738,10 +822,19 @@ function OutlineNav({ outline }) {
 
 const H2 = 'text-[19px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100';
 
-export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenChat }) {
+export function HelpArticle({ sections, area, guide, user, query = '', onOpenTicket, onOpenChat, onSecurity = () => {} }) {
   const session = useViewMode();
+  const location = useLocation();
+  const headingRef = useRef(null);
   const section = sections.find((s) => s.id === area);
   const sub = section?.subsections.find((g) => g.id === guide);
+  // D4640: a guide opened from inside Help takes focus on its title, so a
+  // screen reader announces the new page; a guide loaded from outside keeps
+  // the browser's own start.
+  useEffect(() => {
+    if (location.key === 'default') return;
+    headingRef.current?.focus({ preventScroll: true });
+  }, [area, guide, location.key]);
   if (!section || !sub) return <GuideNotFound />;
 
   const anchor = `${section.id}/${sub.id}`;
@@ -762,11 +855,25 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
       return guideFor(target, sections);
     })
     .filter(Boolean);
-  const outline = guideOutline(sub, { related: related.length, feedback: !!user, stuck: recovery && !user });
+  // Signed out, account recovery keeps its own "Still can't get in?" (HC9).
+  const support = !(recovery && !user);
+  const q = cleanQuery(query);
+  const searchLabel = user ? 'Search Help' : 'Search public guides';
+  const outline = guideOutline(sub, { related: related.length, support, feedback: !!user, stuck: recovery && !user });
+  const openTicket = (missing = '') => onOpenTicket({ anchor, title: sub.title, missing, query: q });
 
   return (
     <div className="mx-auto grid max-w-6xl gap-8 px-4 pb-14 pt-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_260px]">
       <article className="min-w-0">
+        {q && (
+          <Link to={searchHref(q)} className="mb-3 inline-flex min-h-[44px] max-w-full items-center gap-1.5 text-[12.5px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="help-guide-back-results">
+            <ChevronLeft size={15} aria-hidden className="shrink-0" />
+            <span className="truncate">Results for “{q}”</span>
+          </Link>
+        )}
+        <div className="mb-4 lg:hidden">
+          <GuideSearch label={searchLabel} id="help-guide-search-top" initial={q} testid="help-guide-search-top" />
+        </div>
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.11em] text-gray-500 dark:text-gray-400">
           <Link to="/help" className="hover:text-violet-700 dark:hover:text-violet-300">Help</Link>
           <span aria-hidden className="text-gray-300 dark:text-gray-600">/</span>
@@ -777,7 +884,7 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
 
         <header className="mt-6 max-w-[680px]">
           {recovery && <span className={`${LABEL_BASE} text-violet-700 dark:text-violet-300`}>Can’t sign in?</span>}
-          <h1 className="mt-1 text-[30px] font-extrabold leading-[1.14] tracking-tight text-balance text-gray-900 dark:text-gray-100">{sub.title}</h1>
+          <h1 ref={headingRef} tabIndex={-1} style={{ outline: 'none' }} className="mt-1 text-[30px] font-extrabold leading-[1.14] tracking-tight text-balance text-gray-900 dark:text-gray-100">{sub.title}</h1>
           <div className="mt-2.5 flex flex-wrap items-center gap-2.5 font-mono text-[11px] text-gray-500 dark:text-gray-400">
             <span className={CHIP}>{appliesToLine(placement?.appliesTo)}</span>
             <span>{readingMinutes(sub)} min read</span>
@@ -900,7 +1007,7 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
                 {related.map((r) => (
                   <Link
                     key={r.anchor}
-                    to={guideHref(r.anchor)}
+                    to={guideHrefFor(r.anchor, q)}
                     className={`${CARD} flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:border-violet-200 dark:hover:border-violet-900`}
                   >
                     <div className="min-w-0">
@@ -914,7 +1021,9 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
             </section>
           )}
 
-          {user && <GuideFeedback anchor={`${section.id}/${sub.id}`} next={{ related, chatAvailable: canUseCustomerChat(user), onOpenChat, onOpenTicket: (missing) => onOpenTicket({ anchor, title: sub.title, missing }) }} />}
+          {support && <GuideSupportLive user={user} query={q} onOpenTicket={() => openTicket('')} onOpenChat={onOpenChat} onSecurity={onSecurity} />}
+
+          {user && <GuideFeedback anchor={`${section.id}/${sub.id}`} next={{ related, chatAvailable: canUseCustomerChat(user), onOpenChat, onOpenTicket: openTicket }} />}
 
           {recovery && !user && (
             <section id="still-stuck" aria-labelledby="help-recovery-stuck" className={`${CARD} scroll-mt-6 grid gap-3 px-5 py-4`}>
@@ -941,7 +1050,7 @@ export function HelpArticle({ sections, area, guide, user, onOpenTicket, onOpenC
 
       <aside className="hidden lg:block" aria-label="About this guide">
         <div className="sticky top-6 grid gap-5">
-          <GuideSearch label={user ? 'Search Help' : 'Search public guides'} />
+          <GuideSearch label={searchLabel} initial={q} />
           {outline.length > 0 && (
             <div>
               <div className={LABEL}>On this page</div>
@@ -991,6 +1100,7 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
   const s = useHelpSearch({ role, query, setQuery, user });
   const { trimmedQuery } = s;
   const publicCount = useMemo(() => publicGuides(visibleSections).length, [visibleSections]);
+  const scope = useMemo(() => searchScope(visibleSections), [visibleSections]);
 
   return (
     <>
@@ -1005,10 +1115,10 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
       />
       <div className="mx-auto grid max-w-6xl gap-6 px-4 pb-10 pt-6 md:px-8">
         {trimmedQuery && s.search.results.length > 0 && (
-          <SearchResults search={s.search} query={trimmedQuery} chip={s.chip} onChip={s.setChip} active={s.active} onHover={s.setActive} />
+          <SearchResults search={s.search} query={trimmedQuery} chip={s.chip} onChip={s.setChip} active={s.active} onHover={s.setActive} onOpen={s.onOpen} scope={scope} />
         )}
         {trimmedQuery && s.search.results.length === 0 && (
-          <NothingFound query={trimmedQuery} fuse={s.fuse} user={user} onQuery={setQuery} onTicket={(title) => onTicket({ kind: 'ticket', title })} publicCount={publicCount} />
+          <NothingFound query={trimmedQuery} fuse={s.fuse} user={user} onQuery={setQuery} onTicket={(title) => onTicket({ kind: 'ticket', title })} publicCount={publicCount} chatAvailable={canUseCustomerChat(user)} onOpenChat={onOpenChat} scope={scope} />
         )}
         {!trimmedQuery && user && (
           <div className="grid items-stretch gap-4 lg:grid-cols-2">
@@ -1091,15 +1201,17 @@ function AreaGuides({ area }) {
 /**
  * A9m — the bar and the three sections, then `children`: the open area,
  * results, tickets and Still stuck. D6861 (HC13A): `search` is drawn
- * directly under the bar's title, before the sections.
+ * directly under the bar's title, before the sections. D4640 (HC13B): while
+ * a query is typed (`browsing` false) the sections are not drawn, so the
+ * results sit directly under the search; clearing it brings them back.
  */
-export function HelpPhoneView({ popular, onRetry, areas, openArea, onArea, search = null, children = null }) {
+export function HelpPhoneView({ popular, onRetry, areas, openArea, onArea, search = null, browsing = true, children = null }) {
   return (
     <AccountPhonePage
       pageKey="help"
       bleed
       testid="help-phone"
-      groups={helpPhoneGroups({ popular, onRetry, areas, openArea, onArea })}
+      groups={browsing ? helpPhoneGroups({ popular, onRetry, areas, openArea, onArea }) : []}
       header={search ? (bar) => <>{bar}<div className="px-[22px] pt-3">{search}</div></> : null}
     >
       {children}
@@ -1115,6 +1227,7 @@ function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInp
   const { trimmedQuery } = s;
   const publicCount = useMemo(() => publicGuides(visibleSections).length, [visibleSections]);
   const area = areas.find((a) => a.id === openArea);
+  const scope = useMemo(() => searchScope(visibleSections), [visibleSections]);
   const box = (
     <HelpSearchBox
       compact
@@ -1128,16 +1241,16 @@ function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInp
     />
   );
   return (
-    <HelpPhoneView popular={popular} onRetry={retry} areas={areas} openArea={openArea} onArea={setOpenArea} search={box}>
+    <HelpPhoneView popular={popular} onRetry={retry} areas={areas} openArea={openArea} onArea={setOpenArea} search={box} browsing={!trimmedQuery}>
       {trimmedQuery && s.search.results.length > 0 && (
-        <SearchResults search={s.search} query={trimmedQuery} chip={s.chip} onChip={s.setChip} active={s.active} onHover={s.setActive} keyboardHelp={false} />
+        <SearchResults search={s.search} query={trimmedQuery} chip={s.chip} onChip={s.setChip} active={s.active} onHover={s.setActive} keyboardHelp={false} onOpen={s.onOpen} scope={scope} />
       )}
       {trimmedQuery && s.search.results.length === 0 && (
-        <NothingFound query={trimmedQuery} fuse={s.fuse} user={user} onQuery={setQuery} onTicket={(title) => onTicket({ kind: 'ticket', title })} publicCount={publicCount} />
+        <NothingFound query={trimmedQuery} fuse={s.fuse} user={user} onQuery={setQuery} onTicket={(title) => onTicket({ kind: 'ticket', title })} publicCount={publicCount} chatAvailable={canUseCustomerChat(user)} onOpenChat={onOpenChat} scope={scope} />
       )}
       {!trimmedQuery && area && <AreaGuides area={area} />}
-      {user && <YourTicketsCard isAdmin={role === 'admin'} />}
-      {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
+      {!trimmedQuery && user && <YourTicketsCard isAdmin={role === 'admin'} />}
+      {!trimmedQuery && role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
       <StillStuck user={user} onOpenChat={onOpenChat} onSecurity={onSecurity} />
       {user && (
         <div className="sticky bottom-3 z-10 flex justify-end">
@@ -1242,8 +1355,9 @@ export default function DocsLayout() {
   }, [route?.area, route?.guide]);
 
   // HC6 → HC7: a ticket from a guide carries its link and the member's words.
-  const openGuideTicket = ({ anchor, title, missing }) => {
-    setSheet({ kind: 'ticket', from: { anchor, title }, ...guideTicketDraft({ anchor, title, missing }) });
+  // D4640: and the search that led to it, when the guide's address carries one.
+  const openGuideTicket = ({ anchor, title, missing, query: q }) => {
+    setSheet({ kind: 'ticket', from: { anchor, title }, ...guideTicketDraft({ anchor, title, missing, query: q }) });
   };
   const openSheet = (draft) => { if (user) setSheet({ from: null, ...draft }); };
   const shared = {
@@ -1259,9 +1373,12 @@ export default function DocsLayout() {
   };
 
   return (
-    <div className={`${route ? '-mx-4 -my-4 md:-mx-6 md:-my-6 ' : ''}min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950`}>
+    // D4640: a guide takes back the shell's padding only inside the shell
+    // (`data-app-main`); rendered on its own it has none to take, and the
+    // negative margins pushed it off the left edge and scrolled the page sideways.
+    <div className={`${route ? '[[data-app-main]_&]:-mx-4 [[data-app-main]_&]:-my-4 md:[[data-app-main]_&]:-mx-6 md:[[data-app-main]_&]:-my-6 ' : ''}min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950`} data-testid="help-root">
       {route ? (
-        <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} onOpenTicket={openGuideTicket} onOpenChat={() => setChatOpen(true)} />
+        <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} query={urlQuery} onOpenTicket={openGuideTicket} onOpenChat={() => setChatOpen(true)} onSecurity={shared.onSecurity} />
       ) : directory ? (
         <HelpDirectory sections={visibleSections} role={helpRole} />
       ) : phone ? (
