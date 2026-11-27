@@ -37,15 +37,16 @@ export function prRelationships(body, repo = 'AxalNetwork/StudioOS') {
   let fenced = false;
   for (const line of String(body || '').replace(/<!--[\s\S]*?-->/g, '').split('\n')) {
     if (/^\s{0,3}(?:```|~~~)/.test(line)) { fenced = !fenced; continue; }
-    if (fenced) continue;
-    const row = /^\s{0,3}(?:[-*]\s+)?(closes?|fix(?:es)?|resolves?|part of|refs?)\s+(.+)/i.exec(line);
-    if (!row) continue;
-    const kind = /^(part|ref)/i.test(row[1]) ? 'partial' : 'closing';
-    const list = referenceList.exec(row[2])?.[0] || '';
-    for (const ref of list.matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)|#(\d+)\b/g)) {
-      if (ref[1] && ref[1].toLowerCase() !== repo.toLowerCase()) continue;
-      const n = Number(ref[2] || ref[3]);
-      if (kind === 'partial' || !linked.has(n)) linked.set(n, kind);
+    if (fenced || /^\s*>/.test(line) || /^(?: {4}|\t)/.test(line)) continue;
+    const prose = line.replace(/`+[^`]*`+/g, ' ');
+    for (const directive of prose.matchAll(/(?:^|[\s.!;])(closes?|fix(?:es)?|resolves?|part of|refs?)\s+/gi)) {
+      const kind = /^(part|ref)/i.test(directive[1]) ? 'partial' : 'closing';
+      const list = referenceList.exec(prose.slice(directive.index + directive[0].length))?.[0] || '';
+      for (const ref of list.matchAll(/https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)|#(\d+)\b/g)) {
+        if (ref[1] && ref[1].toLowerCase() !== repo.toLowerCase()) continue;
+        const n = Number(ref[2] || ref[3]);
+        if (kind === 'partial' || !linked.has(n)) linked.set(n, kind);
+      }
     }
   }
   return linked;
@@ -114,7 +115,8 @@ export function verifiedClosure(finding, { facts }, { repo, readBlob, readPullFi
   if (finding.verdict === 'close_superseded') return Number.isSafeInteger(v.replacement_issue) && closed(v.replacement_issue);
   if (v.scope_complete !== true || v.unfinished) return false;
   const children = v.completed_children || [];
-  if (!Array.isArray(children) || !children.every(closed)) return false;
+  const completed = n => facts.dependencies.some(item => item.number === n && item.state === 'closed' && item.stateReason === 'completed');
+  if (!Array.isArray(children) || !children.every(completed)) return false;
   const witnesses = v.main_paths || [];
   if (!Array.isArray(witnesses) || witnesses.length > 20) return false;
   if (v.source_prs && !Array.isArray(v.source_prs)) return false;
@@ -131,10 +133,10 @@ export function verifiedClosure(finding, { facts }, { repo, readBlob, readPullFi
       if (!pr) return false;
       const file = readBlob(path, facts.mainSha);
       if (file.type !== 'file' || file.sha !== blob) return false;
-      if (pr.inclusion !== 'ancestor') {
-        if (!changedFiles.has(number)) changedFiles.set(number, readPullFiles(number));
-        if (!changedFiles.get(number).some(item => item.filename === path && item.sha === blob && item.status !== 'removed')) return false;
-      }
+      if (!changedFiles.has(number)) changedFiles.set(number, readPullFiles(number));
+      const inPull = changedFiles.get(number).some(item => item.filename === path && item.status !== 'removed'
+        && (pr.inclusion === 'ancestor' || item.sha === blob));
+      if (!inPull) return false;
       witnessedPrs.add(number);
     }
     return sources.every(pr => witnessedPrs.has(pr.number));

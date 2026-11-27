@@ -154,6 +154,8 @@ test('deltaSelect re-reads new issues, issues named by merged PRs, and issues wi
 test('partial handback #4570 stays separate from closure intent and quoted examples', () => {
   const links = prRelationships('Closes #4570 and #123. Details in #8\n\nPart of #4570\nRefs #9\nCloses https://github.com/Elsewhere/Project/issues/44\n```txt\nCloses #99\n```');
   assert.deepEqual([...links], [[4570, 'partial'], [123, 'closing'], [9, 'partial']]);
+  assert.deepEqual([...prRelationships('Finish lifecycle reconciliation. Closes #8661. Refs #6312.\n`Closes #18`\n> Closes #20')],
+    [[8661, 'closing'], [6312, 'partial']]);
 });
 
 test('expired claims stay held and a 403 or a label receipt cannot supply absence', () => {
@@ -226,16 +228,31 @@ test('topic merges #8518/#8529/#8585/#8591 need verified main files; a partial P
   prs[3].relationship = 'closing';
   reads.readPullFiles = () => [];
   assert.equal(verifiedClosure(finding, evidence, reads), false, 'topic merge without a squash witness cannot close');
+  reads.readPullFiles = n => [{ ...pullFiles(n)[0], sha: 'c'.repeat(40) }];
+  assert.equal(verifiedClosure(finding, evidence, reads), false, 'topic merge requires the exact delivered blob');
   reads.readPullFiles = pullFiles;
   assert.equal(verifiedClosure(finding, evidence, reads), true, 'matching blobs can prove squash inclusion');
   assert.equal(verifiedClosure({ ...finding, verification: { ...verification, unfinished: 'one criterion' } }, evidence, reads), false);
 });
 
+test('a PR ancestor still needs a witnessed file it changed', () => {
+  const repo = 'AxalNetwork/StudioOS', blob = 'a'.repeat(40);
+  const pr = { number: 301, baseRepo: repo, mergedAt: '2026-11-25', state: 'closed', relationship: 'closing', inclusion: 'ancestor' };
+  const data = { facts: { mainSha: 'b'.repeat(40), prs: [pr], dependencies: [] } };
+  const finding = { verdict: 'close_done', verification: { scope_complete: true, source_prs: [301], main_paths: [{ pr: 301, path: 'unrelated.mjs', blob }] } };
+  const reads = { repo, readBlob: () => ({ type: 'file', sha: blob }), readPullFiles: () => [{ filename: 'delivered.mjs', sha: 'c'.repeat(40), status: 'added' }] };
+  assert.equal(verifiedClosure(finding, data, reads), false);
+  finding.verification.main_paths[0].path = 'delivered.mjs';
+  assert.equal(verifiedClosure(finding, data, reads), true, 'an independently verified later edit can be the current main blob');
+});
+
 test('a completed parent requires recorded closed children and an independently verified full scope', () => {
   const finding = { verdict: 'close_done', verification: { scope_complete: true, completed_children: [1, 2] } };
-  const data = { facts: { prs: [], dependencies: [{ number: 1, state: 'closed' }, { number: 2, state: 'open' }] } };
+  const data = { facts: { prs: [], dependencies: [{ number: 1, state: 'closed', stateReason: 'completed' }, { number: 2, state: 'open' }] } };
   assert.equal(verifiedClosure(finding, data, {}), false);
-  data.facts.dependencies[1].state = 'closed';
+  data.facts.dependencies[1] = { number: 2, state: 'closed', stateReason: 'not_planned' };
+  assert.equal(verifiedClosure(finding, data, {}), false);
+  data.facts.dependencies[1].stateReason = 'completed';
   assert.equal(verifiedClosure(finding, data, {}), true);
   assert.equal(verifiedClosure({ ...finding, verification: { ...finding.verification, scope_complete: false } }, data, {}), false);
 });

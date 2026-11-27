@@ -151,7 +151,7 @@ function readFacts(number, mainSha, openPulls, { note, extraIssues = [], extraPu
   });
   const dependencies = dependencyNumbers.map(n => {
     const item = canonicalLabels(gh('GET', `/issues/${n}`));
-    return { number: n, state: item.state, url: `https://github.com/${REPO}/issues/${n}`,
+    return { number: n, state: item.state, stateReason: item.state_reason, url: `https://github.com/${REPO}/issues/${n}`,
       digest: issueEvidenceDigest(item), commentDigest: digestComments(getPages(`/issues/${n}/comments`)) };
   });
   const foreignComments = comments.filter(c => !ownNote(c, note));
