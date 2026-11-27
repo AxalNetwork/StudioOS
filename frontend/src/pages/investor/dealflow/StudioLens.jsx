@@ -256,7 +256,7 @@ function AttentionStrip({ counts, view }) {
         if (!n && !on) return <span key={a.key} title={a.rule} className="inline-flex min-h-[44px] items-center rounded-full border border-axal-hairline px-3 text-[12.5px] text-axal-muted md:min-h-[30px] dark:border-gray-700 dark:text-gray-500" data-testid={`studio-attention-${a.key}`}>{words}</span>;
         return (
           <Link key={a.key} to={studioViewHref({ view: view.view, stage: view.stage, attention: on ? null : a.key })} title={a.rule} aria-current={on ? 'true' : undefined} data-testid={`studio-attention-${a.key}`}
-            className={`inline-flex min-h-[44px] items-center rounded-full border px-3 text-[12.5px] font-semibold md:min-h-[30px] ${on ? 'border-violet-400 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'}`}>{words}</Link>
+            className={`inline-flex min-h-[44px] items-center rounded-full border px-3 text-[12.5px] font-semibold md:min-h-[30px] ${on ? 'border-violet-400 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-200'}`}>{words}</Link>
         );
       })}
     </section>
