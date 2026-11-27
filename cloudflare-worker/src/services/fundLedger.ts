@@ -111,10 +111,13 @@ export async function postLedgerEntry(env: Env, actor: any, fundId: number, peri
     .bind(line.account_id,line.debit_cents,line.credit_cents,uid));
   // The database recomputes totals from the actual inserted lines before the
   // CHECK permits publication. This and its audit are the same D1 transaction.
+  // Each subquery names fund_id so idx_fund_ledger_lines_entry (fund_id,entry_id,…)
+  // serves it instead of a scan of every fund's lines (#9203); the (fund_id,entry_id)
+  // foreign key makes it the same rows.
   statements.push(env.DB.prepare(`UPDATE fund_ledger_entries SET posted=1,
-    debit_cents=(SELECT SUM(debit_cents) FROM fund_ledger_lines WHERE entry_id=fund_ledger_entries.id),
-    credit_cents=(SELECT SUM(credit_cents) FROM fund_ledger_lines WHERE entry_id=fund_ledger_entries.id),
-    line_count=(SELECT COUNT(*) FROM fund_ledger_lines WHERE entry_id=fund_ledger_entries.id),updated_at=datetime('now')
+    debit_cents=(SELECT SUM(debit_cents) FROM fund_ledger_lines WHERE fund_id=fund_ledger_entries.fund_id AND entry_id=fund_ledger_entries.id),
+    credit_cents=(SELECT SUM(credit_cents) FROM fund_ledger_lines WHERE fund_id=fund_ledger_entries.fund_id AND entry_id=fund_ledger_entries.id),
+    line_count=(SELECT COUNT(*) FROM fund_ledger_lines WHERE fund_id=fund_ledger_entries.fund_id AND entry_id=fund_ledger_entries.id),updated_at=datetime('now')
     WHERE uid=? AND posted=0`).bind(uid));
   statements.push(ledgerAudit(env,actor.id,'fund_ledger_entry_posted',{fund_id:fundId,period_id:periodId,entry_uid:uid,kind,fee_terms_id:termsId,
     entry_date:input.entry_date,description:input.description.trim(),lines:input.lines}));
