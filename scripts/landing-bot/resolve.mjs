@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { giveUp, LABELS, mode, pathGuard, prIssue } from './rules.mjs';
 import { client, pages, push, readBreakers, upsertSticky } from './keeper.mjs';
 import { gitIn } from './keeper-merge.mjs';
+import { stackGuard } from './stack-membership.mjs';
 import { oneLine } from './ejection.mjs';
 import { sameFiles, sidesOf, stageMerge } from './model/stage.mjs';
 import { checkPatch } from './model/patch.mjs';
@@ -116,6 +117,8 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   const base = { pr: n, head: pr.head?.sha, ref: pr.head?.ref, day };
   // Rules that need no clone first: a PR the bot may not touch is not cloned.
   const ctx = { env, event: env.GITHUB_EVENT_NAME, dispatchPr: n, repo: env.GITHUB_REPOSITORY, breakers, botLogin: env.LANDING_BOT_LOGIN, now, runs, reserved };
+  const stack = await stackGuard({ graph: gh.graph, repo: env.GITHUB_REPOSITORY, number: n, expectedHead: pr.head?.sha ?? 'unread', boundary: 'the conflict resolver' });
+  if (stack.hold) return finish({ ...base, decision: 'skip', reasons: [stack.line] });
   const pre = gate(pr, ctx);
   if (pre.decision !== 'resolve') return finish({ ...base, ...pre });
 
@@ -180,6 +183,8 @@ export async function applyStage(env, {
     const now = await gh.get(`pulls/${plan.pr}`);
     if (now.state !== 'open') return 'the pull request is closed';
     if (now.head?.sha !== plan.head) return HEAD_MOVED;
+    const stack = await stackGuard({ graph: gh.graph, repo: env.GITHUB_REPOSITORY, number: plan.pr, expectedHead: plan.head, boundary: 'the resolver push' });
+    if (stack.hold) return stack.line;
     if (mode(env) === 'off') return 'the landing bot is off';
     if ((now.labels || []).some((l) => l.name === LABELS.off)) return `it is labelled ${LABELS.off}`;
     if ((await readBreakers(gh, env)).open) return 'a breaker is open';

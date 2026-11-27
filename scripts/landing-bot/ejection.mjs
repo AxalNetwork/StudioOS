@@ -15,6 +15,7 @@ import { classify, consent, decide, evidenceState, groupRunFor, keeperMergedSinc
 import { client, pages, readBreakers } from './keeper.mjs';
 import { keeperAttempts } from './keeper-plan.mjs';
 import { createGitHubReader } from './feeder-github.mjs';
+import { stackHeld } from './stack-membership.mjs';
 
 const Q = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{
   id number state isDraft body isInMergeQueue mergeable headRefName headRefOid
@@ -170,6 +171,7 @@ export async function sweep(env, {
     const line = `#${pr.number}: ${k.class} (${k.why}); ${d.action}${pr.stranded ? ' (stranded label, second look)' : ''}${d.reasons.length ? ` — ${d.reasons.join('; ')}` : ''}; ${minutes} min after the ejection; auto-merge ${pr.autoMerge ? 'still set' : 'not set'}`;
     say(`- ${line}`);
     if (!app) continue;
+    if (await stackHeld(gh.graph, { repo: env.GITHUB_REPOSITORY, number: pr.number, head: pr.head.sha, boundary: 'the ejection handler', say })) continue;
     if (d.action === 'requeue') {
       await app.graph('mutation($id:ID!,$oid:GitObjectID!){enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$oid}){clientMutationId}}', { id: pr.id, oid: pr.head.sha })
         .catch(() => { throw new Error(`enqueue of #${pr.number} failed`); });

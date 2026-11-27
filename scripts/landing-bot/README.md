@@ -24,6 +24,7 @@ its data, passes it in, and does only what these functions allow.
 | `mainRepair.mjs` | Main repair (#6477): the pure decision (`confirmRed()`, `ownership()`, `choose()`), the patch and revert checks, and the entry point (`plan`, `claim`, `apply`) that takes the repair issue and opens one `main-repair` PR, or steps aside. |
 | `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
+| `stack-membership.mjs` | The native stack guard (#8555, D8555): one read-only GraphQL read of a PR's `stack` and `stackEntry`, classified `ordinary`, `member` or `unknown` with the PR, repository, head and evidence. The keeper, resolver, refresh, feeder and ejection handler call it before each individual write or model dispatch and hold a member or an unknown, or a head that moved since the plan. A held PR in the merge queue keeps its entry, order and auto-merge. |
 
 The tests are `frontend/test/landing_bot_core_6467.test.mjs`. They live there because `npm run test:frontend`
 runs that folder, and adding a glob here would mean editing `package.json`, which these rules protect.
