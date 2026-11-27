@@ -437,17 +437,24 @@ rehearses; it does not gate the deploy.
 
 ## 4. If a migration fails
 
-`migrate-d1.mjs` aborts loudly and names the offending file. Three cases:
+`migrate-d1.mjs` reports the offending file when it cannot continue.
 
 **(a) A genuinely new migration has bad SQL.**
 Fix the `.sql` file and re-run. The ledger only records files that applied
 successfully, so a failed one is still pending and will be retried. Nothing
 to clean up.
 
-**(b) `duplicate column name` / `table already exists` on a historical migration.**
-Production carries roughly 124 migrations applied by hand before the ledger
-existed, so the runner sees them as pending and replaying them fails. This is
-the one legitimate use of:
+**(b) `duplicate column name` / `table already exists` / `index already exists`.**
+On a duplicate error, the runner checks the pending file against the target
+schema. It verifies every added column by table and column name and requires
+an exact catalog definition for each unguarded table or index creation. It
+then runs the remaining `CREATE TABLE/INDEX IF NOT EXISTS` statements in order
+and logs the objects it found. It records that file's original checksum only
+after every replay succeeds. A missing column, unsupported statement, failed
+schema read or failed replay stops the run and leaves the file pending.
+
+For an older, populated database with no migration ledger, use the one-time
+baseline procedure:
 
 ```bash
 npm run d1:baseline      # dispatches the locked production baseline workflow
@@ -455,18 +462,17 @@ npm run d1:baseline      # dispatches the locked production baseline workflow
 
 It applies the idempotent pending files for real, *records* the non-idempotent
 ones without executing them, and prints exactly which it marked so you can
-verify them by hand. Run it **once per environment**. Afterwards, plain runs
-apply only genuinely new migrations.
+verify them by hand. Run it **once per environment**. Using baseline on an
+existing ledger would also mark genuinely pending non-idempotent migrations.
 
 **(c) A multi-statement file failed partway.**
 D1 applies a `--file` batch as one implicit transaction and rolls the whole
 file back on the first error, so nothing of it landed and it is not in the
 ledger (GOTCHAS has the 2026-09-03 worked example, with the seeded local
 reproduction showing the source table untouched). Fix the file, prove it
-against a local D1 the way GOTCHAS describes, and re-run. The one exception
-is a file someone applied by hand statement-by-statement: inspect the live
-schema first, then either make the file safely re-runnable or write a
-forward fix-up.
+against a local D1 the way GOTCHAS describes, and re-run. If a file's effects
+were applied through a separate path and case (b) cannot verify them,
+inspect the live schema and prepare a forward-only repair.
 
 **(d) `schema_migrations exists but is not this runner's ledger`.**
 The target holds a `schema_migrations` with other columns. A read through the

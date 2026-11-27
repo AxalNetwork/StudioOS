@@ -37,6 +37,7 @@ import {
   listMigrationFiles,
   planActions,
   applyPlan,
+  recoverDuplicateDdl,
   needsBaseline,
   bootstrapStateProblem,
   sqlQuote,
@@ -76,6 +77,145 @@ function makeEngine(db: InstanceType<typeof DatabaseSync>) {
     },
   };
 }
+
+test('D8936 recovers deployed columns and records each exact file after remaining DDL', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  const engine = makeEngine(db);
+  const migrations = listMigrationFiles(REAL_MIGRATIONS)
+    .filter((file: { name: string }) => /_(7707|7708|8522)_/.test(file.name));
+  assert.equal(migrations.length, 3);
+  db.exec(`
+    CREATE TABLE market_intel_rows (
+      observed_period TEXT, observed_period_end TEXT, published_at TEXT,
+      retrieved_at TEXT, coverage_area TEXT, scope TEXT
+    );
+    CREATE TABLE market_intel_indexes (window_start TEXT, window_end TEXT, source_mix_json TEXT);
+    CREATE TABLE ai_usage_logs (provider TEXT, request_id TEXT, tokens_reported INTEGER);
+    INSERT INTO market_intel_rows (observed_period) VALUES ('2025');
+  `);
+  assert.throws(() => engine.exec(migrations[0]), /duplicate column name: observed_period/);
+
+  const confirmed: string[][] = [];
+  let replayed = 0;
+  const result = applyPlan(planActions(migrations, engine.appliedSet()), {
+    ...engine,
+    exec(file: { name: string; sql: string }) {
+      try {
+        engine.exec(file);
+      } catch (error) {
+        confirmed.push(recoverDuplicateDdl(file.sql, error, {
+          read: (sql: string) => db.prepare(sql).all(),
+          execute(sql: string) {
+            assert.equal(engine.appliedSet().has(file.name), false);
+            replayed += 1;
+            db.exec(sql);
+          },
+        }));
+      }
+    },
+  });
+  assert.equal(result.failure, null);
+  assert.equal(replayed, 2);
+  assert.deepEqual(confirmed[0], [
+    'market_intel_rows.observed_period', 'market_intel_rows.observed_period_end',
+    'market_intel_rows.published_at', 'market_intel_rows.retrieved_at',
+    'market_intel_rows.coverage_area', 'market_intel_rows.scope',
+  ]);
+  assert.deepEqual([...engine.appliedSet()], migrations.map(({ name, checksum }: { name: string; checksum: string }) => [name, checksum]));
+  assert.equal(db.prepare('SELECT observed_period FROM market_intel_rows').get()?.observed_period, '2025');
+  assert.equal(db.prepare("SELECT type FROM sqlite_schema WHERE name = 'idx_mi_source_runs_source_started'").get()?.type, 'index');
+  assert.ok(planActions(migrations, engine.appliedSet()).every(({ action }: { action: string }) => action === 'skip'));
+});
+
+test('D8936 refuses missing columns, non-replayable SQL and unrelated diagnostics before writes', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec('CREATE TABLE sample (have TEXT);');
+  const duplicate = new Error('duplicate column name: have: SQLITE_ERROR');
+  let reads = 0;
+  const ports = {
+    read(sql: string) {
+      reads += 1;
+      return db.prepare(sql).all();
+    },
+    execute: () => assert.fail('unsafe recovery must not replay'),
+  };
+  const create = 'CREATE TABLE IF NOT EXISTS side_effect (value TEXT);';
+  assert.throws(() => recoverDuplicateDdl(create + 'ALTER TABLE sample ADD COLUMN have TEXT;' +
+    'ALTER TABLE sample ADD COLUMN missing TEXT;', duplicate, ports), (error) => error === duplicate);
+  assert.equal(reads, 1);
+  for (const sql of [
+    'ALTER TABLE sample ADD COLUMN have TEXT;' + create + 'DELETE FROM sample;',
+    'ALTER TABLE sample ADD COLUMN different TEXT;' + create,
+  ]) {
+    assert.throws(() => recoverDuplicateDdl(sql, duplicate, ports), (error) => error === duplicate);
+  }
+  const unrelated = new Error('database is locked');
+  assert.throws(
+    () => recoverDuplicateDdl('ALTER TABLE sample ADD COLUMN have TEXT;', unrelated, ports),
+    (error) => error === unrelated,
+  );
+  assert.equal(reads, 1);
+});
+
+test('D8936 exact table and index collisions can replay guarded DDL, altered definitions cannot', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  const table = "CREATE TABLE sample (value TEXT DEFAULT 'a;b');";
+  const index = 'CREATE UNIQUE INDEX sample_index ON sample (value);';
+  db.exec(table + index);
+  const ports = {
+    read: (sql: string) => db.prepare(sql).all(),
+    execute: (sql: string) => db.exec(sql),
+  };
+  const assertions = [
+    [table, 'table sample', /table sample already exists/],
+    [index, 'index sample_index', /index sample_index already exists/],
+  ] as const;
+  for (const [sql, object, diagnostic] of assertions) {
+    let duplicate;
+    try { db.exec(sql); } catch (error) { duplicate = error; }
+    assert.match(String(duplicate), diagnostic);
+    assert.deepEqual(recoverDuplicateDdl(sql + 'CREATE TABLE IF NOT EXISTS tail(id);', duplicate, ports), [object]);
+  }
+  const mismatched = new Error('table sample already exists');
+  assert.throws(
+    () => recoverDuplicateDdl("CREATE TABLE sample (value TEXT DEFAULT 'a b');", mismatched, ports),
+    (error) => error === mismatched,
+  );
+});
+
+test('D8936 replay failure stops the plan without recording the current or later file', (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  const engine = makeEngine(db);
+  db.exec('CREATE TABLE sample (have TEXT);');
+  const { dir, files } = tmpMigrations({
+    '001_recover.sql': `ALTER TABLE sample ADD COLUMN have TEXT;
+      CREATE TABLE IF NOT EXISTS tail (id);
+      CREATE INDEX IF NOT EXISTS bad_index ON tail(missing);`,
+    '002_next.sql': 'CREATE TABLE IF NOT EXISTS later (id);',
+  });
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const result = applyPlan(planActions(files, engine.appliedSet()), {
+    ...engine,
+    exec(file: { name: string; sql: string }) {
+      try {
+        engine.exec(file);
+      } catch (error) {
+        recoverDuplicateDdl(file.sql, error, {
+          read: (sql: string) => db.prepare(sql).all(),
+          execute: (sql: string) => db.exec(sql),
+        });
+      }
+    },
+  });
+  assert.match(String(result.failure?.error), /no such column: missing/);
+  assert.equal(result.failure?.file.name, '001_recover.sql');
+  assert.equal(engine.appliedSet().size, 0);
+  assert.deepEqual(db.prepare("SELECT name FROM sqlite_schema WHERE name IN ('tail', 'later')").all().map((row) => row.name), ['tail']);
+});
 
 test('compareMigrations sorts numerically with a stable tiebreak on duplicate prefixes', () => {
   const names = [

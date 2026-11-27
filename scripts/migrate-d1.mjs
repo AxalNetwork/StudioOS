@@ -65,6 +65,7 @@ import {
   classifyIdempotency,
   planActions,
   applyPlan,
+  recoverDuplicateDdl,
   needsBaseline,
   sqlQuote,
   verifyMarked,
@@ -525,7 +526,15 @@ function main() {
 
   const exec = (file) => {
     console.log(`[migrate-d1]   applying ${file.name} ...`);
-    wrangler(target, { file: `sql/migrations/${file.name}` });
+    try {
+      wrangler(target, { file: `sql/migrations/${file.name}` });
+    } catch (error) {
+      const confirmed = recoverDuplicateDdl(file.sql, error, {
+        read: (command) => wrangler(target, { command, json: true }),
+        execute: (command) => wrangler(target, { command }),
+      });
+      console.log(`[migrate-d1]   ${file.name} already present: ${confirmed.join(', ')}; replayed remaining idempotent DDL`);
+    }
   };
   const record = (file) => {
     recordMigration(target, file, {

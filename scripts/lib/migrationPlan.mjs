@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { splitStatements } from '../dr-drill-split.mjs';
 
 // Ledger table. filename is the natural primary key; checksum lets us detect a
 // migration file that was edited AFTER it was applied (forward-only runners
@@ -206,6 +207,76 @@ export function checksum(sql) {
 // injecting) the INSERT.
 export function sqlQuote(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+// Restrict recovery to the additive forms we can verify or replay safely.
+const DDL_NAME = '[A-Za-z_][A-Za-z0-9_]*';
+const ADD_COLUMN = new RegExp(`^ALTER\\s+TABLE\\s+(${DDL_NAME})\\s+ADD\\s+COLUMN\\s+(${DDL_NAME})\\s+\\S`, 'i');
+const CREATE_TABLE = new RegExp(`^(CREATE\\s+TABLE)\\s+(?:(IF\\s+NOT\\s+EXISTS)\\s+)?((${DDL_NAME})\\s*\\()`, 'i');
+const CREATE_INDEX = new RegExp(`^(CREATE\\s+(?:UNIQUE\\s+)?INDEX)\\s+(?:(IF\\s+NOT\\s+EXISTS)\\s+)?((${DDL_NAME})\\s+ON\\s+${DDL_NAME}\\s*\\()`, 'i');
+const COLUMN_EXISTS = new RegExp(`\\bduplicate (column) name:\\s*(${DDL_NAME})(?=[:\\s]|$)`, 'i');
+const OBJECT_EXISTS = new RegExp(`\\b(table|index)\\s+(${DDL_NAME})\\s+already exists\\b`, 'i');
+
+function createDefinition(statement, match) {
+  // SQLite's catalog drops IF NOT EXISTS and normalizes the leading CREATE
+  // keywords. Keep the definition exact, including its literal values.
+  const header = match[1].toUpperCase().replace(/\s+/g, ' ');
+  return `${header} ${match[3]}${statement.slice(match[0].length)}`;
+}
+
+/**
+ * Recover a single pending file after a duplicate DDL diagnostic. Verify every
+ * non-replayable statement before issuing any writes. The caller records the
+ * original file only after this returns successfully.
+ */
+export function recoverDuplicateDdl(sql, originalError, { read, execute }) {
+  const diagnostic = String(originalError?.message).replace(/\u001b\[[\d;]*m/g, '');
+  const duplicate = COLUMN_EXISTS.exec(diagnostic) ?? OBJECT_EXISTS.exec(diagnostic);
+  if (!duplicate) throw originalError;
+  const [, duplicateKind, duplicateName] = duplicate.map((part) => part.toLowerCase());
+  const { statements, error } = splitStatements(sql);
+  if (error) throw originalError;
+
+  const effects = statements.map((statement) => {
+    const add = ADD_COLUMN.exec(statement);
+    if (add) return { kind: 'column', table: add[1], name: add[2] };
+    const table = CREATE_TABLE.exec(statement);
+    const create = table ?? CREATE_INDEX.exec(statement);
+    if (create) return { kind: table ? 'table' : 'index', name: create[4], statement, create };
+    throw originalError;
+  });
+  if (!effects.some(({ kind, name }) => kind === duplicateKind && name.toLowerCase() === duplicateName)) {
+    throw originalError;
+  }
+
+  const columns = new Map();
+  const confirmed = [];
+  const replay = [];
+  for (const effect of effects) {
+    const { kind, table, name, statement, create } = effect;
+    if (kind === 'column') {
+      if (!columns.has(table)) {
+        const rows = read(`PRAGMA main.table_info(${sqlQuote(table)})`);
+        columns.set(table, new Set(rows.map((row) => row.name.toLowerCase())));
+      }
+      if (!columns.get(table).has(name.toLowerCase())) throw originalError;
+      confirmed.push(`${table}.${name}`);
+    } else if (create[2]) {
+      replay.push(statement);
+    } else {
+      const [row] = read(`SELECT sql FROM main.sqlite_schema WHERE type = ${sqlQuote(kind)} AND name = ${sqlQuote(name)} COLLATE NOCASE`);
+      const stored = typeof row?.sql === 'string' ? splitStatements(row.sql) : null;
+      if (!stored || stored.error || stored.statements.length !== 1) throw originalError;
+      const storedCreate = (kind === 'table' ? CREATE_TABLE : CREATE_INDEX).exec(stored.statements[0]);
+      if (!storedCreate ||
+          createDefinition(stored.statements[0], storedCreate) !== createDefinition(statement, create)) {
+        throw originalError;
+      }
+      confirmed.push(`${kind} ${name}`);
+    }
+  }
+  for (const statement of replay) execute(statement);
+  return confirmed;
 }
 
 // Should the runner refuse to auto-apply and demand a one-time baseline?
