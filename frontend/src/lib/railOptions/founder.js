@@ -487,6 +487,7 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Grow · Durable company-building': 'Its Share an update is the section’s; the checklist and the compliance calendar run no model.',
   'Founder · Network · Organizations': 'The founder’s zone runs no model; the organizations band is a partner’s.',
   'Founder · Research · Markets': 'Recording a reading and its Draft run no model.',
+  'Founder · Research · Geographies': 'Read only.',
 };
 
 // D1420 (#3864): Ask-panel chips that run a model on POST /api/ai/rail/run but
