@@ -1,5 +1,5 @@
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 /**
  * Task #13 — Section 83(b) election tracker (worker / D1 parity).
@@ -47,21 +47,17 @@ export async function ensureSection83bSchema(env: Env): Promise<void> {
     `CREATE INDEX IF NOT EXISTS idx_83b_user ON section_83b_trackers(user_id)`,
     // Migration 310 (D361) — the filing record. Declared there; these are the
     // D235 safety net for a cold isolate on a database the runner has not
-    // reached yet. "duplicate column" is swallowed below, so on every
-    // migrated database each is a no-op.
+    // reached yet. #5343: `runSchemaBootstrap` reads the table's columns once
+    // per binding and skips each whose column is there, so a migrated database
+    // issues none (they used to be tried blind, "duplicate column" swallowed).
     'ALTER TABLE section_83b_trackers ADD COLUMN filing_method TEXT',
     'ALTER TABLE section_83b_trackers ADD COLUMN tracking_number TEXT',
     'ALTER TABLE section_83b_trackers ADD COLUMN irs_service_center TEXT',
     'ALTER TABLE section_83b_trackers ADD COLUMN company_ack_at TEXT',
     'ALTER TABLE section_83b_trackers ADD COLUMN tax_return_copy_at TEXT',
   ];
-  for (const s of stmts) {
-    try { await env.DB.prepare(s).run(); }
-    catch (e) {
-      const msg = (e as Error).message || '';
-      if (!/duplicate column|already exists/i.test(msg)) throw e;
-    }
-  }
+  // Anything but "already exists" throws, as before, and is not remembered.
+  await runSchemaBootstrap(env, stmts);
   MIGRATED.set(bindingKey(env), true);
 }
 
