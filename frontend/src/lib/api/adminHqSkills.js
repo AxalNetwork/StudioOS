@@ -45,6 +45,7 @@ export const adminHqSkillsApi = {
   },
   library: (options) => request(`${BASE}/library`, options),
   get: (uid) => request(`${BASE}/${enc(uid)}`),
+  pins: (uid, options) => request(`${BASE}/${enc(uid)}/pins`, options),
   diff: (uid, { from, to } = {}) => {
     const q = new URLSearchParams(Object.entries({ from, to }).filter(([, v]) => v)).toString();
     return request(`${BASE}/${enc(uid)}/diff${q ? `?${q}` : ''}`);

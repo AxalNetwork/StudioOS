@@ -4,6 +4,7 @@
  * what the evidence is made of, and the manifest each published version was released on. Read only.
  */
 import React from 'react';
+import { reusedLine } from './skillLifecycleModel';
 import { Card } from '../../../ui';
 import { changeRows, evaluationLine, evidenceRows, readiness, versionRecord } from './releaseModel';
 
@@ -26,6 +27,7 @@ function Rows({ rows, testid }) {
 }
 
 export function ReleaseEvidence({ freshness, versions }) {
+  const reused = reusedLine(freshness);
   const r = readiness(freshness);
   const changes = changeRows(freshness?.review);
   const evidence = evidenceRows(freshness?.evidence);
@@ -38,6 +40,7 @@ export function ReleaseEvidence({ freshness, versions }) {
         {r.reasons.length ? <ul className="mt-1 list-disc pl-5">{r.reasons.map((x) => <li key={x}>{x}</li>)}</ul> : null}
       </div>
       <p className={MUTED} data-testid="release-evaluation">Evaluation on the current evidence: {evaluationLine(freshness?.evaluation)}</p>
+      {reused && <p className={MUTED}>{reused}</p>}
       {spent ? <p className={MUTED} data-testid="release-spent">The approval on this evidence already released v{spent}, so publishing again needs a new review.</p> : null}
       <section className="space-y-1">
         <h4 className={DT}>Since the last approval</h4>
