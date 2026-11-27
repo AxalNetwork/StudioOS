@@ -201,6 +201,13 @@ r.post('/slots/:id/book', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM partner_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
     if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+    // D9040: through the `/:uid/book` alias, only a slot of the partner its
+    // address names is bookable; any other is the same 404 as no slot.
+    const viaUid = c.req.query('partner_uid');
+    if (viaUid !== undefined) {
+      const named = await partnerByUid(c.env, viaUid);
+      if (!named || Number(named.id) !== Number(slot.partner_id)) return c.json({ detail: 'Slot not available' }, 404);
+    }
     if (new Date(slot.starts_at).getTime() < Date.now()) {
       return c.json({ detail: 'Slot is in the past' }, 400);
     }
@@ -525,14 +532,20 @@ r.get('/ratings/summary', async (c) => {
 
 // Task #1 (AG) — spec-contract alias. POST /:uid/book maps the partner uid +
 // slot_id (body) to the existing /slots/:id/book handler.
+//
+// D9040: this router's own routes are unprefixed, so the forward names
+// `/slots/:id/book`, not the mounted `/api/partner-office-hours/...` path,
+// which matched nothing here and answered every call 404. The partner uid
+// travels with it, so the handler books only a slot of that partner.
 r.post('/:uid/book', async (c) => {
   const body = await c.req.text();
   let parsed: Record<string, unknown> = {};
   try { parsed = JSON.parse(body || '{}'); } catch { /* noop */ }
   const slotId = Number(parsed?.slot_id);
-  if (!Number.isFinite(slotId)) return c.json({ detail: 'slot_id required in body' }, 400);
+  if (!Number.isSafeInteger(slotId)) return c.json({ detail: 'slot_id required in body' }, 400);
   const url = new URL(c.req.url);
-  url.pathname = `/api/partner-office-hours/slots/${slotId}/book`;
+  url.pathname = `/slots/${slotId}/book`;
+  url.search = `?partner_uid=${encodeURIComponent(c.req.param('uid'))}`;
   return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
 });
 
