@@ -113,7 +113,10 @@ test('the strip is the shell\'s six core sections in PG03\'s order and words, wi
   assert.deepEqual(moduleRows('ai-native-venture', { modules: [] }), { state: 'ready', rows: [] });
   // The strip's literal doors equal the model's.
   const strip = read('frontend/src/pages/admin/programs/ProgramTabs.jsx');
-  const body = strip.slice(strip.indexOf('export function AiNativeTabs'));
+  // D5894 (#5894): Product testing's strip follows it in the file, so the slice ends at the next strip.
+  const from = strip.indexOf('export function AiNativeTabs');
+  const next = strip.indexOf('export function', from + 1);
+  const body = strip.slice(from, next === -1 ? undefined : next);
   assert.deepEqual([...body.matchAll(/<Tab to="([^"]+)"[^>]*>([^<]+)<\/Tab>/g)].map((m) => [m[1], m[2].replace('&amp;', '&')]), TABS.map((t) => [t.path, t.label]));
   for (const t of TABS) {
     assert.deepEqual(routeFor(t.path), { program: 'ai-native-venture', tab: t.key });
