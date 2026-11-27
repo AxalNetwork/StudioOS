@@ -52,3 +52,32 @@ retrying. No production backfill was run as part of this change.
 
 The webhook secret controls updates from GitHub back to StudioOS; changing it
 does not repair outbound issue-creation permission.
+
+## Set up the sync
+
+Outbound (StudioOS → GitHub) is `services/githubSync.ts` and
+`routes/tickets.ts`; inbound (GitHub → StudioOS) is `routes/github.ts`,
+mounted at `/api/github`. Both run in the `studioos` Worker.
+
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `GITHUB_ACCESS_TOKEN` | secret | Creates, edits, labels and comments on issues (Issues: Read and write, above). |
+| `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` | `wrangler.toml` vars, both tables | The target repository. Changed only by a pull request; HQ refuses to write them (`repo_is_deploy_time`). |
+| `GITHUB_WEBHOOK_SECRET` | secret | The HMAC key for `X-Hub-Signature-256` on inbound deliveries. HQ → Integration keys → GitHub Sync can generate it. |
+| `GITHUB_SYNC_BOT_LOGIN` | secret or var, optional | The GitHub login behind the token; inbound events from it are the Worker's own echoes and are dropped. |
+| `ADMIN_GITHUB_LOGINS` | secret or var, optional | JSON map of a local assignee (name or email) to a GitHub login. An unmapped assignee skips the GitHub assignee call, and the response says so. |
+
+Register the inbound webhook once, in the repository's **Settings → Webhooks**:
+payload URL `https://axal.vc/api/github/webhook` (HQ › Integration keys ›
+GitHub Sync shows the URL the Worker expects), content type
+`application/json`, the secret above, events **Issues** and **Issue
+comments**. Without the secret the webhook answers 503; a bad signature
+answers 401; any other event is acknowledged with a 2xx so GitHub does not
+retry. `GET /api/health` reports `github_sync.token`, `.repo` and
+`.webhook_secret` as presence flags, never values.
+
+Each delivery's `X-GitHub-Delivery` id is recorded in `ticket_sync_events`,
+so a redelivery is acknowledged and dropped, and comments the Worker posts
+carry an `axal-sync:ticket-<id>` marker that inbound handling ignores. The
+label and status mappings are pinned by
+`cloudflare-worker/test/ticketsGithubSync.test.ts`.
