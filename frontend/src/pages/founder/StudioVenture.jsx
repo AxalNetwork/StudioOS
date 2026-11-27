@@ -22,7 +22,8 @@ import {
 } from './founderNextModel';
 
 const CARD = 'mb-4 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900/40';
-const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-wide text-axal-faint';
+// D8729 part 3: `text-axal-muted`, not `-faint` (#a1a1aa, 2.6:1 on white), which axe failed for colour contrast at 390 and 1440.
+const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-wide text-axal-muted';
 
 /** The address Studio is on now, for `state.under`. */
 const here = (location) => `${location.pathname}${location.search}`;
@@ -214,7 +215,8 @@ export function NextCard({ next, venture, ventureId, phone = false, onRetry = nu
                   {s.eadwyn
                     ? <button type="button" id={`studio-next-${s.key}`} className="sm-link min-h-11 shrink-0" onClick={onOpenEadwyn || undefined} aria-label="Answer Eadwyn’s questions">Answer ›</button>
                     : s.to && (
-                      <StudioTaskLink to={s.to} id={`studio-next-${s.key}`} ventureId={ventureId} venture={venture} className="sm-link inline-flex min-h-11 shrink-0 items-center" aria-label={taskName(s.text, venture)}>
+                      // D8729 part 3: the name starts with the word it shows (WCAG 2.5.3, axe's label-content-name-mismatch).
+                      <StudioTaskLink to={s.to} id={`studio-next-${s.key}`} ventureId={ventureId} venture={venture} className="sm-link inline-flex min-h-11 shrink-0 items-center" aria-label={`Open: ${taskName(s.text, venture)}`}>
                         Open ›
                       </StudioTaskLink>
                     )}

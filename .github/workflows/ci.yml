@@ -1041,6 +1041,13 @@ jobs:
       - name: Switcher name and rail absent colour (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/switcher_rail_7808.spec.js --retries=0 --trace off
+      # #8729 (D8729-p3): the founder Studio's first screen at 390 × 844 and 1440 for two synthetic ventures — the
+      # venture's h1 and Add feature inside the window, Add feature and Cancel or Back keeping the venture with focus
+      # returned, the unavailable, chooser and first-venture paths, axe on the header and the Next card. Same docs/
+      # and fixtures pattern as the step above; no trace is recorded.
+      - name: Founder Studio first screen (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/studio_founder_first_screen_8729.spec.js --retries=0 --trace off
       # #8537 (D8537): the public journey at 1440 and 390 — Pricing to sign-up and back to the plan's checkout, a Grow
       # action through sign-in and back, a session that ended back in by the email link. The local Worker in
       # tests/e2e/_helpers.js serves the docs/ built above and keeps the sign-in links in an outbox; no email, no account.
