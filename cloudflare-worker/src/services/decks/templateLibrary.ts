@@ -102,7 +102,8 @@ export const LAYOUT_AREAS: Record<string, Array<{ id: string; grid: G; kind: 'te
   ],
   quote: [{ id: 'Q', grid: g(2, 11, 2, 4), kind: 'text', style: 'heading' }, { id: 'A', grid: g(2, 11, 5, 5), kind: 'text', style: 'paragraph' }],
   comparison_table: [{ id: 'H', grid: g(1, 12, 1, 1), kind: 'text', style: 'heading' }, { id: 'C', grid: g(1, 12, 2, 6), kind: 'chart', chart: 'comparison_table' }],
-  image_text: [{ id: 'I', grid: g(1, 6, 1, 6), kind: 'image' }, { id: 'H', grid: g(7, 12, 1, 1), kind: 'text', style: 'heading' }, { id: 'P', grid: g(7, 12, 2, 6), kind: 'text', style: 'paragraph' }],
+  // D8770 (#8770, canvas PTP14): a six-column heading takes rows 1 and 2, so a two-line heading fits at export size instead of clipping.
+  image_text: [{ id: 'I', grid: g(1, 6, 1, 6), kind: 'image' }, { id: 'H', grid: g(7, 12, 1, 2), kind: 'text', style: 'heading' }, { id: 'P', grid: g(7, 12, 3, 6), kind: 'text', style: 'paragraph' }],
   appendix_table: [{ id: 'H', grid: g(1, 12, 1, 1), kind: 'text', style: 'heading' }, { id: 'L', grid: g(1, 12, 2, 6), kind: 'text', style: 'list' }],
 };
 
@@ -447,7 +448,8 @@ export const SPECS: readonly Spec[] = [
     description: 'Traction lands third under serif headlines with a clear arc: the fullest seed story.',
     cards: [
       ['title', 'title'], ['problem', 'quote'], ['traction', 'chart_text'], ['solution', 'image_text', { I: ART }], ['why_now', 'statement'], ['validation', 'metric_tiles'],
-      ['product', 'two_columns'], ['market', 'comparison_table'], ['competition', 'two_columns', { R: MATRIX }], ['roadmap', 'timeline'], ['team', 'team_grid'], ['round', 'metric_tiles'], ['use_of_funds', 'timeline'],
+      // D8770 (owner Q3, option A drawn): the Product card is image and text, with a screenshot area.
+      ['product', 'image_text'], ['market', 'comparison_table'], ['competition', 'two_columns', { R: MATRIX }], ['roadmap', 'timeline'], ['team', 'team_grid'], ['round', 'metric_tiles'], ['use_of_funds', 'timeline'],
     ],
   },
   {

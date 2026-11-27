@@ -18,6 +18,9 @@ import {
 } from './templatesModel';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 import DeckPreview, { previewRead } from './DeckPreview';
+import TemplateSlide, { TemplateFullSize, ViewSwitch, useThemeFonts } from './TemplateSlide';
+import { DEFAULT_VIEW, SCALED_LINE, carryLines, previewFace, previewSlides, takeaway, templateSets } from './templatePreviewModel';
+import { EXAMPLE_NOTE } from './templateExamples';
 
 /**
  * D1604 (#3716, pd29), wired to the template store by #3876 (canvas pd29c,
@@ -37,6 +40,14 @@ import DeckPreview, { previewRead } from './DeckPreview';
  *   Yours     the caller's own templates, used the same way, and Save as my
  *             template from the venture's current version: text and figures
  *             are removed; structure, theme and decor are kept.
+ *
+ * D8770 (#8770, canvas PTP01 to PTP05): every preview card is the card laid
+ * out once at export size in the template's own theme and scaled
+ * (`TemplateSlide`), with charts plotted. The aside and Preview all slides
+ * switch between Example (a marked fictional company, `templateExamples.js`,
+ * first, owner Q1 A) and Blank structure (the store's placeholders, the only
+ * thing Use this template sends for: it posts the uid). Each card offers Open
+ * full size, which has Previous, Next and Read this slide.
  *
  * A reader (read-only HQ) browses and gets no Use this template and no Save.
  * Gallery and Yours are two buttons with `aria-pressed`, as New deck's Length
@@ -156,8 +167,19 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
+  // D8770: Example first (owner Q1, option A); `full` is the card open at full size.
+  const [view, setView] = useState(DEFAULT_VIEW);
+  const [full, setFull] = useState(null);
+  const deck = preview.status === 'ok' ? preview.deck : null;
+  useThemeFonts(deck?.theme);
+  const face = useMemo(() => previewFace(deck?.theme), [deck]);
+  const blank = useMemo(() => (Array.isArray(deck?.cards) ? deck.cards : []), [deck]);
+  const shown = useMemo(() => previewSlides(blank, view, face), [blank, view, face]);
+  const aspect = deck?.template?.aspect === '4:3' ? '4:3' : '16:9';
+  const cardLabel = (i) => `Slide ${i + 1} of ${shown.length}, ${blank[i]?.title || `Card ${i + 1}`}: ${takeaway(shown[i]) || ''}`;
 
   useEffect(() => {
+    setFull(null);
     if (!tile) { setPreview({ status: 'idle', titles: [] }); return undefined; }
     let live = true;
     setPreview({ status: 'loading', titles: [] });
@@ -199,7 +221,7 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
             <button type="button" aria-pressed={selected === t.id} onClick={() => setSelected(t.id)}
               className={`${CARD} flex w-full flex-col gap-2 p-2.5 text-left ${selected === t.id ? 'outline outline-2 outline-axal-violet dark:outline-violet-400' : ''}`}
               data-testid={`pitch-templates-tile-${t.id}`}>
-              <DeckPreview cache={cache} cacheKey={t.id} load={() => deckTemplatesApi.template(t.id)} />
+              <DeckPreview cache={cache} cacheKey={t.id} load={() => deckTemplatesApi.template(t.id)} scaled />
               <span className={SMALL}>Template preview · placeholders</span>
               <span className={`text-[13px] font-bold ${INK}`}>{t.label}</span>
               <span className="flex flex-wrap items-center gap-1.5">
@@ -222,8 +244,13 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
             {preview.status === 'error' ? <span className={SMALL} role="alert" data-testid="pitch-templates-preview-error">{PREVIEW_FAILED}</span> : null}
             {preview.status === 'ok' ? (
               <div className="flex flex-col gap-3">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{preview.titles.slice(0, 3).map((title, i) => <DeckPreview key={i} deck={preview.deck} slideIndex={i} />)}</div>
-              <button type="button" className={GHOST} onClick={() => setAll(true)}>Preview all slides</button>
+              <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]" data-testid="pitch-templates-sets">
+                {templateSets(preview.deck).map(([k, v]) => <React.Fragment key={k}><dt className={`${EYE} self-center`}>{k}</dt><dd className={`m-0 ${INK}`}>{v}</dd></React.Fragment>)}
+              </dl>
+              <ViewSwitch view={view} onChange={setView} testId="pitch-templates-view" />
+              {view === 'example' ? <span className={SMALL} data-testid="pitch-templates-example-note">{EXAMPLE_NOTE}</span> : null}
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{shown.slice(0, 3).map((slide, i) => <TemplateSlide key={`${view}-${i}`} slide={slide} index={i} count={shown.length} face={face} aspect={aspect} label={cardLabel(i)} onOpen={() => setFull(i)} initialWidth={306} testId={`pitch-templates-card-${i}`} />)}</div>
+              <button type="button" className={GHOST} onClick={() => setAll(true)} data-testid="pitch-templates-all">Preview all slides</button>
               <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-templates-strip">
                 {preview.titles.map((x, i) => (
                   <li key={`${x}-${i}`} className="flex gap-2 text-[12px]"><span className="font-mono text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span><span className={INK}>{x}</span></li>
@@ -236,9 +263,22 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
           </>
         ) : <span className={MUTED}>Select a template to see its cards.</span>}
       </aside>
-      {all && tile && preview.status === 'ok' ? <Lightbox label={`Preview · ${tile.label}`} title={`Preview · ${tile.label}`} width={960} onClose={() => setAll(false)}>
-        <div className="grid gap-3 sm:grid-cols-2">{preview.titles.map((title, i) => <figure key={i} className="m-0 min-w-0"><DeckPreview deck={preview.deck} slideIndex={i} /><figcaption className={SMALL}>{i + 1}. {title}</figcaption></figure>)}</div>
+      {all && tile && preview.status === 'ok' && full == null ? <Lightbox label={`Preview · ${tile.label}`} title={`Preview · ${tile.label}`} width={1100} onClose={() => setAll(false)} testId="pitch-templates-all-dialog"
+        footer={canUse ? <div className="flex justify-end"><button type="button" className={PRIMARY} onClick={() => { setAll(false); setConfirm(true); }} data-testid="pitch-templates-all-use">{USE_TEMPLATE}</button></div> : null}>
+        <div className="flex flex-col gap-3">
+          <span className="flex flex-wrap items-center gap-3"><ViewSwitch view={view} onChange={setView} testId="pitch-templates-all-view" /><span className={SMALL}>{shown.length} cards · {aspect} · {SCALED_LINE}</span></span>
+          {view === 'example' ? <span className={SMALL}>{EXAMPLE_NOTE}</span> : null}
+          <div className="grid gap-3 sm:grid-cols-2">{shown.map((slide, i) => (
+            <figure key={`${view}-${i}`} className="m-0 flex min-w-0 flex-col gap-1">
+              <TemplateSlide slide={slide} index={i} count={shown.length} face={face} aspect={aspect} label={cardLabel(i)} onOpen={() => setFull(i)} initialWidth={500} testId={`pitch-templates-all-${i}`} />
+              <figcaption className={SMALL}>{i + 1}. {blank[i]?.title || preview.titles[i]}</figcaption>
+            </figure>
+          ))}</div>
+        </div>
       </Lightbox> : null}
+      {full != null && tile && preview.status === 'ok' ? (
+        <TemplateFullSize blank={blank} shown={shown} at={full} onMove={setFull} onClose={() => setFull(null)} view={view} onView={setView} face={face} aspect={aspect} />
+      ) : null}
       {confirm && tile ? (
         <Lightbox label={USE_TEMPLATE} title={USE_TEMPLATE} width={480} onClose={() => !busy && setConfirm(false)} testId="pitch-templates-dialog"
           footer={(
@@ -248,8 +288,27 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
             </div>
           )}>
           <p className={`m-0 ${MUTED}`} data-testid="pitch-templates-dialog-sentence">{STORE_SENTENCE}</p>
+          {preview.status === 'ok' ? <CarryOver lines={carryLines(preview.deck, tile.label)} /> : null}
         </Lightbox>
       ) : null}
+    </div>
+  );
+}
+
+/** D8770 (PTP05): what Use this template carries over and what it does not; the example never does. */
+function CarryOver({ lines }) {
+  const list = (title, rows, testId) => (
+    <div className="flex flex-col gap-1">
+      <span className={EYE}>{title}</span>
+      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]" data-testid={testId}>
+        {rows.map(([k, v]) => <React.Fragment key={k}><dt className={`font-bold ${INK}`}>{k}</dt><dd className={`m-0 ${MUTED}`}>{v}</dd></React.Fragment>)}
+      </dl>
+    </div>
+  );
+  return (
+    <div className="mt-3 flex flex-col gap-3">
+      {list('Carries over', lines.carries, 'pitch-templates-carries')}
+      {list('Does not carry over', lines.not, 'pitch-templates-not-carried')}
     </div>
   );
 }
