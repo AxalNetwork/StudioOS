@@ -1,24 +1,36 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { filterByKind } from '../../lib/licenceKind';
 import { Link } from 'react-router-dom';
 import { Globe, Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { Card, DataState, RailFrame, StateChip, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
 import { registryUnreadable } from './hqTeamBranchModel';
 import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import MyTasks from '../work/MyTasks.jsx';
+import { EscalationsCard, OtherSignals, useEscalationRead } from './HqAttention.jsx';
+import { ANNOUNCE, HQ_WORK_OFF, attentionLine, clockUtc, namesByCode } from './hqHomeModel.js';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
  *
- * One request, `GET /api/admin/hq/overview`, and everything on this page is
- * either read from it or said to be not recorded. The canvas draws five
- * totals, a health card per subsidiary, an escalation queue and a licensing
- * feed; the store can answer some of each and the page says which.
+ * D8727 (#8727) — HQ HOME OPENS ON "WHAT NEEDS MY ATTENTION?". The h1 is
+ * "HQ home"; escalations and the scope they affect come before the Platform
+ * tiles, the subsidiary cards, the licensing feed and, last, My tasks, which
+ * while Work is off is one sentence with no Show or Due filters. Two reads, each
+ * with its own Reading, value, All clear and Unavailable state and its own Try
+ * again: the overview below, and the escalation board on its own
+ * (`HqAttention.jsx`), so a pending read is never drawn as a failure and a
+ * failed overview never costs the escalations. One polite live region speaks
+ * for the page (`hqHomeModel.js` holds the literal announcements).
+ *
+ * The overview, `GET /api/admin/hq/overview`: everything else on this page is
+ * either read from it or said to be not recorded. The canvas draws the
+ * totals, a health card per subsidiary and a licensing feed; the store can
+ * answer some of each and the page says which.
  *
  * THE TENANT SWITCHER NARROWS THIS PAGE ONLY. "All subsidiaries ▾" filters
  * the cards and the feed over the payload already loaded and sends nothing
@@ -101,12 +113,23 @@ function Pill({ status }) {
   return <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{titleCase(status)}</span>;
 }
 
-function Tile({ label, value, note, tone = 'text-axal-ink' }) {
+/**
+ * A Platform tile. D8727 — the tile carries its read's state: Reading is a
+ * skeleton, a failed overview is Unavailable ("not read"), and only a read that
+ * answered shows its value, where a missing figure is still Not recorded.
+ */
+function Tile({ label, value, note, state = 'ok', tone = 'text-axal-ink' }) {
   return (
-    <Card>
+    <Card data-read={state}>
       <div className="text-[9.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
-      <div className={`mt-1.5 text-xl font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
-      {note && <div className="mt-1 text-[10.5px] text-axal-faint">{note}</div>}
+      <div className={`mt-1.5 text-xl font-extrabold tracking-tight tabular-nums ${tone}`}>
+        {state === 'reading'
+          ? <span aria-hidden="true" className="my-[3px] block h-5 w-16 rounded-[5px] bg-gray-200 dark:bg-gray-700" />
+          : state === 'failed' ? <StateChip kind="unavailable" /> : <>{value ?? <Unrecorded />}</>}
+      </div>
+      {state === 'failed'
+        ? <div className="mt-1 text-[10.5px] text-axal-faint">not read</div>
+        : state === 'ok' && note ? <div className="mt-1 text-[10.5px] text-axal-faint">{note}</div> : null}
     </Card>
   );
 }
@@ -120,6 +143,20 @@ export default function HqHomePage() {
   // HQ view", which is chrome rather than a control on this page, because the
   // overlay frames every page it covers and not only this one.
   const { branch: viewAs, setBranch: setViewAs } = useViewAsBranch();
+  const [readAt, setReadAt] = useState(null);   // when the overview answered
+  // D8727 — the page's one polite live region. Each line is keyed, so the same
+  // sentence twice is spoken twice.
+  const [said, setSaid] = useState({ text: '', n: 0 });
+  const announce = useCallback((text) => setSaid((s) => ({ text, n: s.n + 1 })), []);
+  const overviewReady = useRef(false);
+  const overviewFailSaid = useRef(false);
+  // D8727 — the escalation board, read on its own beside the overview, with
+  // its own state and its own Try again. Not read under the overlay (D153).
+  const { read: esc, retry: retryEscalations } = useEscalationRead({
+    enabled: !viewAs, announce, overviewReady: () => overviewReady.current,
+  });
+  const escFailed = useRef(false);
+  escFailed.current = esc.phase === 'failed';
 
   const load = useCallback(() => {
     // D153 — under the overlay this page does not fetch AT ALL. `HqBranchOverlay`
@@ -128,11 +165,23 @@ export default function HqHomePage() {
     // from a screen whose banner says nothing on it is a platform total.
     if (viewAs) return;
     setData(null);
-    api.hqOverview().then(setData, (e) => { reportError('hq-home', e); setData(UNAVAILABLE); });
-  }, [viewAs]);
+    api.hqOverview().then((d) => { setData(d); setReadAt(Date.now()); }, (e) => {
+      reportError('hq-home', e);
+      setData(UNAVAILABLE);
+      // Announced once per page view; a failed Try again is the block's own alert.
+      if (!overviewFailSaid.current) {
+        overviewFailSaid.current = true;
+        announce(escFailed.current ? ANNOUNCE.overviewFailedToo : ANNOUNCE.overviewFailed);
+      }
+    });
+  }, [viewAs, announce]);
+  useEffect(() => { if (!viewAs) announce(ANNOUNCE.coldLoad); }, [viewAs, announce]);
   useEffect(() => { load(); }, [load]);
 
   const ready = data && data !== UNAVAILABLE;
+  overviewReady.current = Boolean(ready);
+  const overviewState = data === null ? 'reading' : data === UNAVAILABLE ? 'failed' : 'ok';
+  const names = useMemo(() => namesByCode(ready ? data : null), [ready, data]);
   const licences = ready ? data.licences || [] : [];
   const selected = tenant ? licences.find((l) => l.uid === tenant) || null : null;
   const kindScoped = filterByKind(licences, kindFilter);
@@ -149,8 +198,12 @@ export default function HqHomePage() {
   }, [ready, data, selected]);
 
   const countries = ready ? data.countries_held || [] : [];
-  const suspendedCount = ready ? (data.suspended || []).length : 0;
-  const queue = ready ? data.queue : null;
+  // D8727 — the kind filter is drawn only when it can change the cards: both kinds hold a licence.
+  const kindCount = useMemo(() => ({
+    subsidiary: licences.filter((l) => l.kind !== 'white_label').length,
+    white_label: licences.filter((l) => l.kind === 'white_label').length,
+  }), [licences]);
+  const bothKinds = ready && kindCount.subsidiary > 0 && kindCount.white_label > 0;
   const accountsTotal = ready ? num(data.accounts?.total) : null;
 
   // D150 — THE FAN-OUT THIS PAGE WAS ALREADY BEING SENT. `/admin/hq/overview`
@@ -202,9 +255,10 @@ export default function HqHomePage() {
     let silent = 0;
     for (const b of branches) {
       if (b.status !== 'ok' || !b.data) { silent += 1; continue; }
-      const used = num(b.data.seats_used);
-      if (used === null) { silent += 1; continue; }
-      sum += used;
+      // D8727 — `num` formats for display ("1,102"); adding its string joined the
+      // digits ("268" + "251" read as 268,251). The sum is of numbers.
+      if (num(b.data.seats_used) === null) { silent += 1; continue; }
+      sum += Number(b.data.seats_used);
       answered += 1;
     }
     if (answered === 0) {
@@ -323,58 +377,69 @@ export default function HqHomePage() {
   return (
     <RailFrame rail={rail} data-testid="hq-home-page">
       <div className="min-w-0">
+        {/* D8727 — the page's one polite live region (SHQ20). */}
+        <div role="status" aria-live="polite" className="sr-only" data-testid="hq-home-live">
+          {said.text ? <span key={said.n}>{said.text}</span> : null}
+        </div>
         {/* The HQ bar: the tenant switcher sits where a subsidiary's territory
             badge sits, because both answer "whose data am I looking at?". Here
             the honest answer is "everyone's", stated rather than left as the
-            absence of a filter. */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#881337] px-4 py-2.5 text-white">
-          <label className="flex items-center gap-2 text-[12.5px] font-bold">
+            absence of a filter.
+            D8727 — controls are drawn only when they can change the result:
+            the switcher once the ledger has loaded (never drawn disabled), the
+            kind filter only when both kinds hold a licence. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#881337] px-4 py-2.5 text-white" data-testid="hq-scope-bar">
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px] font-bold">
             <Globe size={15} aria-hidden="true" />
-            <span className="sr-only">Narrow this page to one subsidiary</span>
-            <select
-              value={tenant}
-              onChange={(e) => setTenant(e.target.value)}
-              disabled={!ready || licences.length === 0}
-              className="rounded-md bg-white/15 px-2 py-1 text-[12.5px] font-bold text-white disabled:opacity-70"
-              data-testid="hq-tenant-switcher"
-            >
-              <option value="" className="text-gray-900 dark:text-gray-100">All subsidiaries</option>
-              {licences.map((l) => (
-                <option key={l.uid} value={l.uid} className="text-gray-900 dark:text-gray-100">{l.brand_name} · {l.licence_ref}</option>
-              ))}
-            </select>
-            {ready && (
+            {ready && licences.length > 0 ? (
+              <label className="flex items-center gap-2">
+                <span className="sr-only">Narrow this page to one subsidiary</span>
+                <select
+                  value={tenant}
+                  onChange={(e) => setTenant(e.target.value)}
+                  className="min-h-[44px] rounded-md bg-white/15 px-2 py-1 text-[12.5px] font-bold text-white sm:min-h-0"
+                  data-testid="hq-tenant-switcher"
+                >
+                  <option value="" className="text-gray-900 dark:text-gray-100">All subsidiaries</option>
+                  {licences.map((l) => (
+                    <option key={l.uid} value={l.uid} className="text-gray-900 dark:text-gray-100">{l.brand_name} · {l.licence_ref}</option>
+                  ))}
+                </select>
+              </label>
+            ) : <span>All subsidiaries</span>}
+            {ready ? (
               <span className="text-[11px] font-medium opacity-80 tabular-nums">
                 {licences.length} {plural(licences.length, 'tenant', 'tenants')} · {countries.length} {plural(countries.length, 'country', 'countries')}
               </span>
+            ) : (
+              <span className="text-[12px] font-medium opacity-85">{data === UNAVAILABLE ? 'Licence ledger unavailable' : 'Reading the licence ledger…'}</span>
             )}
-          </label>
-          <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-[.05em]">AXAL VC HQ</span>
-          <div className="flex w-full flex-wrap gap-2 pt-1 sm:w-auto sm:pt-0" data-testid="hq-kind-filter">
-            {[
-              ['all', 'All'],
-              ['subsidiary', 'Axal'],
-              ['white_label', 'White-label'],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                disabled={!ready}
-                aria-pressed={kindFilter === id}
-                onClick={() => setKindFilter(id)}
-                className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
-                  kindFilter === id
-                    ? 'border-white bg-white/25 text-white'
-                    : 'border-white/50 text-white/95 hover:bg-white/15'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
           </div>
+          <span className="hidden rounded bg-white/15 px-2 py-0.5 text-[10px] font-bold tracking-[.05em] sm:inline">AXAL VC HQ</span>
+          {bothKinds && (
+            <div className="flex w-full flex-wrap gap-2 pt-1 sm:w-auto sm:pt-0" role="group" aria-label="Licence kind" data-testid="hq-kind-filter">
+              {[
+                ['all', 'All'],
+                ['subsidiary', 'Axal'],
+                ['white_label', 'White-label'],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={kindFilter === id}
+                  onClick={() => setKindFilter(id)}
+                  className={`min-h-[44px] rounded-full border px-3 py-1 text-[11px] font-semibold sm:min-h-0 ${
+                    kindFilter === id
+                      ? 'border-white bg-white/25 text-white'
+                      : 'border-white/50 text-white/95 hover:bg-white/15'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        {/* D1614 W8 (#3994): every task given to me, across my Teams. Not under View as: that is a branch's page. */}
-        <div className="mt-3"><MyTasks licence="admin" testId="hq-my-tasks" /></div>
         {selected && (
           <p className="mt-2 text-[11.5px] text-axal-faint">
             Narrowed to {selected.brand_name} on this page only. Elsewhere, use View as on a deployed branch
@@ -384,84 +449,113 @@ export default function HqHomePage() {
 
         <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            <Landmark size={13} /> HQ · Home
-          </div>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">Platform</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            {ready
-              ? `${accountsTotal === null ? 'An unrecorded number of' : accountsTotal} active accounts across ${licences.length} ${plural(licences.length, 'licence', 'licences')} and ${countries.length} ${plural(countries.length, 'country', 'countries')}. `
-              : 'The franchisor’s overview: every licence, every account, the licence trail. '}
-            Per-branch accounts, seats used and backlog on the cards below come from each branch's own read when it answers.
-            Revenue per subsidiary stays not recorded — every stream in the morning report arrives unmeasured.
-          </p>
+            <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              <Landmark size={13} aria-hidden="true" /> HQ › Home
+            </nav>
+            {/* D8727 — the first heading names HQ. It was "Platform", which is now the h2 below. */}
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink">HQ home</h1>
+            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-axal-muted">
+              <span className="sm:hidden">Escalations first, then the platform.</span>
+              <span className="hidden sm:inline">Escalations waiting on HQ come first, then the platform: licences, seats and each branch’s own read.</span>
+            </p>
           </div>
           <HeaderAsk />
         </header>
 
-        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The HQ overview" claim="This is not a claim that none exist." onRetry={load} /></div>}
-        {registryDown && (
-          <div className="mt-4" data-testid="hq-home-registry-unreadable">
-            <Unreadable
-              what="HQ's deployment registry"
-              claim={`${data.registry_reason || 'The set of provisioned branches is not established.'} This is not a claim that no branch is deployed, and branch figures below are not a complete total.`}
-              onRetry={load}
+        {/* D8727 — WHAT NEEDS MY ATTENTION? Escalations over their own read,
+            beside the other signals from the overview. Each card keeps its own
+            state; neither waits on, or fails with, the other. */}
+        <section aria-labelledby="hq-attn" className="mt-5 flex flex-col gap-2.5" data-testid="hq-attention">
+          <div className="flex flex-wrap items-baseline gap-2.5">
+            <h2 id="hq-attn" className="m-0 text-[17px] font-extrabold tracking-tight text-axal-ink">What needs my attention?</h2>
+            <span className="text-[12.5px] text-axal-muted">{attentionLine(esc)}</span>
+          </div>
+          <div className="grid items-start gap-3.5 md:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+            <EscalationsCard read={esc} onRetry={retryEscalations} names={names} overview={overviewState} now={Date.now()} />
+            <OtherSignals overview={overviewState} data={ready ? data : null} readAt={readAt} />
+          </div>
+        </section>
+
+        <section aria-labelledby="hq-plat" className="mt-6 flex flex-col gap-2.5" data-testid="hq-platform">
+          <div className="flex flex-wrap items-baseline gap-2.5">
+            <h2 id="hq-plat" className="m-0 text-[17px] font-extrabold tracking-tight text-axal-ink">Platform</h2>
+            <span className="text-[12.5px] text-axal-muted">
+              {ready
+                ? [!registryDown && branchCoverage && num(branchCoverage.total) ? `${branchCoverage.answered} of ${branchCoverage.total} ${plural(branchCoverage.total, 'branch', 'branches')} answered` : null, readAt ? `read ${clockUtc(readAt)}` : null].filter(Boolean).join(' · ')
+                : data === UNAVAILABLE ? '' : 'Reading…'}
+            </span>
+          </div>
+          {data === UNAVAILABLE && (
+            <div data-testid="hq-home-overview-unavailable">
+              {/* The overview's one Try again: it reads the overview again and
+                  leaves the escalation card as it is. Polite on first load (the
+                  page's region says it once); an alert only after Try again. */}
+              <DataState
+                state="unavailable"
+                size="block"
+                what="The HQ overview"
+                claim="This is not a claim that the platform is empty."
+                reason={esc.phase === 'ok' ? 'Escalations above come from their own read and are current.' : undefined}
+                onRetry={load}
+                retryLabel="Try again"
+                announce="after-action"
+              />
+            </div>
+          )}
+          {registryDown && (
+            <div data-testid="hq-home-registry-unreadable">
+              <Unreadable
+                what="HQ's deployment registry"
+                claim={`${data.registry_reason || 'The set of provisioned branches is not established.'} This is not a claim that no branch is deployed, and branch figures below are not a complete total.`}
+                onRetry={load}
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+            <Tile
+              label="Licences"
+              state={overviewState}
+              value={ready ? num(licences.length) : null}
+              note={ready ? `${kindCount.subsidiary} Axal · ${kindCount.white_label} white-label · ${countries.length} ${plural(countries.length, 'country', 'countries')}` : null}
+            />
+            <Tile
+              label="Seats licensed"
+              state={overviewState}
+              value={ready ? num(data.seats_licensed) : null}
+              note={(
+                <>
+                  utilised:{' '}
+                  {seatsUtilised.value !== null
+                    ? (
+                      <>
+                        {num(seatsUtilised.value)}
+                        {seatsUtilised.reason ? ` · ${seatsUtilised.reason}` : ' · summed from branch reads'}
+                      </>
+                    )
+                    : <Unrecorded reason={seatsUtilised.reason} />}
+                </>
+              )}
+            />
+            {/* D210 — H15 is reached from here. Its own nav lights Home, and the HQ
+                group is eleven rows by design (D146), so the page is a link on the
+                tile whose figure it draws over time, not a twelfth row. */}
+            <Tile
+              label="Accounts · HQ"
+              state={overviewState}
+              value={ready ? accountsTotal : null}
+              note={<>active on HQ's database · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
+            />
+            <Tile
+              label="MTD revenue"
+              state={overviewState}
+              value={null}
+              note={ready ? (data.mtd_revenue_reason || 'every stream in the morning report arrives unmeasured') : null}
             />
           </div>
-        )}
+        </section>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-          {/* D210 — H15 is reached from here. Its own nav lights Home, and the HQ
-              group is eleven rows by design (D146), so the page is a link on the
-              tile whose figure it draws over time, not a twelfth row. */}
-          <Tile
-            label="Accounts"
-            value={ready ? accountsTotal : null}
-            note={<>active on HQ's database · <Link to="/admin/analytics" className="underline">weekly activity, by branch</Link></>}
-          />
-          <Tile
-            label="Seats licensed"
-            value={ready ? num(data.seats_licensed) : null}
-            note={(
-              <>
-                utilised:{' '}
-                {seatsUtilised.value !== null
-                  ? (
-                    <>
-                      {num(seatsUtilised.value)}
-                      {seatsUtilised.reason ? ` · ${seatsUtilised.reason}` : ' · summed from branch reads'}
-                    </>
-                  )
-                  : <Unrecorded reason={seatsUtilised.reason} />}
-              </>
-            )}
-          />
-          <Tile
-            label="MTD revenue"
-            value={null}
-            note={ready ? (data.mtd_revenue_reason || 'Not recorded on HQ') : '…'}
-          />
-          <Tile
-            label="Queue backlog"
-            value={ready && queue?.available ? num(queue.open) : null}
-            // D204 — the same `open` Support splits into its queues, so the
-            // tile points at the desk that shows where each ticket landed.
-            note={ready && queue?.available
-              ? <>open + in progress, platform-wide · <Link to="/admin/hq-support" className="underline">by queue on Support</Link></>
-              : 'tickets unreadable'}
-            tone={ready && queue?.available && queue.open > 20 ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink'}
-          />
-          <Tile
-            label="Suspended"
-            value={ready ? num(suspendedCount) : null}
-            // 'none' is a fact about the ledger; an unreadable overview is not
-            // the same fact, and must not wear the green either.
-            note={!ready ? 'unreadable' : suspendedCount ? data.suspended[0].brand_name : 'none'}
-            tone={!ready ? 'text-axal-ink' : suspendedCount ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'}
-          />
-        </div>
-
-        <Card className="mt-4">
+        <Card className="mt-6">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="text-[14.5px] font-extrabold tracking-tight">Subsidiary health</h2>
             <span className="text-[11.5px] text-axal-faint">One card per licence</span>
@@ -598,110 +692,42 @@ export default function HqHomePage() {
           </p>
         </Card>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <Card>
-            <div className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="text-[14.5px] font-extrabold tracking-tight">Escalations awaiting HQ</h2>
-              <span className="text-[11.5px] text-axal-faint">Pushed up by subsidiaries</span>
-            </div>
-            {/* D108 — escalations have a store now (migration 259), so this
-                zone stops saying the concept does not exist. Three states, and
-                an empty list is NOT the same as an unreadable table: one means
-                no branch has pushed anything up, the other means HQ cannot
-                tell. */}
-            {!ready || data.escalations_available === false ? (
-              <p className="text-[12.5px] leading-relaxed text-axal-muted">
-                <Unreadable
-                  what="Escalations"
-                  claim={ready ? data.escalations_reason : 'The overview has not loaded yet.'}
-                />{' '}
-                The <Link to="/help" className="underline">ticket queue</Link> is platform-wide and is not one.
-              </p>
-            ) : (data.escalations || []).length === 0 ? (
-              <p className="text-[12.5px] leading-relaxed text-axal-muted">
-                Nothing is waiting on HQ. A branch pushes an item up from its Approvals board —
-                moderation, content for brand approval, or a seat increase — and it lands here with
-                its clock running. The <Link to="/help" className="underline">ticket queue</Link> is
-                platform-wide and is not one.
-              </p>
-            ) : (
-              <ul className="space-y-1.5" data-testid="hq-escalations">
-                {(data.escalations || []).map((e) => (
-                  <li key={e.uid} className="flex items-baseline justify-between gap-3 text-[12.5px]">
-                    <span className="min-w-0 truncate">
-                      <span className="font-medium">{e.branch_code}</span>
-                      {' · '}{String(e.kind || '').replace(/_/g, ' ')}
-                      {' — '}{e.subject}
-                    </span>
-                    {/* The band is the server's, derived from the due date on
-                        read. A band computed here from `created_at` would be a
-                        second answer to the same question. */}
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      e.sla === 'past'
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                        : e.sla === 'due_soon'
-                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                    }`}>
-                      {e.sla === 'past' ? 'past SLA' : e.sla === 'due_soon' ? 'due soon' : 'on time'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {/* D112 — THE LIST IS NOT THE LOOP. Until an escalation could be
-                answered, this zone was a queue nobody could clear: a branch
-                pushed an item up and HQ could read it and nothing else, so
-                every item stayed here forever. Answering happens on its own
-                surface rather than inline, because a decision needs its reason
-                typed and a one-line list is the wrong place for that.
-                D205 — that surface is HQ Support. This link used to point at
-                Content, which has no answer control, so the note described a
-                loop no screen could close. */}
-            {ready && data.escalations_available !== false && (
-              <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
-                Answering one records HQ&rsquo;s decision and pushes it to the branch;
-                whether the branch received it is reported separately from whether
-                the decision was made.{' '}
-                <Link to="/admin/hq-support" className="underline" data-testid="hq-escalations-answer-link">
-                  Answer on Support &rarr;
-                </Link>
-              </p>
-            )}
-          </Card>
+        <Card className="mt-4 border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="text-[14.5px] font-extrabold tracking-tight">Licensing events</h2>
+            <span className="text-[11.5px] text-axal-faint">Renewals ≤ {ready ? data.renewals_within_days : 60}d and the trail</span>
+          </div>
+          {ready && renewals.length > 0 && (
+            <ul className="mb-2 space-y-1.5" data-testid="hq-renewals">
+              {renewals.map((rw) => (
+                <li key={rw.uid} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
+                  <span className="font-bold">{rw.brand_name} renews</span>
+                  <span className="font-mono text-[10.5px] text-amber-800 dark:text-amber-300">{day(rw.renews_on)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {ready && events.length === 0 && (
+            <p className="text-[12px] text-axal-faint">No licence events {selected ? 'for this subsidiary' : 'recorded'} yet.</p>
+          )}
+          {ready && events.length > 0 && (
+            <ul className="space-y-1" data-testid="hq-events">
+              {events.map((e) => (
+                <li key={e.id} className="grid grid-cols-[92px_1fr] gap-2 text-[11.5px]">
+                  <span className="font-mono text-[10px] text-axal-faint">{day(e.created_at)}</span>
+                  <span><b>{EVENT_LABEL[e.event] || titleCase(e.event)}</b> · {e.brand_name}{e.note ? ` — ${e.note}` : ''}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          <p className="mt-2"><Link to="/admin/licences" className="text-[11.5px] font-bold text-rose-800 underline dark:text-rose-300">View more · Licences →</Link></p>
+        </Card>
 
-          <Card className="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
-            <div className="mb-2 flex items-baseline justify-between gap-3">
-              <h2 className="text-[14.5px] font-extrabold tracking-tight">Licensing events</h2>
-              <span className="text-[11.5px] text-axal-faint">Renewals ≤ {ready ? data.renewals_within_days : 60}d and the trail</span>
-            </div>
-            {ready && renewals.length > 0 && (
-              <ul className="mb-2 space-y-1.5" data-testid="hq-renewals">
-                {renewals.map((rw) => (
-                  <li key={rw.uid} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
-                    <span className="font-bold">{rw.brand_name} renews</span>
-                    <span className="font-mono text-[10.5px] text-amber-800 dark:text-amber-300">{day(rw.renews_on)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {ready && events.length === 0 && (
-              <p className="text-[12px] text-axal-faint">No licence events {selected ? 'for this subsidiary' : 'recorded'} yet.</p>
-            )}
-            {ready && events.length > 0 && (
-              <ul className="space-y-1" data-testid="hq-events">
-                {events.map((e) => (
-                  <li key={e.id} className="grid grid-cols-[92px_1fr] gap-2 text-[11.5px]">
-                    <span className="font-mono text-[10px] text-axal-faint">{day(e.created_at)}</span>
-                    <span><b>{EVENT_LABEL[e.event] || titleCase(e.event)}</b> · {e.brand_name}{e.note ? ` — ${e.note}` : ''}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
-            <p className="mt-2"><Link to="/admin/licences" className="text-[11.5px] font-bold text-rose-800 underline dark:text-rose-300">View more · Licences →</Link></p>
-          </Card>
-        </div>
+        {/* D1614 W8 (#3994): every task given to me, across my Teams. Not under View as: that is a branch's page.
+            D8727 — last, after everything that needs HQ (⚑ Q1, option A): while Work is
+            off it is one sentence with no Show or Due filters, and names no issue. */}
+        <div className="mt-6"><MyTasks licence="admin" testId="hq-my-tasks" offReason={HQ_WORK_OFF} hideControlsWhenOff /></div>
       </div>
 
     </RailFrame>

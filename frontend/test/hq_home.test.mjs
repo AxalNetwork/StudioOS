@@ -20,6 +20,8 @@ import { codeOnly } from './_codeOnly.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const PAGE = codeOnly(read('frontend/src/pages/hq/HqHomePage.jsx'));
+// D8727 — the first section, "What needs my attention?", lives in its own file.
+const ATTN = codeOnly(read('frontend/src/pages/hq/HqAttention.jsx'));
 const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_hq.ts'));
 const APP = read('frontend/src/App.jsx');
 
@@ -162,7 +164,11 @@ test('a failed request is unreadable, not an empty platform', () => {
   // rendering it, so the component is checked too.
   assert.match(PAGE, /const UNAVAILABLE = Symbol\('unavailable'\)/);
   assert.match(PAGE, /<Unreadable/, 'a failed read no longer renders Unreadable');
-  assert.match(PAGE, /claim="This is not a claim that none exist\."/);
+  // D8727 — the overview's failure is the block of SHQ06D, with its own Try
+  // again, polite on first load: "The HQ overview could not be read. This is
+  // not a claim that the platform is empty."
+  assert.match(PAGE, /state="unavailable"[\s\S]{0,80}what="The HQ overview"\s+claim="This is not a claim that the platform is empty\."/);
+  assert.match(PAGE, /retryLabel="Try again"\s+announce="after-action"/);
   assert.match(
     read('frontend/src/ui/Honesty.jsx'),
     /\{what\} could not be read\. \{claim\}/,
@@ -230,13 +236,13 @@ test('D112 — the escalations list is no longer a queue nobody can clear', () =
   // item up and HQ could read it and do nothing else, so every item stayed in
   // this zone forever. The note is what tells a reader the loop closes, and
   // where — so all three of its properties are pinned, because each can be
-  // lost on its own.
-  const at = PAGE.indexOf('data-testid="hq-escalations-answer-link"');
+  // lost on its own. D8727 moved the card into `HqAttention.jsx`.
+  const at = ATTN.indexOf('data-testid="hq-escalations-answer-link"');
   assert.ok(at > 0, 'the escalations zone lost the route to answering one');
 
   // 1. The destination is a REGISTERED route, not a plausible-looking string.
   //    A note pointing at a 404 is worse than no note: it reads as shipped.
-  const link = PAGE.slice(PAGE.lastIndexOf('<Link', at), at);
+  const link = ATTN.slice(ATTN.lastIndexOf('<Link', at), at);
   const to = /to="([^"]+)"/.exec(link);
   assert.ok(to, 'the answer link has no destination');
   assert.ok(APP.includes(`path="${to[1]}"`), `${to[1]} is not a registered route`);
@@ -245,18 +251,16 @@ test('D112 — the escalations list is no longer a queue nobody can clear', () =
   //    page that invites the action: a decision that was recorded but did not
   //    reach the branch must not read as a decision that never happened, or an
   //    operator enters it twice.
-  const note = PAGE.slice(PAGE.lastIndexOf('<p', at), at);
-  assert.match(note, /records HQ&rsquo;s decision/, 'the note does not say the decision is recorded');
+  const note = ATTN.slice(at, ATTN.indexOf('</span>', at));
+  assert.match(note, /records HQ’s decision/, 'the note does not say the decision is recorded');
   assert.match(note, /reported separately/,
     'the note collapses "decided" and "delivered" into one outcome');
 
-  // 3. It is gated on the queue being READABLE. Inviting someone to answer a
-  //    list that could not be read points them at nothing.
-  assert.match(
-    PAGE.slice(Math.max(0, at - 700), at),
-    /data\.escalations_available !== false &&/,
-    'the answer note renders even when the escalations queue is unreadable',
-  );
+  // 3. It is drawn only over a READ that answered with rows. Inviting someone
+  //    to answer a list that could not be read points them at nothing.
+  const branch = ATTN.lastIndexOf('{ok && read.items.length ? (', at);
+  const next = ATTN.indexOf('{failed ? (', branch);
+  assert.ok(branch > 0 && at < next, 'the answer link renders outside the successful read with rows');
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -281,12 +285,14 @@ test('every HQ rail passes [title, detail] pairs, the shape WorkerRail destructu
   }
 });
 
-test('the Suspended tile never reads as fine while the overview is unreadable', () => {
-  // 'none' is a fact about the ledger. When the read failed, the tile says
-  // so, in the neutral tone, instead of a green 'none'.
-  const src = codeOnly(read('frontend/src/pages/hq/HqHomePage.jsx'));
-  const tile = src.slice(src.indexOf('label="Suspended"'), src.indexOf('label="Suspended"') + 700);
-  assert.match(tile, /note=\{!ready \? 'unreadable' :/, 'the note names the unreadable read first');
-  assert.match(tile, /tone=\{!ready \? 'text-axal-ink' :/, 'and takes no colour from a count it does not have');
+test('the suspended count never reads as fine while the overview is unreadable', () => {
+  // 'None on the ledger' is a fact about the ledger. D8727 moved the count
+  // from a Platform tile to Other signals, whose rows exist only for a read
+  // that answered; a pending read is Reading and a failed one is Unavailable.
+  // The rendered check is in hq_home_reads_8727.test.mjs.
+  const rows = ATTN.indexOf("const rows = overview === 'ok' ?");
+  assert.ok(rows > 0, 'Other signals builds its rows outside the successful read');
+  const none = ATTN.indexOf("'None on the ledger'");
+  assert.ok(none > rows && none < ATTN.indexOf(': null;', rows), 'the green "none" is reachable without a read');
+  assert.doesNotMatch(PAGE, /label="Suspended"/, 'the Suspended tile came back beside Other signals');
 });
-

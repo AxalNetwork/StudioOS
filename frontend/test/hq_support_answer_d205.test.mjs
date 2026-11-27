@@ -329,7 +329,8 @@ test('the rail says the page acts, once, and the old refusal is gone', () => {
 // ─────────────────────────────────────────────────── HQ Home's answer link ──
 
 test('HQ Home’s answer link lands on a page that can actually answer', () => {
-  const home = read('frontend/src/pages/hq/HqHomePage.jsx');
+  // D8727 (#8727): the escalation card moved into HQ home's first section.
+  const home = read('frontend/src/pages/hq/HqAttention.jsx');
   const app = read('frontend/src/App.jsx');
   const at = home.indexOf('data-testid="hq-escalations-answer-link"');
   assert.ok(at > 0);
