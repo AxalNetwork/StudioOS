@@ -296,7 +296,7 @@ export function GeographyState({ geo, code, role = 'founder', reload }) {
  */
 export function GeographyPage({ geo, code, role = 'founder', reload }) {
   return (
-    <WorkspaceShell role={role} title={geo.data?.item?.name || 'Country'} activeSlug="geographies">
+    <WorkspaceShell role={role} title={geo.data?.item?.name || 'Country'} activeSlug="markets">
       <div data-testid="geography-profile" className="space-y-4">
         <Link to="/research/geographies" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300"><ArrowLeft size={13} /> Geographies</Link>
         <CountryStrip code={code} />

@@ -155,7 +155,7 @@ const FOUNDER = [
   own('/research', key(F, 'Research')),
   own('/research/ask', key(F, 'Research', 'Ask')),
   own('/research/markets', key(F, 'Research', 'Markets')),
-  own('/research/geographies', key(F, 'Research', 'Geographies')),
+  alias('/research/geographies', key(F, 'Research', 'Markets'), 'Geographies is part of Markets.'),
   own('/research/companies', key(F, 'Research', 'Companies')),
   own('/research/funds', key(F, 'Research', 'Funds')),
   own('/research/library', key(F, 'Research', 'Library')),

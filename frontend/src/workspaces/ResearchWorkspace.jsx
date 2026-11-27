@@ -197,7 +197,8 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
   const isRoot = bucket && location.pathname === bucket.prefix;
-  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
+  const geographyList = location.pathname.replace(/\/$/, '') === '/research/geographies';
+  const zone = isRoot ? null : zoneForPath(bucket, geographyList ? '/research/markets' : location.pathname);
   const slug = zone?.slug;
 
   const accentClass = accentLinkClass(role);
@@ -206,7 +207,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (isRoot) {
       return <ResearchOverview role={role} />;
     }
-    if (slug === 'markets') {
+    if (slug === 'markets' && !geographyList) {
       // THE ZONE'S OBJECT CHANGED, WHICH IS WHY THE MOUNT DID. This rendered
       // `SignalsPage` embedded — the `market_intel_rows` sector feed — and the
       // `pr3` artboard is about comparable RANGES for the firm's own service
@@ -229,7 +230,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         </Suspense>
       );
     }
-    if (slug === 'geographies') {
+    if (slug === 'markets' && geographyList) {
       return (
         <Suspense fallback={<Loading />}>
           <GeographiesZone />
@@ -367,7 +368,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         + 'tell you about a surface you are not looking at.',
     };
     return <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />;
-  }, [slug, accentClass, role, user, isRoot]);
+  }, [slug, geographyList, accentClass, role, user, isRoot]);
 
   // THE GAP SITS ABOVE THE BODY, NOT INSTEAD OF IT. These three zones read a
   // real store AND have a canvas-specified capability with none, so neither
@@ -405,7 +406,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     <WorkspaceShell
       role={role}
       title={isRoot ? bucketTitle(bucket) : undefined}
-      activeSlug={isRoot ? null : undefined}
+      activeSlug={isRoot ? null : zone?.slug}
       rail={(
         <WorkerRail
           workspace="Research"

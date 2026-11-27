@@ -50,8 +50,6 @@ export default function researchBoard(role, api) {
       // card where a comparable range is recorded (migration 223), each shown
       // with its run date and age. The blurb names both.
       card('markets', 'Markets', 'Comparable ranges you entered for your own work, each with its run date and age, beside the taxonomy’s markets by tracked sector.'),
-      // D546 (#1080) — Geographies sits beside Markets in every Research bucket.
-      card('geographies', 'Geographies', 'Where the directory’s companies are based and its funds are headquartered.'),
       ...(isPartner ? [] : [
         card('companies', 'Companies', 'The competitor and market analyses you have run yourself.'),
       ]),

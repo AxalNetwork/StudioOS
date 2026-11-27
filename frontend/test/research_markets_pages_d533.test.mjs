@@ -312,9 +312,10 @@ test('the client calls the Worker routes, listed companies included', async () =
   assert.match(calls[1], /\/api\/research\/geographies\/gb$/);
 });
 
-test('Geographies is a zone pill beside Markets, and both routes are guarded like Markets', () => {
+test('Geographies is reached inside Markets, and both routes are guarded like Markets', () => {
   const shell = read('frontend/src/workspaces/shellConfig.js');
-  assert.equal((shell.match(/\{ slug: 'markets', label: 'Markets', archetype: A\.ANALYTICS \},\n\s+\{ slug: 'geographies', label: 'Geographies', archetype: A\.ANALYTICS \}/g) || []).length, 4);
+  assert.doesNotMatch(shell, /slug: 'geographies'/);
+  assert.match(read('frontend/src/pages/research/MarketDirectoryZone.jsx'), /to="\/research\/geographies">Geographies<\/Link>/);
   const app = read('frontend/src/App.jsx');
   const guard = "guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor'])";
   assert.ok(app.includes(`<Route path="/research/geographies" element={${guard}, <ResearchWorkspace`));
