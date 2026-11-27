@@ -6,35 +6,27 @@
  * columns exist on first request so the worker is self-healing on
  * fresh environments where the migration has not been applied yet.
  *
- * Cached per isolate so the PRAGMA round-trip only happens once.
+ * Cached per binding so the column read only happens once.
  */
 import type { Env } from '../types';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
 export async function ensurePartnerDirectoryColumns(env: Env): Promise<void> {
-  const key = env.DB as unknown as object;
+  const key = bindingKey(env);
   if (READY.get(key)) return;
   try {
-    const info = await env.DB.prepare(`PRAGMA table_info(partners)`).all<{ name: string }>();
-    const have = new Set((info.results || []).map((r) => r.name));
-    const adds: string[] = [];
-    if (!have.has('directory_listed')) {
-      adds.push(`ALTER TABLE partners ADD COLUMN directory_listed INTEGER NOT NULL DEFAULT 0`);
-    }
-    if (!have.has('directory_featured')) {
-      adds.push(`ALTER TABLE partners ADD COLUMN directory_featured INTEGER NOT NULL DEFAULT 0`);
-    }
-    if (!have.has('directory_decided_at')) {
-      adds.push(`ALTER TABLE partners ADD COLUMN directory_decided_at TEXT`);
-    }
-    if (!have.has('directory_decided_by')) {
-      adds.push(`ALTER TABLE partners ADD COLUMN directory_decided_by INTEGER`);
-    }
-    for (const stmt of adds) {
-      try { await env.DB.prepare(stmt).run(); }
-      catch (e) { console.warn('[partnerDirectorySchema] ALTER failed (likely already applied)', e); }
-    }
+    // #5343 (#4568 R2-04): through `runSchemaBootstrap`, which reads the columns
+    // once per binding and skips an ALTER whose column is there. A failed ALTER
+    // used to be logged as "likely already applied" and the binding marked
+    // ready; it now reaches the catch below and the next call tries again.
+    await runSchemaBootstrap(env, [
+      `ALTER TABLE partners ADD COLUMN directory_listed INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE partners ADD COLUMN directory_featured INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE partners ADD COLUMN directory_decided_at TEXT`,
+      `ALTER TABLE partners ADD COLUMN directory_decided_by INTEGER`,
+    ]);
     try {
       await env.DB.prepare(
         `CREATE INDEX IF NOT EXISTS idx_partners_directory_listed

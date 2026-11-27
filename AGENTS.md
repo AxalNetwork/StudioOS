@@ -75,7 +75,10 @@ because only Session 1 makes a task ready.
    `state:in-progress` and post a STATUS comment. Release with `release` and
    the same identity on DONE or hand-back; never delete another holder's ref.
    An expired ref remains held until its holder releases it or the owner
-   explicitly hands it back. The reaper only comments.
+   explicitly hands it back. The reaper only comments. A Code Scanning
+   remediation batch (`scan:batch`, D7259) is claimed the same way; its
+   claim also holds each open member tracker, and exit 3 on a member means
+   its batch is held.
 3. **Work.** Branch `agent/<agent>/<issue>-<slug>` from the latest `main`. If
    your environment only allows its designated branch, restart that branch
    from `main` for each task. Open one draft PR whose body contains

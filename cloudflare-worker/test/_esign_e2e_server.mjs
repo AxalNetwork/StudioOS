@@ -44,7 +44,9 @@ const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t)
   + '\n' + migration('434_contract_template_publications.sql')
   + '\n' + migration('475_legal_document_files.sql')
   + '\n' + migration('479_template_kind_party.sql')
-  + '\n' + migration('633_staged_signing.sql');
+  + '\n' + migration('633_staged_signing.sql')
+  // #8516 (#8572): the staged next stage is an owed effect, recorded in esign_effects in the completion batch.
+  + '\n' + migration('202611250101_8516_esign_effects.sql');
 
 const SECRET = ['d8524', 'esign', 'journey', 'fixture', 'secret'].join('-');
 export const FOUNDER = 2, INVESTOR = 3;

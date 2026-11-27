@@ -96,7 +96,8 @@ export function assignRows(agents, skill, personaOf = () => null) {
   return (Array.isArray(agents) ? agents : []).map((a) => {
     const withPersona = a?.persona ? a : { ...a, persona: personaOf(a?.uid) || null };
     const blocked = a?.blocked && a.blocked.code !== 'role_mismatch' ? a.blocked : null;
-    return { ...a, persona: withPersona.persona, blocked, fit: naturalFit(withPersona, skill) };
+    // D8768: the Worker's fit (the role it was written for, or the persona's areas) or the persona's, whichever says so.
+    return { ...a, persona: withPersona.persona, blocked, fit: !!a?.eligibility?.fit || naturalFit(withPersona, skill) };
   }).sort((x, y) => Number(y.fit) - Number(x.fit));
 }
 
@@ -146,7 +147,7 @@ export function directory(skills, { area = null, fit = null, q = '', sort = 'pop
   if (fit) list = list.filter((s) => (s.fit || []).includes(fit));
   const a = area ? areaOf(area) : null;
   if (area) list = list.filter((s) => !!a && (s.taxonomy || []).some((t) => t.category_slug === a.axis));
-  if (needle) list = list.filter((s) => `${s.name || ''} ${s.description || ''}`.toLowerCase().includes(needle));
+  if (needle) list = list.filter((s) => matchesSkill(s, needle));
   const by = {
     popular: (a, b) => (Number.isFinite(b.used_by) ? b.used_by : -1) - (Number.isFinite(a.used_by) ? a.used_by : -1) || String(a.name).localeCompare(String(b.name)),
     new: (a, b) => String(b.published_at || b.updated_at || '').localeCompare(String(a.published_at || a.updated_at || '')) || String(a.name).localeCompare(String(b.name)),
@@ -236,6 +237,119 @@ export function blockedWords(blocked) {
   if (blocked.code === 'role_mismatch') return null;
   if (blocked.code === 'skill_retired') return 'Axal retired this skill.';
   return skillRefusalWords(blocked.code);
+}
+
+// ---------------------------------------------------------------- D8768: one eligibility rule at every picker
+
+/**
+ * D8768 (#8768): the six states the Worker's one rule answers (`services/agents/skillEligibility.ts`), each with its
+ * own word and glyph (TMS00). The screens never decide a state themselves: they draw what the read says.
+ */
+export const ELIGIBILITY = Object.freeze({
+  listed: { word: 'Listed', glyph: '○', tone: 'draft' },
+  published: { word: 'Published', glyph: '●', tone: 'plain' },
+  eligible: { word: 'Can attach', glyph: '+', tone: 'go' },
+  attached: { word: 'Attached', glyph: '✓', tone: 'done' },
+  blocked: { word: 'Blocked by policy', glyph: '⊘', tone: 'warn' },
+  unreadable: { word: 'Couldn’t be read', glyph: '?', tone: 'error' },
+});
+export const ELIGIBILITY_STATES = Object.keys(ELIGIBILITY);
+
+/**
+ * A row's eligibility as the Worker said it, or, from a read that predates D8768, derived from its `assigned` and
+ * `blocked` fields. A `role_mismatch` from an older Worker is not a block (D4116): fit only sorts.
+ */
+export function eligibilityOf(row) {
+  const e = row?.eligibility;
+  if (e && ELIGIBILITY[e.state]) return { state: e.state, code: e.code || null, tool: e.tool || null, fit: !!e.fit };
+  if (row?.assigned) return { state: 'attached', code: null, tool: null, fit: !!row?.fit };
+  const b = row?.blocked && row.blocked.code !== 'role_mismatch' ? row.blocked : null;
+  if (b) return { state: b.code === 'version_not_published' ? 'listed' : 'blocked', code: b.code, tool: b.tool || null, fit: !!row?.fit };
+  if (row && row.status && row.status !== 'published') return { state: 'listed', code: 'version_not_published', tool: null, fit: false };
+  return { state: 'eligible', code: null, tool: null, fit: !!row?.fit };
+}
+
+/** Only `eligible` can be ticked; every other state says why, with its recovery. */
+export const canPick = (row) => eligibilityOf(row).state === 'eligible';
+
+/** Why a skill (or an agent) is not eligible, and what to do about it; null when it is. */
+export function eligibilityWhy(e, { who = 'its sponsor' } = {}) {
+  const x = e?.state ? e : eligibilityOf(e);
+  switch (x.state) {
+    case 'eligible': case 'published': return null;
+    case 'attached': return 'Already attached.';
+    case 'listed': return 'Not published yet, so it can’t be attached. Axal publishes a skill only once it passes the golden-case bar.';
+    case 'unreadable': return x.code === 'tools_unreadable'
+      ? 'Your connected tools couldn’t be read, so whether it can be attached is not known. Try again.'
+      : 'This skill couldn’t be read. Try again; it is not offered until it can be.';
+    default:
+      if (x.code === 'tool_not_approved') return `Needs the ${x.tool?.label || x.tool?.key || 'a'} read tool, which ${who} hasn’t approved. Approve it in Settings › Connected tools, or ask ${who}.`;
+      if (x.code === 'capability_missing') return 'Uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.';
+      return blockedWords({ code: x.code, tool: x.tool });
+  }
+}
+
+/** "31 listed · 25 published · 19 can attach · 0 attached · 6 blocked by policy · 0 couldn’t be read"; null without counts. */
+export function countsLine(c, { agent = true } = {}) {
+  if (!c || !Number.isFinite(c.listed)) return null;
+  const parts = [`${c.listed} listed`, `${c.published} published`];
+  if (agent) parts.push(`${c.eligible} can attach`, `${c.attached} attached`, `${c.blocked} blocked by policy`);
+  else if (Number.isFinite(c.drafts) && c.drafts) parts.push(`${c.drafts} ${c.drafts === 1 ? 'draft' : 'drafts'} (count only)`);
+  parts.push(`${c.unreadable} couldn’t be read`);
+  return parts.join(' · ');
+}
+
+/** TMS01: one area's line from `GET /skills`'s `areas`: "7 listed · 6 published · 1 draft of yours · 14 Axal drafts · 0 unreadable". */
+export function areaLine(a) {
+  if (!a || !Number.isFinite(a.listed)) return null;
+  const parts = [`${a.listed} listed`, `${a.published} published`];
+  if (a.drafts_company) parts.push(`${a.drafts_company} ${a.drafts_company === 1 ? 'draft' : 'drafts'} of yours`);
+  if (a.drafts_axal) parts.push(`${a.drafts_axal} Axal ${a.drafts_axal === 1 ? 'draft' : 'drafts'} in qualification`);
+  parts.push(`${a.unreadable} couldn’t be read`);
+  return parts.join(' · ');
+}
+
+/**
+ * TMS05, TMS08: an empty list said plainly, with the way on. `areas` are the read's per-area counts; `area` the
+ * area the picker is filtered to (a taxonomy slug), if any. Never "No other skill of this role yet".
+ */
+export function emptyEligible({ counts, areas, area = null, q = '' } = {}) {
+  if (String(q || '').trim()) return { text: 'No skill matches this search. Your picks are kept.', way: null };
+  const name = (slug) => areaOf(slug)?.name || slug;
+  const here = area ? (areas || []).find((a) => a.area === area) : null;
+  const best = (areas || []).filter((a) => a.eligible > 0 && a.area !== area).sort((x, y) => y.eligible - x.eligible)[0] || null;
+  const way = best ? { area: best.area, text: `${name(best.area)} has ${best.eligible} you can attach.` } : null;
+  if (here && here.listed && !here.published) return { text: `${name(area)} is a draft-only area: ${here.listed} listed, none published yet. A draft can’t be attached.`, way };
+  if (here && !here.listed) return { text: `No skills in ${name(area)} yet.`, way };
+  if (counts && counts.published === 0 && counts.listed > 0) return { text: `None of the ${counts.listed} listed skills is published yet. A draft can’t be attached.`, way };
+  if (counts && counts.published > 0 && counts.eligible === 0) {
+    return { text: `Nothing here can be attached now: ${counts.attached} attached, ${counts.blocked} blocked by policy, ${counts.unreadable} couldn’t be read.`, way };
+  }
+  return { text: 'No published skill yet.', way };
+}
+
+/** TMS08 (owner's Q2 open in D8769; built to option A): the wizard's Next on the Skills step says when it goes on without any. */
+export const wizardSkillsNext = (picked) => (picked > 0 ? 'Next: model and cap' : 'Next: model and cap, with no skills');
+
+/** D8768: what a picker's search reads: the name, the job, what it needs and what it proposes. */
+export function matchesSkill(s, q) {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return true;
+  const inputs = Array.isArray(s?.inputs) ? s.inputs.map((i) => i?.field) : [];
+  return [s?.name, s?.description, outputWords(s), ...inputs].filter(Boolean).join(' ').toLowerCase().includes(needle);
+}
+
+/** A picker's rows: matched by `q`, natural fit first, then the Worker's own order. The picks are never touched. */
+export function pickerRows(list, q = '') {
+  return (Array.isArray(list) ? list : []).filter((s) => matchesSkill(s, q))
+    .map((s, i) => ({ s, i, fit: eligibilityOf(s).fit })).sort((a, b) => Number(b.fit) - Number(a.fit) || a.i - b.i).map((x) => x.s);
+}
+
+/** TMS02: "Needs: …" from D4667's inputs; null is "Not recorded", never "nothing". */
+export function inputsLine(inputs) {
+  if (!Array.isArray(inputs)) return null;
+  if (!inputs.length) return 'Nothing recorded';
+  return inputs.map((i) => (i.required ? i.field : `${i.field} (optional)`)).join(' · ');
 }
 
 /** The Worker's skill refusals in words (A1, A2). */
@@ -450,7 +564,15 @@ export function fromWorkerSkill(c) {
     uid: c.uid, slug: c.slug || null, scope: c.scope, status: c.status,
     version: Number.isFinite(c.version) ? c.version : null,
     author: hq ? { kind: 'axal' } : { kind: 'company', name: typeof c.author === 'string' && c.author ? c.author : null },
-    name: c.name, description: c.purpose ?? c.description ?? null,
+    // D8768: the customer's job line (no routing clause, no planning text) where the Worker serves it.
+    name: c.name, description: c.job ?? c.purpose ?? c.description ?? null,
+    // D8768: what it needs (D4667), null when not recorded; why it cannot be attached at all, and what to take instead.
+    inputs: Array.isArray(c.inputs) ? c.inputs.filter((i) => i && typeof i.field === 'string').map((i) => ({ field: i.field, required: i.required !== false })) : null,
+    attach_refusal: typeof c.attach_refusal === 'string' ? c.attach_refusal : null,
+    alternative: c.alternative && typeof c.alternative.uid === 'string' ? { uid: c.alternative.uid, name: String(c.alternative.name || '') } : null,
+    ...(c.eligibility ? { eligibility: eligibilityOf(c) } : {}),
+    ...(Array.isArray(c.tools_to_grant) ? { tools_to_grant: c.tools_to_grant.filter((t) => typeof t === 'string') } : {}),
+    ...(c.assigned !== undefined ? { assigned: !!c.assigned, pinned_version: Number.isFinite(c.pinned_version) ? c.pinned_version : null, blocked: c.blocked || null } : {}),
     steps: Array.isArray(c.steps) ? c.steps : [],
     tools: (Array.isArray(c.tools) ? c.tools : []).map((t) => (typeof t === 'string' ? { key: t, label: toolName(t) } : t)).filter(Boolean),
     output_kind: c.output_kind || null, output_label: c.output_label || null,
@@ -495,7 +617,22 @@ export function fromWorkerLibrary(r) {
     // #5964: the company's name, for the compare page's "Why … extended it" and the Extend dialog.
     company_name: typeof r?.company?.name === 'string' ? r.company.name : null,
     figures: { skills: { axal: hq.length, company: r?.company ? co.length : 0 }, agents_with_skills: null, updates_available: null },
+    // D8768 (TMS01): per area, listed · published · drafts (counted, never named) · unreadable; null from an older Worker.
+    areas: Array.isArray(r?.areas) ? r.areas : null,
     skills: [...hq, ...co],
+  };
+}
+
+/**
+ * D8768: `GET /api/teams/agents/:uid/skills/available` and `GET /api/teams/:scope/:id/skills/eligible` →
+ * `{ skills, counts, areas, tools_unreadable }`. Counts a read did not make are null ("Not recorded"), never zeros.
+ */
+export function fromWorkerEligible(r) {
+  return {
+    skills: (Array.isArray(r?.skills) ? r.skills : []).map(fromWorkerSkill).filter(Boolean),
+    counts: r?.counts && Number.isFinite(r.counts.listed) ? r.counts : null,
+    areas: Array.isArray(r?.areas) ? r.areas : null,
+    tools_unreadable: !!r?.tools_unreadable,
   };
 }
 

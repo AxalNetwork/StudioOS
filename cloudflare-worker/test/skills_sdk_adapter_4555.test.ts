@@ -90,7 +90,8 @@ function world() {
   add(OTHER_CO_OK, 'company', 2, 'synthetic-company-digest', 'published', [{ steps: ['Other tenant digest'] }]);
   db.prepare("INSERT INTO agent_skill_moderation (skill_id, action, version, reason, created_by) VALUES (?, 'suspend', 1, 'Synthetic suspension for a test.', ?)").run(CO_SUSPENDED, SUPER);
   const link = db.prepare('INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, ?, ?)');
-  for (const id of [HQ_OK, HQ_DRAFT, HQ_RETIRED, CO_SUSPENDED, OTHER_CO, HQ_CEO_ONLY, HQ_UNGRANTED, HQ_GROW, CO_DUP, HQ_BROKEN, CO_OK, HQ_BAD_NAME]) link.run(1, id, 1, EDITOR);
+  // D8768: HQ_CEO_ONLY (written for another role) is linked by the first test, which shows it now runs.
+  for (const id of [HQ_OK, HQ_DRAFT, HQ_RETIRED, CO_SUSPENDED, OTHER_CO, HQ_UNGRANTED, HQ_GROW, CO_DUP, HQ_BROKEN, CO_OK, HQ_BAD_NAME]) link.run(1, id, 1, EDITOR);
   link.run(2, OTHER_CO_OK, 1, OTHER_EDITOR);
   const statements: string[] = [];
   const env: any = {
@@ -107,11 +108,11 @@ test('the catalogue holds only D1-authorized skills at their pinned version; eve
   const w = world();
   const m = await buildRunManifest(w.env, 1);
   // Mutation checked: the `status !== 'published'` gate dropped → synthetic-draft is listed; attachCheck dropped →
-  // the retired, other-company and ceo-only skills are listed; the read-source check dropped → synthetic-grow is listed.
+  // the retired and other-company skills are listed; the read-source check dropped → synthetic-grow is listed.
   assert.deepEqual(m.visible.map((s) => s.name), ['synthetic-hq-brief', 'synthetic-company-digest']);
   assert.deepEqual(codes(m), {
     [uid(HQ_DRAFT)]: 'skill_not_published', [uid(HQ_RETIRED)]: 'skill_retired', [uid(CO_SUSPENDED)]: 'skill_suspended',
-    [uid(OTHER_CO)]: 'not_found', [uid(HQ_CEO_ONLY)]: 'role_mismatch', [uid(HQ_UNGRANTED)]: 'tool_not_approved',
+    [uid(OTHER_CO)]: 'not_found', [uid(HQ_UNGRANTED)]: 'tool_not_approved',
     [uid(HQ_GROW)]: 'read_not_in_rules', [uid(CO_DUP)]: 'duplicate_name', [uid(HQ_BROKEN)]: 'skill_malformed', [uid(HQ_BAD_NAME)]: 'skill_malformed',
   });
   for (const rt of await both(m)) {
@@ -128,6 +129,12 @@ test('the catalogue holds only D1-authorized skills at their pinned version; eve
   // The other tenant's agent sees only its own company's skill, under the same name.
   const other = await buildRunManifest(w.env, 2);
   assert.deepEqual(other.visible.map((s) => [s.name, s.uid]), [['synthetic-company-digest', uid(OTHER_CO_OK)]]);
+  // D8768: a skill written for another role, once pinned, runs: the roles only recommend it (D4116), so attach and
+  // run agree. Mutation checked: the role gate restored in attachCheck → it is excluded and this fails.
+  w.db.prepare('INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (1, ?, 1, ?)').run(HQ_CEO_ONLY, EDITOR);
+  const crossRole = await buildRunManifest(w.env, 1);
+  assert.ok(crossRole.visible.some((s) => s.name === 'synthetic-ceo-only'), 'a cross-role pinned skill is in the catalogue');
+  assert.equal(codes(crossRole)[uid(HQ_CEO_ONLY)], undefined);
   // An agent that cannot run has no skills.
   w.db.prepare("UPDATE team_agents SET status = 'paused' WHERE id = 1").run();
   const paused = await buildRunManifest(w.env, 1);

@@ -13,7 +13,7 @@
  * D214 measured neither.
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -95,21 +95,18 @@ export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
       env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_network_profiles_active_order
         ON network_profiles (is_active, display_order)`),
     ]);
-    // Task #1 — additive company column for tables created before the
-    // roster gained an affiliation field (migration 077). Idempotent:
-    // duplicate-column errors on re-run are swallowed.
-    try { await env.DB.exec(`ALTER TABLE network_profiles ADD COLUMN company TEXT`); }
-    catch (_e) { /* column already exists */ }
-    // D974 — migration 551: the member link, the creator and the archived
-    // state, apart from hidden. Same idempotent pattern.
-    for (const ddl of [
+    // Task #1 — the company column, for tables created before the roster
+    // gained an affiliation field (migration 077); D974 — migration 551's
+    // member link, creator and archived state, apart from hidden.
+    // #5343 (#4568 R2-04): asked first (`runSchemaBootstrap`), so a migrated
+    // database issues no ALTER; a real failure reaches the catch below and the
+    // schema is not marked ready. Each used to be tried blind and swallowed.
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE network_profiles ADD COLUMN company TEXT',
       'ALTER TABLE network_profiles ADD COLUMN linked_user_id INTEGER REFERENCES users(id)',
       'ALTER TABLE network_profiles ADD COLUMN created_by INTEGER REFERENCES users(id)',
       'ALTER TABLE network_profiles ADD COLUMN archived_at TEXT',
-    ]) {
-      try { await env.DB.exec(ddl); }
-      catch (_e) { /* column already exists */ }
-    }
+    ]);
     READY.set(bindingKey(env), true);
   } catch (err) {
      

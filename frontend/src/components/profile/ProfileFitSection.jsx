@@ -530,7 +530,9 @@ const FIT_BAND = {
   no: { label: 'No', cls: 'bg-[#f4f4f5] dark:bg-gray-800 text-[#52525b] dark:text-gray-400 border-[#d4d4d8] dark:border-gray-600' },
 };
 
-function FitBody({ state }) {
+// D8730 (#8730): `profilingApplicable` is Completion's own reading of /advisor/progress. When profiling does
+// not apply, Fit says so too instead of asking for profiling the account is never asked (Fit and Completion agree).
+function FitBody({ state, profilingApplicable = true }) {
   const { data, error } = state;
   if (error) return <ErrorNote>Couldn’t load your Axal Fit. {error}</ErrorNote>;
   if (!data) return <div className="py-4 flex justify-center text-gray-400"><Loader2 className="animate-spin" size={18} /></div>;
@@ -539,6 +541,9 @@ function FitBody({ state }) {
   const axal = Array.isArray(data.axal_values) ? data.axal_values : [];
   const axalWithSignal = axal.filter((v) => Number(v.confidence) > 0);
   
+  if (fit.length === 0 && axalWithSignal.length === 0 && profilingApplicable === false) {
+    return <Nudge>Fit scores come from profiling, which doesn’t apply to your account type.</Nudge>;
+  }
   if (fit.length === 0 && axalWithSignal.length === 0) {
     return (
       <Nudge>
@@ -591,7 +596,7 @@ function FitCard({ progressState, fitState, className }) {
         <CompletionBody state={progressState} />
       </CardShell>
       <CardShell title="Your Axal VC Fit & values">
-        <FitBody state={fitState} />
+        <FitBody state={fitState} profilingApplicable={progressState?.data?.profiling?.applicable !== false} />
       </CardShell>
     </div>
   );

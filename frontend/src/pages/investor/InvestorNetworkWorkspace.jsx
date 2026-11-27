@@ -13,11 +13,15 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
 import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue, shortDate, touchHistory, touchRecorder, openReminderFor, reminderLists } from '../../lib/networkBook';
 import { useAuth } from '../../hooks/useAuthSync';
-import { introTarget, askKey, createIntroRequests, quotaFrom, askTargetName, askStatusLabel } from '../../lib/investorIntroRequest';
+import { introTarget, askKey, createIntroRequests, quotaFrom, quotaLine, askTargetName, askStatusLabel } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
 import InvestorAskCard from './InvestorAskCard';
 import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestination';
 import { counterpartAnswer, introCreditView } from './introCreditModel.js';
+// D6257 (#6257): NW3.1 / NW8.1 (the request sheet) and NW4 / NW4.1 (the directory and its detail).
+import InvestorNetworkRequestSheet from './InvestorNetworkRequestSheet.jsx';
+import InvestorOrganizationSheet from './InvestorOrganizationSheet.jsx';
+import { MATCH_VIEWS, matchGroups, matchViewLabel, latestTouch, nameSource, openRemindersFor, searchOrganizations } from './investorNetworkModel';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -249,11 +253,25 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     }
   }, []);
 
+  // D6257: the Organizations directory counts each name's open reminders
+  // (NW4) and lists them in its detail (NW4.1), so that zone reads them too.
+  // Read-only: unlike the propositions read, it generates nothing.
+  const readReminders = useCallback(async () => {
+    try {
+      const value = await api.partnerReminders(true);
+      setReminders(Array.isArray(value?.items) ? value.items : []);
+      setErrors((current) => ({ ...current, reminders: '' }));
+    } catch {
+      setErrors((current) => ({ ...current, reminders: 'Your reminders are unavailable right now.' }));
+    }
+  }, []);
+
   const load = useCallback(async (refresh = false) => {
     setRefreshing(refresh);
     setActionError('');
     const relationshipRead = readRelationships();
     const askRead = readAsks();
+    const reminderRead = inOrgZone ? readReminders() : null;
     // Reading propositions can generate or expire records. Directory visits
     // and retries only need ties plus the separate, read-only ask state.
     if (!inOrgZone) {
@@ -269,9 +287,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
         reminders: reminderResult.status === 'rejected' ? 'Your reminders are unavailable right now.' : '',
       }));
     }
-    await Promise.all([relationshipRead, askRead]);
+    await Promise.all([relationshipRead, askRead, reminderRead]);
     setRefreshing(false);
-  }, [inOrgZone, readRelationships, readAsks]);
+  }, [inOrgZone, readRelationships, readAsks, readReminders]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (role === 'investor') readIntroQuota(); }, [role, readIntroQuota]);
@@ -293,12 +311,29 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   }, [highlightedIntro, introductions, requestedTab]);
 
   const propositionRows = introductions?.propositions || [];
+  const inZone = zone === 'introductions';
+  // D6257 (NW3): on the Introductions zone, Curated matches is its own section
+  // with the canvas's four views (Awaiting your decision, Accepted, Declined,
+  // Stalled), Awaiting first. The zone row's Stalled chip selects the same
+  // view. The overview keeps its preview of every proposition.
+  const [matchView, setMatchView] = useState('pending');
+  const matches = matchGroups(propositionRows);
+  const shownMatchView = deskView === 'stalled' ? 'stalled' : matchView;
+  // A notification naming a proposition opens the view that holds it.
+  useEffect(() => {
+    if (!inZone || !highlightedIntro || !introductions) return;
+    const prop = (introductions.propositions || []).find((item) => item.uid === highlightedIntro);
+    const view = prop ? (String(prop.status || '').toLowerCase() === 'expired' ? 'stalled' : String(prop.status || '').toLowerCase()) : '';
+    if (MATCH_VIEWS.some((v) => v.key === view)) setMatchView(view);
+  }, [inZone, highlightedIntro, introductions]);
   // THE ZONE VIEW NARROWS BEFORE THE CAP, and the order matters: the memo below
   // shows four propositions and pins a deep-linked one into them, so a filter
   // applied after it would only ever search the first four rows.
-  const deskRows = deskView === 'stalled'
-    ? propositionRows.filter((prop) => String(prop.status || '').toLowerCase() === 'expired')
-    : propositionRows;
+  const deskRows = inZone
+    ? matches.rowsFor(shownMatchView)
+    : deskView === 'stalled'
+      ? propositionRows.filter((prop) => String(prop.status || '').toLowerCase() === 'expired')
+      : propositionRows;
   /**
    * #4611 finding 7 — THE PREVIEW CAP IS AN OVERVIEW'S, AND THIS IS A ZONE.
    *
@@ -320,12 +355,11 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
    * proposition is pulled into the preview rather than being cut off by it,
    * which is what makes a notification land on its record on the overview too.
    */
-  const inZone = zone === 'introductions';
   const [shown, setShown] = useState(PROPOSITION_PAGE);
   // A new filter is a new list: showing page three of `all` as page three of
   // `stalled` would hand the member a short list and call it the end of a long
   // one.
-  useEffect(() => { setShown(PROPOSITION_PAGE); }, [deskView, inZone]);
+  useEffect(() => { setShown(PROPOSITION_PAGE); }, [deskView, inZone, matchView]);
   const cap = inZone ? shown : PROPOSITION_PREVIEW;
   const visiblePropositions = useMemo(() => {
     const compact = deskRows.slice(0, cap);
@@ -356,8 +390,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       // A legacy response can supply a name alone. Keep it attributed to
       // that account until the server can confirm a shared linked profile.
       const key = profileId ? `profile:${profileId}` : `affiliation:${personId}`;
-      const entry = grouped.get(key) || { key, name, profileId, people: new Map(), types: new Set(), introTargets: new Map(), coInvestor: false };
-      const person = entry.people.get(personId) || { name: item.other.name?.trim(), role: item.other.role, lastTouch: null };
+      const entry = grouped.get(key) || { key, name, profileId, people: new Map(), types: new Set(), introTargets: new Map(), coInvestor: false, relationshipIds: new Set() };
+      // D6257: the ties under the name, for the open reminders NW4 counts.
+      entry.relationshipIds.add(Number(item.id));
+      const person = entry.people.get(personId) || { name: item.other.name?.trim(), role: item.other.role, type: item.relationship_type || null, lastTouch: null };
       const touch = lastTouchAt(item);
       if (touch && (!person.lastTouch || Date.parse(touch) > Date.parse(person.lastTouch))) person.lastTouch = touch;
       entry.people.set(personId, person);
@@ -373,10 +409,16 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // heading that counted every organisation. The zone pages; the overview
   // previews and says so.
   const [orgShown, setOrgShown] = useState(ORGANIZATION_PAGE);
-  useEffect(() => { setOrgShown(ORGANIZATION_PAGE); }, [inOrgZone, orgView]);
-  const orgRows = orgView === 'co_investors' ? organizations.filter((org) => org.coInvestor) : organizations;
+  // D6257 (NW4): the directory's search box, over the name only, and the one
+  // organization whose detail (NW4.1) is open, by its grouping key.
+  const [orgQuery, setOrgQuery] = useState('');
+  const [openOrgKey, setOpenOrgKey] = useState('');
+  useEffect(() => { setOrgShown(ORGANIZATION_PAGE); }, [inOrgZone, orgView, orgQuery]);
+  const orgRows = searchOrganizations(orgView === 'co_investors' ? organizations.filter((org) => org.coInvestor) : organizations, orgQuery);
   const visibleOrganizations = orgRows.slice(0, inOrgZone ? orgShown : ORGANIZATION_PREVIEW);
   const moreOrganizations = Math.max(0, orgRows.length - visibleOrganizations.length);
+  const openOrg = openOrgKey ? organizations.find((org) => org.key === openOrgKey) || null : null;
+  const remindersRead = errors.reminders ? 'unreadable' : reminders;
 
   /**
    * The interaction log and the reminders (migration 338). Logging a touch
@@ -543,10 +585,93 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const known = zone === 'relationships' || zone === 'introductions' || zone === 'organizations';
   const shows = (section) => !known || zone === section;
 
+  // D6257 (NW3.1): the founders and startups on Axal an ask can name — the
+  // ones the investor's own ties link (`introTarget`), each once.
+  const askTargets = (() => {
+    const unique = new Map();
+    for (const item of relationships || []) { const target = introTarget(item); if (target) unique.set(target.key, target); }
+    return [...unique.values()];
+  })();
+  const introHandlers = {
+    requestIntroduction: { onClick: () => setNetworkPicker('request'), title: 'Find a teammate who knows them, or use an ask on a founder or startup on Axal.' },
+    offerIntroduction: { onClick: () => setNetworkPicker('introduction'), title: 'Offer an introduction between two of your accepted ties.' },
+  };
+  const introExportView = deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), askStatusLabel(a.status), a.quarter, a.created_at] }
+    : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] };
+  // One row for the zone and the overview's desk, whichever this page draws.
+  const introRowActions = investorZoneActions('network/introductions', { handlers: introHandlers, view: introExportView });
+
+  /** One curated match, the same card on the overview and in the zone. */
+  const propositionCard = (prop) => {
+    const target = prop.target || {}; const active = prop.status === 'pending'; const busy = busyUid === prop.uid;
+    return <article id={`network-intro-${safeKey(prop.uid)}`} className={`inw-proposition ${active ? 'featured' : ''} ${highlightedIntro === prop.uid ? 'highlighted' : ''}`} key={prop.uid} data-testid={`card-introduction-${prop.uid}`}>
+      <div className="inw-prop-top"><span className="inw-prop-label">Proposal · {prop.source || 'network'}</span><span className="inw-score" data-testid={`text-intro-score-${prop.uid}`}>{prop.source==='offered'?'Match not recorded':Number.isFinite(Number(prop.score)) ? `${prop.score} match` : 'Match pending'}</span></div>
+      <strong>{target.name || target.email || 'Proposed introduction'}</strong>
+      <p>{introductionContext(prop)}</p>
+      <p data-testid={`intro-counterpart-${prop.uid}`}>Other side: {counterpartAnswer(prop.counterpart_status)}</p>
+      {active ? <p className="inw-footnote" data-testid={`intro-cost-${prop.uid}`}>Accepting uses 1 credit</p> : null}
+      <div className="inw-prop-actions">{active ? <><button type="button" onClick={() => resolveIntro(prop, 'accept')} disabled={busy || Boolean(busyUid) || !creditView.canAccept} aria-describedby={creditView.reason ? 'intro-credit-reason' : undefined} data-testid={`button-accept-intro-${prop.uid}`}><Check size={12} />{busy ? 'Working' : 'Accept intro'}</button><button type="button" className="quiet" onClick={() => resolveIntro(prop, 'decline')} disabled={busy} data-testid={`button-decline-intro-${prop.uid}`}><X size={12} />Decline</button></> : <span className="inw-state" data-testid={`status-intro-${prop.uid}`}>{typeLabel(prop.status)}</span>}{(prop.screened === true || prop.screening_status === 'screened') && <span className="inw-screened" data-testid={`status-intro-screened-${prop.uid}`}><ShieldCheck size={11} />Screened</span>}</div>
+    </article>;
+  };
+
+  /** The investor's own asks (D550, D6260, D6261), the same list on the overview's Asked view and in the zone. */
+  const asksBody = errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
+    <div className="inw-proposition-list">{askRows.map((ask) => <InvestorAskCard key={ask.uid} ask={ask} namesUnreadable={askNamesUnreadable} highlighted={ask.uid === highlightedAsk} age={age} onWithdrawn={(result) => {
+      // The answer carries the new count; the asks are read again so the card reads Withdrawn.
+      setIntroQuota((current) => { const q = quotaFrom(result, current.value); return q ? { status: 'ready', value: q } : current; });
+      readAsks();
+    }} />)}</div>
+    <p className="inw-footnote">The founder is told when you send an ask, and accepts or declines it here. You may withdraw an ask they have not answered. Acceptance opens the mutual NDA; it is not a signature or an introduction made.</p>
+  </>;
+
+  /**
+   * D6257 (NW3): the Introductions zone's two sections below From your team
+   * (`IntroductionsDesk`, which the shell mounts above this body): Curated
+   * matches and Your asks. Three sources, three counts, never added together.
+   */
+  const introZone = inZone ? <>
+    <div className="inw-card" data-testid="introductions-zone-head">
+      <SectionHeading id="introductions-zone" title="Introductions" detail="Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count." role={role}
+        filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []}
+        actions={introRowActions} />
+    </div>
+    {deskView !== 'asked' && <section className="inw-card" aria-labelledby="introductions-desk" data-testid="section-curated-matches">
+      <SectionHeading id="introductions-desk" title="Curated matches" detail={detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: true }))} />
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="intro-credit-summary">
+        <span>Spendable intro credits · <strong>{creditView.label}</strong></span>
+        <button type="button" className="min-h-11 font-semibold underline" onClick={() => load(true)} disabled={refreshing} data-testid="intro-credit-retry">{refreshing ? 'Reading…' : 'Refresh credits'}</button>
+        {creditView.reason ? <p className="m-0 w-full text-axal-muted dark:text-gray-400" id="intro-credit-reason">{creditView.reason}</p> : null}
+      </div>
+      <div className="inw-seg" role="radiogroup" aria-label="Matches" data-testid="match-views">
+        {MATCH_VIEWS.map((v) => <button key={v.key} type="button" role="radio" aria-checked={shownMatchView === v.key} disabled={!introductions}
+          onClick={() => { setMatchView(v.key); if (deskView === 'stalled' && v.key !== 'stalled') setDeskView('all'); }} data-testid={`match-view-${v.key}`}>
+          {introductions ? matchViewLabel(v.key, matches.counts[v.key]) : v.label}</button>)}
+      </div>
+      <p className="inw-footnote">Accept uses 1 credit · Decline is free · no credits are sold; more come by referral.</p>
+      {introductions === null ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <Skeleton rows={4} />) : <>
+        {errors.introductions ? <Alert>{errors.introductions} Previously loaded propositions remain below.</Alert> : null}
+        {actionError && <Alert>{actionError}</Alert>}
+        {deskRows.length === 0
+          ? <div className="inw-empty" data-testid="empty-introductions">{propositionRows.length === 0 ? 'No live introduction propositions. New matches appear here when available.' : `None ${shownMatchView === 'pending' ? 'awaiting your decision' : shownMatchView === 'stalled' ? 'stalled' : shownMatchView}. ${propositionRows.length} ${propositionRows.length === 1 ? 'match' : 'matches'} in all.`}</div>
+          : <div className="inw-proposition-list">{visiblePropositions.map(propositionCard)}</div>}
+        {morePropositions > 0 ? (
+          <div className="inw-prop-actions" data-testid="introductions-more">
+            <button type="button" onClick={() => setShown((n) => n + PROPOSITION_PAGE)}>{`Show more (${visiblePropositions.length} of ${deskRows.length})`}</button>
+          </div>
+        ) : null}
+      </>}
+    </section>}
+    {deskView !== 'stalled' && <section className="inw-card" aria-labelledby="your-asks" data-testid="section-your-asks">
+      <SectionHeading id="your-asks" title="Your asks" detail={introQuota.status === 'ready' && introQuota.value ? `${quotaLine(introQuota.value)}${introQuota.value.quarter ? ` (${introQuota.value.quarter})` : ''}` : introQuota.status === 'unreadable' ? 'Asks this quarter could not be read' : 'Reading your asks left this quarter'} />
+      {asksBody}
+    </section>}
+  </> : null;
+
   return (
     <main className="investor-network-workspace" data-testid="investor-network-workspace">
       {networkPickerNotice && <p role="status">{networkPickerNotice}</p>}
       {networkPicker === 'introduction' && <NetworkIntroOffer onClose={()=>setNetworkPicker(null)} onOffered={()=>{setNetworkPicker(null);setNetworkPickerNotice('Introduction offered. Each person chooses whether to accept.');}} />}
+      {networkPicker === 'request' && <InvestorNetworkRequestSheet onClose={() => setNetworkPicker(null)} askTargets={askTargets} quota={introQuota} asksReady={asks !== null && !errors.asks} askStates={introRequestStates} requestAsk={requestIntro} asked={pendingAskTargets} />}
       {networkPicker === 'tie' && <NetworkTieRequest onClose={()=>setNetworkPicker(null)} onSent={()=>{setNetworkPicker(null);setNetworkPickerNotice('Tie requested. It counts only after the other person accepts.');}} />}
       <div className="inw-layout">
         <section className="inw-main">
@@ -727,93 +852,68 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
           </section>}
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
-            {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { handlers: {offerIntroduction: {onClick:()=>setNetworkPicker('introduction'),title:'Offer an introduction between two of your accepted ties.'}}, view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), askStatusLabel(a.status), a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+            {introZone}
+            {shows('introductions') && !inZone && <section className="inw-card" aria-labelledby="introductions-desk">
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={introRowActions} />
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="intro-credit-summary">
                 <span>Spendable intro credits · <strong>{creditView.label}</strong></span>
                 <button type="button" className="min-h-11 font-semibold underline" onClick={() => load(true)} disabled={refreshing} data-testid="intro-credit-retry">{refreshing ? 'Reading…' : 'Refresh credits'}</button>
                 {creditView.reason ? <p className="m-0 w-full text-axal-muted dark:text-gray-400" id="intro-credit-reason">{creditView.reason}</p> : null}
               </div>
-              {deskView === 'asked' ? (
-                errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
-                  <div className="inw-proposition-list">{askRows.map((ask) => <InvestorAskCard key={ask.uid} ask={ask} namesUnreadable={askNamesUnreadable} highlighted={ask.uid === highlightedAsk} age={age} onWithdrawn={(result) => {
-                    // The answer carries the new count; the asks are read again so the card reads Withdrawn.
-                    setIntroQuota((current) => { const q = quotaFrom(result, current.value); return q ? { status: 'ready', value: q } : current; });
-                    readAsks();
-                  }} />)}</div>
-                  <p className="inw-footnote">The founder is told when you send an ask, and accepts or declines it here. You may withdraw an ask they have not answered. Acceptance opens the mutual NDA; it is not a signature or an introduction made.</p>
-                </>
-              ) : introductions === null ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <Skeleton rows={4} />) : propositionRows.length === 0 ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div>) : <>
+              {deskView === 'asked' ? asksBody : introductions === null ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <Skeleton rows={4} />) : propositionRows.length === 0 ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div>) : <>
                 {errors.introductions ? <Alert>{errors.introductions} Previously loaded propositions remain below.</Alert> : null}
                 {actionError && <Alert>{actionError}</Alert>}
-                <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
-                  const target = prop.target || {}; const active = prop.status === 'pending'; const busy = busyUid === prop.uid;
-                  return <article id={`network-intro-${safeKey(prop.uid)}`} className={`inw-proposition ${active ? 'featured' : ''} ${highlightedIntro === prop.uid ? 'highlighted' : ''}`} key={prop.uid} data-testid={`card-introduction-${prop.uid}`}>
-                    <div className="inw-prop-top"><span className="inw-prop-label">Proposal · {prop.source || 'network'}</span><span className="inw-score" data-testid={`text-intro-score-${prop.uid}`}>{prop.source==='offered'?'Match not recorded':Number.isFinite(Number(prop.score)) ? `${prop.score} match` : 'Match pending'}</span></div>
-                    <strong>{target.name || target.email || 'Proposed introduction'}</strong>
-                    <p>{introductionContext(prop)}</p>
-                    <p data-testid={`intro-counterpart-${prop.uid}`}>Other side: {counterpartAnswer(prop.counterpart_status)}</p>
-                    {active ? <p className="inw-footnote" data-testid={`intro-cost-${prop.uid}`}>Accepting uses 1 credit</p> : null}
-                    <div className="inw-prop-actions">{active ? <><button type="button" onClick={() => resolveIntro(prop, 'accept')} disabled={busy || Boolean(busyUid) || !creditView.canAccept} aria-describedby={creditView.reason ? 'intro-credit-reason' : undefined} data-testid={`button-accept-intro-${prop.uid}`}><Check size={12} />{busy ? 'Working' : 'Accept intro'}</button><button type="button" className="quiet" onClick={() => resolveIntro(prop, 'decline')} disabled={busy} data-testid={`button-decline-intro-${prop.uid}`}><X size={12} />Decline</button></> : <span className="inw-state" data-testid={`status-intro-${prop.uid}`}>{typeLabel(prop.status)}</span>}{(prop.screened === true || prop.screening_status === 'screened') && <span className="inw-screened" data-testid={`status-intro-screened-${prop.uid}`}><ShieldCheck size={11} />Screened</span>}</div>
-                  </article>;
-                })}</div>
+                <div className="inw-proposition-list">{visiblePropositions.map(propositionCard)}</div>
                 {/* #4611 finding 7: the rest of the collection, reachable by
-                    ordinary navigation. In the zone this extends the list; on
-                    the overview it is a link to the zone, because an overview's
-                    job is to point at the place the work is done. */}
-                {morePropositions > 0 ? (inZone ? (
-                  <div className="inw-prop-actions" data-testid="introductions-more">
-                    <button type="button" onClick={() => setShown((n) => n + PROPOSITION_PAGE)}>
-                      {`Show more (${visiblePropositions.length} of ${deskRows.length})`}
-                    </button>
-                  </div>
-                ) : (
+                    ordinary navigation. On the overview it is a link to the
+                    zone, because an overview's job is to point at the place the
+                    work is done; the zone (above, D6257) pages in place. */}
+                {morePropositions > 0 ? (
                   <p className="inw-footnote" data-testid="introductions-more-link">
                     <Link to="/network/introductions">{`Open Introductions to see all ${deskRows.length}`}</Link>
                   </p>
-                )) : null}
+                ) : null}
               </>}
             </section>}
 
+            {/* D6257 (NW4, NW4B): the directory as the canvas's table — the
+                name, the people under it and where the name came from, how
+                many, the latest touch and the open reminders — with a search
+                over the name. Each name opens its detail (NW4.1). Below 640px
+                each row stacks, so nothing scrolls sideways. */}
             {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
               <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.relationships, relationships, () => (orgsUnreadable ? 'Company lookup unavailable'
                 : visibleOrganizations.length >= orgRows.length
                   ? `${orgRows.length} relationship-backed organizations`
                   : `${visibleOrganizations.length} of ${orgRows.length} relationship-backed organizations shown`))} role={role} filters={zoneFilters ? zoneFilters({ value: orgView, onChange: setOrgView }) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: orgRows, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
+              {inOrgZone && !(errors.relationships || orgsUnreadable) && relationships !== null && organizations.length > 0 ? (
+                <label className="inw-org-search"><span className="sr-only">Search organizations</span>
+                  <input type="search" value={orgQuery} onChange={(e) => setOrgQuery(e.target.value)} placeholder="Search organizations" data-testid="input-organizations-search" />
+                </label>
+              ) : null}
               {errors.relationships || orgsUnreadable ? (
                 <div className="inw-alert" role="status" data-testid="status-organizations-unreadable">
                   <CircleAlert size={14} />
-                  <span>{errors.relationships ? 'The relationships behind this directory could not be read.' : 'Your counterparts’ companies could not be read. This is not a claim that none are recorded.'}{' '}
+                  <span>{errors.relationships ? 'The relationships behind this directory could not be read.' : 'Your counterparts’ companies could not be read. This is not a claim that none are recorded. Your ties still show in Relationships, without their company.'}{' '}
                     <button type="button" className="underline" onClick={readRelationships} disabled={relationshipsReading} data-testid="button-organizations-retry">{relationshipsReading ? 'Reading…' : 'Try again'}</button>
                   </span>
                 </div>
               ) : relationships === null ? <Skeleton rows={4} /> : orgRows.length === 0 ? (
-                <div className="inw-empty" data-testid="empty-organizations">{orgView === 'co_investors' ? 'No organization with a co-investor contact is recorded.' : 'None of the people you have a tie with links a company on their account yet.'}</div>
-              ) : <div className="inw-org-list">{visibleOrganizations.map((org) => {
-                const linkedBy = [...org.people.values()].find((person) => person.name);
-                return <div className="inw-org flex-wrap" key={org.key} data-testid={`row-organization-${safeKey(org.name)}`}>
-                  <details className="w-full">
-                    <summary className="min-h-11 cursor-pointer py-1 focus-visible:outline-2 focus-visible:outline-offset-2" data-testid="organization-disclosure">
-                      <strong className="inline!">{org.name}</strong>{' · '}<b>{org.people.size} known</b>
-                      <span>{org.profileId
-                        ? (linkedBy ? `Linked by ${linkedBy.name}${linkedBy.role ? `, ${typeLabel(linkedBy.role)}` : ''}` : 'Linked on a counterpart’s account')
-                        : 'Company name from the relationship · profile not confirmed'}</span>
-                      {org.coInvestor && <span>Has a co-investor contact</span>}
-                    </summary>
-                    <ul className="mt-2 space-y-1" aria-label="Known people">
-                      {[...org.people].map(([id, person]) => {
-                        const touched = shortDate(person.lastTouch);
-                        return <li key={id}>
-                          {person.name || 'Name not recorded'}{person.role ? ` · ${typeLabel(person.role)}` : ''}
-                          <span>{touched ? `Last touch ${touched}` : 'No recorded touch'}</span>
-                        </li>;
-                      })}
-                    </ul>
-                    {org.types.size > 0 && <span>{[...org.types].join(' · ')}</span>}
-                  </details>
-                  {introAction([...org.introTargets.values()])}
-                </div>;
-              })}</div>}
+                <div className="inw-empty" data-testid="empty-organizations">{orgQuery.trim() && organizations.length ? `No organization name matches “${orgQuery.trim()}”.` : orgView === 'co_investors' ? 'No organization with a co-investor contact is recorded.' : 'No organization is recorded on your relationships yet. None of the people you have a tie with links a company on their account.'}</div>
+              ) : <div className="inw-org-table" role="table" aria-label="Organizations" data-testid="table-organizations">
+                <div className="inw-org-head" role="row"><span role="columnheader">Organization</span><span role="columnheader">People · where the name came from</span><span role="columnheader">People</span><span role="columnheader">Latest touch</span><span role="columnheader">Open reminders</span></div>
+                {visibleOrganizations.map((org) => {
+                  const latest = latestTouch([...org.people.values()]);
+                  const open = openRemindersFor(org.relationshipIds, remindersRead);
+                  return <div className="inw-org-row" role="row" key={org.key} data-testid={`row-organization-${safeKey(org.name)}`}>
+                    <span role="cell" data-label="Organization"><button type="button" className="inw-org-open" onClick={() => setOpenOrgKey(org.key)} aria-label={`Open ${org.name}`} data-testid="organization-open">{org.name}</button>{org.coInvestor && <small>Has a co-investor contact</small>}</span>
+                    <span role="cell" data-label="People · where the name came from" data-testid="organization-people">{[...org.people.values()].map((person, i) => <span key={i} className="block">{person.name || 'Name not recorded'}{person.role ? ` · ${typeLabel(person.role)}` : ''} <i className="inw-src">{nameSource(org)}</i></span>)}</span>
+                    <span role="cell" data-label="People" data-testid="organization-count">{org.people.size}</span>
+                    <span role="cell" data-label="Latest touch" data-testid="organization-latest">{latest ? (shortDate(latest) || String(latest).slice(0, 10)) : '— Not recorded'}</span>
+                    <span role="cell" data-label="Open reminders" data-testid="organization-reminders">{open === 'unreadable' ? '? Could not be read' : open === null ? 'Reading…' : open.length ? `${open.length} open` : '○ None'}</span>
+                  </div>;
+                })}
+              </div>}
               {moreOrganizations > 0 ? (inOrgZone ? (
                 <div className="inw-prop-actions" data-testid="organizations-more">
                   <button type="button" onClick={() => setOrgShown((n) => n + ORGANIZATION_PAGE)}>
@@ -826,6 +926,8 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 </p>
               )) : null}
               <p className="inw-footnote" data-testid="text-organizations-source">An organization here is the company the other person links on their own account, read as it stands now. A tie whose counterpart links none is not grouped. Names and email domains are never used to infer a firm.</p>
+              {openOrg ? <InvestorOrganizationSheet org={openOrg} reminders={remindersRead} onReminderDone={doneReminder} onRetryReminders={readReminders}
+                introAction={introAction([...openOrg.introTargets.values()])} onClose={() => setOpenOrgKey('')} /> : null}
             </section>}
           </div>}
         </section>

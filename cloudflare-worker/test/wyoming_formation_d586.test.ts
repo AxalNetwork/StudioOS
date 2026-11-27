@@ -26,7 +26,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import legal from '../src/routes/legal.ts';
-import { checkCompanyName, JURISDICTION_REGISTRY } from '../src/services/nameCheck.ts';
+import { checkCompanyName, JURISDICTION_REGISTRY, registryFor } from '../src/services/nameCheck.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -34,6 +34,11 @@ const FOUNDER = 10, ADMIN = 1;
 const WY_PRICE = 34900;
 
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
+// D6691 (#6691): the catalogue (its tables and the version 1 seed) is in every fixture, so the jurisdiction list, the
+// wizard's handoff and the name check run on the catalogue as production does; `catalogue: false` leaves it out.
+const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
+const CATALOGUE = ['202611151923_6689_formation_catalogue.sql', '202611161600_6690_formation_catalogue_seed_v1.sql']
+  .map((f) => readFileSync(resolve(MIGRATIONS, f), 'utf8'));
 function ddl(name: string): string {
   const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
   assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
@@ -46,9 +51,10 @@ const product = (id: string, jurisdiction: string, amount: number) => ({
   prices_json: JSON.stringify([{ id: `price_${id}`, product: id, unit_amount: amount, currency: 'usd', type: 'one_time', interval: null, active: true }]),
 });
 
-function fixture({ wyPrice = true } = {}) {
+function fixture({ wyPrice = true, catalogue = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'entities', 'documents']) db.exec(ddl(t));
+  if (catalogue) for (const sql of CATALOGUE) db.exec(sql);
   db.exec(`CREATE TABLE stripe_products (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'alacarte',
     active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]',
     synced_at TEXT NOT NULL DEFAULT (datetime('now')), livemode INTEGER)`);
@@ -166,7 +172,9 @@ test('with no catalog price an order is refused and nothing is written or charge
 
 test('the name check asks the Wyoming register, or says to verify by hand', async () => {
   assert.equal(JURISDICTION_REGISTRY.us_wy_ccorp, 'wy');
-  const noKey = await checkCompanyName({} as any, 'us_wy_ccorp', 'Acme Robotics');
+  const DB = d1Over(fixture());
+  assert.equal(await registryFor({ DB } as any, 'us_wy_ccorp'), 'wy', 'the catalogue does not place Wyoming at US-WY');
+  const noKey = await checkCompanyName({ DB } as any, 'us_wy_ccorp', 'Acme Robotics');
   assert.equal(noKey.status, 'unavailable');
   assert.equal(noKey.reason, 'wy_register_requires_manual_check');
 
@@ -175,7 +183,7 @@ test('the name check asks the Wyoming register, or says to verify by hand', asyn
     seen.push(String(url));
     return new Response(JSON.stringify({ results: { companies: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }) as any;
-  await checkCompanyName({ OPENCORPORATES_API_KEY: 'oc_test' } as any, 'us_wy_ccorp', 'Acme Robotics', { fetchImpl });
+  await checkCompanyName({ DB, OPENCORPORATES_API_KEY: 'oc_test' } as any, 'us_wy_ccorp', 'Acme Robotics', { fetchImpl });
   assert.ok(seen.some((u) => /jurisdiction_code=us_wy\b/.test(u)), `the Wyoming register was not asked: ${seen.join(' ')}`);
 });
 
@@ -211,4 +219,12 @@ test('the Wyoming price is never an estimate: no JURISDICTION_COSTS or legacy en
   assert.doesNotMatch(costs, /us_wy/);
   const envs = src.slice(src.indexOf('const JURISDICTION_PRICE_ENV'), src.indexOf('};', src.indexOf('const JURISDICTION_PRICE_ENV')));
   assert.doesNotMatch(envs, /us_wy/);
+});
+
+// D6691: the D586 list is the same with the catalogue and from the frozen array (no catalogue tables).
+// Mutation checked: the catalogue reader dropping a display field from each form (fails).
+test('the Wyoming entry is the same read from the catalogue and from the frozen array', async () => {
+  const fromCatalogue = await call(fixture(), FOUNDER, 'GET', '/legal/jurisdictions');
+  const fromArray = await quiet(() => call(fixture({ catalogue: false }), FOUNDER, 'GET', '/legal/jurisdictions'));
+  assert.deepEqual(fromCatalogue.body, fromArray.body);
 });

@@ -2,6 +2,7 @@
 import { pathToFileURL } from 'node:url';
 import { githubApi } from './github.mjs';
 import { loadTrackers, matchingPulls } from './trackers.mjs';
+import { batchedTrackers, loadBatches, reconcileBatches } from './batches.mjs';
 import { ALERT_SOURCES } from './sources.mjs';
 import { breachPass, digestText, isDigestRun, openSecurityTasks } from './sla.mjs';
 import { webhookDelivery } from '../health-alert-transport.mjs';
@@ -23,11 +24,14 @@ export async function reconcile(api, options, dependencies = {}) {
   if (!positive(runNumber) || (alertNumber !== undefined && !positive(alertNumber))) throw new Error('Invalid run or alert number');
   const ref = `refs/heads/${defaultBranch}`;
   const trackers = await (dependencies.loadTrackers ?? loadTrackers)(api, options);
-  let candidates;
+  // D7259: an open batch owns its members' queue state; S21 claims the batch, not each member.
+  const batches = await (dependencies.loadBatches ?? loadBatches)(api, options);
+  const batched = batchedTrackers(batches);
+  let candidates, open;
   if (alertNumber !== undefined) {
     candidates = [alertNumber];
   } else {
-    const open = await api.pages(`/code-scanning/alerts?state=open&ref=${encodeURIComponent(ref)}`);
+    open = await api.pages(`/code-scanning/alerts?state=open&ref=${encodeURIComponent(ref)}`);
     if (!open.every(a => positive(a.number) && a.state === 'open' && a.most_recent_instance?.ref === ref)) {
       throw new Error('Unreadable default-branch alert inventory');
     }
@@ -36,7 +40,7 @@ export async function reconcile(api, options, dependencies = {}) {
     candidates = [...windowOf(openNumbers, OPEN_PER_RUN, runNumber), ...windowOf(checkFixed, CLOSURES_PER_RUN, runNumber)];
   }
   // GitHub's canonical alert URL also identifies an existing same-repo PR with a custom branch name.
-  const pulls = candidates.length
+  const pulls = candidates.length || open
     ? await api.pages(`/pulls?state=open&base=${encodeURIComponent(defaultBranch)}`) : [];
   let failed = 0;
   for (const number of candidates) {
@@ -59,12 +63,21 @@ export async function reconcile(api, options, dependencies = {}) {
         else await trackers.linkPulls(issue, [...existing.keys()]);
         continue;
       }
-      if (alert.assignees?.length) continue;
+      if (alert.assignees?.length || batched.has(issue.number)) continue;
       // CodeQL and third-party findings share the same non-AI handoff to S21.
       await trackers.markReady(issue);
     } catch (error) {
       // The private alert body and API error payload stay out of public logs.
       console.error(`Alert ${number}: reconciliation failed${Number.isInteger(error.status) ? ` (HTTP ${error.status})` : ''}.`);
+      if (error.limited || [401, 403, 429].includes(error.status)) throw error;
+      failed++;
+    }
+  }
+  if (open) {
+    // Grouping needs the whole open inventory, so a single-alert dispatch leaves batches to the next sweep.
+    try {
+      await (dependencies.reconcileBatches ?? reconcileBatches)(api, options, { alerts: open, trackers, pulls, batches });
+    } catch (error) {
       if (error.limited || [401, 403, 429].includes(error.status)) throw error;
       failed++;
     }
@@ -132,6 +145,8 @@ async function main(env) {
   const options = {
     owner, repo, defaultBranch: 'main', botLogin: env.SCAN_REMEDIATION_BOT_LOGIN || 'github-actions[bot]',
     runNumber: Number(env.GITHUB_RUN_NUMBER),
+    // D7259: optional; without it each new batch id is keyed at random. It is never logged.
+    batchKey: env.SCAN_BATCH_KEY || undefined,
   };
   const now = new Date();
   if (isDigestRun(env)) {

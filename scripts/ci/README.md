@@ -13,6 +13,7 @@ They do not change production application state.
 | `no-anthropic-in-prod.mjs` | Enforce the production Advisor provider boundary (D5339). |
 | `pool-contract.mjs` | The untrusted pool contract: every job a pull request starts runs hosted or in `untrusted`, with a read-only token, no id-token, no secret and no environment; deploys run only from main or a dispatch (D8072). |
 | `queue-ref-alive.sh` | Distinguish a missing merge-queue ref from an unavailable remote. |
+| `queue-run-lookup.mjs` | On a push to main, find the successful merge-queue run of `ci.yml` on the exact commit, and report `reused`, `miss` or `unavailable`; only `reused` skips the suite (D5500). Fixtures: `frontend/test/queue_run_lookup_5500.test.mjs`. |
 | `scanner-acquisition.mjs` | Verify cached and downloaded scanner archives before extraction or execution (D5531). |
 | `scanner-tools.json` | Record the reviewed release URLs, versions and SHA256 pins. |
 | `test-tracer-hooks.mjs` | Collect module dependency evidence through off-thread loader hooks (D5608). |
