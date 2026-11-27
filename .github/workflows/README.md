@@ -82,7 +82,7 @@ allow it. Required and shadow contexts use the merge queue ruleset test.
 | `scan-remediation.yml` | Remediate code scanning alerts | — | — | — | — | reconcile (advisory, conditional) | `workflow_dispatch` · reconcile (advisory, conditional) |
 | `schema-rehearsal.yml` | Schema rehearsal (hosted provisioning and restore) | — | — | — | — | — | `workflow_dispatch` · provision, seed, export, restore, compare (advisory) |
 | `semgrep.yml` | Semgrep | security scan scope (advisory)<br>code scanning takes uploads? (advisory, conditional)<br>Scan (advisory, conditional)<br>main scan findings (advisory, conditional)<br>Request alert reconciliation (advisory, conditional) | — | — | security scan scope (advisory)<br>code scanning takes uploads? (advisory, conditional)<br>Scan (advisory, conditional)<br>main scan findings (advisory, conditional)<br>Request alert reconciliation (advisory, conditional) | security scan scope (advisory)<br>code scanning takes uploads? (advisory, conditional)<br>Scan (advisory, conditional)<br>main scan findings (advisory, conditional)<br>Request alert reconciliation (advisory, conditional) | — |
-| `workspace-image.yml` | Workspace image candidate | validate (advisory) | — | — | — | — | — |
+| `workspace-image.yml` | Workspace image candidate | validate (advisory, conditional) | — | — | — | — | — |
 
 Workflows that listen for `merge_group` (5): `agent-provenance.yml`, `ci.yml`, `dependency-review.yml`, `gitleaks.yml`, `migration-immutability.yml`.
 
