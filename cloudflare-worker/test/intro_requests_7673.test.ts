@@ -27,6 +27,10 @@ function fixture() {
   const users = Object.entries(ROLES).map(([role, id]) => `(${id},'7673-${role}@example.test','Synthetic ${role}','${role}',1)`);
   users.push(`(${OPERATOR},'7673-op@example.test','Synthetic operator','admin',1)`, `(${OPERATOR_2},'7673-op2@example.test','Synthetic operator two','admin',1)`);
   db.exec(`INSERT INTO users(id,email,name,role,is_active) VALUES ${users.join(',')};
+    -- D9067: the operator side needs a Super Admin's named grant; both operators hold one, the first also reviews.
+    INSERT INTO network_intro_staff_grants(uid,user_id,kind,granted_by,reason) VALUES
+      ('g7673-op',${OPERATOR},'operator',${OPERATOR},'Synthetic grant'), ('g7673-rev',${OPERATOR},'reviewer',${OPERATOR},'Synthetic grant'),
+      ('g7673-op2',${OPERATOR_2},'operator',${OPERATOR},'Synthetic grant');
     INSERT INTO network_directory_sources(uid,name,url) VALUES ('src-7673','Synthetic source','https://directory.example.test');
     INSERT INTO network_directory_entries(uid,kind,source_uid,source_external_id,display_name,publication_status,observed_at) VALUES
       ('p-ada','person','src-7673','r1','Ada Example','published','2026-11-01 00:00:00'),
