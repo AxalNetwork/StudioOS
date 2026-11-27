@@ -5,7 +5,7 @@ import Sheet from '../../ui/Sheet.jsx';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import { connectorsApi } from '../../lib/api/connectors';
 import {
-  FOOTNOTE, NOT_CONNECTED, OPENS, PREPARE_NOTE, PRIVACY_PASSED, PROVIDERS, counterText, githubConnection, pickedRepositories, providerWord, sendRefusal,
+  FOOTNOTE, NOT_CONNECTED, OPENS, PREPARE_NOTE, PROVIDERS, SEND_CHECKS, SEND_CHECK_OK, SEND_NOT_COVERED, counterText, githubConnection, pickedRepositories, providerWord, sendRefusal,
 } from './buildProgressModel';
 
 /**
@@ -31,7 +31,7 @@ const CHIP_OFF = 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:
 const EYE = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'm-0 text-[12.5px] leading-[1.5] text-axal-muted dark:text-gray-400';
 const BOX = 'm-0 max-h-[260px] overflow-auto whitespace-pre-wrap rounded-[10px] border border-axal-hairline bg-axal-ground p-3 font-mono text-[12px] leading-[1.6] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-const OK = 'flex items-center gap-2 rounded-[10px] border border-emerald-300 bg-emerald-50 px-3 py-2 text-[12.5px] font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300';
+const CHECKED = 'flex flex-col gap-1 rounded-[10px] border border-axal-hairline px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-100';
 const OUT = 'inline-flex min-h-[32px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[12px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 /** The founder's picked repositories for this venture; `null` while reading, `[]` when none. */
@@ -189,6 +189,24 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
   );
 }
 
+/**
+ * D8773 (#8773, owner Q3 option A): what the send's check covered — the four
+ * checks `lintForSend` runs, each named, then what they do not cover. A send
+ * that reached this point found no match; it is never called "passed" or
+ * "no names".
+ */
+function SendCheck() {
+  return (
+    <section className={CHECKED} data-testid="plan-send-privacy" aria-label="Privacy check">
+      <p className="m-0 font-semibold text-axal-ink dark:text-gray-100">{SEND_CHECK_OK}</p>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+        {SEND_CHECKS.map((c) => <li key={c.key}><b>{c.name}</b> · <span className="text-axal-muted dark:text-gray-400">{c.what}</span></li>)}
+      </ul>
+      <p className="m-0 text-axal-muted dark:text-gray-400" data-testid="plan-send-not-covered">{SEND_NOT_COVERED}</p>
+    </section>
+  );
+}
+
 /** What the press prepared, per tool, with the founder's own way out to the tool. */
 function Result({ tool, result, onCopy, onDownload }) {
   if (tool === 'lovable') {
@@ -197,7 +215,7 @@ function Result({ tool, result, onCopy, onDownload }) {
         <span className={EYE}>Prompt</span>
         <pre className={BOX} data-testid="plan-send-prompt">{result.text}</pre>
         <span className="self-end font-mono text-[11px] text-axal-muted dark:text-gray-400" data-testid="plan-send-counter">{counterText(result.prompt_chars)}</span>
-        <p className={OK} data-testid="plan-send-privacy">✓ {PRIVACY_PASSED}</p>
+        <SendCheck />
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={OUT} onClick={() => onCopy(result.text)} data-testid="plan-send-copy">Copy prompt</button>
           <a href={result.link} target="_blank" rel="noopener noreferrer" className={actionPrimary} data-testid="plan-send-open">Open in Lovable ↗</a>
@@ -211,7 +229,7 @@ function Result({ tool, result, onCopy, onDownload }) {
     const linked = issues.some((x) => x.url);
     return (
       <div className="flex flex-col gap-2" data-testid="plan-send-result-github">
-        <p className={OK} data-testid="plan-send-privacy">✓ {PRIVACY_PASSED}</p>
+        <SendCheck />
         {issues.map((x) => (
           <div key={x.plan_item_uid} className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="plan-send-issue">
             <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{x.title}</span>
@@ -229,7 +247,7 @@ function Result({ tool, result, onCopy, onDownload }) {
   if (tool === 'notion') {
     return (
       <div className="flex flex-col gap-2" data-testid="plan-send-result-notion">
-        <p className={OK} data-testid="plan-send-privacy">✓ {PRIVACY_PASSED}</p>
+        <SendCheck />
         <pre className={BOX} data-testid="plan-send-pages">{result.markdown}</pre>
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={OUT} onClick={() => onDownload(result.markdown || '')} data-testid="plan-send-download">Download .md</button>

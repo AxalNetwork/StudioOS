@@ -124,17 +124,29 @@ jobs:
   # parts skipped; when the queue is off, when nothing is found, or when the
   # lookup fails, the full suite runs (D1279: main still finishes a run for
   # every commit, and that run names the queue run it relies on).
+  # D5500 (#5500): the lookup is scripts/ci/queue-run-lookup.mjs, exercised by
+  # frontend/test/queue_run_lookup_5500.test.mjs. The job is named for what it
+  # does, not for one of its outcomes: it reports `reused`, `miss` or
+  # `unavailable` (the last two run the full suite) in its step summary.
   # -------------------------------------------------------------------------
   verified:
-    name: already verified in the merge queue
+    name: merge-queue run lookup
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       actions: read
     outputs:
       run: ${{ steps.lookup.outputs.run }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
       - name: A successful merge_group run of ci.yml on this commit
         id: lookup
         env:
@@ -144,20 +156,7 @@ jobs:
         # The queue merges as soon as its required checks pass, so the queue
         # run can still be closing when this push starts: look four times,
         # 20 seconds apart. A miss, or a failed call, means the suite runs.
-        run: |
-          run=''
-          for attempt in 1 2 3 4; do
-            run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=merge_group&status=success&per_page=1" \
-              --jq '.workflow_runs[0] | select(.head_sha == env.SHA and .event == "merge_group" and .conclusion == "success") | .html_url' || true)
-            [ -n "$run" ] && break
-            [ "$attempt" -lt 4 ] && sleep 20
-          done
-          echo "run=$run" >> "$GITHUB_OUTPUT"
-          if [ -n "$run" ]; then
-            echo "The merge queue already passed the full suite on $SHA: $run"
-          else
-            echo "No merge-queue run passed on $SHA, so the full suite runs."
-          fi
+        run: node scripts/ci/queue-run-lookup.mjs
 
   # D7108 part 2 (#7108): never in the merge queue. There the part list is
   # always the full nine (prTier), so `suite` lists it literally and each part
@@ -1053,6 +1052,12 @@ jobs:
       - name: Fund report print (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/report_print_6250.spec.js --retries=0 --trace off
+      # #8524 (D8524, D8524-p2): the eSign signer's own journey at 1440 and 390 — open the link, sign, complete,
+      # download the signed PDF, revisit, and a two-signer envelope in order, with an axe pass. The real eSign
+      # router runs on SQLite with isolated fixtures (tests/e2e/_esign_e2e_server.mjs); no email, no preview.
+      - name: eSign signer journey (real router on SQLite, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/esign_signer_journey.spec.js --retries=0 --trace off
       # #4580 (D4580-p2): the return to Grow after each Sign In v2 method at 1440 and 390 — the email link (and an
       # expired one) through tests/e2e/_helpers.js' local Worker and outbox, the code, passkey, Apple and Google with
       # mocked callbacks, each cancel or refusal retried. Same docs/ and fixtures pattern; no account, no email.

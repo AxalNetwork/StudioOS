@@ -29,6 +29,12 @@
   "GET /api/cycles/raise/evidence/preview": {
     "kind": "filter"
   },
+  "GET /api/cycles/raise/evidence/search-console/preview": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/search-console/recheck": {
+    "kind": "filter"
+  },
   "GET /api/cycles/raise/evidence/share-links": {
     "kind": "filter"
   },

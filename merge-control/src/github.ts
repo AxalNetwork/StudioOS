@@ -19,6 +19,9 @@ const base64url = (value: Uint8Array | string) => Buffer.from(value).toString('b
 export const DEFAULT_PERMISSIONS: Readonly<Record<string, string>> = Object.freeze({ actions: 'write', contents: 'read' });
 /** D5990: the separate token the policy check uses: the compare and tree reads, and creating check runs. */
 export const POLICY_PERMISSIONS: Readonly<Record<string, string>> = Object.freeze({ checks: 'write', contents: 'read' });
+/** D7109: the manual conflict check: create and update its check run, read the pull request (GraphQL) and the clicker's permission. */
+export const CONFLICT_PERMISSIONS: Readonly<Record<string, string>> = Object.freeze({ checks: 'write', contents: 'read', pull_requests: 'read' });
+export const GRAPHQL = 'graphql';
 export async function githubClient(env: Env, fetcher: typeof fetch = fetch, permissions: Readonly<Record<string, string>> = DEFAULT_PERMISSIONS): Promise<GithubApi> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(env.REPOSITORY) || !/^\d+$/.test(env.GITHUB_APP_ID ?? '') || !/^\d+$/.test(env.GITHUB_INSTALLATION_ID ?? '') || !env.GITHUB_APP_PRIVATE_KEY) throw new Error('App not configured');
   const now = Math.floor(Date.now() / 1000);
@@ -33,7 +36,9 @@ export async function githubClient(env: Env, fetcher: typeof fetch = fetch, perm
   let requests = 0;
   return async (method, path, body) => {
     if (++requests > 100 || !/^[\w./?=&%_-]+$/.test(path) || (path.includes('..') && !COMPARE.test(path))) throw new Error('GitHub request cap or invalid path');
-    const res = await fetcher(`https://api.github.com/repos/${env.REPOSITORY}/${path}`, { method, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    // D7109: `POST graphql` is the one path outside the repository (merge-queue timeline and mergeability reads).
+    const url = path === GRAPHQL && method === 'POST' ? 'https://api.github.com/graphql' : `https://api.github.com/repos/${env.REPOSITORY}/${path}`;
+    const res = await fetcher(url, { method, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'StudioOS-Merge-Control', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (!res.ok && !(method === 'POST' && path.endsWith('/cancel') && res.status === 409)) throw Object.assign(new Error(`GitHub HTTP ${res.status}`), { status: res.status });

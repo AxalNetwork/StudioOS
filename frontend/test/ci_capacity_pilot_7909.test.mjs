@@ -309,7 +309,7 @@ test('D7909 pilot configuration refuses included billing and full-suite publicat
 const BASE_JOB_DIGESTS={
   "frontend":'e2884e1ba35220b8',
   "worker":'338f2e46f9af2c9f',
-  "verified":'671cbb73f43df103',
+  "verified":'3566bb89558bcaa1', // D5500 (#5500): named for what it does; the lookup moved to scripts/ci/queue-run-lookup.mjs (same query and decision).
   "suite":'ed1af766388ae3b8', // D8626: needs capacity-route, and a job env telling test-drift-parts.mjs a Worker part was routed.
   "test-deps":'584ab84cbc836df0',
   "fast":'066a8e32945222c9',
@@ -317,7 +317,7 @@ const BASE_JOB_DIGESTS={
   "gate":'a0da00b955654e3e', // D8626: refuses a routed candidate while main does not require ci-capacity/full-suite.
   "selection-shadow":'41ac4055f5a3c941',
   "classify":'d594dedf4e520c73',
-  "visual":'91d69169463e3600', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #4580 (D4580-p2): the Grow return step.
+  "visual":'e52969c5d5812f66', // #6250 (D6250-p2): fund report print; #8537 (D8537): public journey; #7808 (D7808): switcher and rail; #8524 (D8524-p2): eSign signer journey; #4580 (D4580-p2): Grow return.
   "drift":'d870bd539b8eced2',
   "og-tags":'e7c2cfaf81226e04',
   "dev-backend":'82b39cdcaa1e275a',

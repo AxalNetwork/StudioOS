@@ -104,6 +104,8 @@ test('D1424 (#3700): each investor zone header fills the primary D1424 names, or
     'funds/lps': ['Add LP'],
     'funds/calls': ['New call'],
     'funds/reporting': ['New reporting period'],
+    // D6257 (#6257, NW3.1): the Introductions zone's request sheet.
+    'network/introductions': ['Request an intro'],
     'portfolio/updates': ['Chase all overdue'],
     'portfolio/value-add': ['Log support'],
     'research/ask': ['New brief'],

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
+import { linkBootstrapFailureFor } from '../lib/pendingNext';
 
 /**
  * T20 — Auth re-sync on navigation.
@@ -28,6 +29,7 @@ const AuthCtx = createContext({
   role: null,
   loading: false,
   oauthBootstrapping: false,
+  linkBootstrapFailure: null,
   refresh: async () => {},
   setUser: () => {},
 });
@@ -73,6 +75,21 @@ export function AuthProvider({ children }) {
   // moment the probe settles (success OR failure) so a genuinely failed
   // bootstrap still falls through to /login.
   const [oauthBootstrapping, setOauthBootstrapping] = useState(postOAuthMarker);
+
+  // D8680 (#8680): the email link's own marker, kept apart from Google's. When
+  // the forced probe after `?magic=ok` finds no session, the guard used to fall
+  // through to a bare /login: the person had just opened a valid link and read
+  // only "Sign in", with no reason and no way to tell a refused link from a
+  // session the browser did not keep. This holds the reason (`session` or
+  // `unreachable`, see `linkBootstrapFailureFor` in lib/pendingNext.js) for RequireAuth to carry to
+  // /login as `?magic_error=`, where LoginPage words it and opens the send-a-new-
+  // link step. Cleared once /login is reached, so a later signed-out visit to a
+  // protected page reads the plain sign-in page again.
+  const [magicMarker] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return new URLSearchParams(window.location.search).get('magic') === 'ok'; } catch { return false; }
+  });
+  const [linkBootstrapFailure, setLinkBootstrapFailure] = useState(null);
 
   // Wrap setUser so localStorage stays consistent. Callers like
   // handleImpersonate / login still write to localStorage themselves
@@ -120,12 +137,14 @@ export function AuthProvider({ children }) {
 
     setLoading(true);
     const gen = sessionRef.current.gen;
+    // D8680: the probe answers how it ended (`{ ok: true }`, `{ stale: true }` or `{ error }`) so the email-link
+    // bootstrap can say why it failed. Every other caller ignores the value, as before.
     const p = (async () => {
       try {
         const me = await api.getMe();
         // D4581: signed out (or another account signed in) while this was in flight. Its answer is
         // the old session's; drawing it would sign that account back in on this tab.
-        if (gen !== sessionRef.current.gen) return;
+        if (gen !== sessionRef.current.gen) return { stale: true };
         const stored = safeReadJSON('user', {}) || {};
         // Task #4 — identity-change purge. If /me returned a different user
         // than the one we had cached (e.g. someone signed in with Google on
@@ -146,7 +165,7 @@ export function AuthProvider({ children }) {
           nextSession(me);
           setUserState(me);
           lastFetchRef.current = Date.now();
-          return;
+          return { ok: true };
         }
         const merged = { ...stored, ...me };
         try { localStorage.setItem('user', JSON.stringify(merged)); } catch { /* ignore */ }
@@ -155,10 +174,12 @@ export function AuthProvider({ children }) {
         // failed transiently we want the next navigation to retry
         // instead of being silenced for the full 5-minute window.
         lastFetchRef.current = Date.now();
-      } catch {
+        return { ok: true };
+      } catch (error) {
         // 401 is already handled by api.request (redirects to /login).
         // Other errors are transient — keep the cached user and let the
         // next navigation re-attempt the sync.
+        return { error };
       } finally {
         setLoading(false);
         inFlightRef.current = null;
@@ -202,10 +223,25 @@ export function AuthProvider({ children }) {
       // Settle `oauthBootstrapping` once the forced /me resolves (success
       // populates `user`; failure leaves it null) so RequireAuth either
       // renders the protected page or, only then, falls through to /login.
-      Promise.resolve(refresh({ force: true })).finally(() => setOauthBootstrapping(false));
+      Promise.resolve(refresh({ force: true }))
+        .then((outcome) => {
+          // D8680: only the email link's bootstrap names its failure; Google keeps its own `?google_error=` path.
+          // A cached account is dropped with it: the link was opened to sign someone in, and an identity this
+          // probe could not confirm (perhaps another person's, from an earlier session) must not be drawn instead.
+          if (magicMarker && outcome?.error) {
+            setLinkBootstrapFailure(linkBootstrapFailureFor(outcome.error));
+            setUser(null);
+          }
+        })
+        .finally(() => setOauthBootstrapping(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postOAuthMarker]);
+
+  // D8680: /login has read `?magic_error=` on its first render; the reason is spent.
+  useEffect(() => {
+    if (linkBootstrapFailure && location.pathname === '/login') setLinkBootstrapFailure(null);
+  }, [linkBootstrapFailure, location.pathname]);
 
   // Cross-tab sync: another tab logging in/out updates localStorage; mirror
   // it here so tabs stay consistent without a reload.
@@ -229,6 +265,7 @@ export function AuthProvider({ children }) {
     role: user?.role || null,
     loading,
     oauthBootstrapping,
+    linkBootstrapFailure,
     refresh,
     setUser,
   };

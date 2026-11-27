@@ -14,7 +14,7 @@
  *                          user can compare regenerations.
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -26,10 +26,13 @@ export async function ensureDeckReviewSchema(env: Env): Promise<void> {
     );
     // D900 (migration 541): the studio version a review read. A table made before
     // 541 gains both columns here; two literal statements, never a built name.
-    const info = await env.DB.prepare('PRAGMA table_info(deck_reviews)').all<{ name: string }>();
-    const have = new Set((info.results || []).map((r) => r.name));
-    if (!have.has('deck_id')) await env.DB.prepare('ALTER TABLE deck_reviews ADD COLUMN deck_id INTEGER').run();
-    if (!have.has('deck_version')) await env.DB.prepare('ALTER TABLE deck_reviews ADD COLUMN deck_version INTEGER').run();
+    // #5343: through `runSchemaBootstrap`, which reads the columns once per
+    // binding and skips an ALTER whose column is there; a real failure reaches
+    // the catch below and the schema is not marked ready.
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE deck_reviews ADD COLUMN deck_id INTEGER',
+      'ALTER TABLE deck_reviews ADD COLUMN deck_version INTEGER',
+    ]);
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_deck_reviews_deck ON deck_reviews (deck_id, created_at)');
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_deck_reviews_user ON deck_reviews (user_id, updated_at)",

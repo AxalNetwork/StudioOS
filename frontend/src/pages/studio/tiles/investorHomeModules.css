@@ -3,6 +3,8 @@
    frame's own dark tokens. Every state is a glyph plus a word; red is only the small icon. */
 .ihs-rows { list-style: none; margin: 0; padding: 0; }
 .ihs-sub { margin: 0; font-size: 12px; line-height: 1.45; color: var(--sm-mut); }
+.ihs-tolink { display: flex; align-items: center; gap: 6px; }
+.ihs-tolink svg { flex: none; }
 .ihs-body { margin: 0; font-size: 12.5px; color: var(--sm-body); }
 .ihs-strong { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--sm-body); }
 .ihs-mu { color: var(--sm-mut); }
@@ -123,4 +125,9 @@ button.ihs-st { cursor: pointer; }
   .ihs-more { display: inline-flex; align-items: center; min-height: 22px; font-size: 12px; font-weight: 600; color: var(--sm-vtx); background: none; border: 0; padding: 0; cursor: pointer; }
   .ihs-crow[data-open="true"] .ihs-chip-extra { display: inline-flex; }
   .ihs-crow[data-open="true"] .ihs-more { display: none; }
+}
+/* D8731 (#8731, canvas SIV-9): on a phone the Funds and Usage & quota card links are 44 px tall. */
+@media (max-width: 639px) {
+  [data-testid="studio-tile-fund_commitment"] .sm-link,
+  [data-testid="studio-tile-usage_quota"] .sm-link { display: inline-flex; align-items: center; min-height: 44px; }
 }
