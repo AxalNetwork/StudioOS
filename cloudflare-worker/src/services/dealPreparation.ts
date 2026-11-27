@@ -275,6 +275,10 @@ export const REVISION_CONTENT_KEYS = [
   'title', 'summary', 'description', 'sector', 'website', 'instrument', 'target_raise', 'minimum_check',
   'valuation_cap', 'carry_pct', 'management_fee_pct', 'spv_jurisdiction', 'closing_deadline', 'currency',
   'internal_notes', 'evidence_refs', 'audience_manifest',
+  // D5456 §9 (owner answer A): the nine brief sections and #6196's proposed terms.
+  'brief_executive_summary', 'brief_investment_thesis', 'brief_problem_product', 'brief_market', 'brief_team',
+  'brief_traction', 'brief_use_of_funds', 'brief_risks_mitigations', 'brief_open_questions',
+  'discount_pct', 'pro_rata', 'information_rights', 'information_rights_note', 'board_seat', 'board_seat_count',
 ] as const;
 
 export const PROJECTIONS = {

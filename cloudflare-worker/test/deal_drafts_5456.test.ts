@@ -36,6 +36,11 @@
  *   M13 write the audit row after the batch, best effort                          → T5 audit failure
  *   M14 drop the percentage upper bound                                           → T4 numbers, T4 store
  *   M15 allow non-http(s) URL schemes                                             → T4 URLs
+ *   D5456 §9 (brief sections and #6196 terms):
+ *   N1  drop a brief key from REVISION_CONTENT_KEYS    N2  drop board_seat_count from it        → §9 key tests
+ *   N3  accept a 5001-character section    N4  discount not a percentage    N5  an empty pro_rata enum
+ *   N5b accept any enum value    N6  a seat count beside `observer`    N7  a seat count of 0
+ *   N8  no seat-count upper bound    N9  a fractional seat count    N10 no note bound    N11 sections untrimmed
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deal_drafts_5456.test.ts
@@ -49,7 +54,7 @@ import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import adminDealPreparations from '../src/routes/admin_deal_preparations.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { preparationCapabilities, type PreparationCapability } from '../src/services/dealPreparation.ts';
+import { PROJECTIONS, REVISION_CONTENT_KEYS, preparationCapabilities, type PreparationCapability } from '../src/services/dealPreparation.ts';
 import {
   createPreparationDraft, readPreparationDetail, readPreparationRevisions, savePreparationDraft,
 } from '../src/services/dealDraftStore.ts';
@@ -148,6 +153,85 @@ test('T4 · currency, instrument, dates, URLs, unknown keys, the audience and ev
   assert.deepEqual(crossFieldErrors({ minimum_check: 500001, target_raise: 500000 }), { minimum_check: 'minimum_exceeds_target' });
   assert.deepEqual(crossFieldErrors({ minimum_check: 500000, target_raise: 500000 }), {});
   assert.deepEqual(crossFieldErrors({ minimum_check: 500001, target_raise: null }), {});
+});
+
+// ------------------------------------------------------------------------------------------------ T4 brief and #6196 terms (D5456 §9 = A)
+
+const BRIEF = ['brief_executive_summary', 'brief_investment_thesis', 'brief_problem_product', 'brief_market', 'brief_team',
+  'brief_traction', 'brief_use_of_funds', 'brief_risks_mitigations', 'brief_open_questions'];
+const TERMS_6196 = ['discount_pct', 'pro_rata', 'information_rights', 'information_rights_note', 'board_seat', 'board_seat_count'];
+
+test('§9 · the allowed draft keys hold the nine brief sections and the #6196 terms, and the authoring projection carries them', () => {
+  for (const k of [...BRIEF, ...TERMS_6196]) assert.ok((REVISION_CONTENT_KEYS as readonly string[]).includes(k), `${k} is not an allowed key`);
+  assert.equal(new Set(REVISION_CONTENT_KEYS).size, REVISION_CONTENT_KEYS.length, 'no key twice');
+  for (const k of [...BRIEF, ...TERMS_6196]) assert.ok((PROJECTIONS.authoring.content as readonly string[]).includes(k), `authoring drops ${k}`);
+  // Evidence may point at a brief section or a new term, so a quoted fact keeps its source.
+  const ev = validateChanges({ evidence_refs: [{ field: 'brief_traction', kind: 'quoted', source: 'Board pack, March' }, { field: 'board_seat', kind: 'typed' }] });
+  assert.deepEqual(ev.errors, {});
+});
+
+test('§9 · brief sections are bounded text; blank is null', () => {
+  for (const k of BRIEF) {
+    assert.deepEqual(validateChanges({ [k]: '  A section.  ' }).values, { [k]: 'A section.' }, k);
+    assert.equal(validateChanges({ [k]: 'x'.repeat(5001) }).errors[k], 'too_long', k);
+    assert.deepEqual(validateChanges({ [k]: 'x'.repeat(5000) }).errors, {}, k);
+    assert.equal(validateChanges({ [k]: ['list'] }).errors[k], 'not_text', k);
+    assert.deepEqual(validateChanges({ [k]: '' }).values, { [k]: null }, k);
+  }
+});
+
+test('§9 · #6196 terms: discount 0–100 with two decimals, the three enumerations, a bounded note, a seat count only for a seat', () => {
+  const bad: Array<[Record<string, unknown>, string, string]> = [
+    [{ discount_pct: 100.5 }, 'discount_pct', 'percent_out_of_range'], [{ discount_pct: '12.345' }, 'discount_pct', 'too_many_decimals'],
+    [{ discount_pct: -1 }, 'discount_pct', 'must_not_be_negative'],
+    [{ pro_rata: 'yes' }, 'pro_rata', 'unsupported_value'], [{ pro_rata: 'PRO_RATA' }, 'pro_rata', 'unsupported_value'],
+    [{ information_rights: 'full' }, 'information_rights', 'unsupported_value'], [{ board_seat: 'director' }, 'board_seat', 'unsupported_value'],
+    [{ board_seat: true }, 'board_seat', 'unsupported_value'],
+    [{ information_rights_note: 'n'.repeat(281) }, 'information_rights_note', 'too_long'],
+    [{ board_seat_count: 0 }, 'board_seat_count', 'must_be_positive'], [{ board_seat_count: 1.5 }, 'board_seat_count', 'not_a_whole_number'],
+    [{ board_seat_count: '2a' }, 'board_seat_count', 'not_a_whole_number'], [{ board_seat_count: 21 }, 'board_seat_count', 'too_large'],
+  ];
+  for (const [input, k, code] of bad) assert.equal(validateChanges(input).errors[k], code, JSON.stringify(input));
+  const good = validateChanges({
+    discount_pct: '20', pro_rata: 'super_pro_rata', information_rights: 'major_investor', information_rights_note: 'Quarterly accounts.',
+    board_seat: 'seat', board_seat_count: '2',
+  });
+  assert.deepEqual(good.errors, {});
+  assert.deepEqual(good.values, {
+    discount_pct: 20, pro_rata: 'super_pro_rata', information_rights: 'major_investor', information_rights_note: 'Quarterly accounts.',
+    board_seat: 'seat', board_seat_count: 2,
+  });
+  assert.deepEqual(validateChanges({ discount_pct: 100, board_seat_count: 20, information_rights_note: 'n'.repeat(280) }).errors, {});
+  // Blank is not recorded, never `none` and never 0.
+  assert.deepEqual(validateChanges({ pro_rata: '', information_rights: null, board_seat: ' ', discount_pct: '', board_seat_count: '' }).values,
+    { pro_rata: null, information_rights: null, board_seat: null, discount_pct: null, board_seat_count: null });
+  assert.deepEqual(crossFieldErrors({ board_seat: 'seat', board_seat_count: 2 }), {});
+  assert.deepEqual(crossFieldErrors({ board_seat: 'seat', board_seat_count: null }), {});
+  for (const seat of ['none', 'observer', null, undefined]) {
+    assert.deepEqual(crossFieldErrors({ board_seat: seat, board_seat_count: 1 }), { board_seat_count: 'board_seat_count_needs_seat' }, String(seat));
+  }
+});
+
+test('§9 · a draft with brief sections and the new terms saves, reloads and keeps unknown terms null', async () => {
+  const db = freshDb();
+  try {
+    const c = await created(db, { title: 'Harbor Ledger Seed', brief_executive_summary: 'Harbour ledgers, reconciled daily.' });
+    const s: any = await savePreparationDraft(env(db), user(ADMIN_A), c.preparation_uid, {
+      expected_revision: 1, operation_key: key('brief'),
+      changes: { brief_open_questions: 'Who leads?', pro_rata: 'pro_rata', board_seat: 'observer', information_rights: '', discount_pct: 15 },
+    }, deps());
+    assert.equal(s.ok, true, JSON.stringify(s));
+    const d: any = await readPreparationDetail(env(db), c.preparation_uid, deps());
+    const content = d.preparation.content;
+    assert.equal(content.brief_executive_summary, 'Harbour ledgers, reconciled daily.');
+    assert.equal(content.brief_open_questions, 'Who leads?');
+    assert.deepEqual([content.pro_rata, content.board_seat, content.discount_pct], ['pro_rata', 'observer', 15]);
+    assert.ok(Object.hasOwn(content, 'information_rights') && content.information_rights === null, 'blank stays null, not none');
+    // The merged draft is checked: a seat count beside an observer is refused, and nothing is written.
+    const bad: any = await savePreparationDraft(env(db), user(ADMIN_A), c.preparation_uid, { expected_revision: 2, operation_key: key('seat'), changes: { board_seat_count: 1 } }, deps());
+    assert.deepEqual([bad.status, bad.code, bad.extra.fields], [422, 'invalid_fields', { board_seat_count: 'board_seat_count_needs_seat' }]);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM deal_preparation_revisions'), 2);
+  } finally { db.close(); }
 });
 
 // ------------------------------------------------------------------------------------------------ T7 clock

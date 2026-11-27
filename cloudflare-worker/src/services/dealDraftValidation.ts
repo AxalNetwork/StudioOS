@@ -30,10 +30,25 @@ export const PERMITTED_CURRENCIES = ['USD'] as const;
 
 export const TEXT_LIMITS: Readonly<Record<string, number>> = Object.freeze({
   title: 200, summary: 1000, description: 20000, sector: 120, spv_jurisdiction: 120, internal_notes: 10000,
+  information_rights_note: 280,
+});
+/** D5456 §9: the brief's sections. Bounded text each; the whole revision stays under 64 KiB. */
+export const BRIEF_KEYS = [
+  'brief_executive_summary', 'brief_investment_thesis', 'brief_problem_product', 'brief_market', 'brief_team',
+  'brief_traction', 'brief_use_of_funds', 'brief_risks_mitigations', 'brief_open_questions',
+] as const;
+export const BRIEF_SECTION_MAX = 5000;
+/** #6196's proposed terms (D5456 §9). No default: blank stays null, never `none`. */
+export const PRO_RATA_VALUES = ['none', 'pro_rata', 'super_pro_rata'] as const;
+export const INFORMATION_RIGHTS_VALUES = ['none', 'standard', 'major_investor'] as const;
+export const BOARD_SEAT_VALUES = ['none', 'observer', 'seat'] as const;
+export const BOARD_SEAT_COUNT_MAX = 20;
+const ENUMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  pro_rata: PRO_RATA_VALUES, information_rights: INFORMATION_RIGHTS_VALUES, board_seat: BOARD_SEAT_VALUES,
 });
 export const WEBSITE_MAX = 300;
 export const AMOUNT_KEYS = ['target_raise', 'minimum_check', 'valuation_cap'] as const;
-export const PERCENT_KEYS = ['carry_pct', 'management_fee_pct'] as const;
+export const PERCENT_KEYS = ['carry_pct', 'management_fee_pct', 'discount_pct'] as const;
 /** The largest amount a field accepts: well inside a double's exact-cent range. */
 export const AMOUNT_MAX = 1e13;
 export const EVIDENCE_MAX = 50;
@@ -149,7 +164,20 @@ export function validateChanges(input: unknown): { values: Content; errors: Fiel
       continue;
     }
     if (blank(raw)) { values[k] = null; continue; }
-    if (k in TEXT_LIMITS) {
+    if ((BRIEF_KEYS as readonly string[]).includes(k)) {
+      if (typeof raw !== 'string') { errors[k] = 'not_text'; continue; }
+      const t = raw.trim();
+      if (t.length > BRIEF_SECTION_MAX) { errors[k] = 'too_long'; continue; }
+      values[k] = t;
+    } else if (k in ENUMS) {
+      if (typeof raw !== 'string' || !ENUMS[k].includes(raw)) errors[k] = 'unsupported_value'; else values[k] = raw;
+    } else if (k === 'board_seat_count') {
+      const n = typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+      if (typeof n !== 'number' || !Number.isSafeInteger(n)) errors[k] = 'not_a_whole_number';
+      else if (n < 1) errors[k] = 'must_be_positive';
+      else if (n > BOARD_SEAT_COUNT_MAX) errors[k] = 'too_large';
+      else values[k] = n;
+    } else if (k in TEXT_LIMITS) {
       if (typeof raw !== 'string') { errors[k] = 'not_text'; continue; }
       const t = raw.trim();
       if (t.length > TEXT_LIMITS[k]) { errors[k] = 'too_long'; continue; }
@@ -188,6 +216,8 @@ export function crossFieldErrors(content: Content): FieldErrors {
   const errors: FieldErrors = {};
   const min = content.minimum_check, target = content.target_raise;
   if (typeof min === 'number' && typeof target === 'number' && min > target) errors.minimum_check = 'minimum_exceeds_target';
+  // #6196: a seat count describes seats; it is refused beside `none`, `observer` or no board term at all.
+  if (content.board_seat_count != null && content.board_seat !== 'seat') errors.board_seat_count = 'board_seat_count_needs_seat';
   return errors;
 }
 
