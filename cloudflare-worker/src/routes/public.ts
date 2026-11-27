@@ -7,7 +7,8 @@
  * returned. The handle is the user's `uid` (already public).
  *
  *   GET /u/:handle           — public user card
- *   GET /p/:partner_slug     — public partner card (uid)
+ *   GET /p/:partner_slug     — partner card: the profile to a signed-in caller,
+ *                              the display name only to a signed-out one (D8958)
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -625,24 +626,52 @@ publicRoutes.get('/partners', async (c) => {
   }
 });
 
+/** D8958: one listed partner by uid or referral code; a uid match wins over a code match. */
+const PARTNER_CARD_SQL = `SELECT uid, name, company, specialization
+       FROM partners WHERE (lower(uid) = ? OR lower(referral_code) = ?) AND ${DIRECTORY_LISTED_WHERE}
+      ORDER BY (lower(uid) = ?) DESC LIMIT 1`;
+
+/**
+ * D8958 (#8958) — a partner's directory profile is Members only (#6981, the
+ * owner's answer of 2026-11-27: enforced here, not only hidden on the page).
+ *
+ * The key is the partner's uid or its referral code, read only from rows the
+ * directory lists (DIRECTORY_LISTED_WHERE: `status = 'active'` and listed by
+ * an admin), the same gate the list and the link card use. A missing,
+ * inactive or unlisted partner is the same 404 for every caller.
+ *
+ * A signed-in caller gets the profile. A signed-out caller gets only the
+ * partner's display name and `members_only: true` — what a shared or referral
+ * link needs to say whose page it is — never the uid, company or
+ * specialization. The answer depends on the caller, so neither is cached.
+ */
+export async function publicPartnerCard(env: Env, slug: string, viewer: PublicViewer): Promise<CardResult> {
+  const { ensurePartnerDirectoryColumns } = await import('../services/partnerDirectorySchema');
+  await ensurePartnerDirectoryColumns(env);
+  const row = await env.DB.prepare(PARTNER_CARD_SQL).bind(slug, slug, slug).first<{
+    uid: string; name: string; company: string | null; specialization: string | null;
+  }>();
+  if (!row) return NOT_FOUND;
+  if (!viewer) return { status: 200, body: { name: row.name, members_only: true } };
+  return {
+    status: 200,
+    body: {
+      uid: row.uid,
+      handle: row.uid,
+      name: row.name,
+      company: row.company,
+      specialization: row.specialization,
+    },
+  };
+}
+
 publicRoutes.get('/p/:partner_slug', async (c) => {
   const slug = String(c.req.param('partner_slug') || '').trim().toLowerCase();
   if (!slug) return c.json({ detail: 'slug required' }, 400);
-  const row = await c.env.DB.prepare(
-    `SELECT uid, name, company, specialization, status
-       FROM partners WHERE lower(uid) = ? OR lower(referral_code) = ?`,
-  ).bind(slug, slug).first<{
-    uid: string; name: string; company: string | null;
-    specialization: string | null; status: string;
-  }>();
-  if (!row || row.status !== 'active') return c.json({ detail: 'Not found' }, 404);
-  return c.json({
-    uid: row.uid,
-    handle: row.uid,
-    name: row.name,
-    company: row.company,
-    specialization: row.specialization,
-  });
+  const viewer = await getCurrentUser(c);
+  const out = await publicPartnerCard(c.env, slug, viewer ? { id: Number(viewer.id), role: viewer.role } : null);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(out.body, out.status);
 });
 
 // ==================================================================
