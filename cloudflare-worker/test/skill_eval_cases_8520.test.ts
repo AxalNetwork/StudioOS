@@ -156,6 +156,26 @@ test('the summary names what ran and each finding as skill, case, check and reas
   assert.match(summaryMarkdown({ mode: 'changed', reason: 'r', slugs: [] }, { rows: [], failures: [] }, 5), /No finding\./);
 });
 
+test('summary table cells preserve literal backslashes and escape separators in every column (#8603)', () => {
+  const selection = { mode: 'all', reason: 'fixture', slugs: ['fixture'] };
+  const samples = [
+    ['', ''],
+    ['plain text', 'plain text'],
+    [String.raw`a\b`, String.raw`a\\b`],
+    [String.raw`a|b`, String.raw`a\|b`],
+    [String.raw`a\|b`, String.raw`a\\\|b`],
+    [String.raw`a\\|b`, String.raw`a\\\\\|b`],
+    ['trailing\\', 'trailing\\\\'],
+    ['a\t|\r\nb', String.raw`a \| b`],
+  ];
+  for (const [value, expected] of samples) {
+    const md = summaryMarkdown(selection, {
+      rows: [], failures: [{ skill: value, case: value, check: value, reason: value }],
+    }, 1);
+    assert.equal(md.split('\n').at(-2), `| ${expected} | ${expected} | ${expected} | ${expected} |`);
+  }
+});
+
 test('the library passes as it is, every allowlisted skill lacks a deterministic case, and D8520 states the count', () => {
   const r = runScript([]);
   assert.equal(r.status, 0, r.out);
