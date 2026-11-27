@@ -17,8 +17,10 @@
  *   T6  a null-company project, a forged pair, an archived company and a project moved during editing are refused;
  *       a company with two projects may hold a draft for each; another deployment's draft is not found.
  *   T7  the deadline clock: the expiry instant and the day, month and year boundaries, from an injected clock.
- *   T8  mutations stay disabled: no caller holds `create` or `edit` today, and the router's POST and PATCH answer
- *       403 `preparation_mutations_disabled` with nothing written; the reads answer an admin and refuse a partner.
+ *   T8  capability (D5456-p2): an admin holds read, create and edit; a frozen admin read only; submit and ADP-04's
+ *       mutations stay off; D5454 §7's CHECKs still stand.
+ *   R1–R5 end to end through the router (D5456-p2): create, save, a stale save conflicts; a retry under one key
+ *       replays; a partner is refused; a moved project is refused; an audit failure rolls everything back.
  *
  * MUTATION CHECKS (each was run; each turns at least one test here red):
  *   M1  drop the in-batch `lock_version = ?` guard (revision insert and token move) → concurrent-save test
@@ -31,7 +33,10 @@
  *   M8  a deadline passes at its last instant (`>=`)                              → T7 clock
  *   M9  refuse minimum == target                                                  → T4 cross-field
  *   M10 permit EUR                                                                → T4 currency
- *   M11 the router skips the disabled-write refusal                               → T8 router
+ *   M11 the router skips its capability gate on POST → EQUIVALENT: requireAdmin stops a partner and a frozen
+ *       admin first, and the store re-checks `create` itself (T8), so the answer is still 403 with nothing written
+ *   D5456-p2 (route tests and flags): create off → R1; edit off → R1; submit on → T8 and D5454 AC3; a frozen admin
+ *       keeps writes → T8; If-Match ignored → R1; no ETag → R1; a replay answering 201 → R2
  *   M12 `in_review` editable                                                      → in-review test
  *   M13 write the audit row after the batch, best effort                          → T5 audit failure
  *   M14 drop the percentage upper bound                                           → T4 numbers, T4 store
@@ -54,7 +59,9 @@ import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import adminDealPreparations from '../src/routes/admin_deal_preparations.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { PROJECTIONS, REVISION_CONTENT_KEYS, preparationCapabilities, type PreparationCapability } from '../src/services/dealPreparation.ts';
+import {
+  PREPARATION_MUTATIONS_ENABLED, PROJECTIONS, REVISION_CONTENT_KEYS, preparationCapabilities, type PreparationCapability,
+} from '../src/services/dealPreparation.ts';
 import {
   createPreparationDraft, readPreparationDetail, readPreparationRevisions, savePreparationDraft,
 } from '../src/services/dealDraftStore.ts';
@@ -532,9 +539,9 @@ test('T6 · another deployment does not see or edit this deployment\'s draft', a
   } finally { db.close(); }
 });
 
-// ------------------------------------------------------------------------------------------------ T8 still disabled
+// ------------------------------------------------------------------------------------------------ T8 capability (D5456-p2)
 
-test('T8 · without create or edit the store refuses, and no caller holds either today', async () => {
+test('T8 · without create or edit the store refuses; an admin now holds read, create and edit, a frozen admin read only', async () => {
   const db = freshDb();
   try {
     const readOnly = deps({ capabilities: new Set(['read']) });
@@ -544,10 +551,27 @@ test('T8 · without create or edit the store refuses, and no caller holds either
     const s: any = await savePreparationDraft(env(db), user(ADMIN_A), c.preparation_uid, { expected_revision: 1, operation_key: key(), changes: { title: 'x' } }, readOnly);
     assert.deepEqual([s.status, s.code], [403, 'preparation_edit_not_permitted']);
     assert.equal(await readPreparationDetail(env(db), c.preparation_uid, deps({ capabilities: new Set() })), null);
-    const caps = preparationCapabilities(env(db), user(ADMIN_A), null, { writesFrozen: false });
-    assert.deepEqual([...caps], ['read']);
+    assert.deepEqual([...preparationCapabilities(env(db), user(ADMIN_A), null, { writesFrozen: false })], ['read', 'create', 'edit']);
+    assert.deepEqual([...preparationCapabilities(env(db), user(ADMIN_A), null, { writesFrozen: true })], ['read']);
+    assert.equal(preparationCapabilities(env(db), user(PARTNER), null, { writesFrozen: false }).size, 0);
+    assert.deepEqual({ ...PREPARATION_MUTATIONS_ENABLED }, { create: true, edit: true, submit: false, review: false, publish: false, withdraw: false });
   } finally { db.close(); }
 });
+
+test('T8 · D5454 §7: the CHECKs that keep a draft out of every deal reader still stand on the fresh schema', () => {
+  const db = freshDb();
+  try {
+    const ddl = String((db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deal_preparations'`).get() as any).sql);
+    for (const name of ['dp_private_owns_no_deal', 'dp_release_has_deal', 'dp_distribution_needs_release', 'dp_legacy_names_deal']) {
+      assert.match(ddl, new RegExp(`CONSTRAINT\\s+${name}\\s+CHECK`), name);
+    }
+    db.exec(`INSERT INTO deals (id, project_id, status) VALUES (900, ${PROJ}, 'applied')`);
+    assert.throws(() => db.exec(`INSERT INTO deal_preparations (uid, scope_code, company_id, project_id, deal_id, origin, created_by_user_id)
+      VALUES ('prep-check-0001', 'hq', ${CO}, ${PROJ}, 900, 'preparation', ${ADMIN_A})`), /CHECK constraint failed: dp_private_owns_no_deal/, 'a never-released draft owning a deal row');
+  } finally { db.close(); }
+});
+
+// ------------------------------------------------------------------------------------------------ R end to end through the router
 
 const app = (() => {
   const a = new Hono();
@@ -569,35 +593,109 @@ async function call(db: DatabaseSync, who: number, path: string, init: { method?
   const text = await res.text();
   let body: any = null;
   try { body = JSON.parse(text); } catch { /* asserted on text */ }
-  return { status: res.status, body, text };
+  return { status: res.status, body, text, etag: res.headers.get('ETag') };
 }
 
-test('T8 · the router: reads answer an admin and refuse a partner; POST and PATCH are disabled and write nothing', async () => {
+const writes = (db: DatabaseSync) => ({
+  preparations: count(db, 'SELECT COUNT(*) AS n FROM deal_preparations'),
+  revisions: count(db, 'SELECT COUNT(*) AS n FROM deal_preparation_revisions'),
+  operations: count(db, 'SELECT COUNT(*) AS n FROM deal_preparation_operations'),
+  audit: count(db, `SELECT COUNT(*) AS n FROM admin_audit_log WHERE action LIKE 'deal_preparation_%'`),
+  deals: count(db, 'SELECT COUNT(*) AS n FROM deals'),
+});
+
+test('R1 · an admin creates, saves, and a stale save gets a conflict naming the current revision; no deal row is written', async () => {
   const db = freshDb();
   try {
-    const c = await created(db, { title: 'Harbor Ledger Seed', target_raise: 750000 });
-    const q = await call(db, ADMIN_A, '');
-    assert.equal(q.status, 200, q.text);
-    assert.equal(q.body.total, 1);
-    assert.ok(!q.text.includes('Harbor Ledger Seed'), 'the queue carries no content');
-    const d = await call(db, ADMIN_A, `/${c.preparation_uid}`);
+    const post = await call(db, ADMIN_A, '', { method: 'POST', body: { company_id: CO, project_id: PROJ, operation_key: key('rc'), content: { title: 'Harbor Ledger Seed', target_raise: 750000 } } });
+    assert.equal(post.status, 201, post.text);
+    assert.deepEqual([post.body.ok, post.body.replayed, post.body.revision, post.body.revision_no], [true, false, 1, 1]);
+    const uid = post.body.preparation_uid;
+    const d = await call(db, ADMIN_A, `/${uid}`);
     assert.equal(d.status, 200, d.text);
+    assert.deepEqual(d.body.capabilities, ['create', 'edit', 'read']);
     assert.equal(d.body.preparation.content.target_raise, 750000);
-    assert.deepEqual(d.body.capabilities, ['read']);
-    const rv = await call(db, ADMIN_A, `/${c.preparation_uid}/revisions`);
-    assert.deepEqual([rv.status, rv.body.items.length], [200, 1]);
-    assert.equal((await call(db, ADMIN_A, '/00000000-0000-0000-0000-000000000000')).status, 404);
+    const save = await call(db, ADMIN_A, `/${uid}`, { method: 'PATCH', headers: { 'If-Match': '"1"' }, body: { operation_key: key('rs'), changes: { target_raise: 900000, instrument: 'SAFE' } } });
+    assert.equal(save.status, 200, save.text);
+    assert.deepEqual([save.body.revision, save.body.revision_no, save.etag], [2, 2, '"2"']);
+    const stale = await call(db, ADMIN_B, `/${uid}`, { method: 'PATCH', body: { expected_revision: 1, operation_key: key('rx'), changes: { target_raise: 100 } } });
+    assert.deepEqual([stale.status, stale.body.error], [409, 'revision_conflict'], stale.text);
+    assert.match(stale.body.message, /Nothing was saved/);
+    assert.equal(stale.body.current.revision, 2);
+    assert.deepEqual(stale.body.fields, [{ key: 'target_raise', yours: 100, current: 900000 }]);
+    const after = await call(db, ADMIN_A, `/${uid}`);
+    assert.equal(after.body.preparation.content.target_raise, 900000, 'the stale save changed nothing');
+    assert.deepEqual(writes(db), { preparations: 1, revisions: 2, operations: 2, audit: 2, deals: 0 });
+    assert.equal((db.prepare('SELECT deal_id FROM deal_preparations').get() as any).deal_id, null, 'a draft owns no deal');
+  } finally { db.close(); }
+});
+
+test('R2 · a retry under the same operation key replays the outcome and writes nothing twice; a changed payload under it is refused', async () => {
+  const db = freshDb();
+  try {
+    const ck = key('ri');
+    const body = { company_id: CO, project_id: PROJ, operation_key: ck, content: { title: 'Harbor Ledger Seed' } };
+    const first = await call(db, ADMIN_A, '', { method: 'POST', body });
+    const again = await call(db, ADMIN_A, '', { method: 'POST', body });
+    assert.deepEqual([first.status, again.status, again.body.replayed], [201, 200, true], again.text);
+    assert.equal(again.body.preparation_uid, first.body.preparation_uid);
+    const uid = first.body.preparation_uid;
+    const sk = key('rj');
+    const patch = { expected_revision: 1, operation_key: sk, changes: { title: 'Harbor Ledger Seed II' } };
+    const s1 = await call(db, ADMIN_A, `/${uid}`, { method: 'PATCH', body: patch });
+    const s2 = await call(db, ADMIN_A, `/${uid}`, { method: 'PATCH', body: patch });
+    assert.deepEqual([s1.status, s2.status, s2.body.replayed, s2.body.revision], [200, 200, true, 2], s2.text);
+    const reused = await call(db, ADMIN_A, `/${uid}`, { method: 'PATCH', body: { ...patch, changes: { title: 'Something else' } } });
+    assert.deepEqual([reused.status, reused.body.error], [409, 'operation_key_reused']);
+    assert.deepEqual(writes(db), { preparations: 1, revisions: 2, operations: 2, audit: 2, deals: 0 });
+  } finally { db.close(); }
+});
+
+test('R3 · a partner is refused on every read and write, and nothing is written', async () => {
+  const db = freshDb();
+  try {
+    const c = await created(db);
+    const before = writes(db);
     for (const path of ['', `/${c.preparation_uid}`, `/${c.preparation_uid}/revisions`]) {
       assert.equal((await call(db, PARTNER, path)).status, 403, `partner reads ${path}`);
     }
-    const before = count(db, 'SELECT COUNT(*) AS n FROM deal_preparation_revisions') + count(db, 'SELECT COUNT(*) AS n FROM deal_preparations');
-    const post = await call(db, ADMIN_A, '', { method: 'POST', body: { company_id: CO, project_id: PROJ_SECOND, operation_key: key() } });
-    assert.deepEqual([post.status, post.body.error], [403, 'preparation_mutations_disabled']);
-    assert.match(post.body.message, /Nothing was saved/);
-    const patch = await call(db, ADMIN_A, `/${c.preparation_uid}`, { method: 'PATCH', headers: { 'If-Match': '"1"' }, body: { operation_key: key(), changes: { title: 'x' } } });
-    assert.deepEqual([patch.status, patch.body.error], [403, 'preparation_mutations_disabled']);
-    assert.equal((await call(db, PARTNER, '', { method: 'POST', body: {} })).status, 403);
-    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM deal_preparation_revisions') + count(db, 'SELECT COUNT(*) AS n FROM deal_preparations'), before);
+    const post = await call(db, PARTNER, '', { method: 'POST', body: { company_id: CO, project_id: PROJ_SECOND, operation_key: key() } });
+    const patch = await call(db, PARTNER, `/${c.preparation_uid}`, { method: 'PATCH', body: { expected_revision: 1, operation_key: key(), changes: { title: 'x' } } });
+    assert.deepEqual([post.status, patch.status], [403, 403]);
+    assert.deepEqual(writes(db), before);
+  } finally { db.close(); }
+});
+
+test('R4 · a project whose company moved is refused, on save and on create, with nothing written', async () => {
+  const db = freshDb();
+  try {
+    const post = await call(db, ADMIN_A, '', { method: 'POST', body: { company_id: CO, project_id: PROJ, operation_key: key() } });
+    assert.equal(post.status, 201, post.text);
+    db.exec(`UPDATE projects SET company_id = ${CO_OTHER} WHERE id = ${PROJ}`);
+    const before = writes(db);
+    const save = await call(db, ADMIN_A, `/${post.body.preparation_uid}`, { method: 'PATCH', body: { expected_revision: 1, operation_key: key(), changes: { title: 'Moved' } } });
+    assert.deepEqual([save.status, save.body.error, save.body.reason], [409, 'issuer_reconciliation_required', 'company_mismatch'], save.text);
+    const create = await call(db, ADMIN_A, '', { method: 'POST', body: { company_id: CO, project_id: PROJ, operation_key: key(), new_round: true } });
+    assert.deepEqual([create.status, create.body.error], [422, 'company_mismatch'], create.text);
+    assert.deepEqual(writes(db), before);
+  } finally { db.close(); }
+});
+
+test('R5 · an audit write that fails rolls the save and the create back, and the answer is "outcome unknown"', async () => {
+  const db = freshDb();
+  try {
+    const post = await call(db, ADMIN_A, '', { method: 'POST', body: { company_id: CO, project_id: PROJ, operation_key: key() } });
+    assert.equal(post.status, 201, post.text);
+    db.exec(`CREATE TRIGGER fail_audit BEFORE INSERT ON admin_audit_log BEGIN SELECT RAISE(ABORT, 'audit store down'); END;`);
+    const before = writes(db);
+    const save = await call(db, ADMIN_A, `/${post.body.preparation_uid}`, { method: 'PATCH', body: { expected_revision: 1, operation_key: key(), changes: { target_raise: 5 } } });
+    assert.deepEqual([save.status, save.body.error], [503, 'save_outcome_unknown'], save.text);
+    assert.match(save.body.message, /same operation key/);
+    assert.ok(!save.text.includes('audit store down'), 'the database text never reaches the caller');
+    const create = await call(db, ADMIN_A, '', { method: 'POST', body: { company_id: CO, project_id: PROJ_SECOND, operation_key: key() } });
+    assert.deepEqual([create.status, create.body.error], [503, 'create_outcome_unknown'], create.text);
+    assert.deepEqual(writes(db), before, 'no revision, preparation, ledger row or audit row survives');
+    assert.equal(Number((db.prepare('SELECT lock_version AS n FROM deal_preparations').get() as any).n), 1);
   } finally { db.close(); }
 });
 

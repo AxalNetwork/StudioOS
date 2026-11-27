@@ -318,10 +318,10 @@ test('AC2 · r1 stays released while r2 is edited; deal and commitment ids are u
 
 // ------------------------------------------------------------------------------------------------ AC3
 
-test('AC3 · capability: only an admin on its own deployment, outside a support session, holds read; nothing grants a mutation yet', () => {
+test('AC3 · capability: only an admin on its own deployment, outside a support session, holds read; create and edit only since D5456-p2', () => {
   const hq = { scope_code: 'hq' };
   const ok = { writesFrozen: false };
-  assert.deepEqual([...preparationCapabilities({}, user(ADMIN), hq, ok)], ['read']);
+  assert.deepEqual([...preparationCapabilities({}, user(ADMIN), hq, ok)], ['read', 'create', 'edit']);
   assert.deepEqual([...preparationCapabilities({}, user(ADMIN), hq, { writesFrozen: true })], ['read'], 'a frozen admin keeps read only');
   assert.equal(preparationCapabilities({}, user(ADMIN, { support_session: true }), hq, ok).size, 0, 'a support session');
   assert.equal(preparationCapabilities({ BRANCH_CODE: 'north' }, user(ADMIN), hq, ok).size, 0, 'a branch admin on an HQ row');
@@ -331,7 +331,8 @@ test('AC3 · capability: only an admin on its own deployment, outside a support 
     assert.equal(preparationCapabilities({}, user(who, { licences: ['partner', 'investor', 'founder'] }), hq, { ...ok, previewMode: true }).size, 0, `${ROLE[who]} with every licence in preview mode`);
   }
   assert.deepEqual(PREPARATION_CAPABILITIES, ['read', 'create', 'edit', 'submit', 'review', 'publish', 'withdraw']);
-  for (const v of Object.values(PREPARATION_MUTATIONS_ENABLED)) assert.equal(v, false);
+  // D5456-p2 (#5456) enabled create and edit; submit waits for ADP-04's review rule, and ADP-04 owns the rest.
+  assert.deepEqual({ ...PREPARATION_MUTATIONS_ENABLED }, { create: true, edit: true, submit: false, review: false, publish: false, withdraw: false });
   // No route writes a preparation in this package.
   for (const f of ['routes/deals.ts', 'routes/search.ts', 'services/dealStudioLens.ts', 'services/dealTransitions.ts', 'services/dealPreparation.ts']) {
     assert.doesNotMatch(read(`cloudflare-worker/src/${f}`), /(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+deal_preparation/i, f);

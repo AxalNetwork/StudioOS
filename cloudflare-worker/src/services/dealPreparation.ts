@@ -14,8 +14,10 @@
  * "released" (unknown, corrupt or unreleased values are hidden, never published), and hides withdrawn/archived
  * releases from discovery (lists, counts, search, feeds) while transactional reads by a related party survive.
  *
- * DISABLED. Creating a draft, editing, submitting, reviewing, publishing and withdrawing are ADP-02/ADP-04's.
- * `PREPARATION_MUTATIONS_ENABLED` is false for each and a test pins it; no route here writes a preparation.
+ * ENABLED: CREATE AND EDIT ONLY (D5456-p2). ADP-02 turned on `create` and `edit` for a platform admin; the writes are
+ * `services/dealDraftStore.ts`, behind `routes/admin_deal_preparations.ts`. Submitting (ADP-02's last step, held for
+ * ADP-04's review rule), reviewing, publishing and withdrawing stay off, and a test pins each value. No route in this
+ * file writes a preparation, and a draft still owns no `deals` row until ADP-04's release.
  *
  * LOGS carry counts and outcome codes only, never a name, title or amount.
  */
@@ -35,11 +37,13 @@ export const PREPARATION_CAPABILITIES = ['read', 'create', 'edit', 'submit', 're
 export type PreparationCapability = typeof PREPARATION_CAPABILITIES[number];
 
 /**
- * Every mutation is off until its owning package enables it (ADP-02 create/edit/submit; ADP-04 review/publish/
+ * Each mutation is off until its owning package enables it (ADP-02 create/edit/submit; ADP-04 review/publish/
  * withdraw). Enabling one is a code change reviewed against the reader inventory in D5454.md, never a setting.
+ * `create` and `edit` were enabled by D5456-p2 (#5456) once D5454 §7's conditions were checked: the readers guard
+ * passes and the CHECKs `dp_private_owns_no_deal` / `dp_release_has_deal` stand. `submit` waits for ADP-04 (#5458).
  */
-export const PREPARATION_MUTATIONS_ENABLED: Readonly<Record<Exclude<PreparationCapability, 'read'>, false>> = Object.freeze({
-  create: false, edit: false, submit: false, review: false, publish: false, withdraw: false,
+export const PREPARATION_MUTATIONS_ENABLED: Readonly<Record<Exclude<PreparationCapability, 'read'>, boolean>> = Object.freeze({
+  create: true, edit: true, submit: false, review: false, publish: false, withdraw: false,
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -209,7 +213,7 @@ export type PreparationScopeRow = { scope_code?: unknown } | null | undefined;
  * support session, on the row's own deployment. Nothing else grants anything: not the partner licence (pipeline
  * read/move access is not preparation access), not the investor or founder licence, not preview mode. A frozen
  * admin keeps `read` (D135 never gates a read) and loses every write. Mutations are further gated by
- * `PREPARATION_MUTATIONS_ENABLED`, so today the most anyone holds is `read`.
+ * `PREPARATION_MUTATIONS_ENABLED`, so today the most anyone holds is `read`, `create` and `edit`.
  */
 export function preparationCapabilities(
   env: Pick<Env, 'BRANCH_CODE'>, user: User | null | undefined, row: PreparationScopeRow, ctx: CapabilityContext,
