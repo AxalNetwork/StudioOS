@@ -48,7 +48,7 @@ async function mount(el) {
   const container = document.createElement('div'); document.body.appendChild(container);
   const r = createRoot(container);
   await act(async () => r.render(h(MemoryRouter, null, el)));
-  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((res) => setTimeout(res, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((res) => setImmediate(res)); });
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
