@@ -147,7 +147,8 @@ test('change review: downgrade names dependents as not recorded; refusals', asyn
   assert.equal(res.status, 200);
   assert.equal(res.body.kind, 'downgrade');
   assert.deepEqual(res.body.programs.ending, ['learning']);
-  assert.equal(res.body.ending_dependents.status, 'not_recorded');
+  assert.equal(res.body.ending_dependents.status, 'not_read', 'no administrator is bound, so no holder is read');
+  assert.deepEqual(res.body.ending_dependents.programs.map((p: any) => [p.program_key, p.status]), [['learning', 'not_recorded']]);
   assert.equal(res.body.proration_quote, null);
   assert.deepEqual(res.body.country_index, { old_ppm: 1_000_000, new_ppm: null, movement_ppm: null });
   assert.equal(res.body.effective.starts_inside_current_term, false);

@@ -26,7 +26,7 @@ import { reportError } from '../../lib/log';
 export function cycleContextOf(project) {
   if (project === undefined) return 'loading:';
   if (project === null) return 'none:';
-  if (project.failed) return `failed:${project.unavailable ?? ''}`;
+  if (project.failed) return `failed:${project.unavailable ?? (project.choose ? 'choose' : '')}`;
   return `ready:${project.id}`;
 }
 
@@ -41,7 +41,8 @@ export function useFounderCycleReads(project, placed) {
   const want = placed.join(',');
   const ctx = cycleContextOf(project);
   const projectId = ctx.startsWith('ready:') ? project.id : null;
-  const failure = ctx.startsWith('failed:') ? (project.unavailable ? project.failed : 'The venture could not be read.') : null;
+  // D8729: a venture still to be chosen (`chooseProject`) says so, as an unavailable one does.
+  const failure = ctx.startsWith('failed:') ? (project.unavailable || project.choose ? project.failed : 'The venture could not be read.') : null;
   useEffect(() => {
     if (context.current !== ctx) {
       // A new venture: every request for the old one is now obsolete, and nothing read for it is kept.

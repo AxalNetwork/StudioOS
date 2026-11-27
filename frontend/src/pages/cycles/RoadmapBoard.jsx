@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { recordHref } from './recordModel.js';
 import { COLUMNS, STATE_TAGS, dateLine, roadmapColumns, roadmapStrip, roadmapTimeline, stripPressed, toggleStrip } from './roadmapBoardModel.js';
+import { DOOR, boardColumn, boardHref, boardView, doorHref, itemParam } from './roadmapShortcut.js';
 
 /**
  * D6036 (#6036, BD25, BD26, BD28, BD30) — Build › Product roadmap's board, above its list.
@@ -12,6 +13,12 @@ import { COLUMNS, STATE_TAGS, dateLine, roadmapColumns, roadmapStrip, roadmapTim
  * page in four columns; on a phone, one column at a time behind a segmented control (BD30). The timeline
  * groups the listed items by target month, with a No date recorded tray. Each mark is a word and a glyph.
  * The list under the board keeps the search, filters, paging, Add and Export.
+ *
+ * D8776 (#8776, BLR01, BLR04, BLR07A/D): the link above the board names the page it opens, "Quarters,
+ * dependencies and scenarios", with one line on what it shows (owner question 1, option A). Board or Timeline
+ * (`?view=`), the phone column (`?column=`) and a linked item (`?item=`) are in the address, so Back from the
+ * landing, by its link or the browser's, comes back to the view, column and card the founder left; the link
+ * hands the landing this address, and focus returns to the control that left.
  */
 const STRIP_CELL = 'flex min-h-[44px] min-w-0 flex-col items-start gap-0.5 rounded-xl border px-3 py-2 text-left';
 const IDLE = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -33,12 +40,12 @@ function Tag({ tone, glyph, children, testid }) {
   return <span className={`${TAG} ${TONES[tone]}`} data-testid={testid}><span aria-hidden="true">{glyph}</span>{children}</span>;
 }
 
-function Card({ card, href }) {
+function Card({ card, href, focusRef }) {
   const state = STATE_TAGS[card.state];
   return (
     <li className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-axal-hairline bg-white p-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid="roadmap-card" data-state={card.state}>
       {href
-        ? <Link to={href} className="text-[13px] font-bold text-axal-ink hover:underline dark:text-gray-100">{card.title}</Link>
+        ? <Link to={href} ref={focusRef} className="text-[13px] font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`roadmap-card-link-${card.id}`}>{card.title}</Link>
         : <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{card.title}</span>}
       <span className="flex flex-wrap items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
         <span>{card.owner || 'No owner'}</span>
@@ -58,17 +65,43 @@ function Card({ card, href }) {
   );
 }
 
+/** The venture the page's own search names (`?project_id=`, or a read link's legacy `?project=`). */
+const ventureOf = (search) => {
+  const p = new URLSearchParams(String(search || ''));
+  return p.get('project_id') || p.get('project') || null;
+};
+
 export default function RoadmapBoard({ module, query, onQuery, search = '' }) {
-  const [view, setView] = useState('board');
-  const [phoneColumn, setPhoneColumn] = useState('now');
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const strip = roadmapStrip(module?.facts);
   const records = module?.records;
   const board = roadmapColumns(records);
   const timeline = roadmapTimeline(records);
+  const view = boardView(params.get('view'));
+  const item = itemParam(params.get('item'));
+  const itemColumn = item == null ? null : board.columns.find((c) => c.cards.some((card) => Number(card.id) === item))?.key ?? null;
+  const phoneColumn = boardColumn(params.get('column'), itemColumn);
+  // Each choice replaces the address rather than adding to history, so Back still leaves the page.
+  const write = (key, value) => setParams((old) => { const next = new URLSearchParams(old); next.set(key, value); return next; }, { replace: true });
+  const projectId = ventureOf(search);
+  const doorRef = useRef(null);
+  const cardRef = useRef(null);
+  const focused = useRef(false);
+  const focusDoor = location.state?.roadmapFocus === 'door';
+  useEffect(() => {
+    if (focused.current) return;
+    const target = focusDoor ? doorRef.current : item != null ? cardRef.current : null;
+    if (!target?.focus) return;
+    focused.current = true;
+    target.focus();
+  });
   const hrefOf = (card) => (card.id == null ? null : recordHref('build', 'product-roadmap', card.id, search));
+  const refOf = (card) => (item != null && Number(card.id) === item ? cardRef : undefined);
   const paged = board.total > board.listed;
+  const itemCount = Number(module?.facts?.items);
   // Before the first item the progressive list draws BD28's zero guide; the board draws nothing over it.
-  if (!board.listed && !(Number(module?.facts?.items) > 0)) return null;
+  if (!board.listed && !(itemCount > 0)) return null;
   return (
     <section className="flex min-w-0 flex-col gap-3" data-testid="roadmap-board" aria-label="Product roadmap board">
       {strip && (
@@ -93,15 +126,21 @@ export default function RoadmapBoard({ module, query, onQuery, search = '' }) {
           <legend className="sr-only">View</legend>
           {[['board', 'Board'], ['timeline', 'Timeline']].map(([value, label]) => (
             <label key={value} className={`${SEG} flex items-center justify-center px-3 ${view === value ? 'bg-violet-100 text-violet-900 dark:bg-violet-900/40 dark:text-violet-100' : 'text-axal-ink dark:text-gray-200'}`}>
-              <input type="radio" name="roadmap-view" value={value} checked={view === value} onChange={() => setView(value)} className="sr-only" data-testid={`roadmap-view-${value}`} />
+              <input type="radio" name="roadmap-view" value={value} checked={view === value} onChange={() => write('view', value)} className="sr-only" data-testid={`roadmap-view-${value}`} />
               {label}
             </label>
           ))}
         </fieldset>
-        {/* D6034 part 2, option A: /build/roadmap stays as Dependencies and Scenarios, linked from the board. */}
-        <Link to={`/build/roadmap${search}`} className="text-[12.5px] font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="roadmap-dependencies-link">
-          Dependencies and Scenarios
-        </Link>
+        {/* D8776 (#8776, BLR01, BLR07A): the link names the page it opens; one line says what that page shows. */}
+        <div className="flex min-w-0 flex-col gap-0.5 max-md:w-full">
+          <Link ref={doorRef} to={doorHref(projectId)} state={{ roadmapFrom: boardHref(projectId, view, phoneColumn) }}
+            className="flex min-h-[44px] items-center gap-1 text-[12.5px] font-semibold text-violet-700 hover:underline md:min-h-0 dark:text-violet-300" data-testid="roadmap-dependencies-link">
+            {DOOR}<span aria-hidden="true">›</span>
+          </Link>
+          <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="roadmap-door-explainer">
+            {itemCount > 0 ? `The same ${itemCount} ${itemCount === 1 ? 'item' : 'items'}` : 'Your items'} placed by quarter, with what waits on what and saved what-ifs.
+          </span>
+        </div>
       </div>
       {paged && (
         <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="roadmap-paged">
@@ -114,7 +153,7 @@ export default function RoadmapBoard({ module, query, onQuery, search = '' }) {
             <legend className="sr-only">Column</legend>
             {COLUMNS.map(([key, label]) => (
               <label key={key} className={`${SEG} flex items-center justify-center ${phoneColumn === key ? 'bg-violet-100 text-violet-900 dark:bg-violet-900/40 dark:text-violet-100' : 'text-axal-ink dark:text-gray-200'}`}>
-                <input type="radio" name="roadmap-phone-column" value={key} checked={phoneColumn === key} onChange={() => setPhoneColumn(key)} className="sr-only" data-testid={`roadmap-phone-column-${key}`} />
+                <input type="radio" name="roadmap-phone-column" value={key} checked={phoneColumn === key} onChange={() => write('column', key)} className="sr-only" data-testid={`roadmap-phone-column-${key}`} />
                 {label} {board.columns.find((c) => c.key === key).cards.length}
               </label>
             ))}
@@ -126,7 +165,7 @@ export default function RoadmapBoard({ module, query, onQuery, search = '' }) {
                   {col.label}<span className="text-[11px] font-semibold text-axal-muted dark:text-gray-400">{col.cards.length} listed</span>
                 </h3>
                 {col.cards.length
-                  ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{col.cards.map((card) => <Card key={card.id} card={card} href={hrefOf(card)} />)}</ul>
+                  ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{col.cards.map((card) => <Card key={card.id} card={card} href={hrefOf(card)} focusRef={refOf(card)} />)}</ul>
                   : <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">None listed here.</p>}
               </section>
             ))}
@@ -142,13 +181,13 @@ export default function RoadmapBoard({ module, query, onQuery, search = '' }) {
           {timeline.months.map((m) => (
             <section key={m.key} className="flex min-w-0 flex-col gap-2" data-testid="roadmap-timeline-month" aria-label={m.label}>
               <h3 className="m-0 text-[13px] font-extrabold text-axal-ink dark:text-gray-100">{m.label}</h3>
-              <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-3">{m.cards.map((card) => <Card key={card.id} card={card} href={hrefOf(card)} />)}</ul>
+              <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-3">{m.cards.map((card) => <Card key={card.id} card={card} href={hrefOf(card)} focusRef={refOf(card)} />)}</ul>
             </section>
           ))}
           <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-axal-hairline p-2.5 dark:border-gray-700" data-testid="roadmap-timeline-nodate" aria-label="No date recorded">
             <h3 className="m-0 text-[13px] font-extrabold text-axal-ink dark:text-gray-100">No date recorded</h3>
             {timeline.noDate.length
-              ? <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-3">{timeline.noDate.map((card) => <Card key={card.id} card={card} href={hrefOf(card)} />)}</ul>
+              ? <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-3">{timeline.noDate.map((card) => <Card key={card.id} card={card} href={hrefOf(card)} focusRef={refOf(card)} />)}</ul>
               : <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Every listed item has a target date.</p>}
           </section>
         </div>

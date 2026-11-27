@@ -20,11 +20,11 @@
 export const PREVIEW_SHELLS = [
   { key: 'hq', label: 'HQ', what: 'The eleven-row shell.', holderOnly: true, viewMode: 'admin', hq: true },
   { key: 'admin', label: 'HQ’s own accounts', what: 'The eight-row Admin shell over accounts HQ holds directly (Subsidiary S20).', holderOnly: false, viewMode: 'admin', hq: false },
-  { key: 'founder', label: 'Founder', what: 'The founder shell.', holderOnly: false, viewMode: 'founder', hq: null },
+  { key: 'founder', label: 'Founder', what: 'The founder shell. Interview questions show as examples.', holderOnly: false, viewMode: 'founder', hq: null },
   { key: 'investor', label: 'Investor', what: 'The investor shell.', holderOnly: false, viewMode: 'investor', hq: null },
   { key: 'partner', label: 'Partner', what: 'The operating partner shell.', holderOnly: false, viewMode: 'partner', hq: null },
   { key: 'advisor', label: 'Advisor', what: 'The advisor shell.', holderOnly: false, viewMode: 'advisor', hq: null },
-  { key: 'exploring', label: 'Exploring', what: 'The exploring shell.', holderOnly: false, viewMode: 'exploring', hq: null },
+  { key: 'exploring', label: 'Exploring', what: 'The exploring shell. Pick the visitor state to show.', holderOnly: false, viewMode: 'exploring', hq: null },
 ];
 
 export const PREVIEW_TRIGGER = 'Preview shell';
@@ -69,3 +69,20 @@ export function previewNote(superAdmin, shell) {
   }
   return `This changes this browser’s chrome only. Every write still goes out as ${writesAs(superAdmin)}.`;
 }
+
+/**
+ * D8730 (#8730) — the two previews that are a role and not a person.
+ *
+ * An admin (not in a support session) browsing the Founder or Exploring shell
+ * is previewing the ROLE, so the interview there draws that role's questions as
+ * labelled examples and none of the operator's own answers. Returns the shell
+ * key, or null when the page is a member's own (or an impersonation, which is
+ * a person). `mode` is `useViewMode()`'s value.
+ */
+export const ROLE_PREVIEWS = ['founder', 'exploring'];
+
+export function rolePreviewOf(mode) {
+  if (!mode || mode.isAdmin !== true || mode.isImpersonating) return null;
+  return ROLE_PREVIEWS.includes(mode.viewMode) ? mode.viewMode : null;
+}
+

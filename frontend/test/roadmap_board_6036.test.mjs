@@ -6,7 +6,7 @@
  *   2. the cards read each row's keys: Late with its day, Unlinked, Blocked with what it waits on, Blocks N;
  *      a column outside the four is said, never dropped; the timeline groups by month with a No date tray;
  *   3. mounted: the strip's Late button filters (aria-pressed), Board and Timeline are a radio group, the
- *      phone's column control shows one column, the board links Dependencies and Scenarios, and a venture
+ *      phone's column control shows one column, the board links Quarters, dependencies and scenarios (D8776), and a venture
  *      with no item draws no board (the progressive list's zero guide stands alone).
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/roadmap_board_6036.test.mjs
@@ -83,7 +83,8 @@ test('3. mounted: the strip filters, Board and Timeline switch, the phone shows 
     assert.match(ui.text(), /Unlinked · no theme, no KPI/);
     assert.match(ui.text(), /Blocks 2/);
     assert.match(ui.text(), /1 listed item has a column other than Now, Next, Later or Done/);
-    assert.equal(propsOf(ui.by('roadmap-dependencies-link')).href, '/build/roadmap?project=7');
+    // D8776 (#8776): the link names its destination and opens it on By quarter, keeping the venture.
+    assert.equal(propsOf(ui.by('roadmap-dependencies-link')).href, '/build/roadmap?project_id=7&view=quarters');
     const cls = (id) => String(propsOf(ui.by(id)).className);
     assert.match(cls('roadmap-column-now'), /(^| )flex( |$)/);
     assert.match(cls('roadmap-column-next'), /(^| )hidden( |$)/, 'on a phone, one column at a time');

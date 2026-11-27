@@ -17,6 +17,14 @@ import FundReportsSection from './investor/fund/FundReportsSection';
 import FundOnboardingSection from './investor/fund/FundOnboardingSection';
 import FundWorkspaceNavigation, { FUND_SECTION_HASHES } from './investor/fund/FundWorkspaceNavigation';
 
+/** D8731 (#8731): focus the section's own heading (`data-section-heading`), without scrolling it again. */
+export function focusSectionHeading(target) {
+  const heading = target?.querySelector?.('[data-section-heading]');
+  if (!heading || typeof heading.focus !== 'function') return false;
+  heading.focus({ preventScroll: true });
+  return true;
+}
+
 export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -44,6 +52,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     if (!target) return undefined;
     const scroll = () => target.scrollIntoView?.({ block: 'start' });
     scroll();
+    // D8731 (#8731): a section with a heading (My commitment, Fund and terms) hands focus to it on arrival.
+    focusSectionHeading(target);
     if (typeof ResizeObserver !== 'function' || !workspaceContent.current) return undefined;
     // The booklet and notices settle independently. Keep the anchor in view
     // through layout changes until the reader starts interacting.

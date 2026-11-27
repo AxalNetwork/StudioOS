@@ -19,7 +19,8 @@ import { requireAuth, selectJwt } from '../../auth';
 import { logCycleWriteStatement } from '../cycleActivity';
 import { canReadBoard, canWrite, type ProjectRef } from '../../routes/_founder_validate_helpers';
 import {
-  LEFT_OUT, LOVABLE_PROMPT_MAX, buildWithUrl, checkLine, landingTestPrompt, privacyFindings, prototypePrompt, type Finding,
+  LEFT_OUT, LOVABLE_PROMPT_MAX, aliasOf, buildWithUrl, checkLine, labelLines, landingTestPrompt, linesWords, memberNameAdvisories, privacyFindings, prototypePrompt,
+  type Finding,
 } from './prompt';
 
 export type LovableCycle = 'validate' | 'build';
@@ -58,12 +59,24 @@ export function recordOf(cycle: LovableCycle, projectId: number, raw: unknown): 
 
 /** The dialog's "What this tests" (the owner's re-export, D1311 §3): the record's own words, never more. */
 export type Tests = { code: string | null; claim: string | null; title: string | null; target: string | null };
-type Drafted = { prompt: string; dropped: number; hypothesisId: number | null; tests: Tests };
+type Drafted = { prompt: string; dropped: number; hypothesisId: number | null; tests: Tests; ventureName: string; label: string };
 
-async function drafted(env: Env, cycle: LovableCycle, projectId: number, ref: RecordRef): Promise<Drafted> {
-  const venture = await env.DB.prepare('SELECT name, description FROM projects WHERE id = ? AND deleted_at IS NULL')
+/**
+ * The record's prompt from its template. D8773 (#8773): with an alias, the
+ * template is built with the alias wherever it names the venture, so the
+ * client never string-replaces; the venture itself is not renamed, and the
+ * alias is not stored.
+ */
+async function drafted(env: Env, cycle: LovableCycle, projectId: number, ref: RecordRef, alias: string | null = null): Promise<Drafted> {
+  const row = await env.DB.prepare('SELECT name, description FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(projectId).first<{ name: string; description: string | null }>();
-  if (!venture) throw new LovableError('not_found', 404, 'This venture could not be found.');
+  if (!row) throw new LovableError('not_found', 404, 'This venture could not be found.');
+  const d = await draftedFrom(env, cycle, projectId, ref, { name: alias ?? row.name, description: row.description }, row.name);
+  return { ...d, ventureName: row.name, label: alias ?? row.name };
+}
+
+async function draftedFrom(env: Env, cycle: LovableCycle, projectId: number, ref: RecordRef, venture: { name: string; description: string | null }, realName: string)
+  : Promise<Omit<Drafted, 'ventureName' | 'label'>> {
   if (cycle === 'validate') {
     const e = await env.DB.prepare(`SELECT e.title, e.method, e.target, e.hypothesis_id, h.code, h.claim
       FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id AND h.project_id = e.project_id
@@ -79,7 +92,7 @@ async function drafted(env: Env, cycle: LovableCycle, projectId: number, ref: Re
     WHERE project_id = ? AND is_must_have = 1 AND (scope IS NULL OR scope != 'out') ORDER BY sort_order, id`).bind(projectId)
     .all<{ title: string; description: string | null }>()).results || [];
   const { prompt, dropped } = prototypePrompt({ venture: venture.name, description: venture.description, mustHaves: features, targetDate: p?.mvp_target_date ?? null });
-  return { prompt, dropped, hypothesisId: null, tests: { code: null, claim: venture.name, title: `Prototype / MVP · ${features.length} must-have${features.length === 1 ? '' : 's'}`, target: null } };
+  return { prompt, dropped, hypothesisId: null, tests: { code: null, claim: realName, title: `Prototype / MVP · ${features.length} must-have${features.length === 1 ? '' : 's'}`, target: null } };
 }
 
 /** When this record was last opened in Lovable, or null. */
@@ -90,17 +103,44 @@ async function lastOpened(env: Env, cycle: LovableCycle, projectId: number, ref:
   return row?.at ?? null;
 }
 
-const view = (findings: Finding[]) => ({ ok: findings.length === 0, line: checkLine(findings), findings });
+/**
+ * The check's answer. `ok` is the refusal gate and reads `findings` only.
+ * D8773 (#8773): `advisories` (a member's name, as whole words) ask the
+ * founder for a choice and never refuse; `advisory_line` says where, never
+ * what; `checked_at` is when this exact text was checked.
+ */
+function view(findings: Finding[], advisories: Finding[] = []) {
+  const a = advisories[0];
+  return {
+    ok: findings.length === 0, line: checkLine(findings), findings, advisories,
+    ...(a ? { advisory_line: `This prompt contains ${a.words}${linesWords(a.lines) ? `, ${linesWords(a.lines)}` : ''}. Lovable will see it.` } : {}),
+    checked_at: new Date().toISOString(),
+  };
+}
 
-/** The dialog's opening read. */
-export async function draftPrompt(env: Env, cycle: LovableCycle, projectId: number, rawRecord: unknown) {
+async function checked(env: Env, projectId: number, text: string) {
+  const [findings, advisories] = await Promise.all([privacyFindings(env, projectId, text), memberNameAdvisories(env, projectId, text)]);
+  return view(findings, advisories);
+}
+
+/**
+ * The dialog's opening read. D8773 (#8773): `alias` drafts the template with
+ * a neutral name in place of the venture's (never saved), and the answer
+ * says how the prompt names the venture (`venture_label`, `venture_lines`)
+ * and whether this is a support session, which the launch refuses, so the
+ * dialog can say so before the press.
+ */
+export async function draftPrompt(env: Env, cycle: LovableCycle, projectId: number, rawRecord: unknown, rawAlias: unknown = null, supportSession = false) {
   const ref = recordOf(cycle, projectId, rawRecord);
-  const d = await drafted(env, cycle, projectId, ref);
-  const findings = await privacyFindings(env, projectId, d.prompt);
+  const alias = aliasOf(rawAlias);
+  if (alias === false) throw new LovableError('invalid_alias', 400, 'Use an alias of 2 to 60 letters, digits or spaces, on one line.');
+  const d = await drafted(env, cycle, projectId, ref, alias);
   return {
     record: ref, prompt: d.prompt, prompt_chars: d.prompt.length, max: LOVABLE_PROMPT_MAX, left_out: LEFT_OUT,
     ...(d.dropped ? { cut: `${d.dropped} ${d.dropped === 1 ? 'line was' : 'lines were'} left out to stay within ${LOVABLE_PROMPT_MAX.toLocaleString('en-US')} characters.` } : {}),
-    check: view(findings), last_opened_at: await lastOpened(env, cycle, projectId, ref), tests: d.tests,
+    check: await checked(env, projectId, d.prompt), last_opened_at: await lastOpened(env, cycle, projectId, ref), tests: d.tests,
+    venture_name: d.ventureName, venture_label: d.label, venture_lines: labelLines(d.prompt, d.label), alias: alias ?? null,
+    support_session: supportSession,
   };
 }
 
@@ -115,7 +155,7 @@ function promptOf(raw: unknown): string {
 /** The dialog's check on an edited prompt. */
 export async function checkPrompt(env: Env, projectId: number, raw: unknown) {
   const prompt = promptOf(raw);
-  return { prompt_chars: prompt.length, check: view(await privacyFindings(env, projectId, prompt)) };
+  return { prompt_chars: prompt.length, check: await checked(env, projectId, prompt) };
 }
 
 async function sha256(text: string): Promise<string> {
@@ -172,7 +212,7 @@ type Step = 'draft' | 'check' | 'launch' | 'launches';
 
 /**
  * The four routes each cycle mounts (`cycle_validate.ts`, `cycle_build.ts`):
- *   POST /lovable/draft, /lovable/check, /lovable/launch  { project_id, record, prompt? }
+ *   POST /lovable/draft, /lovable/check, /lovable/launch  { project_id, record, prompt?, alias? (draft only, D8773) }
  *   GET  /lovable/launches?project=
  * Writing is the venture's own or an admin's (`canWrite`), and reading the
  * launches is the board's audience. A support session may look but never
@@ -191,12 +231,13 @@ export function lovableHandler(cycle: LovableCycle, step: Step) {
     if (!project) return c.json({ detail: 'Project not found', code: 'not_found' }, 404);
     if (!(step === 'launches' ? canReadBoard(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden', code: 'forbidden' }, 403);
     // A support session's token carries `impersonated_by` (as `isSupportSession` reads it).
-    if (step === 'launch' && (await selectJwt(c))?.payload?.impersonated_by) {
+    const support = (step === 'launch' || step === 'draft') && !!(await selectJwt(c))?.payload?.impersonated_by;
+    if (step === 'launch' && support) {
       return c.json({ detail: 'A support session cannot open Lovable for the founder. Nothing was opened.', code: 'support_session_refused' }, 403);
     }
     c.header('Cache-Control', 'private, no-store');
     try {
-      if (step === 'draft') return c.json(await draftPrompt(c.env, cycle, projectId, (body as any).record));
+      if (step === 'draft') return c.json(await draftPrompt(c.env, cycle, projectId, (body as any).record, (body as any).alias, support));
       if (step === 'check') return c.json(await checkPrompt(c.env, projectId, (body as any).prompt));
       if (step === 'launch') return c.json(await launchPrompt(c.env, user, cycle, projectId, body as Record<string, unknown>));
       return c.json(await launchesOf(c.env, cycle, projectId));

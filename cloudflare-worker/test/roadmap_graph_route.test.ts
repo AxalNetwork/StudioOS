@@ -26,6 +26,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(HERE, '../sql');
 const MIGRATION = readFileSync(`${SQL}/migrations/254_roadmap_dependencies.sql`, 'utf8');
 const BASELINE = readFileSync(`${SQL}/schema_baseline.sql`, 'utf8');
+// D8776: the read names each item's owner and target date, which migration 441 added to `roadmap_okrs`.
+const BUILD_STORES = readFileSync(`${SQL}/migrations/441_build_cycle_stores.sql`, 'utf8');
 const ROUTE_SRC = readFileSync(resolve(HERE, '../src/routes/founder_roadmap.ts'), 'utf8');
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -84,6 +86,7 @@ function freshDb() {
   // hand-copy. `roadmap_okrs` is where that rule was learned (#203, and again on
   // the first draft of `okr_move_log.test.ts`).
   db.exec(tableFromBaseline(BASELINE, 'roadmap_okrs'));
+  for (const stmt of splitStatements(BUILD_STORES)) if (/^ALTER TABLE roadmap_okrs\b/.test(stmt.trim())) db.exec(stmt);
   for (const stmt of splitStatements(MIGRATION)) db.exec(stmt);
 
   const u = db.prepare('INSERT INTO users (id, role, founder_id) VALUES (?,?,?)');
@@ -248,6 +251,27 @@ test('an outsider is refused the read; a partner is allowed it', async () => {
   assert.equal((await call('GET', `/api/founder/roadmap/${PROJECT}`, OUTSIDER)).status, 403);
   assert.equal((await call('GET', `/api/founder/roadmap/${PROJECT}`, PARTNER)).status, 200);
   assert.equal((await call('GET', `/api/founder/roadmap/${PROJECT}`, null)).status, 401);
+});
+
+test('D8776: the read says who may edit, and each item\'s owner and target date', async () => {
+  // Mutation checked: `can_write: true` for every reader → the partner is offered edits the writes refuse with 403;
+  // the owner join dropped → `owner` is undefined.
+  const db = freshDb();
+  const call = appFor(db);
+  db.prepare("UPDATE users SET name = '[Maya Ruiz]' WHERE id = ?").run(OWNER);
+  const a = addOkr(db, PROJECT, '[Block map]', 'now', 'Q4 2026');
+  db.prepare('UPDATE roadmap_okrs SET owner_user_id = ?, target_date = ? WHERE id = ?').run(OWNER, '2026-12-18', a);
+  addOkr(db, PROJECT, '[Yield forecast]', 'later');
+  const owner = await call('GET', `/api/founder/roadmap/${PROJECT}`, OWNER);
+  assert.equal(owner.json.can_write, true);
+  assert.deepEqual(owner.json.items.map((i: any) => [i.objective, i.owner, i.target_date]),
+    [['[Block map]', '[Maya Ruiz]', '2026-12-18'], ['[Yield forecast]', null, null]]);
+  const partner = await call('GET', `/api/founder/roadmap/${PROJECT}`, PARTNER);
+  assert.equal(partner.status, 200);
+  assert.equal(partner.json.can_write, false, 'a reader the writes refuse is told so');
+  const b = owner.json.items[1].id;
+  assert.equal((await call('POST', `/api/founder/roadmap/${PROJECT}/dependencies`, PARTNER, { okr_id: a, blocks_okr_id: b })).status, 403,
+    'can_write agrees with the write gate');
 });
 
 test('an empty roadmap reads as empty rather than as an error', async () => {

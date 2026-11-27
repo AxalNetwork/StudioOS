@@ -152,7 +152,8 @@ test('Funds: a failed calls read leaves committed and TVPI, and every call figur
   failed.fund_commitment.onRetry();
   assert.deepEqual(retried, ['fund']);
   const none = investorTiles({ quick: quickStats({}), today: TODAY, records: { ...RECORDS, fund: { lp_holdings: [] } }, retrySource: () => {} });
-  assert.deepEqual([none.fund_commitment.state, none.fund_commitment.openLabel, none.fund_commitment.href], ['empty', 'See Axal Fund I', '/funds']);
+  // D8731 (#8731): no commitment opens the fund brief, Axal VC Fund › Fund and terms, never /funds (Run my fund).
+  assert.deepEqual([none.fund_commitment.state, none.fund_commitment.openLabel, none.fund_commitment.href], ['empty', 'See Axal VC Fund terms', '/spinout-lab/investor-workspace#fund']);
 });
 
 // ── Returns (SM19) ────────────────────────────────────────────────────────────

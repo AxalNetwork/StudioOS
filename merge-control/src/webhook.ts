@@ -2,6 +2,7 @@
 import { timingSafeEqual, createHmac, createHash } from 'node:crypto';
 import type { Delivery, Env } from './types.ts';
 import { POLICY_PR_ACTIONS } from './policyCheck.ts';
+import { conflictIngress } from './manualConflictIngress.ts';
 export function verifySignature(body: Uint8Array, signature: string | null, secret: string): boolean {
   if (!signature || !/^sha256=[a-f0-9]{64}$/.test(signature)) return false;
   const expected = createHmac('sha256', secret).update(body).digest();
@@ -51,9 +52,13 @@ export async function webhook(request: Request, env: Env): Promise<Response> {
   const pr = event === 'pull_request' && POLICY_PR_ACTIONS.includes(payload.action ?? '') ? payload.pull_request : undefined;
   if (pr && (typeof pr.head?.sha !== 'string' || !/^[a-f0-9]{40}$/.test(pr.head.sha) || typeof pr.base?.sha !== 'string' || !/^[a-f0-9]{40}$/.test(pr.base.sha)
     || !Number.isSafeInteger(pr.number) || Number(pr.number) <= 0)) return new Response('invalid pull request', { status: 400 });
+  // D7109: a queue ejection, a check-run action or a moved pull request keeps only the verified fields the manual conflict check reads.
+  const conflict = conflictIngress(event, payload);
+  if (conflict === 'invalid') return new Response('invalid conflict event', { status: 400 });
+  if (conflict === 'ignore') return Response.json({ accepted: false });
   const message: Delivery = { delivery, repo: env.REPOSITORY, event, action: payload.action ?? '', reason: payload.reason ?? null,
     headSha: group?.head_sha ?? (pr ? String(pr.head?.sha) : null), headRef: group?.head_ref ?? null, at: Date.now(),
-    baseSha: group?.base_sha ?? (pr ? String(pr.base?.sha) : null), pr: pr ? Number(pr.number) : null };
+    baseSha: group?.base_sha ?? (pr ? String(pr.base?.sha) : null), pr: pr ? Number(pr.number) : null, ...(conflict ? { conflict } : {}) };
   await env.EVENTS.send(message);
   return Response.json({ accepted: true });
 }

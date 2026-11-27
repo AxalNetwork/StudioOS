@@ -76,10 +76,10 @@ const MEMBERS = {
 };
 /** #3840's Agent DTO, as the canvas draws TM1a's rows. */
 const AGENTS = [
-  { uid: 'a1', role_key: 'cfo', persona: { key: 'orrin', avatar: '/agents/orrin.webp', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
-  { uid: 'a2', role_key: 'cmo', persona: { key: 'kade', tagline: '[Light ten lanterns.]' }, first_name: '[Iris]', last_name: '[Cole]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'paused', paused_reason: 'cap', monthly_cap_microusd: 10_000_000, month_spend: { available: true, value_microusd: 10_000_000 }, last_activity_at: '2026-10-28T12:00:00Z', project: null },
-  { uid: 'a3', role_key: 'research', persona: { key: 'ryssa', tagline: '[If the plan survives me.]' }, first_name: '[Milo]', last_name: '[Hart]', model_id: 'm-c', model_label: '[Model C]', tools: [], sponsor: { uid: 'u3', name: '[Sam Okafor]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 10_000_000, month_spend: { available: false }, last_activity_at: null, project: null },
-  { uid: 'a4', role_key: 'cto', persona: { key: 'corvane', tagline: '[Ask the right question.]' }, first_name: '[Ada]', last_name: '[Quinn]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 20_000_000, month_spend: { available: true, value_microusd: 2_100_000 }, last_activity_at: '2026-10-31T08:00:00Z', project: { id: 7, name: '[Atlas Pilot]' } },
+  { uid: 'a1', skill_count: 3, role_key: 'cfo', persona: { key: 'orrin', avatar: '/agents/orrin.webp', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
+  { uid: 'a2', skill_count: 1, role_key: 'cmo', persona: { key: 'kade', tagline: '[Light ten lanterns.]' }, first_name: '[Iris]', last_name: '[Cole]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'paused', paused_reason: 'cap', monthly_cap_microusd: 10_000_000, month_spend: { available: true, value_microusd: 10_000_000 }, last_activity_at: '2026-10-28T12:00:00Z', project: null },
+  { uid: 'a3', skill_count: 2, role_key: 'research', persona: { key: 'ryssa', tagline: '[If the plan survives me.]' }, first_name: '[Milo]', last_name: '[Hart]', model_id: 'm-c', model_label: '[Model C]', tools: [], sponsor: { uid: 'u3', name: '[Sam Okafor]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 10_000_000, month_spend: { available: false }, last_activity_at: null, project: null },
+  { uid: 'a4', skill_count: 1, role_key: 'cto', persona: { key: 'corvane', tagline: '[Ask the right question.]' }, first_name: '[Ada]', last_name: '[Quinn]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 20_000_000, month_spend: { available: true, value_microusd: 2_100_000 }, last_activity_at: '2026-10-31T08:00:00Z', project: { id: 7, name: '[Atlas Pilot]' } },
 ];
 const render = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 
@@ -133,7 +133,8 @@ test('"Not recorded" is muted and never a zero: spend, last activity, title, cou
   assert.equal(milo.last, null);
   assert.equal(spendLine(AGENTS[0]), '$3.84 of $25 cap');
   const card = renderedText(render(h(AgentsCard, { block: { available: true, value: { agents: [AGENTS[2]] } }, kind: 'project', companyName: 'x', now: NOW })));
-  assert.equal((card.match(/Not recorded/g) || []).length, 3, 'this month (the phone line and its column) and last activity');
+  // D8769: its area of work (a role key outside the catalogue) on the phone line and in What it does, this month (the phone line and its column) and last activity.
+  assert.equal((card.match(/Not recorded/g) || []).length, 5, 'area of work twice, this month twice and last activity');
   assert.doesNotMatch(card, /\$0(\.00)?\b/);
   const html = render(h(AgentsCard, { block: { available: true, value: { agents: [AGENTS[2]] } }, kind: 'project', companyName: 'x', now: NOW }));
   // D5129: the shared Not recorded chip (dotted border, dash glyph), muted grey.
@@ -218,9 +219,10 @@ test('TM9d1: below md an agent row keeps its role, this month and its status on 
   const lines = html.split('data-testid="agent-phone-line"').slice(1).map((x) => renderedText(`<span ${x.split('role="cell"')[0]}`));
   assert.equal(lines.length, 3);
   // D4119: the line under an agent is its persona's tagline, never a job title.
-  assert.match(lines[0], /\[Every road ends at a market\.\] · \$3\.84 of \$25 capActive/);
-  assert.match(lines[1], /\[Light ten lanterns\.\] · \$10\.00 of \$10 capPaused/, 'a paused agent shows Paused on a phone');
-  assert.match(lines[2], /\[If the plan survives me\.\] · this month Not recordedActive/, 'never $0');
+  // D8769 (TMM10A): the phone line leads with what the agent does, then this month and whether it can run.
+  assert.match(lines[0], /Finance · \$3\.84 of \$25 capActive/);
+  assert.match(lines[1], /Marketing and growth · \$10\.00 of \$10 capPaused/, 'a paused agent shows Paused on a phone');
+  assert.match(lines[2], /Not recorded · this month Not recordedActive/, 'never $0');
   assert.match(html, /class="hidden md:block truncate[^"]*">\[Every road ends at a market\.\]</, 'the line under the name is the desktop form only');
   assert.doesNotMatch(renderedText(html), /\bCFO\b|\bCMO\b|Research analyst/, 'no job title');
 });
@@ -375,7 +377,7 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/company/nw1/moves', 'GET /api/teams/company/nw1/queue', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status; D1531 (TM18): and the moves');
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/company/nw1/engine', 'GET /api/teams/company/nw1/moves', 'GET /api/teams/company/nw1/queue', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status; D1531 (TM18): and the moves; D8769: and the engine, for the roster');
     assert.equal(v.has('platform-paused-banner'), false, 'nothing paused: no banner');
     const text = v.text();
     assert.match(text, /Company settings/);
@@ -829,7 +831,8 @@ test('#3840 switched on: the agents card draws the list with Studio archetypes, 
     assert.match(text, /\[Nora\] \[Vale\]Disciplined Allocator/);
     assert.match(text, /\[Milo\] \[Hart\]Thesis-Driven Backer/);
     assert.match(text, /Platform model · m-a/, 'the model the Worker names, with no invented label');
-    assert.match(text, /\[If the plan survives me\.\] · this month Not recorded/, 'unread spend is Not recorded');
+    // D8769: the phone line leads with the work (this fixture's role key is outside the catalogue, so Not recorded), then this month.
+    assert.match(text, /Not recorded · this month Not recorded/, 'unread spend is Not recorded');
     assert.doesNotMatch(text, /\$0\.00|aren’t switched on/);
     await v.click('team-add');
     assert.equal(v.prop('team-add-agent', 'disabled'), false, 'an editor on a paid plan may add');
@@ -926,6 +929,9 @@ test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model 
     assert.match(v.text(), /Coverage with these skillsNot recorded/);
     await v.click('add-agent-next');
     assert.match(v.text(), /Area of work · Finance · 0 skills/, 'the role remains visible while model and cap are chosen');
+    // D8769 (TMM06): token prices are one press away.
+    assert.doesNotMatch(v.text(), /1M tokens/);
+    await v.click('model-prices-toggle');
     assert.match(v.text(), /Input \$0\.06 \/ 1M tokens · Output \$0\.24 \/ 1M tokens/);
     assert.doesNotMatch(v.text(), /Offered on your plan/);
     const radio = walkRadio();
