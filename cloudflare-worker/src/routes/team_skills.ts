@@ -52,6 +52,7 @@
  *                                        version's parts, the HQ skill's current version, `base_update_available`
  *                                        (a newer published HQ version, never applied), and a per-field three-way
  *                                        comparison (old base, new base, the company's latest) naming conflicts.
+ *                                        `versions[]` is `{ version, based_on_version, published_at, by_name }` (D8826).
  *   PATCH /skills/:uid on an extension   its tools stay within its base version's (422 `tool_not_in_base`).
  *   Every card carries `based_on: { skill_uid, version } | null`.
  *
@@ -753,6 +754,12 @@ router.post('/skills/:uid/rebase', async (c) => {
   return c.json({ skill: await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, ''), base: { uid: base.row.uid, version: b.version } });
 });
 
+/** D8826: a publisher's display name, or null when there is none to show; a value holding "@" is never sent. */
+function publisherName(name: string | null): string | null {
+  const n = typeof name === 'string' ? name.trim() : '';
+  return n && !n.includes('@') ? n : null;
+}
+
 router.get('/skills/:uid/base', async (c) => {
   const user = await requireAuth(c);
   const s = await skillByUid(c.env, c.req.param('uid'));
@@ -761,9 +768,13 @@ router.get('/skills/:uid/base', async (c) => {
   if (s.scope !== 'company' || !s.based_on_skill_uid || s.based_on_version == null) return c.json({ lineage: null });
   const tax = await taxonomy(c.env);
   const base = await baseOf(c.env, s);
-  const history = await all<{ version: number; based_on_version: number | null }>(c.env,
-    'SELECT version, based_on_version FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC', s.id);
-  const lineage = { based_on: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, reason: s.fork_reason ?? null, versions: history };
+  // D8826 (#8826): who published each company version, and when, for History. The publisher's display name only — no
+  // uid, no email — and a name that is blank or holds an address is null (the screen's "Not recorded").
+  const history = await all<{ version: number; based_on_version: number | null; published_at: string | null; by_name: string | null }>(c.env,
+    `SELECT v.version, v.based_on_version, v.published_at, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
+      WHERE v.skill_id = ? ORDER BY v.version DESC`, s.id);
+  const versions = history.map((v) => ({ version: v.version, based_on_version: v.based_on_version, published_at: v.published_at ?? null, by_name: publisherName(v.by_name) }));
+  const lineage = { based_on: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, reason: s.fork_reason ?? null, versions };
   // The HQ row or its version could not be read: say so, never guess an answer (the screen's "Unreadable").
   if (!base?.version) return c.json({ lineage: { ...lineage, base: null, base_update_available: null, fields: null } });
   const retired = base.row.status === 'retired';
