@@ -576,7 +576,8 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals?age=past', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unreadable: [] }) });
   try {
-    assert.match(v.of('approvals-empty'), /Nothing matches these filters\.\s*Clear filters/);
+    // D8728 (SAD13 L3): the empty filtered view also says what the filter hides.
+    assert.match(v.of('approvals-empty'), /Nothing matches these filters\.\s*123 more waiting are hidden by this filter\.\s*Clear filters/);
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals', h(AdminApprovals), { inbox: () => json({ code: 'assigned_unreadable', message: 'Assignments could not be read.' }, 503) });
   try {
