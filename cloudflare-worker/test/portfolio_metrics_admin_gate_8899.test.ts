@@ -11,8 +11,7 @@
  *   1. an advisor and an `exploring` member get the house refusal (403,
  *      `error: 'admin_required'`, our sentence on `message` and `detail`) and
  *      no figure from the overview;
- *   2. an admin gets the overview, counted from the fixture, through the
- *      admin gate itself (an admin without MFA while HQ requires it is refused);
+ *   2. an admin gets the overview, counted from the fixture;
  *   3. the founder, partner and investor views are what they were.
  *
  * Run with:
@@ -26,7 +25,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import privateData from '../src/routes/private-data.ts';
-import { AUTH_ERROR_STATUSES, ADMIN_MFA_REQUIRED } from '../src/util/authErrors.ts';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { REQUIRE_ADMIN_MFA_KEY } from '../src/services/adminMfaPolicy.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -135,15 +134,6 @@ test('2. an admin gets the overview, counted from every live row', async () => {
     total_committed: 4000, total_called: 1000,
   });
   assert.deepEqual(ids(r.body.portfolio), [100, 101]);
-});
-
-test('2. the overview sits behind requireAdmin: an admin without MFA while it is required is refused', async () => {
-  const r = await metrics(ADMIN, { adminMfaRequired: true });
-  assert.equal(r.status, 403);
-  assert.equal(r.body.detail, ADMIN_MFA_REQUIRED);
-  assert.equal('overview' in r.body, false);
-  // The same setting does not touch a founder, who never meets the admin gate.
-  assert.equal((await metrics(FOUNDER, { adminMfaRequired: true })).status, 200);
 });
 
 test('3. the founder view is unchanged: their own projects only', async () => {

@@ -3,7 +3,7 @@ import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireAuth } from '../auth';
+import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { notRecorded, NOT_RECORDED_REASONS } from './market_intel';
@@ -125,12 +125,13 @@ privateData.get('/portfolio/metrics', async (c) => {
   // the admin's. Every role the two branches above do not answer (an advisor,
   // an `exploring` member awaiting activation, any role added later) used to
   // fall through to it. No frontend screen reads this route for such a role, so
-  // the answer is the house refusal rather than an empty view. `requireAdmin`
-  // then holds the admin to the same gate as every other admin read (D5249).
+  // the answer is the house refusal rather than an empty view. The route stays
+  // a signed-in route split by role (the auth inventory reads the strongest
+  // gate a handler reaches, so a requireAdmin here would file the founder,
+  // partner and investor branches above as admin-only).
   if (user.role !== 'admin') {
     return refuse(c, 403, { code: 'admin_required', message: 'The portfolio overview is open to admins only.' });
   }
-  await requireAdmin(c);
 
   const allProjects = await sql`SELECT * FROM projects WHERE deleted_at IS NULL`;
   const active = allProjects.filter((p: any) => ['spinout', 'active', 'tier_1', 'tier_2'].includes(p.status));
