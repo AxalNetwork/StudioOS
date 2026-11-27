@@ -18,6 +18,7 @@ import { exportView } from '../../../lib/csvExport';
 import FromMercury from '../FromMercury';
 import ClosingWorkspace from './ClosingWorkspace';
 import { transferBody, verifierOptions } from './closingWorkspaceModel';
+import { NOT_YOUR_CLOSING, NO_LED_ROUND, closingDealsFor, closingSeat } from './closingSeatModel';
 
 /**
  * Deals · Closing — canvas **ID4**, `/deals/closing`. COLLECTION.
@@ -222,6 +223,10 @@ export default function InvestorClosingZone() {
   const [actionError, setActionError] = useState('');
   const [view, setView] = useState('close');
   const [query, setQuery] = useState('');
+  // D9072: who reads this page is decided by role and id alone (closingSeatModel).
+  const seatRole = user?.role;
+  const seatId = user?.id;
+  const seatUser = useMemo(() => ({ role: seatRole, id: seatId }), [seatRole, seatId]);
 
   const load = useCallback(() => {
     setDeals(null);
@@ -229,8 +234,9 @@ export default function InvestorClosingZone() {
     setConditions(null);
     setTransfers(null);
     setChecklists({});
+    // D9072 (#9072): a partner's list is the rounds they lead, nothing else.
     api.listDeals(undefined, 'mine').then(
-      (r) => setDeals(Array.isArray(r) ? r : (r?.items || [])),
+      (r) => setDeals(closingDealsFor(seatUser, Array.isArray(r) ? r : (r?.items || []))),
       () => setDeals(UNAVAILABLE),
     );
     api.esignList().then(
@@ -249,7 +255,7 @@ export default function InvestorClosingZone() {
       (r) => setTransfers(Array.isArray(r?.items) ? r.items : []),
       () => setTransfers(UNAVAILABLE),
     );
-  }, []);
+  }, [seatUser]);
   useEffect(() => { load(); }, [load]);
 
   const dealsReady = deals !== null && deals !== UNAVAILABLE;
@@ -616,6 +622,28 @@ export default function InvestorClosingZone() {
 
   if (workspaceDeal) {
     const deal = dealsReady ? deals.find((d) => Number(d.id) === workspaceDeal) || null : null;
+    // D9072 (#9072, D6158 Q1 = A): a partner opens only a round they lead. The
+    // list above is already narrowed to those, so a round missing from it is
+    // not theirs; while it is read the answer waits, and a failed read is
+    // Unavailable, never a refusal or an admission.
+    const seat = closingSeat(seatUser, deals === null ? undefined : deal);
+    if (seatRole === 'partner' && deals === UNAVAILABLE) {
+      return (
+        <p className="text-[12.5px] leading-relaxed text-red-700 dark:text-red-300" role="alert" data-testid="closing-seat-unavailable">
+          Unavailable: whether you lead this round could not be read. That is not a refusal.
+          <button type="button" onClick={load} className="ml-1 inline-flex min-h-[44px] items-center underline md:min-h-0">Try again</button>
+        </p>
+      );
+    }
+    if (seat === 'pending') return <p className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="closing-seat-reading">Reading…</p>;
+    if (seat === 'refused') {
+      return (
+        <section className="space-y-2 rounded-[10px] border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="closing-seat-refused">
+          <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{NOT_YOUR_CLOSING}</p>
+          <button type="button" onClick={() => setParams({})} className="min-h-[44px] text-[12px] font-semibold text-axal-violet-deep underline-offset-2 hover:underline dark:text-violet-300 md:min-h-0">‹ Deals at closing</button>
+        </section>
+      );
+    }
     return (
       <>
         {wirePanel}
@@ -718,7 +746,7 @@ export default function InvestorClosingZone() {
         error={bothFailed ? 'Neither the deal record nor the signature archive could be read.' : ''}
         onRetry={load}
         isEmpty={dealsReady && closing.length === 0}
-        empty={<NothingYet title={EMPTY_TITLE} body={EMPTY_BODY} />}
+        empty={<NothingYet title={EMPTY_TITLE} body={seatRole === 'partner' ? NO_LED_ROUND : EMPTY_BODY} />}
       >
         <div className="space-y-6">
           {/* ══ THE DE08 STRIP (DX8) — five figures from `closingKpis`. A

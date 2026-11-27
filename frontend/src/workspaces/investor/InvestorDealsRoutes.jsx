@@ -115,7 +115,7 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      sectionNav={role==='partner'?<nav aria-label="Deals"><Link className="inline-flex min-h-11 items-center text-sm font-bold" to="/deals/commit">Commit</Link></nav>:undefined}
+      sectionNav={role==='partner'?<nav aria-label="Deals" className="flex gap-4"><Link className="inline-flex min-h-11 items-center text-sm font-bold" to="/deals/commit">Commit</Link><Link className="inline-flex min-h-11 items-center text-sm font-bold" to="/deals/closing" data-testid="partner-nav-closing">Closing</Link></nav>:undefined}
       title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : isRoundCalls ? ROUND_CALLS_TITLE : undefined}
       activeSlug={isRoot || isCompare || isRooms || isRoundCalls ? null : undefined}
       bucketPath={isRoundCalls ? '/deals' : undefined}
