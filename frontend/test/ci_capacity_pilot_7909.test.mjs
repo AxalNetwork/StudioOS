@@ -309,7 +309,7 @@ test('D7909 pilot configuration refuses included billing and full-suite publicat
 const BASE_JOB_DIGESTS={
   "frontend":'e2884e1ba35220b8',
   "worker":'338f2e46f9af2c9f',
-  "verified":'671cbb73f43df103',
+  "verified":'3566bb89558bcaa1', // D5500 (#5500): named for what it does; the lookup moved to scripts/ci/queue-run-lookup.mjs (same query and decision).
   "suite":'ed1af766388ae3b8', // D8626: needs capacity-route, and a job env telling test-drift-parts.mjs a Worker part was routed.
   "test-deps":'584ab84cbc836df0',
   "fast":'066a8e32945222c9',
