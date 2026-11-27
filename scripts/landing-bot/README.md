@@ -166,8 +166,17 @@ handler never queue one.
 | `LANDING_BOT_MAX_CONFLICT_FILES` | The most conflicted files a model is asked to resolve. Unset is 0: none. |
 | `LANDING_BOT_MAX_CONFLICT_LINES` | The most lines inside conflict blocks, across those files. Unset is 0: none. |
 | `LANDING_BOT_DAILY_MODEL_RUNS` | Resolver runs that may call a model per UTC day. Unset is 0. |
+| `LANDING_BOT_MANUAL_CONFLICT` | `true` lets a manual "Fix conflicts" request (#7109) run. Anything else: the request stops in `plan`, quietly. |
 
-Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`.
+**A manual request (#7109, D7109).** Merge Control's advisory **Merge queue conflict** check dispatches this same
+workflow when a repository writer clicks **Fix conflicts**, with `expected_head`, `expected_base` and a 16-hex
+`request` id (also in the run name). `plan` stops before any model call unless `LANDING_BOT_MANUAL_CONFLICT` is
+`true`, the head and base are the pinned ones, the PR is out of the merge queue, GitHub still reports the conflict,
+and no earlier run carries the id; `apply` checks the switch, base and queue again before it pushes. A request
+that cannot run leaves one sticky line saying why (`report`), with no label. Every rule above still applies: the
+request only narrows when the resolver runs, and the owner still lands the result.
+
+Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`, `frontend/test/landing_bot_manual_conflict_7109.test.mjs`.
 
 ## The ejection handler
 

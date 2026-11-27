@@ -2,8 +2,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Delivery, Env, GithubApi, Run } from './types.ts';
 import { changeLease, type LeaseInput, type LeaseState } from './lib/lease.ts';
+import { processConflict } from './manualConflictIngress.ts';
 import { cancellable, destroyedTarget, queueBranch, WORKFLOWS } from './lib/reconcile.ts';
-import { githubClient, POLICY_PERMISSIONS } from './github.ts';
+import { CONFLICT_PERMISSIONS, githubClient, POLICY_PERMISSIONS } from './github.ts';
 import { checkRunBody, decide, evaluate, policyTarget } from './policyCheck.ts';
 import type { Decision, PolicyTarget } from './policyCheck.ts';
 import { POLICY_VERSION } from './policy.ts';
@@ -95,6 +96,12 @@ export class RepoControl extends DurableObject<Env> {
           const runs = await this.pages(api, `actions/workflows/${workflow}/runs?head_sha=${sha}&event=merge_group`, 'workflow_runs') as Run[];
           for (const run of runs) await this.cancel(api, run, sha, event.delivery);
         }
+      }
+      // D7109: the manual conflict check, off unless MANUAL_CONFLICT_ENABLED is `true`.
+      if (event.conflict && !await this.off()) {
+        const outcome = await processConflict(this.env, event.conflict, this.ctx.storage, {
+          checks: () => this.client(injectedApi, CONFLICT_PERMISSIONS), actions: () => this.client(injectedApi) });
+        this.audit('conflict', event.delivery, { kind: event.conflict.kind, outcome });
       }
       await this.ctx.storage.put(key, { done: true });
     });

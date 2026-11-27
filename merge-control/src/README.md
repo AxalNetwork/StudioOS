@@ -22,3 +22,5 @@
 | `ciCapacityRuntime.ts` | D7973: unbound inactive capacity object, independent switches and alarm recovery. |
 | `ciCapacityHistory.ts` | D7909-p8: bounded cursored collection retains full, compact and pending-negative dependent evidence. |
 | `ciCapacityReconciliation.ts` | Owner inspection of outstanding publication evidence and compare-and-set adoption of an independently observed check (#8376). |
+| `manualConflictActions.ts` | D7109: the manual conflict check's handlers: publish once on a verified conflict ejection, and turn an authorized click into one durable request. |
+| `manualConflictIngress.ts` | D7109: the signed-event adapters: the verified fields of `pull_request.dequeued`, `check_run.requested_action` and a moved pull request, the GraphQL pull read, the durable check/request/outbox state, one conflict-only resolver dispatch per request and expiry of a stale button. Off unless `MANUAL_CONFLICT_ENABLED` is `true`. |
