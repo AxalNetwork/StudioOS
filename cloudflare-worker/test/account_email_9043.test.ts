@@ -243,6 +243,14 @@ test('a case pair seeded before D9043: every lookup picks the lowest id, and no 
   assert.equal(await magicSignIn(f, 'Twin.T9043@Example.test'), 60, 'the exact stored case does not pick the other row');
   const reg = await post(f.env, '/api/auth/register', { email: 'twin.T9043@example.TEST', name: 'Synthetic Twin' });
   assert.equal(reg.status, 409);
+  const sql = getSQL(f.env);
+  const g = await googleTesting.resolveGoogleSignin(fakeCtx(f.env), sql, { sub: 'google-sub-9043-twin', email: 'Twin.T9043@Example.test', name: 'Synthetic Twin', hd: 'example.test' });
+  assert.equal(g.ok, true, JSON.stringify(g));
+  assert.equal(Number((g as any).user.id), 60, 'Google first sign-in picks the lowest id');
+  const a = await appleTesting.resolveAppleSignin(fakeCtx(f.env), sql, { sub: 'apple-sub-9043-twin', email: 'Twin.T9043@Example.test', privateEmail: false }, { name: 'Synthetic Twin' });
+  // Apple is not authoritative for a non-relay address, so it refuses; the refusal names the account it matched.
+  assert.equal((a as any).code, 'link_requires_email_proof', JSON.stringify(a));
+  assert.equal((a as any).userId, 60, 'Apple first sign-in matches the lowest id');
   assert.equal(f.rows().length, 2, 'the pair is left alone: not merged, not added to');
 });
 
