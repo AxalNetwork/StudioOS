@@ -186,7 +186,13 @@ ejection, then:
   - `[alert] merge queue stalled` is not open;
   - this PR has had fewer than 2 re-queues in 24 hours;
   - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
-  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
+  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`;
+  - **then, just before the enqueue,** a fresh landing decision for that exact head allows it (D6476-p7):
+    `readLandingDecision()` from `feeder-github.mjs`, which runs `landPr.decide()`. That means `LANDING_AUTO` is
+    true now and on the head's `landing policy` report, #5500 is done, main still requires the merge queue, the
+    tier is T0 or T1, `landing-policy.yml` is untouched and `[alert] merge queue stalled` is not open.
+    `requeuePolicy()` and `gateRequeue()` in `ejection-rules.mjs` turn a refusal into a wait, or into a hand-back
+    for T2, a draft, a PR not open on main or an edited `landing-policy.yml`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
 ## The conflict indicator
