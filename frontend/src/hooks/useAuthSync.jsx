@@ -31,6 +31,7 @@ const AuthCtx = createContext({
   oauthBootstrapping: false,
   linkBootstrapFailure: null,
   refresh: async () => {},
+  readCurrentUser: () => api.getMe(),
   setUser: () => {},
 });
 
@@ -39,6 +40,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const lastFetchRef = useRef(0);
   const inFlightRef = useRef(null);
+  const verifiedRef = useRef(null);
   const location = useLocation();
 
   // Capture the post-OAuth marker DURING the initial render (lazy initializer
@@ -162,6 +164,7 @@ export function AuthProvider({ children }) {
           nextSession(me);
           setUserState(me);
           lastFetchRef.current = Date.now();
+          verifiedRef.current = { gen: sessionRef.current.gen, me };
           return { ok: true };
         }
         const merged = { ...stored, ...me };
@@ -171,6 +174,7 @@ export function AuthProvider({ children }) {
         // failed transiently we want the next navigation to retry
         // instead of being silenced for the full 5-minute window.
         lastFetchRef.current = Date.now();
+        verifiedRef.current = { gen: sessionRef.current.gen, me };
         return { ok: true };
       } catch (error) {
         // 401 is already handled by api.request (redirects to /login).
@@ -185,6 +189,17 @@ export function AuthProvider({ children }) {
     inFlightRef.current = p;
     return p;
   }, []);
+
+  // Late mounts in the shell need the same verified response as the auth
+  // provider. Reuse the provider's navigation throttle and session boundary.
+  const readCurrentUser = useCallback(async () => {
+    const recent = () => verifiedRef.current?.gen === sessionRef.current.gen
+      && Date.now() - lastFetchRef.current < THROTTLE_MS;
+    if (recent()) return verifiedRef.current.me;
+    const result = await refresh({ force: true });
+    if (recent()) return verifiedRef.current.me;
+    throw result?.error ?? new Error('The current account could not be read.');
+  }, [refresh]);
 
   // Re-sync on every route change (throttled). Using pathname as the key
   // is intentional — query-only changes (e.g. ?status=open filter swaps)
@@ -264,6 +279,7 @@ export function AuthProvider({ children }) {
     oauthBootstrapping,
     linkBootstrapFailure,
     refresh,
+    readCurrentUser,
     setUser,
   };
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

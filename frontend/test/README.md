@@ -302,4 +302,5 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
 | `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |
 | `effective_legal_facts_8831.test.mjs` | D8831: approved policy corrections, protected regulatory rows, email-only notice and existing receipt versions. |
+| `shell_reads_9197.test.mjs` | D9197 mounted shell request budget, 429 replay and company switcher recovery. |
 `capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.

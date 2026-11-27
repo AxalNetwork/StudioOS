@@ -9,6 +9,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { pageMayHaveSession } from '../lib/sessionHint';
+import { useAuth } from '../hooks/useAuthSync';
 
 const STORAGE_KEY = 'axal_appearance_v1';
 const DEFAULTS = { theme: 'light' };
@@ -45,10 +46,12 @@ function applyTheme(theme) {
 export function SettingsProvider({ children }) {
   const cachedRaw = safeReadJSON(STORAGE_KEY, DEFAULTS);
   const cached = { theme: normalizeTheme(cachedRaw?.theme) };
+  const { user, readCurrentUser } = useAuth();
   const [appearance, setAppearanceState] = useState(cached);
   const [effectiveTheme, setEffectiveTheme] = useState(() => applyTheme(cached.theme));
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
+  const refreshVersion = useRef(0);
 
   // Apply on every change.
   useEffect(() => {
@@ -56,6 +59,8 @@ export function SettingsProvider({ children }) {
   }, [appearance.theme]);
 
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
+    const current = () => mountedRef.current && version === refreshVersion.current;
     // D5318 (#5318, H10): both reads below are the member's own and answer 401
     // to a visitor. With no sign of a session they are not sent: an anonymous
     // page keeps its cached theme and skips two requests on every load.
@@ -63,34 +68,37 @@ export function SettingsProvider({ children }) {
       if (mountedRef.current) setLoading(false);
       return;
     }
+    const me = await readCurrentUser().catch(() => null);
+    if (!current()) return;
+    const bundled = me?.shell?.settings;
     try {
-      const res = await api.getAppearanceSettings();
-      if (!mountedRef.current) return;
+      const res = bundled ?? await api.getAppearanceSettings();
+      if (!current()) return;
       const next = { theme: normalizeTheme(res?.theme) };
       setAppearanceState(next);
       safeWriteJSON(STORAGE_KEY, next);
     } catch {
       // Unauthenticated / network — keep cached values.
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (current()) setLoading(false);
     }
     // Task #15 — hydrate the page-explainer dismiss-list from the server.
     // localStorage is a read cache; server is source of truth so dismissals
     // roam across devices. Failure is silent (unauth / offline).
     try {
-      const ex = await api.getExplainersDismissed();
-      if (!mountedRef.current) return;
+      const ex = bundled ?? await api.getExplainersDismissed();
+      if (!current()) return;
       const list = Array.isArray(ex?.dismissed) ? ex.dismissed : [];
       try { localStorage.setItem('dismissed_explainers', JSON.stringify(list)); } catch {}
       try { window.dispatchEvent(new CustomEvent('axal:explainers_synced')); } catch {}
     } catch { /* noop */ }
-  }, []);
+  }, [readCurrentUser]);
 
   useEffect(() => {
     mountedRef.current = true;
     refresh();
     return () => { mountedRef.current = false; };
-  }, [refresh]);
+  }, [refresh, user?.id]);
 
   const setAppearance = useCallback(async (delta) => {
     const next = { theme: normalizeTheme(delta?.theme ?? appearance.theme) };

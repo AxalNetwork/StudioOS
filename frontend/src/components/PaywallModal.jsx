@@ -111,7 +111,7 @@ export default function PaywallModal({ user }) {
   const [feature, setFeature] = useState('');
   const location = useLocation();
   // D1050: the prices, from the plans read the checkout sheet and Pricing read.
-  const prices = usePlansRead();
+  const prices = usePlansRead(open);
 
   useEffect(() => {
     function onEvt(e) {

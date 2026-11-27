@@ -1697,7 +1697,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
 function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
-  const { oauthBootstrapping, linkBootstrapFailure } = useAuth();
+  const { oauthBootstrapping, linkBootstrapFailure, readCurrentUser } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
   // Task #24 — authoritative role from /api/me. The login token / stored
@@ -1778,8 +1778,10 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     }
     let cancelled = false;
     (async () => {
+      let shell;
       try {
-        const me = await api.getMe();
+        const me = await readCurrentUser();
+        shell = me.shell;
         if (cancelled) return;
         setKycStatus(me.kyc_status || 'not_started');
         setAccessLevel(me.access_level || null);
@@ -1817,16 +1819,21 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         }
       } catch {}
       try {
-        const r = await api.getMyPersonas();
-        if (cancelled) return;
-        const primary = r?.personas?.find((p) => p.is_primary) || r?.personas?.[0];
-        setPrimaryPersonaId(primary?.persona_id || null);
+        const bundled = shell?.persona;
+        if (bundled) {
+          setPrimaryPersonaId(bundled.primary);
+        } else {
+          const r = await api.getMyPersonas();
+          if (cancelled) return;
+          const primary = r?.personas?.find((p) => p.is_primary) || r?.personas?.[0];
+          setPrimaryPersonaId(primary?.persona_id || null);
+        }
       } catch {}
       // Phase 0.2 / Task #23 — onboarding resume.
       // Fetch the per-user wizard progress so RequireAuth can redirect
       // unfinished users back to the right /onboarding/<role> step.
       try {
-        const p = await api.onboardingGetProgress();
+        const p = shell?.progress ?? await api.onboardingGetProgress();
         if (cancelled || licenceChosen.current) return;
         setOnboardingFlow(p?.flow || null);
         setOnboardingComplete(!!p?.completed_at);
@@ -1840,7 +1847,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id]);
+  }, [user?.id, readCurrentUser]);
 
   // The effect above is keyed on `[user?.id]`, so it reads onboarding
   // progress once per session and never re-reads. That is fine until a

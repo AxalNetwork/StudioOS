@@ -590,7 +590,34 @@ export function sharedRead(name, run) {
   return read;
 }
 
-export async function request(path, options = {}) {
+// Only replay GETs with a usable Retry-After. Bound the wait so a long rate
+// window cannot keep the page loading indefinitely.
+function rateLimitDelay(response, method) {
+  if (response.status !== 429 || (method ?? 'GET').toUpperCase() !== 'GET') return null;
+  const header = response.headers?.get('Retry-After')?.trim();
+  if (!header) return null;
+  const delay = /^\d+$/.test(header) ? Number(header) * 1_000
+    : header.endsWith(' GMT') ? Date.parse(header) - Date.now() : NaN;
+  return Number.isFinite(delay) ? Math.min(5_000, Math.max(0, delay)) : null;
+}
+
+function waitForRateLimit(delay, signal) {
+  return new Promise((resolve, reject) => {
+    function aborted() {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', aborted);
+      reject(new DOMException('Request aborted', 'AbortError'));
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', aborted);
+      resolve();
+    }, delay);
+    if (signal?.aborted) aborted();
+    else signal?.addEventListener('abort', aborted, { once: true });
+  });
+}
+
+export async function request(path, options = {}, rateLimitRetried = false) {
   // Armed per attempt, never per call: the step-up retry below re-enters
   // `request()` after a modal the user may sit on for a minute, and that wait
   // must not eat the next attempt's deadline.
@@ -600,15 +627,16 @@ export async function request(path, options = {}) {
     // sets it (with the multipart boundary). Setting application/json here
     // would corrupt the request body.
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const authHeaders = getAuthHeaders();
     const csrfHeader = getCsrfHeader(options.method);
     const companyHeader = getActiveCompanyHeader();
     // D765: the rail's page (and option), so the Worker records and switches each run by it.
     const railHeader = railPageHeaders();
     const previewHeader = getInvestorPreviewHeader(options.method);
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers };
-    const res = await fetch(`${BASE}${path}`, {
+      ? { ...authHeaders, ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...authHeaders, ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers };
+    const send = () => fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
       // requests would send it anyway with `same-origin`, but `include` is
@@ -628,6 +656,19 @@ export async function request(path, options = {}) {
       headers: baseHeaders,
       signal: deadline.signal,
     });
+    let res = await send();
+    const delay = rateLimitDelay(res, options.method);
+    if (delay !== null && !rateLimitRetried) {
+      // Release the first response and keep the caller's deadline for the
+      // entire retry, including the wait.
+      void res.body?.cancel().catch(() => {});
+      await waitForRateLimit(delay, deadline.signal);
+      if (JSON.stringify(authHeaders) !== JSON.stringify(getAuthHeaders())) {
+        throw new DOMException('Request identity changed', 'AbortError');
+      }
+      rateLimitRetried = true;
+      res = await send();
+    }
     if (res.status === 204) return null;
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
@@ -776,7 +817,7 @@ export async function request(path, options = {}) {
         // The modal wait happens above, so this attempt is armed fresh by the
         // recursive call rather than inheriting a clock already part-spent.
         deadline.cleanup();
-        return request(path, { ...options, __steppedUp: true });
+        return request(path, { ...options, __steppedUp: true }, rateLimitRetried);
       }
       throw e;
     }
@@ -908,7 +949,7 @@ export const api = {
     request('/auth/sms/start-challenge', { method: 'POST', body: JSON.stringify({ email, recaptcha_token }) }),
   smsVerifyChallenge: (email, session_info, code) =>
     request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
-  getMe: () => request('/auth/me'),
+  getMe: () => sharedRead('auth:me', () => request('/auth/me')),
   // Task #178 — the affirmative act the re-acceptance interstitial collects.
   // No body: the only thing the server needs is who is calling, and the one
   // thing it must never accept is a user id — an acceptance recorded on
@@ -1408,7 +1449,7 @@ export const api = {
     // "Completed" bucket. Same scope/predicate as the header answered count,
     // so it includes free-form/reflection replies that never reach
     // field_sources (and thus were missing from /sources).
-    answered: () => request('/advisor/answered'),
+    answered: () => sharedRead('advisor:answered', () => request('/advisor/answered')),
     // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
     // + its mime type to the Workers AI Whisper endpoint; returns { text }.
     // The UI mic button that calls this is a separate task.
@@ -3099,16 +3140,16 @@ export const api = {
   //
   // D552 step 3 — with `surface`, one page's month and last run instead
   // (`?surface=<the page's path, as the router records it>`).
-  myAiSpend: (surface) => request(surface == null
+  myAiSpend: (surface) => sharedRead(`ai:spend:${surface ?? ''}`, () => request(surface == null
     ? '/ai/me/spend'
-    : `/ai/me/spend?surface=${encodeURIComponent(surface)}`),
+    : `/ai/me/spend?surface=${encodeURIComponent(surface)}`)),
 
   // The router's own routing table and price list. The rail quotes a cost
   // before a run and shows a receipt after it; assistCost.js already forces
   // both through ONE calculation, but the PRICES were a second copy — canvases
   // carry hand-written per-1M figures while the receipt is computed from
   // PRICE_USD_PER_1M_TOKENS in aiRouter. This removes that copy.
-  aiPricing: () => request('/ai/pricing'),
+  aiPricing: () => sharedRead('ai:pricing', () => request('/ai/pricing')),
 
   // Read back one workspace zone — the ONLY thing a workspace surface runs a
   // model for, and the reason the rail on those pages is allowed to name one
@@ -4064,7 +4105,7 @@ export const api = {
   // `/api/introductions/quota`. The 402 `{required, message, …}` shape from
   // the worker is auto-fanned into `studioos:tier_required` by the request
   // helper above, so PaywallModal opens automatically on quota exhaustion.
-  investorBillingStatus: () => request('/billing/investor/status'),
+  investorBillingStatus: () => sharedRead('billing:investor:status', () => request('/billing/investor/status')),
   // D816 (#2262): `interval` ('month' | 'year') overrides the plan key's own; omitted, the key's stands.
   investorCheckout: (plan, interval) =>
     request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify(interval ? { plan, interval } : { plan }) }),
@@ -4082,7 +4123,7 @@ export const api = {
     }) }),
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
-  introductionsQuota: () => request('/introductions/quota'),
+  introductionsQuota: () => sharedRead('introductions:quota', () => request('/introductions/quota')),
   // D6260: no trailing slash. The Worker mounts GET `/` under /api/introductions
   // and Hono is strict, so `/api/introductions/` is a 404 and the Asked view read as unavailable.
   listIntroductions: () => request('/introductions'),
@@ -5142,7 +5183,7 @@ export const api = {
     const q = qs.toString();
     return request(`/notifications${q ? `?${q}` : ''}`);
   },
-  notificationsUnreadCount: () => request('/notifications/unread-count'),
+  notificationsUnreadCount: () => sharedRead('notifications:unread', () => request('/notifications/unread-count')),
   markNotificationsRead: (data) =>
     request('/notifications/mark-read', { method: 'POST', body: JSON.stringify(data) }),
   getNotificationPrefs: () => request('/notifications/prefs'),
@@ -5914,7 +5955,7 @@ export const adminArticles = {
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.
 export const spinoutLab = {
-  state: () => request('/spinout-lab/state').then(rememberLabVenture),
+  state: () => sharedRead('spinout-lab:state', () => request('/spinout-lab/state').then(rememberLabVenture)),
   start: () => request('/spinout-lab/start', { method: 'POST' }),
   // D4659: name which of your own projects is the Lab venture.
   chooseVenture: (project_id) =>

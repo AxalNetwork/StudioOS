@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
@@ -256,6 +256,9 @@ function CompanySwitcher({ collapsed, role }) {
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
   const ref = useRef(null);
+  const pendingRead = useRef(null);
+  const { pathname } = useLocation();
+  const previousPath = useRef(pathname);
 
   // Create, then select. Appending to `companies` rather than refetching keeps
   // the one-writer rule intact: this component owns both writes.
@@ -280,30 +283,51 @@ function CompanySwitcher({ collapsed, role }) {
     }
   }
 
-  // Fetch all companies the current user is a member of.
-  useEffect(() => {
+  const readCompanies = useCallback(() => {
+    if (pendingRead.current) return;
+    const attempt = {};
+    pendingRead.current = attempt;
     const savedId = initActiveCompanyId();
+    setLoading(true);
     setReadState({ loading: true, failed: false });
     api.listMyCompanies()
       .then(list => {
+        if (pendingRead.current !== attempt) return;
         const arr = Array.isArray(list) ? list : [];
         setCompanies(arr);
-        // Restore the persisted company when it is still a membership; fall
-        // back to the primary company (is_primary_admin=true comes first).
+        // Memberships still decide whether a persisted selection is valid.
         const restored = savedId ? arr.find((co) => co.id === savedId) : null;
         const next = restored || arr[0] || null;
-        setActiveCompanyId(next?.id ?? null); setCompany(next);
+        setActiveCompanyId(next?.id ?? null);
+        setCompany(next);
+        setLoadError('');
         setReadState({ loading: false, failed: false });
       })
-      // A failed read used to be swallowed here, which rendered exactly like an
-      // account with no companies — the one state a user reports as "I created
-      // one and nothing appeared". Keep the reason.
       .catch((err) => {
-        setLoadError(err?.message || "Could not load your companies.");
+        if (pendingRead.current !== attempt) return;
+        setLoadError(err?.message || 'Could not load your companies.');
         setReadState({ loading: false, failed: true });
       })
-      .finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      .finally(() => {
+        if (pendingRead.current !== attempt) return;
+        pendingRead.current = null;
+        setLoading(false);
+      });
+  }, [setCompanies, setCompany]);
+
+  useEffect(() => {
+    readCompanies();
+    return () => { pendingRead.current = null; };
+  }, [readCompanies]);
+
+  useEffect(() => {
+    const moved = previousPath.current !== pathname;
+    previousPath.current = pathname;
+    if (!loadError) return undefined;
+    if (moved) readCompanies();
+    window.addEventListener('focus', readCompanies);
+    return () => window.removeEventListener('focus', readCompanies);
+  }, [loadError, pathname, readCompanies]);
 
   // D1413 (#3696, PF5): the projects nested under each company, read when the list opens.
   useEffect(() => {
@@ -351,7 +375,10 @@ function CompanySwitcher({ collapsed, role }) {
     }>
       {loading && <div className="px-3 py-2.5 text-xs text-gray-500">Loading…</div>}
       {!loading && loadError && (
-        <div className="px-3 py-2.5 text-xs text-red-600 dark:text-red-400">{loadError}</div>
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-xs text-red-600 dark:text-red-400">
+          <span role="status">{loadError}</span>
+          <button type="button" className="min-h-[44px] font-semibold underline" onClick={readCompanies}>Try again</button>
+        </div>
       )}
       {!loading && !loadError && companies.length === 0 && (
         <div className="px-3 py-2.5 text-xs text-gray-500">No company yet.</div>
