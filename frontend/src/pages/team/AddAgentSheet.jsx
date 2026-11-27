@@ -7,7 +7,7 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MUTED } from './teamUi.jsx';
 import { HOLD_LINE, RULEBOOK_SECTIONS, WHO_PAYS, initials, money } from './teamModel.js';
 import { SkillsStep } from './SkillSheets.jsx';
-import { previewRadar } from './skillsModel.js';
+import { previewRadar, wizardSkillsNext } from './skillsModel.js';
 import { SKILL_AXES } from '../../lib/assessmentMeta.js';
 import {
   COMPARE_MAX, NOT_RECORDED, agentValueBars, filterOptions, fitLine, gallery, galleryCount, onTeamKeys, pronouns, rolesFor,
@@ -240,7 +240,8 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
     if (!out.available) { setRefusal(out.reason); return; }
     onAdded?.(out.value);
   };
-  const next = ['Next: skills', 'Next: model and cap', `Add ${name} to ${scopeName}`];
+  // D8768 (TMS08): the Skills step says when it goes on with none.
+  const next = ['Next: skills', wizardSkillsNext(chosenSkills.length), `Add ${name} to ${scopeName}`];
   return (
     <Sheet title="Add an AI agent" sub={`Step ${step + 1} of ${STEPS.length} · ${titles[step]}`} width={640} onClose={onClose} testId="add-agent-sheet"
       footer={(

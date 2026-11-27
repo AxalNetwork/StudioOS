@@ -200,7 +200,6 @@ const SKILL_WORDS = {
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again.',
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
-  role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
   capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 } as const;
