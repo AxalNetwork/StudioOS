@@ -1,6 +1,7 @@
 /** D1263 (#3286): deterministic, local source adapters. Never calls a connector. */
 import type { Env } from '../types';
 import { loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings } from './painGroups';
+import { exponentOf } from '../../../frontend/src/lib/money.js';
 
 export const EVIDENCE_AREAS = [
   'Fundraising readiness', 'Investor narrative and Pitch deck', 'Use of funds', 'Data room',
@@ -54,7 +55,14 @@ export const EVIDENCE_RULES: readonly EvidenceRule[] = [
   { kind:'round-call-response', dataset:'responses', source_table:'round_call_recipients', areas:[CAPITAL], backs:['indicative_commitment'], source:'recorded', days:90, summary:'A round-call response is recorded; it is indicative, not received money.' },
   { kind:'typed-commitment', dataset:'prospects', source_table:'raise_prospects', areas:[CAPITAL], backs:['typed_commitment'], source:'typed', days:90, summary:'A founder-recorded commitment is stated, not bank-verified.' },
   { kind:'model-assumption', dataset:'models', source_table:'financial_models', areas:[MODEL], backs:['growth','churn','cac','margin'], source:'typed', days:90, summary:'A saved model assumption is recorded; it is modelled, not an actual.' },
+  // D5837 (#5837): never collected from every line. A row exists only once the founder chose one line of one exact revision for
+  // one claim (`raise_ledger_selections`); its one area follows that claim's surface, so it is never proposed (`buildCandidates`).
+  { kind:'ledger-fact', dataset:'ledger', source_table:'raise_ledger_selections', areas:[READINESS,NARRATIVE,FUNDS,MODEL], backs:['cash_balance','revenue','profit'], source:'connector', days:365, summary:'A figure the founder chose from one revision of a ledger statement is recorded.' },
 ];
+/** D5837: the evidence kind of a founder-chosen ledger fact, and the table it stands on. */
+export const LEDGER_EVIDENCE_KIND='ledger-fact';
+export const LEDGER_EVIDENCE_TABLE='raise_ledger_selections';
+export const isLedgerEvidence=(r:{kind:string}):boolean=>r.kind===LEDGER_EVIDENCE_KIND;
 
 /** Static, venture-bound selectors. Sync timestamps are never observation dates. */
 const QUERIES = {
@@ -125,6 +133,16 @@ const QUERIES = {
   responses: `SELECT r.id,r.commitment_cents,r.responded_at,r.last_response_at,r.committed_at FROM round_call_recipients r JOIN round_calls c ON c.id=r.call_id WHERE c.project_id=? AND r.responded_at IS NOT NULL`,
   prospects: `SELECT id,amount_cents,currency,commit_status,created_at,updated_at FROM raise_prospects WHERE project_id=? AND stage='committed' AND commit_status IS NOT NULL`,
   models: `SELECT id,assumptions_json,updated_at FROM financial_models WHERE project_id=? AND updated_by IS NOT NULL`,
+  // D5837: a current selection still standing on its exact revision and line, through the selecting founder's own active
+  // connection (member authority). A generic `project_metrics.source` string never reaches this query. A correction keeps the
+  // row (superseded_by changes the fingerprint: "changed"); a withdrawn, replaced, revoked or deleted source drops it.
+  ledger: `SELECT s.uid,s.area,s.figure,s.provider,s.report,s.snapshot_uid,s.revision,s.source_key,s.line_label,s.amount,s.amount_minor,s.currency,s.basis,s.precision,s.observed_on,
+    (SELECT n.uid FROM financial_statement_snapshots n WHERE n.supersedes_id=f.id) AS superseded_by FROM raise_ledger_selections s
+    JOIN financial_statement_snapshots f ON f.id=s.snapshot_id AND f.project_id=s.project_id AND f.uid=s.snapshot_uid
+    JOIN financial_statement_lines l ON l.snapshot_id=f.id AND l.source_key=s.source_key AND l.state IN ('value','zero') AND l.amount_minor=s.amount_minor
+    JOIN integrations i ON i.id=f.integration_id AND i.provider_key=f.provider AND i.status='active' AND i.user_id=s.selected_by
+    JOIN users u ON u.id=i.user_id AND u.is_active=1 JOIN projects p ON p.id=s.project_id AND p.deleted_at IS NULL AND p.founder_id=u.founder_id
+    WHERE s.project_id=? AND s.selected_by=? AND s.status='current'`,
 } as const;
 /** Exact source IDs for a displayed page/decision; the hourly builder deliberately has no ID filter. */
 const SOURCE_IDS:Record<Dataset,string>={
@@ -139,9 +157,11 @@ const SOURCE_IDS:Record<Dataset,string>={
  ipSteps:' AND f.id IN (SELECT value FROM json_each(?))',bankDocuments:' AND d.id IN (SELECT value FROM json_each(?))',safes:' AND m.id IN (SELECT value FROM json_each(?))',
  filings83b:' AND id IN (SELECT value FROM json_each(?))',receipts:' AND m.id IN (SELECT value FROM json_each(?))',responses:' AND r.id IN (SELECT value FROM json_each(?))',
  prospects:' AND id IN (SELECT value FROM json_each(?))',models:' AND id IN (SELECT value FROM json_each(?))',
+ ledger:' AND s.uid IN (SELECT value FROM json_each(?))',
 };
 export type EvidenceSourceRef=Pick<EvidenceCandidate,'kind'|'source_ref'>;
-const BANK_DATASETS = new Set<Dataset>(['bank','bankSpend','bankDocuments','safes','receipts']);
+/** Datasets bound to one member's own connection: the founder reading, or the founder who accepted a shared item. */
+const BANK_DATASETS = new Set<Dataset>(['bank','bankSpend','bankDocuments','safes','receipts','ledger']);
 export type EvidenceCandidate = {
   area: EvidenceArea; kind: string; source_table: string; source_ref: string; provider: string | null;
   source_label: EvidenceSourceLabel; strength: EvidenceStrength; observed_on: string | null; summary: string;
@@ -195,7 +215,23 @@ function provenance(row: DataRow): {label:EvidenceSourceLabel;provider:string|nu
 const METRICS: Record<string,string> = {mrr:'money',arr:'money',cac:'money',ltv:'money',monthly_churn_pct:'percent',active_users:'people',new_users:'people',net_burn:'money',headcount:'people',nrr_pct:'percent',paying_accounts:'accounts'};
 const DRIVERS: Record<string,string> = {monthly_growth_pct:'percent',monthly_churn_pct:'percent',cac:'money',gross_margin_pct:'percent'};
 
-type Material = {row:DataRow;ref:string;date:unknown;value?:unknown;unit?:string;source?:EvidenceSourceLabel;provider?:string;privateReason?:'bank'|'quote';strength?:EvidenceStrength};
+type Material = {row:DataRow;ref:string;date:unknown;value?:unknown;unit?:string;source?:EvidenceSourceLabel;provider?:string;privateReason?:'bank'|'quote';strength?:EvidenceStrength;areas?:readonly EvidenceArea[]};
+/**
+ * D5837: one ledger selection as its fingerprint reads it, fixed keys in a fixed order with fixed types, so the item written
+ * when the founder pins (`raiseLedgerEvidence.ts`) and the row read back here give the same snapshot hash.
+ */
+export function ledgerMaterial(r:DataRow):DataRow{
+  const s=(v:unknown)=>v==null?null:String(v);
+  return {uid:s(r.uid),area:s(r.area),figure:s(r.figure),provider:s(r.provider),report:s(r.report),snapshot_uid:s(r.snapshot_uid),revision:Number(r.revision),
+    source_key:s(r.source_key),line_label:s(r.line_label),amount:s(r.amount),amount_minor:s(r.amount_minor),currency:s(r.currency),basis:s(r.basis),
+    precision:Number(r.precision),observed_on:s(r.observed_on),superseded_by:s(r.superseded_by)};
+}
+/** D5837: a ledger amount in the currency's minor units, exactly, or null when it cannot be (finer than the currency, or past 2^53). */
+export function ledgerMinorUnits(amountMinor:string,precision:number,exponent:number|null):number|null{
+  if(exponent==null||!/^-?\d+$/.test(amountMinor)||precision>exponent)return null;
+  const v=BigInt(amountMinor)*10n**BigInt(exponent-precision);
+  const n=Number(v);return Number.isSafeInteger(n)&&BigInt(n)===v?n:null;
+}
 function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
   const out:Material[]=[];
   for(const row of rows){
@@ -236,9 +272,39 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
       case 'round-call-response': add(row.last_response_at??row.responded_at,row.commitment_cents,'cents');break;
       case 'typed-commitment': add(null,row.amount_cents,'cents');break;
       case 'model-assumption': {const a=parse(row.assumptions_json);for(const [key,unit] of Object.entries(DRIVERS))if(num(a[key])!=null)add(row.updated_at??row.created_at,a[key],unit,id+':'+key);break;}
+      case 'ledger-fact': {const r=ledgerMaterial(row),area=EVIDENCE_AREAS.find(a=>a===r.area);if(!area||!r.uid)throw new Error('source_unreadable');
+        const minor=ledgerMinorUnits(String(r.amount_minor),Number(r.precision),exponentOf(String(r.currency)));
+        out.push({row:r,ref:String(r.uid),date:r.observed_on,value:minor,unit:minor==null?undefined:'cents',provider:String(r.provider),areas:[area]});break;}
     }
   }
   return out;
+}
+
+async function ruleCandidates(rule:EvidenceRule,rows:DataRow[],projectId:number,key:CryptoKey|null,now:string):Promise<EvidenceCandidate[]>{
+  const candidates:EvidenceCandidate[]=[];
+  for(const m of materials(rule,rows)){
+    if(!key)throw new Error('source_unreadable');
+    if(!/^[A-Za-z0-9_:./-]{1,200}$/.test(m.ref))throw new Error('source_unreadable');
+    const origin=provenance(m.row), label=m.source??(rule.source==='record'?origin.label:rule.source);
+    const provider=m.provider??(label==='connector'?(origin.provider??(rule.private_reason==='bank'?'mercury':null)):null);
+    const observed=evidenceDate(m.date), strength=m.strength??(label==='typed'?'anecdote':num(m.value)!=null||label==='signed'?'measured':label==='document'?'pattern':'anecdote');
+    const privateReason=m.privateReason??rule.private_reason??(sourceProvider(m.row)==='mercury'?'bank':null);
+    for(const area of m.areas??rule.areas){const snapshot_hash=await evidenceHash({project_id:projectId,kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,source_label:label,provider,observed_on:observed,strength,private_reason:privateReason,summary:rule.summary,value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),material:m.row},key);
+      candidates.push({kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,provider,source_label:label,strength,observed_on:observed,summary:rule.summary,
+        value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),snapshot_hash,private_reason:privateReason,backs:rule.backs,
+        stale:evidenceStale(observed,rule.days,now),date_reason:observed?null:'The source has no recorded observation date; a sync timestamp is not used.'});}
+  }
+  return candidates;
+}
+/**
+ * D5837: the candidate one ledger selection makes, built by the same code `collectEvidenceSources` runs on the row the
+ * `ledger` query returns. The pin writes its item from this before the selection exists, so the two fingerprints agree.
+ */
+export async function ledgerCandidate(env:Env,projectId:number,row:DataRow,now=new Date().toISOString()):Promise<EvidenceCandidate>{
+  const rule=EVIDENCE_RULES.find(r=>r.kind===LEDGER_EVIDENCE_KIND)!;
+  const [candidate]=await ruleCandidates(rule,[row],projectId,await snapshotKey(env).catch(()=>null),now);
+  if(!candidate)throw new Error('source_unreadable');
+  return candidate;
 }
 
 /** bankUserId is an authenticated founder's own connection owner, never an investor ID supplied in a request. */
@@ -277,18 +343,8 @@ export async function collectEvidenceSources(env:Env, projectId:number, bankUser
   const key=await snapshotKey(env).catch(()=>null);
   const candidates:EvidenceCandidate[]=[];
   for(const rule of EVIDENCE_RULES){if(onlyKinds&&!onlyKinds.includes(rule.kind))continue;const rows=data.get(rule.dataset);if(!rows)continue;
-    try{for(const m of materials(rule,rows)){
-      if(!key)throw new Error('source_unreadable');
-      if(!/^[A-Za-z0-9_:./-]{1,200}$/.test(m.ref))throw new Error('source_unreadable');
-      const origin=provenance(m.row), label=m.source??(rule.source==='record'?origin.label:rule.source);
-      const provider=m.provider??(label==='connector'?(origin.provider??(rule.private_reason==='bank'?'mercury':null)):null);
-      const observed=evidenceDate(m.date), strength=m.strength??(label==='typed'?'anecdote':num(m.value)!=null||label==='signed'?'measured':label==='document'?'pattern':'anecdote');
-      const privateReason=m.privateReason??rule.private_reason??(sourceProvider(m.row)==='mercury'?'bank':null);
-      for(const area of rule.areas){const snapshot_hash=await evidenceHash({project_id:projectId,kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,source_label:label,provider,observed_on:observed,strength,private_reason:privateReason,summary:rule.summary,value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),material:m.row},key);
-        candidates.push({kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,provider,source_label:label,strength,observed_on:observed,summary:rule.summary,
-          value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),snapshot_hash,private_reason:privateReason,backs:rule.backs,
-          stale:evidenceStale(observed,rule.days,now),date_reason:observed?null:'The source has no recorded observation date; a sync timestamp is not used.'});}
-    }}catch{const b=blocks.find(b=>b.dataset===rule.dataset)!;b.state='unreadable';b.count=null;b.reason='This source could not be read. Try again.';}
+    try{candidates.push(...await ruleCandidates(rule,rows,projectId,key,now));}
+    catch{const b=blocks.find(b=>b.dataset===rule.dataset)!;b.state='unreadable';b.count=null;b.reason='This source could not be read. Try again.';}
   }
   const failed=new Set(blocks.filter(b=>b.state==='unreadable').map(b=>b.dataset));
   const validKinds=new Set(EVIDENCE_RULES.filter(r=>!failed.has(r.dataset)).map(r=>r.kind));
