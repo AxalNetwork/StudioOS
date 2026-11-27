@@ -9,7 +9,7 @@ its data, passes it in, and does only what these functions allow.
 
 | File | What it holds |
 | --- | --- |
-| `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
+| `rules.mjs` | `mode()` (the kind's switch from `SWITCHES`: `LANDING_BOT_FEEDER_ENABLED` for the feeder, `LANDING_BOT_ENABLED` for every other kind; `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
 | `concurrency.mjs` | Queue admission holds (#8076, D8076), pure: at most `PRIVILEGED_IN_QUEUE` `pr:privileged` PRs and `PER_SLOT_IN_QUEUE` PRs per slot in the merge queue, the one-line reason for a hold, and the shared-state workflows' concurrency groups. |
 | `ejection-rules.mjs` | The ejection handler's pure rules (#6476): consent, the class of an ejection, and the decision to re-queue, label or hand to the keeper or repair. |
 | `conflict-indicator.mjs` | The PR-list conflict indicator (#6476, D6476-p5): labels a confirmed conflict `conflict` and clears it only on a fresh `mergeable: true` for the current head and main. Labels only. |
@@ -59,12 +59,14 @@ Configure the GitHub Actions environment `landing-bot` to accept deployments fro
 | Actions repository variable | Meaning |
 | --- | --- |
 | `LANDING_AUTO` | The existing landing-policy switch. Queue admission also requires the live PR settings and #5500 closed as completed. |
-| `LANDING_BOT_ENABLED` | Unset disables the feeder. Use `dispatch` for the first named T0 rehearsal. Use `true` for scheduled sweeps after #6480 and the rehearsal. |
+| `LANDING_BOT_FEEDER_ENABLED` | The feeder's own switch (D6481-p2). Unset disables it. Use `dispatch` for the first named T0 rehearsal. `true` adds scheduled sweeps, which still wait until #6480 is closed as completed. `LANDING_BOT_ENABLED` does not turn the feeder on, and this variable does not turn on the keeper, refresh, repair or recovery. |
 | `LANDING_BOT_FEED_PER_SWEEP` | Maximum queue requests per run, also bounded by available queue build slots. |
 | `LANDING_BOT_DAILY_FEEDS` | Maximum reserved first-entry requests per UTC day. Skipped or ambiguous writes after reservation still consume their reserved slots. |
 | `LANDING_BOT_QUEUE_FAIL_BREAKER` | Maximum unsuccessful share of the last 20 completed CI merge-group runs. A value of `0.20` stops admission at four unsuccessful runs. |
 
-Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_ENABLED`.
+Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_FEEDER_ENABLED`.
+
+**The Ready flow (D6481-p2).** Clicking Ready for review starts CI's full suite (`ci.yml` already lists `ready_for_review`) and a fresh `landing policy` report for the same head (`landing-policy.yml` lists it too), so a report written while `LANDING_AUTO` was false, or while the PR was a draft, does not keep it out. The next sweep admits the PR once the full suite has passed on that exact head in an unchanged `ci.yml`. Every listed PR that is not admitted gets one `waiting` line in the run summary that names the kind of wait: checks, policy, conflict, hold, owner review, queue or capacity.
 
 **Concurrency holds (#8076, D8076).** Before it plans an entry, and again before each write, the feeder reads the
 queue's entries and each candidate's slot. The slot is the `slot:S…` label on the issue the PR body names. It then
@@ -166,8 +168,17 @@ handler never queue one.
 | `LANDING_BOT_MAX_CONFLICT_FILES` | The most conflicted files a model is asked to resolve. Unset is 0: none. |
 | `LANDING_BOT_MAX_CONFLICT_LINES` | The most lines inside conflict blocks, across those files. Unset is 0: none. |
 | `LANDING_BOT_DAILY_MODEL_RUNS` | Resolver runs that may call a model per UTC day. Unset is 0. |
+| `LANDING_BOT_MANUAL_CONFLICT` | `true` lets a manual "Fix conflicts" request (#7109) run. Anything else: the request stops in `plan`, quietly. |
 
-Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`.
+**A manual request (#7109, D7109).** Merge Control's advisory **Merge queue conflict** check dispatches this same
+workflow when a repository writer clicks **Fix conflicts**, with `expected_head`, `expected_base` and a 16-hex
+`request` id (also in the run name). `plan` stops before any model call unless `LANDING_BOT_MANUAL_CONFLICT` is
+`true`, the head and base are the pinned ones, the PR is out of the merge queue, GitHub still reports the conflict,
+and no earlier run carries the id; `apply` checks the switch, base and queue again before it pushes. A request
+that cannot run leaves one sticky line saying why (`report`), with no label. Every rule above still applies: the
+request only narrows when the resolver runs, and the owner still lands the result.
+
+Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`, `frontend/test/landing_bot_manual_conflict_7109.test.mjs`.
 
 ## The ejection handler
 
@@ -186,7 +197,13 @@ ejection, then:
   - `[alert] merge queue stalled` is not open;
   - this PR has had fewer than 2 re-queues in 24 hours;
   - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
-  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
+  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`;
+  - **then, just before the enqueue,** a fresh landing decision for that exact head allows it (D6476-p7):
+    `readLandingDecision()` from `feeder-github.mjs`, which runs `landPr.decide()`. That means `LANDING_AUTO` is
+    true now and on the head's `landing policy` report, #5500 is done, main still requires the merge queue, the
+    tier is T0 or T1, `landing-policy.yml` is untouched and `[alert] merge queue stalled` is not open.
+    `requeuePolicy()` and `gateRequeue()` in `ejection-rules.mjs` turn a refusal into a wait, or into a hand-back
+    for T2, a draft, a PR not open on main or an edited `landing-policy.yml`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
 ## The conflict indicator

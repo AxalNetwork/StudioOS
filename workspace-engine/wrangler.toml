@@ -1,0 +1,35 @@
+# D5566: candidate only. No deploy/provision is authorized by committing this file.
+# The owner's preview setup (D5566-p2) is the only path to an account write; no workflow deploys this file.
+name = "studioos-workspace-disabled"
+main = "worker/index.ts"
+compatibility_date = "2026-11-02"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+WORKSPACE_PILOT = "off"
+
+[env.preview]
+name = "studioos-workspace-preview"
+workers_dev = false
+preview_urls = false
+
+[env.preview.vars]
+WORKSPACE_PILOT = "off"
+
+[[env.preview.durable_objects.bindings]]
+name = "WORKSPACES"
+class_name = "CodingWorkspace"
+
+[[env.preview.migrations]]
+tag = "5566-preview-v1"
+new_sqlite_classes = ["CodingWorkspace"]
+
+[[env.preview.containers]]
+class_name = "CodingWorkspace"
+scheduling_policy = "durable_object"
+
+[env.preview.containers.images.coding]
+dockerfile = "./container/Dockerfile"
+build_context = "./container"

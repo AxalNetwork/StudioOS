@@ -46,6 +46,9 @@ jobs:
       LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
       LANDING_BOT_DAILY_REQUEUES: ${{ vars.LANDING_BOT_DAILY_REQUEUES }}
       LANDING_BOT_QUEUE_FAIL_BREAKER: ${{ vars.LANDING_BOT_QUEUE_FAIL_BREAKER }}
+      # D6476-p7: a re-queue needs LANDING_AUTO true now, as well as on the head's landing policy report.
+      # Classifying and labelling run whatever it says.
+      LANDING_AUTO: ${{ vars.LANDING_AUTO }}
       EJECTION_PR: ${{ inputs.pr }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -154,13 +154,13 @@ async function sha256(value: unknown): Promise<string> {
   return [...new Uint8Array(hash)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** The national archive's bytes and its Last-Modified date, bounded; any transport or size problem is a classed failure. */
-export async function providerArchive(url: string): Promise<{ bytes: Uint8Array; lastModified: string | null }> {
+/** A provider file's bytes and its Last-Modified date, bounded (D7928 passes its own cap); any transport or size problem is a classed failure. */
+export async function providerArchive(url: string, maxBytes: number = CBP_IMPORT_LIMITS.archive_bytes): Promise<{ bytes: Uint8Array; lastModified: string | null }> {
   let response: Response;
   try { response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(20_000) }); }
   catch { throw new ImportFailure('provider_transport'); }
   if (!response.ok) { await response.body?.cancel(); throw new ImportFailure('provider_http', response.status); }
-  if (Number(response.headers.get('content-length')) > CBP_IMPORT_LIMITS.archive_bytes) {
+  if (Number(response.headers.get('content-length')) > maxBytes) {
     await response.body?.cancel(); throw new ImportFailure('provider_payload', response.status);
   }
   const reader = response.body?.getReader();
@@ -170,7 +170,7 @@ export async function providerArchive(url: string): Promise<{ bytes: Uint8Array;
     while (true) {
       const next = await reader.read(); if (next.done) break;
       size += next.value.byteLength;
-      if (size > CBP_IMPORT_LIMITS.archive_bytes) { await reader.cancel(); throw new ImportFailure('provider_payload', response.status); }
+      if (size > maxBytes) { await reader.cancel(); throw new ImportFailure('provider_payload', response.status); }
       chunks.push(next.value);
     }
   } catch (error) {

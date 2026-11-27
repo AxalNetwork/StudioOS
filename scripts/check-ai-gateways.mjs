@@ -76,12 +76,14 @@ export function codeFacts(src) {
   facts.providerSwitch = sw?.[1]; facts.providerSlug = slug?.[1];
   need('cloudflare-worker/src/services/aiProviders.ts', /GATEWAY_SLUG_RE\.test\(slug\)\)\s*missing\.push\(GATEWAY_TEXT_SLUG_VAR\)/, 'gatewayConfig slug requirement');
   need('cloudflare-worker/src/services/agents/agentRun.ts', /g\.kind === 'none' && engineRun && !inferenceStubOn\(env\)\) return no\(503, 'gateway_required'/, "gatewayRefusal 'gateway_required'");
-  const block = (name) => {
-    const m = need(cat, new RegExp(`export const ${name}[^=]*= Object\\.freeze\\(\\[([\\s\\S]*?)\\n\\]\\);`), name);
+  const block = (name, pattern) => {
+    const m = need(cat, pattern, name);
     return m ? [...m[1].matchAll(/\bid: '([^']+)',\s*\n\s*provider: '([a-z]+)'/g)].map((x) => ({ id: x[1], provider: x[2] })) : [];
   };
-  facts.anthropicModels = block('PROVIDER_MODELS').filter((m) => m.provider === 'anthropic').map((m) => m.id);
-  facts.openaiModels = block('GATEWAY_TEXT_MODELS').filter((m) => m.provider === 'openai').map((m) => m.id);
+  facts.anthropicModels = block('PROVIDER_MODELS', /export const PROVIDER_MODELS[^=]*= Object\.freeze\(\[([\s\S]*?)\n\]\);/)
+    .filter((m) => m.provider === 'anthropic').map((m) => m.id);
+  facts.openaiModels = block('GATEWAY_TEXT_MODELS', /export const GATEWAY_TEXT_MODELS[^=]*= Object\.freeze\(\[([\s\S]*?)\n\]\);/)
+    .filter((m) => m.provider === 'openai').map((m) => m.id);
   return facts;
 }
 

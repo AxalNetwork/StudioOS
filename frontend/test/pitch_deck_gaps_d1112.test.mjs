@@ -265,6 +265,7 @@ test('PD17 mounted: the two options apply to PowerPoint and PDF, and travel with
     await act(async () => { v.pr(v.by('pitch-export-sources')).onChange({ target: { checked: false } }); });
     await v.settle();
     await v.press(v.by('pitch-export-run'));
-    assert.deepEqual(sent, [[40, 'pptx', { notes: true, sources: true }], [40, 'pdf', { notes: true, sources: false }]]);
+    // D8771 (#8771): the dialog opens on the investor copy — no notes, the Sources appendix.
+    assert.deepEqual(sent, [[40, 'pptx', { notes: false, sources: true }], [40, 'pdf', { notes: false, sources: false }]]);
   } finally { await v.unmount(); }
 });

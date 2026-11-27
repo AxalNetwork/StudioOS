@@ -9,8 +9,13 @@ name: Landing bot conflict resolver
 # never forced. Never main, never a merge, approval or queue entry: the owner
 # lands every model-resolved pull request.
 # scripts/landing-bot/README.md, "The conflict resolver", has the rules.
+# #7109: Merge Control's "Fix conflicts" check dispatches this same workflow with
+# the head and base the request was made for and a request id. The plan refuses
+# unless LANDING_BOT_MANUAL_CONFLICT is true, both pins hold, the pull request is
+# out of the queue and still conflicting, and no earlier run carried the id; the
+# apply job rechecks them before it pushes. Every other rule is unchanged.
 
-run-name: Conflict resolver for #${{ inputs.pr }}
+run-name: Conflict resolver for #${{ inputs.pr }}${{ inputs.request != '' && format(' (request {0})', inputs.request) || '' }}
 
 on:
   workflow_dispatch:
@@ -18,6 +23,21 @@ on:
       pr:
         description: The conflicted pull request to resolve
         required: true
+        type: string
+      expected_head:
+        description: Manual request only (#7109) - the pull request head the request was made for
+        required: false
+        default: ''
+        type: string
+      expected_base:
+        description: Manual request only (#7109) - the base the request was made for
+        required: false
+        default: ''
+        type: string
+      request:
+        description: Manual request only (#7109) - its 16-hex request id
+        required: false
+        default: ''
         type: string
 
 permissions: {}
@@ -50,7 +70,11 @@ jobs:
       LANDING_BOT_DAILY_PUSHES: ${{ vars.LANDING_BOT_DAILY_PUSHES }}
       LANDING_BOT_MAX_CONFLICT_FILES: ${{ vars.LANDING_BOT_MAX_CONFLICT_FILES }}
       LANDING_BOT_MAX_CONFLICT_LINES: ${{ vars.LANDING_BOT_MAX_CONFLICT_LINES }}
+      LANDING_BOT_MANUAL_CONFLICT: ${{ vars.LANDING_BOT_MANUAL_CONFLICT }}
       RESOLVE_PR: ${{ inputs.pr }}
+      MANUAL_EXPECTED_HEAD: ${{ inputs.expected_head }}
+      MANUAL_EXPECTED_BASE: ${{ inputs.expected_base }}
+      MANUAL_REQUEST: ${{ inputs.request }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -111,7 +135,8 @@ jobs:
     needs: [plan, resolve]
     if: >-
       always() && github.repository == 'AxalNetwork/StudioOS' &&
-      (needs.plan.outputs.decision == 'resolve' || needs.plan.outputs.decision == 'handback')
+      (needs.plan.outputs.decision == 'resolve' || needs.plan.outputs.decision == 'handback' ||
+      needs.plan.outputs.decision == 'report')
     environment: landing-bot
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -122,6 +147,7 @@ jobs:
       actions: read
     env:
       LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_MANUAL_CONFLICT: ${{ vars.LANDING_BOT_MANUAL_CONFLICT }}
       MODEL_OUTCOME: ${{ needs.resolve.outputs.outcome }}
       # #8506: the controller commit the model runner's jobs ran; this job runs github.sha and refuses a patch unless
       # they are one commit and the patch's record names it.

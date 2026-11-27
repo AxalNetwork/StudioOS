@@ -1,13 +1,13 @@
 # Merge Control policy check
 
-What the `merge-control/policy` check is and what each tier means. It also covers what a person does with `action_required`, what is not built yet, and how to stop the service. Part of #5620 (scope item 8), written for #5991.
+What the `merge-control/policy` check is and what each tier means. It also covers what a person does with `action_required`, how the owner signs off a T2 head, and how to stop the service. Part of #5620 (scope item 8), written for #5991.
 
 ## Status: code on main, not live
 
-- **Built:** the classifier (D5620, #6368) and the code that posts the check with one audit row per decision (D5990, #8352).
+- **Built:** the classifier (D5620, #6368), the code that posts the check with one audit row per decision (D5990, #8352), and the owner sign-off route with the merge-queue rule that reads it (D8834, #8834).
 - **Not done:**
   - The Merge Control App's deployment, its `checks: write` grant and its `pull_request` subscription are owner steps on #5618.
-  - Until they are done, no `merge-control/policy` check appears on any pull request or merge group.
+  - Until they are done, no `merge-control/policy` check appears on any pull request or merge group, and no sign-off can be made.
 - **Not a required check yet:**
   - It is not one of the `main` ruleset's required contexts.
   - Adding it, pinned to the App's integration id, is #5500's change.
@@ -74,27 +74,44 @@ The change is also T2 when it does any of these:
 ### The conclusion
 
 - **`success`:** only for a completed classification of T0 or T1.
-- **`action_required`:** everything else, with tier T2 and the reasons. A T2 merge-group head is always `action_required` and carries the reason "owner sign-off is not built yet (#5620 items 4 and 5)".
+- **`action_required`:** everything else, with tier T2 and the reasons. A T2 merge-group head is `action_required` unless its pull request has an owner sign-off for the enqueued head (see "Sign-off" below). It then carries the reason "a T2 merge-group head passes only with an owner sign-off for its enqueued pull request head" and the reason the sign-off did not count.
+- **A signed-off T2 head:** `success` with tier T2 and the title "T2: signed off by the owner".
 
 ## What `action_required` asks a person to do
 
 - **Read the check's reasons first.** Each one names the file and the rule it hit.
-- **A real T2 change** (a migration, a privileged path, a test that loses coverage): the owner lands it, as D5605 row 6 says. Nothing in the check can be satisfied by a label, a comment or an approving review.
+- **A real T2 change** (a migration, a privileged path, a test that loses coverage): the owner lands it, as D5605 row 6 says, by signing off the head (see "Sign-off" below). Nothing in the check can be satisfied by a label, a comment or an approving review.
 - **A reason the change did not mean to cause** (a dropped assertion, a changed timeout, an edited baseline): fix the branch and push. The new head gets a new decision.
 - **A failure reason** ("GitHub compare unavailable", "evaluation exceeded 15000 ms", a truncated list): this is not about the change. See "Fail closed" below.
 
-## Sign-off: not built yet
+## Sign-off: built, not deployed
 
-Owner sign-off is **not built yet**. There is no `signoff.ts` and no sign-off route on main, so nothing turns a T2 head into `success` today.
+Owner sign-off is in [`merge-control/src/signoff.ts`](../../merge-control/src/signoff.ts) ([D8834](../architecture/decisions/D8834.md), #5620 items 4 and 5). It is **not deployed**: like the rest of Merge Control it waits on #5618, so no sign-off can be made today.
 
-What #5620 specifies for it (scope items 4 and 5):
-- **`signoff.ts`:** an owner-only route behind Merge Control's owner authentication (#5618).
-- **What it stores:** `{pr, head_sha, actor, policy_version, at}`.
-- **What it posts:** `success` for that SHA only. A new push needs a new sign-off.
-- **What it ignores:** labels, comments and reviews.
-- **The merge queue:** a T2 `merge_group` head passes only when its pull request has a sign-off for the enqueued head SHA.
+### Signing off a pull request head
 
-This section is replaced by the real route once that part of #5620 merges.
+- **The route:** `POST /signoff` with body `{"pr": <number>, "head_sha": "<40-hex SHA>", "actor": "<GitHub login>"}` and the owner's Bearer token, the same token as `/switch` and `/claims`. A call without that token gets 401.
+- **What it checks first.** Each refusal is a 409 that stores nothing:
+  - the kill switch is off (`kill_switch_on`);
+  - `head_sha` is the head Merge Control last recorded for that pull request from its `opened`, `synchronize` or `reopened` deliveries (`not_current_head`);
+  - that head has a policy decision under the running `policy_version` (`no_decision`).
+- **What it stores:** `{pr, head_sha, actor, policy_version, at}`, keyed by the pull request and the exact head SHA. It writes one `signoff` row to the append-only audit table. Repeating the call stores and audits nothing new.
+- **What it posts:** a `merge-control/policy` check run with `success` on that SHA only. A new push is a new head, and it needs a new sign-off.
+- **What it ignores:** labels, comments and reviews, an approval included. None of them reaches the route or creates a sign-off.
+- **A new deploy:** a sign-off counts only under the `policy_version` it was made under. After a deploy, the owner signs off again.
+
+### The merge queue
+
+A T2 `merge_group` head passes only when all of these hold:
+- the queue branch (`gh-readonly-queue/main/pr-<n>-<sha>`) names pull request `<n>`;
+- Merge Control has recorded a head for `<n>`, and that exact head has a sign-off under this `policy_version`;
+- the candidate is built from that head:
+  - its only parent is the group's `base_sha`;
+  - each path in its tree is what a three-way merge of the base and the signed head gives, over their merge base.
+
+A path that both sides changed differently needs a content merge, which the GitHub API cannot check. That candidate stays `action_required`. Rebase the pull request, then sign off the new head.
+
+Anything else is `action_required` with the reason. That includes a missing number, head or sign-off, a sign-off under another `policy_version`, a candidate that does not match, an API or storage error and a timeout. A merge group decided before the sign-off keeps its decision. Queue the pull request again for a new candidate.
 
 ## Break-glass
 
@@ -134,4 +151,5 @@ Each switch writes an audit row. Turning the switch off for the first time is a 
 - [#5600](https://github.com/AxalNetwork/StudioOS/issues/5600) for the landing tiers and [D5605](../architecture/decisions/D5605.md) for the owner's landing decisions.
 - [D5618](../architecture/decisions/D5618.md) for the App and Worker, and [D5620](../architecture/decisions/D5620.md) for the classifier and `evaluate`.
 - [D5990](../architecture/decisions/D5990.md) for the check run and its audit.
-- #5500 for the ruleset, #5501 for the context list, and #5620 for sign-off.
+- [D8834](../architecture/decisions/D8834.md) for the sign-off route and the merge-queue rule.
+- #5500 for the ruleset, #5501 for the context list, and #5620 for the live proof of sign-off.

@@ -192,3 +192,53 @@ test('D6255: the Delivered column uses scoped period receipts even when legacy r
     await view.unmount();
   }
 });
+
+test('D6240: the period page lists each LP for the manager, with No account, and Not recorded for a period issued before delivery was recorded', () => {
+  const issued = { ...period, status: 'issued', issued_at: '2026-07-15T10:00:00Z',
+    lp_delivery: { state: 'recorded', delivered: 2, total: 4, opened: 1, failed: 1, no_account: 1 },
+    lp_deliveries_reason: null,
+    lp_deliveries: [
+      { lp_id: 3, name: 'Sample LP A', lp_removed: false, state: 'failed', made_available_at: null, opened_at: null },
+      { lp_id: 4, name: 'Sample LP B', lp_removed: false, state: 'not_sent', made_available_at: null, opened_at: null },
+      { lp_id: 5, name: 'Sample LP C', lp_removed: false, state: 'made_available', made_available_at: '2026-07-15T10:00:00Z', opened_at: null },
+      { lp_id: 6, name: null, lp_removed: true, state: 'opened', made_available_at: '2026-07-15T10:00:00Z', opened_at: '2026-07-16T09:30:00Z' },
+    ] };
+  const html = render(FundReportPeriodPage, ready({ ...page, period: issued }));
+  assert.match(html, /data-testid="period-lp-delivered">2 of 4<small>1 opened · 1 no account · 1 failed<\/small>/);
+  const rows = [...html.matchAll(/data-testid="row-lp-delivery">(.*?)<\/tr>/g)].map(m => m[1].replace(/<[^>]+>/g, '|').replace(/\|+/g, '|'));
+  assert.deepEqual(rows, [
+    '|Sample LP A|Failed|Notice failed|Not opened|',
+    '|Sample LP B|No account|No active linked account|Not made available|Not opened|',
+    '|Sample LP C|Made available|Jul 15, 2026, 10:00 AM UTC|Not opened|',
+    '|LP 6|LP record removed|Opened|Jul 15, 2026, 10:00 AM UTC|Jul 16, 2026, 9:30 AM UTC|',
+  ]);
+  // An LP never sees the list, even if a reply carried it.
+  const lp = render(FundReportPeriodPage, ready({ ...page, can_manage: false, period: issued }));
+  assert.doesNotMatch(lp, /Delivery to LPs|period-lp-delivered|Sample LP B/);
+  // Legacy: the Worker's reason, never an empty list or 0 of m.
+  const legacy = render(FundReportPeriodPage, ready({ ...page, period: { ...issued,
+    lp_delivery: { state: 'not_recorded', delivered: null, total: null, opened: null, failed: null, no_account: null },
+    lp_deliveries: null, lp_deliveries_reason: 'Not recorded: this period was issued before delivery was recorded for each LP.' } }));
+  assert.match(legacy, /period-lp-delivered">Not recorded · issued before delivery was recorded</);
+  assert.match(legacy, /lp-deliveries-reason"><b>Not recorded<\/b> this period was issued before delivery was recorded for each LP\.</);
+  assert.doesNotMatch(legacy, /row-lp-delivery|0 of/);
+  const unreadable = render(FundReportPeriodPage, ready({ ...page, period: { ...issued, lp_deliveries: null, lp_deliveries_reason: 'Unreadable: the per-LP delivery could not be read.' } }));
+  assert.match(unreadable, /<b>Unreadable<\/b> the per-LP delivery could not be read\./);
+});
+
+test('D6240: the reporting zone shows n of m in the archive and the Delivered tile', async t => {
+  t.mock.method(api, 'fundsList', async () => ({ items: [{ id: 10, name: 'Recorded Fund', can_manage: true }] }));
+  t.mock.method(api, 'fundsReportPeriods', async () => ({ items: [
+    { id: 3, period: 'Q4 2026', status: 'draft' },
+    { ...period, id: 2, period: 'Q3 2026', status: 'issued', lp_delivery: { state: 'recorded', delivered: 2, total: 3, opened: 0, failed: 0, no_account: 1 } },
+    { ...period, status: 'issued', lp_delivery: { state: 'not_recorded', delivered: null, total: null, opened: null, failed: null, no_account: null } },
+  ] }));
+  const view = await mountContracts(React.createElement(InvestorFundReporting), '/funds/reporting?fund=10');
+  try {
+    assert.match(view.text(), /Delivered2 of 3LPs reached · Q3 2026/);
+    assert.match(view.text(), /Q3 2026.*2 of 3.*1 no account.*Q2 2026.*Not recorded · issued before delivery was recorded/s);
+    assert.doesNotMatch(view.text(), /Per-LP delivery unavailable|0 of 3/);
+  } finally {
+    await view.unmount();
+  }
+});

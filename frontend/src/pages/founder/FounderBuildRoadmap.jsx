@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, GitBranch, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { text } from '../../lib/absence';
@@ -9,26 +9,30 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { DependenciesDialog, ScenarioDialog, RiskUnavailable } from './RoadmapDialogs';
-import { LensLink } from '../../workspaces/lens';
+import {
+  DOOR, LANDING_SUB, addFirstHref, dueText, horizonOf, itemParam, itemSheetHref, landingBack, landingView, pickProject, quarterGroups,
+} from '../cycles/roadmapShortcut.js';
 
 /**
- * Build · Roadmap (FB3). Task #176.
+ * Build · Quarters, dependencies and scenarios (`/build/roadmap`). FB3, task #176; D8776 (#8776).
  *
- * WHAT CHANGED AND WHY IT MATTERED. Two of this zone's four chips were wrong in
+ * WHAT CHANGED AND WHY IT MATTERED (#176). Two of this zone's four chips were wrong in
  * opposite ways. `Scenarios` was honestly refused — no store. `Dependencies` was
  * LIVE and could never show a row: this page filtered on `item.dependency ||
  * item.dependencies || item.blocks`, and `roadmap_okrs` has none of those columns
- * while `/progress/roadmap/:id` returns none of them. A founder selecting it saw
- * an empty table captioned "items naming a dependency", which reads as "you have
- * none" rather than "nothing here can have one". The `Blocks` column said "Not
- * recorded" on every row and the `At risk` stat said "Unavailable" — the same
- * emptiness in three different words.
+ * while `/progress/roadmap/:id` returns none of them. Migration 254 stores both,
+ * and `services/okrGraph.ts` derives `Blocked` from the graph. `At risk` stays
+ * unanswered, and the card below says exactly why rather than showing a number
+ * that would have to be invented.
  *
- * Migration 254 stores both, and `services/okrGraph.ts` derives `Blocked` from
- * the graph. `At risk` stays unanswered, and the card below says exactly why
- * rather than showing a number that would have to be invented.
+ * D8776 (#8776, BLR00 to BLR07). Product roadmap is the Now / Next / Later board and links here as
+ * "Quarters, dependencies and scenarios"; this page's h1 is those words. It keeps the venture from the link,
+ * says how an item's horizon, quarter, links and what-ifs relate, and opens By quarter (owner question 3,
+ * option A: no Board view and no zone row here). `?view=` names the view and `?item=` the item it was opened
+ * from, which is highlighted and focused; Back returns to that item, or to the board as it was left. A project
+ * in the link that is not the reader's is said, not silently swapped. At zero items there is one action, Add
+ * the first item, on Product roadmap (owner question 2, option A: the `/execution` editor is no longer offered).
  */
-
 
 const TONE = { blocked: 'blocked', in_flight: 'active', done: 'done', provisional: 'neutral' };
 
@@ -43,18 +47,21 @@ const weekRange = () => {
 
 export default function FounderBuildRoadmap() {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const requestedId = params.get('project_id');
+  const view = landingView(params.get('view'));
+  const itemId = itemParam(params.get('item'));
+  // Where the board handed over (its view and column), read once: a view change replaces the address.
+  const [from] = useState(() => (typeof location.state?.roadmapFrom === 'string' ? location.state.roadmapFrom : null));
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(requestedId ? Number(requestedId) : null);
+  const [refused, setRefused] = useState(null);
   const [graph, setGraph] = useState(null);
-  // All four of the canvas's views are live as of migration 254. `timeline` is
-  // source order, `board` groups by the stored kanban column, `dependencies`
-  // shows the items that are actually in the graph, and `scenarios` lists what
-  // has been saved beside the roadmap.
-  const [view, setView] = useState('timeline');
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
   const [dialog, setDialog] = useState(null);
+  // The venture this page wrote into the address itself; that rewrite is not a new venture to read again.
+  const rewrote = useRef(null);
 
   const load = async () => {
     setStatus('loading');
@@ -62,8 +69,10 @@ export default function FounderBuildRoadmap() {
     try {
       const available = (await api.listProjects()) || [];
       setProjects(available);
-      const requested = Number(requestedId);
-      const chosen = available.find((project) => project.id === requested) || available[0];
+      const picked = pickProject(available, requestedId);
+      const chosen = picked.chosen;
+      // The address is rewritten to the venture shown; the refusal stays said across that rewrite.
+      setRefused((prev) => picked.refused ?? (prev && chosen && String(chosen.id) === requestedId ? prev : null));
       setSelectedId(chosen?.id || null);
       if (!chosen) {
         setGraph(null);
@@ -71,11 +80,12 @@ export default function FounderBuildRoadmap() {
         return;
       }
       if (String(chosen.id) !== requestedId) {
+        rewrote.current = String(chosen.id);
         setParams((old) => {
           const next = new URLSearchParams(old);
           next.set('project_id', String(chosen.id));
           return next;
-        }, { replace: true });
+        }, { replace: true, state: location.state });
       }
       setGraph(await api.roadmapGraph(chosen.id));
       setStatus('ready');
@@ -85,76 +95,128 @@ export default function FounderBuildRoadmap() {
     }
   };
 
-  useEffect(() => { load(); }, [requestedId]);
+  useEffect(() => {
+    if (rewrote.current != null && rewrote.current === requestedId) { rewrote.current = null; return; }
+    load();
+  }, [requestedId]); // eslint-disable-line react-hooks/exhaustive-deps -- reload on the venture only
+
+  const setView = (next) => setParams((old) => {
+    const out = new URLSearchParams(old);
+    out.set('view', next);
+    return out;
+  }, { replace: true, state: location.state });
 
   const selectedProject = useMemo(() => projects.find((project) => project.id === selectedId), [projects, selectedId]);
   const items = graph?.items || [];
   const dependencies = graph?.dependencies || [];
   const scenarios = graph?.scenarios || [];
   const stats = graph?.stats || { items: 0, quarters: 0, dependencies: 0, unresolved: 0, blocked: 0, scenarios: 0 };
+  // A reader the Worker would refuse is offered no edit; an older read without the flag keeps the old behaviour.
+  const canWrite = graph?.can_write !== false;
+  const linked = itemId == null ? null : items.find((i) => Number(i.id) === itemId) ?? null;
+  const missingItem = status === 'ready' && itemId != null && !linked;
+  const back = landingBack({
+    projectId: selectedId,
+    item: itemId != null && !missingItem ? { id: itemId, objective: linked?.objective } : null,
+    from,
+  });
+  const q = selectedId ? `?project_id=${selectedId}` : '';
 
-  // "Board" is the same items read down their stored kanban column instead of in
-  // source order. Nothing is added, dropped or re-scored by the regrouping.
-  const boardOrder = useMemo(() => {
-    const rank = { now: 0, next: 1, later: 2, done: 3 };
-    return [...items].sort((a, b) => (rank[a.kanban_status] ?? 9) - (rank[b.kanban_status] ?? 9));
-  }, [items]);
-  // The dependency view is the items that are IN the graph — either end of a
-  // link. Before migration 254 this filter read three fields that did not exist,
-  // so it was always empty; it now has a store behind it.
+  // The dependency view is the items that are IN the graph — either end of a link.
   const inGraph = useMemo(
     () => items.filter((i) => (i.blocks || []).length > 0 || (i.blocked_by || []).length > 0),
     [items],
   );
-  const rows = view === 'board' ? boardOrder : view === 'dependencies' ? inGraph : items;
+
+  // Arriving, focus goes to the h1, or to the item the page was opened from once its row is drawn.
+  const headingRef = useRef(null);
+  const rowRef = useRef(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (focused.current) return;
+    if (itemId == null || missingItem || view !== 'quarters') {
+      if (headingRef.current?.focus) { focused.current = true; headingRef.current.focus(); }
+      return;
+    }
+    if (rowRef.current?.focus) { focused.current = true; rowRef.current.focus(); }
+  });
 
   const refresh = async () => { if (selectedId) setGraph(await api.roadmapGraph(selectedId)); };
-
-  const handlers = {
-    newScenario: () => setDialog({ kind: 'scenario', scenario: null }),
-  };
+  // A reader without write access gets no handler, so the builder drops New scenario
+  // for them (an undefined callback is not supplied); the object stays a literal so
+  // check-zone-handlers can read which handlers this page supplies.
+  const handlers = { newScenario: canWrite ? () => setDialog({ kind: 'scenario', scenario: null }) : undefined };
+  const zero = status === 'ready' && items.length === 0;
+  const primary = status !== 'ready' || zero || !canWrite ? null
+    : view === 'dependencies' && items.length >= 2 ? <button type="button" className="fb-roadmap-primary" data-testid="button-open-dependencies" onClick={() => setDialog({ kind: 'dependencies' })}>Edit dependency links</button>
+      : view === 'scenarios' ? <button type="button" className="fb-roadmap-primary" data-testid="button-new-scenario" onClick={() => setDialog({ kind: 'scenario', scenario: null })}>New scenario</button>
+        : null;
 
   return (
     <main className="fb-roadmap" data-testid="founder-build-roadmap">
       <div className="fb-roadmap-shell">
         <section className="fb-roadmap-main">
           <header className="fb-roadmap-header">
-            <div className="fb-roadmap-crumb"><Link to="/build" data-testid="link-roadmap-back"><ArrowLeft size={13} /> Build</Link><span>/</span><strong>Roadmap</strong></div>
-            <div className="fb-roadmap-title-row">
-              <div><h1>Roadmap</h1><p className="fb-roadmap-subtitle">Timeline, dependency chain and saved scenarios for the selected startup.</p></div>
-            </div>
-            <nav className="fb-roadmap-zone-nav" aria-label="Build sections">
-              <LensLink to={`/build/this-week${selectedId ? `?project_id=${selectedId}` : ''}`}>This week</LensLink>
-              <LensLink to={`/build/board${selectedId ? `?project_id=${selectedId}` : ''}`}>Board</LensLink>
-              <LensLink to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`} className="is-active" data-testid="link-roadmap-zone">Roadmap</LensLink>
-              <LensLink to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</LensLink>
-              <LensLink to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</LensLink>
+            <nav className="fb-roadmap-crumb" aria-label="Breadcrumb">
+              <Link to={`/build${q}`}><ArrowLeft size={13} /> Build</Link><span>/</span>
+              <Link to={`/build/product-roadmap${q}`}>Product roadmap</Link><span>/</span><strong>{DOOR}</strong>
             </nav>
-            <ZoneToolbar
-              filters={founderZoneFilters('build/roadmap', { value: view, onChange: setView })}
-              actions={founderZoneActions('build/roadmap', {
-                query: selectedId ? `?project_id=${selectedId}` : '',
-                handlers,
-                view: {
-                  scope: selectedProject?.name,
-                  header: ['Objective', 'Quarter', 'State', 'Blocks', 'Blocked by'],
-                  rows: items,
-                  cells: (i) => [
-                    i.objective, i.quarter, i.state_label,
-                    (i.blocks || []).map((b) => b.objective).join(' · '),
-                    (i.blocked_by || []).map((b) => b.objective).join(' · '),
-                  ],
-                },
-              })}
-            />
+            <Link className="fb-roadmap-back" to={back.href} state={back.focus ? { roadmapFocus: back.focus } : undefined} data-testid="link-roadmap-back">
+              <span aria-hidden="true">‹</span> {back.label}
+            </Link>
+            <div className="fb-roadmap-title-row">
+              <div>
+                <h1 ref={headingRef} tabIndex={-1} data-testid="text-roadmap-heading">{DOOR}</h1>
+                <p className="fb-roadmap-subtitle">{LANDING_SUB}</p>
+              </div>
+              {primary}
+            </div>
+            {!zero && status !== 'empty' && (
+              <ZoneToolbar
+                filters={founderZoneFilters('build/roadmap', { value: view, onChange: setView })}
+                actions={founderZoneActions('build/roadmap', {
+                  query: q,
+                  handlers,
+                  view: {
+                    scope: selectedProject?.name,
+                    header: ['Objective', 'Quarter', 'State', 'Blocks', 'Blocked by'],
+                    rows: items,
+                    cells: (i) => [
+                      i.objective, i.quarter, i.state_label,
+                      (i.blocks || []).map((b) => b.objective).join(' · '),
+                      (i.blocked_by || []).map((b) => b.objective).join(' · '),
+                    ],
+                  },
+                })}
+              />
+            )}
           </header>
 
-          {status === 'error' && <div className="fb-roadmap-alert" role="alert" data-testid="status-roadmap-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-roadmap"><RefreshCw size={13} /> Retry</button></div>}
+          {refused && selectedProject && (
+            <div className="fb-roadmap-notice" role="status" data-testid="status-roadmap-refused">
+              <AlertCircle size={16} />
+              <div><strong>Project {refused} isn’t one you can open</strong><p>Showing {text(selectedProject.name)}, your first venture. Back goes to Product roadmap for {text(selectedProject.name)}.</p></div>
+            </div>
+          )}
+          {status === 'error' && <div className="fb-roadmap-alert" role="alert" data-testid="status-roadmap-error"><AlertCircle size={16} /><span>Unavailable · {error} Nothing is shown as 0.</span><button type="button" onClick={load} data-testid="button-retry-roadmap"><RefreshCw size={13} /> Retry</button></div>}
           {status === 'loading' && <RoadmapSkeleton />}
           {status === 'empty' && <EmptyRoadmap />}
-          {status === 'ready' && selectedProject && (
+          {status === 'ready' && selectedProject && zero && <ZeroItems projectId={selectedId} canWrite={canWrite} />}
+          {status === 'ready' && selectedProject && !zero && (
             <>
-              <div className="fb-roadmap-context"><div><span className="fb-roadmap-label">Selected startup</span><strong data-testid="text-roadmap-project">{text(selectedProject.name)}</strong><span>{text(selectedProject.sector, 'Sector not recorded')}</span></div><div className="fb-roadmap-context-right"><span className="fb-roadmap-label">Operating week</span><strong>{weekRange()}</strong><span>Quarters and links are stored on the roadmap</span></div></div>
+              <div className="fb-roadmap-context">
+                <div><span className="fb-roadmap-label">Venture</span><strong data-testid="text-roadmap-project">{text(selectedProject.name)}</strong><span>Kept from the link you followed</span></div>
+                <div className="fb-roadmap-context-right"><span className="fb-roadmap-label">Opened from</span><strong data-testid="text-roadmap-from">{linked ? `Product roadmap · ${linked.objective}` : 'Product roadmap'}</strong><span>Back returns there · week of {weekRange()}</span></div>
+              </div>
+              {missingItem && (
+                <p className="fb-roadmap-notice" role="status" data-testid="status-roadmap-item-missing">Item {itemId} is not on this venture’s roadmap, so nothing is highlighted.</p>
+              )}
+              {!canWrite && (
+                <p className="fb-roadmap-notice" role="status" data-testid="status-roadmap-read-only">
+                  <span className="fb-roadmap-status status-neutral">⊘ Read only</span> You can read this venture. Edit dependency links and New scenario are not offered.
+                </p>
+              )}
+              <Relation linked={linked} />
               <div className="fb-roadmap-stat-strip">
                 <Stat label="Items" value={stats.items} note={stats.quarters ? `across ${stats.quarters} recorded quarter${stats.quarters === 1 ? '' : 's'}` : 'Quarter not recorded'} />
                 <Stat
@@ -163,69 +225,59 @@ export default function FounderBuildRoadmap() {
                   note={stats.dependencies ? `${stats.unresolved} unresolved` : 'No link recorded yet'}
                   muted={!stats.dependencies}
                 />
-                <Stat label="Saved scenarios" value={stats.scenarios} note={stats.scenarios ? 'Compared against the live roadmap' : 'None saved yet'} muted={!stats.scenarios} />
+                <Stat label="Saved scenarios" value={stats.scenarios} note={stats.scenarios ? 'Compared, never applied' : 'None saved yet'} muted={!stats.scenarios} />
                 {/* `At risk` WAS THE FOURTH CARD AND IS NOT A NUMBER. `okrGraph.ts`
                     carries the proof that the obvious derivation is always empty;
                     `Blocked` is what the graph can honestly say. */}
-                <Stat label="Blocked" value={stats.blocked} note={stats.blocked ? 'Waiting on an unfinished objective' : 'Nothing is waiting on anything'} muted={!stats.blocked} />
+                <Stat label="Blocked" value={stats.blocked} note={stats.blocked ? 'Waiting on an unfinished item' : 'Nothing is waiting on anything'} muted={!stats.blocked} />
               </div>
 
               {view === 'scenarios' ? (
                 <ScenarioList
                   scenarios={scenarios}
+                  canWrite={canWrite}
                   onOpen={(scenario) => setDialog({ kind: 'scenario', scenario })}
                   onNew={() => setDialog({ kind: 'scenario', scenario: null })}
                 />
-              ) : (
-                <section className="fb-roadmap-card fb-roadmap-instrument">
+              ) : view === 'dependencies' ? (
+                <section className="fb-roadmap-card fb-roadmap-instrument" data-testid="card-dependencies">
                   <div className="fb-roadmap-card-head">
-                    <div><GitBranch size={16} /><h2>{view === 'dependencies' ? 'Dependency chain' : view === 'board' ? 'Roadmap board' : 'Roadmap timeline'}</h2></div>
-                    <span>
-                      {rows.length} item{rows.length === 1 ? '' : 's'} ·{' '}
-                      {view === 'dependencies' ? 'in the dependency graph' : view === 'board' ? 'grouped by stored column' : 'source order'}
-                    </span>
+                    <div><GitBranch size={16} /><h2>Dependency chain</h2></div>
+                    <span>{stats.dependencies} link{stats.dependencies === 1 ? '' : 's'} · {stats.unresolved} unresolved</span>
                   </div>
-                  <div className="fb-roadmap-toolbar">
-                    <button type="button" data-testid="button-open-dependencies" onClick={() => setDialog({ kind: 'dependencies' })}>
-                      Edit dependency links
-                    </button>
-                  </div>
-                  {rows.length ? (
+                  {inGraph.length ? (
                     <div className="fb-roadmap-table-wrap">
                       <table><thead><tr><th>Item</th><th>Quarter</th><th>State</th><th>Blocks</th></tr></thead>
-                        <tbody>{rows.map((item) => <RoadmapRow key={item.id} item={item} />)}</tbody>
+                        <tbody>{inGraph.map((item) => <RoadmapRow key={item.id} item={item} />)}</tbody>
                       </table>
                     </div>
-                  ) : view === 'dependencies' ? (
+                  ) : (
                     // TWO DISTINCT EMPTY STATES, because they are different
                     // problems: no objectives at all, versus objectives with no
-                    // links between them. The old page had one message for both
-                    // and it was true of neither.
+                    // links between them.
                     <div className="fb-roadmap-inline-empty" data-testid="empty-dependencies">
                       <GitBranch size={18} />
                       <div>
                         <strong>No dependency link is recorded.</strong>
                         <p>
-                          {items.length
-                            ? `All ${items.length} objective${items.length === 1 ? '' : 's'} stand on their own so far. Record a link and the blocked one starts showing as Blocked here.`
-                            : 'There is no objective to link yet.'}
+                          {`All ${items.length} item${items.length === 1 ? '' : 's'} stand on their own so far. Record a link and the blocked one starts showing as Blocked here.`}
                         </p>
-                        {items.length >= 2 && (
+                        {canWrite && items.length >= 2 && (
                           <button type="button" data-testid="button-empty-add-dependency" onClick={() => setDialog({ kind: 'dependencies' })}>
                             Record a link
                           </button>
                         )}
                       </div>
                     </div>
-                  ) : (
-                    <div className="fb-roadmap-inline-empty"><CircleDot size={18} /><div><strong>No roadmap items are recorded.</strong><p>Use the roadmap editor to add an objective and key results for this startup.</p><Link to={`/execution?mode=workspace${selectedId ? `&project_id=${selectedId}` : ''}#execution-roadmap`}>Open roadmap editor</Link></div></div>
                   )}
                   <p className="fb-roadmap-note">
-                    Quarter and column come from the stored roadmap item. <strong>Blocked</strong> is
-                    derived: the objective has at least one link from something that is not Done.
+                    A link resolves when its blocker reaches Done on Product roadmap. <strong>Blocked</strong> is
+                    derived: the item has at least one link from something that is not Done.
                     Nothing is inferred from item names or from the order they were written in.
                   </p>
                 </section>
+              ) : (
+                <QuarterView items={items} highlighted={linked} rowRef={rowRef} projectId={selectedId} canWrite={canWrite} />
               )}
 
               <div className="fb-roadmap-lower-grid">
@@ -262,6 +314,78 @@ export default function FounderBuildRoadmap() {
 
 function Stat({ label, value, note, muted }) { return <div className={`fb-roadmap-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 
+/** BLR02: one record, two placements. Open by default; on a phone it folds (BLR07B). */
+function Relation({ linked }) {
+  return (
+    <details className="fb-roadmap-card fb-roadmap-relation" open data-testid="card-roadmap-relation">
+      <summary><h2>How this relates to Now, Next and Later</h2></summary>
+      <p className="fb-roadmap-relation-lead">{linked ? `${linked.objective} is one record with two placements.` : 'Each item is one record with two placements.'}</p>
+      <dl>
+        <div><dt>Now · Next · Later</dt><dd>The order you work in. Set on Product roadmap, with the target date, owner, theme and KPI.</dd></div>
+        <div><dt>Quarter and key results</dt><dd>When you aim to finish it and how you’ll know. The quarter is set with Edit on the item in Product roadmap.</dd></div>
+        <div><dt>Dependencies and scenarios</dt><dd>What waits on what, and where items would land instead. Set here; a scenario never moves an item.</dd></div>
+      </dl>
+    </details>
+  );
+}
+
+/** BLR02: By quarter, calendar order, No quarter recorded as its own group; the linked item highlighted. */
+function QuarterView({ items, highlighted, rowRef, projectId, canWrite }) {
+  const { quarters, none } = quarterGroups(items);
+  const row = (item) => {
+    const on = highlighted && Number(highlighted.id) === Number(item.id);
+    return <QuarterRow key={item.id} item={item} on={on} rowRef={on ? rowRef : undefined} projectId={projectId} />;
+  };
+  return (
+    <section className="fb-roadmap-card fb-roadmap-instrument" data-testid="card-quarters">
+      <div className="fb-roadmap-card-head">
+        <div><GitBranch size={16} /><h2>By quarter</h2></div>
+        <span>{items.length} item{items.length === 1 ? '' : 's'} · {quarters.length} recorded quarter{quarters.length === 1 ? '' : 's'} · source order within a quarter</span>
+      </div>
+      {quarters.map((g) => (
+        <section key={g.key} className="fb-roadmap-quarter" data-testid="roadmap-quarter" aria-label={g.label}>
+          <h3>{g.label}<small>{g.range ? `${g.range} · ` : ''}{g.items.length} item{g.items.length === 1 ? '' : 's'}</small></h3>
+          <ul>{g.items.map(row)}</ul>
+        </section>
+      ))}
+      {none.length > 0 && (
+        <section className="fb-roadmap-quarter is-none" data-testid="roadmap-quarter-none" aria-label="No quarter recorded">
+          <h3>No quarter recorded<small>{none.length} item{none.length === 1 ? '' : 's'} · <span className="fb-roadmap-status status-neutral">○ Not recorded</span></small></h3>
+          <ul>{none.map(row)}</ul>
+          {canWrite && (
+            <p className="fb-roadmap-note">
+              Set a quarter with Edit on the item: {none.map((item, i) => (
+                <span key={item.id}>{i ? ', ' : ''}<Link to={itemSheetHref(projectId, item.id) || '#'} data-testid={`link-set-quarter-${item.id}`}>{text(item.objective)}</Link></span>
+              ))}.
+            </p>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
+function QuarterRow({ item, on, rowRef, projectId }) {
+  const horizon = horizonOf(item.kanban_status);
+  const blocks = (item.blocks || []).map((b) => b.objective);
+  return (
+    <li ref={rowRef} tabIndex={on ? -1 : undefined} aria-current={on ? 'true' : undefined} className={on ? 'is-current' : undefined} data-testid={`row-quarter-item-${item.id}`}>
+      <div>
+        <Link to={itemSheetHref(projectId, item.id) || '#'}><strong>{text(item.objective)}</strong></Link>
+        {on && <span className="fb-roadmap-status status-active" data-testid="text-roadmap-opened-from">Opened from Product roadmap</span>}
+      </div>
+      <div className="fb-roadmap-quarter-tags">
+        <span className="fb-roadmap-status status-neutral" data-testid={`text-horizon-${item.id}`}>↦ {horizon || 'No column'}</span>
+        <span className={`fb-roadmap-status status-${TONE[item.state] || 'neutral'}`}>
+          {item.state === 'blocked' && (item.blocked_by || []).length ? `Blocked · waits on ${item.blocked_by.map((b) => b.objective).join(', ')}` : text(item.state_label)}
+        </span>
+        {blocks.length > 0 && <span className="fb-roadmap-status status-neutral">→ Blocks {blocks.join(', ')}</span>}
+      </div>
+      <small>{dueText(item.target_date)} · {item.owner || 'No owner'}</small>
+    </li>
+  );
+}
+
 function RoadmapRow({ item }) {
   const blocks = (item.blocks || []).map((b) => b.objective);
   return (
@@ -281,9 +405,9 @@ function RoadmapRow({ item }) {
   );
 }
 
-function ScenarioList({ scenarios, onOpen, onNew }) {
+function ScenarioList({ scenarios, canWrite, onOpen, onNew }) {
   return (
-    <section className="fb-roadmap-card" data-testid="card-scenarios">
+    <section className="fb-roadmap-card fb-roadmap-instrument" data-testid="card-scenarios">
       <div className="fb-roadmap-card-head">
         <div><GitBranch size={16} /><h2>Saved scenarios</h2></div>
         <span>{scenarios.length} saved · compared, never applied</span>
@@ -293,8 +417,8 @@ function ScenarioList({ scenarios, onOpen, onNew }) {
           <CircleDot size={18} />
           <div>
             <strong>No scenario is saved.</strong>
-            <p>A scenario is a named what-if: where each objective would land instead. It sits beside the roadmap and never moves anything on it.</p>
-            <button type="button" data-testid="button-empty-new-scenario" onClick={onNew}>New scenario</button>
+            <p>A scenario is a named what-if: where each item would land instead. It sits beside the roadmap and never moves anything on it.</p>
+            {canWrite && <button type="button" data-testid="button-empty-new-scenario" onClick={onNew}>New scenario</button>}
           </div>
         </div>
       ) : (
@@ -305,8 +429,8 @@ function ScenarioList({ scenarios, onOpen, onNew }) {
                 <strong>{s.name}</strong>
                 <small>
                   {s.moves_count === 0
-                    ? 'Moves nothing — every objective is already where this scenario puts it'
-                    : `Moves ${s.moves_count} objective${s.moves_count === 1 ? '' : 's'}`}
+                    ? 'Moves nothing — every item is already where this scenario puts it'
+                    : `Moves ${s.moves_count} item${s.moves_count === 1 ? '' : 's'}`}
                   {s.note ? ` · ${s.note}` : ''}
                 </small>
                 {s.moves_count > 0 && (
@@ -317,11 +441,12 @@ function ScenarioList({ scenarios, onOpen, onNew }) {
                   </ul>
                 )}
               </div>
-              <button type="button" data-testid={`button-scenario-open-${s.id}`} onClick={() => onOpen(s)}>Edit</button>
+              {canWrite && <button type="button" data-testid={`button-scenario-open-${s.id}`} onClick={() => onOpen(s)}>Edit</button>}
             </li>
           ))}
         </ul>
       )}
+      <p className="fb-roadmap-note">A scenario sits beside the roadmap. Nothing on Product roadmap moves; Now, Next and Later stay as they are.</p>
     </section>
   );
 }
@@ -334,7 +459,7 @@ function SourceSummary({ stats }) {
       <div className="fb-roadmap-source-row"><span>Recorded quarters</span><strong>{stats.quarters || 'None'}</strong></div>
       <div className="fb-roadmap-source-row"><span>Dependency links</span><strong>{stats.dependencies}</strong></div>
       <div className="fb-roadmap-source-row"><span>Saved scenarios</span><strong>{stats.scenarios}</strong></div>
-      <p className="fb-roadmap-note">Objectives and their quarters are edited in the roadmap editor. Links and scenarios are edited here.</p>
+      <p className="fb-roadmap-note">Items and their quarters are edited on Product roadmap. Links and scenarios are edited here.</p>
     </section>
   );
 }
@@ -346,7 +471,7 @@ function PageRail({ project, stats }) {
     stance="Manual operating view"
     note="This rail reads the roadmap and its dependency graph. It does not reorder items, write links, or draft scenarios."
     coverage={[project ? `${stats.items} roadmap item${stats.items === 1 ? '' : 's'}, ${stats.dependencies} link${stats.dependencies === 1 ? '' : 's'}` : 'No project selected']}
-    coverageNote={project ? 'Objectives, quarters, links and saved scenarios are available for review.' : 'Select a startup to read its roadmap.'}
+    coverageNote={project ? 'Items, quarters, links and saved scenarios are available for review.' : 'Select a startup to read its roadmap.'}
     unavailable={[
       // Corrected with the store: the old pair claimed there was no scenario
       // source and no dependency graph. Both exist now, so what is genuinely
@@ -354,9 +479,23 @@ function PageRail({ project, stats }) {
       ['Risk assessment', 'Nothing records why or when an objective became stuck, so no risk can be derived from the graph.'],
       ['Scenario reasoning', 'Scenarios are compared arithmetically here; no model is asked which one to take.'],
     ]}
-    footer="Objectives edited in the roadmap editor · links and scenarios edited here"
+    footer="Items edited on Product roadmap · links and scenarios edited here"
   />;
 }
 
-function EmptyRoadmap() { return <div className="fb-roadmap-empty" data-testid="empty-roadmap"><GitBranch size={24} /><h2>No startup is available</h2><p>This founder roadmap is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/build">Back to Build</Link></div>; }
-function RoadmapSkeleton() { return <div className="fb-roadmap-loading" data-testid="status-roadmap-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }
+/** BLR05B: no item yet. One action, on Product roadmap, never a third editor. */
+function ZeroItems({ projectId, canWrite }) {
+  return (
+    <div className="fb-roadmap-empty" data-testid="empty-roadmap-items">
+      <CircleDot size={24} />
+      <h2>No roadmap items yet.</h2>
+      <p>Quarters, dependencies and scenarios are drawn from the items on Product roadmap. Add the first one there; it lands in Next.</p>
+      {canWrite
+        ? <Link className="fb-roadmap-primary" to={addFirstHref(projectId)} data-testid="link-roadmap-add-first">Add the first item</Link>
+        : <p data-testid="text-roadmap-zero-read-only">You can read this venture; its founder adds the items.</p>}
+    </div>
+  );
+}
+
+function EmptyRoadmap() { return <div className="fb-roadmap-empty" data-testid="empty-roadmap"><GitBranch size={24} /><h2>No venture is available</h2><p>Quarters, dependencies and scenarios belong to a venture. Create one in Build first.</p><Link to="/build">Back to Build</Link></div>; }
+function RoadmapSkeleton() { return <div className="fb-roadmap-loading" data-testid="status-roadmap-loading" role="status" aria-label="Loading quarters, dependencies and scenarios"><i /><i /><div><i /><i /><i /><i /></div></div>; }

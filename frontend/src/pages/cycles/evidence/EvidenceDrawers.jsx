@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
 import { BASE, SHARING, claimHref, itemHref } from './evidenceModel';
+import { ORGANIC_CLAIM_KINDS, organicSearch } from './organicEvidenceModel';
 import {
   AREA_HREF, SURFACES, claimTitle, claimWhere, day, itemFigure, itemTitle, sharingChange, statedFigure,
 } from './evidenceView';
@@ -50,6 +51,8 @@ export function ClaimDrawer({ id, model, search = '', projectId, onChanged }) {
         <>
           <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'link' })} disabled={!linkable.length} data-testid="claim-link-evidence">Link evidence</button>
           {surface ? <Link to={`${surface.href}${search}`} className={BTN_S}>Open the {surface.label.toLowerCase()}</Link> : null}
+          {/* D5841 part 2: an organic-search claim is backed only by a week the founder picks in Organic search. */}
+          {ORGANIC_CLAIM_KINDS.includes(claim.claim_kind) ? <Link to={`${BASE}${organicSearch(search, { claim: claim.uid })}`} className={BTN_S} data-testid="claim-organic">Back with Search Console</Link> : null}
         </>
       ) : null}>
       <Section>

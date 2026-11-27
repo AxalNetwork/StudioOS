@@ -2418,6 +2418,14 @@ const studioos = {
         } catch (e) {
           taskFailed('interview session sweep', e instanceof Error ? e.message : 'error');
         }
+        // D6710 (#6710): a partner offer on a formation case past its expiry returns to HQ's queue with an event.
+        try {
+          const { expireOffers } = await import('./services/formationAssignments');
+          const r = await expireOffers(env, now);
+          if (r.expired) cronSummary.push(`formation offers expired=${r.expired}`);
+        } catch (e) {
+          taskFailed('formation offer expiry', e instanceof Error ? e.message : 'error');
+        }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 50) {
           try {
             const { purgeExpired } = await import('./services/channels/threads');

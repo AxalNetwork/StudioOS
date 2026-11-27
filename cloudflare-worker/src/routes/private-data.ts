@@ -4,8 +4,20 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { refuse } from '../util/refusal';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { notRecorded, NOT_RECORDED_REASONS } from './market_intel';
+import { hiddenDealIds, hiddenJson, type ReaderMode } from '../services/dealPreparation';
+import { isDealStaff } from '../services/dealAccess';
+
+/**
+ * D5454 (#5454, R4): the deals and deal counts this route returns leave out what the preparation guard hides. Staff
+ * (an admin, a partner by licence) read in `transactional` mode: a never-released or unknown preparation is dropped,
+ * a withdrawn or archived release is kept, as the staff list in `routes/deals.ts` does. Anyone else reads in
+ * `discovery` mode, which also drops the unlisted releases. A guard failure fails the request; nothing is served
+ * unfiltered.
+ */
+const dealReaderMode = (user: Parameters<typeof isDealStaff>[0]): ReaderMode => (isDealStaff(user) ? 'transactional' : 'discovery');
 
 const privateData = new Hono<{ Bindings: Env }>();
 
@@ -80,7 +92,8 @@ privateData.get('/portfolio/metrics', async (c) => {
     // Preserve the actual role label so the UI can divergence partner vs
     // investor surfaces (architect feedback — no role flattening).
     const roleLabel = user.role;
-    const deals = user.partner_id ? await sql`SELECT d.*, p.name as project_name, p.sector FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.partner_id = ${user.partner_id} ORDER BY d.created_at DESC` : [];
+    const hidden = user.partner_id ? hiddenJson(await hiddenDealIds(c.env, dealReaderMode(user))) : '[]';
+    const deals = user.partner_id ? await sql`SELECT d.*, p.name as project_name, p.sector FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.partner_id = ${user.partner_id} AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden})) ORDER BY d.created_at DESC` : [];
     const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
     const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
     // Task #3 (Y-1) — pull founder_user_id alongside each portfolio
@@ -119,12 +132,26 @@ privateData.get('/portfolio/metrics', async (c) => {
     return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), called_pct: calledPct, portfolio_companies: portfolioCount }, portfolio });
   }
 
+  // #8899 — what follows is the studio's whole book: every live project, the
+  // deal counts and the limited partners' committed and called totals. It is
+  // the admin's. Every role the two branches above do not answer (an advisor,
+  // an `exploring` member awaiting activation, any role added later) used to
+  // fall through to it. No frontend screen reads this route for such a role, so
+  // the answer is the house refusal rather than an empty view. The route stays
+  // a signed-in route split by role (the auth inventory reads the strongest
+  // gate a handler reaches, so a requireAdmin here would file the founder,
+  // partner and investor branches above as admin-only).
+  if (user.role !== 'admin') {
+    return refuse(c, 403, { code: 'admin_required', message: 'The portfolio overview is open to admins only.' });
+  }
+
   const allProjects = await sql`SELECT * FROM projects WHERE deleted_at IS NULL`;
   const active = allProjects.filter((p: any) => ['spinout', 'active', 'tier_1', 'tier_2'].includes(p.status));
   const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
   const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
-  const totalDeals = await sql`SELECT COUNT(*) as count FROM deals`;
-  const activeDeals = await sql`SELECT COUNT(*) as count FROM deals WHERE status IN ('applied', 'scored', 'active')`;
+  const hidden = hiddenJson(await hiddenDealIds(c.env, dealReaderMode(user)));
+  const totalDeals = await sql`SELECT COUNT(*) as count FROM deals WHERE id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))`;
+  const activeDeals = await sql`SELECT COUNT(*) as count FROM deals WHERE status IN ('applied', 'scored', 'active') AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))`;
   await sql.end();
 
   return c.json({ role: 'admin', overview: { total_projects: allProjects.length, active_projects: active.length, total_deals: Number(totalDeals[0].count), active_deals: Number(activeDeals[0].count), total_committed: Number(committed[0].total), total_called: Number(called[0].total) }, portfolio: active });

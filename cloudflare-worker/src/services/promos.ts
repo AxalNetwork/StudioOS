@@ -23,7 +23,7 @@ import type { Env } from '../types';
 import { paidInvestorTier } from './investorTiers';
 import { stripeCall } from '../routes/billing';
 import { writeFeatureUnlock } from './featureUnlocks';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { likeNeedle } from '../util/likeSearch';
 
 // Stripe rejects PaymentIntents below the per-currency minimum (~50 cents for
@@ -110,13 +110,14 @@ export const DEFAULT_PROMO_INTERVALS: PromoInterval[] = ['month'];
 
 /**
  * Migration 630's columns, for a store that never ran it. Each ALTER is a
- * literal (check-sql-prepare.mjs), added only when PRAGMA says it is missing.
+ * literal (check-sql-prepare.mjs), added only when the table lacks the column
+ * (`runSchemaBootstrap`, #5343).
  */
-const SCOPE_COLUMNS: Array<[string, string]> = [
-  ['plan_keys_json', "ALTER TABLE promo_codes ADD COLUMN plan_keys_json TEXT NOT NULL DEFAULT '[]'"],
-  ['intervals_json', 'ALTER TABLE promo_codes ADD COLUMN intervals_json TEXT'],
-  ['once_per_member', 'ALTER TABLE promo_codes ADD COLUMN once_per_member INTEGER NOT NULL DEFAULT 0'],
-  ['first_purchase_only', 'ALTER TABLE promo_codes ADD COLUMN first_purchase_only INTEGER NOT NULL DEFAULT 0'],
+const SCOPE_COLUMNS: string[] = [
+  "ALTER TABLE promo_codes ADD COLUMN plan_keys_json TEXT NOT NULL DEFAULT '[]'",
+  'ALTER TABLE promo_codes ADD COLUMN intervals_json TEXT',
+  'ALTER TABLE promo_codes ADD COLUMN once_per_member INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE promo_codes ADD COLUMN first_purchase_only INTEGER NOT NULL DEFAULT 0',
 ];
 
 const SCHEMA_READY = new WeakMap<object, boolean>();
@@ -145,14 +146,22 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
         "synced_at TEXT NOT NULL DEFAULT (datetime('now'))" +
         ')',
     );
-    // D1272 (#3298) — migration 629's columns. On a database that has 629 these
-    // fail as duplicates, and each failure is left alone.
-    for (const col of [
-      'paused_at TEXT', 'paused_by INTEGER', 'ended_at TEXT', 'ended_by INTEGER', 'reason TEXT',
-      'name TEXT', 'note TEXT', 'duration_in_months INTEGER', 'replaced_by TEXT',
-    ]) {
-      try { await env.DB.exec(`ALTER TABLE promo_codes ADD COLUMN ${col}`); } catch { /* already there */ }
-    }
+    // D1272 (#3298) — migration 629's columns. #5343 (#4568 R2-04): asked first
+    // (`runSchemaBootstrap`), so a database that has 629 issues no ALTER. Each
+    // used to be tried blind on every fresh isolate and its failure ignored; a
+    // real failure now reaches the catch below and the schema is not marked ready.
+    // Literal statements, so the schema guards can read each one.
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE promo_codes ADD COLUMN paused_at TEXT',
+      'ALTER TABLE promo_codes ADD COLUMN paused_by INTEGER',
+      'ALTER TABLE promo_codes ADD COLUMN ended_at TEXT',
+      'ALTER TABLE promo_codes ADD COLUMN ended_by INTEGER',
+      'ALTER TABLE promo_codes ADD COLUMN reason TEXT',
+      'ALTER TABLE promo_codes ADD COLUMN name TEXT',
+      'ALTER TABLE promo_codes ADD COLUMN note TEXT',
+      'ALTER TABLE promo_codes ADD COLUMN duration_in_months INTEGER',
+      'ALTER TABLE promo_codes ADD COLUMN replaced_by TEXT',
+    ]);
     await env.DB.exec(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_promo_codes_normalized ON promo_codes(code_normalized)',
     );
@@ -176,9 +185,7 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
       'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo ON promo_redemptions(promo_id)',
     );
     // D1273: migration 630, for a store that never ran it.
-    const cols = await env.DB.prepare('PRAGMA table_info(promo_codes)').all<{ name: string }>();
-    const have = new Set((cols.results ?? []).map((r) => r.name));
-    for (const [name, ddl] of SCOPE_COLUMNS) if (!have.has(name)) await env.DB.prepare(ddl).run();
+    await runSchemaBootstrap(env, SCOPE_COLUMNS);
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo_user ON promo_redemptions(promo_id, user_id)',
     );

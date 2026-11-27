@@ -5,6 +5,7 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { Comparison, ExtendSkillSheet, History, Marker, ReasonQuote, RebaseSheet } from './SkillExtension.jsx';
 import { actionsFor, bannerWords, compareView, skillHref } from './extensionCompareModel.js';
+import SkillProposals from './SkillProposals.jsx';
 
 /**
  * #5964 (D5963, owner Q1 option A) — Team › Skills › Compare with Axal, its own page at
@@ -45,6 +46,8 @@ export default function SkillComparePage() {
   const [lib, setLib] = useState(null);
   const [sheet, setSheet] = useState(false);
   const [rebase, setRebase] = useState(false);
+  // D8827: the rebase choices the editor accepted from Eadwyn's proposals (the sheet's starting choices).
+  const [seed, setSeed] = useState(null);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -57,7 +60,7 @@ export default function SkillComparePage() {
   }, [companyUid, skillUid, tick]);
   const back = skillHref(companyUid, skillUid);
   const teamHref = `/account/companies/${encodeURIComponent(companyUid)}/settings/team?tab=skills`;
-  const retry = () => { setRebase(false); setTick((t) => t + 1); };
+  const retry = () => { setRebase(false); setSeed(null); setTick((t) => t + 1); };
 
   const companyName = (lib?.available ? lib.value?.company_name : null) || null;
   const crumb = (name) => (
@@ -68,6 +71,7 @@ export default function SkillComparePage() {
   );
 
   let body;
+  let rail = null;
   if (!card || !lineage) body = <PageState state="loading" />;
   // The base read's 404 is the Worker's "There is no such skill" (another company, or a member on an unpublished draft).
   else if (lineage.refused) body = <PageState state="not_found" back={teamHref} />;
@@ -86,6 +90,8 @@ export default function SkillComparePage() {
       );
     } else {
       const banner = view.kind === 'compare' ? bannerWords(view) : null;
+      // D8827 (SK-17's rail): Eadwyn proposes only where this editor could rebase, and its proposals land only there.
+      if (acts.rebase && !acts.rebase.disabled) rail = <SkillProposals key={tick} skillUid={skillUid} view={view} onRebase={(initial) => { setSeed(initial); setRebase(true); }} />;
       const mineLabel = view.kind === 'compare' && view.companySide === 'draft' ? 'Your draft · Not published' : `Your v${s.version ?? '?'} · ${s.status === 'published' ? 'Published' : 'Draft'}`;
       body = (
         <div className="flex flex-col gap-4" data-testid="compare-page" data-kind={view.kind}>
@@ -158,7 +164,7 @@ export default function SkillComparePage() {
           )}
           <History rows={view.history} />
           {rebase && acts.rebase && !acts.rebase.disabled ? (
-            <RebaseSheet skillUid={skillUid} view={view} card={s} onClose={() => setRebase(false)} onReload={retry}
+            <RebaseSheet skillUid={skillUid} view={view} card={s} initial={seed} onClose={() => setRebase(false)} onReload={retry}
               onRebased={(made) => { setRebase(false); navigate(skillHref(companyUid, made?.uid || skillUid)); }} />
           ) : null}
           {sheet && acts.extendAgain && view.kind === 'compare' ? (
@@ -174,9 +180,9 @@ export default function SkillComparePage() {
   }
   const name = card?.available ? card.value?.skill?.name : null;
   return (
-    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-4 py-5 sm:px-6" data-testid="skill-compare">
+    <div className={`mx-auto flex w-full ${rail ? 'max-w-[1440px]' : 'max-w-[1200px]'} flex-col gap-4 px-4 py-5 sm:px-6`} data-testid="skill-compare">
       {crumb(name)}
-      {body}
+      {rail ? <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]" data-testid="compare-with-rail">{body}{rail}</div> : body}
     </div>
   );
 }

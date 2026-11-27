@@ -27,6 +27,7 @@
  */
 import type { Env } from '../../types';
 import type { HealthKind } from './health';
+import { NO_COMPANY_REASON } from '../connectorBinding';
 
 export const CLOSED_SHOWN_DAYS = 30;
 /** How many sync lines the Hosting block shows, newest first. */
@@ -122,7 +123,7 @@ async function syncLines(env: Env, ids: number[]) {
 }
 
 export async function hostingSystems(env: Env, p: { id: number; company_id: number | null }, viewer: Viewer, viewerMember: boolean, href: string) {
-  if (p.company_id == null) return { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.', syncs: { state: 'not_recorded', rows: [], reason: null } };
+  if (p.company_id == null) return { state: 'not_recorded', systems: [], reason: NO_COMPANY_REASON, syncs: { state: 'not_recorded', rows: [], reason: null } };
   const vercel = await connections(env, p.company_id);
   if (!vercel.length) return { state: 'empty', systems: [], reason: EMPTY, syncs: { state: 'empty', rows: [], reason: NO_SYNC } };
   const ids = vercel.map((v) => Number(v.id));
@@ -184,7 +185,7 @@ export async function hostingSystems(env: Env, p: { id: number; company_id: numb
  * facts, beside GitHub's "Built with". Its own read, Unreadable on its own.
  */
 export async function vercelRuntime(env: Env, p: { id: number; company_id: number | null }, viewer: Viewer, viewerMember: boolean) {
-  if (p.company_id == null) return { state: 'not_recorded', items: [], reason: 'This project has no company scope for connectors.' };
+  if (p.company_id == null) return { state: 'not_recorded', items: [], reason: NO_COMPANY_REASON };
   const vercel = await connections(env, p.company_id);
   if (!vercel.length) return { state: 'empty', items: [], reason: EMPTY };
   const rows = await projectsOf(env, p.id, vercel.map((v) => Number(v.id)));

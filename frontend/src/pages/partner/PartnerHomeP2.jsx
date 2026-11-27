@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Ban, ChevronDown, ChevronRight, ChevronUp, Circle, Clock, Gauge, Info, RefreshCw, SquareMinus, TriangleAlert } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Unrecorded, Unreadable } from '../../ui';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { TILE } from '../studio/studioLayoutModel';
 import { NO_PARTNER_PROFILE } from './PartnerFirmProfileCard';
+import {
+  CHIP_KINDS, CLOSED, FEED_KINDS, KIND, expandedRows, feedNote, feedSummary, feedView, hiddenSentence, homeFeed,
+  kindCounts, kindsLine, partialNote, returnFocus, unreadFeedReads, unreadKinds, unreadSubject,
+} from './firmFeedModel';
+import { FEED_ANCHOR, readFeedReturn, saveFeedReturn, studioReturnHref } from './feedReturn';
 
 /**
  * Partner Studio's body — "Where does the firm stand today?" (D394).
@@ -36,6 +42,9 @@ import { NO_PARTNER_PROFILE } from './PartnerFirmProfileCard';
  * firm: Board, KPIs" — never "Granted by <founder>": `engagement_seats` is
  * written by the partner, so a chip in the founder's voice would be false.
  *
+ * D8733 (#8733): the feed keeps every alert, each naming its client and opening that item; the module shows six
+ * with one reserved per kind, discloses the rest by kind and expands in place (`firmFeedModel.js`).
+ *
  * NOT DRAWN, AND SAID SO: an inbound seam ("From Halverton · 2h ago") — no
  * message store feeds this page; "proposal opened 3×" — `opened_at` is the
  * client's to set and nothing sets it.
@@ -57,7 +66,6 @@ const usd = (cents) => (cents === null || cents === undefined || !Number.isFinit
   ? null
   : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(cents) / 100));
 
-const CLOSED = ['delivered', 'reviewed', 'invoiced', 'cancelled'];
 const within = (iso, days) => {
   if (!iso) return false;
   const d = String(iso).slice(0, 10);
@@ -109,63 +117,6 @@ export function homeTiles({ board, retainers, capacity }) {
   ];
 }
 
-/** The feed: at most six lines, each with its receipt and where to act on it. */
-export function homeFeed({ board, retainers, capacity }) {
-  const out = [];
-  const live = (board?.items || []).filter((i) => !i.seat_revoked_at && !CLOSED.includes(i.status));
-  for (const i of live.filter((x) => x.health === 'at_risk' || x.health === 'blocked')) {
-    out.push({
-      key: `risk-${i.engagement_id}`, tone: 'bad',
-      title: `${i.client || 'Client not recorded'} · ${i.health === 'blocked' ? 'blocked' : 'at risk'}`,
-      body: Array.isArray(i.health_reasons) && i.health_reasons.length ? i.health_reasons.join('; ') : null,
-      receipt: 'Read from milestones, blockers and deliverables',
-      action: 'Open Delivery · Health', to: '/delivery/health',
-    });
-  }
-  for (const i of live.filter((x) => x.milestones_due_7d > 0)) {
-    out.push({
-      key: `due-${i.engagement_id}`, tone: 'due',
-      title: `${i.client || 'Client not recorded'} · ${i.milestones_due_7d} milestone${i.milestones_due_7d === 1 ? '' : 's'} due this week`,
-      body: i.scope || null,
-      receipt: 'Milestone due dates, as the firm entered them',
-      action: 'Open the board', to: '/delivery/board',
-    });
-  }
-  for (const p of (capacity?.people || []).filter((x) => x.over_committed === true)) {
-    out.push({
-      key: `cap-${p.user_id ?? p.name}`, tone: 'due',
-      title: `${p.name || 'A team member'} is over the stated cap`,
-      body: p.total_hours_per_week != null && p.cap_hours != null ? `${p.total_hours_per_week} h a week against a cap of ${p.cap_hours} h a week` : null,
-      receipt: p.cap_source === 'person' ? 'Their own cap, stated by the firm' : 'The firm-wide cap, stated by the firm',
-      action: 'Open Capacity', to: '/delivery/capacity',
-    });
-  }
-  for (const r of (retainers?.items || []).filter((x) => x.retainer && within(x.retainer.renews_at, 60))) {
-    out.push({
-      key: `renew-${r.engagement_id ?? r.founder_name}`, tone: 'plain',
-      title: `${r.founder_name || 'Client not recorded'} renews ${String(r.retainer.renews_at).slice(0, 10)}`,
-      body: null,
-      receipt: 'Retainer record',
-      action: 'Open Retainers', to: '/pipeline/retainers',
-    });
-  }
-  for (const i of live.filter((x) => x.mode === 'embedded' && x.grant)) {
-    out.push({
-      key: `seat-${i.engagement_id}`, tone: 'plain',
-      title: `${i.client || 'Client not recorded'} · embedded`,
-      grant: `Scope recorded by the firm: ${i.grant}`,
-      body: i.grant_holder ? `Seat held by ${i.grant_holder}` : null,
-      receipt: 'Seat record, entered by this firm',
-      action: 'Open Capacity', to: '/delivery/capacity',
-    });
-  }
-  return out.slice(0, 6);
-}
-
-const TONE = {
-  bad: 'border-l-red-500', due: 'border-l-amber-500', plain: 'border-l-gray-300',
-};
-
 function Tile({ tile, onRetry }) {
   return (
     <div className="rounded-xl border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`home-tile-${tile.key}`}>
@@ -209,57 +160,265 @@ export function OperatingBrief() {
   );
 }
 
-/**
- * The reads that did not answer, named for a sentence. Each of the feed's lines
- * comes from exactly one read, so an unanswered read is a part of the feed that
- * could not be drawn, whatever the others returned.
+/*
+ * D8733 (#8733) — THE FIRM FEED, canvas `Studio Home Operating Partner` (SOP01 to SOP12). The model is
+ * `firmFeedModel.js`; this draws it. Six summary rows with one reserved per kind present (owner answer Q3, A), kind
+ * chips that count every alert, a disclosure naming what is hidden, and Show all expanding in place (Q1, A), grouped
+ * by kind, with the view kept in `?feed=`. Each row names its client and opens that item with `from=studio`; on
+ * return focus goes back to the action used, or to the alert now in its place (SOP07).
  */
-export const FEED_READS = { board: 'the delivery board', retainers: 'retainers', capacity: 'capacity' };
-export function unreadFeedReads(reads) {
-  return Object.keys(FEED_READS).filter((key) => !reads?.[key]);
-}
-const sentence = (names) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+export { homeFeed, FEED_READS, unreadFeedReads } from './firmFeedModel';
 
-/** The feed: each line with its receipt and where to act on it. */
-export function FirmFeed({ reads, onRetry }) {
-  const feed = homeFeed(reads);
+const TONE = {
+  blk: 'border-l-red-500', risk: 'border-l-red-500', due: 'border-l-amber-500', cap: 'border-l-amber-500',
+  ren: 'border-l-gray-300', seat: 'border-l-gray-300',
+};
+// A shape and a word for every kind, never the border colour alone (SOP12).
+const GLYPH = { blk: SquareMinus, risk: TriangleAlert, due: Clock, cap: Gauge, ren: RefreshCw, seat: Circle };
+const MARK = { blk: 'Blocked', risk: 'At risk', due: 'Due', cap: 'Over cap', ren: 'Renews', seat: 'Embedded' };
+const LIST_ID = 'firm-feed-list';
+
+function KindMark({ kind }) {
+  const G = GLYPH[kind];
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100" data-kind={kind}>
+      <G size={11} aria-hidden="true" />{MARK[kind]}
+    </span>
+  );
+}
+
+function FeedRow({ alert, onOpen, linkRef }) {
+  return (
+    <li className={`flex flex-col gap-2 rounded-r-[10px] border border-l-[3px] border-axal-hairline bg-white p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 dark:border-gray-800 dark:bg-gray-900 ${TONE[alert.kind]}`} data-testid={`feed-row-${alert.key}`}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <KindMark kind={alert.kind} />
+          <span className="text-[13px] font-bold">{alert.who}</span>
+          {alert.grant && (
+            <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[10px] text-axal-muted" data-testid="home-grant-chip">{alert.grant}</span>
+          )}
+        </div>
+        {alert.body && <div className="mt-1 text-[11.5px] text-axal-muted">{alert.body}</div>}
+        {alert.when && <div className="mt-0.5 text-[11.5px] font-semibold text-axal-ink dark:text-gray-100">{alert.when}</div>}
+        <div className="mt-1 text-[10.5px] text-axal-faint">{alert.receipt}</div>
+      </div>
+      <Link
+        ref={linkRef} to={alert.to} aria-label={alert.label} onClick={(e) => onOpen(e, alert)}
+        className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-lg border border-axal-hairline px-3 text-[12px] font-semibold text-amber-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 sm:min-h-[36px] sm:border-0 sm:px-1 dark:border-gray-700 dark:text-amber-300"
+        data-testid={`feed-open-${alert.key}`}
+      >
+        {alert.action}<ChevronRight size={13} aria-hidden="true" />
+      </Link>
+    </li>
+  );
+}
+
+/** The kind chips: toggle buttons that count every alert, an Unavailable chip for a kind not read, and the zeros in words. */
+function KindChips({ all, una, pressed, expanded, onPick }) {
+  const counts = kindCounts(all);
+  const present = FEED_KINDS.filter((k) => counts[k.key] > 0 || (una.includes(k.key) && CHIP_KINDS.includes(k.key)));
+  const zero = CHIP_KINDS.filter((k) => counts[k] === 0 && !una.includes(k));
+  const chip = 'inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold sm:min-h-[36px]';
+  const tone = (on) => (on
+    ? 'border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-200'
+    : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100');
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2" role="group" aria-label="Show alerts by kind" data-testid="feed-kind-chips">
+      {expanded && (
+        <button type="button" className={`${chip} ${tone(pressed === 'all')}`} aria-pressed={pressed === 'all'} onClick={() => onPick('all')}>
+          All <b className="tabular-nums">{all.length}</b>
+        </button>
+      )}
+      {present.map((k) => {
+        const G = GLYPH[k.key];
+        if (una.includes(k.key)) {
+          return (
+            <button key={k.key} type="button" className={`${chip} ${tone(false)} text-axal-muted`} aria-disabled="true" title="Could not be read" data-testid={`feed-chip-${k.key}`}>
+              <Ban size={12} aria-hidden="true" />{k.chip} · Unavailable
+            </button>
+          );
+        }
+        return (
+          <button key={k.key} type="button" className={`${chip} ${tone(pressed === k.key)}`} aria-pressed={pressed === k.key} onClick={() => onPick(k.key)} data-testid={`feed-chip-${k.key}`}>
+            <G size={12} aria-hidden="true" />{k.chip} <b className="tabular-nums">{counts[k.key]}</b>
+          </button>
+        );
+      })}
+      {zero.length > 0 && (
+        <span className="text-[11px] text-axal-faint" data-testid="feed-kind-zero">{zero.map((k) => `${KIND[k].chip} 0`).join(' · ')}</span>
+      )}
+    </div>
+  );
+}
+
+/** The feed: each line with its receipt and the exact item it opens. */
+export function FirmFeed({ reads, onRetry, readAt = null, now }) {
+  const all = homeFeed(reads, now);
+  const shown = feedSummary(all);
+  const hidden = hiddenSentence(all, shown);
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const view = feedView(params.get('feed') || '');
+  const expanded = view !== '';
+  const { rows, line } = expandedRows(all, view);
+  const visible = expanded ? rows : shown;
+  const una = unreadKinds(reads);
   // D4620 (#4620): the all-clear is a claim about every read. With one or two unanswered it is not
   // made, and a feed that has lines says which part of the firm's record it could not read.
   const unread = unreadFeedReads(reads);
   const qualifier = unread.length > 0 && (
-    <Unreadable what={`The feed's ${sentence(unread.map((key) => FEED_READS[key]))}`} claim="What is listed here comes from the rest, and this is not a claim that nothing else is at risk, due or renewing." onRetry={onRetry} />
+    <Unreadable what={unreadSubject(reads)} claim="What is listed here comes from the rest, and this is not a claim that nothing else is at risk, due or renewing." onRetry={onRetry} />
   );
+
+  const links = useRef(new Map());
+  const toggle = useRef(null);
+  const pending = useRef(null);
+  const handled = useRef(false);
+  const [status, setStatus] = useState('');
+
+  const setView = (next, focus) => {
+    setStatus('');
+    pending.current = focus || null;
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      n.delete('alert');
+      if (next) n.set('feed', next); else n.delete('feed');
+      return n;
+    }, { replace: true });
+  };
+  // A chip changes the list and leaves focus where it is; the count line says what is shown (SOP12).
+  const pick = (kind) => setView(kind === view && kind !== 'all' ? 'all' : kind);
+  const showAll = () => {
+    if (expanded) { setView('', 'toggle'); return; }
+    const first = all.find((a) => !shown.includes(a));
+    setView('all', first ? first.key : 'toggle');
+  };
+
+  // Opening an alert keeps the way back: this address with the view and the alert used, then the destination.
+  const open = (e, alert) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    const href = studioReturnHref(view, alert.key);
+    saveFeedReturn({ href, to: alert.to, key: alert.key, who: alert.who, kind: alert.kind, index: visible.indexOf(alert) });
+    navigate(href, { replace: true });
+    navigate(alert.to);
+  };
+
+  useEffect(() => {
+    const key = pending.current;
+    if (!key) return;
+    pending.current = null;
+    (key === 'toggle' ? toggle.current : links.current.get(key))?.focus();
+  });
+
+  // SOP07: back from a destination. Focus the action used, or the alert now in its place, and say which once.
+  const alertKey = params.get('alert') || '';
+  useEffect(() => {
+    if (!alertKey || handled.current) return;
+    handled.current = true;
+    const kept = readFeedReturn();
+    const target = returnFocus(visible, kept?.key === alertKey ? kept : { key: alertKey });
+    if (!target) return;
+    setStatus(target.message);
+    if (target.key) links.current.get(target.key)?.focus();
+  }, [alertKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const answered = unread.length < 3;
+  const row = (a) => (
+    <FeedRow key={a.key} alert={a} onOpen={open} linkRef={(el) => { if (el) links.current.set(a.key, el); else links.current.delete(a.key); }} />
+  );
+  const byKind = FEED_KINDS.map((k) => ({ k, of: rows.filter((a) => a.kind === k.key) })).filter((g) => g.of.length);
+
   return (
-    <section data-testid="partner-home-feed">
+    <section id={FEED_ANCHOR} tabIndex={-1} className="outline-none" data-testid="partner-home-feed">
       <p className="mb-2 text-[11px] text-axal-faint">Every line carries its receipt</p>
-      {feed.length === 0 ? (
-        unread.length > 0 ? qualifier : <p className="text-[12.5px] text-axal-muted">Nothing is at risk, due this week, over a stated cap or renewing soon.</p>
-      ) : (
-        <ul className="space-y-2">
-          {feed.map((f) => (
-            <li key={f.key} className={`flex items-start justify-between gap-4 rounded-r-[10px] border border-l-[3px] border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900 ${TONE[f.tone] || TONE.plain}`}>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-bold">{f.title}</span>
-                  {f.grant && (
-                    <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[10px] text-axal-muted" data-testid="home-grant-chip">{f.grant}</span>
-                  )}
-                </div>
-                {f.body && <div className="mt-1 text-[11.5px] text-axal-muted">{f.body}</div>}
-                <div className="mt-1 text-[10.5px] text-axal-faint">{f.receipt}</div>
-              </div>
-              <Link to={f.to} className="shrink-0 text-[12px] font-semibold text-amber-700 underline dark:text-amber-300">{f.action}</Link>
-            </li>
-          ))}
-        </ul>
+      {status && (
+        <p role="status" className="mb-2 flex items-center gap-1.5 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="feed-return-status">
+          <Info size={13} aria-hidden="true" />{status}
+        </p>
       )}
-      {feed.length > 0 && qualifier}
+      {all.length === 0 && unread.length === 0 ? (
+        <>
+          <p className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">Nothing is at risk, due this week, over a stated cap or renewing soon.</p>
+          <p className="mt-1 text-[11px] text-axal-faint" data-testid="feed-empty-counts">
+            {readAt ? `All three reads answered at ${readAt.toTimeString().slice(0, 5)} today.` : 'All three reads answered.'}{' '}
+            {CHIP_KINDS.map((k) => `${KIND[k].chip} 0`).join(' · ')}.
+          </p>
+        </>
+      ) : (
+        <>
+          {answered && <KindChips all={all} una={una} pressed={expanded ? view : ''} expanded={expanded} onPick={pick} />}
+          {expanded ? (
+            <div id={LIST_ID} aria-label="All alerts" className="space-y-3">
+              {byKind.map(({ k, of }) => (
+                <div key={k.key}>
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <h4 className="text-[12px] font-bold text-axal-ink dark:text-gray-100">{k.group}</h4>
+                    <span className="font-mono text-[11px] text-axal-faint">{of.length}</span>
+                  </div>
+                  <ul className="space-y-2">{of.map(row)}</ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            visible.length > 0 && <ul id={LIST_ID} className="space-y-2">{visible.map(row)}</ul>
+          )}
+          {!expanded && hidden && (
+            <div className="mt-2 flex flex-col gap-2 rounded-lg border border-dashed border-axal-hairline px-3 py-2 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700" data-testid="feed-hidden">
+              <p className="text-[12px] text-axal-ink dark:text-gray-100"><b>{hidden.lead}</b> · {hidden.detail}</p>
+              <button ref={toggle} type="button" onClick={showAll} aria-expanded="false" aria-controls={LIST_ID}
+                className="inline-flex min-h-[44px] items-center justify-center gap-1 rounded-lg border border-axal-hairline px-3 text-[12px] font-semibold sm:min-h-[36px] dark:border-gray-700">
+                Show all {all.length} alerts<ChevronDown size={13} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+          {expanded && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button ref={toggle} type="button" onClick={showAll} aria-expanded="true" aria-controls={LIST_ID}
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-axal-hairline px-3 text-[12px] font-semibold sm:min-h-[36px] dark:border-gray-700">
+                Show fewer<ChevronUp size={13} aria-hidden="true" />
+              </button>
+              <span className="text-[11px] text-axal-faint" aria-live="polite" data-testid="feed-count-line">{line}</span>
+            </div>
+          )}
+          {qualifier}
+        </>
+      )}
       <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="partner-home-limits">
         Not on this page: messages from a client (no inbound record feeds it) and whether a proposal was
         opened (the client&apos;s to record, and nothing records it).
       </p>
     </section>
   );
+}
+
+/**
+ * D8733 (owner answer Q2, A; SOP11A) — on a phone the feed starts about 993 px down, under Eadwyn, the profile band,
+ * the tiles and the brief. This link sits under the firm line, counts the feed by kind, and jumps to the module; the
+ * module order stays the member's. Hidden from `md` up, where the feed is in view sooner.
+ */
+export function FeedJumpLink({ reads, now }) {
+  const all = homeFeed(reads, now);
+  const kinds = kindsLine(all);
+  const partial = partialNote(reads);
+  const head = all.length ? `Firm feed · ${all.length} alert${all.length === 1 ? '' : 's'}` : 'Firm feed · no alerts';
+  const sub = [kinds || (unreadFeedReads(reads).length ? null : 'Nothing is at risk, due, over cap or renewing'), partial].filter(Boolean).join(' · ');
+  return (
+    <a href={`#${FEED_ANCHOR}`} aria-label={`${head.replace(' · ', ': ')}.${sub ? ` ${sub.replaceAll(' · ', ', ')}.` : ''} Jump to the feed`}
+      className="flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3 py-2 md:hidden dark:border-gray-800 dark:bg-gray-900" data-testid="link-feed-jump">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <b className="text-[13.5px]">{head}</b>
+        {sub && <span className="text-[11.5px] text-axal-muted">{sub}</span>}
+      </span>
+      <ChevronRight size={14} aria-hidden="true" />
+    </a>
+  );
+}
+
+/** The firm feed module's note: "8 alerts · 6 shown", and "Partial · 2 of 3 reads" when a read failed. */
+export function feedSummaryNote(reads) {
+  const all = homeFeed(reads);
+  return feedNote(all, feedSummary(all), reads);
 }
 
 export const UNLINKED_REASON = 'No partner profile is attached to this sign-in, so the firm’s record is not read.';
@@ -293,7 +452,9 @@ export function partnerTiles(state, onRetry) {
   return {
     firm_tiles: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, note, href: '/delivery/board', openLabel: 'Open Delivery', body: <FirmTiles reads={reads} onRetry={onRetry} /> },
     operating_brief: { state: TILE.READY, body: <OperatingBrief /> },
-    firm_feed: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, href: '/delivery/health', openLabel: 'Open the feed', body: <FirmFeed reads={reads} onRetry={onRetry} /> },
+    // D8733: no "Open the feed" link (it went to Delivery · Health, though the feed also holds capacity and
+    // renewals). The feed is this module, and Show all expands it in place; the note counts every alert.
+    firm_feed: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, note: feedSummaryNote(reads), body: <FirmFeed reads={reads} onRetry={onRetry} readAt={state.readAt || null} /> },
   };
 }
 
@@ -343,7 +504,8 @@ export function usePartnerHome(previewing = false) {
     const reads = { ...(have && wanted.length ? have : {}) };
     (have && wanted.length ? wanted : Object.keys(READS)).forEach((key, index) => { reads[key] = answers[index]; });
     kept.current = reads;
-    setState({ status: 'ready', reads: { board: reads.board ?? null, retainers: reads.retainers ?? null, capacity: reads.capacity ?? null } });
+    // D8733: when the reads answered, for the empty feed's "All three reads answered at 09:12 today".
+    setState({ status: 'ready', readAt: new Date(), reads: { board: reads.board ?? null, retainers: reads.retainers ?? null, capacity: reads.capacity ?? null } });
   }, [previewing]);
   useEffect(() => { kept.current = null; load(); }, [load]);
 
