@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#881337;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:172px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:13px 0}
+    .main{flex:1;min-width:0}
+    .inner{padding:17px 19px 24px}
+    .rail{width:264px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:16px 15px 22px}
+    .hq{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 19px;background:#881337;color:#fff}
+    .st{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 19px;background:#334155;color:#fff}
+    .num{font-variant-numeric:tabular-nums}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:14px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 10px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;background:#881337;color:#fff;white-space:nowrap}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;white-space:nowrap}
+    .vm{font-size:11px;font-weight:700;color:#881337;white-space:nowrap}
+    .nr{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:2px 7px;border-radius:4px;background:#fffbf2;color:#92400e;border:1px dashed #f0b429;white-space:nowrap}
+    .lockbox{border:1px dashed #cbd5e1;background:#f8fafc;border-radius:9px;padding:12px 13px}
+  </style>
+</helmet>
+
+<!-- ══════════ T1 · THREE AXES ══════════ -->
+<section class="ab" id="t1">
+  <div class="ab-hd"><a class="ab-id" href="#t1">T1</a><span class="ab-nm">The three axes — title, authority, economics</span><span class="ab-sub">the rule every other artboard obeys</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">A Principal can bring a deal to committee and cannot vote on it. A Venture Partner outranks them socially and holds the same power. An external CFO reads Revenue and touches no deal at all. Three independent facts, so three visually distinct chip families — the moment one implies another, the permission system is decorative.</div>
+
+  <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Investment track · the ladder</div>
+      <div style="display:grid;gap:6px;margin-top:11px">
+        <sc-for list="{{ ladder }}" as="l" hint-placeholder-count="8">
+          <div style="{{ l.rowStyle }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+              <span style="font-size:11.5px;font-weight:700">{{ l.title }}</span>
+              <span style="{{ l.powerStyle }}">{{ l.power }}</span>
+            </div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px;margin-top:5px">
+              <span style="font-size:10px;color:#615c6e;line-height:1.4;min-width:0">{{ l.does }}</span>
+              <span class="num" style="font-size:10px;font-weight:700;color:{{ l.carryInk }};flex:none">{{ l.carry }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ ladderNote }}</div>
+    </div>
+
+    <div style="display:grid;gap:16px;align-content:start">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="lbl">Deal power · one axis, five levels</div>
+        <div style="display:grid;gap:8px;margin-top:11px">
+          <sc-for list="{{ powers }}" as="p" hint-placeholder-count="5">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="{{ p.chip }}">{{ p.code }}</span>
+              <span style="font-size:10.5px;color:#3f3a49;line-height:1.5;min-width:0">{{ p.means }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ powerNote }}</div>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="lbl">Chip families</div>
+        <div style="display:grid;gap:9px;margin-top:11px">
+          <sc-for list="{{ families }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+              <span style="{{ f.sample }}">{{ f.label }}</span>
+              <span style="font-size:10.5px;color:#3f3a49;line-height:1.45;min-width:0">{{ f.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Non-investment functions</div>
+      <div style="font-size:11px;color:#3f3a49;margin-top:8px;line-height:1.6">{{ fnIntro }}</div>
+      <div style="display:grid;gap:7px;margin-top:11px">
+        <sc-for list="{{ functions }}" as="f" hint-placeholder-count="6">
+          <div style="{{ f.rowStyle }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:11px;font-weight:700">{{ f.name }}</span>
+              <span style="{{ f.powerStyle }}">{{ f.power }}</span>
+            </div>
+            <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ f.sees }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ T2 · TEAM HUB · SUBSIDIARY ══════════ -->
+<section class="ab" id="t2">
+  <div class="ab-hd"><a class="ab-id" href="#t2">T2</a><span class="ab-nm">Team hub — subsidiary</span><span class="ab-sub">steel · all six zones</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">This row absorbs the staff fragments that were scattered across Accounts and Settings. Those zones move here rather than being mirrored — a permission edited in two places is a permission nobody trusts.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSub }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="st">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;font-weight:700">Axal France</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">TERRITORY · FR</span></div>
+        <span class="num" style="font-size:10.5px;opacity:.75">{{ hc.total }} people · {{ hc.ext }} external</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.025em">Team</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ hubSub }}</div>
+
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ snapshot }}" as="s" hint-placeholder-count="6">
+            <div style="{{ s.cardStyle }}">
+              <div class="lbl" style="font-size:8.5px;line-height:1.3">{{ s.k }}</div>
+              <div class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:5px;color:{{ s.ink }}">{{ s.v }}</div>
+              <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:4px;line-height:1.35">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Org chart</span><span class="zs">investment spine · functions adjacent</span></div>
+            <div style="display:flex;gap:14px;align-items:flex-start">
+              <div style="flex:1;min-width:0">
+                <div class="lbl" style="font-size:8.5px;margin-bottom:8px">Investment</div>
+                <div style="display:grid;gap:7px">
+                  <sc-for list="{{ spine }}" as="p" hint-placeholder-count="4">
+                    <div style="{{ p.nodeStyle }}">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span style="font-size:11.5px;font-weight:700;min-width:0">{{ p.name }}</span>
+                        <span style="{{ p.powerStyle }}">{{ p.power }}</span>
+                      </div>
+                      <div style="font-size:10px;color:#615c6e;margin-top:4px">{{ p.title }}</div>
+                      <sc-if value="{{ p.ends }}"><div class="num" style="font-size:9.5px;color:#92400e;margin-top:4px">{{ p.ends }}</div></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div class="lbl" style="font-size:8.5px;margin-bottom:8px">Functions</div>
+                <div style="display:grid;gap:7px">
+                  <sc-for list="{{ adjacent }}" as="p" hint-placeholder-count="3">
+                    <div style="{{ p.nodeStyle }}">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <span style="font-size:11.5px;font-weight:700;min-width:0">{{ p.name }}</span>
+                        <span style="{{ p.powerStyle }}">{{ p.power }}</span>
+                      </div>
+                      <div style="font-size:10px;color:#615c6e;margin-top:4px">{{ p.title }}</div>
+                      <sc-if value="{{ p.ends }}"><div class="num" style="font-size:9.5px;color:#92400e;margin-top:4px">{{ p.ends }}</div></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ orgNote }}</div>
+          </div>
+
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Investment committee</span><span class="zs">compressed</span></div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ icRoster }}" as="m" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+                  <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ m.name }}</div><div style="font-size:9.5px;color:#615c6e;margin-top:2px">{{ m.title }}</div></div>
+                  <span style="{{ m.powerStyle }}">{{ m.power }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px">
+              <sc-for list="{{ icStats }}" as="s" hint-placeholder-count="4">
+                <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:8px;padding:9px 10px">
+                  <div class="lbl" style="font-size:8px">{{ s.k }}</div>
+                  <div class="num" style="font-size:14px;font-weight:800;margin-top:4px;color:{{ s.ink }}">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px;padding-top:10px;border-top:1px solid #f4f3f7">
+              <span style="font-size:10.5px;color:#615c6e;line-height:1.5;min-width:0">{{ quorumNote }}</span>
+              <span class="vm">Console →</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:15px 17px;margin-top:14px">
+          <div class="zh"><span class="zt">People directory</span><span class="zs">COLLECTION · filter by track, type, power, coverage</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+            <sc-for list="{{ directory }}" as="p" hint-placeholder-count="4">
+              <div style="{{ p.cardStyle }}">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                  <div style="min-width:0">
+                    <div style="font-size:12px;font-weight:800;letter-spacing:-.01em">{{ p.name }}</div>
+                    <div style="font-size:10px;color:#615c6e;margin-top:3px">{{ p.title }}</div>
+                  </div>
+                  <span style="{{ p.powerStyle }}">{{ p.power }}</span>
+                </div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">
+                  <span style="{{ p.typeStyle }}">{{ p.type }}</span>
+                  <sc-for list="{{ p.tags }}" as="t" hint-placeholder-count="2"><span style="{{ t.style }}">{{ t.label }}</span></sc-for>
+                </div>
+                <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:8px;padding-top:7px;border-top:1px solid #f4f3f7">{{ p.load }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">External engagements</span><span class="zs">LEDGER · access always expires</span></div>
+            <div style="display:grid;grid-template-columns:1.05fr .9fr 1fr .7fr .8fr;gap:9px">
+              <span class="th">Member</span><span class="th">Scope</span><span class="th">Agreement</span><span class="th">Ends</span><span class="th">Access</span>
+            </div>
+            <sc-for list="{{ engagements }}" as="e" hint-placeholder-count="4">
+              <div style="{{ e.rowStyle }}">
+                <span class="td" style="font-weight:700;border-top:none;padding:9px 0">{{ e.who }}</span>
+                <span class="td" style="border-top:none;padding:9px 0">{{ e.scope }}</span>
+                <span class="td" style="border-top:none;padding:9px 0">{{ e.doc }}</span>
+                <span class="td num" style="border-top:none;padding:9px 0;color:{{ e.endInk }}">{{ e.ends }}</span>
+                <span class="td" style="border-top:none;padding:9px 0"><span style="{{ e.pill }}">{{ e.access }}</span></span>
+              </div>
+            </sc-for>
+            <div style="{{ expiredBox }}">
+              <div style="font-size:11.5px;font-weight:700;color:#b91c1c">{{ expiredTitle }}</div>
+              <div style="font-size:11px;color:#7f1d1d;margin-top:5px;line-height:1.6">{{ expiredBody }}</div>
+            </div>
+          </div>
+
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Public team page</span><span class="zs">projection · not a second profile</span></div>
+            <div style="display:grid;gap:7px">
+              <sc-for list="{{ publicRows }}" as="p" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+                  <span style="font-size:11px;color:#615c6e;flex:none">⠿</span>
+                  <div style="min-width:0;flex:1"><div style="font-size:11px;font-weight:700">{{ p.name }}</div><div style="font-size:9.5px;color:#615c6e;margin-top:2px">{{ p.bio }}</div></div>
+                  <span style="{{ p.toggle }}"><span style="{{ p.knob }}"></span></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:11px 12px;margin-top:11px">
+              <div class="lbl" style="font-size:8.5px">What a visitor receives</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px">
+                <div>
+                  <div style="font-size:9px;font-weight:800;letter-spacing:.05em;color:#047857">PROJECTED</div>
+                  <div style="display:grid;gap:4px;margin-top:6px">
+                    <sc-for list="{{ projected }}" as="f" hint-placeholder-count="4"><span style="font-size:10px;color:#3f3a49">{{ f }}</span></sc-for>
+                  </div>
+                </div>
+                <div>
+                  <div style="font-size:9px;font-weight:800;letter-spacing:.05em;color:#b91c1c">NEVER SENT</div>
+                  <div style="display:grid;gap:4px;margin-top:6px">
+                    <sc-for list="{{ withheld }}" as="f" hint-placeholder-count="5"><span style="font-size:10px;color:#615c6e">{{ f }}</span></sc-for>
+                  </div>
+                </div>
+              </div>
+              <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">{{ projCount }}</div>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ publicNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="sub" page="Team" hint-size="100%,1020px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ T3 · OVERSIGHT ══════════ -->
+<section class="ab" id="t3">
+  <div class="ab-hd"><a class="ab-id" href="#t3">T3</a><span class="ab-nm">Team hub — Super, all teams</span><span class="ab-sub">oxblood · read-only oversight</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The dual-mode pattern Funds established. Oversight answers governance questions across tenants — who can vote, who has nobody who can — without opening a single carry row, because aggregate carry is Partner-only within a tenant and HQ is not a partner in someone else's firm.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSuper }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="font-size:12.5px;font-weight:700">Team</span>
+          <span style="display:inline-flex;background:rgba(255,255,255,.16);border-radius:7px;padding:2px">
+            <sc-for list="{{ modesOv }}" as="m" hint-placeholder-count="2"><span style="{{ m.style }}">{{ m.label }}</span></sc-for>
+          </span>
+          <span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">READ ONLY</span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.75">{{ ovTotals }}</span>
+      </div>
+      <div class="inner">
+        <div class="c" style="padding:15px 17px">
+          <div class="zh"><span class="zt">Every firm on the platform</span><span class="zs">governance shape, not personnel files</span></div>
+          <div style="display:grid;grid-template-columns:.9fr .6fr .6fr .6fr .7fr .9fr 1.15fr;gap:9px">
+            <span class="th">Tenant</span><span class="th">People</span><span class="th">External</span><span class="th">VOTE</span><span class="th">Quorum</span><span class="th">Open objections</span><span class="th">Flag</span>
+          </div>
+          <sc-for list="{{ ovRows }}" as="o" hint-placeholder-count="4">
+            <div style="{{ o.rowStyle }}">
+              <span class="td" style="font-weight:700">{{ o.tenant }}</span>
+              <span class="td num">{{ o.people }}</span>
+              <span class="td num">{{ o.ext }}</span>
+              <span class="td num" style="font-weight:700;color:{{ o.voteInk }}">{{ o.vote }}</span>
+              <span class="td num">{{ o.quorum }}</span>
+              <span class="td num" style="color:{{ o.objInk }}">{{ o.obj }}</span>
+              <span class="td"><sc-if value="{{ o.flag }}"><span style="{{ o.flagStyle }}">{{ o.flag }}</span></sc-if><sc-if value="{{ o.clean }}"><span style="font-size:10px;color:#047857;font-weight:700">clear</span></sc-if></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ ovNote }}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">What oversight cannot open</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ ovBlocked }}" as="b" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 11px;border:1px dashed #cbd5e1;background:#f8fafc;border-radius:9px">
+                  <span style="width:13px;height:13px;display:block;flex:none;color:#615c6e;margin-top:1px" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                  <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ b.what }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px;line-height:1.5">{{ b.why }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Ceiling inheritance</span><span class="zs">HQ loosens, tenants tighten</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ ceilings }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid {{ c.edge }};background:{{ c.bg }};border-radius:9px">
+                  <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ c.preset }}</div><div style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ c.note }}</div></div>
+                  <span style="{{ c.pill }}">{{ c.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ ceilingNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="super" page="Team" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ T4 · MEMBER PROFILES ══════════ -->
+<section class="ab" id="t4">
+  <div class="ab-hd"><a class="ab-id" href="#t4">T4</a><span class="ab-nm">Member profile — internal and external</span><span class="ab-sub">the authority panel is where the three axes sit side by side</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Left: a Principal who leads deals, holds two observer seats and cannot vote. Right: a fractional Operating Partner with {{ nilsDays }} days left, real Revenue access and no deal power at all. Economics is <em>locked</em> on both when the viewer is neither the member nor a Partner — visible as a locked section, because a hidden one teaches people the wrong shape of the org.</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="2">
+      <div style="background:#fff;border:1px solid {{ p.edge }};border-radius:12px;padding:17px 19px">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="{{ p.avStyle }}">{{ p.initials }}</div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.015em">{{ p.name }}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
+              <span style="{{ p.titleStyle }}">{{ p.title }}</span>
+              <span style="{{ p.typeStyle }}">{{ p.type }}</span>
+              <span style="{{ p.powerStyle }}">{{ p.power }}</span>
+            </div>
+          </div>
+          <sc-if value="{{ p.countdown }}"><div style="{{ p.cdStyle }}"><div class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ p.countdown }}</div><div style="font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-top:2px">days left</div></div></sc-if>
+        </div>
+
+        <div class="lbl" style="margin-top:15px">Authority · three axes</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:10px">
+          <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px">
+            <div class="lbl" style="font-size:8px">Platform permissions</div>
+            <div style="display:grid;gap:4px;margin-top:7px">
+              <sc-for list="{{ p.perms }}" as="x" hint-placeholder-count="4">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:7px"><span style="font-size:10px;color:#3f3a49">{{ x.row }}</span><span style="{{ x.lv }}">{{ x.level }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px">
+            <div class="lbl" style="font-size:8px">Deal power</div>
+            <div style="margin-top:8px"><span style="{{ p.powerStyle }}">{{ p.power }}</span></div>
+            <div style="font-size:10px;color:#3f3a49;margin-top:8px;line-height:1.5">{{ p.powerWhy }}</div>
+          </div>
+          <div style="{{ p.econStyle }}">
+            <div class="lbl" style="font-size:8px">Economics</div>
+            <sc-if value="{{ p.econLocked }}">
+              <div style="display:flex;align-items:center;gap:6px;margin-top:8px"><span style="width:12px;height:12px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ lockIcon }}"></span><span style="font-size:10.5px;font-weight:700;color:#475569">Locked</span></div>
+              <div style="font-size:10px;color:#3f3a49;margin-top:7px;line-height:1.5">{{ p.econNote }}</div>
+            </sc-if>
+            <sc-if value="{{ p.econOpen }}">
+              <div class="num" style="font-size:15px;font-weight:800;margin-top:7px">{{ p.carry }}</div>
+              <div style="font-size:10px;color:#3f3a49;margin-top:6px;line-height:1.5">{{ p.econNote }}</div>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+          <div>
+            <div class="lbl" style="font-size:8.5px">{{ p.assignLabel }}</div>
+            <div style="display:grid;gap:6px;margin-top:9px">
+              <sc-for list="{{ p.assignments }}" as="a" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+                  <span style="font-size:10.5px;font-weight:600;min-width:0">{{ a.what }}</span>
+                  <span style="{{ a.pill }}">{{ a.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div class="lbl" style="font-size:8.5px">Documents</div>
+            <div style="display:grid;gap:6px;margin-top:9px">
+              <sc-for list="{{ p.docs }}" as="d" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+                  <span style="font-size:10.5px;font-weight:600;min-width:0">{{ d.name }}</span>
+                  <span style="{{ d.pill }}">{{ d.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #f4f3f7">
+          <sc-for list="{{ p.actions }}" as="a" hint-placeholder-count="3"><span style="{{ a.style }}">{{ a.label }}</span></sc-for>
+        </div>
+        <div style="font-size:10.5px;color:#615c6e;margin-top:10px;line-height:1.6">{{ p.footNote }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<!-- ══════════ T5 · MATRIX ══════════ -->
+<section class="ab" id="t5">
+  <div class="ab-hd"><a class="ab-id" href="#t5">T5</a><span class="ab-nm">Roles &amp; permissions matrix</span><span class="ab-sub">the governance surface · Tech Support worked</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Presets as rows, admin surfaces as columns, deal power as a separate column that never mixes with them. Tech Support is the row that proves the granularity: full admin on Support, work on access operations, read on Platform, and nothing financial — a preset that can run entitlements without ever seeing what a fund is worth.</div>
+  <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+    <div style="display:grid;grid-template-columns:1.25fr repeat(7,1fr) .85fr;gap:7px;align-items:end">
+      <span class="th">Preset</span>
+      <sc-for list="{{ matrixCols }}" as="c" hint-placeholder-count="7"><span class="th" style="font-size:8.5px;text-align:center">{{ c }}</span></sc-for>
+      <span class="th" style="font-size:8.5px;text-align:center;color:#881337">Deal power</span>
+    </div>
+    <sc-for list="{{ matrix }}" as="r" hint-placeholder-count="8">
+      <div style="{{ r.rowStyle }}">
+        <span style="font-size:11px;font-weight:{{ r.w }};min-width:0">{{ r.preset }}</span>
+        <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7"><div style="{{ c.style }}">{{ c.label }}</div></sc-for>
+        <div style="text-align:center"><span style="{{ r.powerStyle }}">{{ r.power }}</span></div>
+      </div>
+    </sc-for>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid #f4f3f7">
+      <sc-for list="{{ matrixKey }}" as="k" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:7px"><span style="{{ k.swatch }}">{{ k.code }}</span><span style="font-size:10.5px;color:#3f3a49">{{ k.means }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Editing a cell</div>
+      <div style="border:1.5px solid #881337;background:#fff5f7;border-radius:10px;padding:13px 14px;margin-top:11px">
+        <div style="font-size:11.5px;font-weight:800;color:#4c0519">{{ edit.what }}</div>
+        <div style="font-size:11px;color:#4c0519;margin-top:7px;line-height:1.6">{{ edit.blast }}</div>
+        <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Apply · typed reason</span><span class="gho">Cancel</span></div>
+        <div class="num" style="font-size:9.5px;color:#881337;margin-top:9px">{{ edit.audit }}</div>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ edit.note }}</div>
+    </div>
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Tech Support, worked</div>
+      <div style="display:grid;gap:7px;margin-top:11px">
+        <sc-for list="{{ techWorked }}" as="t" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid {{ t.edge }};background:{{ t.bg }};border-radius:8px">
+            <span style="font-size:11px;font-weight:600;min-width:0">{{ t.row }}</span>
+            <span style="{{ t.pill }}">{{ t.level }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ techNote }}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ T6 · IC CONSOLE ══════════ -->
+<section class="ab" id="t6">
+  <div class="ab-hd"><a class="ab-id" href="#t6">T6</a><span class="ab-nm">IC console — docket with a blocking objection</span><span class="ab-sub">FLAG blocks; only VOTE decides</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Governance around a decision engine that already exists. The one structural addition worth the artboard: an open objection <em>blocks</em> entry to voting, so an Associate with no vote can still stop a partnership from deciding until their concern is answered on the record.</div>
+  <div style="display:grid;grid-template-columns:.85fr 1.6fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">Roster</span><span class="zs">VOTE holders</span></div>
+      <div style="display:grid;gap:7px">
+        <sc-for list="{{ icFull }}" as="m" hint-placeholder-count="4">
+          <div style="{{ m.rowStyle }}">
+            <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ m.name }}</div><div style="font-size:9.5px;color:#615c6e;margin-top:2px">{{ m.title }}</div></div>
+            <span style="{{ m.powerStyle }}">{{ m.power }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1px solid #f9c8d2;background:#fff5f7;border-radius:9px;padding:11px 12px;margin-top:11px">
+        <div class="lbl" style="font-size:8.5px;color:#881337">Quorum</div>
+        <div style="font-size:11px;color:#4c0519;margin-top:6px;line-height:1.6">{{ quorumFull }}</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">Docket</span><span class="zs">WORK BOARD</span></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+        <sc-for list="{{ docket }}" as="l" hint-placeholder-count="5">
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:5px;margin-bottom:7px">
+              <span style="font-size:9px;font-weight:800;letter-spacing:.03em;line-height:1.2">{{ l.name }}</span>
+              <span class="num" style="font-size:9.5px;color:#615c6e">{{ l.n }}</span>
+            </div>
+            <div style="display:grid;gap:6px">
+              <sc-for list="{{ l.cards }}" as="k" hint-placeholder-count="1">
+                <div style="{{ k.cardStyle }}">
+                  <div style="font-size:10.5px;font-weight:800;line-height:1.3">{{ k.deal }}</div>
+                  <div style="font-size:9px;color:#615c6e;margin-top:4px;line-height:1.35">{{ k.sponsor }}</div>
+                  <sc-if value="{{ k.block }}"><div style="{{ k.blockStyle }}">{{ k.block }}</div></sc-if>
+                </div>
+              </sc-for>
+              <sc-if value="{{ l.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:7px;padding:9px;text-align:center;font-size:9px;color:#615c6e">—</div></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:1.5px solid #b91c1c;background:#fffbfb;border-radius:10px;padding:13px 14px;margin-top:13px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:4px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">FLAG · BLOCKING</span>
+          <span style="font-size:11.5px;font-weight:800">{{ objection.deal }}</span>
+        </div>
+        <div style="font-size:11px;color:#7f1d1d;margin-top:8px;line-height:1.65">{{ objection.body }}</div>
+        <div class="num" style="font-size:10px;color:#615c6e;margin-top:8px">{{ objection.who }}</div>
+        <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8">Move to voting · blocked</span>
+          <span class="acc">Resolve with note</span>
+        </div>
+        <div style="font-size:10.5px;color:#7f1d1d;margin-top:9px;line-height:1.6">{{ objection.rule }}</div>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:16px;align-content:start">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="zh"><span class="zt">Decision record</span><span class="zs">Kestrel Bio · decided</span></div>
+        <div style="display:grid;gap:6px">
+          <sc-for list="{{ votes }}" as="v" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+              <span style="font-size:10.5px;font-weight:600;min-width:0">{{ v.who }}</span>
+              <span style="{{ v.pill }}">{{ v.vote }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:9px;border-top:1px solid #f4f3f7">
+          <span class="num" style="font-size:11px;font-weight:800">{{ tally }}</span>
+          <span style="font-size:10.5px;font-weight:800;color:#047857">{{ decision }}</span>
+        </div>
+        <div style="font-size:10.5px;color:#615c6e;margin-top:9px;line-height:1.6">{{ voteNote }}</div>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="zh"><span class="zt">Voting analytics</span><span class="zs">Partner-only</span></div>
+        <div style="display:grid;gap:7px">
+          <sc-for list="{{ analytics }}" as="a" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+              <span style="font-size:10.5px;color:#3f3a49;min-width:0">{{ a.k }}</span>
+              <span class="num" style="font-size:11.5px;font-weight:700">{{ a.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:10.5px;color:#615c6e;margin-top:10px;line-height:1.6">{{ analyticsNote }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ T7 · CARRY LEDGER ══════════ -->
+<section class="ab" id="t7">
+  <div class="ab-hd"><a class="ab-id" href="#t7">T7</a><span class="ab-nm">Carry ledger</span><span class="ab-sub">Partner-gated · the unallocated remainder is never hidden</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The most sensitive page in the suite, and the one where an omission is the lie. The footer states what is <em>not</em> allocated, because a table of allocations that sums to less than the pool without saying so implies a pool that is fully spoken for.</div>
+  <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid #f9c8d2;border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt" style="color:#881337">Axal VC Fund I LP · carry pool</span><span class="zs">{{ asOf }}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <sc-for list="{{ poolStats }}" as="s" hint-placeholder-count="4">
+          <div style="background:#fff5f7;border:1px solid #f9c8d2;border-radius:9px;padding:10px 11px">
+            <div class="lbl" style="font-size:8.5px;color:#881337">{{ s.k }}</div>
+            <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px;color:#4c0519">{{ s.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.05fr .55fr 1.25fr .7fr .7fr .85fr;gap:9px;margin-top:14px">
+        <span class="th">Member</span><span class="th">Carry</span><span class="th">Vesting</span><span class="th">Vested</span><span class="th">Unvested</span><span class="th">Agreement</span>
+      </div>
+      <sc-for list="{{ carryRows }}" as="c" hint-placeholder-count="6">
+        <div style="{{ c.rowStyle }}">
+          <span class="td" style="font-weight:{{ c.w }};border-top:{{ c.bt }}">{{ c.who }}</span>
+          <span class="td num" style="font-weight:{{ c.w }};border-top:{{ c.bt }};color:{{ c.pctInk }}">{{ c.pct }}</span>
+          <span class="td" style="border-top:{{ c.bt }}">
+            <sc-if value="{{ c.hasBar }}">
+              <div style="height:7px;background:#f4e6ea;border-radius:999px;overflow:hidden;position:relative">
+                <div style="height:100%;width:{{ c.vestPct }}%;background:#881337;border-radius:999px"></div>
+                <div style="{{ c.cliffMark }}"></div>
+              </div>
+              <span class="num" style="font-size:9.5px;color:#615c6e">{{ c.schedule }}</span>
+            </sc-if>
+            <sc-if value="{{ c.noBar }}"><span class="num" style="font-size:10px;color:#615c6e">{{ c.schedule }}</span></sc-if>
+          </span>
+          <span class="td num" style="border-top:{{ c.bt }};color:#047857">{{ c.vested }}</span>
+          <span class="td num" style="border-top:{{ c.bt }};color:{{ c.unvestedInk }}">{{ c.unvested }}</span>
+          <span class="td" style="border-top:{{ c.bt }}"><span style="{{ c.pill }}">{{ c.doc }}</span></span>
+        </div>
+      </sc-for>
+
+      <div style="{{ unallocStyle }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="min-width:0">
+            <div style="font-size:12px;font-weight:800;color:#4c0519">Unallocated</div>
+            <div style="font-size:10.5px;color:#7f1d1d;margin-top:5px;line-height:1.6">{{ unallocNote }}</div>
+          </div>
+          <span class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:#881337;flex:none">{{ unalloc }}</span>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ carryNote }}</div>
+    </div>
+
+    <div style="display:grid;gap:16px;align-content:start">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="lbl">As of · history</div>
+        <div style="margin-top:13px">
+          <div style="height:4px;background:#eceaf2;border-radius:999px;position:relative">
+            <div style="position:absolute;left:0;top:0;height:100%;width:74%;background:#881337;border-radius:999px"></div>
+            <sc-for list="{{ historyPins }}" as="h" hint-placeholder-count="4"><div style="{{ h.pin }}"></div></sc-for>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:9px">
+            <sc-for list="{{ historyPins }}" as="h" hint-placeholder-count="4"><span class="num" style="font-size:9px;color:{{ h.ink }};font-weight:{{ h.w }}">{{ h.label }}</span></sc-for>
+          </div>
+        </div>
+        <div style="display:grid;gap:7px;margin-top:13px">
+          <sc-for list="{{ historyRows }}" as="h" hint-placeholder-count="3">
+            <div style="padding:9px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px"><span style="font-size:10.5px;font-weight:700">{{ h.what }}</span><span class="num" style="font-size:9.5px;color:#615c6e">{{ h.when }}</span></div>
+              <div style="font-size:9.5px;color:#615c6e;margin-top:4px;line-height:1.45">{{ h.who }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #f9c8d2;border-radius:12px;padding:17px 19px">
+        <div class="lbl" style="color:#881337">Changing an allocation</div>
+        <div style="font-size:11px;color:#4c0519;margin-top:8px;line-height:1.65">{{ changeNote }}</div>
+        <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Step-up auth</span><span class="gho">Export as-of statement</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ T8 · FLOWS ══════════ -->
+<section class="ab" id="t8">
+  <div class="ab-hd"><a class="ab-id" href="#t8">T8</a><span class="ab-nm">Onboard · offboard · the IC sequence</span><span class="ab-sub">three flows, one rule each</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Onboarding gates access on signature. Offboarding forfeits unvested carry and says so on the ledger. The IC sequence exists to show that a non-voting Associate can halt a decision — the whole point of separating FLAG from VOTE.</div>
+
+  <div class="lbl">A · Onboard a member</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-top:11px">
+    <sc-for list="{{ onboard }}" as="s" hint-placeholder-count="5">
+      <div style="{{ s.cardStyle }}">
+        <div style="display:flex;align-items:center;gap:7px"><span style="{{ s.numStyle }}">{{ s.n }}</span><span style="font-size:11.5px;font-weight:800;letter-spacing:-.01em">{{ s.title }}</span></div>
+        <div style="font-size:10.5px;color:#3f3a49;margin-top:9px;line-height:1.6">{{ s.body }}</div>
+        <sc-if value="{{ s.chip }}"><div style="margin-top:9px"><span style="{{ s.chipStyle }}">{{ s.chip }}</span></div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;margin-top:11px">
+    <div style="font-size:11px;color:#1e293b;line-height:1.65">{{ onboardExt }}</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:16px;margin-top:18px">
+    <div>
+      <div class="lbl">B · Offboard</div>
+      <div style="display:grid;gap:11px;margin-top:11px">
+        <sc-for list="{{ offboard }}" as="s" hint-placeholder-count="3">
+          <div style="{{ s.cardStyle }}">
+            <div style="display:flex;align-items:center;gap:7px"><span style="{{ s.numStyle }}">{{ s.n }}</span><span style="font-size:11.5px;font-weight:800">{{ s.title }}</span></div>
+            <div style="display:grid;gap:5px;margin-top:9px">
+              <sc-for list="{{ s.items }}" as="i" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:7px"><span style="{{ i.box }}"></span><span style="font-size:10.5px;color:{{ i.ink }};line-height:1.5">{{ i.label }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1.5px solid #881337;background:#fff5f7;border-radius:10px;padding:13px 14px;margin-top:11px">
+        <div style="font-size:11.5px;font-weight:800;color:#4c0519">{{ forfeit.title }}</div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:9px">
+          <span style="font-size:10.5px;color:#7f1d1d;line-height:1.6;min-width:0">{{ forfeit.body }}</span>
+          <span class="num" style="font-size:17px;font-weight:800;color:#881337;flex:none">{{ forfeit.amount }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lbl">C · IC decision · seven beats</div>
+      <div style="display:grid;gap:8px;margin-top:11px">
+        <sc-for list="{{ beats }}" as="b" hint-placeholder-count="7">
+          <div style="{{ b.rowStyle }}">
+            <span style="{{ b.numStyle }}">{{ b.n }}</span>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:11.5px;font-weight:700">{{ b.what }}</span>
+                <sc-if value="{{ b.power }}"><span style="{{ b.powerStyle }}">{{ b.power }}</span></sc-if>
+              </div>
+              <div style="font-size:10.5px;color:#3f3a49;margin-top:4px;line-height:1.55">{{ b.note }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ beatsNote }}</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const OX = '#881337', OXT = '#fff5f7', OXE = '#f9c8d2', ST = '#334155', STT = '#f8fafc', STE = '#cbd5e1';
+    const I = {
+      home: this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      lic:  this.ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'),
+      fund: this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      con:  this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      team: this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/>'),
+      acct: this.ic('<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>'),
+      sup:  this.ic('<circle cx="12" cy="12" r="9"/><path d="M9.2 9.4a2.9 2.9 0 0 1 5.5 1c0 1.9-2.7 2.4-2.7 4M12 17.5h.01"/>'),
+      sec:  this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/>'),
+      lock: this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>')
+    };
+    const ROWS = [['Home',I.home],['Licences',I.lic],['Funds',I.fund],['Contracts',I.con],['Team',I.team],['Accounts',I.acct],['Support',I.sup],['Security',I.sec]];
+    const navOf = (accent, tint) => ROWS.map(([label, icon]) => ({ label, icon,
+      style:'display:flex;align-items:center;gap:9px;padding:8px 14px;font-size:12px;'
+        + (label === 'Team' ? 'font-weight:700;color:' + accent + ';background:' + tint + ';box-shadow:inset 2px 0 0 ' + accent : 'font-weight:600;color:#4a4553') }));
+
+    // ══ ONE deal-power vocabulary. Every chip on every artboard reads this map. ══
+    const POWER = {
+      VIEW:    ['#f4f4f6','#615c6e','#e4e4e8', 'Sees the pipeline. Touches nothing.'],
+      WORK:    ['#eff6ff','#1d4ed8','#dbeafe', 'Runs diligence, builds models, drafts memos.'],
+      FLAG:    ['#fffbf2','#92400e','#fde68a', 'May raise a formal objection that blocks a decision until answered. Not a veto — a stop.'],
+      SPONSOR: ['#faf7ff','#6d28d9','#e6dcff', 'Brings a deal to committee. Cannot decide it.'],
+      VOTE:    [OXT, OX, OXE, 'Decides. The only level that does.']
+    };
+    const powerChip = (code, big) => {
+      const c = POWER[code] || POWER.VIEW;
+      return 'display:inline-block;font-size:' + (big ? '10' : '9') + 'px;font-weight:800;letter-spacing:.06em;padding:'
+        + (big ? '3px 9px' : '2px 6px') + ';border-radius:4px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const titleChip = 'display:inline-block;font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;background:#f4f4f6;color:#3f3a49;border:1px solid #e8e8ec;white-space:nowrap';
+    const typeChipOf = (t) => {
+      const ext = /external|fractional|in-residence|part-time/i.test(t);
+      return 'display:inline-block;font-size:10px;font-weight:700;padding:3px 9px;border-radius:5px;white-space:nowrap;'
+        + (ext ? 'background:' + STT + ';color:' + ST + ';border:1px dashed ' + STE : 'background:#f0fdf6;color:#047857;border:1px solid #a7f3d0');
+    };
+    const pill = (t) => {
+      const M = { Signed:['#ecfdf5','#047857','#a7f3d0'], Active:['#ecfdf5','#047857','#a7f3d0'],
+                  Yes:['#ecfdf5','#047857','#a7f3d0'], Granted:['#ecfdf5','#047857','#a7f3d0'],
+                  Pending:['#fffbf2','#92400e','#fde68a'], Abstain:['#f4f4f6','#615c6e','#e4e4e8'],
+                  No:['#fef2f2','#b91c1c','#fecaca'], Expired:['#fef2f2','#b91c1c','#fecaca'],
+                  Tightened:['#fffbf2','#92400e','#fde68a'], Observer:['#faf7ff','#6d28d9','#e6dcff'],
+                  Director:[OXT, OX, OXE], Inherited:['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M.Pending;
+      return 'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const mode = (list, on) => list.map(l => ({ label:l,
+      style:'font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:5px;'
+        + (l === on ? 'background:#fff;color:' + OX : 'color:rgba(255,255,255,.8)') }));
+
+    // ══ ONE ladder. T1, the matrix and every title chip read it. ══
+    const LADDER = [
+      { title:'Analyst', power:'WORK', does:'Research, market maps, screening, model support.', carry:'0–0.25%' },
+      { title:'Associate', power:'FLAG', does:'Runs diligence, drafts memos, some portfolio relationships.', carry:'0.25–1%' },
+      { title:'Senior Associate', power:'FLAG', does:'Experienced deal-runner, more autonomy.', carry:'0.5–1.5%' },
+      { title:'Vice President', power:'FLAG', does:'Sources and leads diligence; presents to IC.', carry:'1–2%' },
+      { title:'Principal', power:'SPONSOR', does:'Leads deals end to end, manages Associates, observer seats.', carry:'1–3%' },
+      { title:'Venture Partner', power:'SPONSOR', does:'Sourcing and sector depth, usually part-time, no GP ownership.', carry:'0.5–2%' },
+      { title:'Partner / GP', power:'VOTE', does:'Raises funds, votes, sits on boards, fiduciary duty.', carry:'5–25%' },
+      { title:'Managing Partner', power:'VOTE', does:'Firm strategy, face to LPs, charter tie-break.', carry:'10–25%' }
+    ];
+    const FUNCTIONS = [
+      { name:'Operating Partner', power:'VIEW', sees:'Portfolio companies they are scoped to. Talent, GTM, product.' },
+      { name:'Entrepreneur in Residence', power:'VIEW', sees:'Time-boxed by definition. Converts to Venture Partner or Principal.' },
+      { name:'Fundraising & LP Relations', power:'VIEW', sees:'Funds reporting and LP records. Not the deal pipeline.' },
+      { name:'Operations / Back office', power:'VIEW', sees:'Contracts and Revenue slices. No deal or LP data by default.' },
+      { name:'Community / Ecosystem', power:'VIEW', sees:'Community and content. Nothing financial.' },
+      { name:'Tech / Platform Support', power:'VIEW', sees:'Support, access operations, Platform read. No financial, LP or carry visibility.' }
+    ];
+
+    // ══ ONE France roster. Headcount, org chart, directory, engagements, IC and the
+    // public-page projection all derive from it. ══
+    const TEAM = [
+      { name:'Camille Moreau', title:'Managing Partner', track:'inv', power:'VOTE', type:'Full-time', tags:['Deep tech','FR'], deals:3, boards:2, ic:true, pub:true },
+      { name:'Théo Bertrand', title:'Partner', track:'inv', power:'VOTE', type:'Full-time', tags:['SaaS','Benelux'], deals:4, boards:1, ic:true, pub:true },
+      { name:'Inès Haddad', title:'Principal', track:'inv', power:'SPONSOR', type:'Full-time', tags:['Climate','FR'], deals:5, boards:2, ic:false, pub:true },
+      { name:'Lucas Girard', title:'Associate', track:'inv', power:'FLAG', type:'Full-time', tags:['SaaS'], deals:6, boards:0, ic:false, pub:false },
+      { name:'Sofia Marchetti', title:'Venture Partner', track:'inv', power:'SPONSOR', type:'Part-time', tags:['Health','IT'], deals:2, boards:0, ic:false, pub:true, ends:'31 Dec 2026' },
+      { name:'Nils Ekström', title:'Operating Partner', track:'fn', power:'VIEW', type:'Fractional', tags:['GTM'], deals:0, boards:0, ic:false, pub:false, ends:'7 Apr 2026' },
+      { name:'Amina Sow', title:'Operations', track:'fn', power:'VIEW', type:'Full-time', tags:['Finance','Legal'], deals:0, boards:0, ic:false, pub:false },
+      // Back-dated so the expired-access narrative is true: 75 days before 25 Feb ≈ eleven weeks.
+      { name:'Ravi Menon', title:'Tech / Platform Support', track:'fn', power:'VIEW', type:'External', tags:['Access ops'], deals:0, boards:0, ic:false, pub:false, ends:'12 Dec 2025' }
+    ];
+    // ONE clock. Expiry and the ≤60-day window both read it — not a name match and a month regex.
+    const NOW = new Date('2026-02-25');
+    const daysLeft = (s) => Math.round((new Date(s) - NOW) / 86400000);
+    const isExpired = (p) => !!p.ends && daysLeft(p.ends) < 0;
+    const weeksSince = (s) => Math.round(-daysLeft(s) / 7);
+    const isExt = (p) => /Fractional|External|Part-time/.test(p.type);
+    const total = TEAM.length;
+    const ext = TEAM.filter(isExt).length;
+    const voteN = TEAM.filter(p => p.power === 'VOTE').length;
+    const invN = TEAM.filter(p => p.track === 'inv').length;
+    const fnN = TEAM.filter(p => p.track === 'fn').length;
+    const endingSoon = TEAM.filter(p => p.ends && daysLeft(p.ends) >= 0 && daysLeft(p.ends) <= 60);
+    const expiredMembers = TEAM.filter(isExpired);
+    // Oversight rows declared once, so header totals reduce over the same array they render.
+    const OV_FIRMS = [
+      { tenant:'Axal VC HQ', people:12, ext:3, vote:4, quorum:'3 of 4', obj:0, flag:null },
+      { tenant:'Axal France', people:TEAM.length, ext:TEAM.filter(isExt).length, vote:TEAM.filter(p => p.power === 'VOTE').length,
+        quorum:Math.ceil(TEAM.filter(p => p.power === 'VOTE').length / 2 + 0.5) + ' of ' + TEAM.filter(p => p.power === 'VOTE').length,
+        obj:1, flag: expiredMembers.length ? 'EXPIRED ACCESS' : null },
+      { tenant:'Axal Nordics', people:6, ext:2, vote:1, quorum:'—', obj:0, flag:'NO QUORUM POSSIBLE' },
+      { tenant:'Axal Benelux', people:5, ext:2, vote:2, quorum:'2 of 2', obj:0, flag:null }
+    ];
+
+    const nodeOf = (p) => ({
+      name:p.name, title:p.title, power:p.power, powerStyle:powerChip(p.power),
+      ends: p.ends ? 'ends ' + p.ends : null,
+      nodeStyle:'border:1px ' + (isExt(p) ? 'dashed ' + STE + ';background:' + STT : 'solid #ececf1;background:#fff') + ';border-radius:9px;padding:10px 11px'
+    });
+
+    // ══ Carry: allocations derive; unallocated is the pool minus their sum. ══
+    const POOL = 20;
+    const CARRY = [
+      { who:'Camille Moreau', pct:8.0, start:'2024-01-01', doc:'Signed' },
+      { who:'Théo Bertrand', pct:5.0, start:'2024-06-01', doc:'Signed' },
+      { who:'Inès Haddad', pct:2.5, start:'2025-03-01', doc:'Signed' },
+      { who:'Sofia Marchetti', pct:1.0, start:'2025-09-01', doc:'Signed' },
+      { who:'Lucas Girard', pct:0.5, start:'2026-01-15', doc:'Pending' }
+    ];
+    const TODAY = new Date('2026-02-25');
+    // As-of is a parameter. The ledger reads NOW; a departure projection must read the
+    // departure date, because a cliff falling between the two changes what is forfeited.
+    const vestFrac = (startISO, asOf) => {
+      const s = new Date(startISO);
+      const months = ((asOf || TODAY) - s) / (86400000 * 30.4375);
+      if (months < 12) return 0;                       // 1-year cliff
+      return Math.min(1, months / 48);                 // 4-year linear
+    };
+    const allocated = CARRY.reduce((a, c) => a + c.pct, 0);
+    const unallocN = POOL - allocated;
+    const pct = (n) => n.toFixed(2) + '%';
+
+    return {
+      lockIcon: I.lock,
+      // Same call the T4 chip and the T2 snapshot make — one fact, one source.
+      nilsDays: String(daysLeft(TEAM.filter(p => p.name === 'Nils Ekström')[0].ends)),
+      navSub: navOf(ST, STT), navSuper: navOf(OX, OXT),
+      modesOv: mode(['My team','All teams'], 'All teams'),
+
+      // ── T1 ──
+      ladder: LADDER.map(l => ({
+        title:l.title, power:l.power, does:l.does, carry:l.carry,
+        powerStyle:powerChip(l.power), carryInk: l.power === 'VOTE' ? OX : '#615c6e',
+        rowStyle:'border:1px solid ' + (l.power === 'VOTE' ? OXE + ';background:' + OXT : '#f0eff4;background:#fbfbfc') + ';border-radius:8px;padding:9px 10px'
+      })),
+      ladderNote: 'Carry ranges are typical, not entitlements — the ledger in T7 holds what a person actually has, and the two are allowed to differ. A title is a ladder position; it grants nothing on its own.',
+      powers: Object.keys(POWER).map(k => ({ code:k, means:POWER[k][3], chip:powerChip(k, true) })),
+      powerNote: 'A Principal sponsors and cannot vote. A Venture Partner outranks an Associate and holds no more power over a decision than the objection an Associate can raise. That asymmetry is the design, not an accident of it.',
+      families: [
+        { label:'Principal', note:'Title — grey, neutral, a ladder position.', sample:titleChip },
+        { label:'SPONSOR', note:'Authority — coloured by level, always uppercase.', sample:powerChip('SPONSOR', true) },
+        { label:'2.50%', note:'Economics — tabular, garnet, Partner-gated.', sample:'display:inline-block;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums;padding:3px 9px;border-radius:4px;background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE }
+      ],
+      fnIntro: 'Parallel tracks, not ladder ranks. None carries deal power by default, and the last one is the proof of the permission system.',
+      functions: FUNCTIONS.map(f => ({ name:f.name, power:f.power, sees:f.sees, powerStyle:powerChip(f.power),
+        rowStyle:'border:1px solid ' + (/Tech/.test(f.name) ? STE + ';background:' + STT : '#f0eff4;background:#fbfbfc') + ';border-radius:8px;padding:9px 10px' })),
+
+      // ── T2 ──
+      hc: { total:String(total), ext:String(ext) },
+      hubSub: 'Axal France: ' + invN + ' on the investment track, ' + fnN + ' in parallel functions, ' + ext + ' of them external. Absorbs the staff zones that used to live in Accounts and Settings.',
+      snapshot: [
+        { k:'Headcount', v:String(total), note:invN + ' investment · ' + fnN + ' functions', tone:'plain' },
+        { k:'External', v:String(ext), note:'every one time-boxed', tone:'plain' },
+        { k:'VOTE holders', v:String(voteN), note:'quorum needs ' + Math.ceil(voteN / 2 + 0.5), tone:'plain' },
+        { k:'Open objections', v:'1', note:'blocking Aurora Grid', tone:'warn' },
+        { k:'Ending ≤60 days', v:String(endingSoon.length),
+          note: endingSoon.length ? endingSoon.map(p => p.name.split(' ')[0] + ' · ' + daysLeft(p.ends) + 'd').join(', ') : 'none', tone:'warn' },
+        { k:'Unallocated carry', v:pct(unallocN), note:'Partner-only', tone:'ox' }
+      ].map(s => {
+        const C = { plain:['#fff','#ececf1','#18181b'], warn:['#fffbf2','#fde68a','#92400e'], ox:[OXT, OXE, OX] }[s.tone];
+        return { k:s.k, v:s.v, note:s.note, ink:C[2],
+          cardStyle:'background:' + C[0] + ';border:1px solid ' + C[1] + ';border-radius:11px;padding:11px 12px' };
+      }),
+      spine: TEAM.filter(p => p.track === 'inv').map(nodeOf),
+      adjacent: TEAM.filter(p => p.track === 'fn').map(nodeOf).concat([{
+        name:'Hiring: Associate', title:'Vacant seat · defined, unfilled', power:'FLAG', powerStyle:powerChip('FLAG'), ends:null,
+        nodeStyle:'border:1px dashed #e2e1e8;background:#fbfbfc;border-radius:9px;padding:10px 11px;opacity:.72'
+      }]),
+      orgNote: 'External members carry a dashed border and their end date on the node itself — an org chart that renders a fractional operator identically to an employee is describing a firm that does not exist. The ghost node is a seat the firm has defined and not filled.',
+
+      icRoster: TEAM.filter(p => p.ic).map(p => ({ name:p.name, title:p.title, power:p.power, powerStyle:powerChip(p.power) })),
+      icStats: [
+        { k:'VOTE holders', v:String(voteN), ink:'#18181b' },
+        { k:'Quorum', v:Math.ceil(voteN / 2 + 0.5) + ' of ' + voteN, ink:'#18181b' },
+        // Nothing is awaiting a vote — the FLAG blocks entry to the Voting lane, which is the rule.
+        { k:'Awaiting resolution', v:'1', ink:'#92400e' },
+        { k:'Decided this Q', v:'6', ink:'#18181b' }
+      ],
+      quorumNote: 'Quorum comes from the IC Charter contract, not a setting — changing it means amending the charter.',
+
+      directory: TEAM.slice(0, 4).map(p => ({
+        name:p.name, title:p.title, power:p.power, type:p.type,
+        powerStyle:powerChip(p.power), typeStyle:typeChipOf(p.type),
+        tags:p.tags.map(t => ({ label:t, style:'font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:4px;background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec' })),
+        load:p.deals + ' active deal' + (p.deals === 1 ? '' : 's') + ' · ' + p.boards + ' board seat' + (p.boards === 1 ? '' : 's'),
+        cardStyle:'border:1px solid #ececf1;background:#fbfbfc;border-radius:10px;padding:12px 13px'
+      })),
+
+      engagements: TEAM.filter(isExt).map(p => {
+        const expired = isExpired(p);
+        return { who:p.name, scope:p.title, doc: /Venture/.test(p.title) ? 'Venture Partner Agreement' : 'Service Agreement',
+          ends:p.ends, endInk: expired ? '#b91c1c' : '#92400e',
+          access: expired ? 'Expired' : 'Active', pill:pill(expired ? 'Expired' : 'Active'),
+          rowStyle:'display:grid;grid-template-columns:1.05fr .9fr 1fr .7fr .8fr;gap:9px;align-items:center;border-top:1px solid #f4f3f7;'
+            + (expired ? 'background:#fffbfb;' : '') };
+      }),
+      expiredBox: 'border:1.5px solid #b91c1c;background:#fffbfb;border-radius:10px;padding:12px 13px;margin-top:12px',
+      expiredTitle: 'Expired engagement with live access',
+      expiredBody: expiredMembers.length
+        ? expiredMembers[0].name + '\u2019s service agreement ended ' + expiredMembers[0].ends + ' — ' + weeksSince(expiredMembers[0].ends)
+          + ' weeks ago — and the account is still active, which means an external contractor holds Support admin and access-operations rights today. This is an error state, so it is loud: red row, red panel, and it stays until the access is revoked or the agreement renewed. Auto-offboard was not configured on this engagement, which is why it did not fire.'
+        : 'No engagement is past its end date with access still live.',
+
+      // Full roster, not a slice: this is the control that decides who appears publicly, so a
+      // member omitted here cannot be toggled — and the count would disagree with the toggles.
+      publicRows: TEAM.map(p => ({
+        name:p.name, bio: p.pub ? 'Bio and photo on file' : 'No public bio recorded',
+        toggle:'width:34px;height:19px;border-radius:999px;position:relative;flex:none;background:' + (p.pub ? ST : '#d4d2dc'),
+        knob:'position:absolute;top:2.5px;' + (p.pub ? 'right:2.5px' : 'left:2.5px') + ';width:14px;height:14px;border-radius:50%;background:#fff'
+      })),
+      // The field contract, not a mock of the marketing page — that page is not ours to redesign.
+      projected: ['Name','Public bio','Photo','Display order'],
+      withheld: ['Deal power','Carry allocation','Permission set','Engagement end date','Reporting line'],
+      projCount: TEAM.filter(p => p.pub).length + ' of ' + TEAM.length + ' shown publicly · '
+        + TEAM.filter(p => p.pub && isExt(p)).length + ' of them external, with no engagement date exposed',
+      publicNote: 'A projection of the roster, not a second profile. Nothing internal — carry, deal power, engagement dates — crosses to the marketing page, and the toggle defaults off so appearing publicly is a decision rather than an oversight.',
+
+      // ── T3 ──
+      ovTotals: OV_FIRMS.length + ' firms · ' + OV_FIRMS.reduce((a, o) => a + o.people, 0)
+        + ' people · ' + OV_FIRMS.reduce((a, o) => a + o.ext, 0) + ' external',
+      ovRows: OV_FIRMS.map(o => ({
+        tenant:o.tenant, people:String(o.people), ext:String(o.ext), vote:String(o.vote),
+        quorum:o.quorum, obj: o.obj ? String(o.obj) : '—', flag:o.flag, clean:!o.flag,
+        voteInk: o.vote < 2 ? '#b91c1c' : '#18181b', objInk: o.obj ? '#92400e' : '#615c6e',
+        flagStyle:'font-size:8.5px;font-weight:800;letter-spacing:.05em;padding:2px 6px;border-radius:3px;background:'
+          + (o.flag === 'EXPIRED ACCESS' ? '#fef2f2;color:#b91c1c;border:1px solid #fecaca' : OXT + ';color:' + OX + ';border:1px solid ' + OXE),
+        rowStyle:'display:grid;grid-template-columns:.9fr .6fr .6fr .6fr .7fr .9fr 1.15fr;gap:9px;align-items:center;padding:9px 0;border-top:1px solid #f4f3f7;'
+          + (o.flag ? 'background:#fffbfb;' : '')
+      })),
+      ovNote: 'Nordics has one VOTE holder, so no quorum is reachable and the firm cannot decide anything — a governance fact visible from here and from nowhere else. France carries an expired engagement with live access. Both are structural, which is why oversight can see them without opening a personnel file.',
+      ovBlocked: [
+        { what:'Carry allocations', why:'Partner-only within a tenant. HQ is not a partner in a subsidiary\u2019s firm, so the ledger does not render here at all.' },
+        { what:'Individual permission sets', why:'Aggregate shape is governance; who specifically holds what is the tenant\u2019s to manage.' },
+        { what:'Vote records by member', why:'Disclosure is set by each firm\u2019s IC charter, not by HQ\u2019s curiosity.' },
+        { what:'Any write action', why:'Oversight is read-only. Changing a subsidiary\u2019s roster from here would make the tenancy wall decorative.' }
+      ],
+      // Every shipped preset, so the table states the ceiling for all of them rather than
+      // illustrating three — a preset absent from a governance list reads as ungoverned.
+      ceilings: [
+        { preset:'Managing Partner', note:'Ceiling as shipped', state:'Inherited' },
+        { preset:'Partner / GP', note:'Ceiling as shipped', state:'Inherited' },
+        { preset:'Principal', note:'Ceiling as shipped', state:'Inherited' },
+        { preset:'Associate', note:'France removed Revenue read', state:'Tightened' },
+        { preset:'Analyst', note:'Ceiling as shipped', state:'Inherited' },
+        { preset:'LP Relations', note:'Benelux removed Contracts read', state:'Tightened' },
+        { preset:'Operations', note:'Ceiling as shipped', state:'Inherited' },
+        { preset:'Tech Support', note:'Nordics attempted to add Funds read', state:'No' }
+      ].map(c => {
+        const C = { Inherited:['#e4e4e8','#fbfbfc'], Tightened:['#fde68a','#fffbf2'], No:['#fecaca','#fffbfb'] }[c.state];
+        return { preset:c.preset, note:c.note, state:c.state, edge:C[0], bg:C[1], pill:pill(c.state) };
+      }),
+      ceilingNote: 'All eight shipped presets, because one missing from a governance list reads as ungoverned. A tenant may tighten a shipped preset and may not loosen it. Nordics\u2019 attempt to grant Funds read to Tech Support was refused at the ceiling, not by an administrator noticing.',
+
+      // ── T4 ──
+      profiles: [
+        {
+          name:'Inès Haddad', initials:'IH', title:'Principal', type:'Full-time', power:'SPONSOR', ext:false,
+          powerWhy:'Brings deals to committee and does not vote on them. Two observer seats, no director seat — an observer attends and cannot bind the company.',
+          econLocked:true,
+          econNote:'Visible to Inès and to Partner+ only. You see that carry exists and not what it is — a hidden section would teach you the wrong shape of this firm.',
+          assignLabel:'Assignments',
+          assignments:[
+            { what:'Aurora Grid · diligence', state:'Active' }, { what:'Kestrel Bio · board', state:'Observer' },
+            { what:'Verdal · board', state:'Observer' }
+          ],
+          docs:[{ name:'Employment agreement', state:'Signed' }, { name:'Carried interest agreement', state:'Signed' }, { name:'IP assignment', state:'Signed' }],
+          actions:[['Edit role','gho'],['Change preset','gho'],['Offboard','danger']],
+          footNote:'Activity feed reads from the audit log — 14 admin actions this quarter, each recorded in Security.'
+        },
+        {
+          name:'Nils Ekström', initials:'NE', title:'Operating Partner', type:'Fractional', power:'VIEW', ext:true,
+          countdown:String(daysLeft(TEAM.filter(p => p.name === 'Nils Ekström')[0].ends)),
+          powerWhy:'No deal power at all. Scoped to three portfolio companies for GTM work, which is Revenue read and nothing adjacent to it.',
+          econLocked:false, carry:'None',
+          econNote:'Fractional engagement, cash retainer, no carry row. Recorded as none rather than left blank — an empty economics panel reads as unknown.',
+          assignLabel:'Scope',
+          assignments:[
+            { what:'Verdal · GTM', state:'Active' }, { what:'Kestrel Bio · pricing', state:'Active' },
+            { what:'Aurora Grid · not scoped', state:'No' }
+          ],
+          docs:[{ name:'Service agreement', state:'Signed' }, { name:'Mutual NDA', state:'Signed' }, { name:'Carry agreement', state:'No' }],
+          actions:[['Renew engagement','acc'],['Convert to Venture Partner','gho'],['Offboard now','danger']],
+          footNote:'Access expires automatically on 7 April unless renewed. Auto-offboard is configured on this engagement — which is exactly what was missing on the expired row in T2.'
+        }
+      ].map(p => ({
+        name:p.name, initials:p.initials, title:p.title, type:p.type, power:p.power, countdown:p.countdown || null,
+        titleStyle:titleChip, typeStyle:typeChipOf(p.type), powerStyle:powerChip(p.power, true), powerWhy:p.powerWhy,
+        econLocked:p.econLocked, econOpen:!p.econLocked, carry:p.carry || null, econNote:p.econNote,
+        edge: p.ext ? STE : '#ececf1',
+        avStyle:'width:42px;height:42px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;'
+          + (p.ext ? 'background:' + STT + ';color:' + ST + ';border:1px dashed ' + STE : 'background:' + OXT + ';color:' + OX),
+        cdStyle:'flex:none;text-align:center;padding:8px 11px;border-radius:9px;background:#fffbf2;color:#92400e;border:1px solid #fde68a',
+        econStyle: p.econLocked
+          ? 'border:1px dashed ' + STE + ';background:' + STT + ';border-radius:9px;padding:10px 11px'
+          : 'border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px',
+        perms: (p.ext
+          ? [['Revenue','read'],['Portfolio','read'],['Funds','none'],['Team','none']]
+          : [['Funds','work'],['Contracts','work'],['Team','read'],['Revenue','none']]
+        ).map(([row, level]) => ({ row, level,
+          lv:'font-size:9px;font-weight:800;letter-spacing:.05em;padding:1px 6px;border-radius:3px;'
+            + (level === 'none' ? 'background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8'
+                : (level === 'read' ? 'background:#eff6ff;color:#1d4ed8;border:1px solid #dbeafe'
+                                    : 'background:#faf7ff;color:#6d28d9;border:1px solid #e6dcff')) })),
+        assignLabel:p.assignLabel,
+        assignments:p.assignments.map(a => ({ what:a.what, state:a.state, pill:pill(a.state) })),
+        docs:p.docs.map(d => ({ name:d.name, state:d.state, pill:pill(d.state) })),
+        actions:p.actions.map(([label, kind]) => ({ label,
+          style: kind === 'acc' ? 'font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;background:' + OX + ';color:#fff'
+            : (kind === 'danger' ? 'font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid ' + OXE + ';background:#fff;color:' + OX
+                                 : 'font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49') })),
+        footNote:p.footNote
+      })),
+
+      // ── T5 ──
+      matrixCols: ['Funds','Contracts','Team','Revenue','Support','Access ops','Platform'],
+      matrix: (function(){
+        const LV = { none:['#f8f8fa','#615c6e','—'], read:['#eff6ff','#1d4ed8','read'], work:['#faf7ff','#6d28d9','work'], admin:[OXT, OX,'admin'] };
+        const defs = [
+          { preset:'Managing Partner', power:'VOTE', c:['admin','admin','admin','admin','read','none','read'] },
+          { preset:'Partner / GP', power:'VOTE', c:['admin','work','work','read','read','none','read'] },
+          { preset:'Principal', power:'SPONSOR', c:['work','work','read','none','none','none','read'] },
+          { preset:'Associate', power:'FLAG', c:['read','read','none','none','none','none','read'] },
+          { preset:'Analyst', power:'WORK', c:['read','none','none','none','none','none','read'] },
+          { preset:'LP Relations', power:'VIEW', c:['read','read','none','read','none','none','none'] },
+          { preset:'Operations', power:'VIEW', c:['none','work','read','work','none','none','read'] },
+          { preset:'Tech Support', power:'VIEW', c:['none','none','none','none','admin','work','read'], hi:true }
+        ];
+        return defs.map(d => ({
+          preset:d.preset, power:d.power, powerStyle:powerChip(d.power), w: d.hi ? '800' : '600',
+          cells:d.c.map(v => {
+            const L = LV[v];
+            return { label:L[2], style:'text-align:center;font-size:9.5px;font-weight:700;padding:5px 0;border-radius:5px;background:'+L[0]+';color:'+L[1] };
+          }),
+          rowStyle:'display:grid;grid-template-columns:1.25fr repeat(7,1fr) .85fr;gap:7px;align-items:center;margin-top:6px;padding:5px 7px;border-radius:7px;'
+            + (d.hi ? 'background:' + STT + ';box-shadow:inset 2px 0 0 ' + ST : '')
+        }));
+      })(),
+      matrixKey: [
+        { code:'—', means:'none', swatch:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:#f8f8fa;color:#615c6e' },
+        { code:'read', means:'sees it', swatch:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:#eff6ff;color:#1d4ed8' },
+        { code:'work', means:'acts within it', swatch:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:#faf7ff;color:#6d28d9' },
+        { code:'admin', means:'configures it', swatch:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + OXT + ';color:' + OX }
+      ],
+      edit: {
+        what:'Associate · Revenue → read',
+        blast:'3 people hold Associate in this firm. Granting Revenue read gives all three visibility into fee and carry income, which no deal-track preset currently has. Tighten is always available; this is a loosen, and France cannot loosen past the shipped ceiling — this edit would be refused.',
+        audit:'Recorded in Security as roles.matrix.edit · typed reason required',
+        note:'Blast radius is stated in people, not in rows. "3 people hold Associate" is the sentence that stops a careless edit; "affects 1 preset" is not.'
+      },
+      techWorked: [
+        { row:'Support', level:'admin', edge:OXE, bg:OXT },
+        { row:'Access operations · onboarding, sessions, entitlements', level:'work', edge:'#e6dcff', bg:'#faf7ff' },
+        { row:'Platform', level:'read', edge:'#dbeafe', bg:'#eff6ff' },
+        { row:'Funds · Revenue · Contracts', level:'none', edge:'#e4e4e8', bg:'#f8f8fa' },
+        { row:'Carry ledger · LP records', level:'none', edge:'#e4e4e8', bg:'#f8f8fa' }
+      ].map(t => ({ row:t.row, level:t.level, edge:t.edge, bg:t.bg,
+        pill:'font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:2px 8px;border-radius:4px;'
+          + (t.level === 'none' ? 'background:#fff;color:#615c6e;border:1px solid #e4e4e8'
+              : 'background:#fff;color:' + (t.level === 'admin' ? OX : (t.level === 'work' ? '#6d28d9' : '#1d4ed8')) + ';border:1px solid ' + t.edge) })),
+      techNote: 'The preset that proves the granularity: someone can reset a founder\u2019s session, revoke an entitlement and close a ticket without ever seeing what a fund is worth or who holds carry. If the permission system cannot express that, it is a role name rather than a permission.',
+
+      // ── T6 ──
+      icFull: TEAM.filter(p => p.ic || p.power === 'SPONSOR').map(p => ({
+        name:p.name, title:p.title, power:p.power, powerStyle:powerChip(p.power),
+        rowStyle:'display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 10px;border:1px solid '
+          + (p.power === 'VOTE' ? OXE + ';background:' + OXT : '#f0eff4;background:#fbfbfc') + ';border-radius:8px'
+      })),
+      quorumFull: Math.ceil(voteN / 2 + 0.5) + ' of ' + voteN + ' VOTE holders, per the IC Charter. Sofia Marchetti sponsors and does not count toward quorum; the Managing Partner holds a tie-break only because this charter grants one, and charters that do not are equally valid.',
+      docket: [
+        { name:'Sponsored', cards:[{ deal:'Halden Robotics', sponsor:'Sofia Marchetti · SPONSOR', block:null }] },
+        { name:'Memo circulated', cards:[{ deal:'Corvid Labs', sponsor:'Inès Haddad · SPONSOR', block:null }] },
+        { name:'Objections open', cards:[{ deal:'Aurora Grid', sponsor:'Inès Haddad · SPONSOR', block:'1 FLAG blocking' }] },
+        { name:'Voting', cards:[] },
+        { name:'Decided', cards:[{ deal:'Kestrel Bio', sponsor:'Théo Bertrand · SPONSOR', block:null }] }
+      ].map(l => ({ name:l.name, n:String(l.cards.length), empty:l.cards.length === 0,
+        cards:l.cards.map(k => ({ deal:k.deal, sponsor:k.sponsor, block:k.block,
+          blockStyle:'font-size:8.5px;font-weight:800;letter-spacing:.05em;padding:2px 6px;border-radius:3px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;margin-top:6px;display:inline-block',
+          cardStyle:'border:1px solid ' + (k.block ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:8px;padding:9px 10px' })) })),
+      objection: {
+        deal:'Aurora Grid · Series A',
+        body:'Raised by Lucas Girard, Associate: the customer concentration in the model counts two entities under common ownership as separate logos, which moves top-customer share from 19% to 34%. The memo\u2019s retention argument rests on the lower figure.',
+        who:'Raised 3 days ago · unanswered',
+        rule:'Voting is blocked until this is resolved with a note. An Associate holds no vote and can still stop the partnership from deciding — which is what FLAG is for, and why it is a separate level rather than a softer VOTE.'
+      },
+      votes: [
+        { who:'Camille Moreau', vote:'Yes' }, { who:'Théo Bertrand', vote:'Yes' },
+        { who:'Partner · Lyon', vote:'Abstain' }, { who:'Partner · alternate', vote:'No' }
+      ].map(v => ({ who:v.who, vote:v.vote, pill:pill(v.vote) })),
+      tally: '2 yes · 1 no · 1 abstain',
+      decision: 'APPROVED',
+      voteNote: 'Votes are attributable because this charter discloses them. A charter that anonymises would render the same tally with the names withheld — the console reads the charter rather than assuming.',
+      analytics: [
+        { k:'Participation · Camille', v:'12 of 12' }, { k:'Sponsor hit rate · Inès', v:'4 of 7' },
+        { k:'Decision → outcome calibration', v:'0.71' }
+      ],
+      analyticsNote: 'Partner-only. Calibration compares what the committee predicted against what happened, which is the one metric that improves a decision process rather than just describing it.',
+
+      // ── T7 ──
+      asOf: 'as of 25 Feb 2026',
+      poolStats: [
+        { k:'Carry pool', v:pct(POOL) }, { k:'Allocated', v:pct(allocated) },
+        { k:'Unallocated', v:pct(unallocN) }, { k:'GP entity share', v:'100% · Axal VC GP LLC' }
+      ],
+      carryRows: CARRY.map(c => {
+        const f = vestFrac(c.start);
+        const vested = c.pct * f;
+        return {
+          who:c.who, pct:pct(c.pct), vested:pct(vested), unvested:pct(c.pct - vested),
+          vestPct:String(Math.round(f * 100)), hasBar:true, noBar:false,
+          schedule: f === 0 ? 'cliff not reached · 4-yr, 1-yr cliff' : Math.round(f * 100) + '% · 4-yr, 1-yr cliff',
+          doc:c.doc, pill:pill(c.doc),
+          pctInk:'#4c0519', unvestedInk: f === 0 ? '#92400e' : '#615c6e', w:'500', bt:'1px solid #f4f3f7',
+          cliffMark:'position:absolute;left:25%;top:-2px;width:1.5px;height:11px;background:#4c0519;opacity:.5',
+          rowStyle:'display:grid;grid-template-columns:1.05fr .55fr 1.25fr .7fr .7fr .85fr;gap:9px;align-items:center'
+        };
+      }),
+      unalloc: pct(unallocN),
+      unallocStyle: 'border:1.5px solid ' + OX + ';background:' + OXT + ';border-radius:10px;padding:13px 14px;margin-top:12px',
+      unallocNote: 'Held back for future hires and the vacant Associate seat. Stated because a table of allocations summing to ' + pct(allocated) + ' of a ' + pct(POOL) + ' pool, with no footer, implies a pool that is fully spoken for.',
+      carryNote: 'Vesting is computed from each start date against a 4-year schedule with a 1-year cliff, so Lucas Girard shows ' + pct(0) + ' vested — six weeks in, the cliff is 46 weeks away. The cliff tick on each bar marks where vesting begins, which is why an empty bar is not the same as no grant.',
+      historyPins: [
+        { label:'Jan 24', at:0, cur:false }, { label:'Jun 24', at:33, cur:false },
+        { label:'Mar 25', at:58, cur:false }, { label:'Today', at:100, cur:true }
+      ].map(h => ({ label:h.label, ink: h.cur ? OX : '#615c6e', w: h.cur ? '800' : '500',
+        pin:'position:absolute;left:' + h.at + '%;top:-3px;width:2px;height:10px;background:' + (h.cur ? OX : '#615c6e') })),
+      historyRows: [
+        { what:'Lucas Girard added · 0.50%', when:'15 Jan 2026', who:'C. Moreau · step-up auth · reason: promotion to Associate' },
+        { what:'Sofia Marchetti added · 1.00%', when:'1 Sep 2025', who:'C. Moreau · step-up auth · reason: venture partner agreement' },
+        { what:'Pool established · 20.00%', when:'1 Jan 2024', who:'Fund I LPA · Section 6.1' }
+      ],
+      changeNote: 'Step-up auth, a typed reason, and a new version — the previous state stays readable through the slider. Carry is the one ledger where "who changed this and why" matters more than the number, because the number is contractual and the change is the event a departing partner will dispute.',
+
+      // ── T8 ──
+      onboard: [
+        { n:'1', title:'Identity & type', body:'Name, email, and whether they are an employee or external. Type drives everything downstream.', chip:'Employee / External', tone:'plain' },
+        { n:'2', title:'Title, track, preset', body:'Ladder title and function track, with a diff of exactly which matrix cells the preset grants.', chip:'Matrix diff preview', tone:'plain' },
+        { n:'3', title:'Agreements', body:'Offer, NDA and carry documents instantiated from the contract system, e-sign tracked.', chip:'2 of 3 signed', tone:'warn' },
+        { n:'4', title:'Access grant', body:'Takes effect only when required agreements complete. The gate is shown, not implied.', chip:'Gated · 1 outstanding', tone:'warn' },
+        { n:'5', title:'Announce', body:'Appears on the org chart. Public team page is a separate, off-by-default toggle.', chip:'Org chart · public off', tone:'ok' }
+      ].map(s => {
+        const C = { ok:['#a7f3d0','#f2fdf7','#047857'], warn:['#fde68a','#fffbf2','#92400e'], plain:['#e2e1e8','#fbfbfc','#4a4553'] }[s.tone];
+        return { n:s.n, title:s.title, body:s.body, chip:s.chip,
+          chipStyle:'font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+C[1]+';color:'+C[2]+';border:1px solid '+C[0],
+          numStyle:'width:19px;height:19px;border-radius:6px;background:' + OX + ';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex:none',
+          cardStyle:'background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:11px;padding:13px 14px' };
+      }),
+      onboardExt: 'The external branch inserts two fields between steps 2 and 3 — a written scope statement and an end date — and one rule: auto-offboard on that date. Both exist because of the row in T2. An engagement without an auto-offboard rule is how an expired contractor keeps Support admin for '
+        + (expiredMembers.length ? weeksSince(expiredMembers[0].ends) + ' weeks' : 'months') + '.',
+
+      offboard: [
+        { n:'1', title:'Effective date', items:[
+          { label:'Last working day set', done:true }, { label:'Notice period honoured', done:true } ] },
+        { n:'2', title:'Revocation checklist', items:[
+          { label:'Sessions killed', done:true }, { label:'Entitlements removed', done:true },
+          { label:'Carry row → vested-only', done:true }, { label:'2 board seats flagged for reassignment', done:false } ] },
+        { n:'3', title:'Record', items:[
+          { label:'Written to Security', done:true }, { label:'Public page row removed', done:true },
+          { label:'Org chart node retired', done:true } ] }
+      ].map(s => ({ n:s.n, title:s.title,
+        numStyle:'width:19px;height:19px;border-radius:6px;background:' + OX + ';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex:none',
+        cardStyle:'background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:11px;padding:13px 14px',
+        items:s.items.map(i => ({ label:i.label, ink: i.done ? '#3f3a49' : '#92400e',
+          box:'width:11px;height:11px;border-radius:3px;flex:none;margin-top:2px;border:1.5px solid ' + (i.done ? '#10b981' : '#f0b429') + ';background:' + (i.done ? '#10b981' : 'transparent') })) })),
+      forfeit: (function(){
+        const LEAVES = new Date('2026-03-31');
+        const vAtExit = 2.5 * vestFrac('2025-03-01', LEAVES);
+        const forfeited = 2.5 - vAtExit;
+        return {
+          title:'Departing · unvested carry forfeited',
+          body:'Inès Haddad, leaving 31 March. Her one-year cliff falls 1 March, so she clears it three weeks before she goes: of her 2.50%, '
+            + pct(vAtExit) + ' has vested at that date and ' + pct(forfeited)
+            + ' returns to the pool — taking the unallocated footer from ' + pct(unallocN) + ' to ' + pct(unallocN + forfeited)
+            + ' on 31 March. Computed at the departure date, not at today, because four days either side of that cliff is the difference between keeping her carry and losing all of it.',
+          amount: pct(forfeited)
+        };
+      })(),
+
+      beats: [
+        { n:'1', what:'Sponsor submits', power:'SPONSOR', note:'Only a SPONSOR can put a deal on the docket. An Associate cannot, however good the deal.' },
+        { n:'2', what:'Memo circulated', power:null, note:'Forge can summarise it. Forge cannot write the recommendation, and the memo names its human author.' },
+        { n:'3', what:'Objection raised', power:'FLAG', note:'Lucas Girard, Associate. Customer concentration understated — 19% against 34%.' },
+        { n:'4', what:'Voting blocked', power:null, note:'The card cannot enter the voting lane. Not a warning; a gate.' },
+        { n:'5', what:'Resolved with note', power:'SPONSOR', note:'The sponsor answers on the record. The note is permanent and appears in the decision record.' },
+        { n:'6', what:'Quorum voting', power:'VOTE', note:'Each vote is cast in the member\u2019s own authenticated session. Step-up auth on the final decision.' },
+        { n:'7', what:'Outcome logged', power:null, note:'Months later. This is what makes the calibration number in the analytics zone mean anything.' }
+      ].map(b => ({ n:b.n, what:b.what, note:b.note, power:b.power, powerStyle: b.power ? powerChip(b.power) : '',
+        numStyle:'width:20px;height:20px;border-radius:6px;background:' + (b.what === 'Voting blocked' ? '#b91c1c' : OX) + ';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex:none;margin-top:1px',
+        rowStyle:'display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid '
+          + (b.what === 'Voting blocked' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
+      beatsNote: 'Beat 4 is the whole reason FLAG is a separate level. Collapse it into VOTE and the Associate either has no voice or has a veto — and neither is what a firm wants from the person who read the model most closely.'
+    };
+  }
+}
+</script>
+</body>
+</html>

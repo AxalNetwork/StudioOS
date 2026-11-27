@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build Connector Scope · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.bx-nav{display:flex;flex-direction:column;gap:2px;margin:2px 0 4px 18px;border-left:1px solid var(--hair);padding-left:6px}
+.bx-nav a{min-height:30px;font-size:12.5px;font-weight:600;color:var(--mu)!important;display:flex;align-items:center;padding:0 10px;border-radius:8px}
+.bx-nav a[aria-current=page]{background:var(--lav);color:var(--vt)!important;font-weight:800}
+.bx-nav .bx-sub{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px 2px}
+.bx-tabs{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.bx-tabs a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.bx-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.bx-tabs a span{font:600 10.5px var(--mo);margin-left:5px;color:var(--mu)}
+.bx-next{border:1.5px solid var(--lavE);background:var(--card);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 20px;align-items:center;position:relative;overflow:hidden}
+.bx-next:before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#7c3aed}
+.bx-next h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.bx-next .m{font:600 12.5px var(--mo);color:var(--mu)}
+.bx-next q{font-size:13px;color:var(--ink);font-style:italic}
+.bx-health{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.bx-health>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.bx-health>div:last-child{border-right:0}
+.bx-health small{font-size:11.5px;color:var(--mu)}
+.bx-health b{font:700 17px var(--mo)}
+.bx-health em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.bx-mods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx-mod{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.bx-mod b{font-size:13.5px}
+.bx-mod .v{font-size:12.5px}
+.bx-mod .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;font:500 11px var(--mo);color:var(--mu)}
+.bx-prop{border:1px solid var(--hair);border-radius:12px;background:var(--card);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) 220px;gap:0}
+.bx-prop>div{padding:14px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:7px}
+.bx-prop>div:last-child{border-right:0}
+.bx-prop h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.bx-lbl{font:700 9.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.bx-ev{display:flex;flex-direction:column;gap:5px}
+.bx-ev a{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 12.5px var(--sg);color:var(--ink)!important}
+.bx-ev a:after{content:'→';color:var(--vt)}
+.bx-sugg{border:1px dashed var(--lavE);background:var(--lav);border-radius:10px;padding:9px 11px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.bx-sugg .bx-row{display:flex;gap:6px}
+.bx-dec{display:flex;flex-direction:column;gap:6px}
+.bx-dec .btn{justify-content:center}
+.bx-acc{display:grid;grid-template-columns:minmax(0,1fr) 220px 160px 80px;gap:12px;align-items:center;padding:9px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-acc:first-child{border-top:0}
+.bx-chain{display:flex;flex-direction:column;gap:0}
+.bx-node{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;position:relative;padding-bottom:14px}
+.bx-node:before{content:'';position:absolute;left:10px;top:20px;bottom:0;width:2px;background:var(--hair2)}
+.bx-node:last-child:before{display:none}
+.bx-node i{width:22px;height:22px;border-radius:999px;border:2px solid #7c3aed;background:var(--card);display:grid;place-items:center;font:800 10px var(--mo);font-style:normal;color:var(--vt)}
+.bx-node .bx-c{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;background:var(--card);display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.bx-node .bx-c q{font-style:italic}
+.bx-node .bx-meta{display:flex;gap:8px;flex-wrap:wrap;font:500 11px var(--mo);color:var(--mu);align-items:center}
+.bx-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.bx-three>div{padding:12px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;position:relative}
+.bx-three>div:last-child{border-right:0}
+.bx-three b{font:700 20px var(--mo)}
+.bx-three small{font-size:12px;color:var(--mu)}
+.bx-stg{display:flex;gap:3px;align-items:center}
+.bx-stg i{width:18px;height:6px;border-radius:2px;background:var(--hair2);display:block}
+.bx-stg i.d{background:#7c3aed}
+.bx-stg i.n{background:transparent;border:1px dashed var(--hair2)}
+.bx-stg i.u{background:transparent;border:1.5px solid var(--neg)}
+.bx-trail li{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-trail li:first-child{border-top:0}
+.bx-trail .s{font-weight:800}
+.bx-kb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bx-kb>section{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.bx-kb h3{font:800 12px var(--sg);display:flex;justify-content:space-between}
+.bx-card{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.bx-card b{font-size:13px}
+.bx-card .bx-meta{font:500 10.5px var(--mo);color:var(--mu);display:flex;gap:6px;flex-wrap:wrap}
+.bx-fnd{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx-check li{display:grid;grid-template-columns:24px minmax(0,1.5fr) 110px 120px 130px 120px;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-check li:first-child{border-top:0}
+.bx-check .ic3{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;font:800 11px var(--sg)}
+.ic3.ok{background:var(--posBg);color:var(--pos)}.ic3.no{border:1.5px solid var(--hair2);color:var(--mu)}.ic3.at{background:var(--amBg);color:var(--amT)}
+.bx-dest{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.bx-dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px;font-size:12px;background:var(--card)}
+.bx-dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.bx-dest b{font-size:14px}
+.bx-frz{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12px}
+.bx-frz b{font-weight:700}
+.bx-auth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:760px}
+.bx-auth .bx-l{background:#18181b;color:#fff;padding:48px;display:flex;flex-direction:column;justify-content:space-between}
+.bx-auth main{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg)}
+.bx-authcard{width:420px;background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px}
+.bx-authcard .btn{min-height:44px;justify-content:center}
+.bx-cookie{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;gap:12px;align-items:center;font-size:12px}
+.bx-states{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.bx-tag{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);border:1px solid var(--hair);background:var(--raised);color:var(--mu);white-space:nowrap}
+.bx-tag.nr{border-style:dashed;background:transparent;font-style:italic;font-weight:600}
+.bx-tag.ne{border-color:transparent;background:transparent;color:var(--mu);font-weight:600}
+.bx-tag.ur{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.bx-tag.pr{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.bx-tag.at{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.bx-tag.ro{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.bx-tag.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.bx-tag.dn{color:#fff;background:var(--pos);border-color:var(--pos)}
+.mc>.bx-tag,.cd>.bx-tag,.bx-mod>.bx-tag{align-self:flex-start}
+.bx-check .bx-tag{justify-self:start}
+.cd>.ptag,.bd>.ptag{align-self:flex-start}
+.bx-states{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.cv .selb{background:var(--card);color:var(--ink)}
+.bx2-guide{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:28px 30px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.bx2-guide h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.bx2-guide p{font-size:13.5px;color:var(--mu);max-width:620px;line-height:1.55}
+.bx2-guide ol{display:flex;flex-direction:column;gap:6px;margin:4px 0 2px;padding-left:18px;list-style:decimal;font-size:13px}
+.bx2-src{border:1px solid var(--hair);border-radius:12px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.bx2-src>.hd2{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bx2-src>.hd2 b{font-size:12.5px}
+.bx2-src ul{display:flex;flex-direction:column}
+.bx2-src li{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx2-src li:first-child{border-top:0}
+.bx2-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx2-stage>div{display:flex;flex-direction:column;gap:8px}
+.bx2-stage .lab{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bx2-ask{border:1px solid var(--lavE);background:var(--lav);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.bx2-ask .q{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;border:1px solid var(--lavE);border-radius:9px;background:var(--card);font-size:12.5px;color:var(--mu)}
+.bx2-ask .chips2{display:flex;gap:6px;flex-wrap:wrap}
+.bx2-ask .chips2 button{min-height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--lavE);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.bx2-util{display:flex;gap:14px;align-items:center;font-size:12.5px;color:var(--mu);padding:8px 2px}
+.bx2-util a{font-weight:700}
+.bx2-priv{position:sticky;top:0;z-index:2;display:flex;gap:10px;align-items:center;padding:9px 14px;border-radius:10px;background:#7f1d1d;color:#fff;font-size:12.5px;font-weight:600}
+.bx2-priv b{font-weight:800}
+.bx2-sys li{display:grid;grid-template-columns:110px 150px 140px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx2-sys li:first-child{border-top:0}
+.bx2-nav{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.sp.eadx{align-items:stretch;padding:0;gap:0}
+.sh>.sp.eadx{max-width:none;width:340px!important}
+.buc-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap}
+.buc-sum{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.buc-sum>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}
+.buc-sum>div:nth-child(5){border-right:0}
+.buc-sum>div.o{grid-column:1/-1;border-right:0;border-top:1px solid var(--hair);flex-direction:row;align-items:center;gap:18px;background:var(--raised)}
+.buc-sum small{font-size:11.5px;color:var(--mu)}
+.buc-sum b{font-size:14.5px;font-weight:700}
+.buc-sum b.mo{font:700 14.5px var(--mo)}
+.buc-sum em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.buc-ord{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+.buc-ord li{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mu)}
+.buc-ord li+li:before{content:'→';margin:0 14px;color:var(--mu)}
+.buc-ord li i{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1.5px dashed var(--hair2);font:800 10px var(--sg);font-style:normal;color:var(--mu);flex:none}
+.buc-ord li.d i{border:0;background:var(--posBg);color:var(--pos)}
+.buc-ord li.d{color:var(--ink)}
+.buc-ord li span{display:flex;flex-direction:column;line-height:1.25}
+.buc-ord li em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.buc-83 td small{display:block;color:var(--mu);font-size:11.5px}
+.buc-83 tr.lim td{background:var(--raised)}
+.buc-lim{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--mu);font-style:italic}
+.buc-note{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 16px;font-size:12px;color:var(--mu)}
+.buc-note a{font-weight:700;white-space:nowrap}
+.bx-check.buc-fil li{grid-template-columns:24px minmax(0,1.7fr) 130px 180px 140px 140px}
+.bx-check.buc-fil.rem li{grid-template-columns:24px minmax(0,1.6fr) 110px 170px 120px 130px 200px}
+.bx-check.buc-fil li.hd{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border-top:0}
+.bx-check.buc-fil li.hot{background:var(--amBg);margin:0 -18px;padding-left:18px;padding-right:18px}
+.buc-fil li>span>small{display:block;font-size:11px;color:var(--mu);font-weight:500}
+.buc-rem{gap:6px;justify-self:start}
+.buc-docs li{display:grid;grid-template-columns:minmax(0,1.25fr) 96px minmax(0,1.5fr) 72px;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.buc-docs li:first-child{border-top:0}
+.buc-docs .bx-tag{justify-self:start}
+.buc-docs .btn{justify-self:end}
+.buc-steps li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.buc-steps li:first-child{border-top:0}
+.buc-steps li>.btn{justify-self:end}
+.buc-steps li>div{grid-column:1/-1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.buc-steps li>div span{color:var(--ink)}
+.buc-steps li>div small{font:500 10.5px var(--mo);color:var(--mu)}
+.buc-links{flex-wrap:wrap;padding:0 2px}
+.buc-prop{border:1px solid var(--lavE);border-radius:10px;background:var(--card);padding:11px 12px;display:flex;flex-direction:column;gap:7px}
+.buc-prop p{font-size:12.5px;line-height:1.55}
+.buc-src{font:500 10.5px var(--mo);color:var(--mu)}
+.buc-pre{border:1px dashed var(--hair2);border-radius:14px;padding:18px 22px;display:flex;flex-direction:column;gap:10px;color:var(--mu)}
+.buc-pre ol{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.buc-pre li{display:flex;flex-direction:column;gap:6px;font-size:12.5px;font-weight:600;color:var(--mu)}
+.buc-pre li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1.5px dashed var(--hair2);font:700 10px var(--mo);font-style:normal}
+.ph .buc-pre ol{grid-template-columns:1fr 1fr;gap:8px 12px}
+.ph .buc-pre li{flex-direction:row;align-items:center}
+.buc-chk li{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.buc-chk li:first-child{border-top:0}
+.buc-chk .ic3{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;font:800 11px var(--sg)}
+.buc-drop{border:1.5px dashed var(--lavE);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;background:var(--lav)}
+.buc-drop span{grid-column:1;font-size:11.5px;color:var(--mu)}
+.buc-drop .btn{grid-row:1/3;grid-column:2}
+.buc-remrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.buc-remrow .btn{gap:6px}
+.btn.buc-del{color:var(--neg)!important;border-color:var(--negE)}
+.buc-dlg2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
+.buc-dlg{position:absolute;left:50%;top:300px;transform:translateX(-50%);width:560px;z-index:6;background:var(--card);border:1.5px solid #7f1d1d;border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.buc-dlg h2{font-size:17px;font-weight:800}
+.buc-dlg p{font-size:13px;line-height:1.55}
+.buc-sug li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.buc-sug li:first-child{border-top:0}
+.buc-sug li>div{display:flex;flex-direction:column;gap:2px}
+.buc-menu{width:300px;border:1px solid var(--hair);border-radius:12px;background:var(--card);box-shadow:0 12px 32px rgba(0,0,0,.12);padding:8px;display:flex;flex-direction:column;gap:2px}
+.buc-menu .eye{padding:4px 8px 6px}
+.buc-menu button{display:flex;justify-content:space-between;align-items:center;min-height:34px;padding:0 10px;border:0;border-radius:8px;background:transparent;font:600 12.5px var(--sg);color:var(--ink);text-align:left}
+.buc-menu button[aria-checked=true]{background:var(--lav);color:var(--vt)}
+.buc-menu button[role=menuitem]{border-top:1px solid var(--hair);border-radius:0;margin-top:4px}
+.buc-skel{display:flex;flex-direction:column;gap:10px}
+.buc-skel .r6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.buc-skel .r6>div{display:flex;flex-direction:column;gap:5px}
+.buc-skel .rows>div{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--hair)}
+.buc-missed{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--negE);border-left:4px solid var(--neg);border-radius:10px}
+.buc-up{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.buc-up .f{display:flex;flex-direction:column}
+.buc-mh{font-size:15px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.buc-msum{padding:10px 14px;gap:8px}
+.buc-msum .kv2 dt,.buc-msum .kv2 dd{padding:6px 0}
+.buc-msum .buc-ord{flex-direction:column;align-items:flex-start;gap:6px}
+.buc-msum .buc-ord li+li:before{display:none}
+.buc-mfil{text-align:left;font:inherit;color:inherit;width:100%;min-height:44px}
+.buc-mfil .r1 i{font-style:normal;color:var(--mu)}
+.buc-mdocs{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.buc-mdocs li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--hair);font-size:12.5px;min-height:52px}
+.buc-mdocs li:first-child{border-top:0}
+.buc-mdocs li>span:first-child{display:flex;flex-direction:column}
+.buc-mdocs li small{color:var(--mu);font-size:11px}
+.buc-mdocs .btn{min-height:44px}
+.buc-mlinks{display:flex;flex-direction:column}
+.buc-mlinks a{min-height:44px;display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;border-top:1px solid var(--hair)}
+.buc-83,.buc-83 td{color:var(--ink)}
+.buc-83 td b{white-space:nowrap}
+.bls-ann{display:inline-flex;font:700 10px var(--mo);color:var(--vt);border:1px dashed var(--lavE);border-radius:6px;padding:0 6px}
+.bls-lb{position:absolute;left:50%;transform:translateX(-50%);z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden}
+.bls-lbh{padding:16px 22px 12px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:4px}
+.bls-lbh .tr{display:flex;justify-content:space-between;align-items:center}
+.bls-lbh h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+.bls-lbh p{margin:0;font-size:12.5px;color:var(--mu)}
+.bls-lbb{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.bls-lbf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--raised)}
+.bls-scope{border:1px solid var(--lavE);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--card)}
+.bls-scope .ch{display:flex;justify-content:space-between;align-items:center}
+.bls-scope h3{margin:0;font-size:14px;font-weight:800}
+.bls-lad{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0}
+.bls-lad li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--hair);position:relative}
+.bls-lad li:first-child{border-top:0}
+.bls-lad li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;font:800 11px var(--mo);font-style:normal;border:1.5px dashed var(--hair2);color:var(--mu)}
+.bls-lad li.ok i{border:0;background:var(--posBg);color:var(--pos)}
+.bls-lad li.no i{border:1.5px solid var(--amE);background:var(--amBg);color:var(--amT)}
+.bls-lad li div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.bls-lad small{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.bls-lad b{font-size:13.5px;font-weight:700;overflow-wrap:anywhere}
+.bls-lad span{font-size:12px;color:var(--mu);line-height:1.45}
+.bls-lad li>.bx-tag{margin-top:2px}
+.bls-lad.sm li{grid-template-columns:24px minmax(0,1fr) auto}
+.bls-lad.m li{grid-template-columns:24px minmax(0,1fr);}
+.bls-lad.m li>.bx-tag{grid-column:2;justify-self:start}
+.bls-fix{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:10px;background:var(--lav);border:1px solid var(--lavE)}
+.bls-fix>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bls-fix b{font-size:13.5px}
+.bls-fix span{font-size:12px;color:var(--mu)}
+.bls-fix .btn{flex:none}
+.bls-fix.m{flex-direction:column;align-items:stretch;gap:6px}
+.bls-after{display:flex;flex-direction:column;gap:6px}
+.bls-feeds{list-style:none;margin:0;padding:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.bls-feeds li{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 12px;border-top:1px solid var(--hair);font-size:12.5px}
+.bls-feeds li:first-child{border-top:0}
+.bls-feeds li b{font-weight:700}
+.bls-feeds.m li{grid-template-columns:minmax(0,1fr) auto;row-gap:2px}
+.bls-feeds.m li .raw{grid-column:1;grid-row:2}
+.bls-feeds.m li .bx-tag{grid-row:1/3;grid-column:2}
+.bls-read{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:10px;border:1px solid var(--hair);background:var(--raised);font-size:12.5px}
+.bls-read b.mo{font:700 14px var(--mo)}
+.bls-read.st{border-color:var(--amE);background:var(--amBg)}
+.bls-read>.ptag{align-self:flex-start}
+.bls-search{display:flex;flex-direction:column;gap:6px}
+.bls-rows{list-style:none;margin:0;padding:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.bls-rows li{display:grid;grid-template-columns:28px minmax(0,1fr) auto 84px;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--hair)}
+.bls-rows li:first-child{border-top:0}
+.bls-rows li.grp{display:block;padding:6px 12px;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.bls-rows li.hl{background:var(--amBg)}
+.bls-rows li>div{display:flex;flex-direction:column;min-width:0}
+.bls-rows li b{font-size:13.5px}
+.bls-rows li>div>span{font-size:12px;color:var(--mu)}
+.bls-rows .btn{justify-self:end}
+.bls-mk{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--ink);color:#fff;font:800 12px var(--sg)}
+.bls-att{list-style:none;margin:0;padding:0}
+.bls-att li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:6px 0}
+.bls-att li div{display:flex;flex-direction:column;gap:2px}
+.bls-att li b{font-size:13.5px}
+.bls-att li span{font-size:12.5px;color:var(--mu)}
+.bls-mods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bls-mods article{gap:6px}
+.bls-mods h3{margin:0;font-size:14px;font-weight:800}
+.bls-mods p{margin:0;font-size:12.5px}
+.bls-mods .ft{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px}
+.bls-mods .ft a{font-weight:700;font-size:12.5px;white-space:nowrap}
+.bls-act{list-style:none;margin:0;padding:0}
+.bls-act li{display:grid;grid-template-columns:130px 110px minmax(0,1fr);gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bls-act li:first-child{border-top:0}
+.bls-tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.bls-tabs a{padding:8px 0;font-weight:600;color:var(--mu);font-size:14px}
+.bls-tabs a[aria-current]{color:var(--ink);font-weight:800;box-shadow:inset 0 -2px 0 var(--vi)}
+.bls-code{list-style:none;margin:0;padding:0}
+.bls-code li{display:grid;grid-template-columns:80px 120px 180px minmax(0,1fr) 170px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bls-code li:first-child{border-top:0}
+.bls-code li span small{display:block;font:500 11px var(--mo);color:var(--mu)}
+.bls-code li .btn,.bls-code li>.raw:last-child{justify-self:end}
+.bls-sub{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.bls-dlg{position:absolute;left:50%;top:120px;transform:translateX(-50%);width:600px;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 24px 70px rgba(0,0,0,.25)}
+.bls-dlg h2{margin:0;font-size:19px;font-weight:800}
+.bls-dlg p{margin:0;font-size:13px}
+.bls-pick{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.bls-pick legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.bls-pick label,.bls-opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;cursor:pointer}
+.bls-pick label.on,.bls-opt.on{border-color:var(--vi);background:var(--lav)}
+.bls-pick label span,.bls-opt span{display:flex;flex-direction:column;gap:2px}
+.bls-pick b,.bls-opt b{font-size:13.5px}
+.bls-pick small,.bls-opt small{font-size:12px;color:var(--mu)}
+.bls-pick input,.bls-opt input{margin-top:3px;accent-color:var(--vi)}
+.bls-cons{padding:10px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px}
+.bls-cons ul{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
+.bls-dlgf{display:flex;gap:8px;justify-content:flex-end}
+.bls-proj{display:flex;gap:10px;align-items:baseline;padding:8px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--hair)}
+.bls-proj b{font-size:13.5px}
+.bls-proj.m{flex-wrap:wrap}
+.bls-repos{list-style:none;margin:0;padding:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.bls-repos li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--hair)}
+.bls-repos li:first-child{border-top:0}
+.bls-repos li div{display:flex;flex-direction:column}
+.bls-repos b.mo{font:600 12.5px var(--mo)}
+.bls-repos .btn.sel{border-color:var(--vi);color:var(--vt);background:var(--lav)}
+.bls-repos.m li{min-height:48px}
+.bls-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.bls-3 .cd,.bls-danger{gap:10px}
+.bls-3 h2,.bls-danger h2{margin:0}
+.bls-3 .kv2 dd,.bls-danger .kv2 dd{font-size:12.5px}
+.bls-danger{border-color:var(--negE)}
+.bls-own{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.bls-own b{font-size:13.5px}
+.bls-skel>div{display:grid;grid-template-columns:26px minmax(0,1fr) 90px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.bls-up{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bls-mx{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.bls-mx th,.bls-mx td{text-align:left;vertical-align:top;padding:10px 12px;border-top:1px solid var(--hair);line-height:1.45}
+.bls-mx thead th{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border-top:0}
+.bls-mx tbody th{width:190px;font-weight:800;font-size:13px}
+.bls-mx tbody th div{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.bls-mx td.raw{width:120px}
+.bls-mh{margin:4px 0 0;font-size:17px;font-weight:800}
+.bls-strip .ch a{white-space:nowrap}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.bls-3 .kv2 dd,.bls-danger .kv2 dd{font-weight:500}
+.bls-lad li.bad i{border:0;background:var(--negBg);color:var(--neg)}
+.bls-code li>.bx-tag{justify-self:start}
+.bls-code li.grp{display:block;padding:12px 0 0;border-top:1px solid var(--hair2);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bls-code li.grp+li{border-top:0}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "BLS01", "options": ["BLS00", "BLS01", "BLS02", "BLS02B", "BLS03", "BLS04", "BLS05", "BLS06", "BLS06B", "BLS07", "BLS07B", "BLS08", "BLS08B", "BLS09", "BLS09B", "BLS10", "BLS11A", "BLS11B", "BLS11C", "BLS11D", "BLS11E", "BLS11F", "BLS12"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'BLS01';
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const PTn = (n) => '<span class="ptag" title="Needs backend work">◇ ' + n + '</span>';
+    const FLAG = (n) => '<span class="buc-flag" title="Owner decision">⚑ ' + n + '</span>';
+    const NOTE = (n) => '<span class="bls-ann" aria-hidden="true">' + n + '</span>';
+
+    /* ---------- state words (Build v2 + Platform States, D5129) ---------- */
+    const T = {
+      'Not recorded': ['nr', '○'], 'Could not be read': ['ur', '!'], Processing: ['pr', '◷'], 'Read only': ['ro', '🔒︎'], Refused: ['ro', '⊘'],
+      Connected: ['ok', '✓'], Linked: ['ok', '✓'], 'On for this company': ['ok', '✓'], Feeding: ['ok', '✓'], Chosen: ['ok', '✓'], Done: ['ok', '✓'],
+      'Not linked': ['nr', '○'], 'Off for this company': ['nr', '○'], 'None chosen': ['', '–'], 'Not feeding': ['nr', '○'], 'Not connected': ['nr', '○'],
+      Failing: ['ur', '✕'], Stale: ['at', '◷'], 'No items': ['', '0'], 'After sync': ['pr', '◷'], Saving: ['pr', '◷'], 'Needs attention': ['at', '▲']
+    };
+    const tg = (s, label) => { const x = T[s] || ['', '•']; return '<span class="bx-tag ' + x[0] + '"><span aria-hidden="true">' + x[1] + '</span>' + (label || s) + '</span>'; };
+
+    /* ---------- sample (fictional, shared with TBP_SAMPLES.md · BLS) ---------- */
+    const V = '[Atlas Orchard]', CO = '[Atlas Orchard, Inc.]', CO2 = '[Ruiz Ventures LLC]', MR = '[Maya Ruiz]', NB = '[Noah Brandt]', IC = '[Iris Chen]';
+    const GH = '[maya-ruiz]', R1 = '[atlas-orchard/app]', R2 = '[atlas-orchard/api]';
+    const GOOD = 'Thu 26 Nov 2026 · 09:42 UTC';
+    const OLD = 'Mon 23 Nov 2026 · 09:42 UTC';
+    // [module, what lands, count text, state]
+    const FEEDS = [
+      ['Product roadmap', 'Issues and releases', '14 issues · 2 releases'],
+      ['Prototype / MVP', 'Pull requests and release checks', '6 pull requests'],
+      ['Solution design', 'Languages and topics, architecture notes', '2 repository stacks'],
+      ['Founding team', 'Contributors and their commits', '3 contributors'],
+      ['Company creation', 'Where the code sits and its licence', '0 IP step proposals'],
+      ['Operating systems', 'Reads the connection: GitHub is the Code system', 'Read from the connection']
+    ];
+
+    /* ---------- shell (Build v2 founder workspace, as BUC) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const BNAV = [['Overview'], ['Plan'], ['Progress'], ['Tools'], ['sub', 'Modules'], ['Solution design'], ['Prototype / MVP'], ['Product roadmap'], ['Founding team'], ['Company creation'], ['Operating systems']];
+    const bnav = (cur) => '<nav class="bx-nav" aria-label="Build">' + J(BNAV.map(n => n[0] === 'sub' ? '<span class="bx-sub">' + n[1] + '</span>' : '<a href="#"' + (n[0] === cur ? ' aria-current="page"' : '') + '>' + n[0] + '</a>')) + '<a href="#" style="font-size:12px">Work board ↗</a></nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><div class="selb" style="font-size:12px"><span>' + V + '</span><span aria-hidden="true">▾</span></div></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Build' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Build' ? bnav(cur) : ''))) + '</nav></aside>';
+    const top = (av) => '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">' + (av || 'MR') + '</span></div></div>';
+    const rail = (what) => '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about ' + what + '" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="sh" style="min-height:' + (o.h || 900) + 'px">' + side(o.cur || 'Overview') + '<div class="mn">' + top(o.av) + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail(o.cur || 'Build') + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const nt = (tone, ic, h, d, act, prim) => '<div class="nt ' + tone + '"' + (tone === 'r' ? ' role="alert"' : '') + '><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + h + '</b>' + (d ? '<div>' + d + '</div>' : '') + (act ? '<button type="button" class="btn bsm' + (prim ? ' p' : '') + '" style="margin-top:6px">' + act + '</button>' : '') + '</div></div>';
+    const kv = (rows, w) => '<dl class="kv2" style="grid-template-columns:' + (w || 130) + 'px minmax(0,1fr)">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl>';
+    const box = (t, inner, span) => '<section class="cd" style="gap:8px' + (span ? ';grid-column:span ' + span : '') + '"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2></div>' + inner + '</section>';
+
+    /* ---------- the three scopes, one ladder (the core of this canvas) ---------- */
+    // st: unbound | linked | norepo | healthy | failing | ro | outside
+    const ladder = (st, o) => {
+      o = o || {};
+      const acc = '<li class="' + (st === 'failing' ? 'bad' : 'ok') + '"><i aria-hidden="true">1</i><div><small>Your account</small><b>GitHub · ' + GH + '</b><span>Connected to ' + (st === 'ro' ? MR + '’s' : 'your') + ' account since Tue 3 Nov 2026. Account-level: it can serve any company you belong to.</span></div>' + (st === 'failing' ? tg('Failing', 'Sign-in expired') : tg('Connected')) + '</li>';
+      const cmp = st === 'unbound'
+        ? '<li class="no"><i aria-hidden="true">2</i><div><small>Company</small><b>' + V + ' is not in a company</b><span>Connections serve companies, and ' + V + ' belongs to none, so nothing from GitHub can land in it.</span></div>' + tg('Not linked') + '</li>'
+        : st === 'linked'
+          ? '<li class="no"><i aria-hidden="true">2</i><div><small>Company</small><b>' + CO + '</b><span>' + V + ' is in ' + CO + '. Your GitHub serves ' + CO2 + ' only; it is not turned on for ' + CO + '.</span></div>' + tg('Off for this company') + '</li>'
+          : '<li class="ok"><i aria-hidden="true">2</i><div><small>Company</small><b>' + CO + '</b><span>' + V + ' is in ' + CO + ', and ' + (st === 'ro' ? MR + '’s' : 'your') + ' GitHub is turned on for it' + (st === 'ro' ? '' : ' (and for ' + CO2 + ')') + '.</span></div>' + tg('On for this company') + '</li>';
+      const prj = (st === 'unbound' || st === 'linked')
+        ? '<li class="wait"><i aria-hidden="true">3</i><div><small>Project · ' + V + '</small><b>Repositories</b><span>Chosen after the company step.</span></div>' + tg('Not recorded', 'Waiting on step 2') + '</li>'
+        : st === 'norepo'
+          ? '<li class="no"><i aria-hidden="true">3</i><div><small>Project · ' + V + '</small><b>No repository chosen</b><span>GitHub lists 4 repositories ' + (o.you === false ? MR : 'you') + ' can read. None is chosen for ' + V + ', so a sync has nothing to read.</span></div>' + tg('None chosen') + '</li>'
+          : '<li class="ok"><i aria-hidden="true">3</i><div><small>Project · ' + V + '</small><b>' + (st === 'ro' ? '2 repositories' : R1 + ', ' + R2) + '</b><span>' + (st === 'ro' ? 'Chosen by ' + MR + '. Only she sees their names.' : 'Chosen for ' + V + ' on ' + (st === 'failing' ? 'Fri 20 Nov 2026' : 'Thu 26 Nov 2026') + '.') + '</span></div>' + tg('Chosen') + '</li>';
+      return '<ol class="bls-lad" aria-label="Where GitHub connects, for ' + V + '">' + acc + cmp + prj + '</ol>';
+    };
+    const lastRead = (st) => st === 'healthy' || st === 'ro'
+      ? '<div class="bls-read"><span class="eye">Last successful read of ' + V + '</span><b class="mo">' + GOOD + '</b><span>GitHub sync · ' + (st === 'ro' ? '2 repositories' : R1 + ' and ' + R2) + ' · by ' + (st === 'ro' ? MR : 'you') + '</span>' + PTn('#8774 · project on the sync log') + '</div>'
+      : st === 'failing'
+        ? '<div class="bls-read st"><span class="eye">Last successful read of ' + V + '</span><b class="mo">' + OLD + '</b><span>' + tg('Stale', 'Stale · 3 days old') + ' Every sync since Tue 24 Nov 2026 09:40 failed: “Sign-in expired”. Build keeps what that read brought.</span>' + PTn('#8774 · project on the sync log') + '</div>'
+        : '<div class="bls-read no"><span class="eye">Last successful read of ' + V + '</span><b>None yet</b><span>No sync has read anything for ' + V + '.</span></div>';
+    const feedList = (st) => '<ul class="bls-feeds">' + J(FEEDS.map((f, i) => {
+      const read = f[2] === 'Read from the connection';
+      let tag, val;
+      if (st === 'unbound' || st === 'linked') { tag = tg('Not feeding'); val = '<span class="mu">Nothing lands until steps 2 and 3 are done</span>'; }
+      else if (st === 'norepo') { tag = tg('After sync'); val = '<span class="mu">' + f[1] + '</span>'; }
+      else if (st === 'failing') { tag = read ? tg('Failing', 'Code system failing') : tg('Stale', 'Stale · 3 days'); val = '<span class="raw">' + (read ? 'Sign-in expired' : f[2] + ' at the last good read') + '</span>'; }
+      else { tag = read ? tg('Feeding', 'Reads the connection') : f[2].startsWith('0 ') ? tg('No items', 'No items') : tg('Feeding'); val = '<span class="raw">' + f[2] + (f[2].startsWith('0 ') ? ' · the read worked, nothing to propose' : '') + '</span>'; }
+      return '<li><b>' + f[0] + '</b>' + val + tag + '</li>';
+    })) + '</ul>';
+
+    /* ---------- the Connect a tool lightbox (D686 §5.4 frame, BD12 rows) ---------- */
+    const lb = (body, o) => { o = o || {}; return '<div class="dim1"></div><div class="bls-lb" role="dialog" aria-modal="true" aria-labelledby="lbt" style="top:' + (o.top || 36) + 'px;width:' + (o.w || 660) + 'px"><div class="bls-lbh"><div class="tr"><span class="eye">' + (o.eye || 'Build') + '</span><button type="button" class="ib" aria-label="Close Connect a tool">✕</button></div><h2 id="lbt">' + (o.title || 'Connect a tool') + '</h2><p>' + (o.sub || 'Connected tools fill your modules with real data. Each one says what it feeds, and for which venture.') + '</p></div><div class="bls-lbb">' + body + '</div>' + (o.foot ? '<div class="bls-lbf">' + o.foot + '</div>' : '') + '</div>'; };
+    const scopeCard = (st, act, o) => '<section class="bls-scope" aria-labelledby="sc1"><div class="ch"><h3 id="sc1">GitHub for ' + V + '</h3>' + (o && o.right ? o.right : '') + '</div>' + ladder(st, o) + (act || '') + '</section>';
+    const row = (name, line, pill, action, cls) => '<li class="' + (cls || '') + '"><span class="bls-mk" aria-hidden="true">' + name[0] + '</span><div><b>' + name + '</b><span>' + line + '</span></div>' + pill + (action || '<span></span>') + '</li>';
+    const others = '<li class="grp">Design and hosting</li>' + row('Vercel', 'Will feed Prototype / MVP: preview and production deploys', tg('Not connected'), '<button type="button" class="btn bsm">Connect</button>') + row('Lovable', 'Draft UI and prompt history per must-have', tg('Not connected'), '<button type="button" class="btn bsm">Connect</button>');
+    const toolsList = (ghRow) => '<div class="bls-search"><div class="inp" style="min-height:34px">Search tools…</div><span class="raw">Sorted by category · 1–3 of 3 in Code and Design</span></div><ul class="bls-rows" aria-label="Tools"><li class="grp">Code</li>' + ghRow + others + '</ul>';
+
+    // Step 1 · unbound: the honest GitHub row and the one repair (owner)
+    const ghUnbound = row('GitHub', 'Connected to your account · feeds nothing in ' + V + ' until it is in a company', tg('Not feeding', 'Account only'), '<button type="button" class="btn bsm">Details</button>', 'hl');
+    const lbUnbound = lb(scopeCard('unbound', '<div class="bls-fix"><div><b>Link ' + V + ' to a company</b><span>You own ' + V + ', so you can. You belong to 2 companies. Linking moves the venture into one; this setup opens again after.</span></div><button type="button" class="btn p">Link to a company…</button></div>')
+      + '<div class="bls-after"><span class="eye">What will feed ' + V + ' after sync</span>' + feedList('unbound') + '</div>' + toolsList(ghUnbound), { top: 28 });
+
+    /* ---------- Overview (BD1 shape) ---------- */
+    const ovHead = '<header class="ph1" style="margin-top:4px"><div><span class="eye">Build</span><h1 style="font-size:28px">Turn what you proved into a company.</h1><p>Decide what to build, ship it, and keep the evidence attached.</p></div></header>';
+    const OVS = {
+      unbound: ['Connected tools can’t feed ' + V + ' yet', V + ' is not in a company. Your GitHub is connected to your account, not to this venture.', 'Link to a company', 'Not linked'],
+      norepo: ['GitHub has no repository chosen for ' + V, 'GitHub is on for ' + CO + '. Choose the repositories it reads.', 'Choose repositories', 'None chosen'],
+      healthy: null,
+      failing: ['GitHub sign-in expired · Build shows a 3-day-old read', 'Last good read ' + OLD + '. Product roadmap and Prototype / MVP keep that read, marked Stale.', 'Reconnect GitHub', 'Failing'],
+      ro: null
+    };
+    const attention = (st) => { const a = OVS[st]; if (!a) return ''; return '<section class="cd" aria-labelledby="na"><div class="ch"><h2 id="na">Needs attention</h2><span class="sm">1 · material blockers only</span></div><ul class="bls-att"><li>' + tg(a[3]) + '<div><b>' + a[0] + '</b><span>' + a[1] + '</span></div><a class="btn bsm" href="#">' + a[2] + '</a></li></ul></section>'; };
+    const MODS = [['Solution design', '2 features · 1 has no evidence link', 'Solution design'], ['Prototype / MVP', '6 pull requests from GitHub · 3 of 7 must-haves', 'Prototype / MVP'], ['Product roadmap', 'Now 3 · Next 4 · Later 6', 'Product roadmap'], ['Founding team', '2 founders · 3 contributors from GitHub', 'Founding team'], ['Company creation', CO + ' · 2 of 5 filed', 'Company creation'], ['Operating systems', 'Code: GitHub · 1 of 5 systems', 'Operating systems']];
+    const srcLine = (st, m) => {
+      if (m === 'Company creation') return st === 'unbound' ? tg('Not linked', 'No company linked') : '<span class="raw">Delaware C-Corp</span>';
+      const gh = ['Prototype / MVP', 'Product roadmap', 'Founding team', 'Operating systems'].includes(m);
+      if (!gh) return '<span class="raw">Updated Tue</span>';
+      if (st === 'unbound') return tg('Not feeding', 'GitHub · not feeding this venture');
+      if (st === 'norepo') return tg('None chosen', 'GitHub · no repository chosen');
+      if (st === 'failing') return tg('Stale', 'GitHub · read 3 days ago');
+      return '<span class="raw">From GitHub · ' + GOOD.replace(' · ', ' ') + '</span>';
+    };
+    const modBody = (st, m) => {
+      if (st === 'unbound' || st === 'norepo') {
+        if (m[0] === 'Prototype / MVP') return '3 of 7 must-haves · none from GitHub yet';
+        if (m[0] === 'Product roadmap') return 'Now 3 · Next 4 · Later 6 · typed here';
+        if (m[0] === 'Founding team') return '2 founders · contributors not read';
+        if (m[0] === 'Company creation' && st === 'unbound') return 'No company linked to ' + V;
+        if (m[0] === 'Operating systems') return st === 'unbound' ? 'Company not linked yet' : 'Code: GitHub · no repository';
+      }
+      return m[1];
+    };
+    const modules = (st) => '<h2 style="font-size:16px;margin:2px 0 -6px">Modules</h2><div class="bls-mods">' + J(MODS.map(m => '<article class="cd"><h3>' + m[0] + '</h3><p>' + modBody(st, m) + '</p><div class="ft">' + srcLine(st, m[0]) + '<a href="#">Open →</a></div></article>')) + '</div>';
+    const toolsStrip = (st) => '<section class="cd bls-strip" aria-labelledby="ts"><div class="ch"><h2 id="ts">Tools &amp; activity</h2><a href="#" style="font-weight:700;font-size:12.5px">Connect a tool →</a></div>'
+      + (st === 'unbound' ? '<p class="mu" style="font-size:13px;margin:0">Nothing from a connected tool has landed in ' + V + '. Your account has GitHub; ' + V + ' needs a company first.</p>'
+        : st === 'norepo' ? '<p class="mu" style="font-size:13px;margin:0">GitHub is on for ' + CO + ' with no repository chosen. No sync has run for ' + V + '.</p>'
+          : '<ul class="bls-act"><li><span class="raw">' + (st === 'failing' ? 'Mon 09:42' : 'Thu 09:42') + '</span><span class="raw">GitHub</span><span>14 issues → Product roadmap, 6 pull requests → Prototype / MVP, 2 releases → Product roadmap</span></li>' + (st === 'failing' ? '<li><span class="raw">Tue 09:40</span><span class="raw">GitHub</span><span>' + tg('Failing', 'Sync failed') + ' Sign-in expired. Nothing new landed.</span></li>' : '') + '</ul>')
+      + '</section>';
+    const overview = (st) => ovHead + attention(st) + modules(st) + toolsStrip(st);
+
+    /* ---------- Operating systems › Tools (BD12 inside D5078) ---------- */
+    const osHead = (prim) => '<div class="crumb"><a href="#">Build</a>/<b>Operating systems</b></div><header class="ph1"><div><h1>Operating systems</h1><p>Run the company on connected systems and a weekly rhythm.</p></div><div class="acts">' + (prim || '') + '</div></header><nav class="bls-tabs" aria-label="Operating systems"><a href="#">Systems</a><a href="#">Cadence</a><a href="#" aria-current="page">Tools</a></nav>';
+    const codeRow = (st) => {
+      const c = {
+        unbound: ['—', tg('Not linked', 'Company not linked yet'), 'Tools connect to a company. ' + V + ' has none, so GitHub on your account is not listed here.', '<a class="btn bsm" href="#">Link to a company</a>'],
+        norepo: [GH, tg('None chosen', 'No repository chosen'), 'On for ' + CO + ' · no sync has read anything for ' + V, '<a class="btn bsm" href="#">Choose repositories</a>'],
+        healthy: [GH, tg('Connected'), 'Last good read ' + GOOD + ' · ' + R1 + ', ' + R2, '<a class="btn bsm" href="#">Manage</a>'],
+        failing: [GH, tg('Failing', 'Sign-in expired'), 'Failing since Tue 24 Nov 2026 09:40 · last good read ' + OLD + ' ' + tg('Stale', 'Stale · 3 days'), '<a class="btn bsm" href="#">Reconnect</a>'],
+        ro: [MR, tg('Connected'), 'Last good read ' + GOOD + ' · 2 repositories', '<span class="raw">' + MR + ' manages it</span>']
+      }[st];
+      return '<li><b>Code</b><span>GitHub<small>' + c[0] + '</small></span>' + c[1] + '<span class="raw">' + c[2] + '</span>' + c[3] + '</li>';
+    };
+    const osTools = (st) => '<section class="cd" aria-labelledby="ot"><div class="ch"><h2 id="ot">Tools feeding Build</h2><span class="sm">' + (st === 'unbound' ? 'Not recorded · no company' : '1 code system · 0 of 5 company systems') + '</span></div>'
+      + (st === 'unbound' ? nt('', '+', 'Company not linked yet', 'Tools connect to a company, too. They appear here after ' + V + ' is in a company. Your account’s GitHub stays connected meanwhile.', 'Link to a company', true) : '<ul class="bls-code">' + codeRow(st) + '</ul>' + '<div class="bls-sub"><span class="eye">Feeds ' + V + '</span>' + feedList(st) + '</div>')
+      + '</section>';
+    const osSync = (st) => st === 'unbound' || st === 'norepo' ? '' : '<section class="cd" aria-labelledby="sy"><div class="ch"><h2 id="sy">Latest syncs</h2><span class="sm">The latest 10 · GitHub only here</span></div><ul class="bls-act">'
+      + (st === 'failing' ? '<li><span class="raw">Thu 26 Nov 09:40</span>' + tg('Failing', 'Failed') + '<span>Sign-in expired. Nothing new landed.</span></li><li><span class="raw">Wed 25 Nov 09:40</span>' + tg('Failing', 'Failed') + '<span>Sign-in expired.</span></li><li><span class="raw">Tue 24 Nov 09:40</span>' + tg('Failing', 'Failed') + '<span>Sign-in expired.</span></li>' : '')
+      + '<li><span class="raw">' + (st === 'failing' ? 'Mon 23 Nov 09:42' : 'Thu 26 Nov 09:42') + '</span>' + tg('Done') + '<span>14 issues → Product roadmap, 6 pull requests → Prototype / MVP, 2 releases → Product roadmap' + (st === 'ro' ? '' : ' · ' + R1 + ', ' + R2) + '</span></li></ul></section>';
+
+    /* ---------- Step 2 · link dialog (POST /api/projects/:id/move) ---------- */
+    const linkDlg = (o) => { o = o || {}; return '<div class="bls-dlg" role="dialog" aria-modal="true" aria-labelledby="lk1"' + (o.inline ? ' style="position:static;transform:none;width:auto;box-shadow:none"' : '') + '><span class="eye">Step 2 of 3 · Link the venture</span><h2 id="lk1">Link ' + V + ' to a company</h2><p>Connected tools serve companies. Once ' + V + ' is in a company, a tool turned on for that company can feed it.</p>'
+      + '<fieldset class="bls-pick"><legend>Your companies</legend><label class="on"><input type="radio" name="co" checked> <span><b>' + CO + '</b><small>You are its primary admin · ' + NB + ' is a member</small></span></label><label><input type="radio" name="co"> <span><b>' + CO2 + '</b><small>You are its primary admin</small></span></label></fieldset>'
+      + '<div class="bls-cons"><b>What changes</b><ul><li>' + V + ' then shows only under ' + CO + '. Today it shows under every company you belong to.</li><li>Its members see ' + V + ' as they see the company’s other ventures.</li><li>No tool connects, and nothing syncs, until step 3.</li></ul></div>'
+      + '<div class="bls-dlgf"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Link to ' + CO + '</button></div>'
+      + '<p class="raw">Runs POST /api/projects/412/move · the owner or an Axal admin only · recorded as a project_move event. Then back to Connect a tool, step 3.</p></div>'; };
+
+    /* ---------- Step 3 · turn on + choose repositories (GitHub sync view) ---------- */
+    const repoView = (o) => { o = o || {}; const REPOS = [[R1, 'Private · updated 25 Nov 2026', 1], [R2, 'Private · updated 24 Nov 2026', 1], ['[maya-ruiz/notes]', 'Private · updated 2 Oct 2026', 0], ['[ruiz-ventures/site]', 'Public · updated 12 Nov 2026', 0]];
+      return '<div class="bls-proj"><span class="eye">Feeds</span><b>' + V + '</b><span class="raw">in ' + CO + ' · fixed here, from Build</span></div><ul class="bls-repos" aria-label="Repositories">' + J(REPOS.map(r => '<li><div><b class="mo">' + r[0] + '</b><span class="raw">' + r[1] + '</span></div><button type="button" class="btn bsm' + (o.none ? '' : r[2] ? ' sel' : '') + '" aria-pressed="' + (!o.none && !!r[2]) + '">' + (!o.none && r[2] ? '✓ Selected' : 'Not selected') + '</button></li>')) + '</ul>'
+        + '<div class="bls-after"><span class="eye">What will feed ' + V + ' after sync</span>' + feedList('norepo') + '<p class="raw">Read from GitHub’s landing list (githubFeeds.ts). Counts appear after the first sync; nothing is promised before it.</p></div>'; };
+
+    /* ---------- disconnect: Scope → Review → Result ---------- */
+    const disc = () => '<div class="bls-3">'
+      + '<section class="cd" aria-labelledby="d1"><span class="eye">Scope</span><h2 id="d1" style="font-size:16px">What do you want to stop?</h2>'
+      + '<label class="bls-opt on"><input type="radio" name="d" checked><span><b>Stop using GitHub for ' + CO + '</b><small>' + V + ' stops getting new items. Your GitHub stays connected and keeps serving ' + CO2 + '.</small></span></label>'
+      + '<label class="bls-opt"><input type="radio" name="d"><span><b>Disconnect GitHub from your account</b><small>Ends it for every company it serves: ' + CO + ' and ' + CO2 + '. The stored credentials are deleted.</small></span></label>'
+      + '<p class="raw">Either way, items already in Build stay. ' + FLAG('Q1 · option A') + '</p><div class="bls-dlgf"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Review</button></div></section>'
+      + '<section class="cd" aria-labelledby="d2"><span class="eye">Review</span><h2 id="d2" style="font-size:16px">Stop using GitHub for ' + CO + '?</h2>' + kv([['Stops', 'New issues, pull requests, releases and contributors for ' + V + '. The Code system on Operating systems reads Not connected.'], ['Stays', '14 issues, 6 pull requests, 2 releases and 3 contributors already in Build. Your GitHub on your account. ' + CO2 + '’s use of it.'], ['Repositories', R1 + ' and ' + R2 + ' are unchosen for ' + V + ' ' + PTn('#8774 · clear project_id')], ['Who', 'You, ' + MR + '. ' + NB + ' sees the change on Operating systems.']], 92)
+      + '<div class="bls-dlgf"><button type="button" class="btn">Back</button><button type="button" class="btn dg">Stop using for ' + CO + '</button></div></section>'
+      + '<section class="cd" aria-labelledby="d3" role="status"><span class="eye">Result</span><h2 id="d3" style="font-size:16px">GitHub no longer serves ' + CO + '</h2>' + nt('g', '✓', 'Done at 10:31', 'GitHub stays connected to your account for ' + CO2 + '. ' + V + ' keeps what it already has.') + '<p class="raw">PUT /api/integrations/:uid/companies with ' + CO2 + ' only · logged as connector_company_scope_changed.</p><a class="btn bsm" href="#" style="align-self:flex-start">Back to Connect a tool</a></section></div>';
+    const discAcct = () => '<section class="cd bls-danger" aria-labelledby="d4"><span class="eye">Review · account-wide</span><h2 id="d4" style="font-size:16px">Disconnect GitHub from your account?</h2>' + kv([['Ends for', CO + ' (feeding ' + V + ') and ' + CO2], ['Stops', 'Every sync of this connection, for both companies. Their Code systems read Not connected.'], ['Stays', 'Data already in StudioOS. Your GitHub account itself.'], ['Deleted', 'The stored credentials. Connecting again starts with GitHub’s sign-in.']], 92) + '<div class="bls-dlgf"><button type="button" class="btn">Back</button><button type="button" class="btn dg">Disconnect from my account</button></div><p class="raw">DELETE /api/integrations/:uid removes every integration_companies row. Today the Build row offers this with one line: “Data already in StudioOS stays. The stored credentials are deleted.”</p></section>';
+
+    /* ---------- non-owner and read-only ---------- */
+    const lbCofounder = lb('<section class="bls-scope" aria-labelledby="sc2"><div class="ch"><h3 id="sc2">GitHub for ' + V + '</h3></div><ol class="bls-lad"><li class="ok"><i aria-hidden="true">1</i><div><small>Your account</small><b>GitHub · [noah-brandt]</b><span>Connected to your account since Fri 6 Nov 2026.</span></div>' + tg('Connected') + '</li><li class="no"><i aria-hidden="true">2</i><div><small>Company</small><b>' + V + ' is not in a company</b><span>Nothing from GitHub can land in it until it is.</span></div>' + tg('Not linked') + '</li><li class="wait"><i aria-hidden="true">3</i><div><small>Project · ' + V + '</small><b>Repositories</b><span>Chosen after the company step.</span></div>' + tg('Not recorded', 'Waiting on step 2') + '</li></ol>'
+      + '<div class="bls-own"><span class="eye">Who can fix this</span><b>' + MR + ', the venture’s owner</b><span>Only the owner of ' + V + ' (or an Axal admin) can link it to a company. Ask her to open Build › Connect a tool and choose Link to a company. You can then turn your GitHub on for that company yourself.</span><div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn">Copy link to this setup</button>' + FLAG('Q2 · option A') + '</div></div></section>'
+      + toolsList(row('GitHub', 'Connected to your account · feeds nothing in ' + V + ' until it is in a company', tg('Not feeding', 'Account only'), '<button type="button" class="btn bsm">Details</button>', 'hl')), { top: 28 });
+
+    /* ---------- states ---------- */
+    const sk = (w, h) => '<span class="sk" style="height:' + (h || 12) + 'px;width:' + w + '"></span>';
+    const loading = '<div aria-busy="true" class="bls-skel">' + J([1, 2, 3].map(() => '<div>' + sk('22px', 22) + sk('48%') + sk('90px', 18) + '</div>')) + '</div><span class="raw">Announced: “Loading where GitHub connects”. The ladder keeps its three rows; no state word shows until each is read.</span>';
+    const statesGrid = () => crop('<span class="eye">BLS10 · States of the scope ladder and the feed · each read fails on its own</span><div class="bx-states">'
+      + box('Loading', loading)
+      + box('Project’s company could not be read', '<ol class="bls-lad sm"><li class="ok"><i aria-hidden="true">1</i><div><b>GitHub · ' + GH + '</b></div>' + tg('Connected') + '</li><li class="no"><i aria-hidden="true">2</i><div><b>Company</b><span>Could not be read. That is not the same as no company.</span></div>' + tg('Could not be read') + '</li></ol>' + nt('r', '!', 'The company could not be read', 'Connecting waits until it can be. Nothing is drawn as Not linked.', 'Try again'))
+      + box('Not a member of the project’s company · refused', '<ol class="bls-lad sm"><li class="no"><i aria-hidden="true">2</i><div><b>' + CO + '</b><span>You are not a member of this company, so you cannot connect tools for it.</span></div>' + tg('Refused') + '</li></ol><span class="raw">No Connect, no Use for. Ask a primary admin of ' + CO + ' to invite you. Nothing from the company is counted.</span>')
+      + box('Synced, nothing to bring · a measured zero', '<ul class="bls-feeds m"><li><b>Company creation</b><span class="raw">0 IP step proposals · the read worked</span>' + tg('No items') + '</li><li><b>Founding team</b><span class="raw">0 contributors · ' + R2 + ' has no commits yet</span>' + tg('No items') + '</li></ul><span class="raw">No items is a Value. It is never drawn for a module that was not read.</span>')
+      + box('Sync history could not be read', nt('r', '!', 'The sync history could not be read', 'The ladder still reads. Last successful read: Not recorded until the history loads.', 'Try again') + tg('Not recorded', 'Last read not recorded'))
+      + box('Linking · saving and refused', '<div class="bls-up">' + tg('Saving', 'Linking…') + '<span class="raw" role="status">Moving ' + V + ' into ' + CO + '.</span></div>' + nt('a', '!', 'A project there already has this project’s address', 'Change ' + V + '’s slug first, then link it. Nothing changed. (slug_taken)', 'Open project settings') + nt('a', '!', 'Someone changed ' + V + ' while you were linking', 'Nothing was written. Read it again and retry. (409)', 'Read again'))
+      + box('Repositories · refusals in the Worker’s words', nt('a', '!', 'GitHub did not list the repositories', 'Nothing was saved. Check the connection and try again. (repositories_unreadable)', 'Try again') + nt('a', '!', 'GitHub grants this connection more than read access', 'Change the StudioOS app to read-only in GitHub, then choose again. (write_scope_refused)'))
+      + box('Super Admin preview', '<div class="bx2-priv" role="status" style="position:static"><span aria-hidden="true">⚠</span><span><b>Super Admin preview of ' + MR + '’s view.</b> Linking is written as you, ' + IC + '.</span></div><span class="raw">Link to a company asks first and names ' + IC + ' as the actor, as BD22. Axal admins may move a venture; the dialog says so.</span>')
+      + '</div>', 1400);
+
+    /* ---------- the five-state matrix across three surfaces ---------- */
+    const MX = [
+      ['Account connected, project unbound', 'unbound', 'Needs attention: “Connected tools can’t feed ' + V + ' yet” → Link to a company. Module footers: GitHub · not feeding this venture.', 'Row: Connected to your account · feeds nothing in ' + V + ' until it is in a company. Pill Account only. Ladder 1 ✓, 2 Not linked, 3 waiting. Primary: Link to a company…', 'Tools: Company not linked yet → Link to a company. No Code row, no Not recorded facts.'],
+      ['Bound, no repository', 'norepo', 'Needs attention: “GitHub has no repository chosen for ' + V + '” → Choose repositories. Footers: GitHub · no repository chosen.', 'Ladder 1 ✓, 2 On for this company, 3 None chosen. Primary: Choose repositories. Feeds listed as After sync, no counts.', 'Code row: No repository chosen · Choose repositories. Feeds: After sync.'],
+      ['Healthy', 'healthy', 'No attention row. Footers: From GitHub · Thu 26 Nov 09:42 UTC. Tools &amp; activity: the last sync’s arrivals.', 'Row: Feeds ' + V + ': Product roadmap, Prototype / MVP, Solution design, Founding team · synced 09:42. Ladder all ✓. Last successful read shown.', 'Code row Connected · last good read · repositories. Feeds with counts; Company creation No items.'],
+      ['Failing (stale read)', 'failing', 'Needs attention: “GitHub sign-in expired · Build shows a 3-day-old read” → Reconnect GitHub. Footers: GitHub · read 3 days ago (Stale).', 'Row: Failing · Sign-in expired · last good read Mon 23 Nov 09:42 UTC. Primary: Reconnect. Feeds Stale · 3 days.', 'Code row Failing since Tue 24 Nov · Stale · Reconnect. Latest syncs list the failures.'],
+      ['Read only (not the connection’s owner)', 'ro', 'Same as Healthy for ' + NB + '. No Reconnect offered to him on a failure: “' + MR + ' manages GitHub”.', 'GitHub listed as ' + MR + '’s, serving ' + CO + '. Ladder read-only, repository names hidden. No Disconnect, no Choose.', 'Code row owner ' + MR + ' · no action · “' + MR + ' manages it”.']
+    ];
+    const matrix = () => crop('<span class="eye">BLS08 B · Five states × three surfaces · the same words on each</span><table class="bls-mx"><thead><tr><th>State</th><th>Overview</th><th>Connect a tool</th><th>Operating systems › Tools</th><th>Board</th></tr></thead><tbody>'
+      + J(MX.map(m => '<tr><th scope="row">' + m[0] + '<div>' + (m[1] === 'unbound' ? tg('Not linked') : m[1] === 'norepo' ? tg('None chosen') : m[1] === 'healthy' ? tg('Feeding') : m[1] === 'failing' ? tg('Failing') + tg('Stale', 'Stale · 3 days') : tg('Read only')) + '</div></th><td>' + m[2] + '</td><td>' + m[3] + '</td><td>' + m[4] + '</td><td class="raw">' + ({ unbound: 'BLS01, BLS08 A, BLS11 A', norepo: 'BLS03, BLS09 B', healthy: 'BLS04, BLS09 A', failing: 'BLS05', ro: 'BLS06 B' })[m[1]] + '</td></tr>')) + '</tbody></table>', 1440);
+
+    /* ---------- phone 390 ---------- */
+    const phone = (title, body, sheetH) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (sheetH || '') + '</div></div>';
+    const mStep = (n) => '<span class="eye">Step ' + n + ' of 3</span>';
+    const mLad = (st) => ladder(st).replace('class="bls-lad"', 'class="bls-lad m"');
+    const mA = mStep(1) + '<h2 class="bls-mh">GitHub for ' + V + '</h2>' + mLad('unbound') + '<div class="bls-fix m"><b>Link ' + V + ' to a company</b><span>You own ' + V + ', so you can. This setup opens again after.</span><button type="button" class="btn p" style="min-height:48px">Link to a company…</button></div><span class="raw">Feeds nothing until it is linked.</span>';
+    const mB = '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mb" style="max-height:700px"><div class="grab" aria-hidden="true"></div><div style="padding:10px 18px 22px;display:flex;flex-direction:column;gap:12px">' + mStep(2) + '<h2 id="mb" style="font-size:18px;font-weight:800;margin:0">Link ' + V + ' to a company</h2><fieldset class="bls-pick"><legend>Your companies</legend><label class="on"><input type="radio" name="mco" checked> <span><b>' + CO + '</b><small>Primary admin</small></span></label><label><input type="radio" name="mco"> <span><b>' + CO2 + '</b><small>Primary admin</small></span></label></fieldset><p style="font-size:12.5px;margin:0;color:var(--mu)">' + V + ' then shows only under ' + CO + '. Nothing syncs until step 3.</p><button type="button" class="btn p" style="min-height:48px">Link to ' + CO + '</button><button type="button" class="btn" style="min-height:44px">Cancel</button></div></div>';
+    const mC = mStep(3) + '<h2 class="bls-mh">Choose repositories</h2><div class="bls-proj m"><span class="eye">Feeds</span><b>' + V + '</b><span class="raw">in ' + CO + '</span></div><ul class="bls-repos m">' + J([[R1, 1], [R2, 1], ['[maya-ruiz/notes]', 0]].map(r => '<li><b class="mo">' + r[0] + '</b><button type="button" class="btn bsm' + (r[1] ? ' sel' : '') + '" aria-pressed="' + !!r[1] + '">' + (r[1] ? '✓ Selected' : 'Not selected') + '</button></li>')) + '</ul><span class="raw">Reads issues, pull requests and releases only.</span><button type="button" class="btn p" style="min-height:48px">Sync selected</button>';
+    const mD = '<h2 class="bls-mh">GitHub for ' + V + '</h2>' + mLad('healthy') + lastRead('healthy').replace(PTn('#8774 · project on the sync log'), '').replace(' · by you', '') + '<span class="eye">Feeds ' + V + '</span><ul class="bls-feeds m">' + J(FEEDS.slice(0, 2).map(f => '<li><b>' + f[0] + '</b><span class="raw">' + f[2] + '</span>' + tg('Feeding') + '</li>')) + '<li><b>Company creation</b><span class="raw">0 IP step proposals</span>' + tg('No items') + '</li></ul><a href="#" style="font-weight:700;font-size:13px;min-height:44px;display:flex;align-items:center">All 6 modules it feeds →</a>';
+    const mE = '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="me" style="max-height:720px"><div class="grab" aria-hidden="true"></div><div style="padding:10px 18px 22px;display:flex;flex-direction:column;gap:12px"><span class="eye">Scope</span><h2 id="me" style="font-size:18px;font-weight:800;margin:0">What do you want to stop?</h2><label class="bls-opt on"><input type="radio" name="md" checked><span><b>Stop using GitHub for ' + CO + '</b><small>' + V + ' stops getting new items. GitHub keeps serving ' + CO2 + '.</small></span></label><label class="bls-opt"><input type="radio" name="md"><span><b>Disconnect GitHub from your account</b><small>Ends it for ' + CO + ' and ' + CO2 + '.</small></span></label><p class="raw" style="margin:0">Items already in Build stay either way.</p><button type="button" class="btn p" style="min-height:48px">Review</button><button type="button" class="btn" style="min-height:44px">Cancel</button></div></div>';
+    const mF = '<h2 class="bls-mh">GitHub for ' + V + '</h2>' + mLad('unbound').replace('Connected to your account since Tue 3 Nov 2026. Account-level: it can serve any company you belong to.', 'Connected to your account.').replace(GH, '[noah-brandt]') + '<div class="bls-own"><span class="eye">Who can fix this</span><b>' + MR + ', the venture’s owner</b><span>Only she (or an Axal admin) can link ' + V + ' to a company.</span><button type="button" class="btn" style="min-height:44px">Copy link to this setup</button></div>';
+
+    /* ---------- BLS00 today on main ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const today = () => dk('<h1>Today on main · why the walkthrough saw a contradiction</h1><p>Authenticated walkthrough, 26 Nov 2026, founder preview with Super Admin authority: Overview said the project had no company scope for connectors; Connect a tool repeated that connected tools could not feed it, then listed GitHub as Connected, “Feeds” several Build modules, with Disconnect enabled. Confirmed against <code>main</code> 7553cd37b9. Nothing in this table is a guess.</p>'
+      + tbl(['Surface', 'What main draws', 'Where', 'Why it misleads'], [
+        ['Overview · Operating systems card', '“This project has no company scope for connectors.” (Not recorded)', '<code>routes/cycle_build.ts</code> operating(), lines 1331, 1353–1356', 'Internal words (“scope”, “connectors”); no repair, no owner named.'],
+        ['Connect a tool · banner', '“This project has no company, so connected tools cannot feed it.”', '<code>connectorsModel.js</code> companyBanner(), state <code>none</code>', 'True, but the row below contradicts it.'],
+        ['Connect a tool · GitHub row', '“Connected” pill, “Feeds Product roadmap, Prototype / MVP, … · synced …”, Disconnect', '<code>toolRow()</code> uses <code>feedsLabel(p)</code>, the registry’s static list; <code>servesCompany</code> is skipped when there is no company', 'Says what GitHub can feed in general, not what feeds this venture.'],
+        ['Connect a tool · Disconnect confirm', '“Data already in StudioOS stays. The stored credentials are deleted.”', '<code>disconnectNote()</code>; <code>DELETE /api/integrations/:uid</code> deletes every <code>integration_companies</code> row', 'Does not say it ends GitHub for every company the account connection serves.'],
+        ['Operating systems', '“Company not linked yet” · Go to Company Creation', '<code>OperatingSystemsHome.jsx</code> CompanyNotLinked', 'Sends a founder with a company elsewhere to incorporate again; the fix is a link.']])
+      + '<h2>The three scopes main already records</h2>' + tbl(['Scope', 'Record', 'Who changes it'], [
+        ['Account', '<code>integrations</code> row (user_id, status, last_synced_at, config_json)', 'The member who connected it: connect, reconnect, <code>DELETE /api/integrations/:uid</code>.'],
+        ['Company', '<code>integration_companies</code> (integration_id, company_id, enabled); <code>PUT /api/integrations/:uid/companies</code> replaces the set', 'The connection’s owner, for companies they belong to (<code>company_not_linked</code> 403 otherwise). Build shows “Use for {company}”.'],
+        ['Project', '<code>projects.company_id</code>, written only by <code>POST /api/projects/:id/move</code> (services/projectMove.ts); GitHub’s <code>config_json.project_id</code> + <code>repositories</code> via <code>PUT /:uid/repositories</code>', 'Move: the venture’s owner or an Axal admin; the owner must belong to the company. Repositories: the connection’s owner, and only for a project whose company the connection serves (<code>project_not_enabled</code>).']])
+      + '<h2>Other findings</h2><ul><li>A GitHub sync refuses with <code>github_no_repositories</code> or <code>github_project_not_enabled</code>: no repository, or the project’s company is off, are both real, distinct states.</li><li>One GitHub connection feeds one project at a time (<code>config_json.project_id</code>).</li><li>The sync log (<code>integration_logs</code>) records time, state, repositories and arrivals, not the project: a per-venture “last successful read” needs the project on that row (◇ #8774).</li><li>The move dialog exists only in Account › Companies › venture (<code>MoveVentureDialog</code>), with no way back to Build.</li></ul>');
+
+    /* ---------- BLS12 handoff ---------- */
+    const handoff = () => dk('<h1>Handoff · Project and company connector scope (#8774)</h1><p>Checked against <code>main</code> 7553cd37b9 on Thu 26 Nov 2026. Extends Build v2 (D4846) and D686 §5.4 (#1597): the Connect a tool lightbox, BD12’s Tools rows and BD20’s Company not linked yet. Shell, state words and the Eadwyn rail are Build v2’s.</p>'
+      + '<h2>Acceptance → boards</h2>' + tbl(['Acceptance item', 'Answered on'], [
+        ['Label account, company and project scope separately', 'The three-row ladder: BLS01, BLS03, BLS04, BLS05, BLS06, phone BLS11 A, D, F'],
+        ['Say a module receives data only when the binding is effective', 'Feeds list: Not feeding (BLS01), After sync (BLS03), counts (BLS04), Stale (BLS05); GitHub row “feeds nothing in [Atlas Orchard] until…”'],
+        ['Distinguish no scope, no repo, stale read, no items', 'Not linked · None chosen · Stale with age · No items (measured 0): BLS08 B, BLS10, BLS04 (Company creation No items)'],
+        ['Permitted owner: link the project and return to setup', 'BLS01 → BLS02 (step 2, then back) → BLS02 B → BLS03; phone BLS11 A → B → C'],
+        ['Other users: name the owner action', 'BLS06 A (co-founder: “Only [Maya Ruiz]…”), phone BLS11 F; refused member BLS10'],
+        ['Consequence and scope of disconnecting an account-level tool', 'BLS07 Scope → Review → Result, BLS07 B account-wide review, phone BLS11 E'],
+        ['Date and source of the last successful project read', 'BLS04, BLS05, BLS09 A, phone BLS11 D'],
+        ['Test unbound / bound-no-repo / healthy / failing / read-only across Overview, Connect a tool, Operating systems', 'BLS08 B matrix; full pages BLS08 A, BLS01, BLS03, BLS04, BLS05, BLS06 B, BLS09 A, B']])
+      + '<h2>Frontend only (main has the route)</h2><ul><li>Ladder from <code>GET /projects/:id</code> (company_id), <code>useConnectors({ companyId })</code> (connection, <code>company_ids</code>), <code>GET /:uid/repositories</code> (selected, project_id).</li><li>GitHub row: when <code>projectCompany().state</code> is <code>none</code> or <code>servesCompany</code> is false, say “feeds nothing in {venture}” and drop “Feeds …”.</li><li>Link dialog inside Build calling <code>companyActionsApi.moveProject</code>; on success reopen <code>/build/connect?project_id=…&amp;tool=github</code>. The owner is read from <code>GET /projects/:id/members</code>.</li><li>Use for {company} (exists), then the existing GitHub sync view with the feeds-after-sync list from <code>githubFeeds.ts</code> words.</li><li>Scoped stop: <code>PUT /:uid/companies</code> without the project’s company. Account-wide: existing DELETE with the new review naming every company in <code>company_ids</code>.</li><li>Operating systems: CompanyNotLinked’s action becomes Link to a company for an owner with a company; Go to Company Creation stays when the owner has none.</li></ul>'
+      + '<h2>Backend required (◇ #8774)</h2>' + tbl(['Item', 'Boards'], [
+        ['Record the project on each sync log row (or return the last ok sync per project), for “Last successful read of [venture]”', 'BLS04, BLS05, BLS09'],
+        ['Reasons on the Overview and Operating systems reads that tell no company / company off / no repository / stale / failing apart, in founder words (today one sentence: “This project has no company scope for connectors.”)', 'BLS08, BLS09'],
+        ['Stopping a company clears the connection’s <code>project_id</code> and repositories when that project’s company is removed, so later syncs do not fail with <code>github_project_not_enabled</code>', 'BLS07'],
+        ['Stale as a field on the read (age of the last good read), per the ⚑ Q3 rule', 'BLS05, BLS08']])
+      + '<h2>Pending the owner (⚑, drawn at A)</h2>' + tbl(['Question', 'A (drawn)', 'B'], [
+        ['Q1 · Disconnect from Build', 'Build’s first choice is “Stop using for {company}”; account-wide disconnect is the second option with its own review', 'Build offers only the scoped stop; account disconnect lives in Account › Connectors'],
+        ['Q2 · A co-founder who cannot link', 'Name the owner and copy a link to this setup', 'An in-app request to the owner (needs a notification route)'],
+        ['Q3 · When a read is Stale', 'Immediately when the latest sync failed, else after 24 hours without a good read', 'Only after a failure']])
+      + '<h2>Headings and focus order</h2>' + tbl(['Board', 'Order'], [
+        ['Lightbox (BLS01, 03–06)', 'h2 “Connect a tool” → h3 “GitHub for {venture}”. Focus: Close → ladder (read as a list, each row one stop) → the one primary action → Search → filters → rows. Escape steps back from a panel, closes from the list (D686).'],
+        ['Link dialog (BLS02)', 'h2 “Link {venture} to a company”. Focus: first company radio (arrow keys move) → Cancel → Link. Return focus to the ladder’s step 2 row, announced “Linked to {company}”.'],
+        ['Disconnect (BLS07)', 'Scope radios → Review; Review’s destructive button is never focused first; Result is a polite status.'],
+        ['Phone', '44px targets; bottom sheets trap focus; the step number is in the eyebrow and in the sheet’s accessible name.']])
+      + '<h2>Accessibility</h2><p>Every state has a word and a glyph: Not linked ○ dashed, None chosen –, Stale ◷ with an age, No items 0, Failing ✕, Could not be read !, Refused ⊘, Read only 🔒︎. Colour never carries it alone. Dates are written out in Roboto Mono with UTC.</p>'
+      + '<p>' + V + ', ' + CO + ', ' + CO2 + ', ' + MR + ', ' + NB + ', ' + IC + ', the GitHub logins, repositories, counts and dates are fictional sample data.</p>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    const dimOv = (st, overlay, h) => page(overview(st), { h: h || 1000, overlay });
+    if (B === 'BLS00') html = today();
+    else if (B === 'BLS01') html = dimOv('unbound', lbUnbound, 1160);
+    else if (B === 'BLS02') html = dimOv('unbound', '<div class="dim1" style="opacity:.6"></div>' + linkDlg(), 1000);
+    else if (B === 'BLS02B') html = crop('<span class="eye">Step 2 done · back in Connect a tool with step 3 next</span><div role="status">' + nt('g', '✓', V + ' is linked to ' + CO, 'Step 3: turn your GitHub on for ' + CO + ', then choose repositories.') + '</div>' + scopeCard('linked', '<div class="bls-fix"><div><b>Use GitHub for ' + CO + '</b><span>Adds ' + CO + ' to the companies your GitHub serves. ' + CO2 + ' keeps it.</span></div><button type="button" class="btn p">Use for ' + CO + '</button></div>'), 760);
+    else if (B === 'BLS03') html = dimOv('norepo', lb(scopeCard('norepo') + repoView(), { top: 28, title: 'Connect GitHub', eye: 'Build · step 3 of 3', sub: 'Choose what StudioOS reads. You can change this later.', foot: '<span class="raw">Reads issues, pull requests and releases only.</span><span style="display:flex;gap:8px"><button type="button" class="btn">Back</button><button type="button" class="btn p">Sync selected</button></span>' }), 1180);
+    else if (B === 'BLS04') html = dimOv('healthy', lb('<div role="status">' + nt('g', '✓', 'GitHub is synced for ' + V, 'Synced 14 issues and 6 pull requests. Product roadmap and Prototype / MVP now show them.') + '</div>' + scopeCard('healthy', '', { right: '<button type="button" class="btn bsm">Stop or disconnect…</button>' }) + lastRead('healthy') + '<div class="bls-after"><span class="eye">Feeds ' + V + ' now</span>' + feedList('healthy') + '</div>', { top: 28, foot: '<span></span><button type="button" class="btn p">Done</button>' }), 1160);
+    else if (B === 'BLS05') html = dimOv('failing', lb(scopeCard('failing', '<div class="bls-fix"><div><b>Reconnect GitHub</b><span>Sign-in expired. Reconnecting keeps ' + CO + ' and your repositories.</span></div><button type="button" class="btn p">Reconnect</button></div>') + lastRead('failing') + '<div class="bls-after"><span class="eye">What ' + V + ' shows meanwhile</span>' + feedList('failing') + '</div>', { top: 28 }), 1160);
+    else if (B === 'BLS06') html = page(overview('unbound'), { h: 1100, av: 'NB', overlay: lbCofounder });
+    else if (B === 'BLS06B') html = page(osHead() + osTools('ro') + osSync('ro') + '<p class="raw">' + NB + ' is a co-founder, not the connection’s owner: he reads the ladder and the feeds, not the repository names; no Reconnect, Choose or Disconnect is offered. An advisor reads the same, with Read only on the page header. ' + tg('Read only') + '</p>', { h: 1000, cur: 'Operating systems', av: 'NB' });
+    else if (B === 'BLS07') html = crop('<span class="eye">Stop or disconnect · Scope → Review → Result · from GitHub’s details in Connect a tool</span>' + disc(), 1400);
+    else if (B === 'BLS07B') html = crop(discAcct(), 620);
+    else if (B === 'BLS08') html = page(overview('unbound'), { h: 1000 });
+    else if (B === 'BLS08B') html = matrix();
+    else if (B === 'BLS09') html = page(osHead() + osTools('healthy') + osSync('healthy'), { h: 1000, cur: 'Operating systems' });
+    else if (B === 'BLS09B') html = crop('<span class="eye">Operating systems › Tools · the Code system in each state</span><ul class="bls-code">' + J(['unbound', 'norepo', 'healthy', 'failing', 'ro'].map(s => '<li class="grp">' + ({ unbound: 'Account connected, venture not in a company', norepo: 'Bound, no repository', healthy: 'Healthy', failing: 'Failing, stale read', ro: 'Read only · seen by ' + NB })[s] + '</li>' + (s === 'unbound' ? '<li><b>Code</b><span>GitHub<small>—</small></span>' + tg('Not linked', 'Company not linked yet') + '<span class="raw">No row is listed: the section shows one prerequisite, Link to a company</span><a class="btn bsm" href="#">Link to a company</a></li>' : codeRow(s)))) + '</ul>', 1400);
+    else if (B === 'BLS10') html = statesGrid();
+    else if (B === 'BLS11A') html = phone('Connect a tool', mA);
+    else if (B === 'BLS11B') html = phone('Connect a tool', mA, '<div class="dim2"></div>' + mB);
+    else if (B === 'BLS11C') html = phone('Connect GitHub', mC);
+    else if (B === 'BLS11D') html = phone('Connect a tool', mD);
+    else if (B === 'BLS11E') html = phone('GitHub', mD, '<div class="dim2"></div>' + mE);
+    else if (B === 'BLS11F') html = phone('Connect a tool', mF);
+    else if (B === 'BLS12') html = handoff();
+    else html = dimOv('unbound', lbUnbound, 1160);
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

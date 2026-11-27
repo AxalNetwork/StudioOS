@@ -1,0 +1,11 @@
+-- D4715 (#4715) — the exact offer an advisor booking was made on.
+--
+-- A booking kept only `session_type_id`, so what the founder booked was read
+-- back from the session type as it is NOW: an advisor who renamed it, changed
+-- its length or repriced it changed every booking already made on it, and a
+-- booking whose type was later deleted had no terms at all. `offer_json` is a
+-- copy of the session type's name, length, pricing mode and price taken when
+-- the booking is written, and re-taken when a cancelled booking of the same
+-- slot is booked again. NULL on a booking made before this column, or made
+-- without a session type.
+ALTER TABLE advisor_bookings ADD COLUMN offer_json TEXT;

@@ -1,0 +1,34 @@
+{
+  "skill": "design-system-token-architecture",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Design System Token Architecture",
+        "task_scope": "Defines a scalable token hierarchy spanning primitive, semantic and component tokens, themes and deprecation.",
+        "evidence": [
+          "primitive-to-semantic token hierarchy"
+        ],
+        "omitted_field": "dark mode token"
+      },
+      "github.repos": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for primitive-to-semantic token hierarchy."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "primitive-to-semantic token hierarchy"
+    ],
+    "must_say_not_recorded": [
+      "dark mode token"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+This is a high-level orchestration. To make this work, **Replit** will act as your development environment where you write the code, and **Cloudflare** will act as your production infrastructure where the database (D1), AI, and Logic live.
+
+Since you are using **GitHub Pages (Jekyll)**, your frontend is static, so all the "intelligence" must reside in the Cloudflare Worker.
+
+### 1. The Blueprint for Replit
+Copy and paste this exact prompt into the **Replit Agent**. It is designed to generate the "Three-Phase" logic: **Anon Chat → Auth → Deep Profile.**
+
+---
+
+**Replit Agent Prompt:**
+
+> **Project Name:** Axal VC Partner Portal (Delaware LLC)
+> **Stack:** Vanilla JS/HTML (for Jekyll), Cloudflare Workers (Hono framework), Cloudflare D1 (SQLite), Cloudflare Workers AI.
+> 
+> **Objective:** Build a serverless intake system that profiles partners via AI and stores data in D1 for admin approval.
+> 
+> **Part 1: The Database (D1 Schema)**
+> Create a SQL schema for D1 with:
+> - `users` table: id, email, otp, verified_status.
+> - `profiles` table: user_id, persona (Founder/LP/Advisor), legal_name, ein, signatory, admin_status (default: 'pending').
+> - `chat_history` table: session_id, message_json.
+> 
+> **Part 2: The Worker (Backend)**
+> Create a Cloudflare Worker that handles these routes:
+> 1. `POST /chat`: Uses `@cf/meta/llama-3-8b-instruct`. It must identify the user's persona in "Anon Mode."
+> 2. `POST /verify-email`: Sends a 6-digit OTP (mock the email sending logic for now).
+> 3. `POST /register`: Finalizes auth and issues a JWT.
+> 4. `POST /update-profile`: A "Structured Extraction" endpoint where the AI parses the chat and updates the D1 `profiles` table.
+> 
+> **Part 3: The Frontend (Jekyll-ready)**
+> Create a single `index.html` with a sophisticated chat UI using Tailwind CSS. 
+> - It must manage state: `STATE_ANON` -> `STATE_VERIFY` -> `STATE_LOGGED_IN`.
+> - Post-login, the UI should show a "Verification Pending" badge if `admin_status` is 'pending'.
+> 
+> **Instructions for AI Behavior:**
+> The AI must be professional. If the user is an LP, it must ask about 'Accredited Investor' status. If a Founder, it must ask for 'Delaware Registration' details.
+
+---
+
+### 2. The "Structured Extraction" System Prompt
+Inside your Worker, you will need a specific "System Prompt" to ensure the AI speaks to the database correctly. This is the "brain" of the profiling:
+
+```javascript
+const SYSTEM_PROMPT = `
+You are the Axal VC Onboarding AI. 
+Your goal is to extract data for a Delaware LLC partnership. 
+
+Rules:
+1. If the user mentions a company name, extract it as 'legal_name'.
+2. If they mention a tax ID, extract as 'ein_tax_id'.
+3. Always check for the 'signatory_name'.
+
+FORMAT: You must always respond with a JSON block at the end of your message:
+{
+  "extracted_data": {
+    "legal_name": string | null,
+    "persona": "Founder" | "LP" | "Advisor" | null,
+    "ein": string | null
+  },
+  "next_step": "string_instruction_for_user"
+}
+`;
+```
+
+---
+
+### 3. The Admin Verification Loop
+Since you want admins to verify the profiles, your D1 database will act as your "Admin Panel." You can view this directly in the Cloudflare Dashboard, or have the Replit Agent build a simple protected route:
+
+| Status | Meaning | Action |
+| :--- | :--- | :--- |
+| **`pending`** | User finished the AI chat but hasn't been checked. | Admin reviews the D1 row. |
+| **`verified`** | Admin clicked "Approve." | User receives a "Verified Partner" badge in the UI. |
+| **`rejected`** | Info was incorrect/incomplete. | AI is instructed to ask for the info again. |
+
+---
+
+### 4. Deployment Workflow (How to go live)
+Once Replit generates the code, follow these steps to link it to your GitHub Pages:
+
+1.  **Cloudflare:** Create a D1 database named `axal_db` and run the schema code Replit gave you.
+2.  **Wrangler:** In the Replit terminal, run `npx wrangler deploy` to push the code to your Cloudflare account.
+3.  **GitHub:** Take the `index.html` code from Replit and save it as `index.html` in your Jekyll folder. 
+4.  **Connect:** Update the `const API_URL` in your JS to point to your new `xxx.workers.dev` address.
+
+### Final Check for Axal VC
+* **Privacy:** Because you are a Delaware LLC, ensure your `index.html` includes a small "Privacy Policy" footer stating that data is handled per US laws.
+* **Security:** Ensure the JWT secret in your Worker is stored as a **Cloudflare Secret**, not hardcoded in the script.
+
+**Do you want me to write the specific D1 SQL "Update" query that the Admin would use to verify a partner?**

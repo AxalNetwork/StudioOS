@@ -1,0 +1,17 @@
+{
+  "$id": "deckRetryFailed",
+  "title": "POST /api/decks/areas/batches/:uid/retry-failed (D1600, #3879)",
+  "description": "The reply the deck v2 adapter's `retryFailed` method passes through: the new run of only the failed areas, the areas it retries and its quote, drawn from what is left of the first run's hold (`routes/deck_batches.ts`). The same Idempotency-Key again answers the same reply.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_uid", "retried", "quote"],
+  "properties": {
+    "batch_uid": { "type": "string" },
+    "retried": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "quote": {
+      "type": "object", "additionalProperties": false,
+      "required": ["microusd"],
+      "properties": { "microusd": { "type": "integer", "minimum": 0 } }
+    }
+  }
+}

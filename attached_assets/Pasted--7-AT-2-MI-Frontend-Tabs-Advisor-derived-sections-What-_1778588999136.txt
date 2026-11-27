@@ -1,0 +1,40 @@
+#7 - AT-2 — MI Frontend Tabs (Advisor-derived sections)
+What & Why
+Render the 9 new Market Intelligence sections from AT-1's endpoints as tabs on MarketIntelPage.jsx. Founders use these to position themselves; investors use them for sourcing and sizing.
+
+Done looks like
+9 new tabs added to MarketIntelPage.jsx: Axal Investor Signals, Founder Sentiment, TALC Positioning, Demand & Supply Atlas, Founder-Investor Fit, Partner Marketplace Pulse, Sector Heat, Sentiment Geography, Capital Velocity.
+Each tab renders within p95 800ms after data load (reads pre-aggregated cells).
+Founder Sentiment shows rolling 30-day line + top-blockers word cloud + top-excitements.
+TALC tab shows stacked bar of self-positioning by sector + chasm-readiness gap chart.
+Demand & Supply: two-sided heatmap per sector with shortage/surplus pills.
+Founder-Investor Fit: founder view shows top-5 investors (de-identified until NDA); investor view shows top-N matching deals.
+Partner Pulse: rate-card averages, capacity by skill, comp-model distribution.
+Sector Heat: single composite index per sector + sub-sector with sparkline.
+Sentiment Geography: map view (per-country sentiment + activity).
+Capital Velocity: per-quarter velocity index chart.
+Empty/low-n states: when AT-1 returns suppressed cells, UI shows "Not enough data yet" with k-anonymity threshold copy.
+Settings → Privacy toggle "Contribute my advisor answers to anonymised Market Intelligence" wired to users.mi_contribution_optout.
+Out of scope
+Backend extractors / storage / endpoints (AT-1).
+Publication exports (AU).
+New chart libraries — reuse what MarketIntelPage.jsx already uses.
+Steps
+Tab scaffolding — Add 9 tabs to MarketIntelPage.jsx with lazy data loaders calling AT-1's endpoints.
+Sentiment tab — Line chart + word cloud + excitement list; date-range + sector filters.
+TALC tab — Stacked bar (self-position) + gap chart (founder belief vs investor preference).
+Demand & Supply tab — Two-sided heatmap with shortage/surplus pill chips.
+Founder-Investor Fit tab — Persona-aware view (founder vs investor); NDA-gated identifier reveal.
+Partner Pulse tab — Rate-card stats + skill capacity + comp-model donut.
+Sector Heat tab — Composite index table with sparkline per sector.
+Sentiment Geography tab — Map (reuse existing geo viz if present; otherwise a heat-coded country list).
+Capital Velocity tab — Per-quarter line chart with deployment-target overlay.
+Privacy toggle UI — Wire Settings → Privacy section.
+Empty/suppressed state — Reusable <MIInsufficientData /> component for n<5 cells.
+Relevant files
+frontend/src/pages/MarketIntelPage.jsx
+frontend/src/lib/advisor/persona.js
+Dependencies
+
+AT-1 — MI extractors, storage & endpoints
+Main

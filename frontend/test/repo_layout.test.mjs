@@ -1,0 +1,217 @@
+/**
+ * Repo layout: the root stays legible.
+ *
+ * The root of this repository had accumulated **38 markdown files** — four
+ * generations of beta-readiness audit, five UX audits, three security
+ * documents, and the four architecture files that actually matter, all in one
+ * alphabetical wall. Finding CODEBASE_MAP.md meant scrolling past
+ * BETA_READINESS_ISSUES_2026-05-20.md.
+ *
+ * They now live under `documentation/`, and this file is what stops the root
+ * from refilling. It is not a style rule: the cost of the old state was that
+ * the four documents a newcomer needs were indistinguishable from a year of
+ * dated snapshots nobody maintains.
+ *
+ * Seven files stay at the root, each because a tool or a platform convention
+ * looks for it there and nowhere else. Adding an eighth fails this test — if
+ * that eighth genuinely belongs at the root, add it to ROOT_MD with the
+ * reason, which is the point: the exception has to be argued once, in writing.
+ * `AGENTS.md` was the seventh (D503): Codex, Cursor and other agents read it
+ * from the root, as Claude Code reads `CLAUDE.md`.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { resolve, join } from 'node:path';
+
+const root = resolve(process.cwd());
+
+// Each entry names the tool or convention that requires the root location.
+const ROOT_MD = new Map([
+  ['CLAUDE.md', 'read by Claude Code from the repo root'],
+  ['AGENTS.md', 'read by Codex, Cursor and other agents from the repo root'],
+  ['replit.md', 'read by Replit from the repo root'],
+  ['README.md', 'GitHub renders it as the repo front page'],
+  ['CONTRIBUTING.md', 'GitHub community-health file'],
+  ['SECURITY.md', 'GitHub community-health file'],
+  ['CHANGELOG.md', 'conventional root location'],
+]);
+
+test('only the seven tool-required markdown files sit at the repo root', () => {
+  const found = readdirSync(root).filter((f) => f.toLowerCase().endsWith('.md'));
+  const unexpected = found.filter((f) => !ROOT_MD.has(f));
+  assert.deepEqual(
+    unexpected, [],
+    `move these under documentation/, or add them to ROOT_MD with the tool that requires the root: ${unexpected.join(', ')}`,
+  );
+  // And the seven must still be there — a "cleanup" that swept README.md into a
+  // folder would break the repo's front page.
+  for (const [f, why] of ROOT_MD) {
+    assert.ok(existsSync(join(root, f)), `${f} must stay at the root — ${why}`);
+  }
+});
+
+test('documentation/ is organised, not just a second heap', () => {
+  const base = join(root, 'documentation');
+  assert.ok(existsSync(base), 'documentation/ must exist');
+  const entries = readdirSync(base, { withFileTypes: true });
+  const loose = entries.filter((e) => e.isFile() && e.name !== 'README.md').map((e) => e.name);
+  assert.deepEqual(loose, [],
+    `documentation/ takes an index and folders, not loose files: ${loose.join(', ')}`);
+  for (const dir of ['architecture', 'audits', 'operations', 'product']) {
+    assert.ok(entries.some((e) => e.isDirectory() && e.name === dir), `documentation/${dir}/ must exist`);
+  }
+});
+
+test('the index says what documentation/ is and what docs/ is', () => {
+  // The two names are one character apart and one of them is build output.
+  // Someone WILL hand-edit docs/ if nothing says not to.
+  // Unwrap the blockquote and collapse whitespace first: the warning is a
+  // wrapped `>` block, so a phrase can straddle a line AND a quote marker.
+  // Three earlier versions of this assertion failed on correct prose for
+  // exactly that reason.
+  const s = readFileSync(join(root, 'documentation/README.md'), 'utf8')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\s+/g, ' ');
+  assert.match(s, /`documentation\/` is not `docs\/`/);
+  assert.match(s, /built frontend bundle/i);
+  assert.match(s, /never be hand-edited/i);
+});
+
+// One hand-maintained markdown file lives inside the build directory. It is
+// NOT generated, and it is not swept: Vite (`emptyOutDir: true`) empties
+// `docs/` on every build and then copies `frontend/public/` back in
+// verbatim, so it survives every build because it is a real file under
+// `frontend/public/`, not because anything in `build-frontend.mjs` writes it.
+// It is reachable as raw markdown at the apex because the Worker's `[assets]`
+// binding serves `docs/` directly (as GitHub Pages did before 2026-09-01).
+//
+// It is allowlisted rather than moved: a raw URL that has been live cannot be
+// relocated on a tidying pass without knowing who links to it. This is
+// recorded as an oddity to resolve deliberately, not as approval of the
+// pattern.
+//
+// `CHANGELOG.md` used to be here too, as a symlink from `frontend/public/`
+// to the root engineering changelog — the exact same "Vite copies public/
+// back in" mechanism, publishing the whole 800KB+ engineering log at
+// `/CHANGELOG.md` since 2026-05-21 with no reader anywhere in the repo
+// (task 433/D300). The symlink is deleted; only the user-facing changelog,
+// which `pages/docs/sections/changelog.js` reads, stays public on purpose.
+const DOCS_MD_ALLOWED = new Set(['CHANGELOG-user.md']);
+
+test('no NEW hand-written markdown appears in the build output', () => {
+  const d = join(root, 'docs');
+  if (!existsSync(d)) return;
+  const stray = readdirSync(d)
+    .filter((f) => f.toLowerCase().endsWith('.md'))
+    .filter((f) => !DOCS_MD_ALLOWED.has(f));
+  assert.deepEqual(stray, [],
+    `docs/ is build output — put documents under documentation/ instead: ${stray.join(', ')}`);
+});
+
+test('the one allowlisted changelog is still actually there', () => {
+  // If it vanishes, something started emptying the build directory, and the
+  // allowlist above has become a lie rather than a record.
+  const d = join(root, 'docs');
+  if (!existsSync(d)) return;
+  for (const f of DOCS_MD_ALLOWED) {
+    assert.ok(existsSync(join(d, f)),
+      `${f} is gone from docs/ — the build now empties the tree, or it was moved without updating this allowlist`);
+  }
+});
+
+test('the deleted CHANGELOG.md symlink and test.html do not resurface in docs/', () => {
+  // task 433/D300: both were published with no reader anywhere in the repo.
+  // A resurrection would mean the symlink or the leftover smoke page came
+  // back into frontend/public/ and rode a build back into the assets Worker
+  // serves at the apex.
+  const d = join(root, 'docs');
+  if (!existsSync(d)) return;
+  assert.ok(!existsSync(join(d, 'CHANGELOG.md')),
+    'docs/CHANGELOG.md exists — the engineering changelog symlink is back under frontend/public/');
+  assert.ok(!existsSync(join(d, 'test.html')),
+    'docs/test.html exists — the leftover smoke page is back under frontend/public/');
+});
+
+test('no file under frontend/public is a symlink', () => {
+  // `stat` follows a symlink and sees whatever it points at as a regular
+  // file; `lstat` sees the link itself. The deleted CHANGELOG.md symlink is
+  // exactly the shape this refuses: a link inside frontend/public/ rides
+  // Vite's emptyOutDir copy-back into docs/ as if it were the linked file's
+  // full content, with no entry in this test file naming who reads it.
+  const pub = join(root, 'frontend/public');
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        assert.fail(`${p.replace(root + '/', '')} is a symlink — every file under frontend/public/ `
+          + 'is published verbatim on every deploy, so a symlink publishes whatever it points at '
+          + '(this is exactly how the CHANGELOG.md symlink leaked the whole engineering log, D300)');
+      } else if (entry.isDirectory()) {
+        walk(p);
+      }
+    }
+  };
+  walk(pub);
+});
+
+test('no node_modules path is tracked, and the ignore rule covers a node_modules that is a link', () => {
+  // `node_modules/` (with the slash) ignores a directory only. A worktree
+  // whose node_modules is a symlink to another checkout's slipped past it, and
+  // `git add -A` committed the link: 645aab7c3 (removed in 4914a121b), then
+  // e5956580f, which reached main with #1824. A checkout of main then swaps a
+  // real node_modules for that link, which on CI points nowhere.
+  const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' });
+  const listed = git('ls-files', '-z');
+  if (listed.status !== 0) return;
+  const tracked = listed.stdout.split('\0').filter((p) => p.split('/').includes('node_modules'));
+  assert.deepEqual(tracked, [], 'a node_modules path is tracked: git rm --cached it');
+  // A path that does not exist is checked as a file, so only a rule without
+  // the trailing slash ignores it.
+  assert.equal(git('check-ignore', '--no-index', '-q', 'cloudflare-worker/no-such-dir/node_modules').status, 0,
+    '.gitignore ignores node_modules only as a directory: write the rule without the trailing slash');
+});
+
+test('every moved document is reachable from the index', () => {
+  // A folder nobody links to is the heap again, one level down.
+  const idx = readFileSync(join(root, 'documentation/README.md'), 'utf8');
+  for (const dir of ['architecture', 'audits', 'operations', 'product']) {
+    assert.ok(idx.includes(`${dir}/`), `the index must describe documentation/${dir}/`);
+  }
+  // The four load-bearing documents are linked by name, not just implied.
+  for (const f of ['CODEBASE_MAP.md', 'ROUTE_MAP.md', 'DECISIONS.md', 'GOTCHAS.md']) {
+    assert.ok(idx.includes(f), `the index must point at ${f}`);
+    assert.ok(existsSync(join(root, 'documentation/architecture', f)), `${f} must be where the index says`);
+  }
+});
+
+/**
+ * Two TypeScript pins, and they have to agree.
+ *
+ * #201 gave the SPA a `tsc --noEmit` and had to put the compiler somewhere the
+ * frontend could reach. The worker already declares `typescript` for its own
+ * check and CI runs that job with only `cloudflare-worker/node_modules`
+ * installed, so the worker cannot borrow a hoisted one — the root gets a second
+ * pin. Two pins that drift would mean two halves of one repository checked by
+ * two different compilers, and the SPA would be the half nobody notices: it has
+ * nine errors' worth of history and a version bump could quietly add more or
+ * silence some.
+ *
+ * The repo has answered a duplicated pin this way before — the `image-size`
+ * override lives in two package.json files and
+ * `pptx_image_size_not_bundled.test.mjs` asserts both. Same shape here.
+ */
+test('the root and the worker pin the same TypeScript', () => {
+  // NOT `root` — the module already binds that to the repo path, and shadowing
+  // it inside the test is a temporal-dead-zone ReferenceError, not a shadow.
+  const rootPkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+  const workerPkg = JSON.parse(readFileSync(resolve(root, 'cloudflare-worker/package.json'), 'utf8'));
+  const a = rootPkg.devDependencies?.typescript;
+  const b = workerPkg.devDependencies?.typescript;
+  assert.ok(a, 'the root no longer declares typescript — `npm run test:types:frontend` has nothing to run');
+  assert.ok(b, 'cloudflare-worker no longer declares typescript — `npm run test:types` has nothing to run');
+  assert.equal(a, b,
+    `TypeScript pins have drifted: root ${a} vs cloudflare-worker ${b}. `
+    + 'Two compilers checking two halves of one repo is how the halves stop agreeing.');
+});

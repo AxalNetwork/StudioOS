@@ -1,0 +1,38 @@
+#6 - AT-1 — MI Extractors, Storage & Endpoints
+What & Why
+Use anonymised advisor data to build the data backbone for new Market Intelligence sections. All extractions happen server-side; no raw user content leaves /api/market-intel. k-anonymity ≥5 enforced on every cell. Reads always go to the aggregates table (fast). AT-2 will build the frontend tabs on top of these endpoints.
+
+Done looks like
+6 extractors live under cloudflare-worker/src/services/market_intel/extractors/: sentiment.ts, talc_position.ts, thesis_embedding.ts, demand_supply.ts, fit_match.ts, sector_heat.ts.
+Each extractor runs (a) on every advisor_answer insert via a queue job (idempotent), and (b) as a nightly cron reconciliation.
+Three storage tables created: market_intel_signals, market_intel_aggregates, market_intel_embeddings (vector BLOB). Aggregates computed nightly.
+9 read endpoints live and return real anonymised numbers: /api/market-intel/sentiment, /talc, /demand-supply, /fit/founder/:project_id, /fit/investor/me, /partner-pulse, /sector-heat, /sentiment-geo, /capital-velocity.
+Privacy: cells with n<5 suppressed; investor identities never disclosed without signed pairwise NDA (reuse existing pairwise NDA gate); free-text excerpts paraphrased by aiRouter.run('paraphrase', …), never raw, stored in market_intel_snippets with origin redacted.
+Per-user opt-out toggle (Settings → Privacy → "Contribute my advisor answers to anonymised Market Intelligence", default on); honored within 24h by the nightly reconciliation purging that user's contribution from aggregates.
+Out of scope
+Frontend MI tabs (AT-2).
+Publication exports (AU).
+Adding new advisor questions (AR is the source of sentiment_eligible flags).
+Steps
+Migration — Numbered migration creating market_intel_signals, market_intel_aggregates, market_intel_embeddings, market_intel_snippets, plus users.mi_contribution_optout boolean. Apply via wrangler.
+Sentiment extractor — bge-base embedding + llama-3.3-70b classifier returning {valence, energy, topic_tag}; aggregate per sector × week.
+TALC extractor — Parse founder/investor TALC self-positioning into stacked-bar + gap data.
+Thesis embedding extractor — bge-base embeddings for founder + investor thesis text; cosine matrix kept per nightly batch.
+Demand-supply extractor — Normalise founder needs vs operating-partner offers + investor service partners; produce two-sided heatmap input.
+Fit match extractor — Cosine similarity + threshold; produces ranked match lists per founder and per investor; identifiers hashed until pairwise NDA.
+Sector heat extractor — Composite of external sources (use existing market-intel route plumbing) × internal signals.
+Queue + cron wiring — On advisor_answers insert, enqueue per-extractor job (idempotent by content hash). Nightly cron runs full reconciliation + aggregates rebuild + opt-out purge.
+9 read endpoints — Each reads from aggregates table only; enforces k≥5 suppression, NDA gating, and mi_contribution_optout.
+Paraphrase pipeline — Free-text excerpts shown anywhere are routed through aiRouter.run('paraphrase', …) and persisted in market_intel_snippets.
+Relevant files
+cloudflare-worker/src/routes/advisor.ts
+cloudflare-worker/sql/migrations/030_market_intel.sql
+cloudflare-worker/sql/migrations/037_market_intel_v2.sql
+cloudflare-worker/sql/migrations/029_advisor.sql
+Dependencies
+
+AS — Auto-fill write router (advisor → page fields)
+Open task
+
+AX — Multi-model AI router (Workers AI + Anthropic fallback)
+Open task

@@ -1,0 +1,138 @@
+name: Isolated Worker release rehearsal
+
+# D5501: run the same candidate preflight on a fresh hosted runner. All
+# application requests stay inside disposable workerd, with outbound I/O stubbed.
+#
+# D8532: and rehearse the window between the release's two writes (migrations
+# applied, publish failed, the previous Worker serving the new schema, then the
+# retry) on pull requests that change a migration, the Worker or the deploy
+# workflow. `changes` decides which of the two jobs a pull request needs, so a
+# Worker-only change does not also build the frontend for the preflight.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-rehearsal.yml'
+      - '.github/workflows/cloudflare-worker-deploy.yml'
+      - 'scripts/check-production-queues.mjs'
+      - 'scripts/check-worker-startup.mjs'
+      - 'scripts/prepare-production-worker.sh'
+      - 'scripts/verify-production-candidate.mjs'
+      - 'scripts/lib/productionAdmission.test.mjs'
+      # D8532: the release window.
+      - 'cloudflare-worker/sql/migrations/**'
+      - 'cloudflare-worker/src/**'
+      - 'cloudflare-worker/package-lock.json'
+      - 'wrangler.toml'
+      - 'scripts/migrate-d1.mjs'
+      - 'scripts/lib/migrationPlan.mjs'
+      - 'scripts/lib/rollbackClass.mjs'
+      - 'scripts/lib/releaseWindow.mjs'
+      - 'scripts/release-window-*.mjs'
+      - 'cloudflare-worker/test/_d1_sqlite.mjs'
+      - 'cloudflare-worker/test/_mem_kv.mjs'
+      - 'cloudflare-worker/test/_ts-loader*.mjs'
+
+permissions:
+  contents: read
+
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# Every other event gets its own group (the run id), so it is never cancelled.
+concurrency:
+  group: release-rehearsal-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: Which rehearsals this change needs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.paths.outputs.release }}
+      window: ${{ steps.paths.outputs.window }}
+    steps:
+      # The merge commit and its first parent: the base this pull request lands on.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: paths
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          printf '%s\n' "$changed"
+          release='^(\.github/workflows/(release-rehearsal|cloudflare-worker-deploy)\.yml|scripts/(check-production-queues\.mjs|check-worker-startup\.mjs|prepare-production-worker\.sh|verify-production-candidate\.mjs|lib/productionAdmission\.test\.mjs))$'
+          window='^(\.github/workflows/(release-rehearsal|cloudflare-worker-deploy)\.yml|cloudflare-worker/sql/migrations/.*|cloudflare-worker/src/.*|cloudflare-worker/package-lock\.json|wrangler\.toml|scripts/(migrate-d1\.mjs|lib/(migrationPlan|rollbackClass|releaseWindow)\.mjs|release-window-[^/]*\.mjs)|cloudflare-worker/test/(_d1_sqlite|_mem_kv|_ts-loader[^/]*)\.mjs)$'
+          if grep -Eq "$release" <<<"$changed"; then echo release=true >> "$GITHUB_OUTPUT"; else echo release=false >> "$GITHUB_OUTPUT"; fi
+          if grep -Eq "$window" <<<"$changed"; then echo window=true >> "$GITHUB_OUTPUT"; else echo window=false >> "$GITHUB_OUTPUT"; fi
+
+  rehearse:
+    name: Isolated release rehearsal
+    needs: changes
+    if: needs.changes.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: npm ci --prefix frontend && npm ci --prefix cloudflare-worker
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+      - name: Rehearse admitted and blocked release paths with synthetic inventory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-rehearsal"
+          node --test scripts/lib/productionAdmission.test.mjs scripts/lib/productionQueues.test.mjs \
+            | tee "$RUNNER_TEMP/release-rehearsal/admission.tap"
+      - run: npm run build
+      - name: Check the prepared Worker in an isolated hosted runtime
+        run: bash scripts/prepare-production-worker.sh "$GITHUB_SHA" "$RUNNER_TEMP/release-rehearsal"
+      - name: Keep hosted rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: isolated-release-rehearsal-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/release-rehearsal/**
+            !${{ runner.temp }}/release-rehearsal/worker.bundle
+          if-no-files-found: warn
+          retention-days: 14
+
+  # D8532 (#8532): migrations applied, publish stopped, the BASE Worker on the
+  # migrated schema, then the retry and the candidate Worker. Local only:
+  # node:sqlite through the Worker tests' D1 adapter, no Cloudflare account,
+  # no deploy, no production data. The report names both SHAs and every
+  # pending migration file, for the release evidence to cite.
+  release-window:
+    name: Release window rehearsal
+    needs: changes
+    if: needs.changes.outputs.window == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: npm ci --prefix cloudflare-worker
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+      - name: The rehearsal catches its fixture migrations
+        run: node --test scripts/release-window-rehearsal.test.mjs
+      - name: Rehearse the window against the base this pull request lands on
+        run: node scripts/release-window-rehearsal.mjs --base HEAD^1 --out "$RUNNER_TEMP/release-window"
+      - name: Keep the release window report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-window-${{ github.sha }}
+          path: ${{ runner.temp }}/release-window/**
+          if-no-files-found: warn
+          retention-days: 30

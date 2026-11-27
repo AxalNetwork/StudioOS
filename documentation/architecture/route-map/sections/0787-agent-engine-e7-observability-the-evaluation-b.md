@@ -1,0 +1,10 @@
+### Agent engine E7: observability, the evaluation board, alerts and the halt (#3851, under D1528)
+
+The engine's router (`routes/agent_engine.ts`), flag and gates for the board; HQ's switches in their own router (`routes/admin_agents.ts`, platform admins). Costs are read from the runs' usage logs (`services/agents/evaluation.ts` `runCostReader`): a task's and a goal's `cost` is the sum of its runs' charges, `{ available: false }` ("Not recorded") when any charge is unrecorded or the read fails, never 0. The alerts (`services/agents/alerts.ts`) run on the agent sweep's minute: the cap at 80% and 100% (once a month each), a task blocked after 3 discards, an approval waiting 3 days, DLQ arrivals (HQ ops), the halt set or cleared (HQ), and the `agents` gateway at 70% of `AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD` (HQ ops; unset, off). Every pause reason already alerts (E3's `notifyPauseOnce`). The client is `agentEngineApi` (`evaluation`, `haltState`, `setHalt`, `rebuildScope`).
+
+| Route | Gate | What it does |
+| --- | --- | --- |
+| `GET /api/teams/:scope/:id/evaluation?days=30\|90` | read | TM14: `{ days, roles: [{ role_key, decided, rated, note, acceptance, edit, discard, median_decision_h, open_past_3d, expired, cost_per_accepted: { available, value_microusd }, refused: [{ reason, n }] }] }`, live from `ai_rail_proposals` joined to `team_agents`. Acceptance is (accepted + edited) / decided. Under 10 decisions the rates are null and `note` is "Too few decisions to rate (n)". Read-only. 400 `invalid_days`; 403. |
+| `GET /api/admin/agents/halt` | platform admin | `{ halted, reason, by: { uid, name } \| null, at }`, from KV `agents:halt`. 403. |
+| `POST /api/admin/agents/halt` | platform admin | Takes `{ halted, reason? }` (reason at most 64 characters); sets or clears `agents:halt`, which every run reads at every step. HQ hears each change. The same answer. 400 `invalid_halt`; 403. |
+| `POST /api/admin/agents/rebuild/:scope` | platform admin | `project:<id>` or `company:<id>`: the runbook's step 3, the scope's object restored from D1. `{ ok, schedules, status }`. 403; 404 `not_found`. |

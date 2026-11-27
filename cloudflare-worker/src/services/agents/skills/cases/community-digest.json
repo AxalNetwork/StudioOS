@@ -1,0 +1,40 @@
+{
+  "skill": "community-digest",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "threads": [
+          {
+            "title": "Best reminder timing?",
+            "replies": 0
+          },
+          {
+            "title": "Dentrix sync tips",
+            "replies": 5
+          }
+        ],
+        "contributors": [
+          {
+            "name": "Dr. Amara Okafor",
+            "posts": 7
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Best reminder timing?",
+      "Dr. Amara Okafor"
+    ],
+    "must_say_not_recorded": [
+      "member count"
+    ],
+    "must_not_include": [
+      "viral"
+    ]
+  }
+}

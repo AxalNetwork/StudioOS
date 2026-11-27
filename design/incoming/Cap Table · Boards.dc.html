@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Raise · Cap table</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Cap table</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One tool inside the Raise module page, with seven tabs. Numbers on record and numbers a scenario models never mix: every modelled figure carries a Modelled tag, and every scenario starts from Today. Sample today is [12 Oct 2026]. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="24">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise Cap Table Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['CT1', 'Overview · Founder · desktop 1440 · light', 'The Raise module header, the module rail with Cap table lit, the tool bar and the seven tabs. Needs you, who owns the company, the group bars with the modelled After [Seed] row, outstanding instruments and the 409A. The moved notice is for an old address.', [D('CT1'), D('CT1c', 'Class view', 1100)]],
+      ['CT2', 'Holder · lightbox over Overview', 'Positions, issuances with their documents, and what the holder can see. The second frame is the vesting block for people.', [D('CT2'), D('CT2p', 'For people', 760)]],
+      ['CT3', 'Instruments', 'Terms on record, the convert-at card, the modelled conversion table and the as-converted chart. The second frame shows an instrument that cannot convert and caps that promise too much.', [D('CT3'), D('CT3b', 'Missing terms and caps over 100%', 1100)]],
+      ['CT4', 'Instrument · lightbox over Instruments', 'Terms with their sources, how the SAFE converts step by step, MFN and the exit before conversion.', [D('CT4')]],
+      ['CT5', 'Option pool', 'Tiles, the pool by month against the scenario’s target, the 409A safe harbour and the grants. The second frame is the pool with Carta connected.', [D('CT5'), D('CT5c', 'With Carta', 760)]],
+      ['CT6', 'Scenarios', 'Four scenario cards, each starting from Today, and the open base case: its inputs, before and after, and what happens in the round.', [D('CT6')]],
+      ['CT7', 'Scenarios compared · light', 'Today and three scenarios side by side, founder ownership as small multiples, the exit waterfall per exit value, and Eadwyn’s read-back.', [D('CT7')]],
+      ['CT8', 'Scenarios compared · dark', 'CT7 in the dark colours; violet becomes #a78bfa.', [D('CT8')]],
+      ['CT9', 'Exit waterfall · crop', 'One scenario at a [$100M] exit, the share of the exit by group from [$1M] to [$500M] with the points where investors convert, and Eadwyn’s order of payment.', [D('CT9', false, 1440)]],
+      ['CT10', 'History', 'Every issuance, newest first, with its document or No document, and the changes to scenarios and access.', [D('CT10')]],
+      ['CT11', 'Proposals · three lightboxes', 'From Mercury, from the closing room and drafted by Eadwyn. Nothing lands until a person accepts it; Eadwyn never fills an amount.', [D('CT11a', 'Mercury SAFE', 680), D('CT11b', 'Second close', 680), D('CT11c', 'Drafted by Eadwyn', 680)]],
+      ['CT12', 'Record and void dialogs', 'Record an issuance, void one, and an admin’s correction with the reason the founder sees.', [D('CT12a', 'Record an issuance', 680), D('CT12b', 'Void', 680), D('CT12c', 'Admin correction', 680)]],
+      ['CT13', 'Access', 'Who sees what at which level, the five levels, share links and the access log. The second frame is a new link.', [D('CT13'), D('CT13n', 'New link', 680)]],
+      ['CT14', 'Import and export', 'Carta, a spreadsheet with its preview, Mercury, and the exports. Imports land as proposals, never on the record.', [D('CT14')]],
+      ['CT15', 'Investor view', 'The read-only panel on the investor’s deal page; the deal page itself is grey blocks. Then the own-position and no-access crops.', [D('CT15'), D('CT15o', 'Own position', 760), D('CT15n', 'No access', 680)]],
+      ['CT16', 'Co-founder', 'Record an issuance reads Propose an issuance, and access is read only.', [D('CT16', 'Overview as a co-founder', 1440, 820), D('CT16a', 'Access as a co-founder', 1100)]],
+      ['CT17', 'Advisor and Operating Partner', 'An advisor sees the Summary level only; an operating partner reads Overview and Scenarios.', [D('CT17a', 'Advisor · Summary', 1440, 640), D('CT17b', 'Operating Partner · read only', 1440, 900)]],
+      ['CT18', 'Admin and Super Admin', 'A studio admin sees the group summary and opens the full table with a reason. HQ reads every company and sees the access log.', [D('CT18a', 'Admin · group summary', 1440, 620), D('CT18b', 'Admin · opened for support', 1440, 980), D('CT18c', 'Super Admin', 1440, 760)]],
+      ['CT19', 'Empty', 'No record yet, a company with only its earlier model, and no scenarios.', [D('CT19a', 'No record yet', 680), D('CT19b', 'Model only', 680), D('CT19c', 'No scenarios', 680)]],
+      ['CT20', 'Loading', 'Header, module rail and tabs drawn at once; skeletons where the table, tiles and bars go.', [D('CT20')]],
+      ['CT21', 'Error and partial', 'The record failed to read, Carta’s sync failed, and one block failed while the rest renders.', [D('CT21a', 'Record failed to read', 1440, 620), D('CT21b', 'Carta sync failed', 1440, 900), D('CT21c', 'One block failed', 1000)]],
+      ['CT22', 'No permission', 'An Explorer, and a founder of another company.', [D('CT22a', 'Explorer', 1440, 620), D('CT22b', 'Another company', 1440, 620)]],
+      ['CT23', 'Phone · 390 wide', 'Overview with the module select and holders as cards, a holder full screen, and scenarios compared one per swipe with the waterfall as a table.', [P('CT23a', 'Overview'), P('CT23b', 'A holder'), P('CT23c', 'Scenarios compared')]],
+      ['CT24', 'Plan gate', 'Below the Raise + Grow plan everything reads; recording and new scenarios give way to one lavender line.', [D('CT24', false, 1440, 760)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

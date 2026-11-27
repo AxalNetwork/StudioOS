@@ -1,0 +1,6 @@
+{
+ "extends": "../cloudflare-worker/tsconfig.json",
+ "compilerOptions": { "types": [] },
+ "files": ["../cloudflare-worker/node_modules/@cloudflare/workers-types/index.d.ts"],
+ "include": ["../cloudflare-worker-tail/src/**/*.ts","src/**/*.ts"]
+}

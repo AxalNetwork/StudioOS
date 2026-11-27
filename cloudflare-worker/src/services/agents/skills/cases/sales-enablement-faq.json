@@ -1,0 +1,37 @@
+{
+  "skill": "sales-enablement-faq",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "objections": [
+          {
+            "text": "Does it work with our practice software?",
+            "answer": "Yes, through the Dentrix integration",
+            "deal": "Northgate Dental"
+          },
+          {
+            "text": "Can patients pay online?"
+          }
+        ]
+      },
+      "build.records": {
+        "capabilities": [
+          "Dentrix integration"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Dentrix integration",
+      "Can patients pay online?"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "every integration"
+    ]
+  }
+}

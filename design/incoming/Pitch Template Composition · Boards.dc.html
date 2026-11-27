@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Template Composition · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Pitch · Templates · #8770 · continues Pitch Deck Templates (TPL-01 … TPL-24) and Pitch Deck Studio v2</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Template previews that look like the deck you will get — a labelled example, the blank structure, and the same theme in the editor, Present and export</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Raise › Pitch deck › Templates (/raise/pitch/templates), drawn on Kitchen Table (TPL-07). Every card is laid out once at 960 × 540 in the template’s own theme (cream, Lora, Inter, IBM Plex Mono) and scaled as one picture, so it never re-wraps or clips. The preview has two views: Example, a clearly marked fictional company with plotted, labelled charts and sources, and Blank structure, main’s placeholders; only the blank one becomes a deck, and the example never enters a venture draft. Use this template says what carries over, and the theme, type and 16:9 hold in the editor, Present and export. Long headlines, two-point and missing data, missing images, 390 px and failure states are drawn. States follow Platform States (D5129). Violet dashed ◇ tags mark engineering main does not have; amber ⚑ tags mark the owner’s picks, drawn as option A. Eadwyn stays the one shared rail.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7553cd37b9 · [Atlas Orchard], [Maya Ruiz] and the example company [Larder Lane] with every figure are fictional; no real company, customer or result</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Pitch Template Composition Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PTP-00', 'Route and annotation key', 'The eight numbered steps from the Gallery to a real deck, with the desktop and phone board for each, what main does today against what is drawn, and the key for ◇, ⚑ and step numbers.', [C('PTP00', false, 1440, 800)]],
+      ['PTP-01', '1 · Gallery · desktop 1440', 'Kitchen Table selected. The aside adds what the template sets (13 cards, 16:9, Lora · Inter · IBM Plex Mono, cream), the Example / Blank structure switch with its note, and the first three cards in the template’s theme. Under the tiles, the aside’s traction card as main draws it today beside the proposed one.', [F('PTP01', false, 1500)]],
+      ['PTP-02', '2 · Preview all slides', 'Every card at one scale, two per row, each with Open full size. Example (fictional, plotted and sourced) and Blank structure (main’s placeholders; the chart areas say where figures come from).', [F('PTP02', 'Example', 1000), F('PTP03', 'Blank structure', 1000)]],
+      ['PTP-03', '3 · Full size', 'Slide 3 of 13 at 16:9 with Previous and Next, and Read this slide: the takeaway, the chart’s data as a table, the source, and what the blank structure holds instead.', [F('PTP04', false, 1000)]],
+      ['PTP-04', '4 · Use this template', 'Main’s sentence, then what carries over (structure, theme, type, 16:9, the venture’s own figures) and what does not (the example, art). Brand-kit locks are named.', [F('PTP05', false, 1000)]],
+      ['PTP-05', '6–8 · Editor, Present, export', 'After Keep in the shared review (step 5, unchanged): the editor keeps Kitchen Table’s theme with [Atlas Orchard]’s own MRR and two paying-customer figures; Present at 16:9 draws the same card; one card on every surface with its tokens.', [F('PTP06', 'Editor', 900), F('PTP07', 'Present 16:9', 900), C('PTP08', 'One card, every surface', 1440, 680)]],
+      ['PTP-06', 'Composition spec', 'The five example slides (editorial cover, product screenshot, competitive comparison, traction chart, use of funds) with one takeaway each; type, grid and margins; chart labelling and the step-down for too little data; thumbnail scaling and when to offer full size.', [C('PTP10', false, 1440, 1410), C('PTP11', 'Type, grid, margins', 1440, 690), C('PTP12', 'Chart labelling', 1440, 660), C('PTP13', 'Thumbnail scaling', 1760, 550)]],
+      ['PTP-07', 'Edge states', 'Long headlines (main clipping, fits, steps down) and the DOM overflow check; two points, Not recorded, missing image and missing photos in the venture’s deck; loading, store unavailable, confirmed empty, preview failure with Try again, example unavailable and read-only.', [C('PTP14', false, 1440, 600), C('PTP15', false, 1440, 1030), C('PTP16', false, 1440, 740)]],
+      ['PTP-08', 'Phone 390', 'Gallery, the template sheet with Example / Blank, Preview all one card per row with Open full size, the full-size card with Read this slide, Use this template as a sheet, and the 390 states.', [P('PTP20', '1 · Gallery'), P('PTP21', '1 · Template sheet'), P('PTP22', '2 · Preview all'), P('PTP23', '3 · Full size'), P('PTP24', '4 · Use this template'), P('PTP25', 'States')]],
+      ['PTP-09', 'Handoff', 'Checked on main with files, preserved, frontend only, ◇ engineering, ⚑ owner picks with option A drawn, acceptance mapped to boards, open questions; then headings, focus order and accessibility.', [W('PTP30'), W('PTP31', 'Headings, focus order, accessibility')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

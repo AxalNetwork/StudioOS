@@ -1,0 +1,40 @@
+{
+  "skill": "monthly-investor-update",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "stripe.revenue": {
+        "mrr_usd": 41200,
+        "month": "2026-10"
+      },
+      "mercury.balances": {
+        "cash_usd": 812000
+      },
+      "build.records": {
+        "shipped": [
+          "Fixture scheduler v2"
+        ]
+      },
+      "raise.records": {
+        "round": "Seed",
+        "status": "open"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "41,200",
+      "812,000",
+      "Fixture scheduler v2"
+    ],
+    "must_say_not_recorded": [
+      "burn"
+    ],
+    "must_not_include": [
+      "sent",
+      "% growth"
+    ]
+  }
+}

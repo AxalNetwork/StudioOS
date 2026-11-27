@@ -1,0 +1,34 @@
+{
+  "skill": "saas-onboarding-journey-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "SaaS Onboarding Journey Design",
+        "task_scope": "Designs the activation journey from signup to first meaningful value with progressive guidance and recovery.",
+        "evidence": [
+          "first-value onboarding milestone"
+        ],
+        "omitted_field": "activation event"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for first-value onboarding milestone."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "first-value onboarding milestone"
+    ],
+    "must_say_not_recorded": [
+      "activation event"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

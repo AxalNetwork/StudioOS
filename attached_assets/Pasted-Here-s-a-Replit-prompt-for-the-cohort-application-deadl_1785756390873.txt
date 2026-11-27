@@ -1,0 +1,96 @@
+Here's a Replit prompt for the cohort application deadline, review, and auto-notification system.
+
+## Replit prompt
+
+Extend the existing **Cohort Application/Submission system** for Axal VC Spin-Out Lab (axal.vc/spinout-lab) to add an automated monthly application deadline, admin decision window, applicant notification pipeline, and automatic workspace unlock at cohort start — all driven by server-side scheduled jobs, not client timers.
+
+Reference and extend existing files: `auth.py`, `entities.py`, `projects.py`, `spinout_lab.py`, `main.py`, and the existing cohort/application routes and notification/queue infrastructure.
+
+### Program calendar
+
+- **Cohort start:** 1st of every month, 00:00:00 **America/New_York** time (Delaware timezone, DST-aware — never hardcode a fixed UTC offset).
+- **Application deadline:** exactly **7 days before the 1st of the month**, at 23:59:59 Delaware time. Example: for a September 1 cohort start, applications close August 25 at 23:59:59 ET.
+- **Decision/notification window:** the 3–4 days between the application deadline and the 1st of the month, during which admins review and decide, and the system sends outcome notifications before the cohort starts.
+- **Workspace access unlock:** automatically at **00:00:00 Delaware time on the 1st of the month**, for every applicant marked accepted into that cohort.
+
+### Application deadline enforcement
+
+1. Add a `cohort_cycles` (or extend existing) table with fields: `id`, `month`, `year`, `applications_open_at`, `applications_close_at` (computed as 7 days before month start, Delaware time, converted to UTC for storage), `cohort_start_at` (1st of month, midnight Delaware, UTC), `status`.
+2. Server-side, reject or hard-block new application submissions once `applications_close_at` has passed for the current cycle — do not rely on frontend disabling the form. Show applicants a clear "Applications for [Month] cohort are closed — you're now eligible for [Next Month]" message if they try to submit late.
+3. A scheduled job runs at `applications_close_at` to:
+   - Freeze the applicant pool for that cycle (snapshot all applications submitted before the deadline).
+   - Move the cycle to a `reviewing` status.
+   - Notify admins that review is open, with a count of pending applications.
+
+### Automated capacity and rollover logic
+
+1. Define a configurable **minimum cohort size** (e.g., a settings field admins can edit, not hardcoded) and a **maximum cohort size**.
+2. When admins finalize decisions (or via a scheduled check before the 1st), evaluate:
+   - If the number of **approved** applicants meets or exceeds the minimum cohort size → cohort proceeds as planned for the 1st.
+   - If approved applicants are below the minimum → do **not** run the cohort that month. Automatically:
+     - Roll every approved-but-unstarted applicant forward to the **next month's cohort cycle** (update their `cohort_cycle_id` to the following cycle, keep their approval status, log the change).
+     - Mark the current cycle as `postponed` or `merged_forward` with a reason and timestamp.
+     - Trigger a distinct "your cohort was combined with next month" notification instead of a standard acceptance notification.
+3. Applicants who are rejected are notified as rejected (not rolled forward) unless an admin explicitly marks them as "waitlist → roll to next cohort," which should be a distinct action logged separately from the automatic low-capacity rollover.
+4. Log every rollover, postponement, and capacity decision in an audit table (`cohort_cycle_events`: id, cohort_cycle_id, event_type, affected_applicant_ids, reason, triggered_by [`system`/admin id], created_at).
+
+### Notification pipeline (email + in-platform)
+
+Build/extend the notification system to send these automatically, reusing the existing queue infrastructure:
+
+1. **Application deadline reminders** (before close):
+   - 3 days before `applications_close_at`
+   - 24 hours before `applications_close_at`
+   Sent via email and in-platform notification to anyone with an in-progress/draft application.
+
+2. **Decision notifications** (a few days before the 1st, once admins finalize or the scheduled evaluation runs):
+   - **Accepted:** email + in-platform notification confirming acceptance, cohort start date, and that workspace access unlocks automatically at midnight Delaware time on the 1st.
+   - **Rolled to next cohort (low capacity):** distinct email + in-platform message explaining there weren't enough approved applicants this cycle, so they've been automatically moved to next month's cohort with no action needed.
+   - **Waitlisted:** email + in-platform notification if an admin manually waitlists rather than approves/rejects.
+   - **Rejected:** standard rejection email + in-platform notification.
+3. All notification sends must be logged (recipient, type, cycle, sent_at, delivery status) for admin visibility and to prevent duplicate sends if a job retries.
+4. Notification jobs must be idempotent — use a sent-flag per applicant per notification type per cycle so retries never double-send.
+
+### Automatic workspace unlock at midnight Delaware time
+
+1. A scheduled job fires at exactly `cohort_start_at` (00:00:00 Delaware time, 1st of month, DST-correct) for each cohort cycle.
+2. For every applicant with status `accepted` in that cycle:
+   - Create/activate their workspace record.
+   - Grant workspace access and Week 1 visibility (per the existing Week/Deliverables gating system).
+   - Set `workspace.access_status = active` and `workspace.activated_at` to the unlock timestamp.
+   - Fire a final "Your workspace is now live" email + in-platform notification the moment access unlocks.
+3. This must run as a real backend scheduled job (cron trigger/scheduled worker), not a browser-based timer, so it fires reliably with zero manual action even if no admin is online.
+4. Idempotency: if the job runs more than once, it must not re-trigger duplicate unlock notifications or reset an already-active workspace.
+
+### Timezone correctness (critical)
+
+- All deadline and unlock calculations must use a proper timezone-aware library that correctly handles **America/New_York** DST transitions (EST/EDT) — the 7-day-before and midnight-of-1st calculations must always resolve to true Delaware wall-clock time, converted to UTC for storage and scheduling.
+- Applicant-facing displays should show deadlines/unlocks converted to the applicant's local timezone, but all backend logic must be computed from the Delaware time source of truth.
+
+### Admin console additions
+
+- **Cycle overview panel:** current cycle status (open/reviewing/postponed/active), applications received, approved/rejected/waitlisted counts, minimum threshold indicator (met/not met), countdown to close date and cohort start.
+- **Manual override controls:** ability for admins to manually approve/reject/waitlist individual applicants, manually force a cycle to proceed even below minimum, or manually roll specific applicants forward — every manual action logged with admin id and reason.
+- **Notification log viewer:** see every automated notification sent for a cycle, with status (sent/failed) and timestamps.
+- **Cycle history view:** past cycles showing final outcomes, rollovers, and postponements for reference.
+
+### Technical requirements
+
+- Enforce the application-close cutoff and workspace-unlock gating at the API/route layer server-side — never trust client-side date checks.
+- Use the platform's native scheduled/cron job capability for: deadline close job, reminder jobs, decision-notification job, and workspace-unlock job.
+- Reuse existing email/notification queue and Durable Object/pipeline infrastructure where applicable.
+- Add tests covering: on-time vs late submission rejection, DST-transition-correct deadline math, low-capacity auto-rollover logic, idempotent notification sending, idempotent workspace activation, and admin manual override paths.
+
+### Deliverable
+
+Implement as production code:
+- Updated cohort cycle data model and migrations.
+- Scheduled job handlers for: applications close, decision/notification dispatch, capacity evaluation/rollover, and midnight workspace unlock.
+- Server-side enforcement of the application deadline on submission routes.
+- Notification templates and queue triggers for all listed notification types.
+- Admin console additions: cycle overview, manual override tools, notification log, cycle history.
+- Full audit logging for every automated and manual decision affecting an applicant's cohort assignment or workspace access.
+
+Do not implement the deadline or unlock logic as frontend-only countdowns — all enforcement, decisions, and workspace activation must be computed and executed server-side on a reliable schedule.
+
+Sources

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validate v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Validate · UX V2 · #4837</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Validate — what did we learn, what is uncertain, what needs review, what next</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Validate is organised around learning, not modules: Talk → Learn → Test → Decide. The overview shows the objective, exactly one next action with its reason, the evidence counted with what each number means, and a short Needs attention queue. Then active hypotheses and recent meaningful changes, with the modules as one tab row on desktop and one selector on smaller screens. Supports, Contradicts and Unknown are words with glyphs, never colour alone. Relationships are never confused with sources. Planned experiments are not evidence, and a done experiment without a result reads Result needed. Eadwyn proposes and the founder accepts, edits or discards, with the original evidence always visible. The decision is the founder’s: three equal choices, none pre-selected, with the evidence it rests on. The Eadwyn rail keeps Ask, suggestions to review and the AI toggle; models and money sit behind AI settings.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · founder licence · the venture, people, quotes and figures are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Validate v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['V0', 'Audit, journeys and information hierarchy', 'Severity-ranked findings from the live audit, marked visual or source-inferred; the existing and proposed journeys (Talk → Learn → Test → Decide).', [W('VA00')]],
+      ['V1', 'Validate overview · desktop', 'A · Next: Review 2 interviews, with why. Evidence names what each number counts (4 distinct sources vs 6 supporting relationships). Needs attention holds the other 4 items; active hypotheses show state, direction and source breadth. B · Material evidence gaps: the next action becomes Review the evidence, and recording a decision anyway stays possible. The Eadwyn rail is open on its default.', [F('VA01', 'A · Review queue first', 1180), F('VA01b', 'B · Evidence gaps + Eadwyn open', 1180)]],
+      ['V2', 'Validate overview · mobile and tablet', 'A · Phone 390: venture, next action, Needs attention, hypotheses, then a module selector; no tables. B · Tablet 768: module selector instead of tabs, evidence in 3×2.', [P('VA02', 'A · Phone'), D('VA14', 'B · Tablet 768', 768, 1024, 16)]],
+      ['V3', 'Customer research index', 'Counts with explicit populations and windows (held this month 0 · previous 30 days 2 · awaiting review 2 · assigned to a segment 3 of 4). Rows show fit, session state, review state and evidence contribution; a failed transcription keeps the audio and offers Retry. B · Phone: cards.', [F('VA03', 'A · Desktop', 900), P('VA03m', 'B · Phone')]],
+      ['V4', 'Record a session · recording and processing states', 'A · Ready, with consent and storage stated, adding to an existing interview. B · Recording. C · Saving the final chunk; Close stays disabled. D · Offline, stored on this device. E · Uploaded, processing. F · Upload failed, nothing lost. Completion shows only after the server confirms.', [C('VA04a', 'A · Ready', 660, 380), C('VA04b', 'B · Recording', 660, 360), C('VA04c', 'C · Saving final audio', 660, 300), C('VA04d', 'D · Offline', 660, 300), C('VA04e', 'E · Processing', 660, 280), C('VA04f', 'F · Upload failed', 660, 300)]],
+      ['V5', 'Interview review', 'A research workspace for one selected session: findings show the original evidence, Eadwyn’s interpretation and where accepting writes, with Discard / Edit / Accept. Session facts and provenance belong to the same session. B · Phone.', [F('VA05', 'A · Desktop', 1000), P('VA05m', 'B · Phone')]],
+      ['V6', 'Eadwyn suggestion editor', 'Typed editors for pain/theme, customer fit, hypothesis evidence and demand signal replace raw JSON. The original evidence and Eadwyn’s proposal stay visible; the founder’s version is separate; an inline error and a failed save keep the edits.', [C('VA06', false, 1400, 800)]],
+      ['V7', 'Hypotheses', 'Code, claim, computed evidence state, supporting and contradicting relationships, distinct sources, experiments, deadline and owner. States are computed, not proof; their wording waits on the evidence methodology (#4586).', [F('VA07', false, 760)]],
+      ['V8', 'Hypothesis evidence detail', 'Computed state and founder decision look different. Success bar, disproof, deadline and owner. Source breadth is explicit (“2 relationships from 2 sources — not 2 studies”). Supporting, contradictory, unknown and experiment results, each item with source, date, excerpt and strength.', [F('VA08', false, 1000)]],
+      ['V9', 'Experiments', 'Planned (dashed; doesn’t count as evidence), Running, Result needed, Completed with result, and Stopped (not a stored status today).', [F('VA09', false, 900)]],
+      ['V10', 'Verdict / decision', 'A · Material evidence missing is stated; the snapshot counts support, contradiction, unknowns, sources and results; no choice is pre-selected. B · Pivot chosen, with rationale, the evidence relied on, and decision history including superseded decisions. C · Phone.', [F('VA10', 'A · Before choosing', 1180), F('VA10b', 'B · Pivot chosen', 1180), P('VA10m', 'C · Phone')]],
+      ['V11', 'Validate → Build handoff', 'After Proceed: Plan the build (the existing VB2a handoff). After Pivot: restate the objective. After Stop: no unqualified Build action; review or reopen.', [C('VA11', false, 1300, 240)]],
+      ['V12', 'Eadwyn rail', 'A · Default: page help, suggestions waiting for review, prompts, Ask, AI toggle and one AI settings link. B · AI settings: model, allowance and links to prices and tokens, off the main rail. C · AI assistance off.', [F('VA12a', 'A · Default', 900), F('VA12b', 'B · AI settings', 900), F('VA12c', 'C · AI off', 900)]],
+      ['V13', 'States', 'Not recorded, Not expected yet, Unreadable, Processing, Needs review, Locked, Result needed and Loading; plus the empty overview as one “Still to establish” list instead of a wall of empty modules.', [C('VA13', false, 1400, 760)]],
+      ['V14', 'Components and interactions', 'Next action, counted figures, direction tags, suggestion card, typed editor, session pipeline, experiment card, decision picker; retry-safe accept and the other lifecycle rules.', [W('VA15')]],
+      ['V15', 'Accessibility and responsive', 'Targets WCAG 2.2 AA without claiming it; focus, announcements, transcript playback, text size, touch and breakpoints.', [W('VA16')]],
+      ['V16', 'Developer handoff', 'Each change with its user problem, the capability it keeps, the backend dependency and how to verify it.', [W('VA17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

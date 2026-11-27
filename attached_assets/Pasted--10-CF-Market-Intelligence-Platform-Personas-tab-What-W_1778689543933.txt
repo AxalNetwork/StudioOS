@@ -1,0 +1,41 @@
+#10 - CF — Market Intelligence "Platform Personas" tab
+
+What & Why
+
+Add a Platform Personas section to Market Intelligence that shows the anonymised composition of platform users — useful for founders ("what kind of investors are here?"), investors ("what kind of founders show up?"), and admins (executive overview). Depends on CE because the underlying advisor signals must be flowing before persona aggregates are meaningful.
+
+Done looks like
+
+New "Platform Personas" tab visible in the Market Intelligence dropdown
+All 8 charts render with real data once n ≥ 5 per cell:
+Role distribution donut (Founders Spin-Out vs Existing, Investors Free/Pro/Inst, Mentors, Operating Partners by deal type)
+Sector × Role heatmap (founder sectors vs investor sectors, matches/mismatches highlighted)
+Stage focus stacked bar
+Geo distribution pie (country/region)
+Activity composite (median session minutes per role, top-feature usage per role)
+Spin-Out Lab funnel (count per week + completion rate)
+New signups trend (weekly, broken down by role)
+Active investor pipeline coverage (weighted by ticket × deals watched)
+Cached results refresh within 5s; fresh aggregation within 30s
+Tier gating enforced: Free sees role donut + sector heatmap; Growth / Investor Pro see all charts; Studio / Institutional get CSV+PDF export and weekly digest
+Free-tier teaser shows blurred charts with an upgrade CTA
+Out of scope
+
+The advisor extractor work (CE, must already be merged)
+New advisor questions (CH)
+Steps
+
+Endpoint — Add GET /api/market-intel/platform-personas?from=&to= returning all 8 chart payloads as JSON, with k-anonymity ≥ 5 applied at read time.
+Tab + charts — Add the "Platform Personas" entry to the MI dropdown in frontend/src/pages/MarketIntelPage.jsx and build the 8 recharts visualisations.
+Tier gating — Restrict charts 3–8 to Growth / Investor Pro and above; render the Free-tier teaser + upgrade CTA for the rest.
+Exports — Wire CSV and PDF export buttons + the weekly digest email for Studio / Institutional tiers.
+Verification — Confirm refresh latency targets (5s cached / 30s fresh) and that Free-tier teaser surfaces correctly.
+Relevant files
+
+cloudflare-worker/src/routes/market_intel.ts
+frontend/src/pages/MarketIntelPage.jsx
+cloudflare-worker/src/services/market_intel/ (aggregation helpers)
+Dependencies
+
+CE — Market Intelligence extractor (advisor → MI signals)
+Main

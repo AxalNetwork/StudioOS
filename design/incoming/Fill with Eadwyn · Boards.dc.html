@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#ebe9f0} a{color:#7c3aed;text-decoration:none} a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="box-sizing:border-box;min-height:100vh;padding:56px 64px 120px;background:#ebe9f0;color:#18181b;font-family:'Space Grotesk',system-ui,sans-serif">
+  <div style="max-width:960px">
+    <div style="font:600 11px/1 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · axal.vc · every fillable module, every profile</div>
+    <h1 style="margin:12px 0 0;font:800 40px/1.05 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">Fill with Eadwyn</h1>
+    <p style="margin:14px 0 0;max-width:780px;font:400 15px/1.6 'Space Grotesk',system-ui,sans-serif;color:#4a4553;text-wrap:pretty">One trigger on every blank field a source or Eadwyn can fill, one sheet to choose sources and preview, and one mark on every filled value. Eadwyn proposes and a person accepts. Nothing is saved until Save, and a value a person typed is never replaced.</p>
+  </div>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+    <section style="margin-top:72px">
+      <div style="display:flex;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid #d9d6e0">
+        <h2 style="margin:0;font:800 24px/1.1 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">{{ g.t }}</h2>
+        <span style="font:500 12px/1 'Roboto Mono',ui-monospace,monospace;color:#6b6577">{{ g.n }}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:56px 48px;margin-top:28px;align-items:flex-start">
+        <sc-for list="{{ g.boards }}" as="d" hint-placeholder-count="3">
+          <div id="{{ d.b }}" style="display:grid;gap:12px">
+            <div style="{{ d.head }}">
+              <span style="flex:none;height:24px;padding:0 9px;border-radius:999px;background:#18181b;color:#ffffff;display:inline-flex;align-items:center;font:700 11px/1 'Roboto Mono',ui-monospace,monospace">{{ d.b }}</span>
+              <span style="font:700 15px/1.3 'Space Grotesk',system-ui,sans-serif">{{ d.lab }}</span>
+            </div>
+            <sc-if value="{{ d.note }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ d.noteS }}">{{ d.note }}</div>
+            </sc-if>
+            <div style="{{ d.box }}"><dc-import name="Fill with Eadwyn Page" b="{{ d.b }}" hint-size="100%,100%"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;section&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;All&quot;,&quot;The system&quot;,&quot;The flow&quot;,&quot;States&quot;,&quot;Profiles&quot;,&quot;Phone and dark&quot;],&quot;default&quot;:&quot;All&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const sec = this.props.section ?? 'All';
+    const showN = this.props.showNotes ?? true;
+    const F = (b, lab, w, h, note) => ({
+      b, lab,
+      note: showN && note ? note : false,
+      head: 'display:flex;align-items:center;gap:10px;max-width:' + w + 'px',
+      noteS: "max-width:" + Math.min(w, 760) + "px;font:400 13px/1.55 'Space Grotesk',system-ui,sans-serif;color:#4a4553",
+      box: 'position:relative;width:' + w + 'px;height:' + h + 'px;overflow:hidden;border-radius:14px;border:1px solid #dcd8e4;background:#ffffff;box-shadow:0 1px 2px rgba(24,24,27,.05),0 12px 32px rgba(24,24,27,.07)'
+    });
+    const G = [
+      { t: 'The system', boards: [
+        F('AF1', 'Founder · Build › Solution design', 1440, 960, 'Two cells carry a Validate mark, one an edited Eadwyn value, one a GitHub fact. Typed cells carry none.'),
+        F('AF2', 'The mark · component sheet at 2x', 1440, 2140, 'Every trigger and provenance state, light and dark. The glyph is one colour; the full-colour image starts at 24px.')
+      ] },
+      { t: 'The flow', boards: [
+        F('AF3', 'Founder · Add feature form', 1440, 900, 'Field triggers on the four blank fields. Impact was typed, so it has none. The form-level Fill sits in the header.'),
+        F('AF4', 'Sources step', 1440, 900, "Sources come first and use no AI tokens. Eadwyn is ticked for what's left, with the founder's own average. Notion could feed this form but is not connected."),
+        F('AF5', 'Preview step', 1440, 900, 'One row per field. GitHub and Eadwyn disagree on Feature, so its row offers 2 sources. Impact is yours and kept.'),
+        F('AF6', 'Conflict detail', 1440, 1220, 'The Feature row opened: yours first, then the connector, then Eadwyn. GitHub is picked by that order.'),
+        F('AF7', 'Placed, then saved', 1440, 860, 'Before Save each placed value is dashed and says Not saved. After Save each keeps its mark.'),
+        F('AF8', 'Provenance cards and Undo', 1440, 960, 'Four marks pressed. Each card shows the source, the run and its cost, who accepted it, and Undo. Undo names the value it restores.')
+      ] },
+      { t: 'States', boards: [
+        F('AF9', 'Running', 1440, 900, 'Values from sources arrive first. Eadwyn rows show a ring until every value is checked.'),
+        F('AF10', 'Partial', 1440, 900, 'A thinner run fills 3 of 5 and leaves two blank rather than guess.'),
+        F('AF11', 'Refused', 1440, 1360, 'AI off, held back by the safety check, the safety check unreachable, and a form that changed during the run.'),
+        F('AF12', 'Out of tokens', 1440, 640, "Not enough AI tokens, today's limit, and AI paused for the studio. Sources still fill in all three."),
+        F('AF13', 'Empty', 1440, 860, 'A form with every field filled draws no trigger. A form no source covers offers Eadwyn alone.'),
+        F('AF14', 'Error', 1440, 720, 'A failed read gives a reference. A record whose marks could not be read says Unreadable, never blank.')
+      ] },
+      { t: 'Profiles', boards: [
+        F('AF15', 'No permission and readers', 1440, 900, "An investor reads the founder's marks with no triggers and no Undo. A support session turns Fill off."),
+        F('AF16', 'Waiting from another module', 1440, 960, 'After a Validate session, four row proposals wait. Each is added as it is accepted.'),
+        F('AF17', 'Investor · Deals › Screening', 1440, 900, "A memo fills from the founder's shared Raise records, scoring and Eadwyn. A replaced draft is struck through. Commitment amount is never filled."),
+        F('AF18', 'Advisor · Expertise › Services', 1440, 900, 'Practice outcomes and Eadwyn fill the service. Legal name has no trigger.'),
+        F('AF19', 'Operating Partner · Delivery › Reporting', 1440, 900, 'The engagement record fills Done and Next with no AI tokens; Eadwyn drafts the summary.'),
+        F('AF20', 'Admin · Community › Events', 1440, 900, 'An admin fills content they write. Approvals carry no trigger: decisions are theirs.'),
+        F('AF21', 'Super Admin · Content › Publications', 1440, 900, 'HQ content uses the same drawer: one row, Eadwyn\'s draft, not saved until accepted.'),
+        F('AF22', 'Explorer', 1440, 640, 'No marks and no triggers until the member holds a venture or a profile.')
+      ] },
+      { t: 'Phone and dark', boards: [
+        F('AF23a', 'Phone · the form', 390, 844, 'Each trigger has a 44px hit area.'),
+        F('AF23b', 'Phone · Sources', 390, 844, 'A trigger opens Sources as a bottom sheet.'),
+        F('AF23c', 'Phone · Preview', 390, 844, 'A full-height Preview, one card per field, with a sticky Accept all.'),
+        F('AF24', 'Dark · Preview step', 1440, 900, 'The Preview step in the dark colours.')
+      ] }
+    ];
+    return { groups: G.filter(g => sec === 'All' || g.t === sec).map(g => Object.assign({}, g, { n: g.boards.length + (g.boards.length === 1 ? ' board' : ' boards') })) };
+  }
+}
+</script>
+</body></html>

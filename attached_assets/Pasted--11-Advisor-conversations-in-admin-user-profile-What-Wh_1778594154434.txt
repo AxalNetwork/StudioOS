@@ -1,0 +1,31 @@
+#11 - Advisor conversations in admin user profile
+
+What & Why
+
+Today the admin user-profile drawer has an "Onboarding" tab that always shows "0 messages" because the worker's /api/admin/users/:user_id/profile endpoint never returns the user's Personal Advisor transcript. Admins need to see what each user has been talking to the advisor about, both their original onboarding session and any ongoing one. We surface this by:
+
+Wiring the existing Onboarding Conversation panel to the user's first advisor session (the one created at sign-up).
+Adding a new Ongoing Conversation tab that shows the user's currently active / most-recent advisor session, with the same chat-bubble layout.
+Done looks like
+
+Opening any user from the admin Users list shows real transcript text under the Onboarding tab when that user has answered at least one advisor question.
+A new "Ongoing Conversation" tab appears next to Onboarding for every user and renders the active or most-recent advisor session.
+When a user has only one advisor session it appears under both tabs (Onboarding == Ongoing); the placeholder text only shows when truly empty.
+Tab labels show the message count, e.g. "Ongoing · 12".
+Admin viewing is read-only — no /answer or /skip buttons surface in the modal.
+Out of scope
+
+Admin-side reply / impersonate-into-advisor (future).
+Sign-up bot transcript storage (no separate sign-up bot table exists; we treat advisor week-1 as the onboarding conversation).
+Pagination of very long transcripts beyond the first ~500 messages.
+Steps
+
+Worker — Extend /api/admin/users/:user_id/profile to also return onboarding_conversation (first by created_at) and ongoing_conversation (most-recent by updated_at), each with {conversation, messages[]} shape. Defensive try/catch (advisor schema may be missing in older D1 envs).
+Frontend — Update Onboarding tab in UserDetailModal to read from data.onboarding_conversation.messages (fallback to legacy data.onboarding for safety). Add a new 'advisor' tab labelled "Ongoing Conversation" with the same bubble layout, reading data.ongoing_conversation.
+Validation — npx tsc --noEmit in cloudflare-worker/, npm run test:drift, manual sanity-check via /api/admin/users/:id/profile.
+Relevant files
+
+cloudflare-worker/src/routes/admin.ts:53-223
+cloudflare-worker/sql/migrations/029_advisor.sql:16-43
+frontend/src/pages/AdminPage.jsx:759-934
+frontend/src/lib/api.js

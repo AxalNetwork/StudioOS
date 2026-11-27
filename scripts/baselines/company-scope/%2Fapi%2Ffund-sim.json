@@ -1,0 +1,8 @@
+{
+  "POST /api/fund-sim/funds/:fund_id/scenarios": {
+    "kind": "target"
+  },
+  "PUT /api/fund-sim/funds/:fund_id/reserves": {
+    "kind": "target"
+  }
+}

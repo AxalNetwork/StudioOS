@@ -1,0 +1,32 @@
+{
+  "skill": "nda-first-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "legal_name": "Brightsmile Health Inc.",
+        "jurisdiction": "Delaware"
+      },
+      "network.relationships": [
+        {
+          "name": "Dentrix Labs",
+          "purpose": "Integration pilot"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Brightsmile Health Inc.",
+      "Integration pilot"
+    ],
+    "must_say_not_recorded": [
+      "term"
+    ],
+    "must_not_include": [
+      "legally binding as drafted"
+    ]
+  }
+}

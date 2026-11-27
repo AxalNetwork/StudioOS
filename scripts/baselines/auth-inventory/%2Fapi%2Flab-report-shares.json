@@ -1,0 +1,16 @@
+{
+  "GET /api/lab-report-shares/open/:token": {
+    "review": "record_without_ownership_check",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+    "note": "Opens only for the named account, signed in: the claim is bound to grantee_user_id, revoked_at, the open limit and expiry. The owner, another founder, an admin, an unstored or broken token get the one 404 and no open is counted; no credentials or a disabled grantee get 401."
+  },
+  "POST /api/lab-report-shares/:id/revoke": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+    "note": "Only the report's owner revokes (owner_user_id = caller): another founder, the named reader and an admin get the one 404 and nothing changes; no credentials get 401."
+  }
+}

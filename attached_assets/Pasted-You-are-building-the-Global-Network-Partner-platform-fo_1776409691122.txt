@@ -1,0 +1,82 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, D1 `users` table (with roles and kyc_status), RBAC middleware, onboarding, `referrals`, `commissions`, and `payouts` tables from previous builds.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+- Use existing Replit Auth and D1 database
+
+DO NOT use Cloudflare AI Workers for any AI logic (only basic Cloudflare setup exists). Instead, use Replit's native AI integration.
+
+Add a complete **AI-powered matching engine** with these exact requirements:
+
+1. **Database Models (new D1 tables)**  
+   Create these tables (with proper indexes and foreign keys):
+   - `deals` (or `projects`)
+     • id (PK)
+     • title (text)
+     • description (text)
+     • status (text: 'mvp', 'traction_review', 'spinout_ready')
+     • metrics (json) → traction data, scores, etc.
+     • created_by (FK to users.id)
+     • created_at, updated_at
+   - `user_preferences`
+     • user_id (FK to users.id, unique)
+     • investment_focus (json) → e.g. ["AI", "fintech"]
+     • min_deal_size (decimal)
+     • preferred_roles (json)
+     • updated_at
+   - `match_scores`
+     • id (PK)
+     • deal_id (FK)
+     • user_id (FK)
+     • score_type (text: 'deal_flow', 'co_investment', 'referral')
+     • score (float, 0-100)
+     • explanation (text)
+     • created_at
+
+2. **Replit AI Integration**  
+   - Install `replit-ai` via pip (add to requirements.txt).
+   - Use Replit AI SDK for all LLM calls (no external API keys required; use Replit's managed models).
+   - Create a helper function `replit_ai_score(prompt: str) -> str` that calls the Replit AI model.
+
+3. **Matching Engine Logic**  
+   - **Deal Flow Scoring**: For any deal, use Replit AI to score 0-100 based on metrics (traction, market, team). Store in match_scores with explanation.
+   - **Co-Investment Matching**: For an investor user, match them to deals using LLM prompt (compare user_preferences vs deal metrics). Return top matches with scores.
+   - **Referral Scoring**: Score each referral (or referrer) using LLM on history (conversions, commissions earned, quality). Update on milestone events.
+   - Run scoring asynchronously (simple background task or on-demand via endpoint).
+   - Rule-based fallback + LLM boost for speed.
+
+4. **Backend Endpoints (add to main.py)**  
+   - POST /api/deals (create new deal/project, protected for operator/advisor roles)
+   - GET /api/matches/deal-flow (returns scored deals for current user)
+   - GET /api/matches/co-invest (returns personalized co-investment recommendations)
+   - GET /api/matches/referral-scores (scored referrals for current user)
+   - POST /api/matches/score (trigger scoring for a deal or referral)
+   - All endpoints protected by existing RBAC (investors see matches, admins see everything).
+
+5. **Frontend**  
+   - New page /matches.html (or integrate into dashboard).
+   - Sections: 
+     • Deal Flow Feed (cards with AI score + explanation)
+     • Co-Investment Recommendations (sortable by score)
+     • Referral Leaderboard / Scores
+   - Use fetch() to call endpoints and display results dynamically.
+   - Reuse existing network graph style for any visual elements.
+
+6. **Security & Best Practices**  
+   - Rate limit scoring endpoints.
+   - Store all AI prompts/responses in D1 for audit (optional table).
+   - Use Replit Secrets if any optional BYOK is added later.
+   - Keep everything lightweight (no heavy vector DB yet; use simple JSON + LLM).
+
+Build this step-by-step:  
+1. First create the new D1 tables and migration.  
+2. Then add Replit AI SDK integration + helper function.  
+3. Then implement the three scoring engines (deal flow, co-investment, referral).  
+4. Then backend endpoints.  
+5. Finally frontend pages.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

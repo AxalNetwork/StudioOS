@@ -1,0 +1,193 @@
+/**
+ * The Super Admin shell and mode.
+ *
+ * `super_admin` is an elevation on `admin` (migration 199, one holder by
+ * 207), so `user.role` is still `'admin'` when this shell renders. The shell
+ * is chosen on the flag by `shellRoleFor` (lib/shellRole.js) — a name for a
+ * sidebar, never a permission — and the holder can switch between the HQ
+ * shell and the plain admin shell from the View-as list.
+ *
+ * THE ROW/ROUTE RULE. A row pointing at an unregistered route is worse than a
+ * missing row — it looks shipped and 404s — so every HQ row must resolve to a
+ * `<Route path>` in App.jsx. Adding a row before its page fails here.
+ *
+ * THE ACCESS RULE. Nothing that decides access may read the shell role:
+ * `'super_admin'` appears in no `guard([...])` array, and the HQ-only routes
+ * are wrapped in `hqOnly(...)`, which renders a stated notice for an admin
+ * without the elevation rather than a page that 403s on every call.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
+import { shellRoleFor, isSuperAdminUser, HQ_VIEW_KEY } from '../src/lib/shellRole.js';
+import { previewOptionsFor } from '../src/lib/previewShells.js';
+import { codeOnly } from './_codeOnly.mjs';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
+const APP = readRoutesSource();
+const APP_CODE = codeOnly(APP);
+
+const rows = (SIDEBAR_GROUPS.super_admin || []).flatMap((g) => g.items || []);
+const adminRows = (SIDEBAR_GROUPS.admin || []).flatMap((g) => g.items || []);
+
+test('the super admin shell exists and is not empty', () => {
+  assert.ok(rows.length > 0, 'SIDEBAR_GROUPS.super_admin must have rows');
+});
+
+test('every row points at a route that is actually registered', () => {
+  const missing = rows.filter((r) => !APP.includes(`path="${r.to}"`));
+  assert.deepEqual(
+    missing.map((r) => `${r.label} → ${r.to}`), [],
+    'a sidebar row whose route does not exist looks shipped and 404s — add the page first',
+  );
+});
+
+test('all fifteen rows are present: the canvas\'s eleven in canvas order, with D714\'s Fund admin after Funds, D4137\'s AI agents and then Integration keys after Platform, and D953\'s Programs after Licences', () => {
+  // The canvas order is Home, Licences, Funds, Contracts, Team, Revenue,
+  // Content, Platform, Support, Security, Settings. "Security", not
+  // "Governance" — decision A4.
+  //
+  // THE LAST THREE POSITIONS ARE READ OFF THE ARTBOARD, not chosen: the nav
+  // in `Admin · Super.dc.html` runs Home, Licenses, Accounts, Revenue,
+  // Content, Governance — so Revenue, Content and Platform sit straight
+  // after Accounts, which ships as Team. That completes the H5/H6 rows;
+  // the eight-row shell this array started as came from the newer
+  // `Support Security · Super.dc.html`. D714 (#1779) decision 7 places Fund
+  // admin straight after Funds, until the canvas "Fund Administration · Admin"
+  // places it elsewhere. The owner's ruling (2026-10-20) gives Integration
+  // keys, with GitHub Sync on the same page, a Super Admin row after Platform,
+  // whose strip carried both.
+  // D953 (#2371): the Programs row the canvas draws after Licences
+  // (`Programs Page.dc.html:509`), lit on every program page by its match.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Programs', 'Funds oversight', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'AI agents', 'Integration keys', 'Support', 'Security', 'Settings']);
+  assert.equal(rows.find((r) => r.label === 'Integration keys')?.to, '/admin/integration-keys');
+  assert.equal(rows.find((r) => r.label === 'AI agents')?.to, '/hq/ai-agents', 'D4137: the canvas\'s HQ › AI agents, after Platform');
+  assert.deepEqual(rows.find((r) => r.label === 'Programs')?.match, ['/admin/programs'], 'the Programs row stays lit on every program page');
+  assert.equal(rows.find((r) => r.label === 'Fund admin')?.to, '/admin/fund-admin');
+  assert.equal(rows.find((r) => r.label === 'Revenue')?.to, '/admin/revenue');
+  assert.equal(rows.find((r) => r.label === 'Content')?.to, '/admin/content',
+    'Content is the HQ pipeline view, not /admin/articles (the plain-admin Content Queue)');
+  assert.equal(rows.find((r) => r.label === 'Platform')?.to, '/admin/platform');
+  const licences = rows.find((r) => r.to === '/admin/licences');
+  assert.ok(licences, 'the franchise console must be reachable from the HQ shell');
+  assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/hq-team',
+    'Team is the cross-tenant accounts table, not the public team-page editor');
+  assert.equal(rows.find((r) => r.label === 'Support')?.to, '/admin/hq-support',
+    'Support is the three-queue HQ page, not the shared Help Center');
+});
+
+test('the shell is chosen on the flag and the HQ toggle, never on the role alone', () => {
+  const user = { role: 'admin', is_super_admin: 1 };
+  assert.equal(shellRoleFor('admin', user), 'super_admin');
+  assert.equal(shellRoleFor('admin', user, false), 'admin', 'the holder can look at the plain admin shell');
+  assert.equal(shellRoleFor('admin', { role: 'admin', is_super_admin: 0 }), 'admin');
+  assert.equal(shellRoleFor('admin', { role: 'admin' }), 'admin', 'a DB without the column reads as not elevated');
+  assert.equal(shellRoleFor('admin', { role: 'admin', is_super_admin: '1' }), 'super_admin', 'D1 may hand the integer back as a string');
+  assert.equal(isSuperAdminUser(null), false);
+  // The selector is one expression, pinned so it cannot quietly widen.
+  assert.match(read('frontend/src/lib/shellRole.js'),
+    /role === 'admin' && Number\(user\?\.is_super_admin \?\? 0\) === 1 && hqView \? 'super_admin' : role/);
+  assert.match(APP_CODE, /SIDEBAR_GROUPS\[shellRoleFor\(role, user, hqView\)\]/,
+    'the sidebar lookup must go through the selector');
+});
+
+test('viewing as another role still shows that role\'s shell', () => {
+  const user = { role: 'admin', is_super_admin: 1 };
+  for (const role of ['founder', 'investor', 'advisor', 'partner', 'exploring']) {
+    assert.equal(shellRoleFor(role, user), role, `${role} preview must get the ${role} shell`);
+  }
+});
+
+test('the sidebar receives the shell role, so the HQ group opens on first visit', () => {
+  // `defaultOpenGroups(role)` looks the role up in SIDEBAR_GROUPS. Passing
+  // the active role ('admin') opened the admin groups and left `hq` — the only
+  // group actually rendered — collapsed on a fresh device.
+  assert.match(APP_CODE, /<SidebarNav groups=\{sidebarGroups\} role=\{shellRole \|\| 'founder'\}/);
+});
+
+test('the mode bar says Super Admin Mode only on the flag, and the Preview shell list leads with HQ for the holder alone', () => {
+  assert.match(APP_CODE, /superAdmin \? 'Super Admin Mode' : 'Admin Mode'/);
+  // D288 — the HQ entry is offered only to a holder. Until D288 this pinned
+  // the literal `['super_admin', 'Super Admin']` option; the list now lives in
+  // lib/previewShells.js, so the property is read off it.
+  assert.deepEqual(previewOptionsFor(true)[0].key, 'hq', 'the holder\'s list does not lead with HQ');
+  assert.ok(!previewOptionsFor(false).some((o) => o.key === 'hq'), 'the HQ entry is offered to an admin without the elevation');
+  assert.match(APP_CODE, /previewOptionsFor\(superAdmin\)/, 'the switcher no longer reads the list by the elevation');
+  assert.match(APP_CODE, /onViewModeChange\('admin', \{ hq: true \}\)/, 'choosing Super Admin browses as admin with the HQ shell');
+  assert.match(APP_CODE, /onViewModeChange\('admin', \{ hq: false \}\)/, 'choosing Admin browses as admin with the plain shell');
+});
+
+test("'super_admin' names a shell, never a permission", () => {
+  // Every access decision keys on the six roles. A guard array carrying the
+  // shell name would be a route nobody can reach: `resolveActiveRole` never
+  // returns it.
+  const guards = [...APP_CODE.matchAll(/guard\(\[([^\]]*)\]/g)].map((m) => m[1]);
+  assert.ok(guards.length > 50, 'expected the route table');
+  assert.deepEqual(guards.filter((g) => /super_admin/.test(g)), [], "'super_admin' must not appear in a guard array");
+  assert.doesNotMatch(read('frontend/src/lib/activeRole.js'), /super_admin/, 'the active role stays a role');
+});
+
+test('the HQ-only routes render the notice for an admin without the elevation', () => {
+  for (const path of ['/admin/licences', '/admin/hq-team', '/hq', '/admin/security', '/admin/hq-support']) {
+    const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
+    assert.ok(line, `${path} must be registered`);
+    assert.match(line, /hqOnly\(/, `${path} must be wrapped in hqOnly — the server 403s a plain admin on every call there`);
+  }
+  const contracts = APP.split('\n').find((l) => l.includes('path="/admin/contracts"'));
+  assert.match(contracts, /guard\(\['admin'\]/);
+  assert.doesNotMatch(contracts, /hqOnly\(/, 'D647: agreements and templates are available to both admin shells');
+  assert.match(APP_CODE, /const hqOnly = \(component\) => \(\s*isSuperAdminUser\(user\) \? component : <SuperAdminOnlyNotice \/>/);
+});
+
+test('the plain admin shell no longer offers HQ\'s ledger', () => {
+  // Every call behind /admin/licences is super-admin-only server-side; a row
+  // for it in the admin shell was a door onto 403s. The subsidiary admin's own
+  // read stays.
+  assert.equal(adminRows.find((r) => r.to === '/admin/licences'), undefined);
+  assert.ok(adminRows.find((r) => r.to === '/admin/my-licence'), 'My Licence stays for a subsidiary admin');
+});
+
+test('a super admin keeps every admin destination, whether HQ view is on or off', () => {
+  // The elevation adds a power; it must not remove the product. Until D286
+  // this compared row COUNTS ("the HQ shell is a lens over the admin product,
+  // not a replacement for it"), which S20's eight-row Admin shell fails while
+  // the property still holds. The property: with HQ view off the holder gets
+  // the plain Admin shell exactly, and with it on, every Admin row still
+  // points at a route that admits an admin — nothing is registered only for
+  // the elevation, and nothing the plain shell offers is taken away.
+  const holder = { role: 'admin', is_super_admin: 1 };
+  assert.equal(shellRoleFor('admin', holder, false), 'admin', 'HQ view off is the plain Admin shell');
+  assert.equal(shellRoleFor('admin', holder, true), 'super_admin');
+  assert.ok(adminRows.length > 0, 'the Admin shell has rows');
+  for (const r of adminRows) {
+    const path = r.to.split('?')[0];
+    const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
+    assert.ok(line, `${r.label} → ${r.to} is not registered`);
+    // `/studio` wraps its list in `labRoles(...)`; the admission is still the literal.
+    assert.match(line, /guard\((?:labRoles\()?\[[^\]]*'admin'/, `${r.to} does not admit an admin`);
+    assert.doesNotMatch(line, /hqOnly\(/, `${r.to} is an Admin row wrapped in hqOnly — the elevation took a destination`);
+  }
+});
+
+test('the HQ toggle is per browser and dies with the session', () => {
+  assert.equal(HQ_VIEW_KEY, 'hqView');
+  assert.match(APP_CODE, /clearHqView\(\)/, 'clearSession must drop the toggle with the rest of the session');
+  assert.match(APP_CODE, /readHqView\(\)/, 'the toggle is restored on load');
+});
+
+test('the rail has an HQ accent that is not the seam hue', () => {
+  const cfg = read('frontend/src/workspaces/shellConfig.js');
+  const m = /super_admin:\s*\{([^}]*)\}/.exec(cfg);
+  assert.ok(m, 'ACCENT.super_admin missing');
+  for (const key of ['ink', 'deep', 'tint', 'border', 'deepDark', 'tintDark']) {
+    assert.match(m[1], new RegExp(`${key}:`), `ACCENT.super_admin has no ${key}`);
+  }
+  assert.doesNotMatch(m[1], /#0e7490/i, 'the seam hue is reserved for founder-sourced objects');
+});

@@ -1,0 +1,3 @@
+{
+  "sets.join(', ') @ routes/auth_recover.ts": 1
+}

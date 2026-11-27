@@ -1,0 +1,3126 @@
+{
+ "class": "simulated",
+ "issue": 4567,
+ "note": "Aggregates from npm run bench:d1 on local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 figure.",
+ "runs": {
+  "closed_1_10_100_1000": {
+   "class": "simulated",
+   "note": "Local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 capacity figure.",
+   "issue": 4567,
+   "taken_at": "2026-11-06T23:40:42.040Z",
+   "commit": "233d2f48e71093ce70ebdbd11f2083f7926ab197",
+   "node": "v22.22.0",
+   "sqlite": "3.50.4",
+   "options": {
+    "tenants": [
+     1,
+     10,
+     100,
+     1000
+    ],
+    "ops": 400,
+    "concurrency": 8,
+    "seed": 4567,
+    "hot": 0,
+    "agents": 2,
+    "mix": {
+     "A": 30,
+     "B": 25,
+     "C": 20,
+     "D": 15,
+     "E": 10
+    },
+    "ramp": null,
+    "seconds": 5,
+    "maxOps": 20000,
+    "maxErrorRate": 0.01,
+    "maxP95Ms": 2000,
+    "control": [
+     1000,
+     10000,
+     100000
+    ]
+   },
+   "scales": [
+    {
+     "tenants": 1,
+     "agents_per_tenant": 2,
+     "ops": 400,
+     "executions": 152,
+     "wall_s": 1.64,
+     "completed_ops_s": 244.52,
+     "statements": 7442,
+     "seeded_bytes": 14839808,
+     "sql_time_share": 0.604,
+     "bytes_per_1k_executions": 1536000,
+     "rows_added": {
+      "ai_usage_logs": 407,
+      "ai_budget_reservations": 142,
+      "ai_credit_ledger": 0,
+      "agent_task_runs": 6,
+      "scope_tasks": 79,
+      "ai_rail_proposals": 6,
+      "team_agent_events": 6,
+      "scope_task_events": 12
+     },
+     "by_mix": {
+      "A": {
+       "ops": 118,
+       "ok": 118,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 13.07,
+       "reads_per_op": 12.03,
+       "writes_per_op": 1.03,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 9.03,
+        "plan": 4,
+        "usage": 0.03
+       },
+       "p50_ms": 6.764,
+       "p95_ms": 23.522,
+       "p99_ms": 36.225
+      },
+      "B": {
+       "ops": 107,
+       "ok": 107,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 33,
+       "reads_per_op": 21,
+       "writes_per_op": 12,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 18,
+        "plan": 8,
+        "policy": 4,
+        "usage": 3
+       },
+       "p50_ms": 23.179,
+       "p95_ms": 66.262,
+       "p99_ms": 76.984
+      },
+      "C": {
+       "ops": 71,
+       "ok": 6,
+       "refusals": {
+        "agent_busy": 9,
+        "queue_full": 56
+       },
+       "errors": 0,
+       "stmts_per_op": 14.45,
+       "reads_per_op": 12.25,
+       "writes_per_op": 2.2,
+       "batches_per_op": 0.17,
+       "stmts_per_op_by_stage": {
+        "access": 0.62,
+        "hold_settle": 1.61,
+        "other": 0.08,
+        "plan": 0.76,
+        "policy": 1.76,
+        "proposal": 0.59,
+        "run": 8.61,
+        "usage": 0.42
+       },
+       "p50_ms": 5.842,
+       "p95_ms": 1322.691,
+       "p99_ms": 1632.715
+      },
+      "D": {
+       "ops": 55,
+       "ok": 55,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 1.89,
+       "reads_per_op": 1.89,
+       "writes_per_op": 0,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "proposal": 1,
+        "run": 0.89
+       },
+       "p50_ms": 0.676,
+       "p95_ms": 4.556,
+       "p99_ms": 8.063
+      },
+      "E": {
+       "ops": 49,
+       "ok": 41,
+       "refusals": {
+        "agent_busy": 2,
+        "queue_full": 6
+       },
+       "errors": 0,
+       "stmts_per_op": 25.29,
+       "reads_per_op": 17.76,
+       "writes_per_op": 7.53,
+       "batches_per_op": 1.39,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 13.12,
+        "plan": 6.37,
+        "policy": 3.35,
+        "run": 1.06,
+        "usage": 1.39
+       },
+       "p50_ms": 18.057,
+       "p95_ms": 74.168,
+       "p99_ms": 87.821
+      }
+     },
+     "fairness": {
+      "tenants_touched": 1,
+      "ops_max": 400,
+      "ops_median": 400,
+      "p95_ms_max": 46.272,
+      "p95_ms_median": 46.272
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 389,
+       "share": 0.0523,
+       "total_ms": 415.25,
+       "mean_ms": 1.0675,
+       "rows_changed": 389,
+       "in_batch": 0,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1945
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 142,
+       "share": 0.0191,
+       "total_ms": 121.52,
+       "mean_ms": 0.8557,
+       "rows_changed": 142,
+       "in_batch": 0,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 710
+      },
+      {
+       "fingerprint": "SELECT * FROM users WHERE id = ?",
+       "kind": "read",
+       "count": 422,
+       "share": 0.0567,
+       "total_ms": 50.39,
+       "mean_ms": 0.1194,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": []
+      },
+      {
+       "fingerprint": "INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at) SELECT ?,a.user_id,?,?,MIN(?,MAX(N,MIN(?-d.spend_m",
+       "kind": "write",
+       "count": 126,
+       "share": 0.0169,
+       "total_ms": 37.2,
+       "mean_ms": 0.2952,
+       "rows_changed": 126,
+       "in_batch": 126,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 630
+      },
+      {
+       "fingerprint": "SELECT a.balance_microusd,d.spend_microusd AS daily,m.spend_microusd AS monthly, (SELECT COALESCE(SUM(included_microusd),N) FROM ai_budget_reservations WHERE us",
+       "kind": "read",
+       "count": 270,
+       "share": 0.0363,
+       "total_ms": 37,
+       "mean_ms": 0.137,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": []
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET status=?, settlement_uid=?, actual_included_microusd=?, actual_topup_microusd=?, updated_at=datetime('?') WHERE uid=? AND user",
+       "kind": "write",
+       "count": 142,
+       "share": 0.0191,
+       "total_ms": 30.98,
+       "mean_ms": 0.2182,
+       "rows_changed": 142,
+       "in_batch": 142,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 710
+      },
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 18,
+       "share": 0.0024,
+       "total_ms": 20.05,
+       "mean_ms": 1.1138,
+       "rows_changed": 18,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 198
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 18,
+       "share": 0.0024,
+       "total_ms": 17.52,
+       "mean_ms": 0.9732,
+       "rows_changed": 18,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 90
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 18,
+       "share": 0.0024,
+       "total_ms": 16.93,
+       "mean_ms": 0.9407,
+       "rows_changed": 18,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 90
+      },
+      {
+       "fingerprint": "SELECT plan_family, amount_cents, currency, interval, interval_count, status FROM member_subscription_amounts WHERE user_id = ? ORDER BY id",
+       "kind": "read",
+       "count": 422,
+       "share": 0.0567,
+       "total_ms": 15.59,
+       "mean_ms": 0.0369,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": []
+      },
+      {
+       "fingerprint": "SELECT spend_microusd FROM ai_included_spend WHERE user_id = ? AND period_kind = ? AND period_key = ?",
+       "kind": "read",
+       "count": 540,
+       "share": 0.0726,
+       "total_ms": 11.65,
+       "mean_ms": 0.0216,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": []
+      },
+      {
+       "fingerprint": "INSERT OR IGNORE INTO ai_topup_accounts(user_id) VALUES(?)",
+       "kind": "write",
+       "count": 270,
+       "share": 0.0363,
+       "total_ms": 11.42,
+       "mean_ms": 0.0423,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": [],
+       "table": "ai_topup_accounts",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 0
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 152,
+       "ops": "BCE",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 152,
+       "ops": "BCE",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 6,
+       "ops": "C",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 6,
+       "ops": "C",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 6,
+       "ops": "C",
+       "scans": [
+        "SCAN l"
+       ]
+      }
+     ]
+    },
+    {
+     "tenants": 10,
+     "agents_per_tenant": 2,
+     "ops": 400,
+     "executions": 222,
+     "wall_s": 3.19,
+     "completed_ops_s": 125.21,
+     "statements": 13037,
+     "seeded_bytes": 14839808,
+     "sql_time_share": 0.717,
+     "bytes_per_1k_executions": 2380108,
+     "rows_added": {
+      "ai_usage_logs": 617,
+      "ai_budget_reservations": 212,
+      "ai_credit_ledger": 130,
+      "agent_task_runs": 76,
+      "scope_tasks": 90,
+      "ai_rail_proposals": 76,
+      "team_agent_events": 87,
+      "scope_task_events": 152
+     },
+     "by_mix": {
+      "A": {
+       "ops": 118,
+       "ok": 118,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 13.14,
+       "reads_per_op": 12.07,
+       "writes_per_op": 1.07,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 9.07,
+        "plan": 4,
+        "usage": 0.07
+       },
+       "p50_ms": 11.351,
+       "p95_ms": 28.226,
+       "p99_ms": 29.597
+      },
+      "B": {
+       "ops": 107,
+       "ok": 107,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 33.26,
+       "reads_per_op": 21.22,
+       "writes_per_op": 12.04,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 18.22,
+        "plan": 8,
+        "policy": 4,
+        "usage": 3.04
+       },
+       "p50_ms": 40.193,
+       "p95_ms": 185.096,
+       "p99_ms": 226.989
+      },
+      "C": {
+       "ops": 71,
+       "ok": 68,
+       "refusals": {
+        "agent_busy": 3
+       },
+       "errors": 0,
+       "stmts_per_op": 83.11,
+       "reads_per_op": 58.1,
+       "writes_per_op": 25.01,
+       "batches_per_op": 1.92,
+       "stmts_per_op_by_stage": {
+        "access": 6.7,
+        "hold_settle": 18.58,
+        "other": 0.96,
+        "plan": 8.62,
+        "policy": 9.62,
+        "proposal": 6.7,
+        "run": 27.03,
+        "usage": 4.9
+       },
+       "p50_ms": 194.422,
+       "p95_ms": 428.29,
+       "p99_ms": 485.346
+      },
+      "D": {
+       "ops": 55,
+       "ok": 55,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 1.78,
+       "reads_per_op": 1.78,
+       "writes_per_op": 0,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "proposal": 1,
+        "run": 0.78
+       },
+       "p50_ms": 1.789,
+       "p95_ms": 6.351,
+       "p99_ms": 8.458
+      },
+      "E": {
+       "ops": 49,
+       "ok": 49,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 39.37,
+       "reads_per_op": 27.33,
+       "writes_per_op": 12.04,
+       "batches_per_op": 1.71,
+       "stmts_per_op_by_stage": {
+        "access": 1.14,
+        "hold_settle": 16.29,
+        "other": 0.16,
+        "plan": 7.84,
+        "policy": 4.82,
+        "proposal": 1.53,
+        "run": 5.18,
+        "usage": 2.41
+       },
+       "p50_ms": 37.138,
+       "p95_ms": 248.662,
+       "p99_ms": 319.099
+      }
+     },
+     "fairness": {
+      "tenants_touched": 10,
+      "ops_max": 47,
+      "ops_median": 39,
+      "p95_ms_max": 454.908,
+      "p95_ms_median": 200.793
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 389,
+       "share": 0.0298,
+       "total_ms": 365.28,
+       "mean_ms": 0.939,
+       "rows_changed": 389,
+       "in_batch": 0,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1945
+      },
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 228,
+       "share": 0.0175,
+       "total_ms": 217.3,
+       "mean_ms": 0.9531,
+       "rows_changed": 228,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 2508
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 228,
+       "share": 0.0175,
+       "total_ms": 213.81,
+       "mean_ms": 0.9378,
+       "rows_changed": 228,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1140
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 228,
+       "share": 0.0175,
+       "total_ms": 203.19,
+       "mean_ms": 0.8912,
+       "rows_changed": 228,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1140
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 212,
+       "share": 0.0163,
+       "total_ms": 165.45,
+       "mean_ms": 0.7804,
+       "rows_changed": 212,
+       "in_batch": 0,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1060
+      },
+      {
+       "fingerprint": "INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)",
+       "kind": "write",
+       "count": 152,
+       "share": 0.0117,
+       "total_ms": 121.63,
+       "mean_ms": 0.8002,
+       "rows_changed": 152,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_task_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 152
+      },
+      {
+       "fingerprint": "INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key) VALUES (?,",
+       "kind": "write",
+       "count": 76,
+       "share": 0.0058,
+       "total_ms": 75.64,
+       "mean_ms": 0.9952,
+       "rows_changed": 76,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 532
+      },
+      {
+       "fingerprint": "INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 87,
+       "share": 0.0067,
+       "total_ms": 75.38,
+       "mean_ms": 0.8665,
+       "rows_changed": 87,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "team_agent_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 87
+      },
+      {
+       "fingerprint": "INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id) VALUES (?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 76,
+       "share": 0.0058,
+       "total_ms": 74.26,
+       "mean_ms": 0.9771,
+       "rows_changed": 76,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 380
+      },
+      {
+       "fingerprint": "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 76,
+       "share": 0.0058,
+       "total_ms": 71.68,
+       "mean_ms": 0.9432,
+       "rows_changed": 76,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "activity_logs",
+       "indexes": 10,
+       "triggers": 0,
+       "index_writes_upper": 760
+      },
+      {
+       "fingerprint": "UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND user_id = ? ",
+       "kind": "write",
+       "count": 76,
+       "share": 0.0058,
+       "total_ms": 68.48,
+       "mean_ms": 0.901,
+       "rows_changed": 76,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 532
+      },
+      {
+       "fingerprint": "SELECT * FROM users WHERE id = ?",
+       "kind": "read",
+       "count": 562,
+       "share": 0.0431,
+       "total_ms": 67.09,
+       "mean_ms": 0.1194,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": []
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 84,
+       "ops": "CE",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 222,
+       "ops": "BCE",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 222,
+       "ops": "BCE",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 76,
+       "ops": "CE",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 76,
+       "ops": "CE",
+       "scans": [
+        "SCAN l"
+       ]
+      }
+     ]
+    },
+    {
+     "tenants": 100,
+     "agents_per_tenant": 2,
+     "ops": 400,
+     "executions": 225,
+     "wall_s": 3.48,
+     "completed_ops_s": 114.87,
+     "statements": 13587,
+     "seeded_bytes": 15085568,
+     "sql_time_share": 0.736,
+     "bytes_per_1k_executions": 2730667,
+     "rows_added": {
+      "ai_usage_logs": 626,
+      "ai_budget_reservations": 215,
+      "ai_credit_ledger": 166,
+      "agent_task_runs": 79,
+      "scope_tasks": 91,
+      "ai_rail_proposals": 79,
+      "team_agent_events": 91,
+      "scope_task_events": 158
+     },
+     "by_mix": {
+      "A": {
+       "ops": 118,
+       "ok": 118,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 14.05,
+       "reads_per_op": 12.53,
+       "writes_per_op": 1.53,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 9.53,
+        "plan": 4,
+        "usage": 0.53
+       },
+       "p50_ms": 11.42,
+       "p95_ms": 26.82,
+       "p99_ms": 30.96
+      },
+      "B": {
+       "ops": 107,
+       "ok": 107,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 34.54,
+       "reads_per_op": 21.93,
+       "writes_per_op": 12.62,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 18.93,
+        "plan": 8,
+        "policy": 4,
+        "usage": 3.62
+       },
+       "p50_ms": 45.499,
+       "p95_ms": 243.854,
+       "p99_ms": 265.322
+      },
+      "C": {
+       "ops": 71,
+       "ok": 71,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 87.31,
+       "reads_per_op": 60.77,
+       "writes_per_op": 26.54,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "access": 7,
+        "hold_settle": 19.77,
+        "other": 1,
+        "plan": 9,
+        "policy": 10,
+        "proposal": 7,
+        "run": 28,
+        "usage": 5.54
+       },
+       "p50_ms": 172.637,
+       "p95_ms": 440.11,
+       "p99_ms": 572.525
+      },
+      "D": {
+       "ops": 55,
+       "ok": 55,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 1.33,
+       "reads_per_op": 1.33,
+       "writes_per_op": 0,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "proposal": 1,
+        "run": 0.33
+       },
+       "p50_ms": 1.832,
+       "p95_ms": 10.437,
+       "p99_ms": 12.181
+      },
+      "E": {
+       "ops": 49,
+       "ok": 49,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 40.02,
+       "reads_per_op": 27.67,
+       "writes_per_op": 12.35,
+       "batches_per_op": 1.71,
+       "stmts_per_op_by_stage": {
+        "access": 1.14,
+        "hold_settle": 16.59,
+        "other": 0.16,
+        "plan": 7.84,
+        "policy": 4.82,
+        "proposal": 1.55,
+        "run": 5.22,
+        "usage": 2.69
+       },
+       "p50_ms": 37.366,
+       "p95_ms": 233.822,
+       "p99_ms": 353.185
+      }
+     },
+     "fairness": {
+      "tenants_touched": 96,
+      "ops_max": 9,
+      "ops_median": 4,
+      "p95_ms_max": 572.525,
+      "p95_ms_median": 140.384
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 389,
+       "share": 0.0286,
+       "total_ms": 371.63,
+       "mean_ms": 0.9554,
+       "rows_changed": 389,
+       "in_batch": 0,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1945
+      },
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 237,
+       "share": 0.0174,
+       "total_ms": 237.13,
+       "mean_ms": 1.0005,
+       "rows_changed": 237,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 2607
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 237,
+       "share": 0.0174,
+       "total_ms": 228.24,
+       "mean_ms": 0.963,
+       "rows_changed": 237,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1185
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 237,
+       "share": 0.0174,
+       "total_ms": 227.54,
+       "mean_ms": 0.9601,
+       "rows_changed": 237,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1185
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 215,
+       "share": 0.0158,
+       "total_ms": 172.81,
+       "mean_ms": 0.8038,
+       "rows_changed": 215,
+       "in_batch": 0,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1075
+      },
+      {
+       "fingerprint": "INSERT OR IGNORE INTO ai_included_spend(user_id,period_kind,period_key,spend_microusd) VALUES(?,?,?,?)",
+       "kind": "write",
+       "count": 182,
+       "share": 0.0134,
+       "total_ms": 152.88,
+       "mean_ms": 0.84,
+       "rows_changed": 180,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": [],
+       "table": "ai_included_spend",
+       "indexes": 2,
+       "triggers": 0,
+       "index_writes_upper": 360
+      },
+      {
+       "fingerprint": "INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)",
+       "kind": "write",
+       "count": 158,
+       "share": 0.0116,
+       "total_ms": 131.53,
+       "mean_ms": 0.8325,
+       "rows_changed": 158,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_task_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 158
+      },
+      {
+       "fingerprint": "INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key) VALUES (?,",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0058,
+       "total_ms": 83.07,
+       "mean_ms": 1.0515,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 553
+      },
+      {
+       "fingerprint": "INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id) VALUES (?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0058,
+       "total_ms": 81.3,
+       "mean_ms": 1.0291,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 395
+      },
+      {
+       "fingerprint": "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0058,
+       "total_ms": 80.24,
+       "mean_ms": 1.0157,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "activity_logs",
+       "indexes": 10,
+       "triggers": 0,
+       "index_writes_upper": 790
+      },
+      {
+       "fingerprint": "INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 91,
+       "share": 0.0067,
+       "total_ms": 78.9,
+       "mean_ms": 0.8671,
+       "rows_changed": 91,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "team_agent_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 91
+      },
+      {
+       "fingerprint": "UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND user_id = ? ",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0058,
+       "total_ms": 75.03,
+       "mean_ms": 0.9498,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 553
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 225,
+       "ops": "BCE",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      },
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 87,
+       "ops": "CE",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 225,
+       "ops": "BCE",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 79,
+       "ops": "CE",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 79,
+       "ops": "CE",
+       "scans": [
+        "SCAN l"
+       ]
+      }
+     ]
+    },
+    {
+     "tenants": 1000,
+     "agents_per_tenant": 2,
+     "ops": 400,
+     "executions": 225,
+     "wall_s": 4.22,
+     "completed_ops_s": 94.79,
+     "statements": 14397,
+     "seeded_bytes": 17633280,
+     "sql_time_share": 0.745,
+     "bytes_per_1k_executions": 3058347,
+     "rows_added": {
+      "ai_usage_logs": 626,
+      "ai_budget_reservations": 215,
+      "ai_credit_ledger": 168,
+      "agent_task_runs": 79,
+      "scope_tasks": 91,
+      "ai_rail_proposals": 79,
+      "team_agent_events": 91,
+      "scope_task_events": 158
+     },
+     "by_mix": {
+      "A": {
+       "ops": 118,
+       "ok": 118,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 16.46,
+       "reads_per_op": 13.73,
+       "writes_per_op": 2.73,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 10.73,
+        "plan": 4,
+        "usage": 1.73
+       },
+       "p50_ms": 21.463,
+       "p95_ms": 39.451,
+       "p99_ms": 91.119
+      },
+      "B": {
+       "ops": 107,
+       "ok": 107,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 36.99,
+       "reads_per_op": 23.14,
+       "writes_per_op": 13.85,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 20.14,
+        "plan": 8,
+        "policy": 4,
+        "usage": 4.85
+       },
+       "p50_ms": 57.374,
+       "p95_ms": 281.341,
+       "p99_ms": 326.328
+      },
+      "C": {
+       "ops": 71,
+       "ok": 71,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 89.38,
+       "reads_per_op": 61.8,
+       "writes_per_op": 27.58,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "access": 7,
+        "hold_settle": 20.8,
+        "other": 1,
+        "plan": 9,
+        "policy": 10,
+        "proposal": 7,
+        "run": 28,
+        "usage": 6.58
+       },
+       "p50_ms": 219.275,
+       "p95_ms": 450.052,
+       "p99_ms": 659.326
+      },
+      "D": {
+       "ops": 55,
+       "ok": 55,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 1.04,
+       "reads_per_op": 1.04,
+       "writes_per_op": 0,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "proposal": 1,
+        "run": 0.04
+       },
+       "p50_ms": 2.017,
+       "p95_ms": 8.837,
+       "p99_ms": 9.388
+      },
+      "E": {
+       "ops": 49,
+       "ok": 49,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 42.73,
+       "reads_per_op": 29.08,
+       "writes_per_op": 13.65,
+       "batches_per_op": 1.71,
+       "stmts_per_op_by_stage": {
+        "access": 1.14,
+        "hold_settle": 18,
+        "other": 0.16,
+        "plan": 7.84,
+        "policy": 4.82,
+        "proposal": 1.55,
+        "run": 5.22,
+        "usage": 4
+       },
+       "p50_ms": 49.491,
+       "p95_ms": 413.932,
+       "p99_ms": 574.453
+      }
+     },
+     "fairness": {
+      "tenants_touched": 333,
+      "ops_max": 4,
+      "ops_median": 1,
+      "p95_ms_max": 659.326,
+      "p95_ms_median": 48.78
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT OR IGNORE INTO ai_included_spend(user_id,period_kind,period_key,spend_microusd) VALUES(?,?,?,?)",
+       "kind": "write",
+       "count": 594,
+       "share": 0.0413,
+       "total_ms": 549.91,
+       "mean_ms": 0.9258,
+       "rows_changed": 576,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": [],
+       "table": "ai_included_spend",
+       "indexes": 2,
+       "triggers": 0,
+       "index_writes_upper": 1152
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 389,
+       "share": 0.027,
+       "total_ms": 400.21,
+       "mean_ms": 1.0288,
+       "rows_changed": 389,
+       "in_batch": 0,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1945
+      },
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 237,
+       "share": 0.0165,
+       "total_ms": 252.54,
+       "mean_ms": 1.0656,
+       "rows_changed": 237,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 2607
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 237,
+       "share": 0.0165,
+       "total_ms": 235.89,
+       "mean_ms": 0.9953,
+       "rows_changed": 237,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1185
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 237,
+       "share": 0.0165,
+       "total_ms": 233.45,
+       "mean_ms": 0.985,
+       "rows_changed": 237,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1185
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 215,
+       "share": 0.0149,
+       "total_ms": 185.48,
+       "mean_ms": 0.8627,
+       "rows_changed": 215,
+       "in_batch": 0,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1075
+      },
+      {
+       "fingerprint": "INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)",
+       "kind": "write",
+       "count": 158,
+       "share": 0.011,
+       "total_ms": 141.31,
+       "mean_ms": 0.8944,
+       "rows_changed": 158,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_task_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 158
+      },
+      {
+       "fingerprint": "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0055,
+       "total_ms": 87.73,
+       "mean_ms": 1.1105,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "activity_logs",
+       "indexes": 10,
+       "triggers": 0,
+       "index_writes_upper": 790
+      },
+      {
+       "fingerprint": "INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key) VALUES (?,",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0055,
+       "total_ms": 87.55,
+       "mean_ms": 1.1082,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 553
+      },
+      {
+       "fingerprint": "INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 91,
+       "share": 0.0063,
+       "total_ms": 85,
+       "mean_ms": 0.934,
+       "rows_changed": 91,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "team_agent_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 91
+      },
+      {
+       "fingerprint": "INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id) VALUES (?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0055,
+       "total_ms": 82.77,
+       "mean_ms": 1.0477,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 395
+      },
+      {
+       "fingerprint": "UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND user_id = ? ",
+       "kind": "write",
+       "count": 79,
+       "share": 0.0055,
+       "total_ms": 78.89,
+       "mean_ms": 0.9986,
+       "rows_changed": 79,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 553
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 225,
+       "ops": "BCE",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 87,
+       "ops": "CE",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 79,
+       "ops": "CE",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 225,
+       "ops": "BCE",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 79,
+       "ops": "CE",
+       "scans": [
+        "SCAN l"
+       ]
+      }
+     ]
+    }
+   ],
+   "control": [
+    {
+     "rows": 1000,
+     "plan": "SCAN ai_usage_logs",
+     "mean_ms": 0.0523,
+     "indexed_plan": "MULTI-INDEX OR; INDEX 1; SEARCH ai_usage_logs USING INTEGER PRIMARY KEY (rowid=?); INDEX 2; SEARCH ai_usage_logs USING INDEX bench_only_guard_for (guard_for=?)",
+     "indexed_mean_ms": 0.0048
+    },
+    {
+     "rows": 10000,
+     "plan": "SCAN ai_usage_logs",
+     "mean_ms": 0.4501,
+     "indexed_plan": "MULTI-INDEX OR; INDEX 1; SEARCH ai_usage_logs USING INTEGER PRIMARY KEY (rowid=?); INDEX 2; SEARCH ai_usage_logs USING INDEX bench_only_guard_for (guard_for=?)",
+     "indexed_mean_ms": 0.0048
+    },
+    {
+     "rows": 100000,
+     "plan": "SCAN ai_usage_logs",
+     "mean_ms": 5.811,
+     "indexed_plan": "MULTI-INDEX OR; INDEX 1; SEARCH ai_usage_logs USING INTEGER PRIMARY KEY (rowid=?); INDEX 2; SEARCH ai_usage_logs USING INDEX bench_only_guard_for (guard_for=?)",
+     "indexed_mean_ms": 0.005
+    }
+   ]
+  },
+  "hot_tenant": {
+   "class": "simulated",
+   "note": "Local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 capacity figure.",
+   "issue": 4567,
+   "taken_at": "2026-11-06T23:41:01.485Z",
+   "commit": "233d2f48e71093ce70ebdbd11f2083f7926ab197",
+   "node": "v22.22.0",
+   "sqlite": "3.50.4",
+   "options": {
+    "tenants": [
+     100
+    ],
+    "ops": 400,
+    "concurrency": 8,
+    "seed": 4567,
+    "hot": 0.5,
+    "agents": 2,
+    "mix": {
+     "A": 30,
+     "B": 25,
+     "C": 20,
+     "D": 15,
+     "E": 10
+    },
+    "ramp": null,
+    "seconds": 5,
+    "maxOps": 20000,
+    "maxErrorRate": 0.01,
+    "maxP95Ms": 2000,
+    "control": []
+   },
+   "scales": [
+    {
+     "tenants": 100,
+     "agents_per_tenant": 2,
+     "ops": 400,
+     "executions": 208,
+     "wall_s": 3.69,
+     "completed_ops_s": 108.48,
+     "statements": 13289,
+     "seeded_bytes": 15085568,
+     "sql_time_share": 0.723,
+     "bytes_per_1k_executions": 2638769,
+     "rows_added": {
+      "ai_usage_logs": 564,
+      "ai_budget_reservations": 191,
+      "ai_credit_ledger": 56,
+      "agent_task_runs": 83,
+      "scope_tasks": 114,
+      "ai_rail_proposals": 83,
+      "team_agent_events": 95,
+      "scope_task_events": 166
+     },
+     "by_mix": {
+      "A": {
+       "ops": 118,
+       "ok": 118,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 14.12,
+       "reads_per_op": 12.56,
+       "writes_per_op": 1.56,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 9.56,
+        "plan": 4,
+        "usage": 0.56
+       },
+       "p50_ms": 14.678,
+       "p95_ms": 30.125,
+       "p99_ms": 37.072
+      },
+      "B": {
+       "ops": 82,
+       "ok": 82,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 34.12,
+       "reads_per_op": 21.61,
+       "writes_per_op": 12.51,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 18.61,
+        "plan": 8,
+        "policy": 4,
+        "usage": 3.51
+       },
+       "p50_ms": 49.529,
+       "p95_ms": 271.794,
+       "p99_ms": 685.667
+      },
+      "C": {
+       "ops": 94,
+       "ok": 75,
+       "refusals": {
+        "agent_busy": 19
+       },
+       "errors": 0,
+       "stmts_per_op": 70.66,
+       "reads_per_op": 49.57,
+       "writes_per_op": 21.09,
+       "batches_per_op": 1.6,
+       "stmts_per_op_by_stage": {
+        "access": 5.61,
+        "hold_settle": 15.56,
+        "other": 0.8,
+        "plan": 7.18,
+        "policy": 8.18,
+        "proposal": 5.59,
+        "run": 23.41,
+        "usage": 4.33
+       },
+       "p50_ms": 195.783,
+       "p95_ms": 389.531,
+       "p99_ms": 437.557
+      },
+      "D": {
+       "ops": 60,
+       "ok": 60,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 1.55,
+       "reads_per_op": 1.55,
+       "writes_per_op": 0,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "proposal": 1,
+        "run": 0.55
+       },
+       "p50_ms": 1.527,
+       "p95_ms": 5.921,
+       "p99_ms": 13.619
+      },
+      "E": {
+       "ops": 46,
+       "ok": 46,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 45.43,
+       "reads_per_op": 31.98,
+       "writes_per_op": 13.46,
+       "batches_per_op": 1.85,
+       "stmts_per_op_by_stage": {
+        "access": 1.22,
+        "hold_settle": 19.15,
+        "other": 0.17,
+        "plan": 9.04,
+        "policy": 5.48,
+        "proposal": 1.65,
+        "run": 5.57,
+        "usage": 3.15
+       },
+       "p50_ms": 48.056,
+       "p95_ms": 315.329,
+       "p99_ms": 369.599
+      }
+     },
+     "fairness": {
+      "tenants_touched": 88,
+      "ops_max": 212,
+      "ops_median": 2,
+      "p95_ms_max": 685.667,
+      "p95_ms_median": 86.364
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 315,
+       "share": 0.0237,
+       "total_ms": 322.24,
+       "mean_ms": 1.023,
+       "rows_changed": 315,
+       "in_batch": 0,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1575
+      },
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 249,
+       "share": 0.0187,
+       "total_ms": 268.55,
+       "mean_ms": 1.0785,
+       "rows_changed": 249,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 2739
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 249,
+       "share": 0.0187,
+       "total_ms": 254.78,
+       "mean_ms": 1.0232,
+       "rows_changed": 249,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1245
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 249,
+       "share": 0.0187,
+       "total_ms": 250.96,
+       "mean_ms": 1.0079,
+       "rows_changed": 249,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1245
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 191,
+       "share": 0.0144,
+       "total_ms": 174.63,
+       "mean_ms": 0.9143,
+       "rows_changed": 191,
+       "in_batch": 0,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 955
+      },
+      {
+       "fingerprint": "INSERT OR IGNORE INTO ai_included_spend(user_id,period_kind,period_key,spend_microusd) VALUES(?,?,?,?)",
+       "kind": "write",
+       "count": 168,
+       "share": 0.0126,
+       "total_ms": 153.79,
+       "mean_ms": 0.9154,
+       "rows_changed": 158,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": [],
+       "table": "ai_included_spend",
+       "indexes": 2,
+       "triggers": 0,
+       "index_writes_upper": 316
+      },
+      {
+       "fingerprint": "INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)",
+       "kind": "write",
+       "count": 166,
+       "share": 0.0125,
+       "total_ms": 149.89,
+       "mean_ms": 0.9029,
+       "rows_changed": 166,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_task_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 166
+      },
+      {
+       "fingerprint": "INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id) VALUES (?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 83,
+       "share": 0.0062,
+       "total_ms": 93.97,
+       "mean_ms": 1.1321,
+       "rows_changed": 83,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 415
+      },
+      {
+       "fingerprint": "INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key) VALUES (?,",
+       "kind": "write",
+       "count": 83,
+       "share": 0.0062,
+       "total_ms": 91.51,
+       "mean_ms": 1.1025,
+       "rows_changed": 83,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 581
+      },
+      {
+       "fingerprint": "INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 95,
+       "share": 0.0071,
+       "total_ms": 90.04,
+       "mean_ms": 0.9477,
+       "rows_changed": 95,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "team_agent_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 95
+      },
+      {
+       "fingerprint": "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 83,
+       "share": 0.0062,
+       "total_ms": 88.93,
+       "mean_ms": 1.0714,
+       "rows_changed": 83,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "activity_logs",
+       "indexes": 10,
+       "triggers": 0,
+       "index_writes_upper": 830
+      },
+      {
+       "fingerprint": "UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND user_id = ? ",
+       "kind": "write",
+       "count": 83,
+       "share": 0.0062,
+       "total_ms": 83.89,
+       "mean_ms": 1.0107,
+       "rows_changed": 83,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 581
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 91,
+       "ops": "CE",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 208,
+       "ops": "BCE",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 83,
+       "ops": "CE",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 208,
+       "ops": "BCE",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 83,
+       "ops": "CE",
+       "scans": [
+        "SCAN l"
+       ]
+      }
+     ]
+    }
+   ],
+   "control": null
+  },
+  "ramp": {
+   "class": "simulated",
+   "note": "Local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 capacity figure.",
+   "issue": 4567,
+   "taken_at": "2026-11-06T23:41:09.536Z",
+   "commit": "233d2f48e71093ce70ebdbd11f2083f7926ab197",
+   "node": "v22.22.0",
+   "sqlite": "3.50.4",
+   "options": {
+    "tenants": [
+     100
+    ],
+    "ops": 200,
+    "concurrency": 4,
+    "seed": 4567,
+    "hot": 0,
+    "agents": 2,
+    "mix": {
+     "A": 30,
+     "B": 25,
+     "C": 20,
+     "D": 15,
+     "E": 10
+    },
+    "ramp": [
+     1,
+     5,
+     10,
+     25,
+     50,
+     100,
+     200
+    ],
+    "seconds": 5,
+    "maxOps": 20000,
+    "maxErrorRate": 0.01,
+    "maxP95Ms": 3000,
+    "control": []
+   },
+   "scales": [
+    {
+     "tenants": 100,
+     "agents_per_tenant": 2,
+     "ops": 1955,
+     "executions": 1033,
+     "wall_s": 36.91,
+     "completed_ops_s": 52.96,
+     "statements": 65969,
+     "seeded_bytes": 15085568,
+     "sql_time_share": 0.329,
+     "bytes_per_1k_executions": 3021444,
+     "rows_added": {
+      "ai_usage_logs": 2937,
+      "ai_budget_reservations": 994,
+      "ai_credit_ledger": 759,
+      "agent_task_runs": 432,
+      "scope_tasks": 502,
+      "ai_rail_proposals": 432,
+      "team_agent_events": 494,
+      "scope_task_events": 864
+     },
+     "by_mix": {
+      "A": {
+       "ops": 602,
+       "ok": 602,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 13.21,
+       "reads_per_op": 12.11,
+       "writes_per_op": 1.11,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 9.11,
+        "plan": 4,
+        "usage": 0.11
+       },
+       "p50_ms": 0.722,
+       "p95_ms": 3.053,
+       "p99_ms": 4.76
+      },
+      "B": {
+       "ops": 478,
+       "ok": 478,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 33.59,
+       "reads_per_op": 21.43,
+       "writes_per_op": 12.16,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 18.43,
+        "plan": 8,
+        "policy": 4,
+        "usage": 3.16
+       },
+       "p50_ms": 8.405,
+       "p95_ms": 884.192,
+       "p99_ms": 1855.518
+      },
+      "C": {
+       "ops": 396,
+       "ok": 390,
+       "refusals": {
+        "agent_busy": 6
+       },
+       "errors": 0,
+       "stmts_per_op": 85.28,
+       "reads_per_op": 59.55,
+       "writes_per_op": 25.73,
+       "batches_per_op": 1.97,
+       "stmts_per_op_by_stage": {
+        "access": 6.89,
+        "hold_settle": 19.08,
+        "other": 0.98,
+        "plan": 8.86,
+        "policy": 9.86,
+        "proposal": 6.89,
+        "run": 27.65,
+        "usage": 5.05
+       },
+       "p50_ms": 106.071,
+       "p95_ms": 2926.852,
+       "p99_ms": 4167.115
+      },
+      "D": {
+       "ops": 289,
+       "ok": 289,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 1.75,
+       "reads_per_op": 1.75,
+       "writes_per_op": 0,
+       "batches_per_op": 0,
+       "stmts_per_op_by_stage": {
+        "proposal": 1,
+        "run": 0.75
+       },
+       "p50_ms": 0.23,
+       "p95_ms": 0.395,
+       "p99_ms": 0.738
+      },
+      "E": {
+       "ops": 190,
+       "ok": 188,
+       "refusals": {
+        "agent_busy": 2
+       },
+       "errors": 0,
+       "stmts_per_op": 40.43,
+       "reads_per_op": 28.4,
+       "writes_per_op": 12.03,
+       "batches_per_op": 1.53,
+       "stmts_per_op_by_stage": {
+        "access": 1.55,
+        "hold_settle": 14.99,
+        "other": 0.22,
+        "plan": 7.17,
+        "policy": 4.81,
+        "proposal": 2.09,
+        "run": 7.12,
+        "usage": 2.48
+       },
+       "p50_ms": 7.366,
+       "p95_ms": 1788.757,
+       "p99_ms": 3673.569
+      }
+     },
+     "fairness": {
+      "tenants_touched": 100,
+      "ops_max": 38,
+      "ops_median": 19,
+      "p95_ms_max": 3700.347,
+      "p95_ms_median": 1272.499
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": [
+      {
+       "rate": 1,
+       "seconds": 5,
+       "started": 5,
+       "completed": 5,
+       "achieved_ops_s": 1.24,
+       "error_rate": 0,
+       "p50_ms": 16.501,
+       "p95_ms": 53.371,
+       "p99_ms": 53.371
+      },
+      {
+       "rate": 5,
+       "seconds": 5,
+       "started": 25,
+       "completed": 25,
+       "achieved_ops_s": 5.21,
+       "error_rate": 0,
+       "p50_ms": 11.94,
+       "p95_ms": 32.298,
+       "p99_ms": 34.87
+      },
+      {
+       "rate": 10,
+       "seconds": 5,
+       "started": 50,
+       "completed": 50,
+       "achieved_ops_s": 10.19,
+       "error_rate": 0,
+       "p50_ms": 10.778,
+       "p95_ms": 34.571,
+       "p99_ms": 40.161
+      },
+      {
+       "rate": 25,
+       "seconds": 5,
+       "started": 125,
+       "completed": 125,
+       "achieved_ops_s": 25.19,
+       "error_rate": 0,
+       "p50_ms": 3.693,
+       "p95_ms": 26.875,
+       "p99_ms": 28.152
+      },
+      {
+       "rate": 50,
+       "seconds": 5,
+       "started": 250,
+       "completed": 250,
+       "achieved_ops_s": 49.95,
+       "error_rate": 0,
+       "p50_ms": 6.977,
+       "p95_ms": 37.144,
+       "p99_ms": 47.761
+      },
+      {
+       "rate": 100,
+       "seconds": 5,
+       "started": 500,
+       "completed": 500,
+       "achieved_ops_s": 100.03,
+       "error_rate": 0,
+       "p50_ms": 6.703,
+       "p95_ms": 76.222,
+       "p99_ms": 121.137
+      },
+      {
+       "rate": 200,
+       "seconds": 5,
+       "started": 1000,
+       "completed": 1000,
+       "achieved_ops_s": 121.62,
+       "error_rate": 0,
+       "p50_ms": 4.954,
+       "p95_ms": 2009.471,
+       "p99_ms": 3517.993
+      }
+     ],
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 1641,
+       "share": 0.0249,
+       "total_ms": 1518.47,
+       "mean_ms": 0.9253,
+       "rows_changed": 1641,
+       "in_batch": 0,
+       "ops": "BE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 8205
+      },
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 1296,
+       "share": 0.0196,
+       "total_ms": 1264.11,
+       "mean_ms": 0.9754,
+       "rows_changed": 1296,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 14256
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 1296,
+       "share": 0.0196,
+       "total_ms": 1190.86,
+       "mean_ms": 0.9189,
+       "rows_changed": 1296,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 6480
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 1296,
+       "share": 0.0196,
+       "total_ms": 1151.01,
+       "mean_ms": 0.8881,
+       "rows_changed": 1296,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 6480
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 994,
+       "share": 0.0151,
+       "total_ms": 761.33,
+       "mean_ms": 0.7659,
+       "rows_changed": 994,
+       "in_batch": 0,
+       "ops": "BCE",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 4970
+      },
+      {
+       "fingerprint": "INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)",
+       "kind": "write",
+       "count": 864,
+       "share": 0.0131,
+       "total_ms": 685.98,
+       "mean_ms": 0.794,
+       "rows_changed": 864,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "scope_task_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 864
+      },
+      {
+       "fingerprint": "INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id) VALUES (?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 432,
+       "share": 0.0065,
+       "total_ms": 449.97,
+       "mean_ms": 1.0416,
+       "rows_changed": 432,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 2160
+      },
+      {
+       "fingerprint": "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 432,
+       "share": 0.0065,
+       "total_ms": 440.76,
+       "mean_ms": 1.0203,
+       "rows_changed": 432,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "activity_logs",
+       "indexes": 10,
+       "triggers": 0,
+       "index_writes_upper": 4320
+      },
+      {
+       "fingerprint": "INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key) VALUES (?,",
+       "kind": "write",
+       "count": 432,
+       "share": 0.0065,
+       "total_ms": 431.35,
+       "mean_ms": 0.9985,
+       "rows_changed": 432,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 3024
+      },
+      {
+       "fingerprint": "INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 494,
+       "share": 0.0075,
+       "total_ms": 409.54,
+       "mean_ms": 0.829,
+       "rows_changed": 494,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "team_agent_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 494
+      },
+      {
+       "fingerprint": "UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND user_id = ? ",
+       "kind": "write",
+       "count": 432,
+       "share": 0.0065,
+       "total_ms": 378.69,
+       "mean_ms": 0.8766,
+       "rows_changed": 432,
+       "in_batch": 0,
+       "ops": "CE",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 3024
+      },
+      {
+       "fingerprint": "SELECT * FROM users WHERE id = ?",
+       "kind": "read",
+       "count": 2668,
+       "share": 0.0404,
+       "total_ms": 362.65,
+       "mean_ms": 0.1359,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "ABCE",
+       "scans": []
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 474,
+       "ops": "CE",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 1033,
+       "ops": "BCE",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 432,
+       "ops": "CE",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 1033,
+       "ops": "BCE",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 432,
+       "ops": "CE",
+       "scans": [
+        "SCAN l"
+       ]
+      }
+     ]
+    }
+   ],
+   "control": null
+  },
+  "agent_run_only": {
+   "class": "simulated",
+   "note": "Local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 capacity figure.",
+   "issue": 4567,
+   "taken_at": "2026-11-06T23:41:51.042Z",
+   "commit": "233d2f48e71093ce70ebdbd11f2083f7926ab197",
+   "node": "v22.22.0",
+   "sqlite": "3.50.4",
+   "options": {
+    "tenants": [
+     10
+    ],
+    "ops": 200,
+    "concurrency": 1,
+    "seed": 4567,
+    "hot": 0,
+    "agents": 2,
+    "mix": {
+     "C": 1
+    },
+    "ramp": null,
+    "seconds": 5,
+    "maxOps": 20000,
+    "maxErrorRate": 0.01,
+    "maxP95Ms": 2000,
+    "control": []
+   },
+   "scales": [
+    {
+     "tenants": 10,
+     "agents_per_tenant": 2,
+     "ops": 200,
+     "executions": 200,
+     "wall_s": 5.24,
+     "completed_ops_s": 38.14,
+     "statements": 17284,
+     "seeded_bytes": 14839808,
+     "sql_time_share": 0.754,
+     "bytes_per_1k_executions": 4771840,
+     "rows_added": {
+      "ai_usage_logs": 600,
+      "ai_budget_reservations": 200,
+      "ai_credit_ledger": 132,
+      "agent_task_runs": 200,
+      "scope_tasks": 200,
+      "ai_rail_proposals": 200,
+      "team_agent_events": 200,
+      "scope_task_events": 400
+     },
+     "by_mix": {
+      "C": {
+       "ops": 200,
+       "ok": 200,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 86.42,
+       "reads_per_op": 60.32,
+       "writes_per_op": 26.1,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "access": 7,
+        "hold_settle": 19.32,
+        "other": 1,
+        "plan": 9,
+        "policy": 10,
+        "proposal": 7,
+        "run": 28,
+        "usage": 5.1
+       },
+       "p50_ms": 25.278,
+       "p95_ms": 32.077,
+       "p99_ms": 41.143
+      }
+     },
+     "fairness": {
+      "tenants_touched": 10,
+      "ops_max": 24,
+      "ops_median": 20,
+      "p95_ms_max": 51.065,
+      "p95_ms_median": 31.146
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "UPDATE scope_tasks SET status = ?, board_column = CASE WHEN board_column IS NULL THEN NULL ELSE ? END, close_reason = CASE WHEN board_column IS NOT NULL AND ? =",
+       "kind": "write",
+       "count": 600,
+       "share": 0.0347,
+       "total_ms": 604.83,
+       "mean_ms": 1.0081,
+       "rows_changed": 600,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "scope_tasks",
+       "indexes": 11,
+       "triggers": 0,
+       "index_writes_upper": 6600
+      },
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 600,
+       "share": 0.0347,
+       "total_ms": 572.87,
+       "mean_ms": 0.9548,
+       "rows_changed": 600,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 3000
+      },
+      {
+       "fingerprint": "UPDATE agent_task_runs SET step = ?, steps_json = json_insert(steps_json, '?', json(?)), status = COALESCE(?, status), refusal = CASE WHEN ? THEN ? ELSE refusal",
+       "kind": "write",
+       "count": 600,
+       "share": 0.0347,
+       "total_ms": 531.93,
+       "mean_ms": 0.8865,
+       "rows_changed": 600,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 3000
+      },
+      {
+       "fingerprint": "INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)",
+       "kind": "write",
+       "count": 400,
+       "share": 0.0231,
+       "total_ms": 327.95,
+       "mean_ms": 0.8199,
+       "rows_changed": 400,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "scope_task_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 400
+      },
+      {
+       "fingerprint": "INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id) VALUES (?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 201.14,
+       "mean_ms": 1.0057,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "agent_task_runs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 1000
+      },
+      {
+       "fingerprint": "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 199.9,
+       "mean_ms": 0.9995,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "activity_logs",
+       "indexes": 10,
+       "triggers": 0,
+       "index_writes_upper": 2000
+      },
+      {
+       "fingerprint": "INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key) VALUES (?,",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 194.65,
+       "mean_ms": 0.9733,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 1400
+      },
+      {
+       "fingerprint": "UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND user_id = ? ",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 179.64,
+       "mean_ms": 0.8982,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "ai_rail_proposals",
+       "indexes": 7,
+       "triggers": 0,
+       "index_writes_upper": 1400
+      },
+      {
+       "fingerprint": "INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, ?, ?, ?, ?)",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 169.92,
+       "mean_ms": 0.8496,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "team_agent_events",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 200
+      },
+      {
+       "fingerprint": "INSERT OR IGNORE INTO agent_memory_notes (uid, agent_id, scope_kind, company_id, project_id, kind, body, run_id) VALUES (?, ?, ?, ?, ?, '?', ?, ?)",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 168.95,
+       "mean_ms": 0.8447,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "agent_memory_notes",
+       "indexes": 3,
+       "triggers": 0,
+       "index_writes_upper": 600
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 156.39,
+       "mean_ms": 0.782,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "C",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1000
+      },
+      {
+       "fingerprint": "INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at,idempotency_key) SELECT ?,a.user_id,?,?,MIN(?,MAX(N",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0116,
+       "total_ms": 61.4,
+       "mean_ms": 0.307,
+       "rows_changed": 200,
+       "in_batch": 200,
+       "ops": "C",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1000
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT SUM(charged_microusd) AS charged, SUM(CASE WHEN charged_microusd IS NULL THEN N ELSE N END) AS unrecorded FROM ai_usage_logs WHERE id = ? OR guard_for = ",
+       "count": 200,
+       "ops": "C",
+       "scans": [
+        "SCAN ai_usage_logs"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.agent_id, s.category_slug AS area, COUNT(*) AS n FROM agent_skill_links l JOIN agent_skill_tags t ON t.skill_id = l.skill_id JOIN skills s ON s.slug = ",
+       "count": 200,
+       "ops": "C",
+       "scans": [
+        "SCAN l USING COVERING INDEX sqlite_autoindex_agent_skill_links_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT l.model, l.reason, l.locked_at, l.locked_by, u.name AS locked_by_name FROM ai_model_locks l LEFT JOIN users u ON u.id = l.locked_by ORDER BY l.locked_at,",
+       "count": 200,
+       "ops": "C",
+       "scans": [
+        "SCAN l"
+       ]
+      },
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 200,
+       "ops": "C",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 200,
+       "ops": "C",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      }
+     ]
+    }
+   ],
+   "control": null
+  },
+  "ai_call_only": {
+   "class": "simulated",
+   "note": "Local node:sqlite over the actual migrations, synthetic fixtures, stubbed inference. Latencies are relative, never a D1 capacity figure.",
+   "issue": 4567,
+   "taken_at": "2026-11-06T23:42:00.541Z",
+   "commit": "233d2f48e71093ce70ebdbd11f2083f7926ab197",
+   "node": "v22.22.0",
+   "sqlite": "3.50.4",
+   "options": {
+    "tenants": [
+     10
+    ],
+    "ops": 200,
+    "concurrency": 1,
+    "seed": 4567,
+    "hot": 0,
+    "agents": 2,
+    "mix": {
+     "B": 1
+    },
+    "ramp": null,
+    "seconds": 5,
+    "maxOps": 20000,
+    "maxErrorRate": 0.01,
+    "maxP95Ms": 2000,
+    "control": []
+   },
+   "scales": [
+    {
+     "tenants": 10,
+     "agents_per_tenant": 2,
+     "ops": 200,
+     "executions": 200,
+     "wall_s": 1.75,
+     "completed_ops_s": 114.52,
+     "statements": 6684,
+     "seeded_bytes": 14839808,
+     "sql_time_share": 0.638,
+     "bytes_per_1k_executions": 1720320,
+     "rows_added": {
+      "ai_usage_logs": 600,
+      "ai_budget_reservations": 200,
+      "ai_credit_ledger": 132,
+      "agent_task_runs": 0,
+      "scope_tasks": 0,
+      "ai_rail_proposals": 0,
+      "team_agent_events": 0,
+      "scope_task_events": 0
+     },
+     "by_mix": {
+      "B": {
+       "ops": 200,
+       "ok": 200,
+       "refusals": {},
+       "errors": 0,
+       "stmts_per_op": 33.42,
+       "reads_per_op": 21.32,
+       "writes_per_op": 12.1,
+       "batches_per_op": 2,
+       "stmts_per_op_by_stage": {
+        "hold_settle": 18.32,
+        "plan": 8,
+        "policy": 4,
+        "usage": 3.1
+       },
+       "p50_ms": 8.286,
+       "p95_ms": 11.001,
+       "p99_ms": 16.718
+      }
+     },
+     "fairness": {
+      "tenants_touched": 10,
+      "ops_max": 24,
+      "ops_median": 20,
+      "p95_ms_max": 16.718,
+      "p95_ms_median": 10.267
+     },
+     "invariants": {
+      "double_settlement": 0,
+      "missing_charge": 0,
+      "orphaned_holds": 0,
+      "negative_balance": 0,
+      "second_live_run": 0,
+      "orphaned_runs": 0,
+      "duplicate_proposal": 0,
+      "duplicate_hold": 0,
+      "cross_tenant_read": 0,
+      "unknown_as_zero": 0
+     },
+     "ramp": null,
+     "stopped": null,
+     "hot_fingerprints": [
+      {
+       "fingerprint": "INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, charg",
+       "kind": "write",
+       "count": 600,
+       "share": 0.0898,
+       "total_ms": 586.81,
+       "mean_ms": 0.978,
+       "rows_changed": 600,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_usage_logs",
+       "indexes": 5,
+       "triggers": 0,
+       "index_writes_upper": 3000
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 167.33,
+       "mean_ms": 0.8367,
+       "rows_changed": 200,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1000
+      },
+      {
+       "fingerprint": "INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at) SELECT ?,a.user_id,?,?,MIN(?,MAX(N,MIN(?-d.spend_m",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 63.24,
+       "mean_ms": 0.3162,
+       "rows_changed": 200,
+       "in_batch": 200,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1000
+      },
+      {
+       "fingerprint": "SELECT * FROM users WHERE id = ?",
+       "kind": "read",
+       "count": 400,
+       "share": 0.0598,
+       "total_ms": 49.82,
+       "mean_ms": 0.1246,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": []
+      },
+      {
+       "fingerprint": "UPDATE ai_budget_reservations SET status=?, settlement_uid=?, actual_included_microusd=?, actual_topup_microusd=?, updated_at=datetime('?') WHERE uid=? AND user",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 47.46,
+       "mean_ms": 0.2373,
+       "rows_changed": 200,
+       "in_batch": 200,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_budget_reservations",
+       "indexes": 5,
+       "triggers": 2,
+       "index_writes_upper": 1000
+      },
+      {
+       "fingerprint": "SELECT a.balance_microusd,d.spend_microusd AS daily,m.spend_microusd AS monthly, (SELECT COALESCE(SUM(included_microusd),N) FROM ai_budget_reservations WHERE us",
+       "kind": "read",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 28.25,
+       "mean_ms": 0.1412,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": []
+      },
+      {
+       "fingerprint": "INSERT OR IGNORE INTO ai_included_spend(user_id,period_kind,period_key,spend_microusd) VALUES(?,?,?,?)",
+       "kind": "write",
+       "count": 20,
+       "share": 0.003,
+       "total_ms": 17.76,
+       "mean_ms": 0.8882,
+       "rows_changed": 20,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_included_spend",
+       "indexes": 2,
+       "triggers": 0,
+       "index_writes_upper": 40
+      },
+      {
+       "fingerprint": "SELECT * FROM ai_budget_reservations WHERE uid = ? AND user_id = ?",
+       "kind": "read",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 17.19,
+       "mean_ms": 0.0859,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": []
+      },
+      {
+       "fingerprint": "UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('?') WHERE user_id=? AND period_kind='?' AND period_key=? AND EXISTS(SELECT N F",
+       "kind": "write",
+       "count": 400,
+       "share": 0.0598,
+       "total_ms": 15.48,
+       "mean_ms": 0.0387,
+       "rows_changed": 400,
+       "in_batch": 400,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_included_spend",
+       "indexes": 2,
+       "triggers": 0,
+       "index_writes_upper": 800
+      },
+      {
+       "fingerprint": "SELECT plan_family, amount_cents, currency, interval, interval_count, status FROM member_subscription_amounts WHERE user_id = ? ORDER BY id",
+       "kind": "read",
+       "count": 400,
+       "share": 0.0598,
+       "total_ms": 13.59,
+       "mean_ms": 0.034,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": []
+      },
+      {
+       "fingerprint": "UPDATE ai_included_spend SET spend_microusd=spend_microusd+(SELECT included_microusd FROM ai_budget_reservations WHERE uid=?),updated_at=datetime('?') WHERE use",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 13.3,
+       "mean_ms": 0.0665,
+       "rows_changed": 400,
+       "in_batch": 200,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_included_spend",
+       "indexes": 2,
+       "triggers": 0,
+       "index_writes_upper": 800
+      },
+      {
+       "fingerprint": "INSERT OR IGNORE INTO ai_topup_accounts(user_id) VALUES(?)",
+       "kind": "write",
+       "count": 200,
+       "share": 0.0299,
+       "total_ms": 9.24,
+       "mean_ms": 0.0462,
+       "rows_changed": 0,
+       "in_batch": 0,
+       "ops": "B",
+       "scans": [],
+       "table": "ai_topup_accounts",
+       "indexes": 1,
+       "triggers": 0,
+       "index_writes_upper": 0
+      }
+     ],
+     "scans": [
+      {
+       "fingerprint": "SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id",
+       "count": 200,
+       "ops": "B",
+       "scans": [
+        "SCAN ai_model_policy USING INDEX sqlite_autoindex_ai_model_policy_1"
+       ]
+      },
+      {
+       "fingerprint": "SELECT key, scope, scope_id, enabled FROM feature_flags",
+       "count": 200,
+       "ops": "B",
+       "scans": [
+        "SCAN feature_flags"
+       ]
+      }
+     ]
+    }
+   ],
+   "control": null
+  }
+ }
+}

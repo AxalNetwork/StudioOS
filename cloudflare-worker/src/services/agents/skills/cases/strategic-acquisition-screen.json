@@ -1,0 +1,71 @@
+{
+  "skill": "strategic-acquisition-screen",
+  "version": 1,
+  "note": "Synthetic cents-based acquisition. USD 8 million enterprise value less USD 2 million included debt plus USD 1 million unrestricted cash gives USD 7 million before an unknown working-capital adjustment. USD 0.5 million restricted escrow is explicitly excluded; synergy savings and integration budget are not recorded.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "project_id": "proj-riverstone",
+        "name": "Riverstone Controls",
+        "snapshot_date": "2026-06-30",
+        "source_id": "riverstone-strategy-0630",
+        "strategic_objective": "Add maintenance scheduling software for water utility customers",
+        "integration_budget_cents": null
+      },
+      "raise.records": {
+        "opportunity": {
+          "id": "acq-harbor-0630",
+          "target": "Harbor Automation",
+          "as_of": "2026-06-30",
+          "status": "indicative, unsigned",
+          "currency": "USD",
+          "monetary_unit": "integer cents",
+          "enterprise_value_cents": 800000000,
+          "debt_cents": 200000000,
+          "unrestricted_cash_cents": 100000000,
+          "restricted_cash_cents": 50000000,
+          "cash_definition": "Only unrestricted cash is included in the equity bridge; restricted customer escrow cash is excluded.",
+          "debt_definition": "All supplied debt is included in the enterprise-to-equity bridge.",
+          "working_capital_adjustment_cents": null
+        },
+        "target_evidence": [
+          {
+            "id": "harbor-commercial-0630",
+            "as_of": "2026-06-30",
+            "product": "Maintenance scheduling software used by water utilities",
+            "largest_customer_percent_of_trailing_12_month_revenue": 40,
+            "revenue_period": "2025-07-01 to 2026-06-30"
+          },
+          {
+            "id": "harbor-synergy-note-0628",
+            "as_of": "2026-06-28",
+            "author": "Corporate development team",
+            "view": "A shared support team may reduce duplicated service effort.",
+            "quantified_synergy_cents": null
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "acq-harbor-0630",
+      "USD 7,000,000",
+      "restricted",
+      "40%",
+      "conditional",
+      "Propose"
+    ],
+    "must_say_not_recorded": [
+      "working capital adjustment",
+      "integration budget"
+    ],
+    "must_not_include": [
+      "The equity value is USD 7,500,000",
+      "The final purchase price is USD 7,000,000",
+      "The acquisition is approved",
+      "Synergies are guaranteed"
+    ]
+  }
+}

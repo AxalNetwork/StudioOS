@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eadwyn on a Diligence Case · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Due diligence · Due Diligence Desk addendum DDL20 to DDL29 · #6294 (under #5130)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Eadwyn on a diligence case — summary, request drafts, memo drafts, a reviewer’s section and the founder’s answers, proposed and cited, never decided</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An addendum to the Due Diligence Desk canvas (DDL1 to DDL19), not a redesign: it keeps the case header, the nine tabs, the DDL3 Overview, the DDL6 and DDL6b requests, the DDL10 memo, the DDL12b reviewer view and the DDL15 founder page, in the Deals v2 investor shell (#3704) with the one Eadwyn rail (#5130). Eadwyn reads only this case (Admin, lead or opener), only the reviewer’s own section, or only the founder’s own data room. It proposes notes and drafts that the member keeps, edits or discards, and every line names its source. It never sends a request, saves the memo, records a verdict, raises or resolves a flag, or decides the case; the member does each with the existing button. States follow Platform States (D5129): Not recorded, None, Unavailable and Refused each have their own word and shape. Violet dashed ◇ tags mark the five dd:* rail runs and the rail for non-admin members, which are not built; amber ⚑ tags mark the owner’s three questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Company Alpha], [Harbor Seed Fund], Ada Example, Ben Sample, Dev Testcase, Eva Demo, Chloé Placeholder, Ines Sample, [Founder B], [OpenCorporates] as a named cross-check and every figure (41 of 52 items, 11 pending, 5 of 8 sections, 3 flags, 7 requests) are fictional samples</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Eadwyn on a Diligence Case Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DDL20', 'Overview with Eadwyn’s case summary · lead', 'The DDL3 Overview with the rail docked right, contextual tasks first. “Summarise this case” proposes a note in three parts: Worked (5 of 8 sections, with verdicts), Open (11 items pending today, 2 past due) and Blocks Proceed (2 blocking sections not completed, 1 open High flag). Every line names its source; “Reads this case only”, the time it was made and Refresh. Open the blocking item is the one primary action; Keep as note or Discard. ◇ dd:summary.', [F('EDC20', false, 1180)]],
+      ['DDL21', 'Draft requests to the subject · Requests tab', '“Draft requests from pending and flagged items”, for an Admin, the lead or the opener only. Three draft cards in founder-safe words, each with section, suggested due date and its source item or flag, and Edit, Send, Discard. “Nothing is sent until you send it.” Edit opens DDL6b prefilled; Send request returns to Requests with the new row. ◇ dd:request_drafts.', [F('EDC21', false, 1180), C('EDC21B', 'Edit → DDL6b prefilled → back to Requests', 1240, 545)]],
+      ['DDL22', 'Draft the memo · Sign-off tab', 'The DDL10 memo with Eadwyn’s draft beside each of the four parts, each citing the sections, flags and answers it used, with a character count against 8,000. Accept, Edit, Discard per part; the memo saves only through Save memo. The opener who is not the lead reads the drafts read-only. ◇ dd:memo_draft.', [F('EDC22', false, 1720), C('EDC22B', 'Opener, not lead · read-only', 1140, 850)]],
+      ['DDL23', 'Reviewer’s version · investor', 'The DDL12b view for Ben Sample on Financial Health & Runway, the rail limited to that section: “Summarise my section” and, after the NDA, “Draft my verdict note” (⚑ Q3 A), which suggests no verdict. The observer gets the summary only, with “Observers read this section and do not record its verdict.” No other section, memo, decision or risk score. ◇ dd:section_summary.', [F('EDC23', 'Reviewer', 1080), F('EDC23B', 'Observer', 1000)]],
+      ['DDL24', 'Founder · help me answer from my data room', 'The DDL15 request card with Help me answer. Eadwyn searches only the founder’s data room and proposes a note and 2 files, each with its matched passage. Keep, Remove, edit, then the founder’s own Send answer, which attaches each kept file in turn and saves the note. ◇ dd:answer_from_room.', [F('EDC24', false, 1080)]],
+      ['DDL25', 'Empty · a case with nothing recorded', 'A new case: 0 of 52 items, no flags, no requests, risk Not recorded (never Green). “Nothing to summarise yet”; request and memo tasks hidden. Assign reviewers is the one action. The founder’s page with an unindexed room, search switched off, and no venture data room.', [F('EDC25', false, 900), C('EDC25B', 'Founder page · nothing to search', 1340, 305)]],
+      ['DDL26', 'States and refusals', 'Loading with tabs at once; Not recorded in a draft; the case read failed; a failed run keeps the last summary dated (Stale); Eadwyn unavailable (“Nothing was charged.”) and AI paused; a draft withdrawn as stale; saving and save failed with edits kept. Ten refusals, one sentence each, with the runRefusalView code.', [C('EDC26', 'States', 1440, 790), C('EDC26B', 'Refused', 1440, 370)]],
+      ['DDL27', 'Phone 390', 'Case summary on top with the tabs as a scroller and an Eadwyn button; request drafts as cards with 44px Edit, Send, Discard and a full-height Edit sheet; the founder’s answer sheet with Send answer pinned.', [P('EDC27A', 'Case summary'), P('EDC27B', 'Request drafts'), P('EDC27B2', 'Edit sheet'), P('EDC27C', 'Founder answer')]],
+      ['DDL28', 'Dark', 'DDL20 on the dark tokens; states and severity keep their words and shapes, violet becomes #a78bfa.', [F('EDC28', false, 1180)]],
+      ['DDL29', 'Handoff', 'What was checked on main, the five ◇ dd:* runs and the rail for non-admin members, the owner’s picks, handoffs, frontend-only work, what is preserved, open questions and accessibility.', [W('EDC29')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

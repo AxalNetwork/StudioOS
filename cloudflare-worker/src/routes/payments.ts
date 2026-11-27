@@ -1,0 +1,666 @@
+import { Hono, type Context } from 'hono';
+import type { Env } from '../types';
+import { requireAuth } from '../auth';
+import { stripeCall } from './billing';
+import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
+import { findCatalogPriceById, findCatalogProductByPriceId } from '../services/catalog';
+import { isTokenPackPrice } from '../services/aiCredits';
+import { ensureFeatureUnlockSchema, listActiveUnlocks } from '../services/featureUnlocks';
+import {
+  fulfilFreeUnlock,
+  computeDiscount,
+  normalizeCode,
+  reserveMemberUse,
+  releaseMemberUse,
+  STRIPE_MIN_CHARGE_CENTS,
+  type PromoRow,
+} from '../services/promos';
+import {
+  canRedeemPromo, commitPromoReservation, promoRefusalBody, releasePromoReservation, reservePromo, type Allowed,
+} from '../services/promoRedemption';
+import { captureAndResolveAttribution, readRefCookie } from '../services/referralAttribution';
+import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
+import { refuse } from '../util/refusal';
+import { moneyKindForCatalogPrice, type StripeMoneyKind } from '../services/moneyRails';
+import {
+  adoptInvestorCustomer, ensureInvestorCustomer, heldPlanInStripe, heldPlanSubscription, planMetaForProduct, planMetaParams,
+  storedInvestorCustomer,
+} from '../services/planSubscription';
+
+// PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
+//
+//   POST   /api/payments/intent        { price_id , quantity? , nonce? , promo_code? }
+//                                       → { client_secret, kind, ... }
+//                                       A charge needs a priced product (D707): a
+//                                       body with no price_id is refused.
+//   POST   /api/payments/setup-intent  → { client_secret, customer }
+//   GET    /api/payments/methods       → { methods: [...] }
+//   DELETE /api/payments/methods/:id   → { detached: true }
+//
+// All four endpoints are server-side and reuse the `stripeCall` wrapper so the
+// Stripe secret key never reaches the client. Card capture happens via Stripe
+// Elements / PaymentIntents in the SPA (PCI scope stays SAQ A); the worker only
+// ever hands back a `client_secret`.
+
+const payments = new Hono<{ Bindings: Env }>();
+
+/**
+ * Resolve (creating if necessary) the Stripe customer for the authenticated
+ * user, persisting the id onto `users.stripe_customer_id`. PaymentIntents,
+ * SetupIntents and saved-card listing all require a customer so the card can be
+ * attached and reused across the user's purchases.
+ */
+export async function ensurePaymentsCustomer(env: Env, user: TierUser): Promise<string> {
+  if (user.stripe_customer_id) return user.stripe_customer_id;
+  const customer = await stripeCall<{ id: string }>(env, '/customers', {
+    email: user.email,
+    name: user.name || user.email,
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': user.uid,
+  });
+  await env.DB.prepare('UPDATE users SET stripe_customer_id = ? WHERE id = ?')
+    .bind(customer.id, user.id)
+    .run();
+  return customer.id;
+}
+
+/** Sanitise the caller-supplied nonce so it can't break the idempotency key. */
+function safeNonce(raw: unknown): string {
+  if (typeof raw === 'string' && raw.length > 0) {
+    return raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || crypto.randomUUID();
+  }
+  return crypto.randomUUID();
+}
+
+interface IntentBody {
+  price_id?: string;
+  quantity?: number;
+  nonce?: string;
+  description?: string;
+  promo_code?: string;
+}
+
+/**
+ * Idempotency-key fragment for a promo code. Applying/removing a promo MUST
+ * change the key so Stripe doesn't replay the pre-discount intent for 24h.
+ */
+function promoIdemPart(code?: string): string {
+  if (!code) return 'none';
+  return normalizeCode(code).replace(/[^A-Z0-9_-]/g, '').slice(0, 64) || 'none';
+}
+
+/**
+ * D1274: what the webhook records with a one-time redemption — the product,
+ * the price before the code and what it took off. Stamped at creation, because
+ * the PaymentIntent's own amount is already the discounted one.
+ */
+function redeemRequest(productId: string, amountCents: number, currency: string, userId: number, interval: string | null, code: string) {
+  return { code, productId, amountCents, currency, buyer: { userId, interval } };
+}
+
+function promoDetailMeta(productId: string, amountBefore: number, discount: number): Record<string, string> {
+  return { product_id: productId, promo_amount_before: String(amountBefore), promo_discount: String(discount) };
+}
+
+payments.post('/intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as IntentBody;
+  // D707: a charge needs a priced product, whose catalog entry says what kind
+  // of money it is. Refused before `ensurePaymentsCustomer` can create a Stripe
+  // customer, so a refused body never reaches Stripe.
+  if (!body.price_id) {
+    return refuse(c, 400, { code: 'money_kind_required', message: 'A charge needs a priced product. Choose one from the catalog.', audience: 'member' });
+  }
+  // D755 §9: a token pack is bought only through the order intent, which credits it.
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
+  // D892 §6: a whole number of at least one. A fraction is refused, not floored.
+  const quantity = body.quantity == null ? 1 : Number(body.quantity);
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    return refuse(c, 400, { code: 'invalid_quantity', message: 'The quantity must be a whole number of at least one.', audience: 'member' });
+  }
+  const nonce = safeNonce(body.nonce);
+  const customer = await ensurePaymentsCustomer(c.env, user);
+
+  // ---- Price-driven path: resolve the SKU from the mirrored catalog. -------
+  if (body.price_id) {
+    const price = await findCatalogPriceById(c.env, body.price_id);
+    if (!price || !price.active) return c.json({ error: 'invalid_price' }, 400);
+    // D707: the product says the money kind; with no product there is no kind, never a guessed one.
+    const found = await findCatalogProductByPriceId(c.env, price.id);
+    if (!found) return c.json({ error: 'invalid_price' }, 400);
+    const moneyKind = moneyKindForCatalogPrice(found.product, price);
+
+    // Optional promo code — validated server-side against the product
+    // allow-list (NEVER trust a client-supplied amount). On failure we return
+    // the rejection reason so the SPA can render a precise message.
+    const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+    const idempotencyKey = `pi:${user.id}:${price.id}:${promoIdemPart(promoCode)}:${nonce}`;
+    let promo: PromoRow | undefined;
+    let checked: Allowed | undefined;
+    if (promoCode) {
+      // D1273: the member and, for a subscription, its interval.
+      // D4855: one rule for every checkout. This asks it; the reservation that
+      // takes the discount out of the licence's ceiling is made below, once
+      // nothing else can refuse the checkout.
+      const v = await canRedeemPromo(c.env, { ...redeemRequest(found.product.id, price.unit_amount ?? 0, price.currency, user.id, price.type === 'recurring' ? price.interval : null, promoCode), reference: idempotencyKey });
+      if (!v.ok) return c.json(promoRefusalBody(v), 400);
+      promo = v.promo;
+      checked = v;
+    }
+
+    // Recurring price → create an incomplete Subscription and hand back the
+    // first invoice's PaymentIntent client_secret. The SPA confirms the card
+    // against that secret; the webhook flips the subscription active.
+    if (price.type === 'recurring') {
+      // D892 (#2453): a plan product's subscription carries the plan, as the
+      // Billing checkouts stamp it, so the webhook grants what was paid for.
+      const plan = planMetaForProduct(found.product, price);
+      let subCustomer = customer;
+      if (plan) {
+        // The investor customer is read here, never made: one is made only once
+        // nothing is held, below, so a refused intent leaves the member's
+        // customers as they were (D892 §6).
+        const investorCustomer = plan.kind === 'investor' ? await storedInvestorCustomer(c.env, user.id) : null;
+        // One subscription per plan family: what D1 holds, then what Stripe
+        // holds that D1 never saw (a subscription made before D892), on the
+        // general customer and on the investor customer when there is one.
+        let existing = await heldPlanSubscription(c.env, user.id, plan);
+        if (!existing) {
+          let inStripe: Awaited<ReturnType<typeof heldPlanInStripe>>;
+          try {
+            inStripe = await heldPlanInStripe(c.env, { general: customer, investor: investorCustomer }, plan);
+          } catch (e) {
+            return refuse(c, 503, { code: 'plan_check_unavailable', message: 'Your current plan could not be checked, so nothing was charged. Try again in a moment.', raw: e, audience: 'member' });
+          }
+          existing = inStripe?.subscription ?? null;
+          // An investor plan made before D892 sits on the general customer. A
+          // member with no investor customer adopts it now, so the plan's next
+          // event grants it and the swap route the refusal points to finds it.
+          if (inStripe && plan.kind === 'investor' && !investorCustomer && inStripe.customer === customer) {
+            await adoptInvestorCustomer(c.env, user.id, customer);
+          }
+        }
+        if (existing) {
+          // A founder or investor plan changes through the swap route, which
+          // prorates. That route takes no other family's price.
+          const swappable = plan.kind === 'tier' || plan.kind === 'investor';
+          return refuse(c, 409, {
+            code: 'subscription_exists',
+            message: swappable
+              ? 'You already pay for a plan of this kind. Change it from Billing, which charges or credits only the difference.'
+              : 'You already pay for a plan of this kind. Cancel it in Billing first; the new plan can start when it ends.',
+            audience: 'member',
+            extra: { subscription_id: existing, ...(swappable ? { swap: '/api/billing/subscription/swap/preview' } : {}) },
+          });
+        }
+        // The investor webhook matches on the investor customer, as the investor
+        // checkout does. It is the member's own investor customer, never the
+        // general one: made now when they have none.
+        if (plan.kind === 'investor') subCustomer = investorCustomer ?? await ensureInvestorCustomer(c.env, user);
+      }
+      const subParams: Record<string, string> = {
+        customer: subCustomer,
+        'items[0][price]': price.id,
+        // A plan is one seat of one plan, as the Billing checkouts sell it.
+        'items[0][quantity]': plan ? '1' : String(quantity),
+        payment_behavior: 'default_incomplete',
+        'payment_settings[save_default_payment_method]': 'on_subscription',
+        'expand[0]': 'latest_invoice.payment_intent',
+        'metadata[user_id]': String(user.id),
+        'metadata[uid]': user.uid,
+        'metadata[price_id]': price.id,
+        ...(plan ? planMetaParams(plan) : {}),
+        // Task #12 — Stripe Tax on the subscription (flag-gated; no-op when
+        // STRIPE_TAX_ENABLED is unset). Valid on Subscriptions; the customer
+        // must carry a tax-determinable address once the flag is on.
+        ...automaticTaxParams(stripeTaxEnabled(c.env)),
+      };
+      // Subscriptions redeem the promotion code NATIVELY — Stripe applies the
+      // coupon per its `duration` and enforces applies_to[products] itself.
+      if (promo) {
+        subParams['discounts[0][promotion_code]'] = promo.id;
+        subParams['metadata[promo_code_id]'] = promo.id;
+      }
+      // D1273: a once-per-member code is the member's from the moment Stripe applies it,
+      // so the use is reserved first; two checkouts at once cannot both take it.
+      const reserved = !!promo && promo.once_per_member === 1;
+      if (reserved && !(await reserveMemberUse(c.env, promo!.id, user.id))) {
+        return c.json({ error: 'promo_invalid', reason: 'already_used' }, 400);
+      }
+      // D4855: the first invoice's discount leaves the licence's ceiling here, in
+      // one conditional write, and goes back if Stripe makes no subscription.
+      const taken = promo && checked ? await reservePromo(c.env, { ...redeemRequest(found.product.id, price.unit_amount ?? 0, price.currency, user.id, price.interval, promoCode), reference: idempotencyKey }, Date.now(), checked) : null;
+      if (taken && !taken.ok) {
+        if (reserved) await releaseMemberUse(c.env, promo!.id, user.id);
+        return c.json(promoRefusalBody(taken), 400);
+      }
+      const reservationRef = taken?.reservation?.ref ?? null;
+      if (reservationRef) subParams['metadata[promo_reservation_ref]'] = reservationRef;
+      try {
+        const sub = await stripeCall<{
+          id: string;
+          status: string;
+          latest_invoice?: { id?: string; payment_intent?: { client_secret?: string; id?: string } };
+        }>(c.env, '/subscriptions', subParams, { idempotencyKey, moneyKind });
+        const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
+        if (!clientSecret) {
+          // A 100%-off (or otherwise zero-due) first invoice has NO
+          // PaymentIntent — the subscription is already active/trialing. Treat
+          // it as a successful free activation rather than an error.
+          if (sub.status === 'active' || sub.status === 'trialing') {
+            await commitPromoReservation(c.env, reservationRef);
+            return c.json({
+              kind: 'subscription',
+              free: true,
+              subscription_id: sub.id,
+              status: sub.status,
+              customer,
+              price_id: price.id,
+            });
+          }
+          return c.json({ error: 'no_client_secret' }, 502);
+        }
+        return c.json({
+          kind: 'subscription',
+          client_secret: clientSecret,
+          subscription_id: sub.id,
+          status: sub.status,
+          customer,
+          price_id: price.id,
+        });
+      } catch (e) {
+        // Stripe made no subscription, so the member did not use the code.
+        if (reserved) await releaseMemberUse(c.env, promo!.id, user.id);
+        await releasePromoReservation(c.env, reservationRef);
+        return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+      }
+    }
+
+    // One-time price → PaymentIntent for unit_amount * quantity.
+    if (price.unit_amount == null) return c.json({ error: 'price_has_no_amount' }, 400);
+    let amount = price.unit_amount * quantity;
+    const metadata: Record<string, string> = { price_id: price.id };
+    let reservationRef: string | null = null;
+    if (promo) {
+      // One-time PaymentIntents can't carry a coupon — recompute the discount
+      // from the catalog amount and stamp the promo id so the webhook records
+      // the redemption. This generic one-time path has NO fulfilment hook, so a
+      // free (sub-minimum) result has nothing to grant → reject explicitly.
+      const { discountedAmount, discountCents } = computeDiscount(promo, amount);
+      if (discountedAmount < STRIPE_MIN_CHARGE_CENTS) {
+        return c.json({ error: 'promo_amount_below_minimum', reason: 'amount_below_minimum' }, 400);
+      }
+      // D4855: the discount on the amount actually charged (quantity included)
+      // leaves the licence's ceiling in one conditional write.
+      const taken = await reservePromo(c.env, { ...redeemRequest(found.product.id, amount, price.currency, user.id, null, promoCode), reference: idempotencyKey });
+      if (!taken.ok) return c.json(promoRefusalBody(taken), 400);
+      reservationRef = taken.reservation?.ref ?? null;
+      if (reservationRef) metadata.promo_reservation_ref = reservationRef;
+      Object.assign(metadata, promoDetailMeta(found.product.id, amount, discountCents));
+      amount = discountedAmount;
+      metadata.promo_code_id = promo.id;
+    }
+    const made = await createPaymentIntent(c, {
+      customer,
+      amount,
+      currency: price.currency,
+      idempotencyKey,
+      user,
+      metadata,
+      description: body.description,
+      moneyKind,
+    });
+    // No PaymentIntent was made, so nothing was spent against the ceiling.
+    if (made.status >= 400) await releasePromoReservation(c.env, reservationRef);
+    return made;
+  }
+});
+
+/** Shared one-time PaymentIntent creation. */
+async function createPaymentIntent(
+  c: Context<{ Bindings: Env }>,
+  args: {
+    customer: string;
+    amount: number;
+    currency: string;
+    idempotencyKey: string;
+    user: TierUser;
+    metadata: Record<string, string>;
+    description?: string;
+    /** D707: the money kind Stripe stamps; every caller names one. */
+    moneyKind: StripeMoneyKind;
+  },
+) {
+  const params: Record<string, string> = {
+    customer: args.customer,
+    amount: String(args.amount),
+    currency: args.currency,
+    'automatic_payment_methods[enabled]': 'true',
+    setup_future_usage: 'off_session',
+    'metadata[user_id]': String(args.user.id),
+    'metadata[uid]': args.user.uid,
+  };
+  for (const [k, v] of Object.entries(args.metadata)) params[`metadata[${k}]`] = v;
+
+  // Task #8 — universal referral attribution. Resolve the buyer's first-touch
+  // referral (from the `axal_ref` cookie / prior touch) and stamp it onto the
+  // PaymentIntent so the webhook can pay a commission on ANY sold SKU. This is
+  // best-effort: a missing/expired/self attribution simply leaves the PI
+  // unattributed and never blocks the charge.
+  const attribution = await captureAndResolveAttribution(
+    c.env,
+    args.user.id,
+    readRefCookie(c.req.header('Cookie')),
+  );
+  if (attribution) {
+    params['metadata[referral_code]'] = attribution.referralCode;
+    params['metadata[referrer_user_id]'] = String(attribution.referrerUserId);
+  }
+  if (args.description) params.description = args.description.slice(0, 500);
+  try {
+    const intent = await stripeCall<{ id: string; client_secret: string; status: string }>(
+      c.env,
+      '/payment_intents',
+      params,
+      { idempotencyKey: args.idempotencyKey, moneyKind: args.moneyKind },
+    );
+    return c.json({
+      kind: 'payment',
+      client_secret: intent.client_secret,
+      payment_intent_id: intent.id,
+      status: intent.status,
+      customer: args.customer,
+      amount: args.amount,
+      currency: args.currency,
+    });
+  } catch (e) {
+    return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+}
+
+// POST /api/payments/promo/validate { code, price_id } → preview only.
+// Auth'd + rate-limited (see middleware/rateLimit.ts `promo_validate` bucket)
+// so the code space can't be enumerated. Returns 200 with { valid:false,
+// reason } on rejection so the SPA can render a friendly message; never applies
+// or reserves anything.
+payments.post('/promo/validate', async (c) => {
+  const user = await requireAuth(c);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = (await c.req.json().catch(() => ({}))) as { code?: string; price_id?: string };
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  if (!code) return c.json({ valid: false, reason: 'not_found' });
+  if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
+  const found = await findCatalogProductByPriceId(c.env, body.price_id);
+  if (!found || !found.price.active || !found.product.active) {
+    return c.json({ error: 'invalid_price' }, 400);
+  }
+  const amount = found.price.unit_amount ?? 0;
+  // D4855: the preview asks the same rule checkout does, ceiling included.
+  const v = await canRedeemPromo(c.env, redeemRequest(found.product.id, amount, found.price.currency, user.id,
+    found.price.type === 'recurring' ? found.price.interval : null, code));
+  if (!v.ok) return c.json({ valid: false, reason: v.reason, message: v.message, ...(v.remaining_cents !== undefined ? { remaining_cents: v.remaining_cents, currency: v.currency } : {}) });
+  return c.json({
+    valid: true,
+    code: v.promo.code,
+    percent_off: v.promo.percent_off,
+    amount_off: v.promo.amount_off,
+    currency: v.promo.currency,
+    original_amount: amount,
+    discount_cents: v.discountCents,
+    discounted_amount: v.discountedAmount,
+    free: v.free,
+  });
+});
+
+payments.post('/setup-intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const customer = await ensurePaymentsCustomer(c.env, user);
+  const body = (await c.req.json().catch(() => ({}))) as { nonce?: string };
+  const nonce = safeNonce(body.nonce);
+  try {
+    const intent = await stripeCall<{ id: string; client_secret: string; status: string }>(
+      c.env,
+      '/setup_intents',
+      {
+        customer,
+        usage: 'off_session',
+        'payment_method_types[0]': 'card',
+        'metadata[user_id]': String(user.id),
+        'metadata[uid]': user.uid,
+      },
+      { idempotencyKey: `si:${user.id}:${nonce}` },
+    );
+    return c.json({
+      client_secret: intent.client_secret,
+      setup_intent_id: intent.id,
+      status: intent.status,
+      customer,
+    });
+  } catch (e) {
+    return refuse(c, 502, { code: 'setup_intent_failed', message: 'A card could not be set up. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+interface StripePaymentMethod {
+  id: string;
+  card?: { brand?: string; last4?: string; exp_month?: number; exp_year?: number };
+  created: number;
+}
+
+payments.get('/methods', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  // No customer yet → no saved cards. Don't create one just to list nothing.
+  if (!user.stripe_customer_id) return c.json({ methods: [] });
+  try {
+    const res = await stripeCall<{ data: StripePaymentMethod[] }>(
+      c.env,
+      '/payment_methods',
+      { customer: user.stripe_customer_id, type: 'card', limit: '100' },
+      { method: 'GET' },
+    );
+    const methods = (res.data ?? []).map((pm) => ({
+      id: pm.id,
+      brand: pm.card?.brand ?? null,
+      last4: pm.card?.last4 ?? null,
+      exp_month: pm.card?.exp_month ?? null,
+      exp_year: pm.card?.exp_year ?? null,
+      created: pm.created,
+    }));
+    return c.json({ methods });
+  } catch (e) {
+    return refuse(c, 502, { code: 'methods_failed', message: 'Your saved cards could not be read. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+payments.delete('/methods/:id', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const id = c.req.param('id');
+  if (!id || !/^pm_[A-Za-z0-9]+$/.test(id)) return c.json({ error: 'invalid_id' }, 400);
+  if (!user.stripe_customer_id) return c.json({ error: 'not_found' }, 404);
+  try {
+    // Ownership check — only detach a payment method that belongs to THIS
+    // user's customer, so one user can't delete another's saved card.
+    const pm = await stripeCall<{ id: string; customer?: string | null }>(
+      c.env,
+      `/payment_methods/${id}`,
+      {},
+      { method: 'GET' },
+    );
+    if (pm.customer !== user.stripe_customer_id) return c.json({ error: 'not_found' }, 404);
+    await stripeCall(c.env, `/payment_methods/${id}/detach`, {});
+    return c.json({ detached: true, id });
+  } catch (e) {
+    return refuse(c, 502, { code: 'detach_failed', message: 'That card could not be removed. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Task #7 — À la carte feature unlocks.
+//
+//   POST /api/payments/alacarte/intent  { price_id, nonce? } → { client_secret, ... }
+//   GET  /api/payments/alacarte/unlocks → { unlocks: [{ feature_key, expires_at }] }
+//
+// An à la carte SKU is a Stripe Product with metadata.kind='alacarte' and a
+// metadata.feature_key (plus optional metadata.unlock_days). Buying it creates a
+// one-time PaymentIntent carrying that metadata; the billing webhook
+// (payment_intent.succeeded, kind='alacarte') writes the `feature_unlocks` row
+// that feature gates read. No Connect transfer — these are platform-owned SKUs.
+// ---------------------------------------------------------------------------
+payments.post('/alacarte/intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    price_id?: string;
+    nonce?: string;
+    promo_code?: string;
+  };
+  if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
+
+  const found = await findCatalogProductByPriceId(c.env, body.price_id);
+  if (!found || !found.price.active || !found.product.active) {
+    return c.json({ error: 'invalid_price' }, 400);
+  }
+  if (found.product.kind !== 'alacarte') return c.json({ error: 'not_alacarte' }, 400);
+  if (found.price.type !== 'one_time' || found.price.unit_amount == null) {
+    return c.json({ error: 'price_not_one_time' }, 400);
+  }
+  const featureKey = (found.product.metadata.feature_key || '').trim();
+  if (!featureKey) return c.json({ error: 'feature_key_missing' }, 400);
+  // unlock_days: positive int → time-bounded; absent/0 → permanent.
+  const rawDays = Number(found.product.metadata.unlock_days);
+  const unlockDays = Number.isFinite(rawDays) && rawDays > 0 ? String(Math.floor(rawDays)) : '0';
+
+  // Optional promo code — validated against THIS product's allow-list.
+  const nonce = safeNonce(body.nonce);
+  const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+  let promo: PromoRow | undefined;
+  let amount = found.price.unit_amount;
+  let alacarteReservation: string | null = null;
+  if (promoCode) {
+    const v = await reservePromo(c.env, {
+      ...redeemRequest(found.product.id, found.price.unit_amount, found.price.currency, user.id, null, promoCode),
+      reference: `pi:${user.id}:alacarte_${found.price.id}:${promoIdemPart(promoCode)}:${nonce}`,
+    });
+    if (!v.ok) return c.json(promoRefusalBody(v), 400);
+    promo = v.promo;
+    alacarteReservation = v.reservation?.ref ?? null;
+    if (v.free) {
+      // 100%-off / sub-minimum → no PaymentIntent. Grant the unlock directly
+      // (idempotent per user, usage-capped). `false` means the global usage
+      // limit was exhausted between validate and reserve.
+      const granted = await fulfilFreeUnlock(c.env, {
+        promo,
+        userId: user.id,
+        featureKey,
+        unlockDays: unlockDays === '0' ? null : Number(unlockDays),
+        detail: {
+          productId: found.product.id,
+          priceId: found.price.id,
+          amountBeforeCents: found.price.unit_amount,
+          discountCents: found.price.unit_amount,
+          currency: found.price.currency,
+        },
+      });
+      if (!granted) {
+        await releasePromoReservation(c.env, alacarteReservation);
+        return c.json({ error: 'promo_invalid', reason: 'usage_limit_reached' }, 400);
+      }
+      await commitPromoReservation(c.env, alacarteReservation);
+      return c.json({ kind: 'payment', free: true, feature_key: featureKey });
+    }
+    amount = v.discountedAmount!;
+  }
+
+  const customer = await ensurePaymentsCustomer(c.env, user);
+  const metadata: Record<string, string> = {
+    kind: 'alacarte',
+    feature_key: featureKey,
+    unlock_days: unlockDays,
+    price_id: found.price.id,
+  };
+  if (promo) {
+    metadata.promo_code_id = promo.id;
+    if (alacarteReservation) metadata.promo_reservation_ref = alacarteReservation;
+    Object.assign(metadata, promoDetailMeta(found.product.id, found.price.unit_amount, found.price.unit_amount - amount));
+  }
+  const made = await createPaymentIntent(c, {
+    customer,
+    amount,
+    currency: found.price.currency,
+    idempotencyKey: `pi:${user.id}:alacarte_${found.price.id}:${promoIdemPart(promoCode)}:${nonce}`,
+    user,
+    metadata,
+    description: `À la carte: ${found.product.name}`.slice(0, 500),
+    moneyKind: 'marketplace',
+  });
+  if (made.status >= 400) await releasePromoReservation(c.env, alacarteReservation);
+  return made;
+});
+
+payments.get('/alacarte/unlocks', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureFeatureUnlockSchema(c.env);
+  const unlocks = await listActiveUnlocks(c.env, user.id);
+  return c.json({ unlocks });
+});
+
+// ---------------------------------------------------------------------------
+// Network Introductions — credit-pack checkout.
+//
+//   POST /api/payments/intro-credits/intent  { pack, nonce? } → { client_secret, ... }
+//
+// Packs are platform-owned fixed SKUs (services/introductions.ts INTRO_PACKS:
+// 10 / 100 / 1000 credits) — no Stripe catalog dependency. The PaymentIntent
+// carries metadata.kind='intro_credits' + credits; the billing webhook
+// (payment_intent.succeeded) grants the purchased-bucket ledger rows
+// idempotently on the PI id.
+//
+// D755 (#1915): packs are no longer sold. While INTRO_PACKS_ON_SALE is off the
+// route answers 410 `intro_packs_retired` before any Stripe call; an intent
+// minted before the switch still grants through the webhook.
+// ---------------------------------------------------------------------------
+payments.post('/intro-credits/intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  const { INTRO_PACKS, INTRO_PACKS_ON_SALE, isIntroPackKey } = await import('../services/introductions');
+  if (!INTRO_PACKS_ON_SALE) {
+    return refuse(c, 410, { code: 'intro_packs_retired', message: 'Introduction packs are no longer sold.', audience: 'member' });
+  }
+  await ensureTierSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as { pack?: string; nonce?: string };
+  if (!isIntroPackKey(body.pack)) return c.json({ error: 'invalid_pack' }, 400);
+  const pack = INTRO_PACKS[body.pack];
+
+  const nonce = safeNonce(body.nonce);
+  const customer = await ensurePaymentsCustomer(c.env, user);
+  return createPaymentIntent(c, {
+    customer,
+    amount: pack.amount_cents,
+    currency: pack.currency,
+    idempotencyKey: `pi:${user.id}:intro_${body.pack}:${nonce}`,
+    user,
+    metadata: {
+      kind: 'intro_credits',
+      pack: body.pack,
+      credits: String(pack.credits),
+    },
+    description: `Introduction credits: ${pack.label}`,
+    moneyKind: 'marketplace',
+  });
+});
+
+export default payments;

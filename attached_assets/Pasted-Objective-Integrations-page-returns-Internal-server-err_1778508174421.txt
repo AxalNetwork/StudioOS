@@ -1,0 +1,51 @@
+Objective
+  Integrations page returns "Internal server error" and none of the
+  built plugins (HubSpot/Calendly/Salesforce/Carta/Crunchbase/Slack/
+  DocuSign/Affinity) show up.
+
+Root cause analysis
+  1. /api/integrations stub returns 501 on writes; some UI flows
+     interpret that as 500.
+  2. /api/integrations/available returns a hard-coded catalogue that
+     doesn't include the new providers from Prompts I–P.
+  3. /api/integrations read path likely throws when the integrations
+     table doesn't exist yet on a fresh D1.
+
+Fix
+  1. cloudflare-worker/src/routes/integrations.ts — read paths must
+     never 5xx:
+       - Wrap getRootIntegrations() in try/catch; on any DB error
+         return { items: [] } with a 200 + log to integration_logs.
+       - ensureSchema() creates `integrations`, `integration_logs`,
+         `integration_waitlist` if missing (idempotent).
+  2. Replace the static catalogue with cloudflare-worker/src/
+     integrations/registry.ts (single source of truth). Each provider
+     entry: { provider_name, integration_type, display_name,
+     description, auth_type, status: 'live'|'beta'|'coming_soon',
+     required_tier, capabilities, docs_url, icon_key }.
+     Include HubSpot, Calendly, Salesforce, Carta, Crunchbase, Slack,
+     DocuSign, Affinity with the tier/status from Prompt H.
+  3. /api/integrations/available returns:
+       items.map(i => ({...i, locked_for_user: !meetsTier(user,
+       i.required_tier), already_connected: connectedSet.has(i.name)}))
+  4. Write endpoints: convert 501 to either real handlers (if the
+     provider is LIVE per the registry) or 503 with
+     { error: 'coming_soon', notify_me_url: '/api/integrations/
+     /:provider/notify-me' } so the UI can render the right state.
+
+Frontend (frontend/src/pages/IntegrationsPage.jsx)
+  - Three sections: Connected / Available / Coming Soon.
+  - Header copy (set, do not change):
+      "Connect your CRM, legal providers, and data feeds. Push deals
+       out, receive webhooks back."
+  - Cards show Beta / Coming Soon / locked tier pills.
+  - On 5xx anywhere: inline "Couldn't load integrations — Retry"
+    instead of toast.
+
+Acceptance
+  - Page loads with zero 500s on a fresh account.
+  - All 8 plugins appear with correct status + tier pill.
+  - Coming-soon cards show "Notify me" button writing to
+    integration_waitlist.
+  - LIVE provider connect flow runs end-to-end (validated by Prompts
+    I–P).

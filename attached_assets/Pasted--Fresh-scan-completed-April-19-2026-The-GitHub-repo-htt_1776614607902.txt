@@ -1,0 +1,103 @@
+**✅ Fresh scan completed (April 19, 2026)**
+
+The GitHub repo `https://github.com/AxalNetwork/StudioOS` is still **primarily a static frontend marketing-site skeleton** (index.html, component library for headers/nav/footers, basic Vite setup, no full backend logic or profile system visible in the public repo).
+
+All the real user/profile/KYC/deal flow logic lives in your **Replit** (the full platform we’ve built over this conversation).
+
+### Current State in Replit (from our builds)
+- Single `users` table with basic roles (Admin, Founder, Partner/Investor, Operator, etc.)
+- KYC/AML form (Identity Verification page)
+- Marketplace profiles (for operators/advisors)
+- Partner Dashboard with some profile elements
+- No rich, role-specific profile system yet that actively contributes to **PMF data**, **deal flow**, **partner matching**, **voting**, **Market Intelligence**, etc.
+
+### Proposed Profile Structure (Optimized for Value Creation)
+
+**Core Principle**: Every user profile should be a **value-adding asset** to the network — feeding PMF signals, deal flow, partner matching, voting, Studio Ops, and Market Intelligence.
+
+#### 1. Common Core Profile (all users)
+- `users` table fields (extend existing):
+  - id, email, full_name, role, avatar_url (R2), bio, location, linkedin_url, twitter_url, website
+  - kyc_status, verified_badges, network_score, total_earnings, referrer_id
+  - last_active, joined_at
+
+#### 2. Role-Specific Profile Extensions (separate tables or JSON extensions)
+
+**Founder Profile** (`founder_profiles` table)
+- Startup focus areas, previous exits, current idea/pitch deck link (R2)
+- PMF signals they can contribute (problem validation, customer interviews, waitlist data)
+- Skills: product, tech stack, go-to-market experience
+
+**Partner / Investor / LP Profile** (`investor_profiles` table)
+- Investment thesis, check size, stage preference, sector focus
+- Portfolio companies (links), past exits, co-investment interest
+- Deal flow contribution score, voting history, syndication activity
+
+**Operator / Advisor Profile** (`operator_profiles` table)
+- Expertise areas, past roles, availability (hours/week)
+- Skills matrix (for matching to spin-outs)
+- Past contributions (Studio Ops tasks completed, mentoring hours)
+
+**Service Provider Profile** (`service_profiles` table)
+- Services offered (legal, accounting, tech, marketing, etc.)
+- Pricing tiers, past clients, case studies (R2)
+- Availability and capacity
+
+This structure allows:
+- **PMF data** → Founders contribute validation signals
+- **Deal flow** → Investors + Operators flag opportunities
+- **Partner matching** → AI uses skills/thesis/expertise for recommendations
+- **Voting & Intelligence** → Weighted input based on role + track record
+
+---
+
+**Ready-to-copy prompt for Replit Agent**
+
+Paste this **exactly** into the Agent tab:
+
+```
+You are the senior product engineer for Axal StudioOS. Design and implement a rich, role-specific **User Profile System** that turns every user into a value-adding asset for PMF data, deal flow, partner matching, voting, and Market Intelligence.
+
+Extend the existing users table and create role-specific profile tables.
+
+Exact structure:
+
+1. **Core users table** (extend existing):
+   - Add: bio, location, linkedin_url, twitter_url, website, avatar_url (R2), network_score, total_contribution_score
+
+2. **Role-specific tables**:
+   - founder_profiles (FK to users.id): current_idea_summary, pmf_signals_contributed, previous_exits, skills
+   - investor_profiles (FK to users.id): investment_thesis, check_size_range, stage_preferences, sector_focus, portfolio_companies, co_investment_interest
+   - operator_profiles (FK to users.id): expertise_areas, availability_hours_per_week, past_studio_ops_contributions, skills_matrix
+   - service_provider_profiles (FK to users.id): services_offered, pricing_tiers, past_clients, capacity
+
+3. **Common features**
+   - All profiles support rich text, skills tags, and file uploads to R2 (pitch decks, case studies, etc.)
+   - "Contribution Score" that increases when user adds value (votes, deal flags, PMF signals, etc.)
+   - Profile visibility settings (public to network vs private)
+
+4. **Frontend**
+   - Create /profile.html with role-based tabs/sections
+   - Integrate into Partner Dashboard, Founder Portal, Admin Console
+   - Add "Edit Profile" with rich form fields per role
+
+5. **Integration**
+   - Use profiles in partner matching, voting system, Market Intelligence, deal flow
+   - Auto-populate some fields from KYC/AML data
+
+Build this step-by-step:
+1. First extend the D1 schema with the new profile tables.
+2. Then create backend/routers/profile.py with CRUD endpoints.
+3. Then build the full /profile.html frontend with role-specific forms.
+4. Finally integrate profiles into existing dashboards and matching/voting systems.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+This gives you a clean, scalable, value-adding profile system that directly powers PMF data, deal flow, and partner matching.
+
+Would you like me to also give you a prompt to **seed some example profiles** or to **integrate this with the voting system** next? Just say the word.

@@ -1,0 +1,50 @@
+name: Task
+description: A unit of work for one slot. Only Session 1 makes a task ready.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A task is a unit of work for one slot (`AGENTS.md`). This form adds no state label, because only Session 1 makes a task ready: it starts the body with `S1:` and labels the issue `slot:SNN` and `state:ready`.
+
+        This repository is public. Leave out secrets, tokens, personal data and security-sensitive operational detail.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What is true when this is done, and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What to build or change, and what is out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files owned
+      description: The files and folders this task owns. No other open issue or PR may edit them.
+    validations:
+      required: true
+  - type: input
+    id: numbers
+    attributes:
+      label: Decision and migration numbers
+      description: The D-number, and any migration numbers. Agents never pick their own.
+      placeholder: "D<n>; migration <n>, or none"
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Issues and PRs this waits on or blocks.
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: What closes it, for example a green draft PR that carries its D-entry.
+    validations:
+      required: true

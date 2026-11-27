@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences and Contracts v2 Addendum · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Licences &amp; Contracts · v2 addendum · #5303</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Licences &amp; Contracts v2 · Addendum — pricing, Axal VC packages, agreement readiness and user licences</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">This addendum extends the landed Licences v2 (L00–L22, D4819) and Contracts v2 (CT-01–CT-16, D4811) canvases; it does not fork them. Same shell, tokens, chips, tables and section tabs. It adds country pricing (#5020), Axal VC packages (#5026), agreement readiness and Program access (#5051), user licences (#5060) and the Agreements tab’s licence context (#5050 §5). Fields that no Worker read returns yet carry a dashed “pending read” tag and are listed on L40. Nothing reprices, renews, grants or sends itself: prepare, review and apply or send are separate steps a person takes, each with a recorded reason. One agreement is one record, opened from Licences and from Contracts. Not recorded and Unavailable are never drawn as 0. The Eadwyn rail (#5130) is not redrawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Tue 10 Nov 2026, 14:30 UTC · checked against main 9b8f1423cb · Axal VC France, the four seeded Axal VC packages (their real base fees) and sample users; figures marked sample are not production data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="29">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Licences and Contracts v2 Addendum Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['L23', 'Country pricing catalogue · #5020', 'The Pricing tab beside Ledger and Program access. 49 markets with completeness, last source update (Stale with its age), regulatory class and the latest snapshot’s fees; “No snapshot” when none. Tier and index are pending read in the list. The model selector names the active version.', [F('LX23', false, 900)]],
+      ['L23b', 'Catalogue · incomplete data, model versions open', 'The Incomplete data filter (9 of 49) and the model-version list: v4 draft, v3 active, v2 and v1 retired.', [F('LX23B', false, 760)]],
+      ['L24', 'Country detail · calculation trace · #5020', 'Portugal: each input with status, source and as-of; snapshot history; Preview recommendation shows factors, weights, the index, the tier threshold met, each fee with its rounding and the surcharge. One provisional input marks the whole result Provisional.', [F('LX24', false, 960)]],
+      ['L24b', 'Country detail · input not recorded', 'Denmark: the model needs every input, so no index or fee is calculated and nothing is guessed (the Worker returns available: false).', [F('LX24B', false, 640)]],
+      ['L25', 'Pricing models · #5020', 'Versions with state, effective date and who activated them. Active and retired are immutable.', [F('LX25', false, 620)]],
+      ['L25b', 'Pricing models · draft → preview impact → activate', 'A preview-impact table across countries (current, new, difference) and activation with a reason. No licence moves until its own review.', [F('LX25B', false, 1080)]],
+      ['L26', 'Licence › Terms › Pricing & Market · #5020', 'Market, Recommendation, Current terms with the difference per line, and Actions, plus next review and the reviews list. Recommendation, accepted terms and override are three different records. Exclusivity (#5019) stays a collapsed reference.', [F('LX26', false, 1440)]],
+      ['L26b', 'Pricing & Market · no decision recorded, stale source', '“No pricing decision recorded” with Create recommendation at next review, and a Stale source with its age.', [F('LX26B', false, 1300)]],
+      ['L26c', 'Override sheet', 'Prepare → Review → Apply. What changes, what else it affects, and a required reason under the Super Admin write bar.', [F('LX26C', false, 1440)]],
+      ['L27', 'Annual review queue · #5020 · pending read', 'One row per licence due, with country or basket, due date, kind and difference; Not recorded when the basket is incomplete. Each row opens L26.', [F('LX27', false, 680)]],
+      ['L28', 'Ledger · Needs HQ pricing and legal signals · #5020 #5051 · pending read', 'New Pricing and Legal chip rows beside today’s Operations chips. Chips are filters, and the signals fold into the existing Attention column with no new columns.', [F('LX28', false, 760)]],
+      ['L29', 'Axal VC packages catalogue · #5026', 'The four packages with version, status, programs, global base fee and guidance range (the seeded values), the standalone sum and the bundle saving. Standalone is Not recorded when a program has no reference price. Version history and the immutability rules.', [F('LX29', false, 860)]],
+      ['L30', 'Package comparison matrix · #5026 · pending read', 'Programs × packages, composed from each version’s items, with base and France-adjusted prices, the saving and the warnings in the footer.', [F('LX30', false, 900)]],
+      ['L31', 'Licence › Axal VC package · #5026', 'The current package (pending read: today it is the policy holding with origin package_offer_accepted) and four recommended offers priced for France.', [F('LX31', false, 900)]],
+      ['L31b', 'Licence › Axal VC package · none recorded', '“No Axal VC package recorded”, stating that programs are standalone grants. No package never means no programs.', [F('LX31B', false, 900)]],
+      ['L32', 'Offer review sheet · #5026 · pending read (#5021)', 'Exact package version, programs, recommended price, index and model, effective dates, grant conflicts, agreements to prepare and the effect on grants. Review, then Accept. Nothing is sent.', [F('LX32', false, 980), F('LX32B', 'Accept step', 1080)]],
+      ['L33', 'Licence › Agreement · #5051', 'Extends L08–L10: the territory licence agreement with its history, the Axal VC package agreement (strategy per program here, so no master), licensed program agreements, and the package readiness card ending “2 of 3 programs in force”. Every row opens the one record in Contracts.', [F('LX33', false, 1300)]],
+      ['L34', 'Program access per program · #5051', 'Commercial grant · Agreement · In force as three columns. Granted-but-not-in-force rows are highlighted with what they wait on.', [F('LX34', false, 700)]],
+      ['L35', 'The studio’s read-only Licence page · #5026 #5051', 'The current package, included programs and standalone extras, per-program agreements with why each is not yet in force. Commercial terms for allowed roles; the second frame is a role that is Refused them.', [F('LX35', false, 820), F('LX35B', 'Role refused the terms', 820)]],
+      ['L36', 'Ledger by licence family · #5060 · pending read', 'Family filter chips and user-licence rows. Scope / territory is Not applicable on user licences: the cell is empty, never “Not recorded”. Operating Partner is the screen word for both partner and operating_partner.', [F('LX36', false, 700)]],
+      ['L37', 'User licence detail · #5060 · pending read', 'Overview, Programs, Agreement, Billing and History, not the territory tabs. The second frame has no commercial terms, so Billing is absent, not empty.', [F('LX37', false, 900), F('LX37B', 'No commercial terms', 820)]],
+      ['L38', 'Phone · Pricing & Market, Agreement, Ledger by family', 'The three new families at 390. Apply and Override stay desktop steps.', [P('LX38A', false), P('LX38B', false), P('LX38C', false)]],
+      ['L39', 'States · L23–L37', 'None, Not recorded, Unavailable with Retry, Partial (1 of 3 pricing sources unavailable), Stale with its age, Provisional, Refused and Not applicable. None of them is drawn as 0.', [C('LX39', 'L23–L28', 1400, 400), C('LX39B', 'L29–L37', 1400, 400)]],
+      ['L40', 'Backend fit for the addendum', 'Every field on L23–L37 and CT-17–CT-19 with its read, or pending read and the issue that adds it. Modelled on L22.', [W('LX40')]],
+      ['CT-17', 'Contracts › Agreements · licence filters · #5050 §5 #5060', 'Category chips kept; a filter row for type, legal state, licence, program, Axal VC package, family, type, holder, template and dates; active filters as removable chips. The four user-licence agreement types are pending read.', [F('LXCT17', false, 900)]],
+      ['CT-18', 'Agreement rows with licence context · #5050 §5', 'A context line under each title (territory · licence · package · program), the legal-state word beside the lifecycle pill, and Open licence, Open Program access and Open package context.', [F('LXCT18', false, 900)]],
+      ['CT-19', 'The never-sent version · #5050 §5', '“Prepared · not sent · no envelope”, never drawn as signed or as a template. A version with an envelope is one row.', [F('LXCT19', false, 820)]],
+      ['CT-20', 'Phone and states', 'CT-17/18 at 390; the list in None (for the active filters), Unavailable and Refused.', [P('LXCT20A', false), C('LXCT20B', false, 1100, 240)]],
+      ['DK', 'Dark mode', 'Pricing & Market and the Agreements list on the dark tokens (#0B1220, #111827, #E5E7EB, #A78BFA).', [F('LXDK1', false, 1440), F('LXDK2', false, 900)]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

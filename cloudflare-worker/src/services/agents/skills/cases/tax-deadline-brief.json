@@ -1,0 +1,38 @@
+{
+  "skill": "tax-deadline-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "compliance.calendar": [
+        {
+          "name": "Delaware franchise tax",
+          "due": "2027-03-01"
+        },
+        {
+          "name": "HST return",
+          "due": "2026-11-30"
+        }
+      ],
+      "company.profile": {
+        "jurisdictions": [
+          "Delaware",
+          "Ontario"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "HST return",
+      "2026-11-30"
+    ],
+    "must_say_not_recorded": [
+      "amount"
+    ],
+    "must_not_include": [
+      "you owe"
+    ]
+  }
+}

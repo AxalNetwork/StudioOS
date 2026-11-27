@@ -1,0 +1,32 @@
+{
+  "skill": "contract-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "data_room.index": [
+        {
+          "name": "Dentrix reseller agreement.pdf",
+          "clauses": {
+            "term": "12 months",
+            "renewal": "Auto-renews unless 60 days' notice",
+            "fees": "20% revenue share"
+          }
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "60 days",
+      "20% revenue share"
+    ],
+    "must_say_not_recorded": [
+      "governing law"
+    ],
+    "must_not_include": [
+      "you should sign"
+    ]
+  }
+}

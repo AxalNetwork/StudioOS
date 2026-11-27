@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.strip }}" hint-placeholder-val="{{ false }}"><nav aria-label="Platform" style="{{ v.stripS }}"><sc-for list="{{ v.strip }}" as="st" hint-placeholder-count="11"><a href="{{ st.href }}" aria-current="{{ st.cur }}" style="{{ st.s }}">{{ st.t }}</a></sc-for></nav></sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ v.ptopS }}">
+        <button type="button" aria-label="Menu" style="{{ v.picoS }}">☰</button>
+        <span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">{{ v.ptitle }}</b></span>
+        <button type="button" aria-label="Open Eadwyn" style="{{ v.picoE }}">E</button>
+      </div>
+    </sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><div style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <div role="tablist" aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a role="tab" aria-selected="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  </main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span><sc-if value="{{ v.spineDot }}" hint-placeholder-val="{{ false }}"><span title="Reading" style="{{ v.spineDotS }}"></span></sc-if></aside></sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="{{ v.railHS }}"><span style="{{ v.eadS }}">E</span><b style="flex:1;font-size:14px">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railBtnS }}">›</button></div><p style="{{ v.railNS }}">{{ v.railNote }}</p><div style="{{ v.railQS }}">Ask about this page</div></aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;PAY1&quot;,&quot;options&quot;:[&quot;PAY1&quot;,&quot;PAY2&quot;,&quot;PAY2c&quot;,&quot;PAY3a&quot;,&quot;PAY3b&quot;,&quot;PAY3c&quot;,&quot;PAY3d&quot;,&quot;PAY4a&quot;,&quot;PAY4b&quot;,&quot;PAY4c&quot;,&quot;PAY5&quot;,&quot;PAY6a&quot;,&quot;PAY6b&quot;,&quot;PAY6c&quot;,&quot;PAY6d&quot;,&quot;PAY6e&quot;,&quot;PAY6f&quot;,&quot;PAY7&quot;,&quot;PAY8a&quot;,&quot;PAY8b&quot;,&quot;PAY9&quot;,&quot;PAY10&quot;,&quot;PAY10b&quot;,&quot;PAY11&quot;,&quot;PAY12a&quot;,&quot;PAY12b&quot;,&quot;PAY12c&quot;,&quot;PAY12d&quot;,&quot;PAY13&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'PAY1';
+    const dark = B === 'PAY13', phone = B.indexOf('PAY12') === 0;
+    const crop = ['PAY2c', 'PAY3a', 'PAY3b', 'PAY3c', 'PAY3d', 'PAY4a', 'PAY4b', 'PAY4c', 'PAY6a', 'PAY6b', 'PAY6c', 'PAY6d', 'PAY6e', 'PAY6f', 'PAY10b'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    const btnX = BTN + 'border:1px solid ' + c.hair + ';background:' + c.raised + ';color:' + c.fa + ';cursor:not-allowed';
+    const btnDF = BTN + 'border:1px solid ' + c.neg + ';background:' + c.neg + ';color:#fff';
+    const AMB = CARD + ';background:' + c.amBg + ';border-color:' + c.amE;
+    const AM = '#f59e0b';
+    const POSB = 'display:flex;gap:10px;align-items:center;padding:11px 14px;border-radius:10px;background:' + c.posBg + ';border:1px solid ' + c.posE;
+    const LN = (t, tone) => R({ rs: tone === 'g' ? POSB : NOTE(tone) + ';align-items:center;padding:11px 14px', lead: tone === 'g' ? '✓' : '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'g' ? c.pos : tone === 'r' ? c.neg : c.amT), t, ts: 'font-size:13px;font-weight:600;line-height:1.5;color:' + (tone === 'g' ? c.pos : tone === 'r' ? c.neg : c.amT) });
+    const amberRow = (t, a) => R({ rs: 'display:flex;gap:10px;align-items:flex-start;padding:0', lead: '!', ls: 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#fcd34d;color:#18181b;font:800 11px ' + SG + ';flex:none;margin-top:1px', t, ts: 'font-size:13px;font-weight:600;line-height:1.5;color:' + c.ink, btns: [{ t: a, s: btnSm }] });
+    const kindP = (k) => pl('', k, k === 'Plan' ? 'v' : 'n');
+    const BK = { t: 'Cancel', s: btnS };
+    const PLc = (n, id, mo, yr, al, aly, shows, shows2, who, issue) => ({ n, id, kind: 'Plan', mo, yr, save: !!yr, al, aly, shows, shows2, who, issue });
+    const PLANS = [PLc('Founder [Validate + Build]', 'prod_••••4821', '[$20.00] USD / month', '[$204.00] USD / year', '[$5.00] / month', '[$4.25] on yearly', '/pricing · Founder tab', 'Products page · For Founders', 'For Founders'),
+      PLc('Founder [Raise + Grow]', 'prod_••••7710', '[$49.00] USD / month', false, '[$12.25] / month', false, '/pricing · Founder tab', 'Products page · For Founders', 'For Founders', true),
+      PLc('Founder [Raise + Grow] · [2025]', 'prod_••••0388', '[$45.00] USD / month', false, '[$11.25] / month', false, '/pricing · Founder tab', false, 'For Founders', true),
+      PLc('Investor [Plus]', 'prod_••••5162', '[$29.00] USD / month', '[$295.80] USD / year', '[$7.25] / month', '[$6.16] on yearly', '/pricing · Investor tab', false, 'For Investors / LPs'),
+      PLc('Investor [Pro]', 'prod_••••6043', '[$79.00] USD / month', '[$805.80] USD / year', '[$19.75] / month', '[$16.79] on yearly', '/pricing · Investor tab', false, 'For Investors / LPs'),
+      PLc('Advisor [Pro]', 'prod_••••2297', '[$20.00] USD / month', false, '[$5.00] / month', false, '/pricing · Advisors tab', false, 'For Advisors'),
+      PLc('Operating Partner [Pro]', 'prod_••••3184', '[$20.00] USD / month', false, '[$5.00] / month', false, '/pricing · Operating Partners tab', false, 'For Service Partners'),
+      PLc('Market Intelligence [Pro]', 'prod_••••9055', '[$19.00] USD / month', false, '[$4.75] / month', false, 'Products page · Market Intelligence', false, 'For Founders, For Investors / LPs')];
+    const OT = (n, grp, id, amt, shows, who) => ({ n, id: grp + ' · ' + id, kind: 'One-time', mo: amt + ' USD · one time', shows, who });
+    const ONE = [OT('[Delaware incorporation]', 'Incorporation', 'prod_••••1140', '[$499.00]', 'Products page · For Founders', 'For Founders'), OT('[Wyoming incorporation]', 'Incorporation', 'prod_••••1152', '[$399.00]', 'Products page · For Founders', 'For Founders'), OT('[Advisor session · 30 min]', 'Session', 'prod_••••2408', '[$150.00]', 'Checkout only', 'For Founders'), OT('[Advisor session · 60 min]', 'Session', 'prod_••••2419', '[$280.00]', 'Checkout only', 'For Founders'), OT('[CSV export · 30 days]', 'Add-on', 'prod_••••3307', '[$9.00]', 'Checkout only', 'For Investors / LPs'), OT('[Data room · 30 days]', 'Add-on', 'prod_••••3315', '[$19.00]', 'Checkout only', 'For Founders')];
+    const TOK = ['10', '25', '50', '100'].map(a => ({ n: '[$' + a + '] AI credit pack', id: 'Token pack · prod_••••' + (5000 + Number(a)), kind: 'Token pack', mo: '[$' + a + '.00] USD · one time', shows: 'Usage · Add tokens', who: 'Every member', tok: true }));
+    const ARCH = [{ n: 'Founder [Studio] · legacy', id: 'prod_••••0051', kind: 'Plan', mo: '[$99.00] USD / month', shows: '—', who: 'For Founders', arch: '[2 Sep 2026]' }, { n: '[Old add-on]', id: 'Add-on · prod_••••0907', kind: 'One-time', mo: '[$5.00] USD · one time', shows: '—', who: '—', arch: '[12 Oct 2026]' }];
+    const MS = 'font:500 10.5px ' + MO + ';color:' + c.mu;
+    const CATGC = '1.6fr .7fr 1.45fr .95fr 1.25fr 1fr .95fr .22fr', CATCOLS = ['Product', 'Kind', 'Prices', 'AI allowance', 'Shows on', 'For', 'Status', ''];
+    const GH = 'font:700 10.5px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.ink;
+    const grpRow = (t) => [CL(t, { s: 'grid-column:1/-1;padding-top:6px', ts: GH })];
+    const prodRow = (p) => { const m = p.arch || p.tok, mt = m ? ';color:' + c.mu : ''; return [
+      CL(p.n, { ts: 'font-weight:700;line-height:1.35' + mt, sub: p.id, ss: MS }),
+      CL('', { pill: kindP(p.kind) }),
+      CL(p.mo, { ts: 'font:600 11.5px ' + MO + ';line-height:1.4' + mt, pill: p.save ? { t: 'Yearly saves 15%', s: 'font:700 10.5px ' + MO + ';color:' + c.pos } : false, sub: p.kind !== 'Plan' || p.arch ? false : (p.yr || 'No yearly price'), ss: 'font:500 11px ' + MO + ';color:' + c.mu }),
+      p.kind === 'Plan' && !p.arch ? CL(p.al, { ts: 'font:600 11.5px ' + MO, sub: p.aly || false, ss: MS }) : CL('—', { ts: 'color:' + c.mu, tip: 'Only active plans include an AI allowance.' }),
+      CL(p.shows, { ts: 'font-size:11.5px;line-height:1.4' + mt, sub: p.shows2 || false }),
+      CL(p.who, { ts: 'font-size:11.5px;line-height:1.4' + mt }),
+      CL('', { pill: p.arch ? pl('–', 'Archived', 'n') : pl('✓', 'Active', 'g'), sub: p.arch ? 'Archived on ' + p.arch : p.issue ? '● Needs you' : false, ss: p.issue ? 'font-size:11px;font-weight:700;color:' + c.amT : 'font-size:11px;color:' + c.mu }),
+      p.tok ? CL('—', MU) : DOTS]; };
+    const catRows = [grpRow('Plans · [9]')].concat(PLANS.map(prodRow)).concat([grpRow('One-time · Incorporation, Sessions, Add-ons · [11]')]).concat(ONE.map(prodRow)).concat([[CL('Token packs · [4] · read only', { s: 'grid-column:1/-1;padding-top:6px;display:flex;flex-direction:row;justify-content:space-between;align-items:center', ts: GH, sub: 'Managed on AI allowances →', ss: 'font-size:12px;font-weight:700;color:' + c.vt })]]).concat(TOK.map(prodRow)).concat([grpRow('Archived · [5]')]).concat(ARCH.map(prodRow));
+    const CTB = { search: 'Search name or product ID', chips: [tag('Plans [9]'), tag('One-time [11]'), tag('Token packs [4]'), tag('Filters ▾'), tag('Sort: Name, A to Z ▾')] };
+    const catT = () => TB({ tbar: CTB, gc: CATGC, minW: 820, cols: CATCOLS, rows: catRows, count: '1–24 of [24]', foot: '19 of the 24 rows are drawn; five one-time and archived products are left out of this board. ⋯ holds Open, Add a price, Change a price, Rename and Archive product. Money received, refunds and disputes are on Revenue →. Promo codes have their own page →.' });
+    const T1 = [['Stripe', '● Live', 'Keys match', false, false, false, c.pos], ['Active products', '[19] of [24]', '[41] active prices'], ['Last sync', '18 Oct 2026, 09:12', 'Nothing syncs on a schedule.', false, false, false, c.ink], ['Webhook, last 24 hours', '[212]', 'deliveries · [2] not accepted']];
+    const NEEDS = [['The webhook misses 3 events the platform acts on: a refund and two dispute events.', 'Fix in Stripe connection'], ['Two active products both make the Founder [Raise + Grow] card. /pricing shows two cards; checkout sells only the first by name.', 'Review'], ['Founder [Raise + Grow] has no yearly price. /pricing shows ‘Yearly not offered yet’.', 'Add a yearly price']];
+    const needsK = () => NEEDS.map(([t, a]) => K({ cs: AMB + ';height:100%', rows: [amberRow(t, a)] }));
+    const TOAST = { s: 'position:absolute;right:64px;bottom:26px;z-index:6;width:440px', blocks: [K({ cs: CARD + ';box-shadow:0 14px 36px rgba(24,24,27,.2)', rows: [R({ rs: 'display:flex;gap:10px;align-items:center;padding:0', lead: '!', ls: 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:' + c.neg + ';color:#fff;font:800 11px ' + SG + ';flex:none', t: 'Stripe did not accept the price. Nothing changed.', ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] })] };
+    const stripeErr = K({ cs: CARD + ';border-style:dashed;gap:8px', title: 'Stripe', hs: eyeS, rows: [R({ rs: 'display:flex;padding:0', t: 'Could not be read', ts: 'font:700 15px ' + SG + ';color:' + c.mu, sub: 'The connection was not checked. This is not a claim that Stripe is off.' })], btns: [{ t: 'Try again', s: btnSm }] });
+    const catCols = (err) => (err ? [col([stripeErr], 2), col([TL(T1.slice(1), 3)], 4)] : [col([MOVED('The Admin Console has moved: Payments now lives under Platform.'), K({ cs: PLAIN, title: 'Needs you · [3]', hs: eyeS })])].concat(needsK().map(k => col([k], 2))).concat([col([TL(T1)])])).concat([col([catT()])]).concat(err ? [TOAST] : []);
+    const whereK = K({ cs: SEC, title: 'Where members see it', rows: ['/pricing · Founder tab · card ‘[Validate + Build]’', 'Products page · For Founders', 'Checkout: Founder plan, monthly and yearly'].map(t => R({ rs: 'display:flex;gap:9px;padding:6px 0', lead: '↗', ls: 'color:' + c.vt + ';flex:none', t, ts: 'font-size:13px;font-weight:500;line-height:1.45' })) });
+    const PID = { ts: 'font:500 11px ' + MO };
+    const priceT = TB({ cs: SEC, title: 'Prices', pager: false, gc: '.75fr 1.15fr 1fr 1fr 1.35fr .8fr .2fr', cols: ['Interval', 'Amount', 'AI allowance a month', 'Nickname', 'Price ID', 'Status', ''], rows: [['Monthly', CL('[$20.00] USD', MN), CL('[$5.00]', MN), CL('[Monthly 2026]', MU), CL('price_••••1093 · Copy', PID), PC('Active'), DOTS], ['Yearly', CL('[$204.00] USD', MN), CL('[$4.25]', MN), CL('[Yearly 2026]', MU), CL('price_••••5520 · Copy', PID), PC('Active'), DOTS]], foot: 'Yearly saves 15%, computed from the two prices. ⋯ holds Rename and Archive.' });
+    const membersK = K({ cs: SEC, title: 'Members on this plan', rows: [R({ rs: 'display:flex;padding:0', t: '[37] monthly · [12] yearly', ts: 'font:700 13px ' + MO, sub: 'Archiving a price stops new sales. Members already on it keep their price.' })] });
+    const promoK = K({ cs: SEC, title: 'Promo codes that apply', rows: [R({ rs: 'display:flex;gap:10px;align-items:center;padding:0', t: '[2] codes', ts: 'font:700 13px ' + MO, act: 'Open Promo codes', as: btnG })] });
+    const checkK = (bad) => K({ cs: SEC, title: 'Checks', rows: [bad ? LN('A price is charged every 3 months. Checkout would sell it as monthly.', 'a') : LN('No issues.', 'g')] });
+    const recentK = K({ cs: SEC, title: 'Recent changes', rows: [['[18 Oct 2026]', 'added the yearly price [$204.00]'], ['[9 Oct 2026]', 'renamed the monthly price to [Monthly 2026]'], ['[2 Sep 2026]', 'created the product']].map(([d, t]) => R({ t: d + ' · [Admin Name] · ' + t, ts: 'font-size:12.5px;font-weight:500;line-height:1.45' })), btns: [{ t: 'Open the change log', s: btnG }] });
+    const techK = (open) => K({ cs: SEC, title: 'Technical details ' + (open ? '▾' : '▸'), hs: 'margin:0;font-size:13px;font-weight:700;color:' + c.vt, rows: open ? [['tier', 'growth'], ['plan_family', 'founder'], ['pricing_card', 'validate_build'], ['audience', 'founders'], ['allowance_basis', 'usd_25pct']].map(([k2, v2]) => R({ rs: 'display:flex;gap:11px;padding:6px 0;border-top:1px solid ' + c.hair, t: k2, ts: 'font:500 12px ' + MO + ';color:' + c.mu, v: v2, vs: 'font:600 12px ' + MO + ';color:' + c.ink })) : [] });
+    const prodHead = K({ cs: PLAIN, eye: 'PRODUCT', title: 'Founder [Validate + Build]', hs: H18, meta: 'Esc to close', tags: [pl('', 'Plan · Founder', 'v'), pl('✓', 'Active', 'g'), { t: 'prod_••••4821', s: 'font:600 11.5px ' + MO + ';color:' + c.mu + ';align-self:center' }, { t: 'Copy', s: 'font-size:12px;font-weight:700;color:' + c.vt + ';align-self:center;cursor:pointer' }], btns: [{ t: 'Add a price', s: btnS }, { t: 'Change a price', s: btnS }, { t: 'More ⋯', s: btnSm }] });
+    const prodDlg = [prodHead, whereK, priceT, membersK, promoK, checkK(false), recentK, techK(false)];
+    const AUD = ['For Founders', 'For Investors / LPs', 'For Service Partners', 'For Advisors', 'Legal Services'];
+    const p3a = dlg('New product', 'Step 1 of 2 · What are you selling?', [K({ cs: SEC, rows: [['Plan', 'Sold monthly or yearly. Makes one card on /pricing.', true], ['One-time service', 'Incorporation and other one-off work.', false], ['Add-on', 'Unlocks one feature for some days.', false], ['Session', 'A booked session with a set length.', false]].map(([t, s2, on]) => RAD(t, on, s2)), foot: 'Token packs are made on AI allowances.' })], [BK, { t: 'Continue', s: btnP }]);
+    const desc = (fam) => fam === 'Founder' ? '[Raise the money, then grow the company.]' : '[Research and deal flow for active investors.]';
+    const planStep = (fam, lvls, lvl, warn) => ({ s: DLGS + 'display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px 22px;width:100%;max-width:920px;margin:0 auto;align-items:start', blocks: [
+      K({ cs: PLAIN + ';grid-column:1/-1', title: 'New product · Plan', hs: H18, meta: 'Esc to close', tags: STEPS(['What are you selling?', 'Details'], 1) }),
+      K({ cs: PLAIN, rows: [R({ eye: 'PLAN FAMILY', tags: ['Founder', 'Investor', 'Advisor', 'Operating Partner', 'Market Intelligence'].map(t => tag(t, t === fam)) }), R({ eye: 'LEVEL', tags: lvls.map(t => tag(t, t === lvl)) })].concat(warn === 'plus' ? [LN('/pricing shows this card, but no checkout sells this level yet.', 'a')] : []).concat([field('NAME', fam + ' ' + lvl), field('DESCRIPTION', desc(fam), { ts: FIN + ';font-weight:500;min-height:52px' }), R({ eye: 'AUDIENCE', tags: AUD.map(t => tag(t)), sub: 'Leave empty to set it from the plan.' })]).concat(warn === 'clash' ? [LN('An active product already makes the Founder [Raise + Grow] card. Archive it first, or the page will show two cards.', 'a')] : []), rowsS: 'display:flex;flex-direction:column;gap:6px' }),
+      K({ cs: CARD + ';border-color:' + c.lavE, eye: 'PREVIEW · /PRICING · ' + fam.toUpperCase() + ' TAB', title: lvl, note: desc(fam), rows: [R({ rs: 'display:flex;padding:4px 0', t: 'No price yet', ts: 'font:700 20px ' + SG + ';color:' + c.mu })], btns: [{ t: 'Get started', s: btnX }], foot: 'As a member will see it. It updates as you type.' }),
+      K({ cs: SEC + ';grid-column:1/-1', note: 'This creates the product in Stripe. It shows on /pricing once it has a price. It is recorded in the change log.', btns: [BK, { t: 'Create product', s: btnP }], bs: 'display:flex;gap:7px;justify-content:flex-end' })] });
+    const p3d = dlg('New product · Add-on', 'Step 2 of 2 · Details', [K({ cs: SEC, rows: [field('NAME', '[CSV export · 30 days]'), field('FEATURE IT UNLOCKS', '[CSV export] ▾'), field('UNLOCK DAYS', '[30]', { ts: FIN + ';font-family:' + MO })], foot: 'This creates the product in Stripe. It shows at checkout once it has a price. It is recorded in the change log.' })], [BK, { t: 'Create product', s: btnP }]);
+    const p4a = dlg('Add a price · Founder [Validate + Build]', false, [K({ cs: SEC, rows: [field('AMOUNT', '[204.00]', { ts: FIN + ';font-family:' + MO }), field('CURRENCY', 'USD ▾', { sub: 'Only USD prices give an AI allowance.' }), R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye: 'BILLING', tags: [tag('Monthly'), tag('Yearly', true), tag('One-time')] })] }), K({ cs: SEC, title: 'Preview', hs: eyeS, rows: [R({ rs: NOTE('v'), t: '[$204.00] / year · AI allowance [$4.25] a month · saves 15% against monthly.', ts: 'font:600 12.5px ' + MO + ';line-height:1.5' })], foot: 'It shows on /pricing within 5 minutes and is recorded in the change log. Next you enter your authenticator code.' })], [BK, { t: 'Add price', s: btnP }]);
+    const p4b = dlg('Change a price · Founder [Validate + Build]', 'Stripe never edits a price. This adds the new price and archives the old one.', [K({ cs: SEC, rows: [R({ t: 'Old price', v: '[$20.00] USD / month' }), field('NEW AMOUNT · USD / MONTH', '[24.00]', { ts: FIN + ';font-family:' + MO }), CHK('Also archive the old price', true)] }), K({ cs: SEC, rows: ['[37] members on the old price keep it.', 'New members pay [$24.00] from now.', '/pricing updates within 5 minutes.', 'It is recorded in the change log. Next you enter your authenticator code.'].map(bul) })], [BK, { t: 'Change price', s: btnP }]);
+    const p4c = dlg('Archive Founder [Raise + Grow]?', 'It leaves /pricing and checkout.', [K({ cs: SEC, rows: ['[12] members on it keep their plan until they cancel.', 'You can’t un-archive it here; make a new product instead.', 'It is recorded in the change log.'].map(bul) })], [BK, { t: 'Archive product', s: btnDF }]);
+    const acctK = K({ title: 'Account', rows: [R({ rs: 'display:flex;padding:0', t: '● Live', ts: 'font:700 15px ' + SG + ';color:' + c.pos, sub: 'Mode, read from the secret key. Payments go to HQ’s Stripe account.' })] });
+    const keyK = (bad) => K({ cs: bad ? AMB : CARD, eye: bad ? 'VARIANT · KEYS DO NOT MATCH' : false, title: 'Publishable key', rows: [R({ rs: 'display:flex;gap:9px;align-items:center;padding:0', pill: pl('', bad ? 'Test' : 'Live', bad ? 'a' : 'g'), t: bad ? 'pk_test_••••7302' : 'pk_live_••••4821', ts: 'font:600 13px ' + MO }), bad ? LN('The publishable key is Test, the account is Live. Checkout and token packs will fail until they match.', 'a') : LN('Matches the account’s mode.', 'g')], rowsS: 'display:flex;flex-direction:column;gap:9px', btns: [{ t: 'Replace key…', s: btnS }] });
+    const whHead = K({ title: 'Webhook', note: 'Stripe sends events to this platform at this address.', rows: [R({ rs: 'display:flex;gap:10px;align-items:center;padding:0', t: 'axal.vc/api/billing/stripe/webhook', ts: 'font:600 13px ' + MO, act: 'Copy', as: btnSm })], btns: [{ t: 'Register a new endpoint…', s: btnS }], foot: 'Registering asks for your authenticator code and is recorded.' });
+    const EV = [['Checkout completed', 1], ['Subscription created', 1], ['Subscription updated', 1], ['Subscription deleted', 1], ['Payment succeeded', 1], ['Payment failed', 1], ['Invoice finalized', 1], ['Invoice paid', 1], ['Charge succeeded', 1], ['Charge refunded', 0], ['Dispute opened', 0], ['Dispute closed', 0]];
+    const evRow = (e) => R({ rs: 'display:flex;gap:8px;align-items:center;padding:7px 0;border-top:1px solid ' + c.hair, lead: e[1] ? '✓' : '✕', ls: 'font-weight:800;flex:none;width:14px;color:' + (e[1] ? c.pos : c.amT), t: e[0], ts: 'font-size:12.5px;font-weight:' + (e[1] ? 500 : 700) + ';color:' + (e[1] ? c.ink : c.amT), v: e[1] ? false : 'Missing', vs: 'font:700 11px ' + SG + ';color:' + c.amT });
+    const EPH = 'margin:0;font:700 13.5px ' + MO + ';letter-spacing:0';
+    const ourEp = K({ eye: 'STRIPE ENDPOINT · we_••••3c1d', title: 'axal.vc/api/billing/stripe/webhook', hs: EPH, tags: [pl('✓', 'Enabled', 'g'), pl('◆', 'This platform’s endpoint', 'v')], note: 'Events the platform acts on', rows: EV.map(evRow), rowsS: 'display:grid;grid-template-columns:1fr 1fr;column-gap:18px', btns: [{ t: 'Add the missing events', s: btnS }], foot: '3 missing: charge refunded, dispute opened, dispute closed. Without them a refund or dispute does not take back AI credit.', fs: 'margin:0;font-size:12.5px;font-weight:600;color:' + c.amT + ';line-height:1.5' });
+    const notOurs = K({ cs: CARD + ';background:' + c.raised, eye: 'STRIPE ENDPOINT · we_••••88a0', title: '[hooks.example.com/stripe]', hs: EPH + ';color:' + c.mu, tags: [pl('–', 'Disabled', 'n')], note: 'Not used by this platform.' });
+    const HV = [8, 6, 5, 4, 4, 5, 7, 9, 11, 14, 15, 12, null, 11, 14, 15, 14, 11, 10, 9, 9, 8, 7, 4], HBAD = { 10: 1, 15: 1 };
+    const hr = (i) => String((15 + i) % 24).padStart(2, '0') + ':00';
+    const hourSvg = () => { const W = 760, H = 230, L = 34, T = 22, Bm = 28, iw = W - L - 8, ih = H - T - Bm, n = 24, step = iw / n, bw = step * .62, ymax = 16;
+      const Y = (v) => +(T + ih - v / ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, 'Webhook deliveries per hour for the last 24 hours: 212 in all, 2 not accepted, and no log for the hour from 03:00.');
+      for (let v = 0; v <= ymax; v += 4) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="10" font-size="11" fill="' + c.mu + '">deliveries</text>';
+      HV.forEach((v, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1, cx = (x + bw / 2).toFixed(1);
+        if (v == null) s += '<rect x="' + x + '" y="' + T + '" width="' + bw.toFixed(1) + '" height="' + ih + '" fill="none" stroke="' + c.mu + '" stroke-width="1.2" stroke-dasharray="3 3" tabindex="0"><title>' + hr(i) + ' · no log for this hour</title></rect><text x="' + cx + '" y="' + (T - 6) + '" text-anchor="middle" font-size="10" fill="' + c.mu + '">no log</text>';
+        else { const bad = HBAD[i] || 0, ok = v - bad;
+          s += '<rect x="' + x + '" y="' + Y(ok) + '" width="' + bw.toFixed(1) + '" height="' + (Y(0) - Y(ok)).toFixed(1) + '" fill="' + (cur ? 'none' : S[0]) + '" stroke="' + S[0] + '" stroke-width="' + (cur ? 1.5 : 0) + '" tabindex="0"><title>' + hr(i) + ' · accepted ' + ok + (cur ? ' so far' : '') + '</title></rect>';
+          if (bad) s += '<rect x="' + x + '" y="' + Y(v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(ok) - Y(v)).toFixed(1) + '" fill="' + AM + '" tabindex="0"><title>' + hr(i) + ' · not accepted ' + bad + '</title></rect>';
+          if (cur) s += '<text x="' + cx + '" y="' + (Y(v) - 6) + '" text-anchor="middle" font-size="10" fill="' + c.mu + '">so far</text>'; }
+        if (i % 3 === 0 || cur) s += '<text x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + (cur ? 'now' : hr(i)) + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const DLEG = [{ t: 'Accepted', sw: dotSw(S[0]) }, { t: 'Not accepted', sw: dotSw(AM) }, { t: 'No log', sw: 'width:12px;height:10px;border:1.5px dashed ' + c.mu + ';box-sizing:border-box;border-radius:2px' }, { t: 'This hour, so far', sw: 'width:10px;height:10px;border:1.5px solid ' + S[0] + ';box-sizing:border-box;border-radius:2px' }];
+    const delK = K({ title: 'Deliveries, last 24 hours', tog: TOG(), legend: DLEG, svg: hourSvg(), rows: [R({ rs: 'display:flex;padding:0', t: 'Last delivery: [14:02] · 200 · 84 ms', ts: 'font:600 12.5px ' + MO })], foot: 'Read from the request log: the time this platform took, not Stripe’s round trip. No log was kept for 03:00 to 04:00.' });
+    const delTbl = TB({ title: 'Deliveries, last 24 hours', tog: seg(['Chart', 'Table'], 'Table'), pager: false, gc: '1fr 1fr 1fr', cols: ['Hour', 'Accepted', 'Not accepted'], rows: [23, 22, 21, 20, 19, 18].map(i => [CL(i === 23 ? '14:00 · so far' : hr(i), MN), CL('[' + (HV[i] - (HBAD[i] || 0)) + ']', MN), CL('[' + (HBAD[i] || 0) + ']', MN)]), foot: 'Showing 6 of 24 hours, newest first · Show all. The hour from 03:00 has no log.' });
+    const mirK = K({ title: 'Catalogue mirror', rows: [R({ rs: 'display:flex;padding:0', t: '[19] active of [24] products · [41] active of [57] prices', ts: 'font:600 12.5px ' + MO + ';line-height:1.5', sub: 'Last written 18 Oct 2026, 09:12.' })], note: 'Nothing syncs on a schedule. A product made in the Stripe dashboard appears after a sync.', btns: [{ t: 'Sync from Stripe', s: btnS }] });
+    const stripeCols = () => [col([acctK], 2), col([keyK(false)], 2), col([keyK(true)], 2), col([whHead]), col([ourEp], 4), col([notOurs], 2), col([delK], 4), col([mirK], 2)];
+    const p6a = (bad) => dlg('Replace the publishable key', false, [K({ cs: SEC, rows: [field('PUBLISHABLE KEY', bad ? 'pk_test_••••••••••••7302' : 'pk_live_••••••••••••9034', { ts: FIN + ';font-family:' + MO + (bad ? ';border-color:' + c.neg : '') }), bad ? LN('This is a Test key. The account is Live.', 'r') : LN('Live key · matches the account.', 'g')], rowsS: 'display:flex;flex-direction:column;gap:9px', foot: 'Every checkout uses it at once. It is recorded in the change log.' })], [BK, bad ? { t: 'Replace key', s: btnX } : { t: 'Replace key', s: btnP }]);
+    const p6b = dlg('Register a new endpoint?', 'This creates an endpoint in Stripe with every event the platform acts on, and stores its signing secret on the platform.', [K({ cs: SEC, rows: [R({ rs: 'display:flex;padding:0', t: 'axal.vc/api/billing/stripe/webhook', ts: 'font:600 13px ' + MO, sub: '[12] events' })], foot: 'Only the Super Admin can do this. It asks for your authenticator code and is recorded.' })], [BK, { t: 'Register', s: btnP }]);
+    const p6c = (fail) => dlg('Sync from Stripe', 'Reads every product and price in Stripe and updates the catalogue.', [K({ cs: SEC, rows: fail ? [LN('Stripe did not answer. Nothing changed. This failure is recorded.', 'r')] : [LN('Synced [24] products.', 'g'), bul('[1] new: Advisor [Pro].'), bul('[1] gone from Stripe: [Old add-on].')], rowsS: 'display:flex;flex-direction:column;gap:6px' })], [fail ? { t: 'Try again', s: btnS } : { t: 'Done', s: btnP }]);
+    const BOX6 = ['4', '8', '1', '', '', ''].map((d, i) => ({ t: d || ' ', s: 'display:grid;place-items:center;width:44px;height:52px;border-radius:9px;box-sizing:border-box;border:' + (i === 3 ? '2px solid ' + c.vi : '1px solid ' + c.hair) + ';background:' + c.card + ';font:700 20px ' + MO + ';color:' + c.ink }));
+    const p6d = dlg('Enter your authenticator code to change prices', 'Asked once, before any write that changes what members pay.', [K({ cs: SEC, tags: BOX6, rows: [R({ rs: 'display:flex;padding:4px 0 0', t: 'Use a recovery method', ts: 'font-size:13px;font-weight:700;color:' + c.vt })] })], [BK, { t: 'Confirm', s: btnP }]);
+    const LOG = [['[18 Oct 2026] 09:12', 'Synced from Stripe', '—', '[24] products · [1] new · [1] gone'], ['[18 Oct 2026] 08:55', 'Added a price', 'Founder [Validate + Build]', '[$204.00] / year'], ['[16 Oct 2026] 17:30', 'Replaced the publishable key', '—', 'key pk_live_••••4821'], ['[14 Oct 2026] 11:02', 'Sync failed', '—', 'Stripe did not answer'], ['[12 Oct 2026] 10:40', 'Archived a product', '[Old add-on]', '—'], ['[9 Oct 2026] 15:18', 'Changed a price', 'Investor [Plus]', '[$25.00] → [$29.00] / month'], ['[2 Oct 2026] 09:00', 'Created a product', 'Founder [Raise + Grow] · [2025]', '—'], ['[2 Sep 2026] 14:20', 'Archived a product', 'Founder [Studio] · legacy', '—']];
+    const logT = TB({ tbar: { search: 'Search product or detail', chips: [tag('What ▾'), tag('Who ▾'), tag('Product ▾'), tag('Date range ▾'), tag('Export CSV')] }, gc: '1.2fr .9fr 1.5fr 1.7fr 1.7fr', minW: 900, cols: ['When', 'Who', 'What', 'Product', 'Detail'], rows: LOG.map(l => [CL(l[0], MN), '[Admin Name]', l[1] === 'Sync failed' ? CL('', { pill: pl('✕', 'Sync failed', 'r') }) : CL(l[1], BD), l[2] === '—' ? CL('—', MU) : l[2], l[3] === '—' ? CL('—', MU) : CL(l[3], { ts: 'font:500 11.5px ' + MO })]), count: '1–25 of [142]', foot: 'Newest first. Failed syncs are recorded too.' });
+    const skelT = TB({ tbar: CTB, gc: CATGC, minW: 820, cols: CATCOLS, pager: false, rows: [0, 1, 2, 3, 4, 5, 6, 7].map(() => CATCOLS.map(() => CL('', { ts: 'display:block;height:10px;width:72%;border-radius:5px;background:' + c.skel }))) });
+    const closedK = K({ cs: CARD + ';border-style:dashed;align-items:center;text-align:center;padding:36px 30px;max-width:580px;margin:110px auto 0;width:100%', eye: 'HQ ONLY', title: 'This page belongs to the Super Admin', ths: 'display:flex;flex-direction:column;align-items:center', hs: 'margin:0;font-size:17px;font-weight:800;text-align:center', note: 'HQ sets what members pay. You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns: [{ t: 'Go to Studio', s: btnG }, { t: 'See the public pricing page', s: btnG }], bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const pCard = (p) => R({ t: p.n, ts: 'font-size:13.5px;font-weight:700', sub: p.mo + (p.yr ? ' · ' + p.yr : '') + ' · ' + p.shows, ss: 'font:500 11.5px ' + MO + ';color:' + c.mu + ';line-height:1.5', tags: [kindP(p.kind)].concat(p.issue ? [pl('●', 'Needs you', 'a')] : []), act: '›', as: BTN + 'width:44px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink });
+    let shell = 'hq', head = true, tabsList = false, tabCur = '', period = false, title = 'Payments', crumb = false, crumbHref = '/admin/platform', hlines = [], hpills = false, hbtns = [], scope = false, scopeTip = '', gateV = false, grid = G6, cols = [], pbar = false, minH = 900, tabsL = 'Payments', litRow = 'Platform', railOpen = B === 'PAY1', loadingDot = false;
+    const TABS = [['Catalogue', '', '[24]'], ['Stripe connection', '/stripe', '●', true], ['Change log', '/log']];
+    const payHead = (tab, o) => { o = o || {}; title = o.title || 'Payments'; crumb = phone ? (o.back || '‹ Platform') : 'Platform › Payments'; crumbHref = o.backHref || '/admin/platform'; hpills = o.pills || [pl('', 'HQ only', 'n')]; hlines = [{ t: o.line || 'What members can buy, at what price, and whether Stripe and the platform agree.' }]; hbtns = phone ? [] : (o.btns || [HB('New product', btnP), ICON('⋯', 'More: Sync from Stripe, Token packs, Promo codes, Revenue')]); tabsList = o.notabs ? false : TABS.map(x => ({ t: x[0], href: '/admin/platform/payments' + x[1], n: o.nocount ? (o.load ? '···' : false) : (x[2] || false), w: !o.nocount && !!x[3] })); tabCur = tab; };
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 640)];
+    const PG = (b) => [{ s: STACK, blocks: b }];
+    const MORE = [ICON('⋯', 'More: Sync from Stripe, Token packs, Promo codes, Revenue')];
+    if (B === 'PAY1') { payHead('Catalogue'); cols = catCols(false); }
+    else if (B === 'PAY2') { payHead('Catalogue'); cols = catCols(false).concat(over(prodDlg, 640)); minH = 1500; }
+    else if (B === 'PAY5' || B === 'PAY13') { payHead('Stripe connection'); cols = stripeCols(); }
+    else if (B === 'PAY7') { payHead('Change log'); cols = [col([logT])]; }
+    else if (B === 'PAY8a') { payHead('Catalogue', { btns: MORE, nocount: true }); cols = [col([CENTER('○', 'Stripe is not connected on this platform yet.', 'HQ adds the account’s keys at deploy. Until then nothing can be sold, and this page shows no products.', false, ';max-width:580px;margin:30px auto 0;width:100%')])]; }
+    else if (B === 'PAY8b') { payHead('Catalogue', { btns: MORE, nocount: true }); cols = [col([CENTER('+', 'No products yet.', 'Make the first one, or sync products you made in the Stripe dashboard.', [{ t: 'New product', s: btnP }, { t: 'Sync from Stripe', s: btnS }], ';max-width:580px;margin:30px auto 0;width:100%')])]; }
+    else if (B === 'PAY9') { payHead('Catalogue', { nocount: true, load: true }); loadingDot = true; cols = [col([TL(T1.map(x => [x[0], '', 'Reading…']))]), col([skelT])]; }
+    else if (B === 'PAY10') { payHead('Catalogue'); cols = catCols(true); }
+    else if (B === 'PAY11') { shell = 'admin'; litRow = false; head = false; cols = [col([closedK])]; }
+    else if (crop) { head = false; grid = STACK;
+      const CROPS = { PAY2c: () => [dlgCol([K({ cs: PLAIN, title: 'Founder [Validate + Build] · checks and details', hs: H18 }), checkK(true), techK(true)])], PAY3a: () => [dlgCol(p3a)], PAY3b: () => [planStep('Founder', ['[Validate + Build]', '[Raise + Grow]'], '[Raise + Grow]', 'clash')], PAY3c: () => [planStep('Investor', ['[Plus]', '[Pro]'], '[Plus]', 'plus')], PAY3d: () => [dlgCol(p3d)], PAY4a: () => [dlgCol(p4a)], PAY4b: () => [dlgCol(p4b)], PAY4c: () => [dlgCol(p4c)], PAY6a: () => [dlgCol(p6a(false))], PAY6b: () => [dlgCol(p6a(true))], PAY6c: () => [dlgCol(p6b)], PAY6d: () => [dlgCol(p6c(false))], PAY6e: () => [dlgCol(p6c(true))], PAY6f: () => [dlgCol(p6d)],
+        PAY10b: () => { grid = 'display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start'; return [{ s: PLAIN, blocks: [K({ title: 'Webhook', rows: [LN('Could not be read. Stripe did not answer.', 'r')], btns: [{ t: 'Try again', s: btnSm }] })] }, { s: PLAIN, blocks: [CENTER('!', 'We could not load the catalogue.', 'The rest of Payments still works.', [{ t: 'Try again', s: btnS }])] }]; } };
+      cols = CROPS[B](); }
+    else if (phone) { grid = STACK;
+      if (B === 'PAY12a') { payHead('Catalogue'); cols = PG([K({ cs: PLAIN, title: 'Needs you · [3]', hs: eyeS })].concat(needsK()).concat([TL(T1), K({ cs: PLAIN, tbar: { search: 'Search name or product ID', chips: [tag('Filters · [0]'), tag('Sort: Name, A to Z ▾')] } }), K({ rows: PLANS.slice(0, 5).map(pCard), foot: '1–5 of [24] · Show more' })])); }
+      else if (B === 'PAY12b') { payHead('Catalogue', { back: '‹ Catalogue', backHref: '/admin/platform/payments', title: 'Founder [Validate + Build]', pills: [pl('', 'Plan · Founder', 'v'), pl('✓', 'Active', 'g')], line: 'prod_••••4821', notabs: true }); cols = PG([whereK, K({ cs: SEC, title: 'Prices', rows: [R({ t: 'Monthly · [$20.00] USD', sub: 'AI allowance [$5.00] a month · price_••••1093', tags: [pl('✓', 'Active', 'g')] }), R({ t: 'Yearly · [$204.00] USD', sub: 'AI allowance [$4.25] a month · saves 15% · price_••••5520', tags: [pl('✓', 'Active', 'g')] })] }), membersK, checkK(false), recentK, techK(false)]); pbar = [{ t: 'Add a price', s: btnS + ';flex:1' }, { t: 'Change a price', s: btnS + ';flex:1' }]; }
+      else if (B === 'PAY12c') { payHead('Catalogue'); cols = PG([K({ rows: PLANS.slice(0, 4).map(pCard) })]).concat([{ s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] }, { s: DLGS + 'position:absolute;left:0;right:0;bottom:0;border-radius:16px 16px 0 0;z-index:4;max-height:660px;overflow:auto', blocks: p4b }]); }
+      else if (B === 'PAY12d') { payHead('Stripe connection'); cols = PG([keyK(false), K({ title: 'Webhook · missing events', rows: EV.filter(e => !e[1]).map(evRow), btns: [{ t: 'Add the missing events', s: btnS }] }), delTbl, mirK]); } }
+    const STRIP = ['Overview', 'Switches', 'Topology', 'AI allowances', 'AI usage', 'Payments', 'Bank accounts', 'Product testing', 'Promo codes', 'Monitoring', 'Telegram'];
+    const stripV = !phone && !crop && shell === 'hq' ? STRIP.map(t => ({ t, href: '/admin/platform' + (t === 'Overview' ? '' : '/' + t.toLowerCase().split(' ').join('-')), cur: t === 'Payments' ? 'page' : 'false', s: 'display:inline-flex;align-items:center;min-height:30px;padding:0 12px;border-radius:999px;font-size:12.5px;white-space:nowrap;text-decoration:none;' + (t === 'Payments' ? 'background:' + c.lav + ';border:1px solid ' + c.lavE + ';color:' + c.vt + ';font-weight:800' : 'border:1px solid transparent;color:' + c.mu + ';font-weight:600') })) : false;
+    const SIDES = { admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'], member: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'] };
+    const rows = SIDES[shell].map(t => ({ t, href: (shell === 'member' ? '/' : '/admin/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === litRow ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) ' + (railOpen ? 320 : 44) + 'px;min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed', group: shell === 'admin' ? 'Admin' : shell === 'hq' ? 'HQ' : '', groupS: 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: shell === 'admin' ? '[Studio Lisbon]' : shell === 'hq' ? 'HQ' : '[Northwind Labs]', badgeS: 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + (shell === 'admin' ? '#334155' : shell === 'hq' ? '#881337' : '#7c3aed'),
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptitle: 'Payments', picoE: 'display:grid;place-items:center;width:44px;height:44px;border-radius:12px;border:0;background:#7c3aed;color:#fff;font:800 14px ' + SG + ';cursor:pointer', strip: stripV, stripS: 'display:flex;gap:4px;align-items:center;padding:6px 30px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';overflow-x:auto', ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:' + c.ink + ';font-size:18px;cursor:pointer',
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope, scopeTip, scopeS: 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid ' + c.hair + ';background:' + c.card + ';font:600 11px ' + MO + ';color:' + c.mu,
+      gate: gateV, gateS: 'display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:9px 12px;border-radius:10px;background:' + c.card + ';border:1px solid ' + c.hair,
+      tabsL, tabs: tabsList ? tabsList.map(x => ({ t: x.t, href: x.href, n: x.n || false, sel: x.t === tabCur ? 'true' : 'false', ns: 'display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';' + (x.w ? 'color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE : 'color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair), s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (x.t === tabCur ? c.vi : 'transparent') + ';color:' + (x.t === tabCur ? c.ink : c.mu) + ';font-weight:' + (x.t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: period ? seg(['4 weeks', '12 weeks', '52 weeks'], '12 weeks') : false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      spine: isShell && shell !== 'member' && !railOpen, rail: isShell && railOpen, railS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box', railHS: 'display:flex;align-items:center;gap:10px', railBtnS: 'display:grid;place-items:center;width:40px;height:40px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font-size:16px;cursor:pointer', railNS: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, railQS: 'padding:11px 12px;border:1px solid ' + c.hair + ';border-radius:10px;font-size:12.5px;color:' + c.fa, railNote: 'Eadwyn reads the catalogue on this page. Nothing changes in Stripe until you act.', spineDot: loadingDot, spineDotS: 'width:8px;height:8px;border-radius:999px;background:' + c.vi + ';box-shadow:0 0 0 3px ' + c.lav, spineTip: 'Eadwyn reads the catalogue on this page. Nothing changes in Stripe until you act.', spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      lockS: 'display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair,
+      lockI: { __html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' },
+      stackS: 'display:flex;gap:2px;height:16px;border-radius:5px;overflow:hidden', factsS: 'display:grid;grid-template-columns:1fr 1fr;gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu,
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT,
+      countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box'
+    };
+    return { v };
+  }
+}
+</script>
+</body>
+</html>

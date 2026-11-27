@@ -1,0 +1,4 @@
+{
+  "sets.join(', ') @ routes/company.ts": 2,
+  "where @ routes/company.ts": 1
+}

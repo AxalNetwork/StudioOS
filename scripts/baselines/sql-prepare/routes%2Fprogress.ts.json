@@ -1,0 +1,8 @@
+{
+  "INTERVIEW_SELECT @ routes/progress.ts": 7,
+  "MVP_SELECT @ routes/progress.ts": 3,
+  "OKR_SELECT @ routes/progress.ts": 4,
+  "WAITLIST_SELECT @ routes/progress.ts": 1,
+  "safeMetric @ routes/progress.ts": 2,
+  "sets.join(', ') @ routes/progress.ts": 2
+}

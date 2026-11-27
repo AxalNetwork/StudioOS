@@ -1,0 +1,430 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import {
+  Calendar, MapPin, Clock, Users, ArrowLeft, Loader2, AlertTriangle,
+  CheckCircle2, Download
+} from 'lucide-react';
+import PublicNav from '../../components/PublicNav';
+import PublicFooter from '../../components/PublicFooter';
+import AxalCheckout from '../../components/AxalCheckout';
+import WorkspaceShell from '../../workspaces/WorkspaceShell';
+import MemberRegistrationPanel from '../../components/events/MemberRegistrationPanel';
+import { useAuth } from '../../hooks/useAuthSync';
+import { events, eventsPublic } from '../../lib/api';
+import { reportError } from '../../lib/log';
+import { loadTurnstile } from '../../lib/turnstile';
+import { formatEventPrice as formatMoney } from '../../lib/money';
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+}
+
+export function renderEventLocation(event) {
+  return (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-slate-400" />
+                    {event.location_kind === 'virtual' ? 'Virtual' : (event.location_text || 'TBA')}
+                    {event.location_url ? (
+                      <a href={event.location_url} target="_blank" rel="noopener noreferrer" className="text-violet-700 dark:text-violet-300 hover:underline ml-1">
+                        Join link
+                      </a>
+                    ) : event.location_kind !== 'physical' && event.location_kind !== 'in_person' ? (
+                      <span className="ml-1">Join link sent to ticket holders</span>
+                    ) : null}
+                  </div>
+  );
+}
+
+export function renderAgenda(items) {
+  if (!Array.isArray(items)) return <p>Unreadable — agenda response is incomplete.</p>;
+  if (items.length === 0) return <p>No agenda items yet.</p>;
+  return (
+    <div className="mt-6">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400 mb-3">
+        Agenda
+      </h3>
+      <div className="space-y-3">
+        {items.map((it) => (
+          <div key={it.id} className="flex gap-3 items-start">
+            <div className="text-xs text-slate-500 dark:text-slate-400 w-20 shrink-0 pt-0.5">
+              {it.starts_at ? formatTime(it.starts_at) : 'Not recorded — start time is absent'}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{it.title}</p>
+              {it.description ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{it.description}</p>
+              ) : null}
+              {it.speaker_name ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Speaker: {it.speaker_name}
+                  {it.speaker_title ? ` — ${it.speaker_title}` : ''}
+                </p>
+              ) : <p className="text-xs text-slate-500 dark:text-slate-400">Not recorded — speaker is absent.</p>}
+              {it.location_text ? <p className="text-xs text-slate-500 dark:text-slate-400">{it.location_text}</p> : <p className="text-xs text-slate-500 dark:text-slate-400">Not recorded — no room supplied.</p>}
+              {it.location_url && <a href={it.location_url} target="_blank" rel="noreferrer">Join</a>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function PublicEventDetailPage() {
+  const { slug } = useParams();
+  const { user } = useAuth();
+  const [event, setEvent] = useState(null);
+  const [agenda, setAgenda] = useState([]);
+  const [seatsTaken, setSeatsTaken] = useState(0);
+  const [isFull, setIsFull] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const [form, setForm] = useState({ name: '', email: '' });
+  const [status, setStatus] = useState({ state: 'idle', error: '', result: null });
+  const [payment, setPayment] = useState(null); // { clientSecret, amountCents, currency } when a paid ticket needs payment
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef(null);
+  const turnstileWidgetId = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    const read = user && /^\d+$/.test(slug) ? events.get(slug).then(async detail => { const preview = await events.eligibility(slug); return { ...detail, seats_taken: preview.seats_taken, is_full: preview.is_full }; }) : eventsPublic.read(slug);
+    read
+      .then((data) => {
+        if (cancelled) return;
+        if (!data?.event || !Array.isArray(data.agenda) || typeof data.seats_taken !== 'number' || typeof data.is_full !== 'boolean') throw new Error('Event response is incomplete.');
+        setEvent(data.event);
+        setAgenda(Array.isArray(data?.agenda) ? data.agenda : []);
+        setSeatsTaken(Number(data?.seats_taken || 0));
+        setIsFull(!!data?.is_full);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        reportError('public_event_detail_failed', err);
+        setError(err?.status === 404 ? 'Event not found.' : 'Unable to load event details.');
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [slug, user?.id]);
+
+  // Turnstile lifecycle
+  const formVisible = status.state !== 'sent';
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !formVisible || !event) return;
+    let cancelled = false;
+    let interval;
+    const renderTurnstile = () => {
+      if (cancelled || !turnstileRef.current) return;
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+      }
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => setTurnstileToken(token),
+        'expired-callback': () => setTurnstileToken(''),
+        theme: 'auto',
+      });
+    };
+    loadTurnstile().catch(() => {});
+    if (typeof window.turnstile === 'undefined') {
+      let attempts = 0;
+      interval = setInterval(() => {
+        attempts += 1;
+        if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
+          clearInterval(interval);
+          renderTurnstile();
+        } else if (attempts >= 50) {
+          clearInterval(interval);
+        }
+      }, 200);
+    } else {
+      renderTurnstile();
+    }
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, [formVisible, event]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!user && TURNSTILE_SITE_KEY && !turnstileToken) {
+      setStatus({ state: 'error', error: 'Please complete the verification challenge.', result: null });
+      return;
+    }
+    setStatus({ state: 'sending', error: '', result: null });
+    setPayment(null);
+    try {
+      const res = user ? await events.register(event.id, {}) : await eventsPublic.register(slug, {
+        name: form.name,
+        email: form.email,
+        turnstile_token: turnstileToken,
+      });
+      setTurnstileToken('');
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+      }
+      // Paid ticket: the seat is held but the server returned a PaymentIntent —
+      // collect payment inline (no redirect) before we treat the seat as final.
+      if (res?.client_secret) {
+        setPayment({
+          clientSecret: res.client_secret,
+          amountCents: res.registration?.amount_cents ?? event?.price_cents ?? null,
+          currency: event?.currency || 'usd',
+        });
+        setStatus({ state: 'paying', error: '', result: res });
+        return;
+      }
+      // Paid but no client_secret means we couldn't mint a customer (e.g. the
+      // email isn't a member yet) — surface a clear next step instead of a
+      // silent "registered" state.
+      if (res?.needs_payment) {
+        setStatus({
+          state: 'error',
+          error: 'This is a paid event. Please sign in with a member account to complete payment.',
+          result: null,
+        });
+        return;
+      }
+      setStatus({ state: 'sent', error: '', result: res });
+    } catch (err) {
+      // D258 — the refusal's code is `err.code`; `err.message` is its sentence.
+      const msg = err?.code === 'turnstile_failed'
+        ? 'Verification failed — please complete the challenge again.'
+        : (err?.message || 'Something went wrong. Please try again.');
+      setStatus({ state: 'error', error: msg, result: null });
+      if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+        try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+        setTurnstileToken('');
+      }
+    }
+  };
+
+  const capacityLabel = () => {
+    if (event?.capacity == null) return null;
+    const remaining = Math.max(0, event.capacity - seatsTaken);
+    if (isFull) return <span className="text-xs text-red-600 dark:text-red-400 font-medium">Full</span>;
+    return (
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        {remaining} spot{remaining === 1 ? '' : 's'} left
+      </span>
+    );
+  };
+
+  const memberView = Boolean(user && /^\d+$/.test(slug));
+  const content = (
+    <div className={memberView ? "bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100" : "min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pt-16"}>
+      {!memberView && <PublicNav />}
+      <main className="flex-1">
+        <div className="max-w-3xl mx-auto px-6 py-8">
+          <Link to="/events" className="inline-flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 mb-6">
+            <ArrowLeft className="w-4 h-4" /> All events
+          </Link>
+
+          {loading ? (
+            <div className="text-center text-slate-500 py-20 flex flex-col items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin" /> Loading event…
+            </div>
+          ) : error ? (
+            <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          ) : event ? (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+              {event.cover_url ? (
+                <div className="h-56 sm:h-72">
+                  <img src={event.cover_url} alt={event.title} className="w-full h-full object-cover" />
+                </div>
+              ) : null}
+              <div className="p-6 sm:p-8">
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium uppercase tracking-wide">
+                    {event.type?.replace(/_/g, ' ')}
+                  </span>
+                  {event.approval_required ? (
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">Approval required</span>
+                  ) : null}
+                  {capacityLabel()}
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">{event.title}</h1>
+                {event.summary ? (
+                  <p className="mt-2 text-base text-slate-600 dark:text-slate-400">{event.summary}</p>
+                ) : null}
+                <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                    {formatDate(event.starts_at)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-slate-400" />
+                    {formatTime(event.starts_at)}
+                    {event.ends_at ? ` — ${formatTime(event.ends_at)}` : ''}
+                  </div>
+                  {renderEventLocation(event)}
+                  {event.capacity != null ? (
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-slate-400" />
+                      {seatsTaken} / {event.capacity} registered
+                    </div>
+                  ) : null}
+                </div>
+
+                {event.description ? (
+                  <div className="mt-6 text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-line">
+                    {event.description}
+                  </div>
+                ) : null}
+
+                {user && <MemberRegistrationPanel eventId={event.id} refreshKey={status.state === 'sent'} />}
+                {renderAgenda(agenda)}
+
+                {/* Registration form */}
+                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                  {status.state === 'sent' ? (
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-6">
+                      <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300 font-semibold">
+                        <CheckCircle2 className="w-5 h-5" />
+                        {status.result?.status === 'waitlisted'
+                          ? 'You\'re on the waitlist'
+                          : status.result?.status === 'registered' && event.approval_required
+                            ? 'Registration submitted — pending approval'
+                            : 'Registered'}
+                      </div>
+                      <p className="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
+                        {status.result?.status === 'waitlisted'
+                          ? 'If a spot opens up, you\'ll be notified automatically.'
+                          : status.result?.status === 'registered' && event.approval_required
+                            ? 'The host will review your request and confirm shortly.'
+                            : 'You\'re all set. A calendar invite is attached below.'}
+                      </p>
+                      <div className="mt-4 flex items-center gap-3">
+                        <a
+                          href={user ? events.icsUrl(event.id) : eventsPublic.icsUrl(slug)}
+                          download
+                          className="inline-flex items-center gap-2 text-sm text-violet-700 dark:text-violet-300 hover:underline"
+                        >
+                          <Download className="w-4 h-4" /> Download .ics
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setStatus({ state: 'idle', error: '', result: null })}
+                          className="text-sm text-slate-500 dark:text-slate-400 hover:underline"
+                        >
+                          Register someone else
+                        </button>
+                      </div>
+                    </div>
+                  ) : status.state === 'paying' && payment ? (
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6">
+                      <div className="mb-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                        {payment.amountCents != null
+                          ? `Complete payment · ${formatMoney(payment.amountCents, payment.currency)}`
+                          : 'Complete payment'}
+                      </div>
+                      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+                        Your spot is held. Pay below to confirm your ticket — you won't leave this page.
+                      </p>
+                      <AxalCheckout
+                        clientSecret={payment.clientSecret}
+                        submitLabel={payment.amountCents != null ? `Pay ${formatMoney(payment.amountCents, payment.currency)}` : 'Pay now'}
+                        onSuccess={() => {
+                          setPayment(null);
+                          setStatus((s) => ({ state: 'sent', error: '', result: s.result }));
+                        }}
+                        onError={(err) => setStatus((s) => ({ ...s, error: err?.message || 'Payment failed. Please try again.' }))}
+                      />
+                      {status.error && (
+                        <div className="mt-3 flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
+                          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>{status.error}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : isFull && !event.waitlist_enabled ? (
+                    <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6">
+                      <div className="flex items-center gap-3 text-red-700 dark:text-red-300 font-semibold">
+                        <AlertTriangle className="w-5 h-5" /> This event is full
+                      </div>
+                      <p className="mt-2 text-sm text-red-800 dark:text-red-200">
+                        No spots are currently available.
+                      </p>
+                    </div>
+                  ) : (
+                    <form onSubmit={submit} className="space-y-4">
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        {isFull ? 'Join the waitlist' : 'Register'}
+                      </h3>
+                      {user ? <p className="text-sm text-slate-600 dark:text-slate-400">Register with your signed-in member account.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <label className="block">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Name</span>
+                          <input
+                            type="text"
+                            required
+                            maxLength={120}
+                            value={form.name}
+                            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                            className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">Email</span>
+                          <input
+                            type="email"
+                            required
+                            maxLength={254}
+                            value={form.email}
+                            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                            className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                          />
+                        </label>
+                      </div>}
+                      {status.state === 'error' && (
+                        <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>{status.error}</span>
+                        </div>
+                      )}
+                      {!user && TURNSTILE_SITE_KEY && (
+                        <div ref={turnstileRef} className="flex justify-start" />
+                      )}
+                      <div className="flex items-center justify-end gap-4 pt-2">
+                        <button
+                          type="submit"
+                          disabled={status.state === 'sending' || (!user && TURNSTILE_SITE_KEY && !turnstileToken)}
+                          className="inline-flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {status.state === 'sending' ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : (isFull ? 'Join waitlist' : 'Register')}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </main>
+      {!memberView && <PublicFooter />}
+    </div>
+  );
+  return memberView ? <WorkspaceShell role={user.role} title={event?.title || 'My event'} intro="Your registration and attendee agenda.">{content}</WorkspaceShell> : content;
+}

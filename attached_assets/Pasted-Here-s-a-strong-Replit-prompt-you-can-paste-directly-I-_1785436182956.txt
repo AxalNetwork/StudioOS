@@ -1,0 +1,516 @@
+Here’s a strong **Replit prompt** you can paste directly. I tailored it to the Axal VC Spin-Out Lab screenshots: cohort application review, stage tracking across the 30-day pipeline, unlocked tools/features, follower/watch functionality, and a clean admin workflow inspired by your current product UI.[1][2][3][4]
+
+## Replit prompt
+
+Build a production-quality **Axal VC Spin-Out Lab Cohort Admin Dashboard** web app for internal operators to review founder applications, approve or reject submissions, track every company across the Spin-Out Lab stages, and let internal team members follow each company profile.
+
+Use **Next.js + TypeScript + Tailwind CSS + shadcn/ui + Lucide icons + Supabase** for auth/database/storage. Make it feel like a premium modern venture platform: clean white surfaces, subtle purple accents, rounded cards, crisp tables, strong hierarchy, and dense-but-readable admin UX. Keep typography compact like a real admin panel. No generic AI gradient dashboard look.
+
+### Product context
+
+This dashboard is for the **Axal VC Spin-Out Lab** team. It manages startup applications and cohort progress.
+
+The public/user-facing product already has:
+- A cohort application page with fields like company/working name, project description, incorporation status, current stage, preferred jurisdiction.
+- A 30-day cohort pipeline with 5 phases: **Validate, Structure, Build, Pitch, Fund**.
+- Weekly modules and unlocked features/tools such as:
+  - Startups
+  - Customer Discovery
+  - Market Intel
+  - Profiling
+  - Roadmap
+  - Brand & Landing Pages
+  - Pitch Deck Builder
+  - Studio Ops
+  - Scoring
+  - Advisors
+  - Office Hours
+  - Co-founder Match
+  - MI / Investor Signals
+  - Revenue
+  - Incorporate
+  - Cap Table
+  - 83(b)
+  - Co-founder Agreement
+  - Capital
+
+The admin dashboard should help operators:
+1. Review applications.
+2. Approve, reject, waitlist, or request more info.
+3. Assign accepted companies to cohorts.
+4. Track where each company is in the 5-phase pipeline.
+5. Track what features/tools each company has used or completed.
+6. Let internal users “follow” companies/profiles and see a watchlist.
+7. Add notes, tags, owners, and next actions.
+8. See activity history and progress over time.
+
+### Main views to build
+
+Build these routes/pages:
+
+#### 1. Overview dashboard
+A top-level admin home page with:
+- KPI cards:
+  - New applications
+  - Under review
+  - Approved
+  - Waitlisted
+  - Rejected
+  - Active cohort companies
+  - Companies at risk
+  - Avg time in stage
+- Funnel visualization:
+  - Applied → Reviewed → Approved → Cohort active → Funded
+- Cohort snapshot:
+  - Cohort 3, Cohort 4, etc.
+  - Number of companies in each pipeline phase
+- Recent activity feed:
+  - “Halyard moved to Build”
+  - “Quill approved for Cohort 4”
+  - “Northbeam unlocked Pitch Deck Builder”
+- “Needs attention” panel:
+  - applications missing data
+  - stalled companies
+  - companies with overdue tasks
+  - no activity for 7+ days
+
+#### 2. Applications inbox
+A dense review interface for new cohort submissions.
+Features:
+- Table/list of applications with:
+  - applicant ID
+  - company name
+  - founder name
+  - email
+  - submitted date
+  - incorporation status
+  - current stage
+  - preferred jurisdiction
+  - score
+  - review status
+  - assigned reviewer
+- Filters:
+  - cohort
+  - status
+  - jurisdiction
+  - stage
+  - incorporated vs not
+  - reviewer
+  - date range
+- Search by company/founder/email
+- Bulk actions:
+  - approve
+  - reject
+  - waitlist
+  - assign reviewer
+  - export CSV
+
+Clicking a row opens a **review drawer or detail panel** showing:
+- Full application form answers
+- Founder/company summary
+- Internal score
+- AI-generated highlights/risk flags placeholder
+- Reviewer notes
+- Attachments/documents placeholder
+- Buttons:
+  - Approve
+  - Waitlist
+  - Reject
+  - Request more info
+- Approval modal fields:
+  - assign to cohort
+  - assign operator/lead
+  - starting phase
+  - notes
+  - unlock default tool set
+
+#### 3. Company / profile detail page
+A deep profile page for each startup/company in the lab.
+Sections:
+- Header:
+  - company name
+  - one-line description
+  - cohort
+  - day/week in program
+  - current phase
+  - health status
+  - lead operator
+  - follow/unfollow button
+- Stage progress bar:
+  - Validate
+  - Structure
+  - Build
+  - Pitch
+  - Fund
+- Weekly progress timeline:
+  - Week 1–4 modules
+  - completed/not started/in progress
+- Feature/tool engagement grid:
+  - each Axal feature card shows status:
+    - locked
+    - unlocked
+    - in progress
+    - completed
+  - also show last activity date and owner
+- Deliverables tracker:
+  - scope MVP
+  - OKRs
+  - landing page
+  - pitch deck
+  - cap table
+  - 83(b)
+  - co-founder agreement
+  - capital prep
+- Notes tab
+- Activity tab
+- Followers tab
+- Documents tab
+- Risk / blockers tab
+- Tasks tab
+
+Include a right rail with:
+- follow button
+- owner
+- next meeting
+- missing deliverables
+- suggested next step
+- quick actions:
+  - move stage
+  - add note
+  - assign task
+  - unlock feature
+  - mark deliverable complete
+
+#### 4. Cohort board
+A kanban-style board for active companies across the 5 phases:
+- Columns:
+  - Validate
+  - Structure
+  - Build
+  - Pitch
+  - Fund
+- Company cards show:
+  - logo/initials
+  - company name
+  - short description
+  - day number
+  - lead
+  - risk badge
+  - completed tasks %
+  - key unlocked feature
+- Drag and drop between stages
+- Clicking card opens quick preview
+- Board filters:
+  - cohort
+  - lead
+  - risk
+  - jurisdiction
+  - last active
+
+#### 5. Feature adoption dashboard
+A page showing how companies use Axal VC Spin-Out Lab features.
+Include:
+- Usage table by company
+- Usage table by feature
+- Heatmap or matrix:
+  - rows = companies
+  - columns = features/tools
+  - cell state = locked/unlocked/in progress/completed
+- Feature completion stats:
+  - Pitch Deck Builder adoption
+  - Customer Discovery usage
+  - Cap Table completion
+  - 83(b) filed
+- Filters by cohort/stage
+- Click a feature or company to drill down
+
+#### 6. Followers / watchlist page
+Internal team members can follow company profiles.
+Build:
+- “Companies I follow” page
+- Feed of watched activity:
+  - moved stage
+  - submitted deliverable
+  - got approved
+  - became inactive
+- Option to follow/unfollow from any company page
+- Filter watched companies by:
+  - cohort
+  - stage
+  - owner
+  - risk
+- Notification preferences UI:
+  - all updates
+  - stage changes only
+  - risk alerts only
+  - weekly digest
+
+#### 7. Admin settings
+Pages for:
+- cohorts
+- phases and stage rules
+- feature catalog
+- reviewer roles
+- status labels
+- notification preferences
+- scoring rubric
+- jurisdiction list
+
+### Required data model
+
+Design Supabase schema with tables like:
+
+- users
+- profiles
+- cohorts
+- applications
+- companies
+- company_members
+- company_followers
+- company_notes
+- company_tasks
+- company_documents
+- company_stage_history
+- features
+- company_feature_progress
+- deliverables
+- company_deliverables
+- review_decisions
+- activity_events
+- notification_preferences
+
+Suggested important fields:
+
+#### applications
+- id
+- applicant_user_id
+- company_name
+- founder_name
+- email
+- description
+- incorporated_status
+- current_stage
+- preferred_jurisdiction
+- submitted_at
+- status
+- reviewer_id
+- score
+- notes
+- cohort_id nullable
+
+#### companies
+- id
+- application_id
+- name
+- slug
+- description
+- cohort_id
+- current_phase
+- current_week
+- current_day
+- lead_user_id
+- health_status
+- jurisdiction
+- created_at
+
+#### company_feature_progress
+- id
+- company_id
+- feature_id
+- status
+- started_at
+- completed_at
+- last_activity_at
+- owner_user_id
+
+#### company_followers
+- id
+- company_id
+- user_id
+- notification_mode
+
+#### company_stage_history
+- id
+- company_id
+- from_stage
+- to_stage
+- changed_by
+- changed_at
+- note
+
+### Roles and permissions
+
+Support these roles:
+- super_admin
+- cohort_admin
+- reviewer
+- operator
+- viewer
+
+Permissions:
+- reviewers can review applications
+- cohort admins can approve and assign cohorts
+- operators can manage progress, notes, features, tasks
+- viewers can only view
+- only internal users can follow company profiles
+
+### UX requirements
+
+Follow these UX rules:
+- desktop-first admin layout with left sidebar + top bar + main content area
+- mobile responsive but optimized for desktop operations
+- compact, professional typography
+- sticky filters in tables
+- fast keyboard-driven search
+- row click opens right-side drawer
+- command palette shortcut with Cmd/Ctrl + K
+- all important objects should be linkable by URL
+- loading skeletons, empty states, error states
+- optimistic UI where appropriate
+- dark mode support
+- accessible with keyboard navigation
+
+### Visual direction
+
+Design should be inspired by the attached Spin-Out Lab product screens:
+- white/light neutral background
+- subtle purple/lilac accent
+- rounded cards
+- thin borders
+- soft shadows
+- status pills
+- cohort/stage chips
+- clear modular sections
+- progress states that resemble the existing product
+- avoid flashy charts unless helpful
+- make it feel like the admin back office of the same product family
+
+### Components to include
+
+- sidebar navigation
+- top search bar
+- KPI cards
+- data table with filters
+- right-side detail drawer
+- kanban board
+- timeline / phase tracker
+- progress badges
+- activity feed
+- notes composer
+- follower button and watcher list
+- task checklist
+- feature grid
+- review decision modal
+- cohort assignment modal
+
+### Seed data
+
+Create realistic demo seed data for:
+- 4 cohorts
+- 40 applications
+- 18 approved companies
+- companies spread across all 5 phases
+- realistic feature progress and deliverables
+- 8 internal team members
+- notes, followers, tasks, and activity events
+
+Use company names similar in style to:
+- Halyard
+- Cindershift
+- Tessella
+- Quill
+- Verda
+- Northbeam
+
+### Technical requirements
+
+- Use Supabase auth with email login
+- Use Supabase tables and RLS policies
+- Use server components where useful, but interactive admin tables/boards can use client components
+- Use TanStack Table for application/company tables
+- Use dnd-kit for the cohort board
+- Use Recharts for lightweight analytics
+- Use Zod + React Hook Form for forms
+- Use Zustand or simple app state where useful
+- Include a clean mock AI scoring panel, but keep it fake/local for now
+- Add a README with setup instructions
+- Include a polished demo mode if Supabase env vars are missing
+
+### Important workflows to implement
+
+Implement these end-to-end flows:
+
+1. **Application review flow**
+- view submission
+- add note
+- assign reviewer
+- approve / reject / waitlist
+- on approval create company profile and assign cohort
+
+2. **Stage progression flow**
+- move company from Validate to Structure etc.
+- log history entry
+- update cohort board and company detail page
+
+3. **Feature tracking flow**
+- mark feature unlocked
+- mark in progress
+- mark completed
+- record owner and activity timestamp
+
+4. **Follower flow**
+- internal user follows company
+- company appears in watchlist
+- watchlist feed shows relevant updates
+
+5. **Task management flow**
+- create task
+- assign owner
+- due date
+- mark done
+- show overdue state
+
+### Deliverable
+
+Generate a complete working app scaffold with:
+- clean file structure
+- reusable components
+- seeded sample data
+- clear comments only where helpful
+- polished UI, not wireframes
+- no placeholder lorem ipsum
+- realistic copy and statuses
+
+Also create:
+- a concise README
+- sample `.env.example`
+- SQL schema for Supabase
+- demo seed script
+
+## Optional shorter version
+
+If you want a tighter prompt for faster Replit output, use this:
+
+> Build an **Axal VC Spin-Out Lab Cohort Admin Dashboard** using Next.js, TypeScript, Tailwind, shadcn/ui, Supabase, TanStack Table, dnd-kit, and Recharts.  
+> It should let internal admins review applications, approve/reject/waitlist submissions, assign accepted startups to cohorts, track each company across 5 stages (Validate, Structure, Build, Pitch, Fund), track which Axal features/tools they’ve used, manage notes/tasks/deliverables, and let internal users follow company profiles with a watchlist feed.  
+> Match the visual style of a premium venture platform admin panel: white background, subtle purple accents, rounded cards, clean tables, status pills, progress trackers, and a right-side detail drawer.  
+> Include pages for Overview, Applications Inbox, Company Profile, Cohort Board, Feature Adoption, Followers/Watchlist, and Admin Settings.  
+> Add realistic seeded data, role-based permissions, Supabase schema, demo mode, and polished UI.
+
+## Small additions
+
+To make Replit produce a better first pass, add this at the end of the prompt:
+
+- “Start by generating the database schema and route map.”
+- “Then scaffold the app with seed data and core UI.”
+- “Prioritize the Applications Inbox, Company Detail page, and Cohort Board first.”
+- “Do not build generic placeholder charts or fake crypto-style analytics.”
+- “Use compact admin typography and make dense information readable.”[2][3][1]
+
+Would you like me to turn this into an even more precise **Cursor/Replit engineering spec** with page-by-page acceptance criteria and exact Supabase table SQL?
+
+Sources
+[1] Screenshot-2026-07-30-at-7.49.27-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/0a4ad944-20af-4dbb-b5dd-8cf125e9c14b/Screenshot-2026-07-30-at-7.49.27-PM.jpeg
+[2] Screenshot-2026-07-30-at-2.24.46-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/9971217f-5fcd-4729-bd0d-845d915db415/Screenshot-2026-07-30-at-2.24.46-PM.jpeg
+[3] Screenshot-2026-07-30-at-1.47.08-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/db7ff37d-cce4-4d9e-bc3a-6dc08b5cf200/Screenshot-2026-07-30-at-1.47.08-PM.jpeg
+[4] Axal VC https://axal.vc/

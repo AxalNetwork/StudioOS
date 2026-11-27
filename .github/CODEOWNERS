@@ -1,0 +1,69 @@
+# CODEOWNERS — who gets auto-requested for review.
+#
+# NOTE: We use the repository owner (@guillaumelauzier) as the default reviewer
+# because the @AxalNetwork/security GitHub team has not been created yet.
+# Once that team exists, swap the production-touching paths over to it:
+#   - cloudflare-worker/  → @AxalNetwork/security  (security-sensitive prod)
+#   - .github/workflows/  → @AxalNetwork/security  (CI gates)
+#   - wrangler.toml       → @AxalNetwork/security  (deploy contract)
+
+# Default — anything not matched below.
+*                                     @guillaumelauzier
+
+# Production worker (security-critical — every change ships to axal.vc).
+/cloudflare-worker/                   @guillaumelauzier
+/wrangler.toml                        @guillaumelauzier
+
+# CI + secrets policy.
+/.github/                             @guillaumelauzier
+/.gitleaks.toml                       @guillaumelauzier
+
+# Architecture truth doc — protected so accidental "fixes" don't reintroduce
+# the FastAPI-is-canonical lie that audits keep flagging.
+/CLAUDE.md                            @guillaumelauzier
+/PRODUCTION.md                        @guillaumelauzier
+/README.md                            @guillaumelauzier
+
+# Frontend SPA.
+/frontend/src/lib/api.js              @guillaumelauzier
+
+# privileged:begin — generated from the privileged-path list; node scripts/check-privileged-paths.mjs --write (D8067)
+# CI workflows, labels, Dependabot and CODEOWNERS: the gates themselves
+**/.github                            @guillaumelauzier
+# the build, check, landing and release scripts every gate runs
+**/scripts                            @guillaumelauzier
+# the Merge Control Worker and this classifier
+**/merge-control                      @guillaumelauzier
+# legal templates, specs and other binary sources
+**/attached_assets                    @guillaumelauzier
+# the D1 schema and its migrations
+/cloudflare-worker/sql/**             @guillaumelauzier
+# the Worker's auth and request middleware
+/cloudflare-worker/src/middleware/**  @guillaumelauzier
+# the agents' task protocol
+**/AGENTS.md                          @guillaumelauzier
+# the architecture truth
+**/CLAUDE.md                          @guillaumelauzier
+# who reviews what
+**/CODEOWNERS                         @guillaumelauzier
+# merge drivers and the diff and binary rules
+**/.gitattributes                     @guillaumelauzier
+# dependencies and npm scripts
+**/package*.json                      @guillaumelauzier
+# a Worker's deploy contract and bindings
+**/wrangler*.toml                     @guillaumelauzier
+# a pinned dependency tree
+**/npm-shrinkwrap.json                @guillaumelauzier
+**/*lockfile                          @guillaumelauzier
+**/*.lock                             @guillaumelauzier
+**/*.lockb                            @guillaumelauzier
+**/*-lock.json                        @guillaumelauzier
+**/*-lock.yaml                        @guillaumelauzier
+**/*-lock.yml                         @guillaumelauzier
+**/*_lock.json                        @guillaumelauzier
+**/*_lock.yaml                        @guillaumelauzier
+**/*_lock.yml                         @guillaumelauzier
+**/*.lock.json                        @guillaumelauzier
+**/*.lock.yaml                        @guillaumelauzier
+**/*.lock.yml                         @guillaumelauzier
+# privileged:end

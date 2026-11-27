@@ -1,0 +1,38 @@
+-- 284 — the branch's licence copy says which KIND of licence it runs under
+-- (D206).
+--
+-- WHAT WENT WRONG. Migration 279 gave HQ's ledger a `kind` — subsidiary or
+-- white-label — and the surfaces that already branched on it stopped guessing.
+-- The copy HQ pushes to a branch (`branch_licence`, 256) was never told. Neither
+-- emitter sent it (`licenceRecord` for the push, `licenceForBranch` for the
+-- pull), the table had nowhere to put it, and so a branch could not know the
+-- one fact canvas H30 turns on: a white-label's admins have no HQ brand desk,
+-- so "content for brand approval" is an escalation they can raise and nobody
+-- can answer. The drawer offered it anyway, because it offered all four kinds
+-- to everyone.
+--
+-- NULLABLE, WITH NO DEFAULT, for 257's reason and 265's after it: a branch whose
+-- licence HQ pushed before this column existed has nothing to backfill from, and
+-- defaulting to 'subsidiary' would be the copy asserting something HQ never said
+-- on this tier. A missing kind reads as UNKNOWN, and every reader of it treats
+-- unknown as "offer everything and let HQ decide" — which is safe, because HQ
+-- checks its own ledger before it records a content escalation (D206).
+--
+-- NO CHECK, UNLIKE 279, AND THAT IS DELIBERATE. The vocabulary is closed where
+-- it is AUTHORED: 279's CHECK stops HQ's ledger holding a third kind. A CHECK
+-- on the COPY would do something else entirely — the day HQ is one migration
+-- ahead with a third kind, every push to a branch that has not caught up would
+-- fail WHOLE, and a push can be carrying a suspension (D137). A copy that
+-- refuses the rest of its row over one value it does not recognise is worse
+-- than a copy that stores it and lets the reader say it does not know it.
+--
+-- WHY A NEW MIGRATION RATHER THAN A CORRECTION TO 256, in 257's words, which
+-- still apply: 256 is applied and in the ledger of every database that has run
+-- migrations since, and editing an applied migration changes what a FRESH build
+-- produces without changing any existing database. Additive only, even though
+-- `branch_licence` is empty everywhere — no branch has been provisioned — because
+-- the rule is what makes that emptiness something we can stop having to check.
+--
+-- No BEGIN/COMMIT: D1 rejects transaction control in a migration file (#26).
+
+ALTER TABLE branch_licence ADD COLUMN kind TEXT;

@@ -1,0 +1,106 @@
+Objective
+  Make Personal Advisor ask only relevant questions for each user's
+  persona AND, for Spin-Out Lab founders, only the features unlocked
+  in the current week. Existing founders get the full BUILD/Capital/
+  Legal coverage. Investors and Operating Partners get role-specific
+  banks geared toward decisions, deploys, and offers.
+
+Bank files (frontend/src/lib/advisor/banks/)
+  newFounderSpinout.ts
+    Gated by users.spinout_lab_week:
+      Week 1: idea, customer ICP, problem urgency, 3 first interviews,
+              market sizing seed, brand working name
+      Week 2: roadmap OKRs, brand v1 (tagline, palette, voice),
+              pitch-deck outline, MVP scope
+      Week 3: co-founder gaps, mentor needs, scoring readiness,
+              office-hours topics, sector validation
+      Week 4: incorporation prefs (entity, country, fiscal year),
+              cap-table founders + vesting, 83(b) attestation,
+              cofounder agreement terms, fundraise plan
+    Each question's `unlock_required` matches Spin-Out Lab Week
+    feature unlocks (Prompt 3). Questions for not-yet-unlocked
+    features are deferred to the next week and the advisor explains
+    why.
+
+  existingFounder.ts
+    Sections (the bank cycles through them on demand):
+      BUILD               Project basics, Pipeline board column setup,
+                          Studio Ops cadence, Brand & Landing,
+                          Pitch Deck outline + slide bullets,
+                          Financial Model (MRR, burn, runway,
+                          revenue split), Customer Discovery
+                          (recent interviews), Roadmap OKRs, Metrics
+      CAPITAL             current round target, valuation, investors
+                          in conversation, cap-table snapshot,
+                          reserves plan, waterfall scenarios
+      LEGAL & COMPLIANCE  incorporation, cofounder agreement, 83(b),
+                          IP assignments, compliance basics, KYC
+      NETWORK             mentor needs, partner needs, marketplace
+                          listings, co-marketing pitches
+    Each section completes independently; user can jump.
+
+  investor.ts
+    Decision-support bank:
+      Thesis, sectors, geos, stages, tickets, AUM, deployment target,
+      lead/follow, allergies, signal triggers ("alert me when…"),
+      DD bar (what evidence must be present before commit),
+      portfolio-construction targets, follow-on reserve %, lookalike
+      examples from existing investments, co-invest preferences,
+      conflict disclosures, watchlist seeds, partner-needs (legal,
+      tax, recruiting, technical DD).
+    On completion, advisor maps the thesis to live Axal deals and
+    proposes 3-5 introductions.
+
+  operatingPartner.ts
+    Demand-and-supply bank:
+      What they can offer (services list, hours/week capacity, rate
+      card, equity-friendly?), what they want (deal flow, equity,
+      revshare, co-invest rights), sectors and stages they help,
+      conflicts of interest, references, geographic coverage,
+      portfolio impact claims, available time horizon.
+    Advisor matches their offer to current platform demand (founder
+    needs + investor service requests) and surfaces concrete leads.
+
+  mentor.ts
+    Expertise tags, sector coverage, weekly capacity, languages,
+    timezones served, comp model, topics-they-decline, sample wins,
+    references, calendar provider.
+
+Banks share this question shape:
+  {
+    id, label, type, validate, page_target, tier_required?,
+    unlock_required?,         // for Spin-Out Lab gating
+    persona_filter,           // which roles this question applies to
+    explainer, doc_anchor,
+    followups,                // conditional branches
+    importance: 'critical'|'high'|'med'|'low'
+  }
+  Sorting: critical first; the advisor surfaces a progress ring per
+  page and lets the user pick a page to focus on.
+
+Routing
+  cloudflare-worker/src/routes/advisor.ts
+    GET /api/advisor/next-question?focus=<page_key?>
+      Returns the next pending question for the user's persona,
+      filtered by current spin-out_lab_week, tier, and unlock state.
+    POST /api/advisor/answer { question_id, value }
+    POST /api/advisor/skip { question_id, reason }
+    POST /api/advisor/explain { topic }
+    GET /api/advisor/progress
+      Returns { by_page: { projects: 0.6, pipeline: 0.1, ... },
+                by_section: { build: 0.4, capital: 0.0 },
+                overall: 0.3 }
+
+Frontend
+  Right rail "Your progress" now shows per-page progress bars with
+  click-to-focus. Banks load dynamically based on user role. Spin-
+  Out founders see a banner: "Week 2 — Roadmap unlocks once you add
+  3 OKRs."
+
+Acceptance
+  - New Spin-Out founder in Week 1 only sees Week-1 questions.
+  - Completing Week-1 milestones unlocks Week-2 questions.
+  - Existing founder can pick any section and the advisor sequences
+    only that section's questions.
+  - Investor / Operating Partner banks load with role-specific copy.
+  - Progress ring shows real percentages; clicking a page deep-links.

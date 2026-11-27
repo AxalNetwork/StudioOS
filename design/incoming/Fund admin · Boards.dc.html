@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Fund admin</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Fund Administration · Admin</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One place to run the Axal VC funds on HQ: the funds, their LPs, capital calls, distributions, NAV and performance, fees, reports and cash. Admins prepare, preview, record and reconcile; every act that moves money, power or what LPs read is the Super Admin’s, after a fresh authenticator code. Sample today is [21 Oct 2026]. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="22">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Fund Admin Console Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['FND1', 'Overview · Super Admin · light', 'All funds. Eight tiles, what waits on you, capital by fund, call lines by state, the funds and every entity’s cash. Eadwyn’s rail is open. Cash across entities is NEW and names the account it leaves out.', [D('FND1')]],
+      ['FND2', 'Overview · Admin', 'The primary button becomes Preview a capital call, and Super Admin items in Waiting on you read as sentences.', [D('FND2', false, 1440, 760)]],
+      ['FND3', 'Funds', 'Each administered fund with its facts; carry and fee say Not recorded when missing. The fund run by an outside GP sits apart. The second frame is New fund.', [D('FND3'), D('FND3d', 'New fund', 680)]],
+      ['FND4', 'One fund · [Fund I]', 'Summary, economics, the waterfall that is not recorded, the general partner of record, service providers, the LPA, books and the bank account. Where the Super Admin has a button, the Admin has the sentence.', [D('FND4s', 'Super Admin'), D('FND4a', 'Admin')]],
+      ['FND5', 'LPs', 'Tiles, commitment by LP type, the link to Approvals, and every LP across funds. The other frames are Add LP as each profile sees it.', [D('FND5'), D('FND5a', 'Add LP · Admin', 680), D('FND5s', 'Add LP · Super Admin', 680)]],
+      ['FND6', 'One LP · lightbox over LPs', '[LP Alpha] with Calls & receipts open. The second frame shows the Summary, Notices and Booklet tabs, and withdrawing a booklet.', [D('FND6'), D('FND6x', 'Other tabs', 1200)]],
+      ['FND7', 'Capital calls · [Fund I]', 'Tiles, outstanding by age, proof of funds, and the call ledger drawn here: Call 4 open to its LP lines, earlier calls collapsed.', [D('FND7')]],
+      ['FND8', 'Capital call flow', 'New call, its preview for each profile, the step-up, call notices and recording a receipt. The preview and the act show the same figures.', [D('FND8', false, 1440)]],
+      ['FND9', 'Distributions · [Fund I]', 'Proceeds, where every cent goes, the per-LP preview, notices, the distributions table and cumulative distributions. The second frame is the Admin’s preview.', [D('FND9'), D('FND9a', 'Admin', 900)]],
+      ['FND10', 'NAV & performance · light', 'NAV is investments only. Seven figures, two quarterly charts with a dashed bridge where a quarter has no complete NAV, positions, and all funds side by side. The second frame is a fund whose positions have no mark.', [D('FND10'), D('FND10b', '[Opportunity Fund] · positions with no mark', 1100)]],
+      ['FND11', 'NAV & performance · dark', 'FND10 in the dark colours; violet becomes #a78bfa.', [D('FND11')]],
+      ['FND12', 'NAV dialogs', 'Recording a dated mark, and moving a position to another fund or to firm level.', [D('FND12', false, 1200)]],
+      ['FND13', 'Fees · [Fund II]', 'Terms with a draft step-down, periods, admission and net invested, and the 2026Q3 lines. Confirming terms and issuing a period are the Super Admin’s.', [D('FND13s', 'Super Admin'), D('FND13a', 'Admin')]],
+      ['FND14', 'Reports', 'The packs review queue. The second frame is Report periods and Notices.', [D('FND14'), D('FND14p', 'Report periods and Notices', 1200)]],
+      ['FND15', 'Banking', 'Accounts and transactions for the Super Admin, the Admin’s view of connections, Reconciliation with the Not ours dialog, and the Books.', [D('FND15', 'Accounts and transactions · Super Admin'), D('FND15a', 'Connections · Admin', 1000), D('FND15r', 'Reconciliation'), D('FND15b', 'Books')]],
+      ['FND16', 'Arriving from Fund Ops', 'The moved notice under the title, and HQ › Funds’ foot card with its new link.', [D('FND16', false, 1440, 680), D('FND16b', 'HQ › Funds foot card', 760)]],
+      ['FND17', 'Empty', 'No fund recorded yet, and a fund with no position attributed.', [D('FND17a', 'No fund yet', 1440, 700), D('FND17b', 'NAV · [Fund II] empty', 760)]],
+      ['FND18', 'Loading', 'The header at once; tab counts as short grey bars; tiles and charts as skeletons.', [D('FND18')]],
+      ['FND19', 'Error and partial · Admin', 'Acts that could not be read, every block filled except the entities, and a frozen admin’s refusal.', [D('FND19')]],
+      ['FND20', 'No permission', 'A branch admin, a support session and a member who is not an admin.', [D('FND20a', 'Branch admin', 1440, 640), D('FND20b', 'Support session', 1440, 640), D('FND20c', 'Member', 1440, 640)]],
+      ['FND21', 'Phone · Overview and Capital calls', 'The fund filter as a select, tabs that scroll sideways, tiles two across and tables as labelled cards.', [P('FND21a', 'Overview'), P('FND21b', 'Capital calls')]],
+      ['FND22', 'Phone · LP and step-up', 'The LP as a full-height sheet, and the step-up as a bottom sheet.', [P('FND22a', 'LP'), P('FND22b', 'Step-up')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

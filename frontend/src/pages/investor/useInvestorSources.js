@@ -1,0 +1,98 @@
+/**
+ * #4622 (Studio audit 4/5): the investor Studio's record reads, each on its own.
+ *
+ * `InvestorStudioHome` read the portfolio and the calendar together and committed
+ * both only once both had settled, so a slow calendar held the portfolio tile on
+ * its loading state, and one retry asked for both again. Now each source is read,
+ * committed and retried by itself:
+ *
+ *   - a source's answer (or failure) lands when it settles, whatever the other is doing;
+ *   - a newer read of a source (a retry, or the viewer changing) supersedes an older
+ *     one, and a page that has gone drops what arrives late;
+ *   - retry asks again only for the sources that failed, and for the calendar when it
+ *     answered but a relevant source inside it did not (a partial answer has no entry
+ *     in `failures`); the source that answered stays on the page;
+ *   - an admin previewing is withheld (`null`), and reads nothing.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../../lib/api';
+import { fundNoticesApi } from '../../lib/api/fundNotices.js';
+import { fundBookletsApi } from '../../lib/api/fundBooklets.js';
+import { reportError } from '../../lib/log';
+import { dealFlowApi } from '../../lib/api/dealFlow.js';
+import { dealViewsApi } from '../../lib/api/dealViews.js';
+import { INVESTOR_AGENDA_KINDS } from '../studio/studioAgenda';
+import { FIT_SHOWN, liveDeals } from './investorHomeModel';
+
+/**
+ * D6129 (#6129): Thesis fit's one source is the flow and then the fit read for
+ * its first six live deals, so a failure of either is the module's alone.
+ */
+export async function readDeals(flowClient = dealFlowApi, fitClient = dealViewsApi) {
+  const flow = await flowClient.flow();
+  const ids = liveDeals(flow).slice(0, FIT_SHOWN).map((d) => Number(d.deal_id));
+  const fit = ids.length ? await fitClient.fit(ids) : { items: [] };
+  return { flow, fit };
+}
+
+export function useInvestorSources({ previewing = false, client = api, noticesClient = fundNoticesApi, bookletClient = fundBookletsApi, flowClient = dealFlowApi, fitClient = dealViewsApi } = {}) {
+  const [records, setRecords] = useState({ portfolio: undefined, events: undefined });
+  const [failures, setFailures] = useState({});
+  const alive = useRef(true);
+  const sequence = useRef({});
+  // listCalendarEvents has no "upcoming" flag contract; filtering locally
+  // retains only dated future records and never invents a calendar item.
+  // D5203 (#5203): it asks only for the kinds the tile depends on, not every source.
+  const sources = useMemo(() => ({
+    portfolio: () => client.positionsAnalytics(),
+    events: () => client.listCalendarEvents({ kinds: INVESTOR_AGENDA_KINDS.join(',') }),
+    fund: () => client.fundsLpPortal({ view: 'studio' }),
+    notices: () => noticesClient.mine(),
+    trust: () => client.trustMe(),
+    booklet: () => bookletClient.mine().catch(error => { if (error?.status === 404) return null; throw error; }),
+    // D6129: Needs you's inbox row, Arrivals' founder updates, and Thesis fit's flow and fit reads.
+    inbox: () => client.notificationsUnreadCount(),
+    updates: () => client.portfolioUpdatesLatest(),
+    deals: () => readDeals(flowClient, fitClient),
+  }), [client, noticesClient, bookletClient, flowClient, fitClient]);
+
+  const read = useCallback((key) => {
+    const mine = (sequence.current[key] || 0) + 1;
+    sequence.current[key] = mine;
+    setRecords((r) => ({ ...r, [key]: undefined }));
+    setFailures((f) => { const { [key]: _gone, ...rest } = f; return rest; });
+    let call;
+    try { call = Promise.resolve(sources[key]()); } catch (e) { call = Promise.reject(e); }
+    call.then(
+      (value) => { if (alive.current && sequence.current[key] === mine) setRecords((r) => ({ ...r, [key]: value })); },
+      (reason) => {
+        if (!alive.current || sequence.current[key] !== mine) return;
+        reportError(`InvestorStudio:${key}`, reason);
+        setFailures((f) => ({ ...f, [key]: reason?.message || 'Source unavailable' }));
+      },
+    );
+  }, [sources]);
+
+  useEffect(() => {
+    alive.current = true;
+    if (previewing) {
+      const keys = Object.keys(sources);
+      keys.forEach(key => { sequence.current[key] = (sequence.current[key] || 0) + 1; });
+      setRecords(Object.fromEntries(keys.map(key => [key, null])));
+      setFailures({});
+    } else {
+      Object.keys(sources).forEach(read);
+    }
+    return () => { alive.current = false; };
+  }, [previewing, read, sources]);
+
+  const readAll = useCallback(() => { if (!previewing) Object.keys(sources).forEach(read); }, [previewing, read, sources]);
+  /** Ask again only for what failed; `calendarPartial` adds the calendar when it answered incompletely. */
+  const retryFailed = useCallback((calendarPartial = false) => {
+    const keys = new Set(Object.keys(failures));
+    if (calendarPartial) keys.add('events');
+    keys.forEach(read);
+  }, [failures, read]);
+
+  return { records, failures, read, readAll, retryFailed };
+}

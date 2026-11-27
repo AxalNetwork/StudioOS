@@ -1,0 +1,558 @@
+import React, { Suspense, lazy, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Skeleton, WorkerRail } from '../../ui';
+import { useAuth } from '../../hooks/useAuthSync';
+import WorkspaceShell from '../WorkspaceShell';
+import BucketOverview, { unbuiltFrom } from '../BucketOverview';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
+import { partnerZoneActions } from '../partnerZoneActions';
+import { partnerZoneFilters } from '../partnerZoneFilters';
+import NoStoreYet from '../NoStoreYet';
+import BucketBoard from '../BucketBoard';
+import { boardFor } from '../boards';
+import OfferReadiness from './OfferReadiness';
+import { api } from '../../lib/api';
+import { rowRequests } from '../../lib/serviceMeasures.js';
+
+// NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
+// omission. That component is the legacy five-tab shell at
+// /partner/operations/* — it draws its own PartnerWorkspaceShell, its own
+// header and its own tab bar, and it derives its active tab by testing the
+// pathname for `/capabilities`, `/portfolio`, `/engagements` or
+// `/performance`. None of those strings occurs in `/pipeline/proposals`,
+// `/pipeline/retainers`, `/delivery/board` or `/delivery/health`, so all four
+// zones fell to its `overview` fallback and rendered the SAME page — under a
+// second header whose workspace label came from the same fallback and read
+// "Delivery · Ship the work" on a Pipeline route. Mounting its feature pages
+// directly removes the doubled chrome and the wrong-bucket header together,
+// and left /partner/operations/* as it was, until D395 retired it into
+// these zones.
+const PerksPage = lazy(() => import('../../pages/PerksPage'));
+const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
+// Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
+// which answers where founder demand is concentrated across the whole board.
+// The canvas asks this zone about the FIRM'S OWN pipeline: win rate, cycle
+// time and forecast. Both are honest surfaces answering different questions;
+// Demand Insights keeps its own mount at /partner/insights.
+const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline/AnalyticsZone'));
+// THE ZONE THE PIPELINE ROW LANDS ON NOW READS THE FIRM'S OWN LEADS. It
+// rendered `NeedsBoardPage` — the shared marketplace board a founder and an
+// admin see — which listed open needs and could not tell one this firm had
+// already bid on from one nobody had opened, had no score, no provenance and
+// nowhere to record a pass.
+const PartnerLeads = lazy(() => import('../../pages/partner/pipeline/LeadsZone'));
+// AND THE OTHER HALF OF `EngagementsPage` GOES THE SAME WAY. `/pipeline/
+// proposals` rendered the proposals-and-invoices view it shared with
+// `/delivery/board` until that zone got its own; it listed quotes and their
+// status and nothing else — no version trail, no loss reason, no lifecycle.
+const PartnerProposals = lazy(() => import('../../pages/partner/pipeline/ProposalsZone'));
+// #45 — the two Pipeline zones migration 208 gave a store to. Both read
+// `/api/partner/pipeline/*` and nothing else; neither has a legacy route,
+// because neither has ever had a surface anywhere in the product.
+const PartnerNegotiations = lazy(() => import('../../pages/partner/pipeline/NegotiationsZone'));
+const PartnerRetainers = lazy(() => import('../../pages/partner/pipeline/RetainersZone'));
+// D4838 (#4838, part 1): `/pipeline` is a command centre, not five miniature reports — first run is one setup path,
+// populated is attention, metrics with their basis, the lifecycle strip and risks.
+const PipelineCommandCentre = lazy(() => import('../../pages/partner/pipeline/PipelineCommandCentre'));
+// #45 — the three Offers zones migration 209 gave a store to. These are the
+// only bucket a partner can use TODAY: their stores key on `partners.id` rather
+// than on an engagement or a quote, so a firm with no marketplace activity yet
+// still has something to record.
+const PartnerVisibility = lazy(() => import('../../pages/partner/offers/VisibilityZone'));
+const PartnerProof = lazy(() => import('../../pages/partner/offers/ProofZone'));
+const PartnerAudienceFit = lazy(() => import('../../pages/partner/offers/AudienceFitZone'));
+const PartnerTesting = lazy(() => import('../../pages/partner/offers/TestingZone'));
+// #45 — the last four. Health is the one that reads across the others: it
+// derives a rating over milestones, blockers, deliverables and the retainer
+// record, and returns null rather than "on track" when none of them carries
+// anything.
+const PartnerBoard = lazy(() => import('../../pages/partner/delivery/BoardZone'));
+const PartnerHealth = lazy(() => import('../../pages/partner/delivery/HealthZone'));
+const PartnerDeliverables = lazy(() => import('../../pages/partner/delivery/DeliverablesZone'));
+const PartnerCapacity = lazy(() => import('../../pages/partner/delivery/CapacityZone'));
+const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/StatusReportsZone'));
+
+/**
+ * Pipeline, Delivery and Offers — the Partner shell's three owned buckets.
+ *
+ * THIS IS THE SHELL WITH THE MOST WORKING CODE AND THE LEAST CANONICAL URLS.
+ * Its live surfaces were spread across five prefixes that share no logic —
+ * `/partner/operations/*`, `/needs`, `/services`, `/perks`,
+ * `/partner/insights` — and the shell mounted only some of them. Eight of the
+ * fifteen zones now render one: Pipeline's leads, proposals, negotiations,
+ * retainers and analytics, Delivery's board, and Offers' catalog and perk
+ * deals. Every other legacy prefix stays mounted; a zone and its legacy route
+ * are the same component at two routes, which is not a fork.
+ * `/partner/operations/*` retired in D395 and redirects to these zones.
+ *
+ * NEGOTIATIONS AND RETAINERS ARE THE TWO WITHOUT A LEGACY ROUTE. Every other
+ * live zone mounts a page that already existed somewhere; these two are new
+ * files reading stores migration 208 created, and they are the first two of the
+ * nine no-store zones to be closed.
+ *
+ * `/pipeline` IS NOW A SHARED PREFIX, and deliberately so. The investor shell
+ * has held `/pipeline`, `/pipeline/screening`, `/pipeline/commit` and
+ * `/pipeline/transactions` for a long time; the Partner canvas puts leads,
+ * proposals, negotiations, retainers and analytics under the same prefix. The
+ * two sets share no slug, and `bucketForPath` is role-scoped, so an investor
+ * on `/pipeline/screening` and an operator on `/pipeline/leads` each resolve
+ * to their own bucket. Worth knowing before adding a sixth slug to either.
+ *
+ * WHAT IS NOT WIRED. Four of Delivery's five zones and three of Offers' five
+ * have no surface anywhere. They ship saying what they would hold. Two of those
+ * absences are worth naming rather than glossing:
+ *
+ *   · Delivery·Capacity is the page that would show an operator over-committed
+ *     while holding a granted seat inside a client's systems — a trust
+ *     exposure rather than a scheduling one. There is no seat register and no
+ *     hours record to build it from.
+ *   · Offers·Proof is seam-fed by definition: every item is generated from a
+ *     completed engagement the client was party to, and carries their consent
+ *     state. Consent is a gate, not a warning — an unconsented outcome has no
+ *     published form to suppress. Nothing stores that consent today.
+ *
+ * `offers/catalog` TAKES `(rows, handlers)`, AND THE SECOND ARGUMENT MATTERS.
+ * `New service` is a page-supplied op (D67): the ops row IS the header on that
+ * artboard, so there is no `New offering` button beside the list any more and
+ * the op opens the form the page owns. A closure taking only `rows` drops the
+ * handlers, `makeZoneActions` finds no callable, and it returns null rather
+ * than a dead control — so the op disappears from the header with no error
+ * anywhere. `network_relationship_book.test.mjs` walks every handler-declaring
+ * zone to the module that binds it, for exactly this failure.
+ *
+ * Its export ships `price_cents` rather than the legacy `price_usd` REAL: a
+ * spreadsheet that divides late reads $47,999.99 where the page reads $48,000.
+ * There is no `State` column, because Draft is what an empty Price cell MEANS —
+ * adding one would either duplicate `catalogState` here, where the two copies
+ * could disagree, or force a static import of a page this router lazily loads.
+ *
+ * A NOTE ABOUT COMMENTS INSIDE THE ZONE MAPS BELOW. Three guards read this file
+ * as text and none of them strips an indented comment: `profile_zone_actions`
+ * scans for a balanced builder call and treats an apostrophe as opening a
+ * string; the same file reads bare identifiers out of the call and takes a
+ * capitalised word in a comment for a variable; and `partner_bucket_overview`
+ * reads depth-2 keys out of these maps, so a word followed by a colon becomes a
+ * zone slug that does not exist. Explanations go here, at column zero, where
+ * `codeOnly` removes them.
+ */
+
+function Loading() {
+  return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-56" /></div>;
+}
+
+/**
+ * Zone → the live body that answers it, as a render function rather than a
+ * bare component, because two of these need props to be the right zone at all.
+ *
+ * `user` is the prop whose absence was a visible feature loss, not a style
+ * one: `PerksPage` reads `user.role` to decide whether to offer **My
+ * listings**, and `ServiceCatalogPage` reads it the same way. Mounted with no
+ * props both saw `undefined` and silently dropped the one tab the operator came
+ * for. `ResearchWorkspace` records fixing the identical prop-drop for
+ * `SignalsPage`.
+ *
+ * `NeedsBoardPage` USED TO BE HERE, on `/pipeline/leads`, and the same
+ * paragraph named it first: it read `user.role` for the partner's **My quotes**
+ * tab. It is gone because the zone is no longer the shared marketplace board —
+ * `LeadsZone` reads this firm's own leads, scores them against its own fit
+ * rules and records a pass with its reason, none of which a board serving four
+ * licences could do. #2338 removed that board's own address too: `/needs`
+ * forwards to this zone.
+ *
+ * `embedded` MAKES EACH PAGE RENDER ITS ZONE AND NOTHING ELSE — no heading
+ * block of its own, because the shell above has already drawn the crumb, the h1
+ * and the zone pills, and no tab row either.
+ *
+ * The second half of that is a reversal. What stood here was: "It deliberately
+ * does NOT suppress their tab rows: Browse / My quotes / Engagements and Perks /
+ * My perks / My listings are views WITHIN a zone, not sibling zones, so they are
+ * this page's controls rather than a second copy of the navigation." The test it
+ * applied was whether a tab row is navigation or a control. The test that
+ * settles it is what the tabs select BETWEEN: Browse catalogue is every other
+ * firm's offerings, My perks is what this reader redeemed, Review queue is admin
+ * moderation, Stripe Connect is payouts. None is a view of "what this firm
+ * sells" or "this firm's own perk listings" — they are different subjects that
+ * share a component. `/perks` keeps its own route; `/services` was removed
+ * (#2338) and forwards to this zone.
+ *
+ * The artboards agree and are the contract: PO1 and PO2 in `design/canvases/
+ * integrated/Pages · Partner Offers.dc.html` each declare one `filters` row and
+ * one `ops` row, which is the `ZoneToolbar` these tables already supply, and no
+ * tab row anywhere. And the cost was not cosmetic — `ServiceCatalogPage` starts
+ * on its `mine` tab only when `isPartner`, so every admin opening
+ * /offers/catalog got the public marketplace grid under the Catalog heading and
+ * never saw the LEDGER body at all.
+ *
+ * TWO ZONES ONCE RESOLVED HERE BY ACCIDENT, and the trail is worth keeping.
+ * Pipeline · retainers and Delivery · health both fell through to the
+ * operations Overview, so both looked live and neither was; both were moved to
+ * `COPY` to say so. `engagements` (sql/t13_t14_t15.sql:366) carries id, need,
+ * quote, partner, founder, project, price, status and the
+ * delivered/cancelled/invoiced timestamps — and nothing else, which is why
+ * neither was buildable on it.
+ *
+ * Both are live now, for the reason their cards described: migration 208 added
+ * `partner_retainers` (shape, cadence, amount, retained hours, renewal) and
+ * `retainer_usage` for the first, and `engagement_milestones` and
+ * `engagement_blockers` for the second — exactly the columns `engagements`
+ * lacks. Health is computed from those rows at read time and stored nowhere,
+ * which `partner_delivery_stores.test.mjs` asserts against the schema.
+ *
+ * This paragraph said "Delivery · health stays in `COPY` until its own store
+ * lands — nothing reads them yet" until 2026-09-04, while sitting six lines
+ * above a `LIVE` map containing `health` and an empty `COPY`. It described the
+ * state of the change it was inside, which is the one thing a comment next to
+ * the code cannot be trusted to do on its own.
+ */
+const LIVE = {
+  '/pipeline': {
+    // Leads is a shared page, so its zone actions arrive as a render prop the
+    // way Offers' catalog and perk-deals do. Proposals is the other half of
+    // `EngagementsPage`, which already calls the table directly for
+    // `/delivery/board` and now does the same for its own zone.
+    leads: () => <PartnerLeads />,
+    proposals: () => <PartnerProposals />,
+    negotiations: () => <PartnerNegotiations />,
+    retainers: () => <PartnerRetainers />,
+    analytics: () => <PartnerPipelineAnalytics />,
+  },
+  '/delivery': {
+    // THE ZONE THE DELIVERY ROW LANDS ON NOW READS THE DELIVERY STORES. It
+    // rendered `EngagementsPage` — a proposals-and-invoices page shared with
+    // `/pipeline/proposals` — so none of the five stores migration 208 built
+    // for this bucket reached the one page the bucket opens on.
+    board: () => <PartnerBoard />,
+    health: () => <PartnerHealth />,
+    deliverables: () => <PartnerDeliverables />,
+    capacity: () => <PartnerCapacity />,
+    'status-reports': () => <PartnerStatusReports />,
+  },
+  '/offers': {
+    // These two zones are shared pages, so the zone's actions arrive as a
+    // render prop rather than being wired inside them: the page renders what
+    // the caller hands it and learns nothing about licences, and the rows for
+    // "export this view" come from the tab that actually loaded them.
+    // THE COLUMNS ARE THE ONES THE PAYLOAD CARRIES. This export named six and
+    // filled three: `GET /services/offerings` serializes `price_usd` and
+    // `is_active`, and has never sent `price`, `currency` or `sla_days` — so
+    // every exported row wrote three empty cells under three confident
+    // headings. `currency` and `sla_days` have no column anywhere; `Price` and
+    // `Listed` are real under the store's own names.
+    // `zoneFilters` IS A RENDER PROP FOR THE SAME REASON `zoneActions` IS: both
+    // pages serve several licences and neither may learn about roles, so the
+    // caller — which IS the partner shell — supplies the row and the accent it
+    // wears. `role="partner"` is therefore the shell's licence and not the
+    // viewer's: an admin reading a partner's catalogue is still in this shell,
+    // and chips painted from `user.role` would put founder violet inside it.
+    catalog: (user) => <ServiceCatalogPage user={user} role="partner"
+      zoneFilters={(opts) => partnerZoneFilters('offers/catalog', opts)}
+      zoneActions={(rows, handlers) => partnerZoneActions('offers/catalog', { handlers, view: {
+        header: ['Service', 'Model', 'Price (cents)', 'Requested', 'What’s included'],
+        rows,
+        cells: (o) => [o.title, o.engagement_model || '', o.price_cents ?? '',
+          rowRequests(o)?.requested ?? '', o.summary],
+      } })} />,
+    'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
+      zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
+      zoneActions={(rows, handlers) => partnerZoneActions('offers/perk-deals', { handlers, view: {
+        // `Claimed` and `Redeemed` are two columns since D413: the export
+        // wrote the claim count under "Redeemed" until a claim could be
+        // marked redeemed.
+        header: ['Offer', 'State', 'Claimed', 'Redeemed', 'Cap', 'Ends', 'What it granted', 'Revoked on', 'Review state'],
+        rows,
+        cells: (p) => [p.offer, p.lifecycle, p.claim_count, p.redeemed_count, p.claim_cap,
+          p.ends_at, p.grant_scope, p.grant_revoked_on, p.status],
+      } })} />,
+    visibility: () => <PartnerVisibility />,
+    proof: () => <PartnerProof />,
+    'audience-fit': () => <PartnerAudienceFit />,
+    testing: () => <PartnerTesting />,
+  },
+};
+
+// NOTHING UNDER `/pipeline` ANY MORE, and the two cards that stood here are
+// worth recording as they were. Negotiations said "terms and ball-in-court
+// state exist in the canvas record but nothing tracks them"; retainers said
+// "`engagements` carries no cadence, no renewal date and no consumption".
+// Migration 208 added `quote_negotiations`, `quote_terms`, `partner_retainers`
+// and `retainer_usage`, and both zones now read them — so both cards were
+// DELETED rather than reworded. A no-store card left standing in front of a
+// store is the same false claim as one that overstates; it merely fails in the
+// direction that looks humble.
+/**
+ * EMPTY, AND THAT IS THE POINT OF THIS PASS.
+ *
+ * Nine zones shipped a `NoStoreYet` card, and every one of those cards was TRUE
+ * when it was written. Migrations 208 and 209 built the fifteen tables they
+ * named — a store per card — and the routes and bodies now read them, so all
+ * nine cards were DELETED rather than reworded. A no-store card standing in
+ * front of a store is as false as one that overstates; it merely fails in the
+ * direction that looks humble.
+ *
+ * The four `/delivery` cards said: "no milestones, no hours against a cap, no
+ * last client contact"; "nothing records acknowledgment"; "there is no seat
+ * register and no hours record"; "it would read the deliverables log and the
+ * engagement's blockers, neither of which is recorded". 208 added
+ * `engagement_milestones`, `engagement_deliverables`, `engagement_seats`,
+ * `engagement_hours`, `engagement_blockers` and `engagement_status_reports`.
+ *
+ * TWO OF THOSE SENTENCES WERE NOT FULLY ANSWERED, and the zones say so on
+ * themselves rather than a card saying it for them:
+ *
+ *   · "an embedded seat burning its cap" — the CAP is the firm's to state
+ *     (migration 230, firm-wide or per person). Capacity marks someone over
+ *     only against a cap that was stated, and until one is it refuses to,
+ *     because a threshold nobody set is not a finding (D391 corrected this
+ *     line, which still said nothing records a cap).
+ *   · "whether the client opened it" — `opened_at` is the CLIENT'S to set and
+ *     no surface in this product lets them. Deliverables shows every sent item
+ *     as unopened and says the absence is ours, not theirs.
+ *
+ * "A client who has gone quiet" has no store at all and Health states it.
+ *
+ * The structure stays rather than being deleted with its last entry: it is what
+ * `gapsFor` and `unbuiltFrom` read, and the next zone added to this shell
+ * without a store belongs here.
+ */
+const COPY = {};
+
+/**
+ * One line per zone, for the overview a bucket root renders — but only for the
+ * zones with a page behind them. A zone with no store is deliberately absent:
+ * its card is written from `COPY` — the same heading its own body renders — or
+ * from the generic no-store card when it has neither. `NOTHING_YET` below
+ * mirrors that fallback. The canvas's anchor nav names the same destinations;
+ * the card grid is what the sidebar row opens.
+ *
+ * The first draft of this map described all eight unbacked partner zones as
+ * working features — negotiations "live deals at terms", deliverables "shipped
+ * and acknowledged", capacity "where the firm is over-committed", catalog "the
+ * record lead scoring reads against" — every one of them a `NoStoreYet` card
+ * one click away.
+ */
+const ZONE_LINES = {
+  '/pipeline': {
+    leads: 'Open founder needs with the RFP behind each, and the quotes you have out on them.',
+    proposals: 'The proposal desk: every quote you have submitted, its status, and what it is worth.',
+    // This line described Demand Insights for as long as the zone rendered it,
+    // and the mismatch it recorded is now closed the other way: the zone
+    // answers the canvas's question instead of the card describing a different
+    // one. The loss taxonomy the canvas leads with stays absent — no quote
+    // records why it was rejected — and the zone says so on itself.
+    analytics: 'Win rate, decision cycle and weighted forecast over your own quotes, broken out by shape and by quarter.',
+    // "Live deals at terms" was banned as a phrase for as long as no store
+    // carried a term — `partner_bucket_overview.test.mjs` failed the build on
+    // it. Migration 208 carries stage, ball-in-court and clause-level positions,
+    // so the ban lifted with this line rather than the line being softened
+    // around it.
+    negotiations: 'Live deals at terms: what each side asked, where it lands, whose move it is, and how long since it moved.',
+    retainers: 'Recurring work with what each client is consuming against what they bought, and when it renews.',
+  },
+  '/delivery': {
+    board: 'Accepted work with its lifecycle actions and the invoice ledger beside it.',
+    // "Where the firm is over-committed" and "shipped and acknowledged" were
+    // both banned phrases, and both stay unsaid — not because the stores are
+    // missing now, but because the firm's cap and the client's acknowledgment
+    // still are. These lines describe what the zones actually hold.
+    health: 'A rating read across milestones, blockers, deliverables and the retainer record — with the unrated ones counted rather than called healthy.',
+    deliverables: 'What was shipped and when, with the ones sent and not marked opened named as unknown rather than as ignored.',
+    capacity: 'Who holds a seat inside a client’s systems and what they logged this period.',
+    'status-reports': 'The recurring client update, composed from the record and sent by a person — with each blocker carrying whose side it is on.',
+  },
+  '/offers': {
+    // This zone used to be a card reading "the catalog lives at /services
+    // today", declining to mount it on the grounds that doing so would fork a
+    // second catalog. Mounting the same component at a second route is not a
+    // fork — it is what Leads and Perk deals already do with /needs and
+    // /perks — and the card was standing in front of a page that did not
+    // work: both of its partner-facing tabs read a response shape the worker
+    // does not send, so the catalogue was permanently empty either way.
+    catalog: 'What the firm sells, at what price — the record lead scoring reads a match against.',
+    'perk-deals': 'Deals that expire in public, with grants revoked when they do — and where a perk is submitted and its claims are marked redeemed.',
+    // Written to what the store can support. "Views" is deliberately absent
+    // from this line as it is from the zone: nothing records an impression, so
+    // naming it here would promise a column that renders as an absence.
+    visibility: 'Where the firm appears and what each surface produced, ranked by engagements rather than by reach.',
+    proof: 'Case studies and outcomes, each showing whether the client agreed to publish it — or that nobody has.',
+    'audience-fit': 'Who the firm is for and who it is not, with the sentence a pass quotes instead of going silent.',
+    testing: 'Programmes that recruit Axal members to test a product, opened once HQ approves them, with the testers the firm picks.',
+  },
+};
+
+const NOTHING_YET = 'Nothing here yet';
+
+/** Gap lines for every zone this bucket cannot serve: its own no-store heading
+ *  where COPY has one, the generic card's heading where it does not. */
+function gapsFor(prefix, bucket) {
+  const gaps = unbuiltFrom(COPY[prefix]);
+  for (const zone of bucket?.zones || []) {
+    if (LIVE[prefix]?.[zone.slug] || gaps[zone.slug]) continue;
+    gaps[zone.slug] = NOTHING_YET;
+  }
+  return gaps;
+}
+
+export default function PartnerBucketRoutes() {
+  const location = useLocation();
+  const { user } = useAuth();
+  const bucket = bucketForPath('partner', location.pathname);
+  // D4822 (#4822): Delivery's root IS its Board, the command centre — not a directory of the five zones. It is
+  // rendered here rather than redirected, so the address the sidebar row opens stays `/delivery` and a link to
+  // `/delivery?engagement=…` keeps its query.
+  const landsOnBoard = bucket?.prefix === '/delivery' && location.pathname === bucket.prefix;
+  const isRoot = bucket && location.pathname === bucket.prefix && !landsOnBoard;
+  const zone = landsOnBoard ? (bucket.zones || []).find((z) => z.slug === 'board') ?? null
+    : isRoot ? null : zoneForPath(bucket, location.pathname);
+  const prefix = bucket?.prefix;
+  const slug = zone?.slug;
+  // D4838: the Pipeline root reports which state it drew, so the title and the Eadwyn rail's steps follow it.
+  const pipelineRoot = isRoot && prefix === '/pipeline';
+  const [pipelineView, setPipelineView] = useState(null);
+
+  const body = useMemo(() => {
+    // The bucket root is the canvas overview — the sidebar row lands here,
+    // not on the first zone. Zones stay one click away on the cards below.
+    if (pipelineRoot) {
+      return <Suspense fallback={<Loading />}><PipelineCommandCentre onView={setPipelineView} /></Suspense>;
+    }
+    if (isRoot) {
+      const board = boardFor('partner', prefix, api);
+      // D4841: the Offers root is its readiness view, over the same board.
+      if (board?.overview === 'readiness') return <OfferReadiness bucket={bucket} board={board} />;
+      return board ? (
+        <BucketBoard bucket={bucket} role="partner" board={board} />
+      ) : (
+        <BucketOverview
+          bucket={bucket}
+          role="partner"
+          descriptions={ZONE_LINES[prefix]}
+          unbuilt={gapsFor(prefix, bucket)}
+        />
+      );
+    }
+    const live = LIVE[prefix]?.[slug];
+    if (live) return <Suspense fallback={<Loading />}>{live(user)}</Suspense>;
+    const copy = COPY[prefix]?.[slug];
+    if (copy) return <NoStoreYet {...copy} accentClass="text-amber-700" />;
+    return <NoStoreYet
+      accentClass="text-amber-700"
+      heading="Nothing here yet"
+      what="This zone is named by the canvas and has no surface behind it."
+      why="It ships empty rather than as a placeholder that could be mistaken for real data."
+    />;
+  }, [prefix, slug, isRoot, pipelineRoot, bucket, user]);
+
+  const INTRO = {
+    // D4838: the title is "Win the work" (or "Set up your pipeline" on first run), so the line beneath it does not
+    // repeat it.
+    '/pipeline': 'From first-fit opportunity to recurring engagement.',
+    // D4822: the canvas's one purpose line; the eyebrow and title come from the shell, once.
+    '/delivery': 'Ship the work. Run active client engagements, deliverables, capacity and reporting in one place.',
+    // D4841: the Offers V2 canvas's purpose line (OF-01).
+    '/offers': 'Package what your firm sells, prove it works, and tell Axal which opportunities fit.',
+  };
+
+  /**
+   * The Worker AI rail. This caller never filled the shell's `rail` slot and
+   * did not even import `WorkerRail` — so all fifteen Partner zones and all
+   * three bucket roots rendered with an empty right-hand column. It is the
+   * same omission `AdvisorBucketRoutes` records having fixed for the advisor
+   * shell, and by itself it was most of the product's rail gap.
+   *
+   * THE MODEL CARD IS NOW REAL, and the order it arrived in is the point. The
+   * rail names a model and a per-million rate only for a surface registered in
+   * `ASSIST_SURFACES` (`ui/eadwynConfig.js`), because that registration binds a
+   * surface to an aiRouter task class and the task class decides the model and
+   * the price. For a long time no workspace surface was registered and the card
+   * was correctly absent: registering `pipeline`, `delivery` or `offers` to
+   * make it appear would have attached a model and a price to surfaces that
+   * called no router task. `POST /api/ai/workspace/explain` came first; the
+   * single `workspace` surface followed it. `WorkerRail` reads that surface
+   * itself, so nothing here passes it — which is why this route file has no
+   * model prop to get wrong.
+   *
+   * `coverage` reports what THIS route reads, so it cannot be more confident
+   * than the body beside it: a zone whose card says no store says the same
+   * here, and the two now come from the same `LIVE` map.
+   */
+  const live = Boolean(LIVE[prefix]?.[slug]);
+  const coverage = isRoot
+    ? [`${bucket?.label || 'This bucket'} overview — ${bucket?.zones?.length || 0} zones`]
+    : [live
+      ? `${zone?.label || 'This zone'} reads the stored record`
+      : `${zone?.label || 'This zone'} has no store behind it`];
+  const RAIL = {
+    '/pipeline': {
+      workspace: 'Pipeline',
+      stance: 'Manual pipeline record',
+      note: 'Leads, proposals, negotiations, retainers and analytics read the stored needs, quotes, engagements and retainer records. No proposal is drafted, no price is suggested, no stage moves and no lead is passed or pursued except on your click.',
+      // BOTH OF THESE STAY TRUE after #45. The new zones record what a person
+      // typed — a stage, a clause position, an amount, hours used — and compute
+      // only what is derivable from it (days since a move, utilisation, MRR).
+      // Nothing drafts a position, suggests a rate or predicts a close, and the
+      // negotiations zone says on itself that a close probability is not
+      // computable from the store.
+      unavailable: [
+        ['Proposal drafting', 'Every word of a quote, a term position and an open question is one you typed. Nothing here writes, rewrites or scores a proposal on your behalf.'],
+        ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other quotes or retainers. A price is yours.'],
+      ],
+    },
+    '/delivery': {
+      workspace: 'Delivery',
+      stance: 'Manual delivery record',
+      note: 'Every rating, milestone, blocker, seat and hour here is one a person entered, and health is read back from them at the moment you load the page. Nothing messages a client, marks a milestone, or moves an engagement between states on its own.',
+      // BOTH TUPLES REWRITTEN, because both described absences 208 filled.
+      // Health IS now rated — from stored milestones, blockers, deliverables
+      // and retainer usage — and a report IS composed from the record. What is
+      // still unavailable is narrower and truer: no words are written for you,
+      // and nothing is delivered to anyone.
+      unavailable: [
+        ['Drafted words', 'A status report is composed from your own record — what was shipped, what is open, what is blocked — and every sentence in it is one you write. Nothing here drafts, rewrites or summarises on your behalf.'],
+        ['Delivery of any kind', 'Marking a report sent records that YOU sent it. No email leaves this product, no client is notified, and no client-side surface exists — which is also why every deliverable reads unopened.'],
+      ],
+    },
+    '/offers': {
+      workspace: 'Offers',
+      stance: 'Manual storefront record',
+      note: 'What the firm publishes is what the firm typed. No listing, perk description, case study or fit rule is written here. Pipeline scores leads against your fit rules, and leaves a lead that matches a declined sector or an absent capability out of its ranking, but nothing is declined for you.',
+      // BOTH OF THESE FLIPPED WITH MIGRATION 209, so they are replaced rather
+      // than kept. Attribution and consent are now recorded — which means the
+      // rail would be asserting two absences the store no longer has, exactly
+      // the drift `WorkerRail`'s own docblock warns about. What remains
+      // genuinely unavailable is what nothing in this bucket does even now.
+      unavailable: [
+        ['Automatic declining', 'Your active fit rules score leads and leave a lead that matches a declined sector or an absent capability out of the ranking. No lead is declined, rejected or hidden for you: an excluded lead stays on Leads, and a pass is still your click and still your sentence.'],
+        ['Publishing on your say-so', 'An outcome is publishable only where the client agreed to it, and only the client can record that agreement. Nothing here can mark your own evidence as confirmed, including this rail.'],
+      ],
+    },
+  }[prefix];
+
+  // NO `scope` PROP — it read `scope="One firm"`, which named no firm. The shell
+  // fills the slot from `ActiveCompanyContext`, the same way in all four profiles.
+  // D4838 (PP01): first run is titled by what to do, and its supporting copy sits on the setup card instead.
+  const firstRun = pipelineRoot && pipelineView?.firstRun;
+  return (
+    <WorkspaceShell
+      role="partner"
+      title={firstRun ? 'Set up your pipeline' : (isRoot ? bucketTitle(bucket) : undefined)}
+      intro={firstRun ? undefined : INTRO[prefix]}
+      activeSlug={landsOnBoard ? 'board' : isRoot ? null : undefined}
+      rail={RAIL && (
+        <WorkerRail
+          workspace={RAIL.workspace}
+          role="partner"
+          stance={RAIL.stance}
+          note={RAIL.note}
+          coverage={coverage}
+          unavailable={RAIL.unavailable}
+          // D4838: on the Pipeline root the rail shows what this page asks for next (setup, then attention) in
+          // place of the model list, and model, usage and top-up sit behind Account › AI tokens.
+          steps={pipelineRoot ? pipelineView?.rail || { title: 'For Pipeline', state: 'loading' } : null}
+          usageAt={pipelineRoot ? '/account/ai-tokens' : null}
+        />
+      )}
+    >
+      {body}
+    </WorkspaceShell>
+  );
+}

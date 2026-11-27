@@ -1,0 +1,27 @@
+#48 - Assessment results → matching + full track content
+What & Why
+Make assessment results useful and complete: feed the canonical vectors produced by the A1 engine into the existing matching surfaces, and author the playable item bank for every remaining track. Per design/GAMIFIED_ASSESSMENT_SYSTEM.md §2 (track emphasis) and §4 (scoring).
+Done looks like
+* Matching wiring — routes/matches.ts, cofounder.ts, mentors.ts, investor_signals.tsread user_values/user_skills/the investor profile table: co-founder/key-hire skill-vector complementarity (cosine distance); values alignment on founder spectrums + Schwartz with the top 1–2 divergences surfaced as "watch-outs"; investor↔founder thesis × value alignment × stage/sector; mentor/coach↔founder domain-radar overlap / focus-area fit × style. Extreme self-claims lacking confidence/evidence/endorsement are down-weighted. A co-founder match score visibly changes after two users complete their games.
+* Content bank — migration 110_seed_assessment_content.sql (INSERT OR IGNORE on slug) authors the full item bank for the five remaining tracks (operators_path_v1, thesis_lab_v1, partner_playbook_v1, mentor_compass_v1, coachs_lens_v1), ≥12 items per track, covering each track's emphasis, following the founder_origin_v1 reference pattern, with canonical value_dimension/skill slugs. Every track has a playable, scored game.
+* npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* Player/admin UI (A2/A3) and event work.
+* Cross-system badges/suggestions/landing teasers (Phase F) — this task is matching + content only. If Phase F also touches matching, coordinate so the two don't both rewrite the same scorers.
+Steps
+1. Matching wiring — extend the four matching routes to read the canonical vectors with the described scoring and confidence down-weighting; surface values "watch-outs".
+2. Content seed — write migration 110_seed_assessment_content.sql for the five remaining tracks, ≥12 items each, canonical slugs, INSERT OR IGNORE, idempotent.
+3. Verify + green gates — confirm a co-founder score changes after two completed games and every track is playable; run drift + tsc; update both changelogs.
+Relevant files
+* cloudflare-worker/src/routes/matches.ts
+* cloudflare-worker/src/routes/cofounder.ts
+* cloudflare-worker/src/routes/mentors.ts
+* cloudflare-worker/src/routes/investor_signals.ts
+* cloudflare-worker/sql/migrations/089_skills_values_taxonomy.sql
+* cloudflare-worker/sql/migrations/090_seed_skills_values_taxonomy.sql
+* cloudflare-worker/sql/migrations/094_user_values.sql
+* cloudflare-worker/sql/migrations/096_investor_thesis.sql
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#45 - Assessment engine backend (worker)

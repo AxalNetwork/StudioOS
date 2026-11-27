@@ -1,0 +1,320 @@
+import React from 'react';
+import { Card, DataState, Pill, Skeleton, Unrecorded as SharedUnrecorded } from '../../../ui';
+import ZoneActions from '../../../workspaces/ZoneActions';
+import { FillLabel } from '../../../ui/useScopedFill.jsx';
+import { moneyCents } from '../../../workspaces/boards/format';
+import { amountToCents } from '../../../lib/moneyInput';
+import { LICENCE_SENTENCES, isLicenceSentence } from './licenceRefusal';
+// D4828 (#4828): the shared section states, the limit counter and the one save status.
+import { SectionState, useLimit } from './sectionStates';
+
+/**
+ * Shared pieces for the five Expertise zones.
+ *
+ * WHY A KIT AND NOT FIVE COPIES. The three backed zones each read one store,
+ * and each has to distinguish the same four states — loading, unreadable,
+ * empty, and populated. Written five times that distinction drifts, and the
+ * one it always drifts into is treating "we could not read it" as "there is
+ * nothing there". That is the defect this whole pass was reported for:
+ * "it does show anything, it looks blank, probably not connected to anything".
+ */
+
+/**
+ * Absent renders as absent. Never a zero, never an em-dash pretending to be one.
+ * D5129 (#5129): the shared Not recorded chip, under the name this kit's importers use.
+ */
+export function Unrecorded({ children = 'Not recorded' }) {
+  return <SharedUnrecorded>{children}</SharedUnrecorded>;
+}
+
+/**
+ * Cents to a readable amount.
+ *
+ * `null` is NOT zero and must never render as `$0.00` — an advisor who has not
+ * priced a service has not said it is free. Whole dollars drop the cents
+ * because a price list reads better without `.00` on every row; a price with
+ * real cents keeps them.
+ */
+export function money(cents, currency = 'USD') {
+  if (cents == null) return null;
+  return moneyCents(cents, currency);
+}
+
+/**
+ * What a person typed into a price box, as whole cents, or an error a person can
+ * act on (D4674). `12,50` is 12.50 and `1,5` is 1.50; an amount that could be
+ * read two ways is refused, not guessed (`lib/moneyInput.js`).
+ */
+export function dollarsToCents(input) {
+  return amountToCents(input);
+}
+
+export function ZoneHeading({ title, blurb, action }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <div className="max-w-2xl">
+        <h2 className="text-sm font-extrabold tracking-tight">{title}</h2>
+        {blurb && <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">{blurb}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/**
+ * The four states, in one place.
+ *
+ * `error` beats `items` beats `empty`. The ordering is the whole point: a
+ * failed read that fell through to an empty list would render the empty copy,
+ * which asserts that nothing exists. Reading the error first means the page
+ * can only ever claim a store is empty when it actually read the store.
+ */
+// #5363: the licence refusal's sentences and reader (`licenceRefusal.js`).
+export { ADVISOR_LICENCE_REQUIRED, LICENCE_SENTENCES, isLicenceSentence, zoneError } from './licenceRefusal';
+
+export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, what, children }) {
+  // `actions` renders ABOVE all four states, on purpose. A zone's header row is
+  // as true while the store is loading, or failed, or empty, as it is when rows
+  // are on screen — "no cadence is stored, so there is no set of reports to
+  // draft" does not become false because the fetch is in flight. An export with
+  // nothing loaded says so itself (see `zoneActionBuilder.js`), so the row can
+  // sit here without ever offering a file that does not exist.
+  //
+  // `notice` IS THE SAME ARGUMENT ONE STEP FURTHER, and it exists because a
+  // whole class of state was being rendered as a REPLACEMENT for the zone
+  // rather than as a fact about it. The partner zones each answered "this
+  // account is not attached to a firm" by returning a card and nothing else, on
+  // twelve zones, which is how an admin walked a workspace and saw twelve
+  // copies of one card instead of twelve pages. A condition that explains why a
+  // store is unreadable is a line ABOUT the zone; it is not the zone.
+  //
+  // Deliberately generic: this component serves four licences and knows nothing
+  // about firms or advisors. The caller decides what the line says and when.
+  const row = actions?.length ? <ZoneActions className="mb-3" items={actions} /> : null;
+  const head = (row || notice) ? <>{row}{notice}</> : null;
+  const wrap = (body) => (head ? <>{head}{body}</> : body);
+  // D4828 (EX-14): a zone naming `what` it reads draws #5129's states (`sectionStates.jsx`).
+  const shared = what && (loading || error) ? <SectionState what={what} loading={loading} error={error} onRetry={onRetry} /> : null;
+  if (loading) {
+    // D4711: a skeleton is shapes; the sentence is what a screen reader hears.
+    return wrap(shared || (
+      <div className="space-y-3" aria-busy="true" role="status">
+        <span className="sr-only">Loading…</span>
+        <Skeleton className="h-9" /><Skeleton className="h-28" />
+      </div>
+    ));
+  }
+  if (error && isLicenceSentence(error)) {
+    // #5363: not a failed read, so no "Source unavailable" and no Try again.
+    return wrap(shared || (
+      <Card variant="dashed" padding="lg" role="alert" data-testid="advisor-licence-required">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
+          Advisor licence
+        </div>
+        <h3 className="mt-2 text-sm font-extrabold tracking-tight">{error}</h3>
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
+          This account does not hold the Advisor licence today, so nothing here can be read.
+        </p>
+      </Card>
+    ));
+  }
+  if (error) {
+    // D4711: `role="alert"` so a read that fails after the page is open is
+    // announced, not only drawn.
+    return wrap(shared || (
+      <Card variant="dashed" padding="lg" role="alert">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
+          Source unavailable
+        </div>
+        <h3 className="mt-2 text-sm font-extrabold tracking-tight">This did not load</h3>
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
+          {error} Nothing is shown rather than an empty list, because an empty list here would
+          say you have no records — and that is not something this page can currently know.
+        </p>
+        {onRetry && (
+          <button type="button" onClick={onRetry}
+            className="mt-3 rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800">
+            Try again
+          </button>
+        )}
+      </Card>
+    ));
+  }
+  if (isEmpty) return wrap(empty);
+  return wrap(children);
+}
+
+/** An empty store the page genuinely read — different from one it could not. */
+export function NothingYet({ title, body, action }) {
+  return (
+    <Card variant="dashed" padding="lg">
+      <h3 className="text-sm font-extrabold tracking-tight">{title}</h3>
+      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">{body}</p>
+      {action && <div className="mt-3">{action}</div>}
+    </Card>
+  );
+}
+
+/**
+ * What a zone cannot answer, said on the zone rather than left as a blank.
+ *
+ * Every advisor zone built on this kit can answer less than its canvas asked
+ * for, and in each case the gap is a missing store rather than an oversight.
+ * A reader who is not told that reads the blank as their own data being empty,
+ * which is the same absent-is-not-empty failure `ZoneBody` exists to prevent —
+ * one level up, about the shape of the page instead of the state of a fetch.
+ */
+/**
+ * #4689 — "Showing 100 of 101 · Show more" under a list that has more rows than
+ * it has read. Nothing is drawn once every row is on screen.
+ */
+export function MoreRows({ line, onMore, busy = false, error = '', testid }) {
+  if (!line) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-axal-muted" data-testid={testid}>
+      <span className="tabular-nums">{line}</span>
+      <button type="button" className="font-semibold text-emerald-700 hover:underline disabled:opacity-60 dark:text-emerald-300"
+        onClick={onMore} disabled={busy}>
+        {busy ? 'Loading…' : 'Show more'}
+      </button>
+      {error ? <span role="status" className="text-red-700 dark:text-red-300">{error}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * D4711: a re-read after a write failed. The rows already on screen stay; this
+ * line says they may be out of date, and offers the re-read again. The write
+ * itself is reported by the zone's own SaveNote.
+ */
+export function StaleNote({ error, onRetry, testid }) {
+  if (!error) return null;
+  return (
+    <p role="alert" className="mb-3 flex flex-wrap items-center gap-3 text-[12px] font-semibold text-amber-800 dark:text-amber-300" data-testid={testid}>
+      <span>{error}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Read it again</button>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * #4714 (D4714): one source that did not answer, said where its content would
+ * be, with a retry scoped to that source. It is never an empty state: what
+ * could not be read is not "none".
+ */
+export function Unreadable({ children, onRetry }) {
+  // D5129: the shared Unavailable treatment; `children` is this kit's whole sentence.
+  return <DataState state="unavailable" reason={children} onRetry={onRetry} retryLabel="Try again" as="p" />;
+}
+
+export function StatedLimit({ title, children }) {
+  return (
+    <Card variant="sunken" padding="md" className="mt-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
+        {title}
+      </div>
+      {/*
+        A DIV, NOT A `<p>`, and the difference is not cosmetic. This wrapper was
+        a `<p>` while every caller passed bare text, which worked — until
+        `pages/partner/pipeline/AnalyticsZone.jsx` passed two `<p>` elements into
+        it. A `<p>` inside a `<p>` is invalid, the browser auto-closes the outer
+        one at the first inner tag, and the typography classes below then applied
+        to nothing while React logged `validateDOMNesting`. Seven of the eight
+        call sites render identically under a div carrying the same classes; the
+        eighth simply starts working.
+
+        Worth fixing here rather than at the call sites: a zone that can answer
+        less than its canvas asked for usually has more than one thing to say,
+        and "never pass a paragraph" is a rule the next author will not know.
+      */}
+      <div className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-muted">{children}</div>
+    </Card>
+  );
+}
+
+/**
+ * D1329 (#3490, AF18): `fill` (`{ ctl, name, value }`, from `useScopedFill`)
+ * draws the field's Fill controls beside its label: the trigger, its mark,
+ * "Not saved". The controls sit outside the `<label>`, so a press on the
+ * trigger never lands in the box.
+ */
+export function Field({ label, hint, fill = null, limit, children }) {
+  // D4711: the hint is the control's description, not only text beside it. A
+  // hint such as "blank reads as not recorded, not as free" is the rule the
+  // field follows, so a screen reader hears it on the field itself.
+  const hintId = React.useId();
+  // D4828 (EX-16): `limit` adds a live counter, described by the control and never cutting it.
+  const count = useLimit(children, limit);
+  const described = (hint || count.id) && React.isValidElement(children)
+    ? React.cloneElement(children, {
+      'aria-describedby': [children.props['aria-describedby'], hint ? hintId : null, count.id].filter(Boolean).join(' '),
+      ...count.props,
+    })
+    : children;
+  const hintNode = (hint || count.node) ? <>{hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-muted">{hint}</span> : null}{count.node}</> : null;
+  if (fill?.ctl) {
+    return (
+      <div className="block">
+        <FillLabel fill={fill.ctl} name={fill.name} label={label} value={fill.value}>
+          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted" aria-hidden="true">{label}</span>
+        </FillLabel>
+        <label className="block"><span className="sr-only">{label}</span>{described}</label>
+        {hintNode}
+      </div>
+    );
+  }
+  return (
+    <label className="block">
+      <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{label}</span>
+      {described}
+      {hintNode}
+    </label>
+  );
+}
+
+/**
+ * THESE THREE ARE THE ADVISOR ACCENT. The emerald is not a neutral default —
+ * it is `ACCENT.advisor` from `workspaces/shellConfig.js`, and it is correct in
+ * all eleven files that import it. A partner zone must NOT reuse them: partner
+ * is amber, and `pages/partner/kit.jsx` carries the amber pair for that reason.
+ * Parameterising this file by accent would edit eleven advisor files to solve a
+ * problem that belongs to one licence.
+ */
+export const inputClass =
+  'mt-1 w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] '
+  + 'focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 '
+  + 'dark:border-gray-700 dark:bg-gray-900';
+
+// D4828 (EX-16): a visible keyboard focus, and a 44px target below 1024px.
+const FOCUS_TARGET = ' focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 min-h-[44px] lg:min-h-0';
+
+export const buttonClass =
+  'rounded-lg bg-emerald-700 px-3 py-1.5 text-[12px] font-semibold text-white '
+  + 'hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50' + FOCUS_TARGET;
+
+export const ghostButtonClass =
+  'rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold '
+  + 'hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800' + FOCUS_TARGET;
+
+/**
+ * Saved / failed, said once, above the thing that was saved (D4711): the live
+ * region mounted empty, a failure an alert. D4828: this is `InlineSaveStatus`,
+ * the one feedback component, drawn in `sectionStates.jsx`.
+ */
+export { InlineSaveStatus, SaveNote } from './sectionStates';
+
+/**
+ * D4670: what a refused read or write says, by the Worker's code. Anything
+ * else is the caller's own fixed sentence: a zone never prints raw error text.
+ */
+export const ASK_REFUSALS = Object.freeze({
+  attester_email_required: 'Give their email address: their code is sent there when they answer.',
+  attester_is_requester: 'That address is your own. Someone else confirms your claim.',
+  attester_name_required: 'Name the person you are asking.',
+  advisor_licence_required: LICENCE_SENTENCES.expertise,
+});
+export const refusalText = (err, fallback) => ASK_REFUSALS[err?.code] || fallback;
+
+export { Pill };

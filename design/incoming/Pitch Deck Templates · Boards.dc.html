@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:88px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1180px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Raise › Pitch deck studio · Templates</span>
+<h1 style="margin:0;font-size:42px;font-weight:700;letter-spacing:-0.03em">Pitch deck templates</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">All 24 templates, six per stage: Pre-seed TPL-01 to 06, Seed 07 to 12, Series A 13 to 18 and Series B+ 19 to 24. Each board shows the title card large, the template’s swatch, type, decor, chrome, art, tone and what sets it apart, then every card in order on the 12 × 6 grid. Slides show placeholders only: every figure reads “Not recorded” until it is bound to a record. The Pre-seed and Seed templates (TPL-01 to 12) are written for AI-native companies: their placeholders ask for the model’s task, the person in the loop, what is learned from corrections, gross margin after compute, and where the moat is.</p>
+
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+<section style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><h2 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-0.02em">{{ g.t }}</h2><span style="font-family:'Roboto Mono',monospace;font-size:13px;color:#6b6577">{{ g.s }}</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,1440px);gap:56px 48px;align-items:start">
+<sc-for list="{{ g.ids }}" as="b" hint-placeholder-count="6">
+<div id="{{ b.anchor }}" style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10);background:#ffffff"><dc-import name="Pitch Deck Templates Page" v="{{ b.v }}" hint-size="1440px,1500px"></dc-import></div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const G = (t, s, a) => ({ t, s, ids: Array.from({ length: 6 }, (_, k) => { const v = String(a + k).padStart(2, '0'); return { v, anchor: 'TPL-' + v }; }) });
+    return { groups: [G('Pre-seed', 'TPL-01 to TPL-06', 1), G('Seed', 'TPL-07 to TPL-12', 7), G('Series A', 'TPL-13 to TPL-18', 13), G('Series B+', 'TPL-19 to TPL-24', 19)] };
+  }
+}
+</script>
+</body></html>

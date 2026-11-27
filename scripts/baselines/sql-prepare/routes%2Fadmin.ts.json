@@ -1,0 +1,5 @@
+{
+  "CONV_COLS @ routes/admin.ts": 2,
+  "placeholders @ routes/admin.ts": 3,
+  "where.join(' AND ') @ routes/admin.ts": 3
+}

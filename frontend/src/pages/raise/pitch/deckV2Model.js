@@ -1,0 +1,434 @@
+/**
+ * D1604 (#3716) — Pitch deck studio v2: the words and pure helpers every v2
+ * surface shares. No React, no network.
+ *
+ *   LATER, PEND, HOLD    the three lines a v2 surface prints most often
+ *   areaLabel            "c5–8 × r4–6", the Grid coordinates of an area
+ *   ELEMENT_GROUPS       the lightbox's element picker (pd4 PICK): 8 groups,
+ *                        each item routed to a Worker route on main, a free
+ *                        edit, or the adapter key and issue that brings it
+ *   ACCEPT, …            the one set of proposal verbs (§0 row 5)
+ *   askName, …           the Ask button's accessible names (pd40, §0 row 6)
+ *   DECK_ASK_OPTIONS     the rail options whose proposals Ask lists
+ *   cardEdit, …          a waiting card edit, read from its rail proposal
+ *   saveChip, MORE_MENU  the editor header's save state and its ⋯ menu, with
+ *   moreState, moreName  why each item is greyed and the ", N off" name
+ *
+ * The owner's rules this file carries: the button is "Ask" and its name
+ * "Ask Eadwyn", never "Fill"; every generated element is a proposal decided
+ * with Accept or Discard; a count that could not be read is not drawn, never
+ * "0 waiting".
+ */
+
+/** An item whose route is not on main yet. */
+export const LATER = 'Coming later';
+/** Marked on the three picker items the owner has not decided (M, H, G). */
+export const PEND = '(pending owner)';
+/** The adapter's reason, Team's copy (D1497). */
+export const NOT_ON = 'Not switched on yet.';
+
+/** The hold line shown before anything that costs tokens runs. `money` is already formatted ("$0.03"). */
+export const HOLD = (money) => `Holds up to ${money} · you pay what it uses`;
+
+/**
+ * "c5–8 × r4–6": an area's columns and rows on the 12 × 6 Grid, 1-based and
+ * inclusive (the slide model's `grid`: `{ c1, c2, r1, r2 }`). A one-cell span
+ * reads "c5" rather than "c5–5". Null when the range is not a range.
+ */
+export function areaLabel(grid) {
+  const n = (v) => (Number.isInteger(v) && v > 0 ? v : null);
+  const c1 = n(grid?.c1); const c2 = n(grid?.c2); const r1 = n(grid?.r1); const r2 = n(grid?.r2);
+  if (!c1 || !c2 || !r1 || !r2 || c2 < c1 || r2 < r1) return null;
+  const span = (a, b) => (a === b ? `${a}` : `${a}–${b}`);
+  return `c${span(c1, c2)} × r${span(r1, r2)}`;
+}
+
+// ---------------------------------------------------------------------------
+// The element catalogue (pd4 PICK), routed
+// ---------------------------------------------------------------------------
+
+/**
+ * Where an element comes from. `route` names a Worker route on main and the
+ * rail option its run is charged to (`option`, null when it runs no model).
+ * `adapter` names the `deckV2Adapter.js` method that answers unavailable until
+ * `issue` merges. `free` marks an element placed with no model.
+ */
+const R = (route, option = null) => ({ route, option });
+const A = (adapter, issue) => ({ adapter, issue });
+/**
+ * D1543 (#3781): a venture-record element, read from the records (`deckV2Adapter.ventureElements`).
+ * Only the logo wall is `free`: team bios run a model (#3781's "Team bios [Model A]"), and the venture
+ * items keep their DK3 job in `modelUseCases.ts`'s DECK_ELEMENT_JOBS (D1503, D1549), which a free
+ * placement may not carry.
+ */
+const V = Object.freeze(R('GET /api/decks/:id/venture-elements/:element'));
+const VF = Object.freeze({ free: true, ...V });
+
+export const ELEMENT_GROUPS = Object.freeze([
+  { id: 'text', label: 'Text', items: [
+    { id: 'title', label: 'Title', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
+    { id: 'kicker', label: 'Kicker', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
+    { id: 'body', label: 'Body', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
+    { id: 'bullets', label: 'Bullets', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
+    { id: 'callout', label: 'Call-out', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
+    { id: 'caption', label: 'Caption', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
+    { id: 'quote_founder', label: 'Quote · founder’s own', free: true },
+    { id: 'team_bios', label: 'Team bios', ...V },
+    // D1560 (#3807): the card's speaker notes, written from its own words by the transform route.
+    { id: 'speaker_notes', label: 'Speaker notes', ...R('POST /api/decks/:id/transform', 'deck:notes') },
+  ] },
+  { id: 'images', label: 'Images', items: [
+    { id: 'photo', label: 'Generated photo', ...R('POST /api/decks/:id/images', 'deck:image') },
+    { id: 'illustration', label: 'Illustration', ...R('POST /api/decks/:id/images', 'deck:image') },
+    { id: 'upload', label: 'Uploaded', free: true, ...R('POST /api/decks/:id/images/upload') },
+    { id: 'brand_assets', label: 'Brand assets', ...A('brandLocks', 3819) },
+    // D1544 (#3784): erase, expand, vary and edit are #3784's; crop, focus, filters, upscale and background removal stay #3778's.
+    { id: 'edit_vary', label: 'Edit or vary', ...A('imageVary', 3784) },
+    // D1534: crop, focus and filters are on the placed image's toolbar; these two are phase 2 (owner decision M).
+    { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEditAi', 3778) },
+    { id: 'upscale', label: 'Upscale', ...A('imageEditAi', 3778) },
+  ] },
+  { id: 'graphics', label: 'Graphics', items: [
+    { id: 'icons', label: 'Icons', ...A('elementsLibrary', 3779) },
+    { id: 'shapes', label: 'Shapes and dividers', ...A('elementsLibrary', 3779) },
+    { id: 'textures', label: 'Backgrounds and textures', ...A('elementsLibrary', 3779) },
+    { id: 'logo_wall', label: 'Logo wall', ...VF },
+  ] },
+  { id: 'data', label: 'Data', items: [
+    { id: 'chart', label: 'Chart from records', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:chart') },
+    { id: 'metric', label: 'Metric', free: true, ...R('GET /api/decks/sources') },
+    { id: 'table', label: 'Table from records', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:table') },
+    { id: 'timeline', label: 'Timeline', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:timeline') },
+    { id: 'market_size', label: 'Market size', ...A('typedTables', 3787) },
+    { id: 'projections', label: 'Financial projections', ...A('typedTables', 3787) },
+    { id: 'competition', label: 'Competition table', ...A('typedTables', 3787) },
+    { id: 'typed_table', label: 'Typed table', ...A('typedTables', 3787) },
+    { id: 'market_chart', label: 'Market-size chart', ...A('typedTables', 3787) },
+    { id: 'projection_chart', label: 'Projection chart', ...A('typedTables', 3787) },
+    { id: 'positioning', label: 'Positioning 2×2', ...A('diagrams', 3780) },
+  ] },
+  // D1542 (#3780): Flow, Cycle and Matrix generate through the areas route (the `grid_diagram` job), on the model the
+  // rail's Diagrams group resolves on the server, so they name no rail option here; the rest stay later.
+  { id: 'diagrams', label: 'Diagrams', items: [
+    { id: 'flow', label: 'Flow', ...R('POST /api/decks/:id/areas') },
+    { id: 'cycle', label: 'Cycle', ...R('POST /api/decks/:id/areas') },
+    { id: 'matrix', label: 'Matrix', ...R('POST /api/decks/:id/areas') },
+    { id: 'funnel', label: 'Funnel', ...A('diagrams', 3780) },
+    { id: 'hierarchy', label: 'Hierarchy', ...A('diagrams', 3780) },
+    { id: 'hub', label: 'Hub and spoke', ...A('diagrams', 3780) },
+  ] },
+  { id: 'venture', label: 'Venture records', items: [
+    { id: 'team_grid', label: 'Team grid', free: true },
+    { id: 'use_of_funds', label: 'Use of funds', ...V },
+    { id: 'round_terms', label: 'Round terms', ...V },
+    { id: 'interview_quote', label: 'Interview quote', ...V },
+    { id: 'cap_table', label: 'Cap-table summary', ...V },
+  ] },
+  { id: 'media', label: 'Media & links', items: [
+    { id: 'video', label: 'Video', free: true, ...R('POST /api/decks/video-link') },
+    { id: 'audio', label: 'Audio', free: true },
+    { id: 'link', label: 'Link', free: true },
+    // D1545 (#3788): on main: an MP4 uploaded to the deck (`deckV2Adapter.media`), and a call to action.
+    { id: 'recorded_video', label: 'Recorded video', ...R('POST /api/decks/:id/videos/upload') },
+    { id: 'button', label: 'Button', free: true },
+    { id: 'embeds', label: 'Embeds', ...A('media', 3788) },
+  ] },
+]);
+
+/** Every element, flat, with its group id. */
+export const ELEMENTS = Object.freeze(ELEMENT_GROUPS.flatMap((g) => g.items.map((i) => Object.freeze({ ...i, group: g.id }))));
+
+/** True when the element can be placed or generated on main today. */
+export const elementOnMain = (el) => Boolean(el && !el.adapter && (el.route || el.free));
+
+// ---------------------------------------------------------------------------
+// Proposals: one set of verbs
+// ---------------------------------------------------------------------------
+
+export const ACCEPT = 'Accept';
+export const ACCEPT_ALL = 'Accept all';
+export const DISCARD = 'Discard';
+/** Only for an edit that runs no model (a theme, a layout): one undo step, not a proposal. */
+export const APPLY = 'Apply';
+/** What an accepted run cost, said where the run's results are listed (undo says "Still charged", `STILL_CHARGED`). */
+export const CHARGED_LINE = 'The run was charged when Eadwyn proposed it. Accepting places it; it costs nothing more.';
+
+// ---------------------------------------------------------------------------
+// Ask (pd40)
+// ---------------------------------------------------------------------------
+
+/** The visible label: always "Ask", on every width (the phone shows the word too). */
+export const ASK_LABEL = 'Ask';
+/** The one accessible name. AI off keeps it (§0 row 6, owner question H). */
+export const ASK_NAME = 'Ask Eadwyn';
+
+/**
+ * The header button's accessible name: "Ask Eadwyn", and ", N waiting" only
+ * when a read counted N > 0. An unread count (null) adds nothing.
+ */
+export function askName(waiting) {
+  return Number.isInteger(waiting) && waiting > 0 ? `${ASK_NAME}, ${waiting} waiting` : ASK_NAME;
+}
+
+/** The selection's Ask: "Ask Eadwyn about this area" or "…about these N areas". */
+export function askAreaName(n) {
+  return Number.isInteger(n) && n > 1 ? `${ASK_NAME} about these ${n} areas` : `${ASK_NAME} about this area`;
+}
+
+export const ASKING = 'Asking…';
+export const ASK_UNREADABLE = 'Eadwyn could not be reached. Try again.';
+export const ASK_OFF = 'AI is paused. What is waiting can still be accepted or discarded.';
+/**
+ * PD-9 (plan §8): the page's own line for the two AI-off states. AI paused is
+ * read from the studio's switch (D765); out of tokens is known once a run or a
+ * quote is refused with a 402 (main has no balance gate before the press). In
+ * either state Ask on an area is greyed with the same words, and the rest of
+ * the page keeps working.
+ */
+export const PAUSED_BANNER = 'AI is paused for your studio. Editing, Present, Share and Export still work.';
+export const TOKENS_BANNER = 'You are out of AI tokens. Runs wait until you add tokens; editing, Present, Share and Export still work.';
+export const ASK_OFF_PAUSED = 'AI is paused for your studio.';
+export const ASK_OFF_TOKENS = 'Out of AI tokens. Add tokens to run it.';
+/** The page's AI-off state: paused wins, because adding tokens would not lift it. */
+export function aiOffState({ aiOn = true, outOfTokens = false } = {}) {
+  if (!aiOn) return { kind: 'paused', banner: PAUSED_BANNER, ask: ASK_OFF_PAUSED };
+  if (outOfTokens) return { kind: 'tokens', banner: TOKENS_BANNER, ask: ASK_OFF_TOKENS };
+  return null;
+}
+export const WAITING_TITLE = 'Waiting for you';
+export const WAITING_NONE = 'Nothing is waiting. What Eadwyn proposes for this deck appears here until you accept or discard it.';
+export const STILL_WORKS = Object.freeze([
+  'Manual editing',
+  'Refresh from records',
+  'Check claims’ free checks',
+  'Accepting or discarding what is already waiting',
+]);
+
+/** The deck's text and data edits a card run proposes (deck_assist.ts), in the editor's order. */
+export const DECK_ASK_OPTIONS = Object.freeze(['deck:rewrite', 'deck:shorten', 'deck:expand', 'deck:tone', 'deck:translate', 'deck:chart', 'deck:table', 'deck:timeline']);
+
+const ACTION_WORDS = {
+  rewrite: 'Rewrite', shorten: 'Shorter', expand: 'Longer', headline: 'Headline', tone: 'New tone', translate: 'Translation',
+  ask: 'Your instruction', chart: 'Chart from records', table: 'Table from records', timeline: 'Timeline from records',
+  // D4210: a fix Eadwyn suggested for one preflight finding.
+  preflight_fix: 'Suggested fix',
+};
+const CHART_ACTIONS = new Set(['chart', 'table', 'timeline']);
+const CHART_SIZE = { chart: { cols: 6, rows: 3 }, table: { cols: 6, rows: 3 }, timeline: { cols: 12, rows: 2 } };
+
+/**
+ * A waiting card edit, read from one `ai_rail_proposals` row that a card run
+ * left (`deck_assist.ts`: `record = deck:<id>`, payload `{ deck_id, card,
+ * action, before, after }` or `{ …, block, title }`). Null for a row this
+ * deck did not propose or that is not open.
+ */
+export function cardEdit(row, deckId) {
+  if (!row || (row.status && row.status !== 'proposed')) return null;
+  const p = row.payload && typeof row.payload === 'object' ? row.payload : null;
+  if (!p || String(p.deck_id) !== String(deckId) || !Number.isInteger(p.card) || p.card < 0) return null;
+  const action = String(p.action || '');
+  // D1500: the card's own uid, so the edit lands on that card even if it moved since.
+  const cardUid = typeof p.card_uid === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(p.card_uid) ? p.card_uid : null;
+  const base = { uid: row.uid, option: row.rail_option || null, card: p.card, card_uid: cardUid, action, what: ACTION_WORDS[action] || 'Edit', at: row.created_at || null };
+  if (CHART_ACTIONS.has(action)) {
+    if (!p.block || typeof p.block !== 'object') return null;
+    return { ...base, kind: 'block', block: p.block, title: p.title || null, size: CHART_SIZE[action] };
+  }
+  if (typeof p.after !== 'string' || !p.after.trim()) return null;
+  return { ...base, kind: 'text', before: String(p.before ?? ''), after: p.after };
+}
+
+/** One line naming the edit: "Card 3 · Shorter". */
+export const cardEditLine = (edit) => `Card ${edit.card + 1} · ${edit.what}`;
+
+/**
+ * The waiting count, or null when any read it depends on failed: a failed
+ * read draws no count, never "0 waiting".
+ */
+export function waitingCount({ deck, edits }) {
+  if (deck?.status !== 'ready' || edits?.status !== 'ready') return null;
+  // D1583 (#3830): a teaser, one-pager or memo waiting counts like a card edit.
+  return (deck.proposal ? 1 : 0) + edits.items.length + (Array.isArray(edits.derived) ? edits.derived.length : 0);
+}
+
+/**
+ * Where a text edit lands: the card's text block whose text is still the
+ * proposal's `before`. When the card changed since, nothing is guessed.
+ */
+/**
+ * D1500: where the card an edit was made for sits now. By its uid when the
+ * edit names one: a card moved since is found, and a card removed since is -1,
+ * never the card that took its place. An edit made before uids reads by place.
+ */
+export function editIndex(cards, edit) {
+  const list = Array.isArray(cards) ? cards : [];
+  if (edit?.card_uid) return list.findIndex((c) => c?.uid === edit.card_uid);
+  return Number.isInteger(edit?.card) && edit.card < list.length ? edit.card : -1;
+}
+
+export function placeTextEdit(cards, edit) {
+  const at = editIndex(cards, edit);
+  const card = at >= 0 ? cards[at] : null;
+  if (!card) return { error: `Card ${edit.card + 1} is no longer in this deck. Discard this proposal.` };
+  const blocks = Array.isArray(card.blocks) ? card.blocks : [];
+  const hit = blocks.find((b) => b.kind === 'text' && String(b.text ?? '') === edit.before);
+  if (!hit) return { error: `Card ${edit.card + 1} changed since Eadwyn proposed this. Select the area and ask again.` };
+  return { card: { ...card, blocks: blocks.map((b) => (b === hit ? { ...b, text: edit.after } : b)) }, blockId: hit.id };
+}
+
+// ---------------------------------------------------------------------------
+// The editor's header (DeckToolbar, pd0 · pd13) and its ⋯ menu (DeckMoreMenu)
+// ---------------------------------------------------------------------------
+
+/** The ⋯ button's name, before the off suffix. */
+export const MORE_NAME = 'More deck actions';
+export const SAVED = '✓ Saved';
+export const UNSAVED = '● Unsaved changes';
+export const SAVE_VERSION = 'Save version';
+export const READ_ONLY_LINE = 'Read only';
+
+/**
+ * The save state the header draws. `when` is editorModel's `saveState` line
+ * ("Saved · 2 min ago"), whose time becomes the title. Save version shows
+ * only while the deck differs from its version (owner question G, S1's pick
+ * (a)): versions stay explicit.
+ *
+ * D1515 (#3767): `sync` is the autosave's state (`deckAutosave.js`) while the
+ * deck differs from its version, with `clock` its "14:32":
+ *   pending, saving   "Saving…"
+ *   synced            "✓ All changes saved", titled "Saved to your draft at 14:32…"
+ *   offline           "Offline · N changes saved on this device" (pd9p)
+ *   conflict          "● Card changed elsewhere" (pd9q opens under the header)
+ *   error, off, none  "● Unsaved changes", titled with the reason
+ */
+export function saveChip({ dirty, readOnly, when, version = null, sync = null }) {
+  if (readOnly) return { text: version == null ? READ_ONLY_LINE : `${READ_ONLY_LINE} · v${version}`, title: 'You can read this deck. Changes are the founder’s.', save: false };
+  if (dirty) {
+    const st = sync?.state;
+    if (st === 'pending' || st === 'saving') return { text: SAVING, title: 'Saving your changes to this version’s draft.', save: true, calm: true };
+    if (st === 'synced') return { text: ALL_SAVED, title: sync.clock ? `Saved to your draft at ${sync.clock}. Save version makes them a version.` : 'Saved to your draft. Save version makes them a version.', save: true, calm: true };
+    if (st === 'offline') return { text: `Offline · ${sync.queued} ${sync.queued === 1 ? 'change' : 'changes'} saved on this device`, title: "They'll sync when you're back. Typing still works.", save: true, warn: true };
+    if (st === 'conflict') return { text: CONFLICT_CHIP, title: 'Another tab or member saved this card first. Choose which version to keep.', save: true, warn: true };
+    return { text: UNSAVED, title: sync?.reason || 'Nothing is saved until you save a version.', save: true };
+  }
+  const at = /^Saved · (.+)$/.exec(String(when || ''))?.[1];
+  // "Saved · v3" names the version, not a time: no time is drawn then.
+  if (at && /^v\S+$/.test(at)) return { text: SAVED, title: 'All changes saved', save: false };
+  return { text: SAVED, title: at ? `All changes saved · ${at}` : 'All changes saved', save: false };
+}
+
+/** D1515: the autosave's words in the header. */
+export const SAVING = 'Saving…';
+export const ALL_SAVED = '✓ All changes saved';
+export const CONFLICT_CHIP = '● Card changed elsewhere';
+
+/** D1515 (pd3): Undo and Redo, with the history's depth. */
+export const UNDO = 'Undo';
+export const REDO = 'Redo';
+export const STEPS_LINE = (n) => `${n} steps`;
+/** D1515 (plan §4.5, dk-boards l.1073): undoing an accepted run never refunds it. */
+export const STILL_CHARGED = 'Still charged: undo takes the accepted run off the card, but what it cost stays spent.';
+
+/**
+ * The ⋯ menu, in its four sections (plan §2.2; Before you send is D1370's). An item is wired on main
+ * (`write` when it changes the deck, so a reader sees it greyed), or it names
+ * the `deckV2Adapter.js` method (`adapter`) that answers unavailable until its
+ * issue merges: drawn greyed "Coming later", titled with the adapter's
+ * reason, still reachable by keyboard. `ai` marks an item that runs a model.
+ */
+export const MORE_MENU = Object.freeze([
+  { id: 'deck', label: 'This deck', items: [
+    // D1522 (#3774), D1561 (#3808): Stage opens the stage sheet: the plan's order, its why lines and Reorder for stage.
+    { id: 'stage', label: 'Stage', adapter: 'deckActions' },
+    // D1499 (#3749): the theme's aspect, written like a theme and held until a version is saved.
+    { id: 'size', label: 'Slide size 16:9 · 4:3', write: true },
+    { id: 'theme', label: 'Theme', write: true },
+    { id: 'brand', label: 'Brand kit' },
+    // D1561 (#3808): a new version, one undo step, so a reader sees it greyed.
+    { id: 'reorder', label: 'Reorder for stage', adapter: 'deckActions', write: true },
+    { id: 'sources', label: 'Sources and coverage' },
+    { id: 'versions', label: 'Versions…' },
+    { id: 'save_named', label: 'Save as a named version…', write: true },
+    // D1583 (#3830): a teaser, a one-pager or a memo from the saved version, each a proposal Ask lists.
+    { id: 'derive', label: 'Teaser, one-pager or memo…', write: true },
+    // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
+    { id: 'notes', label: 'Notes from your admins' },
+    // D1515 (#3767, pd3): Undo and Redo (also in the header) and Find and replace, which lives only here.
+    { id: 'undo', label: 'Undo', note: '⌘Z', write: true },
+    { id: 'redo', label: 'Redo', note: '⇧⌘Z', write: true },
+    { id: 'find', label: 'Find and replace…', note: '⌘F', write: true },
+  ] },
+  { id: 'card', label: 'This card', items: [
+    { id: 'structure', label: 'Structure', write: true },
+    { id: 'remix', label: 'Remix this slide', note: 'Free', adapter: 'remix' },
+    { id: 'duplicate', label: 'Duplicate', write: true },
+    { id: 'hide', label: 'Hide', adapter: 'media' },
+    { id: 'section', label: 'Move to section', adapter: 'media' },
+    { id: 'appendix', label: 'Mark as appendix', write: true },
+    { id: 'background', label: 'Background image', write: true },
+    // D1576 (#3823): how this card comes up in Present and the PowerPoint; a sheet, never a toolbar button.
+    { id: 'transition', label: 'Transition', write: true },
+    // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
+    { id: 'comments', label: 'Comments', adapter: 'comments' },
+    // D1569 (#3816): the card's script in an AI voice, quoted first and saved only on Accept; never in the header or the rail.
+    { id: 'voice', label: 'AI voice-over', ai: true, write: true },
+    { id: 'remove_card', label: 'Remove card…', write: true },
+  ] },
+  // D1370 (#3661, pd13 and pf1a): the preflight, free and read-only, between This card and the AI items.
+  { id: 'before', label: 'Before you send', items: [
+    { id: 'preflight', label: 'Check before you send', note: 'Free' },
+  ] },
+  { id: 'ai', label: 'Whole deck · uses AI', items: [
+    { id: 'replace_images', label: 'Replace all images', adapter: 'replaceImages', ai: true },
+    { id: 'check', label: 'Check claims', note: 'Free checks' },
+    { id: 'critique', label: 'Fix with critique', adapter: 'critique', ai: true },
+  ] },
+]);
+
+/** On a phone, Share's two items move into ⋯ (plan §2.1). */
+export const SHARE_ITEMS = Object.freeze([
+  { id: 'share', label: 'Share link…' },
+  { id: 'export', label: 'Export…' },
+]);
+
+/**
+ * Why each item is greyed, or null when it can be pressed: the adapter's
+ * reason ("Coming later") while its surface answers unavailable, read only
+ * for a write, the editor not on screen yet (`waiting`, for every item but
+ * Share's two), or AI paused / out of tokens for a wired item that runs a
+ * model. An item whose adapter surface answers available is wired like any
+ * other: the seam greys it only until its issue merges. `off` counts only the
+ * last kind: the items that would work but for AI.
+ */
+export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens = false, availability = () => null, waiting = null, blocked = {} } = {}) {
+  let off = 0;
+  let why = null;
+  const shareIds = new Set(SHARE_ITEMS.map((i) => i.id));
+  const out = sections.map((s) => ({
+    ...s,
+    items: s.items.map((it) => {
+      if (it.adapter) {
+        // `availability` answers null for a row whose route is on main (`SWAPPED`, D1553): that item is live.
+        const a = availability(it.adapter);
+        if (a && a.available !== true) return { ...it, disabled: true, later: true, why: a.reason || NOT_ON };
+      }
+      if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
+      if (waiting && !shareIds.has(it.id)) return { ...it, disabled: true, why: waiting };
+      // D1515: an item the editor cannot carry out now ("Nothing to undo.").
+      if (blocked?.[it.id]) return { ...it, disabled: true, why: blocked[it.id] };
+      if (it.ai && (!aiOn || outOfTokens)) {
+        off += 1;
+        why = why || (!aiOn ? 'AI is paused' : 'out of AI tokens');
+        return { ...it, disabled: true, why: !aiOn ? 'AI is paused for your studio.' : 'Out of AI tokens. Add tokens to run it.' };
+      }
+      return { ...it, disabled: false, why: null };
+    }),
+  }));
+  return { sections: out, off, why };
+}
+
+/** The ⋯ items' line while the editor itself is not on screen (the deck or the model still reading, or failed). */
+export const EDITOR_WAITING = 'Opens once the deck is on screen.';
+
+/** "More deck actions", with ", N off: <why>" when items are off for AI. */
+export const moreName = (off, why) => (off > 0 ? `${MORE_NAME}, ${off} off: ${why}` : MORE_NAME);

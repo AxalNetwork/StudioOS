@@ -1,0 +1,7 @@
+{
+  "POST /api/validate/lovable-signups/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}

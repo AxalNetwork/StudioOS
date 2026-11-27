@@ -1,0 +1,83 @@
+**✅ Here is a clean, logical breakdown of Task 3: Advanced Partner Matching for Established Companies**
+
+This feature will allow existing companies to find the right partners for geographic expansion, distribution, co-development, and strategic alliances — turning your platform into a true “partner network” for growth-stage companies.
+
+### Task 3 Breakdown: Advanced Partner Matching for Established Companies
+
+**Step 1: Database Schema**  
+Create new tables for “Needs” and “Offers” + enhance partner profiles to support Need → Offer matching.
+
+**Step 2: Backend Matching Engine**  
+Enhance the existing AI matching logic to support geographic, distribution, co-development, and strategic partner criteria.
+
+**Step 3: API Endpoints**  
+Add endpoints for submitting needs/offers and retrieving smart matches.
+
+**Step 4: Frontend Interface**  
+Build the UI where companies can post their needs and browse matched partners.
+
+**Step 5: Integration**  
+Connect the matching system to the Growth & Expansion Engine, Company Profile, and Pipeline Board.
+
+**Step 6: Notifications & Polish**  
+Add real-time notifications when a strong match is found and add smart recommendations.
+
+---
+
+### Ready-to-copy prompt for **Step 1** (Database Schema)
+
+This is the foundational step. Start here.
+
+**Paste this into Replit Agent:**
+
+```
+You are the senior database engineer for Axal StudioOS. Build the foundation for **Advanced Partner Matching for Established Companies** with “Need → Offer” logic.
+
+Exact requirements for Step 1:
+
+1. **New Tables**
+   - `company_needs` table:
+     - id (PK)
+     - company_id (FK to company_profiles.id)
+     - need_type (text: 'geographic_expansion', 'distribution_channel', 'co_development', 'tech_integration', 'strategic_corporate')
+     - description (text)
+     - target_countries (json array)
+     - target_industries (json array)
+     - urgency (integer 1-5)
+     - created_at, expires_at
+
+   - `company_offers` table:
+     - id (PK)
+     - company_id (FK)
+     - offer_type (text: same as need_type)
+     - description (text)
+     - available_countries (json array)
+     - available_industries (json array)
+     - capacity (text)
+
+2. **Enhanced Partner Capabilities**
+   - Add column `partner_capabilities` (json) to `operator_profiles` and `service_provider_profiles` for skills like "EU distribution", "APAC sales", etc.
+
+3. **Migration**
+   - Make migration idempotent.
+   - Add indexes on need_type, offer_type, and company_id.
+
+Build this step-by-step:
+1. First create the two new tables (`company_needs` and `company_offers`) with proper foreign keys and indexes.
+2. Then add the `partner_capabilities` column to existing profile tables.
+3. Finally run the migration.
+
+After each step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Would you like me to prepare **Step 2 prompt** (Backend Matching Engine) right now, or do you want to complete Step 1 first and then continue?
+
+Just reply with:
+- “Give me Step 2 prompt”
+- or “Continue with Step 1 first”
+
+I’m ready whenever you are.

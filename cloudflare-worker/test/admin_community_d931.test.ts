@@ -1,0 +1,480 @@
+/**
+ * D931 (#2715) — GET /api/admin/community/overview: Admin › Community's
+ * period figures, as counts.
+ *
+ * On node:sqlite with the tables cut from `schema_baseline.sql`, plus
+ * migration 550 run as written. The service runs on a fixed clock (a
+ * Wednesday) so each figure is worked out by hand in the fixture; the router
+ * runs on the real clock for the gate and the 400.
+ *
+ * Run with:
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/admin_community_d931.test.ts
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+
+import adminCommunityRoute from '../src/routes/admin_community.ts';
+import {
+  ACTIVE_MEMBERS_REASON, CIRCLE_DISCUSSIONS_REASON, DAYS_OPEN_REASON, MIN_CHECKIN_COHORT,
+  communityOverview, eventsByRole, eventsWeekly, parseCommunityWeeks, participationRole, showUpCounts,
+} from '../src/services/communityOverview.ts';
+import { readOverview } from '../src/services/adminEventsReads.ts';
+import { submitForReview } from '../src/services/jobBoardCommon.ts';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+
+const NOW = Date.parse('2026-10-21T12:00:00Z'); // a Wednesday; the 4-week window is 2026-09-28 to 2026-10-26
+const HOUR = 3_600_000;
+const at = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+
+const SQL = resolve(process.cwd(), 'cloudflare-worker/sql');
+const BASELINE = readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8');
+function ddl(name: string): string {
+  const i = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
+  assert.ok(i >= 0, `${name} is no longer defined in schema_baseline.sql`);
+  return BASELINE.slice(i, BASELINE.indexOf(');', i) + 2);
+}
+
+function makeD1(db: InstanceType<typeof DatabaseSync>) {
+  return {
+    prepare(sql: string) {
+      let b: any[] = [];
+      const api: any = {
+        bind: (...x: any[]) => { b = x.map((v) => (v === undefined ? null : v)); return api; },
+        async first() { return db.prepare(sql).get(...b) ?? null; },
+        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async run() { const r = db.prepare(sql).run(...b); return { meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } }; },
+      };
+      return api;
+    },
+    async batch(x: any[]) { const out = []; for (const st of x || []) out.push(await st.run()); return out; },
+  };
+}
+
+const TABLES = ['users', 'super_admins', 'user_sessions', 'projects', 'job_postings', 'job_applications', 'circles',
+  'network_profiles', 'experts', 'expert_bookings', 'wellbeing_daily_pulses'];
+
+/**
+ * The fixture. Every applicant has a name and an email so the walk below can
+ * prove none leaves the read.
+ *
+ * Applications in the window (2026-09-28 to 2026-10-26), seven:
+ *   week 09-28: a guest on 101 (10-01), the advisor on 101 (09-29)      → 2
+ *   week 10-05: the investor on 101 (10-06)                              → 1
+ *   week 10-12: the partner on 102 (10-13), the admin on 103 (10-14)     → 2
+ *   week 10-19: the founder on 101 (10-20), the explorer on 102 (10-21)  → 2 (to date)
+ * The period before (2026-08-31 to 2026-09-28): one, the explorer on 101 (09-10).
+ */
+function seeded(pulseMembers = 8, otherPulses = 0) {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  for (const t of TABLES) db.exec(ddl(t));
+  db.exec(readFileSync(resolve(SQL, 'migrations/550_job_postings_submitted_at.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(SQL, 'migrations/609_job_postings_published_at.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(SQL, 'migrations/551_network_profiles_roster.sql'), 'utf8'));
+
+  const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
+  // users.role admits no `mentor` (its CHECK); participationRole's own test covers it.
+  const roles: Array<[number, string]> = [[1, 'founder'], [2, 'investor'], [3, 'advisor'], [4, 'partner'], [5, 'exploring'], [6, 'admin']];
+  for (const [id, role] of roles) u.run(id, role, `Person${id} Private`, `person${id}@secret.example`);
+
+  db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run(10, 'Acme Robotics');
+  const p = db.prepare(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status, submitted_at, created_at)
+                        VALUES (?, ?, 1, ?, ?, ?, ?, '2026-01-01 09:00:00')`);
+  p.run(101, 'staff-eng', 10, 'Staff Engineer', 'published', null);
+  p.run(102, 'designer', null, 'Designer', 'published', null);
+  p.run(103, 'ops-lead', null, 'Ops Lead', 'pending_review', at(NOW - 100 * HOUR));
+  p.run(104, 'pm', null, 'PM', 'pending_review', at(NOW - 10 * HOUR));
+  p.run(105, 'analyst', null, 'Analyst', 'pending_review', null); // submitted before migration 550
+  p.run(106, 'draft', null, 'Draft role', 'draft', null);
+  p.run(107, 'closed', null, 'Closed role', 'closed', null);
+  p.run(108, 'odd', null, 'Odd role', 'archived', null);
+  // D1121 (migration 609): 101 was approved 10 days and 5 hours ago; 102 before 609, so not recorded.
+  db.prepare('UPDATE job_postings SET published_at = ? WHERE id = 101').run(at(NOW - 10 * 24 * HOUR - 5 * HOUR));
+
+  const a = db.prepare(`INSERT INTO job_applications (posting_id, user_id, name, email, created_at) VALUES (?, ?, ?, ?, ?)`);
+  a.run(101, null, 'Guest Private', 'guest@secret.example', '2026-10-01 10:00:00');
+  a.run(101, 3, 'Person3 Private', 'person3@secret.example', '2026-09-29 10:00:00');
+  a.run(101, 2, 'Person2 Private', 'person2@secret.example', '2026-10-06 10:00:00');
+  a.run(102, 4, 'Person4 Private', 'person4@secret.example', '2026-10-13 10:00:00');
+  a.run(103, 6, 'Person6 Private', 'person6@secret.example', '2026-10-14 10:00:00');
+  a.run(101, 1, 'Person1 Private', 'person1@secret.example', '2026-10-20 10:00:00');
+  a.run(102, 5, 'Person5 Private', 'person5@secret.example', '2026-10-21 10:00:00');
+  a.run(101, 5, 'Person5 Private', 'person5+old@secret.example', '2026-09-10 10:00:00'); // the period before
+  a.run(102, 2, 'Person2 Private', 'person2+old@secret.example', '2026-08-01 10:00:00'); // before both
+
+  const c = db.prepare('INSERT INTO circles (slug, name, type, access, members, featured, published) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  c.run('c1', 'Builders', 'founder', 'public', 40, 1, 1);
+  c.run('c2', 'Backers', 'investor', 'private', 12, 0, 1);
+  c.run('c3', 'Draft circle', 'founder', 'public', 5, 0, 0);
+
+  const nwk = db.prepare('INSERT INTO network_profiles (name, kind, is_active) VALUES (?, ?, ?)');
+  nwk.run('Mentor Private', 'mentor', 1);
+  nwk.run('Advisor Private', 'advisor', 1);
+  nwk.run('Partner Private', 'partner', 0);
+  nwk.run('Investor Private', 'investor', 1);
+  // #4717: an archived row is off the roster and is never counted in it.
+  db.prepare("INSERT INTO network_profiles (name, kind, is_active, archived_at) VALUES ('Archived Private', 'advisor', 0, '2026-10-01 10:00:00')").run();
+
+  const e = db.prepare('INSERT INTO experts (id, uid, name, verified, is_active, hidden_by_admin) VALUES (?, ?, ?, ?, ?, ?)');
+  e.run(1, 'real-1', 'Expert1 Private', 1, 1, 0);
+  e.run(2, 'real-2', 'Expert2 Private', 0, 1, 0);
+  e.run(3, 'real-3', 'Expert3 Private', 1, 1, 1);
+  e.run(4, 'real-4', 'Expert4 Private', 1, 0, 0);
+  e.run(5, 'seed_sample', 'Sample Private', 1, 1, 0);
+  const b = db.prepare('INSERT INTO expert_bookings (expert_id, user_id, created_at) VALUES (?, ?, ?)');
+  b.run(1, 1, '2026-10-07 10:00:00');
+  b.run(2, 2, '2026-10-20 10:00:00');
+  b.run(5, 3, '2026-10-08 10:00:00'); // a sample expert: never counted
+  b.run(1, 4, '2026-09-15 10:00:00'); // the period before
+
+  const w = db.prepare('INSERT INTO wellbeing_daily_pulses (user_id, day, mood_enc) VALUES (?, ?, ?)');
+  // #4717: the band counts founders. Pulse members 100+ are founders; 200+ hold other roles.
+  for (let i = 0; i < pulseMembers; i++) u.run(100 + i, 'founder', `Pulse${i} Private`, `pulse${i}@secret.example`);
+  const others = ['investor', 'advisor', 'partner', 'admin'];
+  for (let i = 0; i < otherPulses; i++) {
+    u.run(200 + i, others[i % others.length], `Other${i} Private`, `other${i}@secret.example`);
+    w.run(200 + i, '2026-10-07', 'ciphertext-not-to-be-read');
+  }
+  for (let i = 0; i < pulseMembers; i++) {
+    w.run(100 + i, '2026-10-05', 'ciphertext-not-to-be-read');
+    w.run(100 + i, '2026-10-06', 'ciphertext-not-to-be-read'); // the same member twice is one member
+  }
+  w.run(999, '2026-09-01', 'ciphertext-not-to-be-read'); // before the window
+  return db;
+}
+
+const env = (db: InstanceType<typeof DatabaseSync>) => ({ DB: makeD1(db), ENVIRONMENT: 'development' }) as any;
+const read = (db = seeded(), weeks: 4 | 12 | 52 = 4) => communityOverview(env(db), weeks, NOW);
+
+test('the window is the Monday weeks to date, and the period before is the same length', async () => {
+  const r = await read();
+  assert.deepEqual(r.week_starts, ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']);
+  assert.equal(r.current_week, '2026-10-19');
+  assert.deepEqual(r.window, { from: '2026-09-28 00:00:00', to: '2026-10-26 00:00:00' });
+  assert.deepEqual(r.previous, { from: '2026-08-31 00:00:00', to: '2026-09-28 00:00:00' });
+  assert.equal((await read(seeded(), 12)).week_starts.length, 12);
+  assert.equal((await read(seeded(), 52)).week_starts.length, 52);
+});
+
+test('queue: the jobs waiting, Overdue after 72 hours from submission, and a wait not recorded is not a wait of 0', async () => {
+  const q = (await read()).blocks.queue;
+  assert.equal(q.overdue_hours, 72);
+  assert.deepEqual(q.jobs, {
+    available: true, pending: 3, overdue: 1, wait_not_recorded: 1,
+    oldest_submitted_at: at(NOW - 100 * HOUR), oldest_wait_hours: 100,
+    // #4717: the rows behind `pending`, oldest first; the one submitted before migration 550 last, undated.
+    review: [
+      { posting_id: 103, title: 'Ops Lead', company: null, waiting_since: new Date(NOW - 100 * HOUR).toISOString(), waiting_hours: 100, overdue: true },
+      { posting_id: 104, title: 'PM', company: null, waiting_since: new Date(NOW - 10 * HOUR).toISOString(), waiting_hours: 10, overdue: false },
+      { posting_id: 105, title: 'Analyst', company: null, waiting_since: null, waiting_hours: null, overdue: false },
+    ],
+  });
+});
+
+test('#4717 jobs: the five postings with most applications of all time, each with its days open', async () => {
+  const j = (await read()).blocks.jobs as any;
+  // All time, not the window: 101 five (one in the period before), 102 three (one before both), 103 one.
+  assert.deepEqual(j.most_applied.map((m: any) => [m.posting_id, m.title, m.company, m.applications]), [
+    [101, 'Staff Engineer', 'Acme Robotics', 5], [102, 'Designer', null, 3], [103, 'Ops Lead', null, 1],
+  ]);
+  assert.equal(j.most_applied[0].days_open, 10);
+  assert.deepEqual(j.most_applied[1].days_open, { recorded: false, reason: DAYS_OPEN_REASON });
+});
+
+test('jobs: applications in the window and before, weekly with the current week to date, postings by status, the top five', async () => {
+  const j = (await read()).blocks.jobs as any;
+  assert.equal(j.available, true);
+  assert.deepEqual(j.applications, { window: 7, previous: 1 });
+  assert.deepEqual(j.weekly, [
+    { week: '2026-09-28', count: 2, to_date: false },
+    { week: '2026-10-05', count: 1, to_date: false },
+    { week: '2026-10-12', count: 2, to_date: false },
+    { week: '2026-10-19', count: 2, to_date: true },
+  ]);
+  assert.deepEqual(j.by_status, { draft: 1, pending_review: 3, published: 2, rejected: 0, closed: 1, other: 1 });
+  assert.deepEqual(j.top, [
+    { title: 'Staff Engineer', company: 'Acme Robotics', status: 'published', applications: 4, days_open: 10 },
+    { title: 'Designer', company: null, status: 'published', applications: 2, days_open: { recorded: false, reason: DAYS_OPEN_REASON } },
+    { title: 'Ops Lead', company: null, status: 'pending_review', applications: 1, days_open: null },
+  ]);
+  assert.equal('days_open' in j, false, 'days open is per posting now (D1121), not one block-wide "not recorded"');
+});
+
+test('participation by role: one key per role, Operating Partner is `partner`, no account is a guest', async () => {
+  const p = (await read()).blocks.participation_by_role as any;
+  assert.deepEqual(p.jobs, {
+    available: true,
+    by_role: { founder: 1, investor: 1, advisor: 1, operating_partner: 1, explorer: 1, guest: 1, other: 1 },
+  });
+  assert.equal(participationRole('mentor', true), 'advisor');
+  assert.equal(participationRole('partner', true), 'operating_partner');
+  assert.equal(participationRole('explorer', true), 'explorer');
+  assert.equal(participationRole('founder', false), 'guest');
+  assert.equal(participationRole('', true), 'other');
+});
+
+test('circles: totals by state, type and access, and the members as entered, typed', async () => {
+  assert.deepEqual((await read()).blocks.circles, {
+    available: true, total: 3, published: 2, draft: 1, featured: 1,
+    by_type: { founder: 2, investor: 1 }, by_access: { public: 2, private: 1 },
+    members_entered: { value: 57, typed: true },
+  });
+});
+
+test('network: by kind with mentor as advisor, active and hidden; an archived row is counted only as archived', async () => {
+  // Mutation checked (#4717): drop the archived branch and advisor reads 3, inactive 2.
+  assert.deepEqual((await read()).blocks.network, {
+    available: true,
+    by_kind: { advisor: 2, partner: 1, investor: 1 },
+    by_kind_state: { advisor: { active: 2, hidden: 0 }, partner: { active: 0, hidden: 1 }, investor: { active: 1, hidden: 0 } },
+    active: 3, inactive: 1, archived: 1,
+  });
+});
+
+test('wellbeing: experts by state and bookings without the sample experts; the check-in band', async () => {
+  const w = (await read()).blocks.wellbeing as any;
+  assert.deepEqual(w.experts, { available: true, verified: 1, unverified: 1, hidden: 1, inactive: 1 });
+  assert.deepEqual(w.bookings, {
+    available: true, window: 2, previous: 1,
+    weekly: [
+      { week: '2026-09-28', count: 0, to_date: false },
+      { week: '2026-10-05', count: 1, to_date: false },
+      { week: '2026-10-12', count: 0, to_date: false },
+      { week: '2026-10-19', count: 1, to_date: true },
+    ],
+  });
+  assert.deepEqual(w.checkins, { available: true, withheld: false, min_cohort: 7, band: { at_least: 5, under: 10 } });
+});
+
+test('wellbeing: a cohort under seven withholds the band', async () => {
+  assert.equal(MIN_CHECKIN_COHORT, 7);
+  const six = (await read(seeded(6))).blocks.wellbeing as any;
+  assert.deepEqual(six.checkins, { available: true, withheld: true, min_cohort: 7, band: null });
+  const seven = (await read(seeded(7))).blocks.wellbeing as any;
+  assert.deepEqual(seven.checkins.band, { at_least: 5, under: 10 });
+});
+
+test('#4717 wellbeing: other roles never lift a founder cohort over the floor', async () => {
+  // Five founders and six investors, advisors, partners and admins checked in: the band is withheld.
+  // Mutation checked: count every user_id and eleven members show a band.
+  const mixed = (await read(seeded(5, 6))).blocks.wellbeing as any;
+  assert.deepEqual(mixed.checkins, { available: true, withheld: true, min_cohort: 7, band: null });
+  // Eight founders and twenty others: the band is the founders' alone.
+  const many = (await read(seeded(8, 20))).blocks.wellbeing as any;
+  assert.deepEqual(many.checkins.band, { at_least: 5, under: 10 });
+});
+
+test('the check-in band never reads an answer column', () => {
+  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/communityOverview.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''); // the code, not what its comments say
+  assert.doesNotMatch(src, /_enc\b|_plain\b|decrypt/, 'the read names no answer column and decrypts nothing');
+  assert.doesNotMatch(src, /\/api\/wellbeing\/aggregate/);
+});
+
+/**
+ * The events stores, as D918's own test builds them (its migrations), with a
+ * handful of registrations: two in the window by a founder and a guest, one
+ * by an Operating Partner, one by an account that is gone, and one in the
+ * period before; one ended event with three seats (one taken before the
+ * window) and one check-in.
+ */
+function withEvents(db = seeded()) {
+  for (const name of ['109_events_core.sql', '111_event_notifications.sql', '392_event_organiser.sql', '546_events_review_columns.sql']) {
+    db.exec(readFileSync(resolve(SQL, 'migrations', name), 'utf8'));
+  }
+  db.exec(`INSERT INTO events (id, slug, host_user_id, type, title, starts_at, ends_at, location_kind, capacity, visibility, status, price_cents, submitted_at, created_at) VALUES
+      (501, 'q1', 1, 'workshop', 'Queued fixture', '2026-11-01T10:00:00Z', NULL, 'virtual', 10, 'public', 'pending_review', 0, '2026-10-17T00:00:00Z', '2026-09-01 00:00:00'),
+      (502, 'h1', 1, 'meetup', 'Held fixture', '2026-10-10T10:00:00Z', '2026-10-10T12:00:00Z', 'virtual', 10, 'public', 'published', 0, NULL, '2026-09-01 00:00:00'),
+      (503, 'w1', 1, 'webinar', 'Waitlist fixture', '2026-10-25T10:00:00Z', NULL, 'virtual', 1, 'public', 'published', 0, NULL, '2026-09-01 00:00:00');
+    INSERT INTO event_registrations (id, event_id, user_id, email, status, comp, payment_status, amount_cents, registered_at) VALUES
+      (1, 502, 1, NULL, 'attended', 0, 'none', 0, '2026-10-05 09:00:00'),
+      (2, 502, NULL, 'guest@example.test', 'registered', 0, 'none', 0, '2026-10-06 09:00:00'),
+      (3, 503, 4, NULL, 'confirmed', 0, 'none', 0, '2026-10-20 09:00:00'),
+      (4, 503, 98, NULL, 'waitlisted', 0, 'none', 0, '2026-10-20 10:00:00'),
+      (5, 502, 2, NULL, 'registered', 0, 'none', 0, '2026-09-10 09:00:00');
+    INSERT INTO event_checkins (event_id, registration_id, code, checked_in_at) VALUES (502, 1, 'c1', '2026-10-10 10:01:00');`);
+  return db;
+}
+
+test('#4717 the rows behind the counts: next up is the soonest of Upcoming, waiting is the oldest of the queue', async () => {
+  const b = (await read(withEvents())).blocks as any;
+  // Upcoming counts published AND waiting events in the next 30 days; its rows are those same events, soonest first.
+  // Mutation checked: list published events only and the waiting one (501) drops out while Upcoming still counts it.
+  assert.equal(b.events.next_up.total, b.events.upcoming.events);
+  assert.deepEqual(b.events.next_up.rows.map((r: any) => [r.event_id, r.status, r.seats_taken, r.capacity]), [
+    [503, 'published', 1, 1], [501, 'pending_review', 0, 10],
+  ]);
+  // The queue's oldest waiting event, from its submission, Overdue past 72 hours.
+  assert.equal(b.queue.event_rows.total, b.queue.events.count);
+  assert.deepEqual(b.queue.event_rows.rows.map((r: any) => [r.event_id, r.from_created, r.overdue]), [[501, false, true]]);
+  // Every event by status, for the page's empty rule, from the same rows.
+  assert.equal(b.events.by_status.counts.published, 2);
+  assert.equal(b.events.by_status.counts.pending_review, 1);
+});
+
+test('the events parts are D918\'s own blocks, in Community\'s keys, and nothing is recomputed', async () => {
+  const db = withEvents();
+  const b = (await read(db)).blocks as any;
+  const d = await readOverview(env(db), 4, NOW);
+  // One definition: each part is D918's answer for the same window.
+  assert.deepEqual(b.queue.events, d.queue);
+  assert.equal(b.queue.events.count, 1);
+  assert.equal(b.queue.events.overdue, 1, 'waiting since 17 Oct: more than 72 hours by 21 Oct');
+  assert.equal(b.queue.events.overdue_after_hours, b.queue.overdue_hours, 'the jobs and events queues share one Overdue');
+  assert.deepEqual(b.events.by_type, d.by_type);
+  assert.deepEqual(b.events.waitlisted, d.waitlisted);
+  const { recent: _r, ...showUp } = d.show_up as any;
+  assert.deepEqual(b.events.show_up, showUp);
+  assert.deepEqual([b.events.show_up.seats_taken, b.events.show_up.attended, b.events.show_up.rate], [3, 1, 0.33]);
+  assert.equal('recent' in b.events.show_up, false, 'the event list stays on the Events desk');
+  // D1121: the Upcoming tile's figure is D918's next 30 days, counts only.
+  assert.deepEqual(b.events.upcoming, d.upcoming_30d);
+  assert.equal(b.events.upcoming.available, true);
+  assert.equal(typeof b.events.show_up.confirmed, 'number', 'the funnel\'s Confirmed step has no count');
+
+  // The weekly block on Community's weeks.
+  assert.deepEqual(b.events.weekly.weekly.map((w: any) => w.week), (await read(db)).week_starts);
+  assert.deepEqual(b.events.weekly.weekly.map((w: any) => [w.registrations, w.checkins, w.to_date]), [[0, 0, false], [2, 1, false], [0, 0, false], [2, 0, true]]);
+  assert.deepEqual(b.events.weekly.registrations, { window: 4, previous: 1 });
+
+  // By role: D918's buckets as Community's; an account that is gone stays not recorded, never "other".
+  const role = b.participation_by_role.events;
+  assert.equal(role.available, true);
+  assert.deepEqual(role.by_role, { founder: 1, investor: 0, advisor: 0, operating_partner: 1, explorer: 0, guest: 1, other: 0 });
+  assert.equal(role.not_recorded, 0, 'D918 counts seated registrations only; the waitlisted one is not a seat');
+  assert.deepEqual(eventsByRole({ available: true, counts: { partner: 2, exploring: 1, admin: 3, not_recorded: 4, guest: 1 } }),
+    { available: true, by_role: { founder: 0, investor: 0, advisor: 0, operating_partner: 2, explorer: 1, guest: 1, other: 3 }, not_recorded: 4 });
+
+  assert.deepEqual(b.active_members, { recorded: false, reason: ACTIVE_MEMBERS_REASON });
+  assert.deepEqual(b.circle_discussions, { recorded: false, reason: CIRCLE_DISCUSSIONS_REASON });
+});
+
+test('an events part D918 could not read is unreadable here too, and the others still answer', async () => {
+  const u = { available: false as const, unreadable: true as const, reason: 'x could not be read on this database. That is not the same as none.' };
+  assert.equal(eventsByRole(u), u);
+  assert.equal(eventsWeekly(u), u);
+  assert.equal(showUpCounts(u), u);
+  // No events stores at all: every events part fails alone, and no part reads as zero.
+  const b = (await read()).blocks as any;
+  for (const x of [b.queue.events, b.events.weekly, b.events.show_up, b.events.by_type, b.events.waitlisted, b.participation_by_role.events]) {
+    assert.equal(x.available, false);
+    assert.equal(x.unreadable, true);
+    assert.equal(Object.keys(x).length, 3, 'a failed part carries no figure');
+  }
+  assert.equal(b.queue.jobs.available, true);
+  assert.equal(b.participation_by_role.jobs.available, true);
+  // Only the check-ins store gone: the weekly part fails, show-up and the queue still answer.
+  const db = withEvents();
+  db.exec('DROP TABLE event_checkins');
+  const c = (await read(db)).blocks as any;
+  assert.equal(c.events.weekly.unreadable, true);
+  assert.equal(c.events.show_up.available, true);
+  assert.equal(c.queue.events.available, true);
+});
+
+test('a failed store fails its own blocks only, never as a zero', async () => {
+  const db = seeded();
+  db.exec('DROP TABLE job_applications');
+  db.exec('DROP TABLE circles');
+  const b = (await read(db)).blocks as any;
+  for (const x of [b.jobs, b.participation_by_role.jobs, b.circles]) {
+    assert.equal(x.available, false);
+    assert.equal(x.unreadable, true);
+    assert.match(x.reason, /could not be read on this database\. That is not the same as none\./);
+    assert.equal(Object.keys(x).length, 3, 'a failed block carries no figure');
+  }
+  assert.equal(b.queue.jobs.available, true, 'the queue reads job_postings, which still answers');
+  assert.equal(b.network.available, true);
+  assert.equal(b.wellbeing.experts.available, true);
+});
+
+test('counts only: no name, email or account id anywhere in the answer', async () => {
+  for (const r of [await read(), await read(withEvents())]) {
+    // #4717: an event's title travels only in the rows behind a count (next up, waiting for review).
+    const b = (r as any).blocks;
+    const titled = { next: b.events?.next_up, review: b.queue?.event_rows };
+    const rest = { ...r, blocks: { ...b, events: { ...b.events, next_up: null }, queue: { ...b.queue, event_rows: null } } };
+    assert.doesNotMatch(JSON.stringify(rest), /@|Private|secret|fixture/, 'no person, and no event title outside its rows');
+    assert.doesNotMatch(JSON.stringify(titled), /@|Private|secret/, 'no person in the event rows');
+    const walk = (v: unknown, path: string) => {
+      if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}[${i}]`));
+      if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          assert.ok(!/^(email|name|user_id|host_user_id|id|uid)$/.test(k), `${path}.${k} is a person's detail`);
+          walk(x, `${path}.${k}`);
+        }
+      }
+    };
+    walk(r, 'overview');
+  }
+});
+
+test('submitting a posting for review records when (migration 550)', async () => {
+  const db = seeded();
+  const posting = db.prepare('SELECT * FROM job_postings WHERE id = 106').get() as any;
+  const out = await submitForReview(env(db), posting, { id: 1, role: 'founder' } as any);
+  assert.equal(out.ok, true);
+  const row = db.prepare('SELECT status, submitted_at FROM job_postings WHERE id = 106').get() as any;
+  assert.equal(row.status, 'pending_review');
+  assert.match(String(row.submitted_at), /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+});
+
+test('weeks: 4, 12 or 52, and 12 when absent (#4717 package 6: the page\'s default, D933)', () => {
+  assert.equal(parseCommunityWeeks(undefined), 12);
+  assert.equal(parseCommunityWeeks(''), 12);
+  assert.equal(parseCommunityWeeks('12'), 12);
+  assert.equal(parseCommunityWeeks('52'), 52);
+  for (const bad of ['7', '4.0', '012', 'year', '-4']) assert.equal(parseCommunityWeeks(bad), null, bad);
+});
+
+// ---------------------------------------------------------------------------
+// The route: the gate and the 400.
+// ---------------------------------------------------------------------------
+
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+const ADMIN = 901;
+const MEMBER = 903;
+
+const app = new Hono<any>();
+app.route('/api/admin/community', adminCommunityRoute);
+app.onError((err: any, c) => {
+  const s = AUTH_ERROR_STATUSES[String(err?.message || '')];
+  if (s) return c.json({ detail: err.message }, s);
+  throw err;
+});
+
+async function get(db: InstanceType<typeof DatabaseSync>, qs: string, as: number) {
+  const t = await new SignJWT({ user_id: as, role: as === MEMBER ? 'founder' : 'admin', jti: `j-${as}` })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await app.request(`/api/admin/community/overview${qs}`, { headers: { Authorization: `Bearer ${t}` } },
+    { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any);
+  return { status: res.status, body: await res.json() as any };
+}
+
+function routeDb() {
+  const db = seeded();
+  const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
+  u.run(ADMIN, 'admin', 'Admin Private', 'admin@secret.example');
+  u.run(MEMBER, 'founder', 'Member Private', 'member@secret.example');
+  const ss = db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, ?, 'totp', datetime('now'))");
+  for (const id of [ADMIN, MEMBER]) ss.run(id, `j-${id}`);
+  return db;
+}
+
+test('the route: any admin reads, with no HQ gate; a member is refused; a bad weeks is a 400', async () => {
+  const db = routeDb();
+  const ok = await get(db, '?weeks=12', ADMIN);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.weeks, 12);
+  assert.equal(ok.body.week_starts.length, 12);
+  assert.equal((await get(db, '', ADMIN)).body.weeks, 12, 'no weeks reads the page\'s default (#4717 package 6)');
+  assert.equal((await get(db, '', MEMBER)).status, 403);
+  const bad = await get(db, '?weeks=7', ADMIN);
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.body, { code: 'bad_weeks', detail: 'weeks must be 4, 12 or 52.' });
+});

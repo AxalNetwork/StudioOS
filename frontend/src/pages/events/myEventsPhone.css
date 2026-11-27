@@ -1,0 +1,38 @@
+/*
+ * D1037 (#2878, MEV18) — My events on a phone. Below 1024px the page's root
+ * carries `my-events-phone` (`PHONE_ROOT` in `myEventsPhoneModel.js`), and
+ * every control in it is a target of at least 44 × 44px: buttons, selects,
+ * fields, a link laid out as a box (a tab, a card, a button-styled link) and
+ * the label around a checkbox. A link inside a sentence is inline and keeps
+ * its line.
+ *
+ * The sheets draw inside the root (`Lightbox` is not portalled), so their
+ * buttons, the × included, follow the same rule.
+ *
+ * Plain CSS outside Tailwind's layers, so a utility's smaller min-height on
+ * the same element never wins.
+ */
+.my-events-phone button,
+.my-events-phone select,
+.my-events-phone textarea,
+.my-events-phone a,
+.my-events-phone input:not([type='checkbox']):not([type='radio']) {
+  min-height: 44px;
+}
+
+.my-events-phone button,
+.my-events-phone select {
+  min-width: 44px;
+}
+
+.my-events-phone nav a {
+  display: inline-flex;
+  align-items: center;
+}
+
+.my-events-phone label:has(> input[type='checkbox']),
+.my-events-phone label:has(> input[type='radio']) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}

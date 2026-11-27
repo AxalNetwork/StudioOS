@@ -1,0 +1,36 @@
+{
+  "$id": "deckPresence",
+  "title": "GET /api/decks/:id/presence (D1577, #3824)",
+  "description": "The reply the deck v2 adapter's `presence` method passes through: the deck and who is editing it now, each by user id, name, colour, card, area and cursor; never an address or a role (`routes/deck_coedit.ts`, `durable-objects/deck-presence.ts`).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "editors"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "editors": { "type": "array", "maxItems": 12, "items": { "$ref": "#/$defs/editor" } }
+  },
+  "$defs": {
+    "editor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user_id", "name", "colour", "card", "area", "cursor"],
+      "properties": {
+        "user_id": { "type": "integer" },
+        "name": { "type": ["string", "null"] },
+        "colour": { "type": "string" },
+        "card": { "type": ["string", "null"] },
+        "area": { "type": ["string", "null"] },
+        "cursor": { "$ref": "#/$defs/cursor" }
+      }
+    },
+    "cursor": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

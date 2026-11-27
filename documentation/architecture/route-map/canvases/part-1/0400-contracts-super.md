@@ -1,0 +1,7 @@
+| Contracts · Super | super-admin | `/admin` (Legal → Templates) | `/admin/contracts` · `/admin/contracts/registry` | {backend} | UPGRADE | Live: template CRUD, version history, preview PDF, four governance layers, and the D480 registry hub (D1 drafts/publish, corrected usage union, X1/X2 UI, WorkerRail). Cross-tenant oversight ledger and compliance monitor remain canvas-only; pairwise/partner list routes sit before `/:uid`. |
+
+backend:
+- `admin_contract_doc_registry.ts` (D480 migration 332)
+- `admin_contracts.ts`
+- `esign.ts`
+- `legal.ts`

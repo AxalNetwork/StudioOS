@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Security · v2 redesign · #4800–#4803</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Security Command Center</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The console isn’t simplified by removing evidence. It separates triage, investigation, action and explanation into seven workspaces: Overview, Events, Access, Privacy, Trust, AI Safety and Resilience. Overview leads with Action required (the failed restore drill and 0 of 2 admins with MFA), then status by area — with no synthetic score. Events uses human labels, keeps the raw IDs in a drawer, and lets you load older rows. Every destructive action goes through Scope → Review → Result, names its exact scope (HQ-held accounts, never “all tenants”), says whether you are affected and shows the server’s per-item outcome. A shared 13-state vocabulary replaces “Not recorded”. Eadwyn opens on security prompts, and model and pricing details fold away.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026, 14:30 UTC · Super Admin · live facts from the 7 Nov brief; names, IPs (203.0.113.x) and request rows are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Security v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SE-01', 'Overview · desktop', 'Action required first: Failed restore drill, then administrators without MFA, each with when, where and one action. A “Checked and clear” row shows the measured zeros (impersonations, DSR deadlines, sanctions hits, sources) so absence reads as evidence. Status by area is eight compact cells with state, one-line fact and freshness — no score, no giant tiles. Sources stay visible as “5 of 5 sources read” with details behind a disclosure.', [F('SE01', false, 1250)]],
+      ['SE-02', 'Shared state vocabulary', 'Thirteen states used by every workspace, each with a word, a distinct shape and an accessible description. “Not recorded” is retired and split into the states it was hiding.', [C('SE02', false, 1400, 280)]],
+      ['SE-03', 'Events investigation', 'A · Search, date, actor, event type, outcome and source filters; the six existing quick categories as chips; day-grouped, newest-first rows with the human label first and the raw ID beneath; Load older at the foot. Branch is offered only where it’s recorded. B · The detail drawer: what happened in plain words, who and where, related events, and the raw record collapsed.', [F('SE03a', 'A · Workspace', 1000), F('SE03b', 'B · Event drawer', 1000)]],
+      ['SE-04', 'Sessions & Access', 'A · Browser and OS parsed; started, last active and state. Your own session can’t be bulk-selected. Administrator sign-in strength sits below with the 0 of 2 MFA gap, and support access shows 0 live. Emergency re-authentication is worded for HQ-held accounts. B · A row expanded: session ID, IP, issued/expires and the raw user agent, plus Sign out everywhere for that account.', [F('SE04a', 'A · Workspace', 1100), F('SE04b', 'B · Session detail expanded', 1150)]],
+      ['SE-05', 'Destructive actions: Scope → Review → Result', 'A · Revoke one session. B · Bulk revoke review: 3 sessions on 2 accounts, you not affected. C · The server’s per-item result, including one already ended. D · Emergency re-authentication: HQ-held scope, branch databases untouched, “you will be signed out too” and a reason error. E · Its review, with a typed confirmation. F · End a support session. G · Failure with an unknown outcome: re-read before retrying.', [C('SE05a', 'A · Revoke one', 600, 420), C('SE05b', 'B · Bulk review', 600, 420), C('SE05c', 'C · Per-item result', 600, 400), C('SE05d', 'D · Emergency · scope', 640, 520), C('SE05e', 'E · Emergency · review', 640, 460), C('SE05f', 'F · End support session', 600, 420), C('SE05g', 'G · Unconfirmed', 600, 300)]],
+      ['SE-06', 'Privacy & DSR', 'A · Received, exact due date and remaining time per request — one rule (received + 30 days) shown as a date. Withdrawn is the requester’s act and reads as such. B · Detail: lifecycle, next action and history, with the warning that closing records a decision and doesn’t erase data. C · Record outcome: Fulfilled or Denied only. D · Concurrency: the request was withdrawn while the dialog was open, so nothing was saved and the reason is kept.', [F('SE06a', 'A · Workspace', 900), F('SE06b', 'B · Request detail', 1050), C('SE06c', 'C · Record outcome', 600, 460), C('SE06d', 'D · Changed underneath', 600, 300)]],
+      ['SE-07', 'Trust & Compliance', 'A · Sanctions (run on request) and KYC as separate blocks; Trust Center publishing with draft vs published; subprocessor notice delivery marked Not instrumented; obligations linked, not duplicated. B · Publish review: per-block diff against revision 18, publish target and change note. C · A stale preview is refused and the operator is asked to review again.', [F('SE07a', 'A · Workspace', 1000), C('SE07b', 'B · Publish review', 660, 520), C('SE07c', 'C · Stale preview refused', 600, 240)]],
+      ['SE-08', 'AI Safety', 'Content safety, delivery enforcement and usage anomalies as three blocks. Always “x of n”; “2 of 2 evaluated outputs” carries a small-sample flag instead of “100% safe”. The page states up front that AI records carry no branch.', [F('SE08', false, 1000)]],
+      ['SE-09', 'Resilience', 'The failed drill leads, showing where it stopped among the script’s steps, its exit code, duration, the backup it used and the drill record it came from. Backup evidence is separate and says plainly that an export proves a backup, not a restore. KV has no drill (Unsupported). Drill history shows Not instrumented because the record keeps only the latest run.', [F('SE09', false, 1150)]],
+      ['SE-10', 'Loading, empty, partial, failed, stale, success, permission, unsupported, unavailable, not instrumented', 'One block per state as it appears inside any workspace. Partial names the source that failed and what may be missing. Unavailable is explicitly not a pass. Unsupported and Not instrumented say why, not just that.', [C('SE10a', 'Loading', 420, 160), C('SE10b', 'Empty, measured', 420, 160), C('SE10c', 'Partial', 420, 200), C('SE10d', 'Failed', 420, 200), C('SE10e', 'Stale', 420, 200), C('SE10f', 'Success', 420, 160), C('SE10g', 'Permission denied', 420, 160), C('SE10h', 'Unsupported', 420, 160), C('SE10i', 'Unavailable', 420, 200), C('SE10j', 'Not instrumented', 420, 160)]],
+      ['SE-11', 'Mobile', 'A · Overview: Action required with full-width actions, areas as rows. B · Events as cards with filters in a sheet. C · Revoke as a bottom sheet with the same three steps and 48px buttons. D · DSR detail. E · Resilience with the drill steps as a list. F · AI Safety fractions. Tables are never squeezed.', [P('SE11a', 'A · Overview'), P('SE11b', 'B · Events'), P('SE11c', 'C · Revoke sheet'), P('SE11d', 'D · DSR detail'), P('SE11e', 'E · Resilience'), P('SE11f', 'F · AI Safety')]],
+      ['SE-12', 'Eadwyn in security context', 'Opens on security prompts — unresolved items, the failed drill, sessions to review, events since yesterday, recent refusals and why a status is unavailable. Answers cite their source and say Eadwyn ran nothing. Model and usage sit under one disclosure at the foot.', [F('SE12', false, 1250)]],
+      ['SE-A', 'Audit and before/after IA', 'What the live page does today, why it hurts the operator, and what changes.', [W('SEA')]],
+      ['SE-B', 'Components and copy rules', 'Reusable patterns: status, source availability, freshness, action required, action dialog, per-item results, event row and drawer, fraction and evidence limit.', [W('SEB')]],
+      ['SE-C', 'Accessibility annotations', 'Targets WCAG 2.2 AA in design decisions; compliance is not claimed until tested.', [W('SEC')]],
+      ['SE-D', 'React handoff', 'Mapping from SecurityPage.jsx to workspace components, with frontend-only work separated from what needs the backend.', [W('SED')]],
+      ['SE-E', 'Limitations that stay visible', 'What the product can’t do today, and the exact words the design uses to say so.', [W('SEE')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

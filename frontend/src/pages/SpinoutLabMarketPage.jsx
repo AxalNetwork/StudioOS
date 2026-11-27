@@ -1,0 +1,1737 @@
+// Spin-Out Lab Market intelligence: saved project figures and versioned Worker sizing.
+// D7706 (#7706): the drawer previews on the Worker and saves inputs, figures,
+// method and named source as one version. Nothing on this page invents sizing
+// percentages or infers missing inputs from old totals. Market signals,
+// competitors, Eadwyn input marks and their explicit accept/reload remain separate.
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Compass,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Lock,
+  Pencil,
+  ShieldCheck,
+} from 'lucide-react';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
+import Sheet from '../ui/Sheet.jsx';
+import { api, spinoutLab } from '../lib/api';
+import { cycleValidateApi } from '../lib/api/cycleValidate';
+import { marketSizingApi } from '../lib/api/marketSizing.js';
+import { markMilestone } from '../lib/spinoutLabHooks';
+import { useAuth } from '../hooks/useAuthSync';
+import { reportError } from '../lib/log';
+import { pickLabProject } from './SpinoutLabStartupPage';
+import useAssistMode from '../hooks/useAssistMode';
+import FillProposals from '../workspaces/FillProposals';
+import { FillMark, marketFillMark } from '../ui/FillMark.jsx';
+
+const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
+const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
+// Drawer / inline-form controls (design 1478-1536).
+const FLD = 'block text-[11.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1';
+const INP = 'w-full h-[34px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-[12.5px] text-gray-900 dark:text-gray-50 placeholder-gray-400 dark:placeholder-gray-500';
+// D6011: the source picker is a phone tap target (44px).
+const INP_TALL = INP.replace('h-[34px]', 'h-11');
+
+/**
+ * D6011 (#6011): what the sizing save says about where its figures came from.
+ * The method is the drawer's methodology; the source is a stored source's id,
+ * whose title the Worker copies (it never takes a title from the page).
+ */
+export function sizingProvenance(methodology, sourceId) {
+  const id = Number(sourceId);
+  return {
+    method: methodology === 'Bottom-up' ? 'bottom_up' : 'top_down',
+    market_source_id: Number.isSafeInteger(id) && id > 0 ? id : null,
+  };
+}
+
+/** The picker's starting value: the current TAM's named source, or none. */
+export function sizingSourceSeed(readiness) {
+  const id = Number(readiness?.figures?.tam?.market_source_id);
+  const known = (readiness?.sources || []).some((r) => Number(r?.id) === id);
+  return Number.isSafeInteger(id) && id > 0 && known ? String(id) : '';
+}
+const TXA = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-2 text-[12.5px] text-gray-900 dark:text-gray-50 placeholder-gray-400 dark:placeholder-gray-500 resize-y';
+// Toggle pills — selected #7c3aed on white (design 2195-2196).
+const SEG_ON = 'bg-violet-600 border-violet-600 text-white';
+const SEG_OFF = 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300';
+const GHOST_SM = 'h-[26px] px-2.5 rounded-[7px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 text-[11px] font-semibold';
+
+/**
+ * D1327 (#3488): the stamp beside a figure Eadwyn supplied is the shared
+ * `FillMark` (Fill with Eadwyn's one mark), read from the Market fill through
+ * `marketFillMark`. It renders NOTHING for a field the founder filled — the
+ * absence of a stamp is the claim that they did it — and nothing for a figure
+ * they have since typed over, which the server withholds.
+ */
+
+export function fmtMoney(v) {
+  const n = Number(v);
+  if (v == null || v === '' || !Number.isFinite(n) || n < 0) return null;
+  if (n >= 1e12) return `$${+(n / 1e12).toFixed(1)}T`;
+  if (n >= 1e9) return `$${+(n / 1e9).toFixed(1)}B`;
+  // 1 decimal below $10M so $2.4M doesn't flatten to $2M; values that would
+  // round up to "1000K" promote to the M tier instead.
+  if (n >= 1e6 || Math.round(n / 1e3) >= 1000) return `$${+(n / 1e6).toFixed(n < 1e7 ? 1 : 0)}M`;
+  if (n >= 1e3) return `$${+(n / 1e3).toFixed(0)}K`;
+  return `$${n}`;
+}
+
+export const marketFigureDefined = value => value != null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
+export function sizingRequest(assumptions, sourceId) {
+  return { assumptions: { ...assumptions, segFilter: [...(assumptions.segFilter || [])] }, marketFigureSource: sizingProvenance(assumptions.methodology, sourceId) };
+}
+export function currentSizingVersion(version, project) {
+  return Boolean(version && version.current && version.recomputes && Array.isArray(version.formula) &&
+    ['tam', 'sam', 'som'].every(key => marketFigureDefined(project?.[key]) && Number(project[key]) === Number(version[key])));
+}
+export function marketShare(value, total) {
+  if (!marketFigureDefined(value) || !marketFigureDefined(total)) return null;
+  return Number(value) === 0 ? 0 : Number(total) > 0 ? Math.round(Number(value) / Number(total) * 100) : null;
+}
+const SIZING_INPUT_IDS = { population: 'input-population', acv: 'input-acv', tamOverride: 'input-tam', tamOverrideReason: 'input-tam-reason', samPct: 'input-sam', winRate: 'input-som', capacity: 'input-capacity', horizonMonths: 'input-horizon', salesCycleMonths: 'input-sales-cycle', retentionPct: 'input-retention' };
+const PREVIEW_INPUTS = [...Object.keys(SIZING_INPUT_IDS), 'targetYear'];
+const sizingFields = error => error?.data?.fields || (error?.data?.field ? [error.data.field] : []);
+
+// Match the project's free-text sector to an aggregator sector row.
+export function matchSectorRow(rows, sector) {
+  if (!rows?.length) return null;
+  const s = (sector || '').trim().toLowerCase();
+  if (s) {
+    // Containment only counts when the shorter side has ≥3 chars, so tiny
+    // fragments ("ai") can't claim unrelated segments.
+    const hit = rows.find((r) => {
+      const rs = (r.sector || '').trim().toLowerCase();
+      if (!rs) return false;
+      const shorter = rs.length <= s.length ? rs : s;
+      const longer = rs.length <= s.length ? s : rs;
+      return shorter.length >= 3 && longer.includes(shorter);
+    });
+    if (hit) return { row: hit, exact: true };
+  }
+  // D538: the fallback "current leader" is only a sector with a live
+  // composite. With none recorded there is no leader to show; an unrecorded
+  // sector used to arrive as a neutral 50 and could be crowned by default.
+  const recorded = rows.filter((r) => typeof r.composite === 'number' && Number.isFinite(r.composite));
+  const top = [...recorded].sort((a, b) => b.composite - a.composite)[0];
+  return top ? { row: top, exact: false } : null;
+}
+
+function shortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+const DIM_LABELS = {
+  demand: 'Demand',
+  supply: 'Supply',
+  capital: 'Capital',
+  talent: 'Talent',
+  research: 'Research',
+  sentiment: 'Sentiment',
+};
+
+// ---------------------------------------------------------------------------
+// Assumptions are read from the stored drawer inputs. Save uses the Worker’s
+// versioned model to commit those inputs, figures, method and source together.
+// Only recorded inputs seed calculation fields; old totals cannot reconstruct them.
+export function seedAssumptions(p, saved) {
+  // A saved value always wins. `??` and not `||`: a field the founder cleared
+  // comes back as null and must stay cleared rather than re-seed from the
+  // project, and '0' is a figure somebody typed.
+  const s = (key, fallback = '') => {
+    const v = saved?.[key];
+    return v == null || v === '' ? fallback : String(v);
+  };
+  return {
+    category: s('category', p?.sector || ''),
+    geography: s('geography', 'Global'),
+    targetYear: s('targetYear', '2026'),
+    methodology: s('methodology', 'Top-down'),
+    population: s('population'),
+    acv: s('acv'),
+    tamOverride: s('tamOverride'),
+    samPct: s('samPct'),
+    winRate: s('winRate'),
+    horizonMonths: s('horizonMonths'),
+    salesCycleMonths: s('salesCycleMonths'),
+    retentionPct: s('retentionPct'),
+    tamOverrideReason: s('tamOverrideReason'),
+    runway: s('runway'),
+    capacity: s('capacity'),
+    // Stays empty until the founder sets it — visuals fall back to the design's
+    // 24 and label it, which is a stated placeholder rather than a stored guess.
+    cagr: s('cagr'),
+    growthDriver: s('growthDriver'),
+    maturity: s('maturity', 'Growing'),
+    segFilter: Array.isArray(saved?.segFilter) ? saved.segFilter : [],
+  };
+}
+
+// Competitor share / stage / display-category are persisted INSIDE the
+// candidate's `summary` text column as a structured blob:
+//   "mi1|<share>|<stage>|<display category>|<note>"
+// because competitor_candidates has no dedicated columns for them and its
+// `category` column is binary direct/adjacent (so "Indirect" wouldn't
+// round-trip). Plain AI/manual summaries (no marker) pass through as the note.
+const COMP_BLOB = 'mi1';
+function encodeCompSummary({ share, stage, cat, note }) {
+  return `${COMP_BLOB}|${share}|${stage}|${cat}|${note}`;
+}
+function parseCandidate(c) {
+  const s = String(c.summary || '');
+  const base = { key: c.id, id: c.id, name: c.name, persisted: true };
+  if (s.startsWith(`${COMP_BLOB}|`)) {
+    const p = s.split('|');
+    return {
+      ...base,
+      share: p[1] || 'N/A',
+      stage: p[2] || 'Unknown',
+      cat: p[3] || (c.category === 'adjacent' ? 'Adjacent' : 'Direct'),
+      note: p.slice(4).join('|') || '—',
+    };
+  }
+  return { ...base, share: null, stage: null, cat: c.category === 'adjacent' ? 'Adjacent' : 'Direct', note: s || '—' };
+}
+
+const COMP_STAGES = ['Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C', 'Series D', 'Series F', 'Bootstrapped', 'Public', 'Unknown'];
+const COMP_CAT_CHIP = {
+  Direct: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+  Indirect: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+  Adjacent: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
+};
+const SRC_TYPE_CHIP = {
+  Report: 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300',
+  Interview: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
+  Article: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+  Manual: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
+};
+const MATURITY_CHIP = {
+  Early: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
+  Growing: 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300',
+  Mature: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
+};
+
+// Positioning-map placement (design 2094-2096): a deterministic hash of the
+// competitor name — an illustrative sketch, labeled as such on-page.
+const POS_W = 220;
+const POS_H = 140;
+function posSeed(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+function posDot(name) {
+  const h = posSeed(String(name || ''));
+  return {
+    x: 14 + ((h % 80) + (POS_W - 28 - 80) * (((h >> 4) % 100) / 100)),
+    y: 14 + (((h >> 2) % 100) / 100) * (POS_H - 28),
+  };
+}
+
+// What the page's "AI fills the blanks" switch does (D317; the copy the Eadwyn
+// rail used to carry). It names both kinds and both refusals, because a note
+// that described one capability would read as the whole list.
+const FILLS_NOTE = 'Proposes two things, each only when Eadwyn can cite it: the sizing inputs this page multiplies — an addressable population, an ACV benchmark, a growth rate — and competitors not yet on your list. It never proposes your TAM: the page derives that from your own assumptions. And it adds to your competitor list rather than starting one. Every item is yours to accept, edit or discard.';
+const FILLS_OFF_NOTE = 'Nothing runs and nothing is spent. Every figure on this page is one you researched or derived.';
+
+/**
+ * D6010 (#6010): the venture Validate opened this page for — `?project=` (the
+ * card's next step) or `?project_id=` (a module door) — or null. Digits only,
+ * so nothing else in the query picks a venture.
+ */
+export function ventureFromSearch(search) {
+  const params = new URLSearchParams(search || '');
+  const raw = params.get('project') || params.get('project_id') || '';
+  return /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : null;
+}
+
+/**
+ * The venture this page sizes. From Validate it is the one in the query and
+ * only that one: a venture missing from the caller's own list is none, never
+ * the Lab's venture in its place. From the Lab it is the Lab's pick.
+ */
+export function pickMarketProject(projects, user, { fromValidate = false, ventureId = null } = {}) {
+  if (!fromValidate) return pickLabProject(projects, user);
+  if (ventureId == null || !Array.isArray(projects)) return null;
+  return projects.find((p) => Number(p?.id) === ventureId) || null;
+}
+
+/**
+ * `from="validate"` (D6010, #6010) is the page at
+ * `/validate/market-intelligence/sizing`: any founder of the venture in the
+ * query, Lab member or not. It reads no Lab state, draws no Lab week locks or
+ * week copy, and its back control returns to Market intelligence. The Lab's
+ * `/spinout-lab/market` is unchanged.
+ */
+export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
+  const { user } = useAuth();
+  const location = useLocation();
+  const fromValidate = from === 'validate';
+  const ventureId = fromValidate ? ventureFromSearch(location.search) : null;
+  const [state, setState] = useState(null);
+  const [project, setProject] = useState(null);
+  const [compass, setCompass] = useState(null);
+  const [lens, setLens] = useState(null);
+  const [sources, setSources] = useState(null);
+  const [citations, setCitations] = useState(null);
+  const [fit, setFit] = useState(null);
+  const [status, setStatus] = useState('loading');
+  const [methodOpen, setMethodOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [shared, setShared] = useState(false);
+  // Assumptions drawer (spec A) — persisted since 247, see seedAssumptions().
+  const [assume, setAssume] = useState(() => seedAssumptions(null));
+  const [sizingSourceId, setSizingSourceId] = useState('');
+  const [preview, setPreview] = useState({ state: 'idle', result: null });
+  const [previewFieldErrors, setPreviewFieldErrors] = useState({});
+  const [saveFieldErrors, setSaveFieldErrors] = useState({});
+  const fieldErrors = { ...previewFieldErrors, ...saveFieldErrors };
+  const [versionRead, setVersionRead] = useState({ state: 'loading', version: null });
+  const versionRequest = useRef(0);
+  const projectIdentity = useRef(null);
+  projectIdentity.current = project?.id ?? null;
+  const savingRef = useRef(false);
+  const previewInputs = JSON.stringify(Object.fromEntries(PREVIEW_INPUTS.map(key => [key, assume[key]])));
+  useEffect(() => {
+    if (!project?.id) return undefined;
+    let alive = true;
+    const id = project.id;
+    const ticket = ++versionRequest.current;
+    setVersionRead({ state: 'loading', version: null });
+    (async () => {
+      try {
+        const list = await marketSizingApi.versions(id);
+        const latest = list.versions?.[0];
+        const value = latest ? await marketSizingApi.version(id, latest.uid) : null;
+        if (alive && projectIdentity.current === id && versionRequest.current === ticket) setVersionRead({ state: 'ok', version: value?.version || null });
+      } catch {
+        if (alive && projectIdentity.current === id && versionRequest.current === ticket) setVersionRead({ state: 'unreadable', version: null });
+      }
+    })();
+    return () => { alive = false; };
+  }, [project?.id]);
+  useEffect(() => {
+    if (!editOpen || !project?.id) return undefined;
+    let alive = true;
+    const id = project.id;
+    setPreview({ state: 'loading', result: null });
+    const timer = setTimeout(() => marketSizingApi.preview(id, { assumptions: JSON.parse(previewInputs) }).then(reply => {
+      if (alive && projectIdentity.current === id) {
+        setPreview({ state: 'ok', result: reply.result });
+        setPreviewFieldErrors({});
+      }
+    }).catch(error => {
+      if (!alive || projectIdentity.current !== id) return;
+      setPreview({ state: 'unreadable', result: null, message: error?.message || 'The calculation could not be checked. Try again.' });
+      setPreviewFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
+    }), 350);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [editOpen, project?.id, previewInputs]);
+  const fieldState = key => ({ id: SIZING_INPUT_IDS[key], 'aria-invalid': Boolean(fieldErrors[key]) || undefined, 'aria-describedby': fieldErrors[key] ? `${SIZING_INPUT_IDS[key]}-error` : undefined });
+  const fieldError = key => fieldErrors[key] ? <p id={`${SIZING_INPUT_IDS[key]}-error`} className="text-[11.5px] text-red-700 dark:text-red-400" role="alert">{fieldErrors[key]}</p> : null;
+
+  // WHICH FIGURES EADWYN SUPPLIED — and only the ones that are STILL its figures.
+  // The server compares each provenance row against what the row holds now, so a
+  // figure the founder has since typed over comes back unmarked: a label reading
+  // "Eadwyn" over their own number is the same lie this page's copy exists to
+  // avoid, pointed the other way.
+  const [filled, setFilled] = useState({});
+  // The page's own switch (D317), from the module store every fill host reads.
+  // Off until the founder turns it on, per D17 and the money rule behind it.
+  const [fillsOn, setFillsOn] = useAssistMode('market');
+
+  /**
+   * Re-read the drawer's fields and their provenance after an accept.
+   *
+   * WITHOUT THIS THE ACCEPT WORKS AND LOOKS LIKE IT DID NOT. The figure lands in
+   * `project_market_assumptions` and the drawer keeps showing the empty field it
+   * showed a second ago, so a founder presses the button again — and the band has
+   * already removed the proposal, so the second press does nothing either. A
+   * mechanism that succeeds invisibly is indistinguishable from one that failed.
+   *
+   * Both halves, because they are two facts: what the field now holds, and that
+   * Eadwyn is what put it there. Reading only the first would leave the stamp
+   * missing until a reload.
+   */
+  /**
+   * Re-read the competitor analysis after an accept, for the same reason.
+   *
+   * The board is rendered from `compAnalysis`, so without this an accepted
+   * competitor lands in D1 and the list on screen does not change — and the band
+   * has already removed the proposal, so pressing again does nothing either.
+   */
+  const reloadCompetitors = async () => {
+    if (!project) return;
+    try {
+      const list = await api.competitors.list();
+      const hit = (list?.analyses || []).find((a) => Number(a.project_id) === Number(project.id));
+      setCompAnalysis(hit ? await api.competitors.get(hit.id) : null);
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:reloadCompetitors', e);
+    }
+  };
+
+  const reloadAssumptions = async () => {
+    if (!project) return;
+    try {
+      const saved = await api.getMarketAssumptions(project.id);
+      setAssume(seedAssumptions(project, saved?.assumptions));
+      setFilled(saved?.filled || {});
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:reloadAssumptions', e);
+    }
+  };
+  const [anim, setAnim] = useState(null); // {tam,sam,som} in dollars while the recalc tween runs
+  const animRef = useRef(null);
+  const finishRef = useRef({ tween: false, saved: false });
+  // Readiness checklist flags the founder sets by doing the thing (spec F).
+  // Stored since D659 (`market_readiness_marks`): they used to live in this
+  // state alone, so a reload un-ticked them.
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [posDone, setPosDone] = useState(false);
+  const [assumptionsReviewed, setAssumptionsReviewed] = useState(false);
+  // Competitive landscape (spec B) — persisted via the Competitor Analysis API.
+  const [compAnalysis, setCompAnalysis] = useState(null);
+  const [localComps, setLocalComps] = useState([]); // fallback rows that failed to persist — labeled "not saved yet"
+  const [compAdding, setCompAdding] = useState(false);
+  const [compForm, setCompForm] = useState({ name: '', cat: 'Indirect', share: '', note: '', stage: 'Seed' });
+  const [compBusy, setCompBusy] = useState(false);
+  const [compError, setCompError] = useState('');
+  // Founder-added sources (spec D) — stored since D659 (`market_sources`). A
+  // row with no `id` is one whose save failed, and says so.
+  const [founderSources, setFounderSources] = useState([]);
+  const [srcAdding, setSrcAdding] = useState(false);
+  const [srcForm, setSrcForm] = useState({ title: '', type: 'Report' });
+  // D6011 (#6011): the source the three figures are saved with — one of
+  // `founderSources` by id, or '' for none named. Seeded from the current TAM row.
+
+  useEffect(() => () => clearInterval(animRef.current), []);
+
+  // W1 deliverable "Export or share initial Market Intel research" — copies a
+  // real research summary; the milestone fires only on this explicit action.
+  const shareResearch = async () => {
+    if (!project) return;
+    const rows = Array.isArray(citations?.items) ? citations.items : Array.isArray(citations) ? citations : [];
+    const lines = [
+      `Market research — ${project.name || 'startup'}${project.sector ? ` (${project.sector})` : ''}`,
+      project.tam != null ? `TAM: ${fmtMoney(project.tam)}` : null,
+      project.sam != null ? `SAM: ${fmtMoney(project.sam)}` : null,
+      project.som != null ? `SOM: ${fmtMoney(project.som)}` : null,
+      rows.length ? `\nSources (${rows.length}):` : null,
+      ...rows.slice(0, 8).map((c) => `- ${c.title || c.source || c.url || 'source'}${c.url ? ` — ${c.url}` : ''}`),
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+      await markMilestone(user, 'market_research_shared');
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:share', e);
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    setStatus('loading');
+    // From Validate the Lab state is not read (the page draws no week from it),
+    // and a failed project list is an error, never "not your venture".
+    Promise.all([
+      fromValidate ? Promise.resolve({}) : spinoutLab.state(),
+      fromValidate ? api.listProjects() : api.listProjects().catch(() => []),
+    ])
+      .then(async ([s, projects]) => {
+        if (!alive) return;
+        setState(s);
+        const p = pickMarketProject(projects, user, { fromValidate, ventureId });
+        setProject(p);
+        const [cp, fl, src, cit, ft, comp, saved] = await Promise.all([
+          api.miSectorCompass().catch(() => null),
+          api.miFounderLens().catch(() => null),
+          api.miSources().catch(() => null),
+          p?.sector ? api.miCitations(p.sector, 8).catch(() => null) : Promise.resolve(null),
+          p ? api.miFitFounder(p.id).catch(() => ({ unavailable: true })) : Promise.resolve(null),
+          // Reuse an existing Competitor Analysis for this startup, if any —
+          // list() is sorted by updated_at DESC so the first hit is freshest.
+          p
+            ? api.competitors
+                .list()
+                .then((l) => {
+                  const hit = (l?.analyses || []).find((a) => Number(a.project_id) === Number(p.id));
+                  return hit ? api.competitors.get(hit.id) : null;
+                })
+                .catch(() => null)
+            : Promise.resolve(null),
+          // Migration 247 — the drawer's own inputs. Before it, these lived only
+          // in `useState` and went when the tab did, so a founder came back to
+          // the three saved figures and none of the reasoning behind them.
+          p ? api.getMarketAssumptions(p.id).catch(() => null) : Promise.resolve(null),
+        ]);
+        // D659 — the three checks this page used to hold in state alone. A
+        // failed read leaves them unticked, which is what the page showed
+        // before they were stored; it never ticks one it could not read.
+        const readiness = p ? await cycleValidateApi.marketReadiness(p.id).catch((e) => {
+          reportError('SpinoutLabMarketPage:readiness', e);
+          return null;
+        }) : null;
+        if (!alive) return;
+        if (readiness) {
+          setPosDone(Boolean(readiness.positioning_map));
+          setAssumptionsReviewed(Boolean(readiness.assumptions_reviewed));
+          setFounderSources((readiness.sources || []).map((r) => ({
+            id: r.id, title: r.title, type: r.kind,
+            date: new Date(String(r.created_at).replace(' ', 'T') + (String(r.created_at).includes('Z') ? '' : 'Z')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+          })));
+          setSizingSourceId(sizingSourceSeed(readiness));
+        }
+        setCompass(cp);
+        setLens(fl);
+        setSources(src);
+        setCitations(cit);
+        setFit(ft);
+        setCompAnalysis(comp);
+        setAssume(seedAssumptions(p, saved?.assumptions));
+        setFilled(saved?.filled || {});
+        setStatus('ready');
+      })
+      .catch((e) => {
+        if (!alive) return;
+        reportError('SpinoutLabMarketPage:load', e);
+        setStatus('error');
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openEdit = () => {
+    setSaveError('');
+    setPreviewFieldErrors({}); setSaveFieldErrors({});
+    setEditOpen(true);
+  };
+
+  const setAV = (k, v) => {
+    if (saving) return;
+    setAssume(a => ({ ...a, [k]: v }));
+    const clear = errors => { const next = { ...errors }; delete next[k]; return next; };
+    setPreviewFieldErrors(clear); setSaveFieldErrors(clear);
+  };
+  const setA = k => e => setAV(k, e.target.value);
+  const toggleSeg = (name) =>
+    setAssume((a) => {
+      const cur = a.segFilter || [];
+      return { ...a, segFilter: cur.includes(name) ? cur.filter((n) => n !== name) : [...cur, name] };
+    });
+
+  // 800ms ease-out cubic counter tween on the TAM/SAM/SOM cards (design
+  // animateMarketTo, 1581-1595) — ~16ms ticks, e = 1-(1-p)^3.
+  const tweenTo = (to) => {
+    clearInterval(animRef.current);
+    const from = {
+      tam: (anim ? anim.tam : Number(project?.tam)) || 0,
+      sam: (anim ? anim.sam : Number(project?.sam)) || 0,
+      som: (anim ? anim.som : Number(project?.som)) || 0,
+    };
+    const t0 = Date.now();
+    const dur = 800;
+    animRef.current = setInterval(() => {
+      const p = Math.min(1, (Date.now() - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      setAnim({
+        tam: from.tam + (to.tam - from.tam) * e,
+        sam: from.sam + (to.sam - from.sam) * e,
+        som: from.som + (to.som - from.som) * e,
+      });
+      if (p === 1) {
+        clearInterval(animRef.current);
+        finishRef.current.tween = true;
+        // Hand display back to the saved record only once the PUT landed.
+        if (finishRef.current.saved) setAnim(null);
+      }
+    }, 16);
+  };
+
+  // D7706: only the Worker sizes and commits the version; cards change after that commit succeeds.
+  const recalcMarket = async () => {
+    if (!project || savingRef.current) return;
+    const id = project.id;
+    const request = sizingRequest(assume, sizingSourceId);
+    let committed = false;
+    savingRef.current = true; setSaving(true); setSaveError(''); setSaveFieldErrors({});
+    try {
+      const reply = await marketSizingApi.saveVersion(id, request);
+      if (projectIdentity.current !== id) return;
+      const version = reply.version;
+      const figures = { tam: version.tam, sam: version.sam, som: version.som };
+      finishRef.current = { tween: false, saved: true };
+      tweenTo(figures);
+      setProject(prev => ({ ...prev, ...figures }));
+      versionRequest.current += 1; // A pending history read cannot replace this committed version.
+      setVersionRead({ state: 'ok', version });
+      setEditOpen(false);
+      committed = true;
+    } catch (error) {
+      if (projectIdentity.current !== id) return;
+      reportError('SpinoutLabMarketPage:save', error);
+      setSaveFieldErrors(Object.fromEntries(sizingFields(error).map(field => [field, error.message])));
+      setSaveError('Couldn’t save. Your edits are kept here. Nothing changed on the page.');
+      const field = sizingFields(error)[0];
+      document.getElementById(SIZING_INPUT_IDS[field])?.focus?.();
+    } finally {
+      savingRef.current = false;
+      if (projectIdentity.current === id) setSaving(false);
+    }
+    if (!committed) return;
+    // Marks follow the commit without retaining the save lock or changing its outcome.
+    try { await markMilestone(user, 'market_sizing_completed'); }
+    catch (error) { reportError('SpinoutLabMarketPage:mark-sizing', error); }
+    try {
+      await cycleValidateApi.setMarketMark(project.id, 'assumptions_reviewed', true);
+      if (projectIdentity.current === id) setAssumptionsReviewed(true);
+    } catch (error) { reportError('SpinoutLabMarketPage:mark-assumptions', error); }
+  };
+
+  // ---- Competitors (spec B) ----
+  const confirmAddComp = async () => {
+    const f = compForm;
+    const name = f.name.trim();
+    if (!name) {
+      // Design behavior: empty name cancels silently.
+      setCompAdding(false);
+      return;
+    }
+    const share = f.share.trim() ? (f.share.trim().endsWith('%') ? f.share.trim() : `${f.share.trim()}%`) : 'N/A';
+    const note = f.note.trim() || '—';
+    const summary = encodeCompSummary({ share, stage: f.stage, cat: f.cat, note });
+    setCompBusy(true);
+    setCompError('');
+    try {
+      let analysis = compAnalysis;
+      if (!analysis) {
+        // First competitor: bootstrap an analysis record for this startup —
+        // same flow the Competitor Analysis page uses (may take a while on
+        // first run; it also discovers real candidates of its own).
+        analysis = await api.competitors.analyze({
+          project_id: project.id,
+          mode: 'startup',
+          depth: 'quick',
+          title: `${project.name || 'Startup'} · Market Intel`,
+        });
+      }
+      const full = await api.competitors.addCandidate(analysis.id, {
+        // Backend category column is binary: Adjacent maps to 'adjacent',
+        // Direct AND Indirect map to 'direct' — the display category
+        // round-trips via the summary blob (see encodeCompSummary).
+        name,
+        category: f.cat === 'Adjacent' ? 'adjacent' : 'direct',
+        summary,
+        crawl: false,
+      });
+      setCompAnalysis(full);
+      setCompForm({ name: '', cat: 'Indirect', share: '', note: '', stage: 'Seed' });
+      setCompAdding(false);
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:comp-add', e);
+      // Honest fallback: keep the row on-page, clearly labeled unsaved.
+      setLocalComps((prev) => [...prev, { key: `local-${Date.now()}`, name, cat: f.cat, share, stage: f.stage, note, local: true }]);
+      setCompError("Couldn't save to your competitor analysis — the row below is kept on this page only.");
+      setCompForm({ name: '', cat: 'Indirect', share: '', note: '', stage: 'Seed' });
+      setCompAdding(false);
+    } finally {
+      setCompBusy(false);
+    }
+  };
+
+  const removeComp = async (row) => {
+    if (row.local) {
+      setLocalComps((prev) => prev.filter((r) => r.key !== row.key));
+      return;
+    }
+    if (!compAnalysis) return;
+    try {
+      const full = await api.competitors.removeCandidate(compAnalysis.id, row.id);
+      setCompAnalysis(full);
+    } catch (e) {
+      reportError('SpinoutLabMarketPage:comp-remove', e);
+      setCompError("Couldn't remove that competitor. Try again.");
+    }
+  };
+
+  // ---- Sources (spec D) ----
+  const confirmAddSource = async () => {
+    const title = srcForm.title.trim();
+    if (!title) {
+      // Design behavior: empty title cancels silently.
+      setSrcAdding(false);
+      return;
+    }
+    const row = { title, type: srcForm.type, date: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) };
+    setSrcForm({ title: '', type: 'Report' });
+    setSrcAdding(false);
+    // Saved first; a row whose save failed stays on screen, marked unsaved.
+    const saved = project?.id
+      ? await cycleValidateApi.addMarketSource(project.id, { title, kind: srcForm.type }).catch((e) => {
+        reportError('SpinoutLabMarketPage:source-add', e);
+        return null;
+      })
+      : null;
+    setFounderSources((prev) => [...prev, { ...row, id: saved?.id ?? null }]);
+  };
+
+  const removeSource = async (i) => {
+    const row = founderSources[i];
+    if (row?.id != null && project?.id) {
+      try {
+        await cycleValidateApi.removeMarketSource(project.id, row.id);
+      } catch (e) {
+        reportError('SpinoutLabMarketPage:source-remove', e);
+        return;
+      }
+    }
+    setFounderSources((prev) => prev.filter((_, idx) => idx !== i));
+    if (row?.id != null && String(row.id) === sizingSourceId) setSizingSourceId('');
+  };
+
+  const derived = useMemo(() => {
+    const sectorMatch = matchSectorRow(compass?.sectors, project?.sector);
+    // D538: only sectors whose demand-supply gap a live source records.
+    const picks = (lens?.picks || []).filter((p) => typeof p.opportunity_gap === 'number').slice(0, 3);
+    const srcRows = sources?.sources || [];
+    const liveCount = srcRows.filter((s) => s.live).length;
+    const citRows = citations?.rows || [];
+    const matches = (fit?.matches || []).slice(0, 6);
+    const fitUnavailable = Boolean(fit?.unavailable);
+    return { sectorMatch, picks, srcRows, liveCount, citRows, matches, fitUnavailable };
+  }, [compass, lens, sources, citations, fit, project]);
+
+  const compRows = useMemo(
+    () => [...(compAnalysis?.candidates || []).map(parseCandidate), ...localComps],
+    [compAnalysis, localComps],
+  );
+
+  if (status === 'loading') {
+    return (
+      <div className="flex items-center justify-center py-24" data-testid="market-loading">
+        <Loader2 className="animate-spin text-violet-600 dark:text-violet-400" size={28} />
+      </div>
+    );
+  }
+
+  if (status === 'error' || !state) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="market-error">
+        <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Couldn&rsquo;t load Market Intel</div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Check your connection and try again.</p>
+        <button type="button" data-testid="button-retry-market" onClick={() => window.location.reload()} className="h-10 px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const isAdmin = user?.role === 'admin';
+  if (!fromValidate && !state.active && !state.is_incorporated && !isAdmin) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="market-inactive">
+        <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Spin-Out Lab isn&rsquo;t active on this account</div>
+        <Link to="/spinout-lab" className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold mt-3">
+          Go to Spin-Out Lab
+        </Link>
+      </div>
+    );
+  }
+
+  // From Validate there is no Lab week: nothing is locked by one, and no copy names one.
+  const week = fromValidate ? null : state.is_incorporated ? 4 : Math.min(4, Math.max(1, Number(state.week) || 1));
+  const deckUnlocked = fromValidate || state.is_incorporated || week >= 2;
+  const advisorsUnlocked = fromValidate || state.is_incorporated || week >= 3;
+  const validateBack = `/validate/market-intelligence${ventureId != null ? `?project=${ventureId}` : ''}`;
+  const { sectorMatch, picks, srcRows, liveCount, citRows, matches, fitUnavailable } = derived;
+  // Cards read the tween values while the recalc animation runs.
+  const tamTxt = fmtMoney(anim ? anim.tam : project?.tam);
+  const samTxt = fmtMoney(anim ? anim.sam : project?.sam);
+  const somTxt = fmtMoney(anim ? anim.som : project?.som);
+  const samPct = marketShare(project?.sam, project?.tam);
+  const somPct = marketShare(project?.som, project?.sam);
+  const version = versionRead.version;
+  const versionCurrent = currentSizingVersion(version, project);
+
+  const cagrBlank = String(assume.cagr ?? '').trim() === '';
+  const cagrPct = cagrBlank ? 24 : marketFigureDefined(assume.cagr) ? Number(assume.cagr) : null;
+  // ---- Readiness checklist (spec F, design 2181-2192) ----
+  const checklist = [
+    { label: 'TAM defined', done: marketFigureDefined(project?.tam) },
+    { label: 'SAM defined', done: marketFigureDefined(project?.sam) },
+    { label: 'SOM defined', done: marketFigureDefined(project?.som) },
+    { label: 'Sources added (min 2)', done: citRows.length + founderSources.length >= 2 },
+    { label: 'Market growth rate added', done: !cagrBlank && cagrPct != null },
+    { label: 'Competitive landscape (min 3 competitors)', done: compRows.length >= 3 },
+    { label: 'Positioning map completed', done: posDone },
+    { label: 'Founder assumptions reviewed', done: assumptionsReviewed },
+    { label: fromValidate ? 'Investor signals reviewed' : 'Investor signals reviewed (Week 3)', done: advisorsUnlocked && matches.length > 0 },
+  ];
+  const readinessPct = Math.round((100 * checklist.filter((c) => c.done).length) / checklist.length);
+  const readinessRemaining = Math.max(0, Math.ceil((0.7 - readinessPct / 100) * checklist.length));
+  const readinessCls =
+    readinessPct >= 70
+      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+      : readinessPct >= 40
+        ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+        : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300';
+
+  // ---- Growth outlook (spec E, design 2077-2088) — founder assumptions ----
+  // Only a blank CAGR uses the visibly labelled design fallback; a typed zero is zero.
+  const sparkTamM = ((anim ? anim.tam : Number(project?.tam)) || 0) / 1e6;
+  let spark = null;
+  if (sparkTamM > 0 && cagrPct != null) {
+    const pts = [0, 1, 2, 3, 4].map((i) => sparkTamM * Math.pow(1 + cagrPct / 100, i - 2));
+    if (pts.every(Number.isFinite)) {
+      const max = Math.max(...pts);
+      const min = Math.min(...pts);
+      const pad = 6;
+      const xy = pts.map((v, i) => [pad + i * ((220 - pad * 2) / 4), 48 - pad - ((v - min) / (max - min || 1)) * (48 - pad * 2)]);
+      spark = {
+        path: xy.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
+        dot: xy[2],
+      };
+    }
+  }
+
+  const compShown = compRows.slice(0, 6); // design caps the grid at 6
+  const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
+
+  // D1317/D7706: one fixed footer save, with the failed-save edits kept (V18).
+  const sizingFooter = (
+    <>
+      {saveError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-2.5" role="alert" data-testid="sizing-error">{saveError}</div>}
+      <button
+        type="button"
+        data-testid="button-save-sizing"
+        onClick={recalcMarket}
+        disabled={saving}
+        className="w-full h-[42px] rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[13.5px] font-bold disabled:opacity-60 inline-flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 size={14} className="animate-spin" />} {saving ? 'Saving…' : saveError ? 'Try again' : 'Save'}
+      </button>
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed text-center">Save keeps the inputs, figures and source together and updates the cards and Pitch Deck Market slide.</div>
+    </>
+  );
+
+  const page = (
+    <LabPageShell width="full" spaceY="" testId="page-spinout-market">
+      {/* Header — brand rule, back control inline with the title, and the tool
+          icon in its violet tile (design handoff). */}
+      <LabPageHeader
+        className="mb-5"
+        icon={Compass}
+        title={fromValidate ? 'Market sizing' : 'Market Intel'}
+        subtitle={fromValidate
+          ? 'Total, serviceable and obtainable market, each with its source.'
+          : 'TAM / SAM research and sizing — your Week 1 market deliverable.'}
+        status={fromValidate ? null : 'Active'}
+        {...(fromValidate ? { backTo: validateBack, backLabel: 'Back to Market intelligence' } : {})}
+        titleExtra={project ? (
+          <span className="relative">
+            <button
+              type="button"
+              data-testid="market-readiness-pill"
+              onClick={() => setChecklistOpen((v) => !v)}
+              className={`text-[10.5px] font-bold rounded-full px-2.5 py-1 ${readinessCls}`}
+            >
+              Market Intel {readinessPct}% complete
+            </button>
+            {checklistOpen && (
+              <div
+                data-testid="market-checklist-popover"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-[26px] left-0 z-40 w-[280px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] shadow-[0_20px_50px_-12px_rgba(24,24,27,.3)] p-4 text-left"
+              >
+                <div className="text-[13px] font-extrabold text-gray-900 dark:text-gray-50 mb-2.5">Market Intel Checklist</div>
+                <div className="flex flex-col gap-[7px] mb-3">
+                  {checklist.map((c) => (
+                    <div key={c.label} className="flex items-center gap-2">
+                      {c.done ? (
+                        <span className="w-3.5 h-3.5 flex-none rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <Check size={9} strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span className="w-3.5 h-3.5 flex-none rounded-full border-[1.5px] border-gray-200 dark:border-gray-700" />
+                      )}
+                      <span className="text-[11.5px] text-gray-700 dark:text-gray-300">{c.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden mb-2">
+                  <div className="h-full rounded-full bg-violet-600" style={{ width: `${readinessPct}%` }} />
+                </div>
+                <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mb-2.5">Investor-ready threshold: 70%. You need {readinessRemaining} more item(s).</div>
+                <button type="button" onClick={() => setChecklistOpen(false)} className="w-full h-8 rounded-[9px] bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold">
+                  Continue →
+                </button>
+              </div>
+            )}
+          </span>
+        ) : null}
+        actions={project ? (
+          <>
+            <button type="button" data-testid="button-share-research" onClick={shareResearch} className={labBtn('accent')}>
+              {shared ? 'Copied' : 'Copy research summary'}
+            </button>
+            <button type="button" data-testid="button-edit-sizing" onClick={openEdit} className={labBtn('primary')}>
+              <Pencil size={LAB_ICON_SIZE} /> Edit Market Data
+            </button>
+          </>
+        ) : null}
+      />
+
+      {/* THE FILL'S OWN BAND, and the page it fills. Task #188's market kind
+          proposes an addressable population, an ACV benchmark and a growth rate —
+          each with a citation or dropped — into the drawer's own fields. It
+          renders only when the switch above is on, reads existing proposals and
+          runs nothing until the founder presses the button, and `onApplied`
+          reloads so an accepted figure appears in the drawer rather than after a
+          refresh. `useAssistMode('market')` is the one store the switch below
+          writes, so the switch and this band cannot disagree. */}
+      {/* THE SWITCH LIVES ON THE PAGE (D317). It used to be the "AI fills the
+          blanks" card on the Eadwyn rail beside this page; the Spin-Out Lab
+          carries no Eadwyn rail, so the one control that turns these bands on
+          sits with them. Off by default: every run spends the founder's own
+          budget, so nothing runs until they turn it on. */}
+      {project && (
+        <label className="flex items-start gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[11px] px-4 py-3 mb-5 cursor-pointer" data-testid="market-fills-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={fillsOn}
+            onChange={(e) => setFillsOn(e.target.checked)}
+            className="mt-1 h-4 w-4 accent-violet-600"
+            data-testid="toggle-market-fills"
+          />
+          <span>
+            <span className="block text-[13px] font-semibold text-gray-900 dark:text-gray-50">AI fills the blanks</span>
+            <span className="block text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
+              {fillsOn ? FILLS_NOTE : FILLS_OFF_NOTE}
+            </span>
+          </span>
+        </label>
+      )}
+      {project && (
+        <FillProposals
+          key="market-sizing"
+          projectId={project.id}
+          kind="market_input"
+          enabled={fillsOn}
+          onApplied={reloadAssumptions}
+        />
+      )}
+      {/* The second band on this page, and a separate kind rather than a second
+          shape in one: a sizing input is a number on the drawer and a competitor
+          is a row on a list, so they have different writers, different empties and
+          different costs. `/api/ai/me/spend` groups by task, which is why the
+          router has two classes for them too. */}
+      {project && (
+        <FillProposals
+          key="market-competitors"
+          projectId={project.id}
+          kind="competitor"
+          enabled={fillsOn}
+          onApplied={reloadCompetitors}
+        />
+      )}
+
+      {/* Design's Week-2 notice (611-614) — informational only: StudioOS
+          deliberately keeps this page editable in Week 2 (founders iterate
+          sizing all program long), so nothing below is actually disabled. */}
+      {week === 2 && (
+        <div data-testid="market-week2-banner" className="flex items-center gap-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-[11px] px-4 py-3 mb-5">
+          <Lock size={15} className="text-amber-700 dark:text-amber-400 flex-none" />
+          <span className="text-[12.5px] font-medium text-amber-800 dark:text-amber-200">Read-only during Week 2. Full investor signals unlock in Week 3.</span>
+        </div>
+      )}
+
+      {!project && fromValidate ? (
+        <div className={`${CARD} text-center py-10`} data-testid="market-no-venture">
+          <div className="text-base font-bold text-gray-900 dark:text-gray-50">This venture is not one you can size</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">
+            {ventureId == null
+              ? 'No venture was named. Open market sizing from Market intelligence.'
+              : 'It is not in your list of ventures. Nothing was read or saved.'}
+          </p>
+          <Link to={validateBack} className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">
+            Back to Market intelligence
+          </Link>
+        </div>
+      ) : !project ? (
+        <div className={`${CARD} text-center py-10`} data-testid="market-no-project">
+          <div className="text-base font-bold text-gray-900 dark:text-gray-50">Create your startup record first</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">Market sizing attaches to your company record.</p>
+          <Link to="/build?new=1" className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">
+            Create your startup record
+          </Link>
+        </div>
+      ) : (
+        <>
+          {/* TAM / SAM / SOM */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-4">
+            <div className={CARD} data-testid="card-tam">
+              <div className={LBL}>TAM</div>
+              {tamTxt ? (
+                <>
+                  <div className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mt-1">{tamTxt}</div>
+                  <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5">{project.sector ? `${project.sector}, total addressable` : 'Total addressable market'}</div>
+                  <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">Founder research · {project.name}</div>
+                </>
+              ) : (
+                <button type="button" onClick={openEdit} data-testid="button-add-tam" className="block text-left mt-1">
+                  <div className="text-2xl font-extrabold tracking-tight text-gray-300 dark:text-gray-600">—</div>
+                  <div className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 mt-0.5">Add your TAM →</div>
+                </button>
+              )}
+            </div>
+            <div className={CARD} data-testid="card-sam">
+              <div className={LBL}>SAM</div>
+              {samTxt ? (
+                <>
+                  <div className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mt-1">{samTxt}</div>
+                  <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5">Serviceable segment{samPct != null ? ` · ${samPct}% of TAM` : ''}</div>
+                  <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">Founder research · {project.name}</div>
+                </>
+              ) : (
+                <button type="button" onClick={openEdit} data-testid="button-add-sam" className="block text-left mt-1">
+                  <div className="text-2xl font-extrabold tracking-tight text-gray-300 dark:text-gray-600">—</div>
+                  <div className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 mt-0.5">Add your SAM →</div>
+                </button>
+              )}
+            </div>
+            <div className={CARD} data-testid="card-som">
+              <div className={LBL}>SOM</div>
+              {somTxt ? (
+                <>
+                  <div className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mt-1">{somTxt}</div>
+                  <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5">Obtainable share{somPct != null ? ` · ${somPct}% of SAM` : ''}</div>
+                  <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1">Founder model · {project.name}</div>
+                </>
+              ) : (
+                <button type="button" onClick={openEdit} data-testid="button-add-som" className="block text-left mt-1">
+                  <div className="text-2xl font-extrabold tracking-tight text-gray-300 dark:text-gray-600">—</div>
+                  <div className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 mt-0.5">Add your SOM →</div>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Methodology (spec H) — 3 method cards + caveat + drawer CTA */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm mb-5" data-testid="market-methodology">
+            <button
+              type="button"
+              data-testid="button-toggle-methodology"
+              onClick={() => setMethodOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-5 py-3.5 text-left"
+            >
+              <span className="text-[12.5px] font-bold text-gray-900 dark:text-gray-50">How this market is sized</span>
+              <ChevronDown size={15} className={`text-gray-400 transition-transform ${methodOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {methodOpen && (
+              <div className="px-5 pb-4 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-3" data-testid="methodology-body">
+                <div className="flex flex-col gap-2.5 mt-3.5">
+                  {versionRead.state === 'loading' ? <p role="status">Reading the saved sizing version…</p> : versionRead.state === 'unreadable'
+                    ? <p role="alert">Unavailable: the saved sizing version could not be read.</p>
+                    : !versionCurrent ? <p data-testid="sizing-unversioned">These figures were saved without a matching version. No formula is recorded for them.</p> : null}
+                  {(versionCurrent ? ['TAM', 'SAM', 'SOM'].map((tag, index) => ({
+                    tag, method: `Version ${version.version_number} · ${String(version.created_at || '').slice(0, 10)}`,
+                    desc: version.formula[index], why: index === 2 ? version.formula[3] : 'Saved inputs and figures agree.',
+                  })) : []).map((m) => (
+                    <div key={m.tag} className="px-3.5 py-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-[11px]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10.5px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 rounded-md px-[7px] py-0.5">{m.tag}</span>
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{m.method}</span>
+                      </div>
+                      <div className="text-[12.5px] text-gray-800 dark:text-gray-100 mt-1.5">{m.desc}</div>
+                      <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{m.why}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Design says "AI-assisted estimates" — these figures are
+                    founder-entered/derived, not AI output, so the copy drops
+                    that claim rather than lie about provenance. */}
+                <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-[11px] px-3.5 py-2.5">
+                  <Lock size={13} className="text-amber-700 dark:text-amber-400 flex-none mt-0.5" />
+                  <span className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">These figures are estimates based on your inputs. Validate with primary research before presenting to investors.</span>
+                </div>
+                <div>
+                  <button type="button" data-testid="button-update-assumptions" onClick={openEdit} className="h-[34px] px-3.5 rounded-[9px] border border-violet-200 dark:border-violet-800 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 text-[12.5px] font-semibold">
+                    Update assumptions →
+                  </button>
+                  <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-2">Nothing on this page is auto-invented — empty means not researched yet.</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start mb-5">
+            {/* Segment picks */}
+            <div className={CARD} data-testid="market-segments">
+              <div className={`${LBL} mb-1`}>Segment signal · founder lens</div>
+              <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5">The aggregator&rsquo;s strongest founder-opportunity segments this period.</p>
+              {picks.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="market-segments-not-recorded">Not recorded · {(lens?.picks || []).find((p) => p.reason)?.reason || 'No live source yet for this sector'}</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {picks.map((p) => {
+                    const mine = sectorMatch?.exact && sectorMatch.row.sector === p.sector;
+                    return (
+                      <div key={p.sector}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-50">{p.sector}</span>
+                          {mine && <span className="text-[9.5px] font-bold rounded-full px-1.5 py-0.5 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">Your sector</span>}
+                          <span className="ml-auto text-[11.5px] font-bold text-gray-700 dark:text-gray-200">{Math.round(p.composite)}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1.5 overflow-hidden">
+                          <div className="h-full rounded-full bg-violet-600" style={{ width: `${Math.min(100, Math.round(p.composite))}%` }} />
+                        </div>
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                          Demand {Math.round(p.demand)} · Supply {Math.round(p.supply)} · Gap {Math.round(p.opportunity_gap)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Market dynamics — founder growth assumptions + sector compass */}
+            <div className={CARD} data-testid="market-dynamics">
+              <div className={`${LBL} mb-1`}>Market dynamics{sectorMatch ? ` · ${sectorMatch.row.sector}` : ''}</div>
+              <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5">
+                {sectorMatch?.exact
+                  ? 'Live signal for your sector from the platform aggregator.'
+                  : sectorMatch
+                    ? `No aggregator segment matches “${project.sector || 'your sector'}” — showing the current leader.`
+                    : 'Live sector signal from the platform aggregator.'}
+              </p>
+              {/* Growth outlook (spec E) — drawer-fed founder assumptions, saved
+                  in project_market_assumptions since migration 247. */}
+              <div className="mb-3.5" data-testid="market-growth-outlook">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Growth outlook · founder assumptions</span>
+                  <button type="button" onClick={openEdit} className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300">Edit →</button>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">CAGR</span>
+                    <span className="inline-flex items-center gap-1 text-[11.5px] font-bold rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                      {cagrPct == null ? 'Unavailable · invalid growth rate' : <>↑ {cagrPct}%/yr{cagrBlank ? ' (default)' : ''}</>}
+                    </span>
+                  </div>
+                  {/* Peak window + tailwind have no drawer/backend field yet —
+                      rendered as an honest em dash, never invented. */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Peak growth window</span>
+                    <span className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-100">—</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Key growth driver</span>
+                    <div className="text-xs text-gray-800 dark:text-gray-100 mt-0.5 leading-snug">{assume.growthDriver.trim() || '—'}</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Market maturity</span>
+                    <span className={`text-[10.5px] font-bold rounded-full px-2 py-0.5 ${MATURITY_CHIP[assume.maturity] || MATURITY_CHIP.Mature}`}>{assume.maturity}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Tailwind moment</span>
+                    <span className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-100">—</span>
+                  </div>
+                </div>
+                {spark && (
+                  <svg viewBox="0 0 220 48" className="w-full h-11 mt-2.5" data-testid="market-cagr-sparkline">
+                    <path d={spark.path} fill="none" strokeWidth="2" className="stroke-violet-300 dark:stroke-violet-700" />
+                    <circle cx={spark.dot[0].toFixed(1)} cy={spark.dot[1].toFixed(1)} r="3.5" className="fill-violet-600 dark:fill-violet-400" />
+                  </svg>
+                )}
+              </div>
+              {!sectorMatch ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center border-t border-gray-100 dark:border-gray-800">No sector signal available this period.</p>
+              ) : (
+                <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                  <div className="flex items-baseline gap-2 mb-3">
+                    {typeof sectorMatch.row.composite === 'number' ? <>
+                      <span className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">{Math.round(sectorMatch.row.composite)}</span>
+                      <span className="text-[11px] text-gray-400 dark:text-gray-500">composite / 100</span>
+                    </> : <span className="text-sm font-semibold text-gray-500 dark:text-gray-400" data-testid="market-dynamics-not-recorded">Not recorded · {sectorMatch.row.composite_reason || 'No live source yet for this sector'}</span>}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {Object.entries(sectorMatch.row.dimensions || {}).map(([k, d]) => (
+                      <div key={k} className="flex items-center gap-2.5">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400 w-[70px] flex-none">{DIM_LABELS[k] || k}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                          {typeof d.value === 'number' ? <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.min(100, Math.round(d.value))}%` }} /> : null}
+                        </div>
+                        <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-200 w-20 text-right" title={typeof d.value === 'number' ? undefined : (d.reason || 'No live source yet for this sector')}>{typeof d.value === 'number' ? Math.round(d.value) : 'Not recorded'}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-3">Source: platform market-intel aggregator · updated {shortDate(compass?.computed_at) || 'this period'}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Sources & research log (spec D) */}
+            <div className={CARD} data-testid="market-sources">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className={LBL}>Sources &amp; research log</div>
+                <button type="button" data-testid="button-add-source" onClick={() => setSrcAdding(true)} className={GHOST_SM}>
+                  + Add source
+                </button>
+              </div>
+              <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3">{srcRows.length} aggregator sources · {liveCount} live feeds</p>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {srcRows.map((s) => (
+                  <span key={s.key} className={`text-[10.5px] font-semibold rounded-md px-2 py-1 ${s.live ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
+                    {s.display_name}{s.live ? ' · live' : ''}
+                  </span>
+                ))}
+              </div>
+              {srcAdding && (
+                <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-[11px] flex flex-col gap-2" data-testid="form-add-source">
+                  <input
+                    type="text"
+                    data-testid="input-source-title"
+                    placeholder="Source title or URL"
+                    value={srcForm.title}
+                    onChange={(e) => setSrcForm((f) => ({ ...f, title: e.target.value }))}
+                    className={`${INP} h-8 text-xs`}
+                  />
+                  <select
+                    data-testid="select-source-type"
+                    value={srcForm.type}
+                    onChange={(e) => setSrcForm((f) => ({ ...f, type: e.target.value }))}
+                    className={`${INP} h-8 text-xs`}
+                  >
+                    <option value="Report">Report</option>
+                    <option value="Interview">Interview</option>
+                    <option value="Article">Article</option>
+                    <option value="Manual">Manual entry</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button type="button" data-testid="button-confirm-source" onClick={confirmAddSource} className="h-[30px] px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold">
+                      Add
+                    </button>
+                    <button type="button" onClick={() => setSrcAdding(false)} className="h-[30px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              {founderSources.length > 0 && (
+                <div className="flex flex-col mb-1">
+                  {founderSources.map((s, i) => (
+                    <div key={`${s.title}-${i}`} className="group flex items-start gap-2.5 py-2 border-t border-gray-100 dark:border-gray-800" data-testid={`founder-source-${i}`}>
+                      <FileText size={15} className="text-gray-400 dark:text-gray-500 flex-none mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{s.title}</span>
+                          <span className={`text-[9.5px] font-bold rounded-full px-1.5 py-0.5 ${SRC_TYPE_CHIP[s.type] || SRC_TYPE_CHIP.Manual}`}>{s.type === 'Manual' ? 'Manual entry' : s.type}</span>
+                        </div>
+                        {/* Stored since D659; a row whose save failed says so. */}
+                        <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-0.5">
+                          Added {s.date}{s.id == null && <> · <span className="text-amber-700 dark:text-amber-400 font-semibold">not saved yet</span></>}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        title="Remove"
+                        onClick={() => removeSource(i)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-sm leading-none px-1"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {citRows.length > 0 ? (
+                <div className="flex flex-col border-t border-gray-100 dark:border-gray-800">
+                  {citRows.slice(0, 5).map((c, i) => (
+                    <div key={`${c.source_key}-${i}`} className="flex items-center gap-2 py-1.5 border-b border-gray-50 dark:border-gray-800/60 last:border-b-0">
+                      <span className="text-[11px] text-gray-600 dark:text-gray-300 flex-1 truncate">{c.source_key} · {c.metric_key}</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">{shortDate(c.ts)}</span>
+                      {c.citation_url && (
+                        <a href={c.citation_url} target="_blank" rel="noreferrer" className="text-violet-600 dark:text-violet-400"><ExternalLink size={11} /></a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-800 pt-2.5" data-testid="citations-empty">
+                  No recent citations for {project.sector || 'your sector'} — the log fills as sources report.
+                </p>
+              )}
+              <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2.5 leading-relaxed">Minimum 2 sources required for investor-ready status. Primary research (interviews) weighted more heavily.</div>
+            </div>
+          </div>
+
+          {/* Competitive landscape (spec B) + positioning map (spec C) */}
+          <div className={`${CARD} mb-5`} data-testid="market-competitors">
+            <div className="flex items-center justify-between gap-2 mb-3.5">
+              <div className={LBL}>Competitive landscape</div>
+              {compRows.length < 6 && (
+                <button type="button" data-testid="button-add-competitor" onClick={() => setCompAdding(true)} className={GHOST_SM}>
+                  + Add competitor
+                </button>
+              )}
+            </div>
+            {compError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-3" data-testid="competitor-error">{compError}</div>}
+            {compAdding && (
+              <div className="mb-3.5 p-3.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-xl flex flex-col gap-2.5" data-testid="form-add-competitor">
+                <div className="grid grid-cols-[1.4fr_1fr] gap-2.5">
+                  <input
+                    type="text"
+                    data-testid="input-competitor-name"
+                    placeholder="Competitor name"
+                    value={compForm.name}
+                    onChange={(e) => setCompForm((f) => ({ ...f, name: e.target.value }))}
+                    className={INP}
+                  />
+                  <select value={compForm.cat} onChange={(e) => setCompForm((f) => ({ ...f, cat: e.target.value }))} className={INP} data-testid="select-competitor-category">
+                    <option value="Direct">Direct</option>
+                    <option value="Indirect">Indirect</option>
+                    <option value="Adjacent">Adjacent</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Differentiation note — how they differ from you"
+                  value={compForm.note}
+                  onChange={(e) => setCompForm((f) => ({ ...f, note: e.target.value }))}
+                  className={INP}
+                />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <input
+                    type="text"
+                    placeholder="Market share e.g. 8%"
+                    value={compForm.share}
+                    onChange={(e) => setCompForm((f) => ({ ...f, share: e.target.value }))}
+                    className={INP}
+                  />
+                  <select value={compForm.stage} onChange={(e) => setCompForm((f) => ({ ...f, stage: e.target.value }))} className={INP} data-testid="select-competitor-stage">
+                    {COMP_STAGES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2 justify-end">
+                  {compBusy && !compAnalysis && (
+                    <span className="mr-auto text-[10.5px] text-gray-400 dark:text-gray-500">Creating your competitor analysis — the first run can take a moment…</span>
+                  )}
+                  <button type="button" onClick={() => setCompAdding(false)} disabled={compBusy} className="h-8 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-xs font-semibold">
+                    Cancel
+                  </button>
+                  <button type="button" data-testid="button-confirm-competitor" onClick={confirmAddComp} disabled={compBusy} className="h-8 px-3.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60">
+                    {compBusy && <Loader2 size={12} className="animate-spin" />} Add competitor
+                  </button>
+                </div>
+              </div>
+            )}
+            {compShown.length === 0 ? (
+              <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="competitors-empty">
+                No competitors mapped yet — add the players investors will ask about.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {compShown.map((c, i) => (
+                  <div key={c.key} className="relative border border-gray-100 dark:border-gray-800 rounded-xl p-3.5 bg-gray-50 dark:bg-gray-800/50" data-testid={`competitor-card-${i}`}>
+                    <button
+                      type="button"
+                      title="Remove"
+                      onClick={() => removeComp(c)}
+                      className="absolute top-2 right-2 w-5 h-5 rounded-md flex items-center justify-center text-gray-300 dark:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-500 dark:hover:text-gray-300 text-[15px] leading-none"
+                    >
+                      ×
+                    </button>
+                    <div className="flex items-center justify-between gap-2 pr-6 mb-1.5">
+                      <span className="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">{c.name}</span>
+                      <span className={`text-[9.5px] font-bold rounded-full px-2 py-0.5 flex-none ${COMP_CAT_CHIP[c.cat] || COMP_CAT_CHIP.Adjacent}`}>{c.cat}</span>
+                    </div>
+                    <div className="text-[11.5px] text-gray-500 dark:text-gray-400 leading-snug mb-2.5 line-clamp-3">{c.note}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      {c.share ? (
+                        <span className="text-[11.5px] font-semibold text-violet-700 dark:text-violet-300">{c.share} share</span>
+                      ) : (
+                        <span className="text-[11.5px] text-gray-400 dark:text-gray-500">— share</span>
+                      )}
+                      {c.stage && <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-md px-1.5 py-0.5">{c.stage}</span>}
+                    </div>
+                    {c.local && (
+                      <span className="mt-2 inline-flex text-[9.5px] font-bold rounded-full px-1.5 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">not saved yet</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Positioning map (spec C) — deterministic sketch, labeled as such. */}
+            <div className="mt-5 pt-[18px] border-t border-gray-100 dark:border-gray-800" data-testid="market-positioning">
+              <div className={`${LBL} mb-2.5`}>Where you fit</div>
+              <div className="flex gap-5 items-start flex-wrap">
+                <div>
+                  <div className="flex gap-1.5">
+                    <div className="flex flex-col justify-between h-[140px] text-[9.5px] text-gray-400 dark:text-gray-500 py-0.5">
+                      <span>Broad</span>
+                      <span>Narrow</span>
+                    </div>
+                    <svg width={POS_W} height={POS_H} viewBox={`0 0 ${POS_W} ${POS_H}`} className="flex-none rounded-[10px] border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60" data-testid="positioning-map">
+                      {compShown.map((c) => {
+                        const d = posDot(c.name);
+                        return <circle key={c.key} cx={d.x.toFixed(1)} cy={d.y.toFixed(1)} r="4" className="fill-gray-300 dark:fill-gray-600" />;
+                      })}
+                      <circle cx={youDot.x} cy={youDot.y} r="5" className="fill-violet-600" />
+                      <text x={youDot.x} y={youDot.y} dy="-9" textAnchor="middle" fontSize="10" fontWeight="700" className="fill-violet-700 dark:fill-violet-300">You</text>
+                    </svg>
+                  </div>
+                  <div className="flex justify-between text-[9.5px] text-gray-400 dark:text-gray-500 mt-1 pl-[34px]">
+                    <span>Low-cost</span>
+                    <span>Premium</span>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[200px] max-w-[320px]">
+                  {project.problem_statement ? (
+                    <p className="text-[11.5px] text-gray-600 dark:text-gray-300 leading-relaxed mb-2 line-clamp-3">
+                      <span className="font-semibold text-gray-900 dark:text-gray-50">Positioning input · </span>
+                      {project.problem_statement}
+                    </p>
+                  ) : (
+                    <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-2">Add a problem statement to your startup record — positioning is generated from it.</p>
+                  )}
+                  <p className="text-[10.5px] text-gray-400 dark:text-gray-500 leading-relaxed mb-3">Dot placement is an illustrative sketch from your competitor set — directional, not measured data.</p>
+                  {deckUnlocked ? (
+                    <Link
+                      to="/raise/investor-narrative/positioning"
+                      data-testid="link-positioning"
+                      onClick={() => {
+                        setPosDone(true);
+                        if (project?.id) {
+                          cycleValidateApi.setMarketMark(project.id, 'positioning_map', true)
+                            .catch((e) => reportError('SpinoutLabMarketPage:mark-positioning', e));
+                        }
+                      }}
+                      className="inline-flex h-8 items-center gap-1.5 px-3.5 rounded-lg border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 text-[11.5px] font-semibold"
+                    >
+                      Generate positioning <ArrowRight size={13} />
+                    </Link>
+                  ) : (
+                    <span data-testid="positioning-locked" aria-disabled="true" className="inline-flex h-8 items-center gap-1.5 px-3.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 text-[11.5px] font-semibold select-none">
+                      <Lock size={12} /> Unlocks in Week 2
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* The deck's Competition slide stays the investor-ready surface. */}
+            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+              {deckUnlocked ? (
+                <Link to="/raise/pitch" data-testid="link-deck-competitors" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-violet-700 dark:text-violet-300">
+                  Map competitors in the deck <ArrowRight size={13} />
+                </Link>
+              ) : (
+                <span data-testid="competitors-locked" aria-disabled="true" className="inline-flex h-8 items-center gap-1.5 px-3.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 text-[11.5px] font-semibold select-none">
+                  <Lock size={12} /> Deck competition slide unlocks in Week 2
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Investor signals */}
+          <div className={CARD} data-testid="market-investor-signals">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+              <div className={LBL}>Investor signals · scored from your profile</div>
+              {!advisorsUnlocked && (
+                <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 inline-flex items-center gap-1">
+                  <Lock size={10} /> Intro tools unlock in Week 3
+                </span>
+              )}
+            </div>
+            <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5 max-w-2xl">
+              Real anonymised matches from the platform&rsquo;s investor-fit engine, scored against your sector, stage and traction. Identities are NDA-gated platform-wide — names are withheld here, not decoratively blurred.
+            </p>
+            {matches.length === 0 ? (
+              <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="fit-empty">
+                {fitUnavailable
+                  ? 'Investor matching isn’t available for this account — it’s computed for the startup record owner.'
+                  : 'No investor matches computed yet — they appear as your record and traction fill in.'}
+              </p>
+            ) : (
+              <div className="flex flex-col">
+                {matches.map((m, i) => {
+                  const pct = Math.round((Number(m.score) || 0) * 100);
+                  // Design's compact signal affordances (795-812): ●●●○○ dot
+                  // string + banded score chip, both derived from the real
+                  // score (dots = clamp(round(score/20),1,5); band ≥70/≥45).
+                  const dots = Math.max(1, Math.min(5, Math.round(pct / 20)));
+                  const dotsStr = '●'.repeat(dots) + '○'.repeat(5 - dots);
+                  const bandCls =
+                    pct >= 70
+                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                      : pct >= 45
+                        ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+                  // Stable pseudonymous tag: hash prefix when present, rank
+                  // fallback otherwise (post-NDA rows may carry a real
+                  // investor_user_id instead of a hash — never rendered here).
+                  const tag = String(m.investor_id_hash || '').slice(0, 6) || `#${i + 1}`;
+                  return (
+                    <div key={m.investor_id_hash || i} data-testid={`investor-match-${i}`} className="flex items-center gap-3 py-2.5 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
+                      <span className="w-5 text-[11px] font-bold text-gray-400 dark:text-gray-500 flex-none">{i + 1}</span>
+                      <span className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-50 flex-none">
+                        Investor <span className="font-mono text-gray-400 dark:text-gray-500">·{tag}</span>
+                      </span>
+                      {m.nda_required && (
+                        <span className="text-[9.5px] font-bold rounded-full px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 inline-flex items-center gap-1 flex-none">
+                          <ShieldCheck size={9} /> NDA
+                        </span>
+                      )}
+                      <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden min-w-[60px]">
+                        <div className={`h-full rounded-full ${pct >= 75 ? 'bg-violet-600' : pct >= 50 ? 'bg-violet-400' : 'bg-gray-300 dark:bg-gray-600'}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="hidden sm:inline font-mono text-[13px] tracking-[1px] text-violet-600 dark:text-violet-400 flex-none">{dotsStr}</span>
+                      <span className={`text-[10.5px] font-bold rounded-full px-2 py-0.5 flex-none ${bandCls}`}>{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {advisorsUnlocked && matches.length > 0 && (
+              <Link to="/advisors" className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-violet-700 dark:text-violet-300">
+                Work introductions with your advisor <ArrowRight size={12} />
+              </Link>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Market-assumptions drawer (spec A, design 1458-1549) — the shared
+          right-side Sheet (D1317) at 480px. Test-id names from the old modal
+          are kept for continuity: modal-edit-sizing = the sheet (its × is
+          modal-edit-sizing-close), button-save-sizing = "Save", sizing-error = the validation line; input-tam/-sam/-som map
+          to the drawer controls that now drive each figure (TAM override /
+          % reachable / win rate). While it saves, nothing closes it. */}
+      {editOpen && project && (
+        <Sheet
+          label="Edit Market Assumptions"
+          title="Edit Market Assumptions"
+          sub="Preview changes without saving. Save keeps the inputs, figures, method and source in one version."
+          onClose={() => { if (!saving) setEditOpen(false); }}
+          width={480}
+          testId="modal-edit-sizing"
+          footer={sizingFooter}
+        >
+          {/* D7706: explicit version save; previews never write the venture. */}
+          <div className="px-5 py-4 flex flex-col gap-[22px]">
+            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-[10px] px-3 py-2.5">
+              <Lock size={13} className="text-amber-700 dark:text-amber-400 flex-none mt-0.5" />
+              <span className="text-[11.5px] text-amber-800 dark:text-amber-200 leading-relaxed">Only Save updates the page and Pitch Deck Market slide. The calculation below is not saved.</span>
+            </div>
+
+            {/* Market definition */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>Market definition</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>Market category · recorded, not used in the calculation</span>
+                  <input type="text" value={assume.category} onChange={setA('category')} className={INP} data-testid="input-market-category" />
+                </label>
+                <label>
+                  <span className={FLD}>Geography · recorded, not used in the calculation</span>
+                  <select value={assume.geography} onChange={setA('geography')} className={INP} data-testid="select-geography">
+                    <option>Global</option>
+                    <option>North America</option>
+                    <option>Europe</option>
+                    <option>APAC</option>
+                    <option>Custom</option>
+                  </select>
+                </label>
+                <label>
+                  <span className={FLD}>Target year · recorded, not used in the calculation</span>
+                  <select value={assume.targetYear} onChange={setA('targetYear')} className={INP} data-testid="select-target-year">
+                    <option>2025</option>
+                    <option>2026</option>
+                    <option>2027</option>
+                    <option>2028</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            {/* D6011 (#6011): the figures' source, saved with each of them and shown on Validate's market chart. */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>Source</div>
+              <label>
+                <span className={FLD}>Where these figures come from</span>
+                <select value={sizingSourceId} onChange={(e) => setSizingSourceId(e.target.value)} className={INP_TALL} data-testid="select-sizing-source">
+                  <option value="">None named</option>
+                  {founderSources.filter((s) => s.id != null).map((s) => (
+                    <option key={s.id} value={String(s.id)}>{s.title}</option>
+                  ))}
+                </select>
+              </label>
+              {founderSources.every((s) => s.id == null) && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5" data-testid="sizing-source-none">Add a source under Sources on this page to name it here.</p>
+              )}
+            </div>
+
+            {/* TAM inputs */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>TAM inputs</div>
+              <div className="flex flex-col gap-2.5">
+                <div className="flex gap-1.5">
+                  {['Top-down', 'Bottom-up'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setAV('methodology', m)}
+                      className={`flex-1 h-8 rounded-lg border text-xs font-semibold ${assume.methodology === m ? SEG_ON : SEG_OFF}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11.5px] text-gray-500 dark:text-gray-400">Top-down / Bottom-up is recorded, not used in the calculation.</p>
+                <label>
+                  <span className={FLD}>Total addressable population (units)<FillMark mark={marketFillMark(filled.population)} /></span>
+                  <input type="number" min="0" {...fieldState('population')} disabled={saving} value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
+                  {fieldError('population')}
+                </label>
+                <label>
+                  <span className={FLD}>Average contract value ($)<FillMark mark={marketFillMark(filled.acv)} /></span>
+                  <input type="number" min="0" {...fieldState('acv')} disabled={saving} value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
+                  {fieldError('acv')}
+                </label>
+                <label>
+                  <span className={FLD}>TAM override ($M, optional)</span>
+                  <input type="number" min="0" placeholder="Override calculated TAM" {...fieldState('tamOverride')} disabled={saving} value={assume.tamOverride} onChange={setA('tamOverride')} className={INP} data-testid="input-tam" />
+                  {fieldError('tamOverride')}
+                </label>
+                <label>
+                  <span className={FLD}>Reason for TAM override</span>
+                  <input type="text" {...fieldState('tamOverrideReason')} disabled={saving} value={assume.tamOverrideReason} onChange={setA('tamOverrideReason')} className={INP} data-testid="input-tam-reason" />
+                  {fieldError('tamOverrideReason')}
+                </label>
+              </div>
+            </div>
+
+            {/* SAM inputs */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>SAM inputs</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>% of TAM reachable</span>
+                  <input type="number" min="0" max="100" {...fieldState('samPct')} disabled={saving} value={assume.samPct} onChange={setA('samPct')} className={INP} data-testid="input-sam" />
+                  {fieldError('samPct')}
+                </label>
+                <div>
+                  <span className={FLD}>Segment filter · recorded, not used in the calculation</span>
+                  {picks.length === 0 ? (
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500">No aggregator segments this period.</div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {picks.map((p) => (
+                        <button
+                          key={p.sector}
+                          type="button"
+                          onClick={() => toggleSeg(p.sector)}
+                          className={`h-7 px-2.5 rounded-full border text-[11px] font-semibold ${(assume.segFilter || []).includes(p.sector) ? SEG_ON : SEG_OFF}`}
+                        >
+                          {p.sector}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SOM inputs */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>SOM inputs</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>Win rate (%)</span>
+                  <input type="number" min="0" {...fieldState('winRate')} disabled={saving} value={assume.winRate} onChange={setA('winRate')} className={INP} data-testid="input-som" />
+                  {fieldError('winRate')}
+                </label>
+                <label>
+                  <span className={FLD}>Runway (months) · recorded, not part of the figures</span>
+                  <input type="number" min="0" value={assume.runway} onChange={setA('runway')} className={INP} data-testid="input-runway" />
+                </label>
+                <label>
+                  <span className={FLD}>Sales capacity (deals/month)</span>
+                  <input type="number" min="0" {...fieldState('capacity')} disabled={saving} value={assume.capacity} onChange={setA('capacity')} className={INP} data-testid="input-capacity" />
+                  {fieldError('capacity')}
+                </label>
+                {[
+                  ['horizonMonths', 'Time horizon (months)', 'input-horizon'],
+                  ['salesCycleMonths', 'Sales cycle (months)', 'input-sales-cycle'],
+                  ['retentionPct', 'Retention (%)', 'input-retention'],
+                ].map(([key, label, testId]) => <label key={key}>
+                  <span className={FLD}>{label}</span>
+                  <input type="number" min="0" {...fieldState(key)} disabled={saving} value={assume[key]} onChange={setA(key)} className={INP} data-testid={testId} />
+                  {fieldError(key)}
+                </label>)}
+
+              </div>
+            </div>
+
+            <section aria-label="How it was computed" data-testid="sizing-preview" className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+              <div className={`${LBL} mb-2`}>How it was computed · not saved</div>
+              {preview.state === 'loading' ? <p role="status">Calculating…</p> : preview.result ? <>
+                {['tam', 'sam', 'som'].map((key, index) => <div key={key} className="mb-2 text-[12px] text-gray-700 dark:text-gray-300"><strong>{['Total', 'Serviceable', 'Obtainable'][index]} · {fmtMoney(preview.result[key])}</strong><p>{preview.result.formula?.[index]}</p></div>)}
+                <p className="text-[12px] text-gray-600 dark:text-gray-400">{preview.result.formula?.[3]}</p>
+              </> : <p role="status" className="text-[12px] text-gray-600 dark:text-gray-400">{preview.message || 'Enter the inputs to see the calculation.'}</p>}
+            </section>
+
+            {/* Growth */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>Growth</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>CAGR estimate (%)<FillMark mark={marketFillMark(filled.cagr)} /></span>
+                  <input type="number" min="0" value={assume.cagr} onChange={setA('cagr')} className={INP} data-testid="input-cagr" />
+                </label>
+                <label>
+                  <span className={FLD}>Growth driver</span>
+                  <textarea rows={2} value={assume.growthDriver} onChange={setA('growthDriver')} className={TXA} data-testid="input-growth-driver" />
+                </label>
+                <div>
+                  <span className={FLD}>Market maturity</span>
+                  <div className="flex gap-1.5">
+                    {['Early', 'Growing', 'Mature'].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setAV('maturity', m)}
+                        className={`flex-1 h-[30px] rounded-lg border text-[11.5px] font-semibold ${assume.maturity === m ? SEG_ON : SEG_OFF}`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Sheet>
+      )}
+    </LabPageShell>
+  );
+
+  return page;
+}

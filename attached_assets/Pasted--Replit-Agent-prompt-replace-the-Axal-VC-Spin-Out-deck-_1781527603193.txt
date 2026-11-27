@@ -1,0 +1,116 @@
+# Replit Agent prompt — replace the Axal VC Spin-Out deck with the new template + auto-fill from 30-day milestone data
+
+Paste everything below into the Replit Agent. Add the file `axal_vc_spinout_deck.js` to the repo first (it's the rendering template this prompt refers to).
+
+---
+
+## Objective
+
+Replace the existing "Axal VC Spin-Out" pitch-deck generator with the new template in `axal_vc_spinout_deck.js`, and make it **auto-fill from the data founders complete across the 30-day spin-out program** (Weeks 1–4). The founder should be able to click "Generate deck" on a Project and get a populated, on-brand 10-slide `.pptx` with no manual data entry — pulling live from the platform modules each milestone unlocks.
+
+Do not redesign the slides. The template's visual system, layout, and Axal VC branding are final. Your job is the **data layer**: map our milestone data into the template's `DATA` object, expose a generate endpoint, and replace the old deck feature.
+
+---
+
+## 1. What to replace
+
+- Find the current Spin-Out deck generator (search for the existing deck/pitch export feature — likely under the Pitch Deck Builder, `axal.vc/build/deck`). Keep its public entry point/route and button, but swap the implementation to use the new template.
+- Preserve any existing callers (the "Generate deck" / "Export deck" action). They should now invoke the new generator.
+- Keep old generated decks accessible; only change forward generation.
+
+## 2. Import the template
+
+- Add `axal_vc_spinout_deck.js` to the deck service. It is a Node generator built on `pptxgenjs` and renders icons via `react`, `react-dom`, `react-icons`, `sharp`. Install: `pptxgenjs react react-dom react-icons sharp`.
+- The file has three layers: `THEME` (visual system — do not change), `DATA` (all content, the only thing we populate), and a content-agnostic render engine. There is also a `NOTES` block that becomes each slide's speaker notes.
+- **Refactor it minimally** so `DATA` and `NOTES` are passed in rather than hard-coded: export a function `buildDeck(data, opts)` that accepts a fully-formed `DATA` object and writes/returns the `.pptx` (Buffer for HTTP response, or path). Keep the current hard-coded `DATA` only as a fallback sample for tests.
+
+## 3. The data sources (30-day milestones → modules)
+
+The deck is filled from the modules each weekly milestone unlocks. Pull from these (use existing services/DB; the URLs identify the module in our codebase):
+
+| Week | Milestone | Source modules |
+|------|-----------|----------------|
+| 1 | Idea & Customer | Projects (`/projects`), Customer Discovery (`/customer-discovery`), Market Intelligence (`/market-intel`) |
+| 2 | Solution & Roadmap | Roadmap (`/build/roadmap`), Brand Builder (`/build/brand`), Pitch Deck Builder (`/build/deck`) |
+| 3 | Validate & Team | Diligence & Scoring Engine (`/scoring`), Mentors (`/mentors`), Office Hours (`/office-hours`), Co-founder Match (`/cofounder`), MI investor signals |
+| 4 | Incorporate & Capital | Incorporate (`/incorporate`), Cap Table (`/build/captable`), 83(b) (`/incorporate/83b`), Cofounder Agreement (`/incorporate/cofounder-agreement`), Capital (`/capital`), Compliance (`/compliance`), KYC (`/kyc`) |
+
+## 4. Field map — `DATA` ← milestone data
+
+Populate every field below. Where a value is computed, compute it. Where text needs phrasing (thesis, why-now), use the module's stored copy if present, else fall back per §5.
+
+### `brand` (static)
+- `brand.lab = "AXAL VC · SPIN-OUT LAB"`, `brand.network = "Axal VC"`, `brand.footerRight = "<COMPANY> · CONFIDENTIAL"` (uppercase company).
+
+### Slide 1 — `cover` (Week 1 + 2)
+- `company` ← Project.name. `thesis` ← Project.one_liner (fallback: problem statement + solution summary, ≤180 chars).
+- `meta` rows ← `["SECTOR", Project.sector]`, `["STAGE", Project.stage || "Pre-seed"]`, `["FOUNDER", founder.full_name]`, `["LAB STATUS", "Day " + programDay + " / 30"]`.
+- `signalX` / `signalY` ← Customer Discovery: cumulative logged-interview count sampled across the program window (e.g. every 5 days). `signalLabel`/`signalCaption` keep template defaults.
+- `eyebrowRight = "DEMO DAY · DAY " + programDay + " / 30"`.
+
+### Slide 2 — `problem` (Week 1, Customer Discovery)
+- `framing` ← `"Synthesized from " + interviewCount + " discovery interviews with " + Project.icp + "."`
+- `pains` ← top 4 pain themes by frequency: `[theme, pct, "<count> / <interviewCount>"]`. `pct` = mentions/interviews.
+- `quote`/`quoteAttr` ← highest-signal interview quote + role (the one flagged "top quote", else the most-cited).
+
+### Slide 3 — `validation` (Week 1 + 3)
+- `cards` ← `["<interviewCount>", "Interviews completed"]`, `["<distinctPains>", "Distinct pains captured"]`, `["<solutionFit>", "Mean solution-fit (/10)"]` (Scoring Engine solution-fit, else discovery rating), `["<loiCount>", "Design-partner LOIs"]`.
+- `stages` (funnel) ← Customer Discovery: `Reached out`, `Interviewed`, `Pain confirmed`, `Solution-fit ≥ 7`, `LOI / design partner` with counts.
+- `conversion` ← computed: `["<round(LOI/interviewed*100)>%", "interview → LOI conversion"]`.
+
+### Slide 4 — `market` (Week 1, Market Intelligence)
+- `rings` ← MI sizing: `[["TAM", tam, tamLabel], ["SAM", sam, samLabel], ["SOM", som, somLabel]]` (formatted $ values).
+- `why` ← MI "why now" / investor-signal bullets (Week 3 signals) as `[head, body]` ×3 (else manual placeholders, see §5).
+- `assumptions` ← MI sizing assumptions string (must include the citation basis, since Week 1 requires "sized TAM/SAM with citations").
+
+### Slide 5 — `solution` (Week 2, Roadmap + Deck Builder)
+- `steps` (keep iconKeys `ingest/score/monitor/act`) ← MVP scope from Roadmap as `[iconKey, shortLabel, oneLine]` (use the product's own verbs).
+- `outcomes` ← target outcomes / top OKRs phrased as `[bigValue, label]` ×3.
+
+### Slide 6 — `roadmap` (Week 2 + tracker)
+- `phases` (Now/Next/Later) ← 90-day OKRs + milestone tracker. Each item `[status, text]` where status ∈ `done|active|pending` from completion state. `currentDay` ← index of nearest day marker to `programDay`. `days` default `["Day 0","Day 30","Day 60","Day 90"]`.
+
+### Slide 7 — `team` (Week 3)
+- `founder` ← founder profile (`initials`, `name`, `role`, `bio`).
+- `advisors` ← matched Mentors (with cadence) and/or Co-founder Match result as `[initials, name, role]` (top 3). If "going solo", drop co-founder, keep mentors.
+- `centerName` ← company. `nodes` ← keep 4 fixed positions; labels: `Axal VC` (studio + capital), `Capital network` (LP/partner intro count from `/capital`), `Design partners` (`<count> lenders/users`), `Advisor bench` (mentor count).
+
+### Slide 8 — `captable` (Week 4)
+- `items` (readiness checklist) ← statuses from Incorporate, Cap Table, vesting, 83(b), Cofounder Agreement, IP assignment, SAFE/template. Each `[label, status]`, status ∈ `done|active|pending`.
+- `segments` (donut) ← Cap Table fully-diluted split `[label, percent]` (Founders / Option pool / SAFE-reserved or actual rounds).
+
+### Slide 9 — `ask` (Week 4, Capital)
+- `kpis` ← `["<raise>", "Target raise"]`, `["<instrument>", "Instrument · <cap>"]`, `["<runway>", "Runway"]`, `["<close>", "Target close"]`.
+- `funds` ← use-of-funds allocation `[category, percent]`. `milestone` ← `["Gets us to:", "<OKR/seed milestone>"]`.
+
+### Slide 10 — `deal` (Week 4, Capital + Compliance)
+- `ready` ← `[["Data room", <Open|Pending>], ["Financial model", …], ["Cap table & legal docs", …], ["Customer references", …], ["NDA", <Not required|Required>]]` from Compliance/data-room state.
+- `steps` ← Capital intro flow (intro call → data-room access → SAFE/close). `contact` ← founder email + `axal.vc`. `closingLine` keep default.
+
+## 5. Auto-fill behavior & partial completion
+
+- The deck must generate at **any** program day, even if later weeks are incomplete.
+- For any unmet field: numeric → show what exists (don't fabricate); checklist/readiness statuses → `pending`; narrative fields with no stored copy (thesis, why-now, outcomes) → insert a clearly-marked draft string like `"[draft — complete in <Module>]"` and add the slide to a returned `gaps[]` list.
+- If a whole module is empty, still render the slide using template defaults but flag it in `gaps[]`.
+- Watermark logic: if `programDay < 28` OR `gaps.length > 0`, stamp the file metadata title with `"DRAFT"` (do not alter slide visuals).
+- All money/number formatting centralized in one `fmt` helper. Never inject `#` into hex, never leave `xxxx`/lorem placeholders.
+
+## 6. Entry point to expose
+
+- Server route: `POST /api/projects/:projectId/spinout-deck` → loads the founder's milestone data, assembles `DATA`, calls `buildDeck(DATA)`, returns `{ fileUrl, gaps }` (and the `.pptx` as a download).
+- Wire the existing "Generate deck" button to this route; show `gaps[]` to the founder as "Complete these to finish your deck."
+- Generation runs server-side (Node), not in the browser.
+
+## 7. Constraints (do not break)
+
+- Keep `THEME` exactly as shipped: white/black/grayscale base, single cobalt accent `#2C4BE0`, dark cover + close, one focal visual per slide, Axal VC branding in eyebrow/footers/network node. No accent stripes or color bars.
+- Keep the 10-slide order and the `NOTES` speaker-note field map.
+- Keep `DATA` as the single content contract — no copy hard-coded in the render engine.
+
+## 8. Acceptance criteria
+
+1. Clicking "Generate deck" on a fully-completed Project produces a 10-slide `.pptx` with every slide populated from live module data, no placeholders, Axal VC branding throughout.
+2. A half-completed Project (e.g. Day 16) still generates, with later slides on `pending`/draft and a populated `gaps[]`.
+3. Output opens cleanly in PowerPoint and Google Slides; speaker notes present.
+4. Old generator is removed from the forward path; existing button now calls the new endpoint.
+5. A unit test renders the bundled sample `DATA` and asserts a valid non-empty `.pptx`.

@@ -1,0 +1,10 @@
+{
+  "name": "studioos-cloudflare-notifications",
+  "main": "cloudflare-worker-5671.mjs",
+  "compatibility_date": "2026-11-12",
+  "workers_dev": false,
+  "vars": { "CF_DELIVERY_ENABLED": "false", "ROUTING_REGISTRY": "null", "PROVIDER_REGISTRY": "null" },
+  "durable_objects": { "bindings": [{ "name": "CF_DELIVERY", "class_name": "CloudflareDeliveryActor" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CloudflareDeliveryActor"] }],
+  "triggers": { "crons": ["*/5 * * * *"] }
+}

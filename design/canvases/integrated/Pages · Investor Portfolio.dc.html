@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#4338ca;background:#f5f5ff;border-color:#c7d2fe;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f5f5ff;border-color:#c7d2fe;color:#4338ca;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f5f5ff;border:1px solid #c7d2fe;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4338ca;background:#e8e8ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #4338ca;background:#4338ca;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .lock{font-size:9px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:2px 5px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="3">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /portfolio</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#4338ca;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span><sc-if value="{{ n.locked }}"><span class="lock">Inst.</span></sc-if></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Portfolio</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="3">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="7"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#4338ca;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="indigo" page="Portfolio" hint-size="100%,580px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const N = { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff' };
+    // CANONICAL Investor shell — 9 rows, matching Detail Layer Canvas I_ROWS.
+    const ROWS = ['Home','Deals','Portfolio','Axal VC Fund','Fund','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Portfolio' ? 'nav on' : 'nav',
+      locked: label === 'Fund',
+      style: label === 'Portfolio' ? 'color:'+N.deep+';background:'+N.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+N.ink
+        : (label === 'Fund' ? 'color:#615c6e' : '') }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Positions','Updates','Value-add'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Updates' }));
+
+    const pill = (t) => {
+      const M = { 'Green':['#ecfdf5','#047857','#a7f3d0'], 'Received':['#ecfdf5','#047857','#a7f3d0'],
+        'Made':['#ecfdf5','#047857','#a7f3d0'],
+        'Amber':['#fffbeb','#92400e','#fde68a'], 'Late':['#fffbeb','#92400e','#fde68a'],
+        'Parse review':['#fffbeb','#92400e','#fde68a'], 'Promised':['#fffbeb','#92400e','#fde68a'],
+        'Red':['#fef2f2','#b91c1c','#fecaca'], 'Overdue':['#fef2f2','#b91c1c','#fecaca'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const m2 = (n) => '$' + (n / 1e6).toFixed(2) + 'M';
+    // Counts that land mid-sentence become words — a bare numeral there reads as an unfinished
+    // template on a canvas whose substance is the prose.
+    const nWord = (n) => ['no','one','two','three','four','five','six'][n] || String(n);
+    const bothOrAll = (n) => n === 2 ? 'Both' : 'All ' + nWord(n);
+
+    // ══ Portfolio curation rate — Granite 4.0 H Micro, as the rail declares. Every AI cost on
+    // these three pages computes from it. ══
+    const P_IN = 0.017, P_OUT = 0.112;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * P_IN + tout / 1e6 * P_OUT;
+
+    // ══ ONE position book. Every fund metric, health tally and overdue count derives from it. ══
+    const POS = [
+      { co:'Novacraft Labs', stage:'Seed', invested:435000, fmv:435000, health:'Green', lastUpd:6, runway:11.4 },
+      { co:'Halverton', stage:'Seed', invested:600000, fmv:1450000, health:'Green', lastUpd:12, runway:19.0 },
+      { co:'Aperture', stage:'Seed', invested:500000, fmv:500000, health:'Amber', lastUpd:41, runway:7.2 },
+      { co:'Thornfield', stage:'Pre-seed', invested:250000, fmv:610000, health:'Green', lastUpd:19, runway:14.5 },
+      { co:'Kelp Bio', stage:'Seed', invested:400000, fmv:180000, health:'Red', lastUpd:63, runway:3.1 },
+      { co:'Lumen Works', stage:'Pre-seed', invested:200000, fmv:200000, health:'Amber', lastUpd:34, runway:5.8 }
+    ];
+    const DISTRIBUTED = 0, OVERDUE_AT = 30, RUNWAY_ALERT = 6;
+    const invested = POS.reduce((a, p) => a + p.invested, 0);
+    const fmv = POS.reduce((a, p) => a + p.fmv, 0);
+    const tvpi = (fmv + DISTRIBUTED) / invested;
+    const dpi = DISTRIBUTED / invested;
+    const overdue = POS.filter(p => p.lastUpd > OVERDUE_AT);
+    const lowRunway = POS.filter(p => p.runway < RUNWAY_ALERT);
+    const byHealth = (h) => POS.filter(p => p.health === h).length;
+    const attention = POS.filter(p => p.health === 'Red' || p.lastUpd > OVERDUE_AT || p.runway < RUNWAY_ALERT);
+    // Default sort is "needs attention", so row order is a fact rather than alphabetical.
+    const rank = (p) => (p.health === 'Red' ? 0 : p.health === 'Amber' ? 1 : 2);
+    const sorted = POS.slice().sort((a, b) => rank(a) - rank(b) || b.lastUpd - a.lastUpd);
+    const posRows = sorted.map(p => ({ cells:[
+      cell(p.co), cell(p.stage), cell(usd(p.invested)), cell(usd(p.fmv)),
+      cell((p.fmv / p.invested).toFixed(2) + '×'), cell('', { pill:p.health }),
+      cell(p.lastUpd + ' d', { pill: p.lastUpd > OVERDUE_AT ? 'Overdue' : null })
+    ]}));
+
+    // ══ ONE update inbox, keyed to the same companies. ══
+    const KPIS = ['MRR','Burn','Runway','Headcount'];
+    const UPD = [
+      { co:'Novacraft Labs', arrived:'Aug 19', state:'Received', note:'MRR $104.8k (+4.8%), burn $61.2k, runway 11.4 mo.' },
+      { co:'Halverton', arrived:'Aug 13', state:'Parse review', note:'3 of 4 KPIs extracted. Headcount ambiguous — "a team of ~12".' },
+      { co:'Thornfield', arrived:'Aug 6', state:'Received', note:'First revenue: $4.1k MRR. Runway 14.5 mo.' },
+      { co:'Lumen Works', arrived:'Jul 22', state:'Late', note:'22 days late. Runway 5.8 mo, below the alert line.' },
+      { co:'Aperture', arrived:'—', state:'Overdue', note:'41 days. Two chases sent, no reply.' },
+      { co:'Kelp Bio', arrived:'—', state:'Overdue', note:'63 days. Position marked down with no founder update.' }
+    ];
+    // Update-state counts derive from the rows the table renders — never from POS, which uses a
+    // different threshold and would call Lumen Works overdue while the table calls it late.
+    const arrived = UPD.filter(u => u.arrived !== '—').length;
+    const overdueU = UPD.filter(u => u.state === 'Overdue');
+    const lateU = UPD.filter(u => u.state === 'Late').length;
+    const inReview = UPD.filter(u => u.state === 'Parse review').length;
+    const updRows = UPD.map(u => ({ cells:[ cell(u.co), cell(u.arrived), cell('', { pill:u.state }),
+      cell(u.note, { seam: (u.state === 'Received' || u.state === 'Late') ? 'From ' + u.co : null }) ]}));
+
+    // ══ ONE value-add ledger — the support half of the licence axiom, as work not sentiment. ══
+    const VAL = [
+      { co:'Halverton', kind:'Intro', state:'Made', hrs:2, what:'Introduced their VP Eng hire. Started in June.' },
+      { co:'Novacraft Labs', kind:'Intro', state:'Made', hrs:3, what:'Two customer intros, one became a design partner.' },
+      { co:'Thornfield', kind:'Board prep', state:'Made', hrs:6, what:'Prepped the first board deck across two sessions.' },
+      { co:'Halverton', kind:'Board prep', state:'Made', hrs:8, what:'Quarterly board attendance, four sessions.' },
+      { co:'Aperture', kind:'Intro', state:'Promised', hrs:0, what:'CFO intro promised in June. Never made.' },
+      { co:'Kelp Bio', kind:'Hiring', state:'Promised', hrs:0, what:'Offered an eng-pipeline review. No response.' }
+    ];
+    const delivered = VAL.filter(v => v.state === 'Made');
+    const owed = VAL.filter(v => v.state === 'Promised');
+    const hours = VAL.reduce((a, v) => a + v.hrs, 0);
+    const supported = new Set(VAL.map(v => v.co)).size;
+    const unsupported = POS.filter(p => VAL.every(v => v.co !== p.co));
+    const valRows = VAL.map(v => ({ cells:[ cell(v.co), cell(v.kind), cell('', { pill:v.state }),
+      cell(v.hrs ? v.hrs + ' h' : '—'), cell(v.what) ]}));
+
+    const PAGES = [
+      { id:'ip1', badge:'IP1', route:'/portfolio/positions', zone:'Positions', arch:'LEDGER',
+        title:'Portfolio · Positions', h1:'Positions book',
+        blurb:'Compressed shows the fund-level multiple. The full ledger adds every position with its cost basis and current mark, sorted by what needs attention rather than alphabetically — because a book is a worklist, not a directory.',
+        sub:'Lots, marks history and ownership changes.',
+        cmpTitle:'Portfolio · ' + POS.length + ' positions',
+        cmpBody:m2(invested) + ' invested, ' + m2(fmv) + ' FMV. TVPI ' + tvpi.toFixed(2) + '×, DPI ' + dpi.toFixed(2) + '×.',
+        viewMore:'View more · ' + POS.length + ' positions, ' + attention.length + ' need attention →',
+        filters: fil(['Needs attention','All','By stage','Marked down'], 0), ops:['Export','Mark history','Add follow-on'],
+        adds:[ { label:'Invested', value:m2(invested), note:'cost basis, incl. follow-ons' },
+          { label:'Current FMV', value:m2(fmv), note:'as of Aug 25, 2026' },
+          { label:'TVPI', value:tvpi.toFixed(2) + '×', note:'DPI ' + dpi.toFixed(2) + '× — nothing realised' },
+          { label:'Needs attention', value:String(attention.length), note:byHealth('Red') + ' red, ' + byHealth('Amber') + ' amber' } ],
+        instTitle:'Positions', instMeta:'Sorted by attention, worst first',
+        cols:'1.1fr .8fr .9fr .9fr .7fr .8fr .8fr',
+        head:['Company','Stage','Invested','FMV','Multiple','Health','Last update'],
+        rows: posRows,
+        instNote:'TVPI is ' + tvpi.toFixed(2) + '× and DPI is ' + dpi.toFixed(2)
+          + '× because nothing has been realised — the two are reported separately rather than blended, since an unrealised multiple is a mark and a realised one is cash. Kelp Bio is marked down with no founder update behind it, which is the least comfortable row and therefore the first.',
+        aiLabel:'Proposal · explain the quarter\u2019s TVPI move', aiCost:c4(runCost(9200, 640)),
+        aiBody:'The multiple moved on one event: Halverton\u2019s Series A re-marked ' + usd(600000) + ' of cost to ' + usd(1450000)
+          + '. Kelp Bio\u2019s write-down offsets part of it. Every other position is held at last round, so the change is two facts rather than portfolio-wide momentum.',
+        aiAccept:'Accept narrative', aiFoot:'Traces to the mark-history rows.' },
+
+      { id:'ip2', badge:'IP2', route:'/portfolio/updates', zone:'Updates', arch:'FEED',
+        title:'Portfolio · Updates', h1:'Updates & KPI collection',
+        blurb:'Compressed shows what arrived. The full feed adds parse review — extracted KPIs as editable proposals — plus the chase queue and extraction rules. This is the seam view of what founders enter in Build.',
+        sub:'Inbox, parse review, chase and extraction rules.',
+        cmpTitle:'Updates · ' + arrived + ' of ' + UPD.length + ' in',
+        cmpBody:overdueU.length + ' never arrived, ' + lateU + ' late. ' + inReview + ' awaiting parse review.',
+        viewMore:'View more · ' + UPD.length + ' companies, ' + KPIS.length + ' KPIs each →',
+        filters: fil(['This period','Overdue','Parse review','Rules'], 0), ops:['Chase all overdue','Edit rules','Export'],
+        adds:[ { label:'Arrived', value:arrived + ' of ' + UPD.length, note:lateU + ' of them late' },
+          { label:'Never arrived', value:String(overdueU.length), note:'chased, no reply' },
+          { label:'Parse review', value:String(inReview), note:'ambiguous extraction' },
+          { label:'Runway alerts', value:String(lowRunway.length), note:'below ' + RUNWAY_ALERT + ' months' } ],
+        instTitle:'Update inbox', instMeta:'Seam-marked · extraction is a proposal, not a write',
+        cols:'1fr .8fr 1.1fr 2.4fr', head:['Company','Arrived','State','What came in'],
+        rows: updRows,
+        instNote:'Halverton sits in parse review because "a team of ~12" is not a headcount — the extractor proposes 12 and asks, rather than writing an approximation into the ledger as fact. '
+          + bothOrAll(overdueU.length) + ' companies that never reported are also the weakest positions in the book, which is the pattern worth noticing: silence correlates with bad news. Late is tracked separately from absent, because an update 22 days behind is a different problem from one that never came.',
+        aiLabel:'Proposal · parse ' + UPD.length + ' updates', aiCost:c4(runCost(6 * 4800, 6 * 260)),
+        aiBody:'Each update\u2019s KPIs extracted with a diff against last quarter, arriving as editable proposals. Where a figure is ambiguous the extractor flags rather than guesses. Near-free per update, which is what makes parsing every one viable instead of only the interesting ones.',
+        aiAccept:'Review the batch', aiFoot:'Batch cost estimated before it runs.' },
+
+      { id:'ip3', badge:'IP3', route:'/portfolio/value-add', zone:'Value-add', arch:'FEED',
+        title:'Portfolio · Value-add', h1:'Value-add desk',
+        blurb:'Compressed shows intros made. The full ledger records support as work — intros, hours, board prep, and crucially what was promised and never delivered. The licence axiom is invest in and support companies; this is where the second half becomes auditable.',
+        sub:'Support ledger — intros, hours and outcomes per company.',
+        cmpTitle:'Value-add · ' + delivered.length + ' delivered',
+        cmpBody:hours + ' hours logged across ' + supported + ' companies. ' + owed.length + ' promised and outstanding.',
+        viewMore:'View more · ' + VAL.length + ' entries, ' + unsupported.length + ' company untouched →',
+        filters: fil(['All','Delivered','Outstanding','By company'], 0), ops:['Log support','Export','Per-company view'],
+        adds:[ { label:'Delivered', value:String(delivered.length), note:'intros, board prep, hiring' },
+          { label:'Hours logged', value:String(hours), note:'across ' + supported + ' of ' + POS.length + ' companies' },
+          { label:'Outstanding', value:String(owed.length), note:'promised, not made' },
+          { label:'No support at all', value:String(unsupported.length), note: unsupported.length ? unsupported.map(u => u.co).join(', ') : 'none' } ],
+        instTitle:'Support ledger', instMeta:'Promised entries stay visible until delivered or withdrawn',
+        cols:'1.1fr .9fr 1fr .6fr 2.2fr', head:['Company','Kind','State','Hours','What happened'],
+        rows: valRows,
+        instNote:'The ' + nWord(owed.length) + ' outstanding promises are why this ledger exists: an intro offered in June and never made is worse than one never offered, and only a record shows the difference. They sit against the same '
+          + overdueU.length + ' companies that never sent an update — the pattern is mutual neglect, not one-sided silence.',
+        aiLabel:'Proposal · quarterly support summary', aiCost:c4(runCost(7400, 900)),
+        aiBody:'Per company: what was delivered, what is owed, and hours logged — written for the LP report rather than for internal comfort, so the ' + nWord(owed.length)
+          + ' unmade promises appear rather than being rounded away. Names the ' + nWord(unsupported.length) + ' position that received nothing at all.',
+        aiAccept:'Accept summary', aiFoot:'Feeds the LP reporting pack.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

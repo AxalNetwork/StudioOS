@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .in-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .in-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .in-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .in-qa:hover{border-color:#ececf1;background:#fff}
+    .in-row:hover{background:#faf9fc}
+    .in-root.in-embedded .in-header{display:none!important}
+    @media (max-width:1080px){.in-2col{grid-template-columns:1fr!important}.in-3col{grid-template-columns:1fr!important}.in-cmp{grid-template-columns:1fr!important}}
+  
+    .in-root.in-embedded .in-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="in-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="in-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <!-- HEADER -->
+  <div class="in-header" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icBuilding }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Incorporate</h1>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Entity decisioning and formation — recommend, pay once, generate, file, and finish investor-ready.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;padding:5px 11px;border-radius:999px">{{ lifecycleLabel }}</span>
+      <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;padding:5px 11px;border-radius:999px">Unlocked · Wk 4</span>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div style="display:flex;gap:4px;padding:10px 0 16px;flex-wrap:wrap;align-items:center">
+    <button class="in-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <button class="in-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export</button>
+    <button class="in-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button onClick="{{ openPreview }}" class="in-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#7c3aed;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span>Preview as investor</button>
+  </div>
+
+  <!-- LIFECYCLE PROGRESS -->
+  <div class="in-card" style="padding:16px 22px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Formation lifecycle</div>
+      <div style="font-size:12px;color:#71717a">You are <b style="color:#7c3aed">{{ lifecyclePhase }}</b></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0">
+      <sc-for list="{{ lifecycle }}" as="s" hint-placeholder-count="6">
+        <div style="display:flex;align-items:center;flex:1;min-width:0">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">
+            <span style="width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;{{ s.dotStyle }}"><sc-if value="{{ s.done }}"><span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span></sc-if><sc-if value="{{ s.showNum }}">{{ s.num }}</sc-if></span>
+          </div>
+          <sc-if value="{{ s.connector }}"><div style="flex:1;height:2px;background:{{ s.lineColor }};margin:0 4px"></div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;margin-top:8px">
+      <sc-for list="{{ lifecycle }}" as="s" hint-placeholder-count="6">
+        <div style="flex:1;text-align:center;font-size:10.5px;font-weight:600;color:{{ s.labelColor }}">{{ s.label }}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- TOP: recommendation banner + payment card -->
+  <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px;margin-bottom:20px;align-items:stretch" class="in-2col">
+
+    <!-- RECOMMENDATION BANNER -->
+    <div style="background:linear-gradient(135deg,#1a1030,#2d1a54);border-radius:16px;padding:26px 28px;color:#fff;position:relative;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+        <span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#c4b5fd">Recommended entity</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#d9f99d;background:rgba(163,230,53,.14);padding:3px 9px;border-radius:999px">{{ confidenceLabel }} confidence</span>
+      </div>
+      <div style="font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.05">{{ recEntity }}</div>
+      <div style="font-size:13.5px;color:#d4d0e6;margin-top:10px;line-height:1.55;max-width:520px">{{ recSummary }}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:18px">
+        <sc-for list="{{ recFactors }}" as="f" hint-placeholder-count="4">
+          <span style="font-size:11px;font-weight:600;color:#e9e5f6;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 11px;border-radius:999px">{{ f }}</span>
+        </sc-for>
+      </div>
+      <sc-if value="{{ hasWarning }}">
+        <div style="display:flex;align-items:flex-start;gap:8px;margin-top:16px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:10px 13px">
+          <span style="width:15px;height:15px;flex:none;margin-top:1px;color:#fcd34d;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span>
+          <span style="font-size:11.5px;color:#fde68a;line-height:1.45">{{ warningText }}</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- PAYMENT CARD -->
+    <div class="in-card" style="padding:22px;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">One-time incorporation package</div>
+        <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;{{ payStatusStyle }}">{{ payStatusLabel }}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin:10px 0 4px">
+        <span class="in-mono" style="font-size:34px;font-weight:600;color:#1A202C">{{ totalLabel }}</span>
+        <span style="font-size:12px;color:#a1a1aa">one-time · USD</span>
+      </div>
+      <div style="font-size:11.5px;color:#71717a;margin-bottom:14px">{{ feeSplitLabel }}</div>
+      <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid #f4f4f5;padding-top:14px;flex:1">
+        <sc-for list="{{ priceLines }}" as="p" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:12px;color:{{ p.muted }}">{{ p.label }}</span>
+            <span class="in-mono" style="font-size:12px;font-weight:600;color:{{ p.valueColor }}">{{ p.value }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ isPaid }}">
+        <div style="display:flex;align-items:center;gap:8px;margin-top:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 13px">
+          <span style="width:15px;height:15px;flex:none;color:#16a34a;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>
+          <span style="font-size:12px;color:#166534">Paid {{ paidAt }} · workflow unlocked</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isUnpaid }}">
+        <button onClick="{{ pay }}" style="margin-top:16px;font-size:13.5px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:10px;padding:13px;cursor:pointer">Pay {{ totalLabel }} &amp; unlock filing</button>
+        <div style="font-size:10.5px;color:#a1a1aa;text-align:center;margin-top:8px">Payment unlocks document generation and filing. Not legal advice.</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- ENTITY COMPARISON -->
+  <div class="in-card" style="padding:22px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Entity decision · recommendation with override</div>
+        <div style="font-size:12px;color:#71717a;margin-top:3px">Auto-selected from your Spin-Out data. Override if your plans differ — we capture why.</div>
+      </div>
+      <sc-if value="{{ hasOverride }}"><span style="font-size:11px;font-weight:600;color:#b45309;background:#fffbeb;border:1px solid #fde68a;padding:5px 11px;border-radius:999px">Overridden · {{ selectedEntity }}</span></sc-if>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px" class="in-3col">
+      <sc-for list="{{ entities }}" as="e" hint-placeholder-count="3">
+        <div onClick="{{ e.select }}" style="border:1.5px solid {{ e.border }};background:{{ e.bg }};border-radius:14px;padding:18px;cursor:pointer;position:relative">
+          <sc-if value="{{ e.isRec }}"><span style="position:absolute;top:14px;right:14px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7c3aed;background:#f5f3ff;padding:3px 8px;border-radius:999px">Recommended</span></sc-if>
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+            <span style="width:20px;height:20px;border-radius:999px;border:2px solid {{ e.radioColor }};display:flex;align-items:center;justify-content:center"><sc-if value="{{ e.selected }}"><span style="width:10px;height:10px;border-radius:999px;background:#7c3aed"></span></sc-if></span>
+            <span style="font-size:15px;font-weight:700">{{ e.name }}</span>
+          </div>
+          <div style="font-size:12px;color:#52525b;line-height:1.5;margin-bottom:12px">{{ e.fit }}</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ e.points }}" as="pt" hint-placeholder-count="3">
+              <div style="display:flex;align-items:flex-start;gap:7px;font-size:11.5px;color:#3f3f46"><span style="width:13px;height:13px;flex:none;margin-top:1px;color:{{ pt.color }};display:flex" dangerouslySetInnerHTML="{{ pt.icon }}"></span>{{ pt.text }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:9px;margin-top:16px;background:#faf9fc;border:1px solid #f0eefb;border-radius:11px;padding:13px 15px">
+      <span style="width:15px;height:15px;flex:none;margin-top:1px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ icInfo }}"></span>
+      <div style="font-size:12px;color:#52525b;line-height:1.5">{{ rationaleDetail }}</div>
+    </div>
+  </div>
+
+  <!-- FORMATION EXECUTION -->
+  <div class="in-card" style="padding:22px;margin-bottom:20px;opacity:{{ workflowOpacity }};pointer-events:{{ workflowEvents }}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Formation execution · document workspace</div>
+      <sc-if value="{{ isUnpaid }}"><span style="font-size:11px;font-weight:600;color:#71717a;background:#f4f4f5;padding:5px 11px;border-radius:999px">Unlocks after payment</span></sc-if>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:640px">
+        <thead><tr style="background:#faf9fc;border-top:1px solid #f0f0f3;border-bottom:1px solid #f0f0f3">
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#71717a;padding:11px 16px;text-align:left">Document</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#71717a;padding:11px 16px;text-align:left">Source data</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#71717a;padding:11px 16px;text-align:center">Status</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#71717a;padding:11px 16px;text-align:right">Action</th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ documents }}" as="d" hint-placeholder-count="5">
+            <tr class="in-row" style="border-bottom:1px solid #f4f4f5">
+              <td style="padding:13px 16px"><div style="font-size:13px;font-weight:600;color:#1A202C">{{ d.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ d.autogen }}</div></td>
+              <td style="padding:13px 16px"><span style="font-size:11.5px;color:{{ d.srcColor }}">{{ d.source }}</span></td>
+              <td style="padding:13px 16px;text-align:center"><span style="font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;{{ d.statusStyle }}">{{ d.status }}</span></td>
+              <td style="padding:13px 16px;text-align:right"><button style="font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer;{{ d.btnStyle }}">{{ d.btn }}</button></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px" class="in-cmp">
+      <div style="border:1px solid #f0f0f3;border-radius:12px;padding:15px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><span style="width:16px;height:16px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ icShield }}"></span><span style="font-size:12.5px;font-weight:700">Registered agent</span></div>
+        <div style="font-size:12px;color:#52525b;line-height:1.5">Included — Axal-managed agent in Delaware. {{ agentFeeLabel }}. Connected to filing readiness.</div>
+      </div>
+      <div style="border:1px solid #f0f0f3;border-radius:12px;padding:15px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><span style="width:16px;height:16px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ icDoc }}"></span><span style="font-size:12.5px;font-weight:700">EIN application</span></div>
+        <div style="font-size:12px;color:#52525b;line-height:1.5">SS-4 prefilled from formation data. Files after state approval. {{ einStatusLabel }}.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILING TIMELINE -->
+  <div class="in-card" style="padding:22px;margin-bottom:20px;opacity:{{ workflowOpacity }}">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:18px">State filing tracker</div>
+    <div style="display:flex;flex-direction:column;gap:0">
+      <sc-for list="{{ filingSteps }}" as="f" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:26px 1fr auto;gap:14px;align-items:start;padding-bottom:18px;position:relative">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0">
+            <span style="width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;{{ f.dotStyle }}"><sc-if value="{{ f.done }}"><span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span></sc-if><sc-if value="{{ f.current }}"><span style="width:8px;height:8px;border-radius:999px;background:#fff"></span></sc-if></span>
+            <sc-if value="{{ f.connector }}"><div style="width:2px;height:34px;background:{{ f.lineColor }}"></div></sc-if>
+          </div>
+          <div style="padding-top:2px"><div style="font-size:13px;font-weight:600;color:{{ f.titleColor }}">{{ f.title }}</div><div style="font-size:11.5px;color:#a1a1aa;margin-top:2px">{{ f.detail }}</div></div>
+          <span style="font-size:11px;color:#a1a1aa;padding-top:3px">{{ f.time }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- UNIVERSITY IP SPECIALIST (conditional) -->
+  <sc-if value="{{ showUniIp }}">
+    <div class="in-card" style="padding:22px;margin-bottom:20px;border-color:#fde68a">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="width:28px;height:28px;border-radius:8px;background:#fffbeb;color:#b45309;display:flex;align-items:center;justify-content:center;padding:6px" dangerouslySetInnerHTML="{{ icAlert }}"></span>
+        <div style="font-size:14px;font-weight:800">Special handling · University IP assignment</div>
+        <span style="font-size:10.5px;font-weight:600;color:#b45309;background:#fffbeb;border:1px solid #fde68a;padding:3px 9px;border-radius:999px;margin-left:auto">Required before filing docs sign</span>
+      </div>
+      <div style="font-size:12.5px;color:#52525b;line-height:1.55;margin-bottom:16px">Detected from founder affiliation (TU Berlin) and deep-tech IP posture. Resolve assignment or licensing with the tech-transfer office before executing formation documents, or founder stock may be encumbered.</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <sc-for list="{{ uniIpSteps }}" as="u" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:#faf9fc;border:1px solid #f0f0f3;border-radius:10px">
+            <span style="width:16px;height:16px;flex:none;color:{{ u.color }};display:flex" dangerouslySetInnerHTML="{{ u.icon }}"></span>
+            <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:#1A202C">{{ u.title }}</div><div style="font-size:11px;color:#a1a1aa">{{ u.detail }}</div></div>
+            <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;{{ u.statusStyle }}">{{ u.status }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- COMPLETION CONSOLE -->
+  <div class="in-card" style="padding:22px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:16px">Completion console · downstream outputs</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px" class="in-cmp">
+      <sc-for list="{{ outputs }}" as="o" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:13px;border:1px solid #f0f0f3;border-radius:12px;padding:16px 18px">
+          <span style="width:36px;height:36px;flex:none;border-radius:9px;background:{{ o.iconBg }};color:{{ o.iconColor }};display:flex;align-items:center;justify-content:center;padding:8px" dangerouslySetInnerHTML="{{ o.icon }}"></span>
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">{{ o.title }}</div><div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ o.detail }}</div></div>
+          <span style="font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;{{ o.statusStyle }}">{{ o.status }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+
+<!-- INVESTOR PREVIEW MODAL -->
+<sc-if value="{{ previewOpen }}">
+  <div onClick="{{ closePreview }}" style="position:fixed;inset:0;background:rgba(24,24,27,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:720px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #f0f0f3">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span><span style="font-size:14px;font-weight:700">Investor preview · formation status</span></div>
+        <button onClick="{{ closePreview }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <div style="padding:26px 24px">
+        <div style="background:#0d0d12;border-radius:14px;padding:28px 32px;color:#fff;margin-bottom:18px">
+          <div style="font-size:11px;color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Legal entity</div>
+          <div style="font-size:24px;font-weight:800;margin-top:6px">NovaCraft AI, Inc.</div>
+          <div style="font-size:13px;color:#d4d0e6;margin-top:4px">{{ recEntity }} · State of Delaware</div>
+          <div style="display:flex;gap:24px;margin-top:18px;flex-wrap:wrap">
+            <div><div style="font-size:11px;color:#a1a1aa">Status</div><div class="in-mono" style="font-size:14px;font-weight:600;margin-top:2px">{{ investorStatus }}</div></div>
+            <div><div style="font-size:11px;color:#a1a1aa">EIN</div><div class="in-mono" style="font-size:14px;font-weight:600;margin-top:2px">{{ investorEin }}</div></div>
+            <div><div style="font-size:11px;color:#a1a1aa">Registered agent</div><div class="in-mono" style="font-size:14px;font-weight:600;margin-top:2px">Axal (DE)</div></div>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:#a1a1aa;line-height:1.5">This is the clean formation summary an investor sees in the data room — entity type, jurisdiction, filing status, registered agent, and EIN. Formation documents attach on approval.</div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { entity:'ccorp', override:false, paid:false, phase:'deciding', previewOpen:false };
+
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state;
+    const chk=ic('<polyline points="20 6 9 17 4 12"/>',2.4);
+    const warn=ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',2);
+    const dot=ic('<circle cx="12" cy="12" r="9"/>',2);
+
+    const REC='ccorp';
+    const entityMeta={
+      ccorp:{ name:'Delaware C-Corp', short:'Delaware C-Corp',
+        fit:'Standard structure for venture-scale, equity-financed startups. Expected by seed investors and required for SAFEs, priced rounds, and QSBS.',
+        points:[['Investor-standard · SAFEs and priced rounds',true],['Enables option pool + QSBS eligibility',true],['Double taxation until profitable',false]] },
+      pbc:{ name:'Public Benefit Corp', short:'Delaware PBC',
+        fit:'A C-Corp variant that binds a public benefit into governance. Fits when mission is central to company identity and investor narrative.',
+        points:[['Mission locked into charter',true],['Still venture-fundable (Delaware PBC)',true],['Extra reporting; some investors cautious',false]] },
+      llc:{ name:'LLC', short:'LLC',
+        fit:'Best for cash-flow, services, or studio businesses not raising venture equity. Simpler tax, but not suited to SAFEs or standard equity financing.',
+        points:[['Pass-through tax · simple admin',true],['No option pool / QSBS',false],['Investors will require conversion later',false]] },
+    };
+
+    const selected=st.override?st.entity:REC;
+    const hasOverride=st.override && st.entity!==REC;
+
+    const entities=['ccorp','pbc','llc'].map(k=>{ const m=entityMeta[k]; const isSel=selected===k; const isRec=k===REC;
+      return { name:m.name, fit:m.fit, isRec, selected:isSel,
+        border:isSel?'#7c3aed':'#ececf1', bg:isSel?'#faf7ff':'#fff', radioColor:isSel?'#7c3aed':'#d4d4d8',
+        points:m.points.map(([text,good])=>({text,icon:good?chk:warn,color:good?'#16a34a':'#d97706'})),
+        select:()=>this.setState({entity:k, override:k!==REC}) }; });
+
+    const phases=['deciding','paying','reviewing','filing','waiting','completed'];
+    const phaseLabels={deciding:'Deciding',paying:'Paying',reviewing:'Reviewing',filing:'Filing',waiting:'Waiting',completed:'Completed'};
+    const curIdx=phases.indexOf(st.phase);
+    const lcLabels=['Decide','Pay','Review docs','File','Await approval','Complete'];
+    const lifecycle=lcLabels.map((label,i)=>{ const done=i<curIdx; const current=i===curIdx;
+      return { label, num:i+1, showNum:!done, done, connector:i<lcLabels.length-1,
+        dotStyle: done?'background:#7c3aed;color:#fff':current?'background:#7c3aed;color:#fff;box-shadow:0 0 0 4px #ede9fe':'background:#f0f0f3;color:#a1a1aa',
+        lineColor: i<curIdx?'#7c3aed':'#f0f0f3',
+        labelColor: (done||current)?'#6d28d9':'#a1a1aa' }; });
+
+    const isPaid=st.paid; const isUnpaid=!st.paid;
+    const priceLines=[
+      { label:'Formation package (Axal service)', value:'$1,200', muted:'#52525b', valueColor:'#1A202C' },
+      { label:'Delaware state filing fee', value:'$110', muted:'#52525b', valueColor:'#1A202C' },
+      { label:'Registered agent · year 1', value:'Included', muted:'#52525b', valueColor:'#16a34a' },
+      { label:'Expedited 24h processing (add-on)', value:'+$100', muted:'#a1a1aa', valueColor:'#a1a1aa' },
+    ];
+
+    const docStatus=(k)=>({ ready:['Ready','color:#166534;background:#dcfce7'], review:['Needs review','color:#b45309;background:#fffbeb'], sign:['Needs signature','color:#5b21b6;background:#f5f3ff'], locked:['Locked','color:#71717a;background:#f4f4f5'], done:['Complete','color:#166534;background:#dcfce7'] }[k]);
+    const docsRaw=[
+      ['Certificate of Incorporation','Auto-generated','Entity + founders','ready'],
+      ['Bylaws','Auto-generated','Standard DE template','ready'],
+      ['Incorporator statement','Auto-generated','Incorporator action','ready'],
+      ['Initial board consent','Needs founder input','Board = founders','review'],
+      ['Founder IP assignment','Linked · Startups','Founder + entity','sign'],
+    ];
+    const documents=docsRaw.map(([name,autogen,source,sk])=>{ const eff= isUnpaid?'locked':sk; const s=docStatus(eff);
+      const btn = eff==='locked'?'Locked':eff==='ready'?'Preview':eff==='review'?'Review':eff==='sign'?'Sign':'View';
+      return { name, autogen, source, srcColor: isUnpaid?'#c4c4cc':'#71717a', status:s[0], statusStyle:s[1],
+        btn, btnStyle: eff==='locked'?'color:#a1a1aa;background:#f4f4f5;border:none;pointer-events:none':'color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb' }; });
+
+    const filingDefs=[
+      ['Documents prepared','Formation package generated and reviewed', isPaid?'done':'pending','Ready'],
+      ['Submitted to Delaware','Filed with Secretary of State', isPaid?'current':'pending','Est. same day'],
+      ['Processing','State review of Certificate','pending','1–3 business days'],
+      ['Formation approved','Certificate stamped and returned','pending','Est. Jul 25'],
+      ['EIN issued','IRS SS-4 processed after approval','pending','Est. Jul 26'],
+    ];
+    const filingSteps=filingDefs.map(([title,detail,state,time],i)=>{ const done=state==='done'; const current=state==='current';
+      return { title, detail, time, done, current, connector:i<filingDefs.length-1,
+        dotStyle: done?'background:#7c3aed;color:#fff':current?'background:#7c3aed;color:#fff':'background:#f0f0f3;color:#a1a1aa',
+        lineColor: done?'#7c3aed':'#f0f0f3', titleColor:(done||current)?'#1A202C':'#a1a1aa' }; });
+
+    const showUniIp=true;
+    const uiStatus=(k)=>({ done:['Done','color:#166534;background:#dcfce7'], progress:['In progress','color:#b45309;background:#fffbeb'], todo:['To do','color:#71717a;background:#f4f4f5'] }[k]);
+    const uniIpRaw=[
+      ['Confirm IP origin','Identify university-owned vs. independently developed IP','done',chk,'#16a34a'],
+      ['Tech-transfer contact','Open assignment/licensing discussion with TU Berlin TTO','progress',dot,'#d97706'],
+      ['Execute assignment','Assign or license core IP to the new entity before docs sign','todo',warn,'#a1a1aa'],
+    ];
+    const uniIpSteps=uniIpRaw.map(([title,detail,sk,icon,color])=>{ const s=uiStatus(sk); return { title, detail, icon, color, status:s[0], statusStyle:s[1] }; });
+
+    const outStatus=(k)=>({ ready:['Ready','color:#166534;background:#dcfce7'], pending:['Pending','color:#b45309;background:#fffbeb'], locked:['After approval','color:#71717a;background:#f4f4f5'] }[k]);
+    const outputs=[
+      { title:'Cap Table', detail:'Entity + share structure seed founder stock issuance', icon:ic('<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>'), iconBg:'#f5f3ff', iconColor:'#7c3aed', status: isPaid?'ready':'locked' },
+      { title:'Co-founder Agreement', detail:'Execution unlocks once entity governing law is set', icon:ic('<path d="M11 17l-1.7-1.7a2.5 2.5 0 0 0-3.5 0l-.6.6L2 12.7 8.7 6l3 3"/><path d="M13 15l2 2a2 2 0 0 0 3-3l-3.5-3.5"/><path d="M16 14l1.5 1.5a2 2 0 0 0 3-3L14 6l-3 3"/>'), iconBg:'#fffbeb', iconColor:'#b45309', status: isPaid?'pending':'locked' },
+    ].map(o=>{ const s=outStatus(o.status); return { ...o, status:s[0], statusStyle:s[1] }; });
+
+    const recM=entityMeta[REC];
+    return {
+      embeddedClass: this.props.embedded ? 'in-embedded' : '',
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icBuilding:ic('<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="7" x2="9" y2="7"/><line x1="15" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="9" y2="11"/><line x1="15" y1="11" x2="15" y2="11"/><path d="M9 22v-4h6v4"/>'),
+      icCheck:chk, icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
+      icInfo:ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',2),
+      icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
+      icShield:ic('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>'),
+      icDoc:ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'),
+      lifecycleLabel: phaseLabels[st.phase], lifecyclePhase: phaseLabels[st.phase].toLowerCase(), lifecycle,
+      recEntity:recM.name, confidenceLabel:'High',
+      recSummary:'NovaCraft AI is a venture-scale, equity-financed deep-tech startup raising on SAFEs. A Delaware C-Corp is the investor-standard structure and a prerequisite for your current round.',
+      recFactors:['Equity-financed','2 founders','Deep-tech IP','Raising a SAFE round','US-based'],
+      hasWarning:true, warningText:'University-originated IP detected — resolve assignment with the tech-transfer office before signing formation documents.',
+      hasOverride, selectedEntity: entityMeta[st.entity].short, entities,
+      rationaleDetail: hasOverride
+        ? 'You overrode the recommendation. '+entityMeta[st.entity].name+' changes your financing and equity setup — confirm this matches your fundraising intent before filing.'
+        : 'Why not the others: an LLC blocks standard SAFEs/priced rounds and QSBS; a PBC is fundable but adds reporting and isn\u2019t needed unless public benefit is core to your identity. C-Corp keeps the round clean.',
+      payStatusLabel: isPaid?'Paid':'Awaiting payment', payStatusStyle: isPaid?'color:#166534;background:#dcfce7':'color:#b45309;background:#fffbeb',
+      totalLabel:'$1,310', feeSplitLabel:'$1,200 service + $110 state filing · agent included',
+      priceLines, isPaid, isUnpaid, paidAt:'Jul 21', pay:()=>this.setState({paid:true, phase:'reviewing'}),
+      workflowOpacity: isPaid?'1':'.55', workflowEvents: isPaid?'auto':'none',
+      documents, agentFeeLabel:'$0 year 1, then $99/yr', einStatusLabel: isPaid?'SS-4 prefilled':'Prepares after payment',
+      filingSteps,
+      showUniIp, uniIpSteps,
+      outputs,
+      previewOpen:st.previewOpen, openPreview:()=>this.setState({previewOpen:true}), closePreview:()=>this.setState({previewOpen:false}),
+      investorStatus: isPaid?'Filing':'Pre-formation', investorEin: isPaid?'Pending':'—',
+      stop:(e)=>e.stopPropagation(),
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'in-back'},'*');}catch(x){}},
+    };
+  }
+}
+</script>
+</body>
+</html>

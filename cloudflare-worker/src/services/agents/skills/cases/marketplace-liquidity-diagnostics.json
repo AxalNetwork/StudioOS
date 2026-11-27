@@ -1,0 +1,64 @@
+{
+  "skill": "marketplace-liquidity-diagnostics",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "record_id": "marketplace-definition-02",
+        "marketplace": "Scheduled specialist consultations",
+        "demand_unit": "Eligible consultation request",
+        "qualifying_match": "Confirmed appointment within 72 hours",
+        "matching_window_hours": 72,
+        "segments": [
+          "North",
+          "South"
+        ]
+      },
+      "grow.records": {
+        "record_id": "matching-cohort-10",
+        "cohort_start": "2026-10-01",
+        "cohort_end": "2026-10-28",
+        "as_of": "2026-11-01",
+        "segments": [
+          {
+            "region": "North",
+            "complete_window_requests": 20,
+            "confirmed_matches": 5,
+            "registered_suppliers": 40
+          },
+          {
+            "region": "South",
+            "complete_window_requests": 10,
+            "confirmed_matches": 8,
+            "registered_suppliers": 8
+          }
+        ],
+        "recent_requests": {
+          "region": "North",
+          "arrived_at": "2026-10-31",
+          "count": 4,
+          "status": "pending",
+          "complete_observation": false
+        },
+        "match_event_timestamps": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "25%",
+      "80%",
+      "pending"
+    ],
+    "must_say_not_recorded": [
+      "time to match"
+    ],
+    "must_not_include": [
+      "There is no liquidity problem",
+      "Matches are guaranteed",
+      "There are 34 completed matching windows"
+    ]
+  }
+}

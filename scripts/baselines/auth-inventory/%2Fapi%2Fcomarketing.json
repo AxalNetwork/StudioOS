@@ -1,0 +1,17 @@
+{
+  "GET /api/comarketing/me/pitches/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/comarketing/me/pitches/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/comarketing/me/pitches/:uid/withdraw": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

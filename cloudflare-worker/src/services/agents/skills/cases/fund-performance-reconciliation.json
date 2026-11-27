@@ -1,0 +1,50 @@
+{
+  "skill": "fund-performance-reconciliation",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "record_id": "FUND-Q3",
+        "fund": "Synthetic Fund I",
+        "as_of": "2026-09-30",
+        "currency": "USD",
+        "basis": "net LP fund level",
+        "paid_in_cents": 100000000,
+        "distributions_cents": 20000000,
+        "residual_nav_cents": 90000000,
+        "nav_source_id": "NAV-Q3",
+        "dated_cash_flows": null,
+        "irr_convention": null
+      },
+      "raise.records": {
+        "record_id": "CAPITAL-Q3",
+        "fund": "Synthetic Fund I",
+        "as_of": "2026-09-30",
+        "currency": "USD",
+        "basis": "net LP fund level",
+        "commitments_cents": 200000000,
+        "paid_in_cents": 100000000,
+        "nav_approval_record_id": "NAV-Q3"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "DPI 0.20x",
+      "RVPI 0.90x",
+      "TVPI 1.10x",
+      "net LP"
+    ],
+    "must_say_not_recorded": [
+      "IRR",
+      "dated cash flows"
+    ],
+    "must_not_include": [
+      "TVPI 0.55x",
+      "Future returns are guaranteed",
+      "IRR is 10%"
+    ]
+  }
+}

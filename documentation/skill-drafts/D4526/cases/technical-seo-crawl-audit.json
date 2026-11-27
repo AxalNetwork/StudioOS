@@ -1,0 +1,41 @@
+{
+  "skill": "technical-seo-crawl-audit",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "url_path": "/pricing",
+        "http_status": 200,
+        "robots": "noindex",
+        "intended_indexable": true,
+        "search_index_status": null
+      },
+      "github.repos": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "/pricing",
+      "noindex",
+      "200"
+    ],
+    "must_say_not_recorded": [
+      "search index status"
+    ],
+    "must_not_include": [
+      "Google has indexed this page"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why search index status is missing rather than inventing it.",
+    "Do not assert: Google has indexed this page.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "/pricing; noindex; 200. search index status: Not recorded. Human review required."
+}

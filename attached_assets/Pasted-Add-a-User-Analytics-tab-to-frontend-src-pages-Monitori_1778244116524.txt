@@ -1,0 +1,52 @@
+Add a "User Analytics" tab to frontend/src/pages/MonitoringPage.jsx. Admin-only.
+Provides cohort + per-user metrics with CSV/PDF export for financial, technical, and
+management decisions.
+
+Worker endpoints (cloudflare-worker/src/routes/monitoring.ts — guarded by requireAdmin
+AND Cloudflare Access from Prompt T3):
+  GET /api/monitoring/analytics/overview?from=&to=
+        → { active_users, new_signups, conversion_to_paid, mrr, arr, churn_rate,
+            avg_session_minutes, p50/p95 latency, error_rate, top_pages }
+  GET /api/monitoring/analytics/cohorts?metric=retention|revenue&granularity=week|month
+  GET /api/monitoring/analytics/users?role=&tier=&search=&limit=&offset=
+        → table of users with: last_login, sessions_30d, projects, tier, lifetime_value
+  GET /api/monitoring/analytics/user/:id
+        → drill-down: per-feature usage, billing history, support tickets, error count
+  GET /api/monitoring/analytics/financial?from=&to=
+        → { mrr_breakdown_by_tier, new_mrr, expansion_mrr, churn_mrr, ltv_by_cohort }
+  GET /api/monitoring/analytics/technical?from=&to=
+        → { error_rate_by_route, p50/p95/p99 by route, queue_depth, dlq_count,
+            slow_queries, top_errors }
+  POST /api/monitoring/analytics/export
+        body { report: 'overview'|'financial'|'technical'|'management',
+                format: 'csv'|'pdf', from, to, filters }
+        → returns { download_url } (R2 presigned, 24h)
+
+Data sources:
+- Workers Analytics Engine (request-level latency + error data — wire it in
+  if not already)
+- D1: users, projects, deals, activity_logs, billing tables
+- R2: existing tail-worker logs for technical metrics
+
+Frontend (MonitoringPage.jsx):
+- New "Analytics" tab. Sub-tabs: Overview, Users, Financial, Technical, Management.
+- Date-range picker (default last 30 days).
+- Each chart: lightweight (recharts). Each table: sortable + paginated.
+- Two action buttons per sub-tab: "Export CSV" and "Export PDF" → call the export
+  endpoint, then download from the returned URL.
+- For PDF, server-side use Cloudflare Browser Rendering (or a simple HTML→PDF service)
+  to render a printable report template.
+
+Privacy:
+- All endpoints requireAdmin.
+- PII redaction switch: "View as anonymized" toggle that hides emails/names but keeps
+  IDs.
+- Every export request is written to admin_audit_log (admin_user_id, report_type,
+  filters_json, exported_at, download_url). Show this log on a "Recent Exports" panel.
+
+Acceptance:
+- Admin sees analytics tab. Non-admin users get 403.
+- Overview shows real numbers (not zeros). MRR matches Stripe.
+- CSV export downloads with correct columns.
+- PDF export renders a styled report (logo, date range, sections, charts as images).
+- All exports recorded in admin_audit_log.

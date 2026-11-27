@@ -1,0 +1,22 @@
+{
+  "DELETE /api/settings/founder/invites/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/settings/headshot/:uid": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/settings/email-change/confirm": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/settings/email-change/revoke": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}

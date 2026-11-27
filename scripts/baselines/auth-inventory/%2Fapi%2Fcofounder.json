@@ -1,0 +1,22 @@
+{
+  "DELETE /api/cofounder/interest/:user_uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/cofounder/connections/:uid/nda": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/cofounder/matches": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "POST /api/cofounder/me/preferences": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  }
+}

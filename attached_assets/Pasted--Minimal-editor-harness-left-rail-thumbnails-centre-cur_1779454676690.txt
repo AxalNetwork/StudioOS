@@ -1,0 +1,90 @@
+// Minimal editor harness — left rail (thumbnails), centre (current slide),
+// right rail (template settings). All slides editable inline; saves on blur.
+
+import React, { useState, useMemo } from 'react';
+import { DeckSpec, SlideSpec } from './types';
+import { Slide, brandingFor } from './SlidePrimitives';
+import { autofillSlide, PlatformContext } from './autofill';
+
+type EditorProps = {
+  template: DeckSpec;
+  context: PlatformContext;
+  initialData?: Record<string, Record<string, any>>;   // slide.key → overrides
+  onChange?: (data: Record<string, Record<string, any>>) => void;
+};
+
+export const DeckEditor: React.FC<EditorProps> = ({
+  template, context, initialData = {}, onChange,
+}) => {
+  const [current, setCurrent] = useState(0);
+  const [data, setData] = useState(initialData);
+
+  const brand = useMemo(
+    () => brandingFor(template.branding, context.projects?.brand_palette),
+    [template.branding, context.projects?.brand_palette],
+  );
+
+  const allSlides: SlideSpec[] = [...template.slides, ...(template.appendix || [])];
+  const slide = allSlides[current];
+  const filled = useMemo(
+    () => autofillSlide(slide, context, data[slide.key] || {}),
+    [slide, context, data],
+  );
+
+  const onEdit = (field: string, value: string) => {
+    setData((prev) => {
+      const next = { ...prev, [slide.key]: { ...(prev[slide.key] || {}), [field]: value } };
+      onChange?.(next);
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 280px', height: '100vh' }}>
+      <aside style={{ overflowY: 'auto', borderRight: '1px solid #E2E8F0', padding: 12 }}>
+        {allSlides.map((s, i) => (
+          <button
+            key={s.key}
+            onClick={() => setCurrent(i)}
+            style={{
+              width: '100%', textAlign: 'left', padding: 8, marginBottom: 4,
+              background: i === current ? '#EDE9FE' : 'transparent',
+              border: '1px solid #E2E8F0', borderRadius: 6, cursor: 'pointer',
+            }}>
+            <div style={{ fontSize: 11, color: '#64748B' }}>{i + 1}</div>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>{s.title || s.type}</div>
+          </button>
+        ))}
+      </aside>
+      <main style={{ background: '#F8FAFC', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ transform: 'scale(0.42)', transformOrigin: 'center' }}>
+          <Slide
+            slide={slide}
+            data={filled}
+            brand={brand}
+            pageNumber={current + 1}
+            footer={template.branding.footer}
+            editable
+            onEdit={onEdit}
+          />
+        </div>
+      </main>
+      <aside style={{ overflowY: 'auto', borderLeft: '1px solid #E2E8F0', padding: 16 }}>
+        <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1 }}>
+          Template
+        </div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>{template.label}</div>
+        <div style={{ fontSize: 13, color: '#475569', marginBottom: 16 }}>
+          {template.description}
+        </div>
+        <div style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: 1 }}>
+          Slide
+        </div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>{slide.title || slide.type}</div>
+        {slide.notes && (
+          <div style={{ fontSize: 12, color: '#64748B' }}>{slide.notes}</div>
+        )}
+      </aside>
+    </div>
+  );
+};

@@ -1,0 +1,65 @@
+You are working in the StudioOS monorepo. Architecture truth lives in
+CLAUDE.md: the Cloudflare Worker at cloudflare-worker/ is production
+(axal.vc), the FastAPI at backend/ is Replit-dev-only, frontend/ ships to
+Cloudflare Pages. D1 is the canonical store. Make every server change in
+BOTH the worker (production) AND backend/app/api/routes/brand.py (dev mirror).
+
+GOAL — Upgrade the Brand Builder so founders can:
+  1. Upload an existing logo file (PNG / JPG / SVG, ≤512 KB) as an
+     alternative to AI generation. Both options coexist in the same step.
+  2. Get an AI-suggested color palette (primary / background / ink /
+     secondary / accent — 5 swatches) seeded from their description, with a
+     "Suggest palette" button that re-rolls. Add light/dark contrast
+     warnings (WCAG AA against ink + background).
+  3. Iterate on taglines independently of brand-name generation. Add a
+     "Generate taglines" panel with three factor inputs: AUDIENCE
+     (free text), TONE (dropdown: bold / warm / technical / playful /
+     authoritative), MARKET ANGLE (free text, e.g. "vs. incumbents",
+     "category creation"). Output 6 tagline candidates; clicking one fills
+     draft.tagline / draft.headline.
+
+FILES TO EDIT:
+  - frontend/src/pages/BrandBuilderPage.jsx — add Upload tab in the logo
+    column (existing column at line 237–308), palette suggester next to
+    color pickers (line 267–292), tagline iterator panel below the name +
+    headline inputs (line 309–329).
+  - frontend/src/lib/api.js — add `brandUploadLogo(projectId, file)` (uses
+    FormData / multipart), `brandSuggestPalette({ description, sector,
+    seed_color })`, `brandSuggestTaglines({ name, description, audience,
+    tone, market_angle })`. Match the existing helper style (line 1020–1026).
+  - cloudflare-worker/src/routes/brand.ts — three new routes:
+      POST /api/brand/logo/upload (multipart) — validate MIME + size, store
+        in R2 if bound, else inline as base64 data URL (≤200 KB limit).
+        Return { url } compatible with the existing draft.logo_url field.
+      POST /api/brand/palette/suggest — calls Claude with the description
+        and (optional) seed_color, returns
+        { primary, background, ink, secondary, accent } (hex strings).
+        Heuristic fallback when no key: pick from a curated 12-palette
+        bank keyed by hash(description).
+      POST /api/brand/tagline/suggest — calls Claude with the factor inputs,
+        returns { taglines: string[6], ai_generated: bool }. Heuristic
+        fallback: template-based generator that interpolates audience +
+        tone + market_angle into 6 known patterns.
+  - cloudflare-worker/sql/migrations/080_brand_kit_expansion.sql (NEW):
+      ALTER TABLE landing_pages ADD COLUMN palette_secondary TEXT;
+      ALTER TABLE landing_pages ADD COLUMN palette_accent TEXT;
+      ALTER TABLE landing_pages ADD COLUMN logo_asset_id TEXT;
+  - cloudflare-worker/src/services/landingPageSchema.ts — extend the lazy
+    bootstrap to add the three new columns idempotently (follow the
+    existing pattern in that file).
+  - backend/app/api/routes/brand.py — mirror upload / palette / tagline
+    routes with identical payloads (use the file's existing OpenAI helper).
+    Mirror the migration in backend/app/models/migrations.py.
+
+VALIDATION:
+  - Frontend type check: cd frontend && npm run typecheck (or build).
+  - Drift smoke test: npm run test:drift from repo root — must pass.
+  - Manual: run the dev FastAPI, upload a 200 KB PNG, confirm it appears in
+    the preview and is round-trippable via brandSaveLanding +
+    brandGetLanding. Confirm "Suggest palette" updates all five color
+    inputs. Confirm tagline iterator returns 6 candidates and one click
+    populates draft.tagline.
+
+COMMIT MESSAGE: "Brand kit: logo upload, palette suggester, tagline iterator"
+
+Push to branch {branch} and open a draft PR.

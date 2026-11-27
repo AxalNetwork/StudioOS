@@ -1,0 +1,85 @@
+You are working in the StudioOS monorepo (see CLAUDE.md). The Cloudflare
+Worker is production; backend/ is dev-only. Mirror all server changes in
+both.
+
+CONTEXT — Founders report the waitlist "doesn't work." The route exists at
+cloudflare-worker/src/routes/brand.ts:347 (`POST /api/brand/landing/:slug/
+waitlist`) and the published landing form posts to it correctly. The two
+real issues are:
+  (a) Founders test before clicking Publish. Unpublished landings return
+      404 on /landing/:slug, which looks like "broken." Add a private
+      preview URL that works without publish.
+  (b) There is no segmentation: customers, partners, and investors all
+      submit the same form, so the waitlist preview shows undifferentiated
+      emails.
+
+GOAL — Add audience-segmented waitlist with three tabs (Customer
+discovery / Partner / Investor), and fix the unpublished-preview gap.
+
+FILES TO EDIT:
+  - cloudflare-worker/sql/migrations/081_waitlist_audience.sql (NEW):
+      ALTER TABLE waitlist_signups ADD COLUMN audience TEXT
+        CHECK(audience IN ('customer','partner','investor') OR audience IS NULL);
+      ALTER TABLE landing_pages ADD COLUMN audience_customer_headline TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_customer_body TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_customer_cta TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_partner_headline TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_partner_body TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_partner_cta TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_investor_headline TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_investor_body TEXT;
+      ALTER TABLE landing_pages ADD COLUMN audience_investor_cta TEXT;
+      ALTER TABLE landing_pages ADD COLUMN preview_token TEXT;
+      CREATE INDEX IF NOT EXISTS idx_landing_preview_token
+        ON landing_pages(preview_token);
+  - cloudflare-worker/src/services/landingPageSchema.ts — add the new
+    columns to the lazy bootstrap.
+  - cloudflare-worker/src/routes/brand.ts:
+      • Extend the PUT /landing/by-project/:pid handler (line ~270) to
+        accept and persist the nine audience_* fields. Auto-generate a
+        `preview_token` (16-byte hex) on first insert if NULL.
+      • Update `rowToLanding()` to return all new fields.
+      • Update `POST /landing/:slug/waitlist` (line 347) to read
+        `body.audience` and persist it; validate it is one of
+        ('customer','partner','investor') or null.
+      • Update GET /landing/by-project/:pid/waitlist (line 325) to
+        SELECT `audience` and to support a `?audience=` filter.
+      • Add GET /api/brand/landing/by-project/:pid/preview-url — returns
+        { url: "/landing/preview/{token}" }.
+      • Update `renderLandingHtml()` (line 387) to additionally accept a
+        preview token route. Render unpublished rows when accessed via
+        token; render published rows by slug. The template (next task)
+        will render three audience tabs.
+      • Add a noindex `<meta>` tag for preview-token responses.
+  - cloudflare-worker/src/index.ts — register
+    `app.get('/landing/preview/:token', renderLandingPreviewHtml)` near the
+    existing `/landing/:slug` route (line 558).
+  - frontend/src/pages/BrandBuilderPage.jsx:
+      • Add an "Audience copy" section (new step between Step 3 and Step 4)
+        with three sub-panels (Customer discovery / Partner / Investor),
+        each with headline / body / cta fields. Provide defaults seeded
+        from draft.headline / draft.subheadline / draft.cta_text so a
+        founder who skips this still ships a coherent page.
+      • Show the preview URL in Step 4 alongside the public URL, with a
+        clear "Private — share for feedback only" label.
+      • Waitlist preview at line 382 — add an audience filter dropdown
+        (All / Customer / Partner / Investor) and show a small audience
+        badge next to each email.
+  - frontend/src/lib/api.js — extend `brandSaveLanding` to pass through
+    audience_* fields; add `brandGetPreviewUrl(projectId)`; extend
+    `brandListWaitlist(projectId, { audience })` to forward the filter.
+  - backend/app/api/routes/brand.py — mirror schema changes, new routes,
+    audience persistence, preview-token logic. Mirror migration in
+    backend/app/models/migrations.py.
+
+VALIDATION:
+  - npm run test:drift must pass (no frontend method without a worker
+    route).
+  - Manually save a draft without publishing, copy the preview URL, open
+    in a private window — must render. Submit waitlist with audience set;
+    verify it appears in the founder's waitlist preview with the right
+    badge. Verify the audience filter narrows the list.
+
+COMMIT MESSAGE: "Waitlist: audience segmentation + private preview URL"
+
+Push to branch {branch} and open a draft PR.

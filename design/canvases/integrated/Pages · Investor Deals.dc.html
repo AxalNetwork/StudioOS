@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#4338ca;background:#f5f5ff;border-color:#c7d2fe;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f5f5ff;border-color:#c7d2fe;color:#4338ca;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f5f5ff;border:1px solid #c7d2fe;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4338ca;background:#e8e8ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #4338ca;background:#4338ca;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .lock{font-size:9px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:2px 5px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="4">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /deals</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#4338ca;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span><sc-if value="{{ n.locked }}"><span class="lock">Inst.</span></sc-if></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Deals</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="4">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#4338ca;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="indigo" page="{{ p.railPage }}" hint-size="100%,580px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const N = { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff' };
+    // CANONICAL Investor shell — 9 rows, matching Detail Layer Canvas I_ROWS.
+    // 'Fund' is the Institutional add-on: rendered locked, never hidden.
+    const ROWS = ['Home','Deals','Portfolio','Axal VC Fund','Fund','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Deals' ? 'nav on' : 'nav',
+      locked: label === 'Fund',
+      style: label === 'Deals' ? 'color:'+N.deep+';background:'+N.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+N.ink
+        : (label === 'Fund' ? 'color:#615c6e' : '') }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Pipeline','Screening','Commit','Closing'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Pipeline' }));
+
+    const pill = (t) => {
+      const M = { 'Closed':['#ecfdf5','#047857','#a7f3d0'], 'Wired':['#ecfdf5','#047857','#a7f3d0'],
+        'Approved':['#ecfdf5','#047857','#a7f3d0'], 'Signed':['#ecfdf5','#047857','#a7f3d0'],
+        'Cleared':['#ecfdf5','#047857','#a7f3d0'], 'Received':['#ecfdf5','#047857','#a7f3d0'],
+        'Diligence':['#f5f5ff','#3730a3','#c7d2fe'], 'IC':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Term sheet':['#f5f5ff','#3730a3','#c7d2fe'], 'First meeting':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Conditions':['#fffbeb','#92400e','#fde68a'], 'Stale':['#fffbeb','#92400e','#fde68a'],
+        'Pending':['#fffbeb','#92400e','#fde68a'], 'Flag':['#fffbeb','#92400e','#fde68a'],
+        'Passed':['#fef2f2','#b91c1c','#fecaca'], 'Overdue':['#fef2f2','#b91c1c','#fecaca'],
+        'Recused':['#f4f4f6','#615c6e','#e4e4e8'], 'Sourced':['#f4f4f6','#615c6e','#e4e4e8'],
+        'Not started':['#f4f4f6','#615c6e','#e4e4e8'], 'Abstain':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Not started'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+
+    // ══ Deals curation rate — Llama 3.3 70B Fast, as the rail declares. Every AI cost on these
+    // four pages computes from it, so no figure can imply a model the rail does not show. ══
+    const P_IN = 0.293, P_OUT = 2.253;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * P_IN + tout / 1e6 * P_OUT;
+    const memoCost = c4(runCost(21400, 1180));    // screening memo from a dropped deck
+    const icMemoCost = c4(runCost(34600, 2240));  // IC memo — whole pipeline in context
+    const coverCost = c4(runCost(12800, 760));    // closing cover note
+
+    // ══ ONE pipeline. Every count, total and conversion figure on all four pages derives here. ══
+    const SLA_AMBER = 14, SLA_RED = 30;
+    const DEALS = [
+      { co:'Novacraft Labs', sector:'Dev tools', stage:'Term sheet', ask:435000, days:6, owner:'GL', src:'Spin-Out Lab' },
+      { co:'Halverton', sector:'B2B SaaS', stage:'Diligence', ask:600000, days:19, owner:'GL', src:'Inbound' },
+      { co:'Kelp Bio', sector:'Bio tools', stage:'Diligence', ask:750000, days:34, owner:'—', src:'Referral' },
+      { co:'Aperture', sector:'Data infra', stage:'IC', ask:500000, days:4, owner:'AO', src:'Spin-Out Lab' },
+      { co:'Thornfield', sector:'Fintech', stage:'First meeting', ask:400000, days:11, owner:'AO', src:'Event' },
+      { co:'Lumen Works', sector:'Climate', stage:'Sourced', ask:300000, days:41, owner:'—', src:'Cold' }
+    ];
+    const PASSED = [
+      { co:'Brightline', reason:'Valuation', note:'$14M pre at pre-revenue. Revisit at a lower mark.' },
+      { co:'Corvid AI', reason:'Too early', note:'No customers. Asked them back at five paying.' },
+      { co:'Stagerail', reason:'Outside thesis', note:'Consumer marketplace. Not our mandate.' },
+      { co:'Vantidge', reason:'Team', note:'Solo founder, no technical depth, no hire plan.' }
+    ];
+    const totalAsk = DEALS.reduce((a, d) => a + d.ask, 0);
+    const stale = DEALS.filter(d => d.days > SLA_AMBER);
+    const red = DEALS.filter(d => d.days > SLA_RED);
+    const unassigned = DEALS.filter(d => d.owner === '—');
+    const fromLab = DEALS.filter(d => d.src === 'Spin-Out Lab').length;
+    const slaPill = (d) => d.days > SLA_RED ? 'Overdue' : (d.days > SLA_AMBER ? 'Stale' : null);
+    const dealRows = DEALS.map(d => ({ cells:[
+      cell(d.co), cell(d.sector), cell('', { pill:d.stage }), cell(usd(d.ask)),
+      cell(d.days + ' d', { pill: slaPill(d) }), cell(d.owner === '—' ? 'unassigned' : d.owner)
+    ]}));
+    // Pass reasons are a taxonomy, so the tally is a fact about the fund, not a guess.
+    const byReason = {};
+    PASSED.forEach(p => { byReason[p.reason] = (byReason[p.reason] || 0) + 1; });
+    const passRows = PASSED.map(p => ({ cells:[ cell(p.co), cell('', { pill:'Passed' }), cell(p.reason), cell(p.note) ]}));
+
+    // ══ ONE IC vote. Quorum and outcome derive from it, never asserted. ══
+    const PARTNERS = [
+      { p:'G. Lauzier', vote:'Approve', why:'Traction is the strongest in the pipeline.' },
+      { p:'A. Osei', vote:'Conditions', why:'Approve subject to the IP chain being cleared.' },
+      { p:'M. Vega', vote:'Approve', why:'Sector fit and a warm reference from a portfolio founder.' },
+      { p:'D. Raman', vote:'Recused', why:'Angel in the company. Conflict declared before the memo circulated.' },
+      { p:'L. Zhang', vote:'Pending', why:'Has not voted. Quorum already met without them.' }
+    ];
+    const eligible = PARTNERS.filter(v => v.vote !== 'Recused').length;
+    const cast = PARTNERS.filter(v => v.vote !== 'Recused' && v.vote !== 'Pending').length;
+    const QUORUM = 3;
+    const approvals = PARTNERS.filter(v => v.vote === 'Approve' || v.vote === 'Conditions').length;
+    const quorumMet = cast >= QUORUM;
+    const voteRows = PARTNERS.map(v => ({ cells:[ cell(v.p), cell('', { pill:v.vote }), cell(v.why) ]}));
+
+    // ══ ONE closing checklist. Completion derives from it. ══
+    const CLOSE = [
+      { item:'Term sheet countersigned', state:'Signed', who:'Both', note:'Executed Aug 22.' },
+      { item:'IP chain of title cleared', state:'Pending', who:'Counsel', note:'The IC condition. Blocks the wire.' },
+      { item:'SAFE executed', state:'Signed', who:'Both', note:'YC standard, $8M cap.' },
+      { item:'KYB on the entity', state:'Cleared', who:'Ops', note:'Delaware good standing confirmed.' },
+      { item:'Wire instructions verified', state:'Cleared', who:'Ops', note:'Called the CFO to confirm. Never email-only.' },
+      { item:'Funds transferred', state:'Not started', who:'Ops', note:'Held until the IP condition clears.' }
+    ];
+    const done = CLOSE.filter(c => c.state === 'Signed' || c.state === 'Cleared').length;
+    const blocking = CLOSE.filter(c => c.state === 'Pending').length;
+    const closeRows = CLOSE.map(c => ({ cells:[ cell(c.item), cell('', { pill:c.state }), cell(c.who), cell(c.note) ]}));
+
+    const PAGES = [
+      { id:'id1', badge:'ID1', route:'/deals/pipeline', zone:'Pipeline', arch:'WORK BOARD', railPage:'Deals',
+        title:'Deals · Pipeline', h1:'Pipeline',
+        blurb:'Compressed shows stage counts. The full board adds configurable stages, saved views and velocity — plus the stale-deal flag, which is the actual product: pipeline hygiene is what a deal CRM is for.',
+        sub:'Stage config, saved views and velocity analytics.',
+        cmpTitle:'Pipeline · ' + DEALS.length + ' live', cmpBody:usd(totalAsk) + ' in asks. ' + stale.length + ' past the ' + SLA_AMBER + '-day SLA.',
+        viewMore:'View more · ' + DEALS.length + ' live, ' + PASSED.length + ' passed →',
+        filters: fil(['All stages','Mine','Unassigned','Stale','Passed'], 0), ops:['Configure stages','Save view','Export'],
+        adds:[ { label:'Live deals', value:String(DEALS.length), note:usd(totalAsk) + ' in asks' },
+          { label:'Past SLA', value:String(stale.length), note:red.length + ' past ' + SLA_RED + ' days' },
+          { label:'Unassigned', value:String(unassigned.length), note:'both are stale' },
+          { label:'From the Lab', value:String(fromLab), note:'proprietary sourcing' } ],
+        instTitle:'Pipeline board', instMeta:'Amber at ' + SLA_AMBER + ' days in stage, red at ' + SLA_RED,
+        cols:'1.1fr .9fr 1.1fr .9fr .9fr .7fr', head:['Company','Sector','Stage','Ask','In stage','Owner'],
+        rows: dealRows,
+        instNote:'The ' + unassigned.length + ' unassigned deals are also the two oldest, which is not a coincidence — a deal with no owner is a deal nobody is moving. Kelp Bio at 34 days in diligence and Lumen Works at 41 in sourced are the pipeline\u2019s real state, and a stage count cannot say that.',
+        aiLabel:'Proposal · ' + stale.length + ' stale-deal notes', aiCost:stale.length + ' × per-note rate',
+        aiBody:'One note per stale deal: last recorded activity, what is blocking, and the honest option — assign an owner or pass and record the reason. Two of the three have had no activity at all since sourcing.',
+        aiAccept:'Review the ' + stale.length, aiFoot:'Nothing changes stage until you accept.' },
+
+      { id:'id2', badge:'ID2', route:'/deals/screening', zone:'Screening', arch:'ANALYTICS', railPage:'Deals',
+        title:'Deals · Screening', h1:'Screening desk',
+        blurb:'Compressed shows the latest score. The full page adds batch runs, rubric configuration and red-flag rules — so a score is the repeatable output of a stated rubric rather than an opinion with a number attached.',
+        sub:'Batch scoring runs, rubric config and red-flag rules.',
+        cmpTitle:'Screening · 4 of ' + DEALS.length + ' scored', cmpBody:'Halverton 74, Aperture 68. 2 flags open, both material.',
+        viewMore:'View more · rubric, 6 dimensions, ' + PASSED.length + ' pass reasons →',
+        filters: fil(['Scored','Rubric','Red flags','Pass reasons'], 0), ops:['New batch run','Edit rubric','Export'],
+        adds:[ { label:'Scored', value:'4 of ' + DEALS.length, note:'2 not yet screened' },
+          { label:'Rubric', value:'6 dims', note:'weights sum to 100' },
+          { label:'Open flags', value:'2', note:'severity: material' },
+          { label:'Pass taxonomy', value:Object.keys(byReason).length + ' reasons', note:PASSED.length + ' passes recorded' } ],
+        instTitle:'Pass reasons — the fund\u2019s memory', instMeta:'Queryable · a pass is data, not a deletion',
+        cols:'1.1fr .9fr 1fr 1.9fr', head:['Company','State','Reason','Note'],
+        rows: passRows,
+        instNote:'Passes are kept because they are the most queryable thing a fund owns — "show everything we passed on valuation" is a real question, and ' + (byReason['Valuation'] || 0)
+          + ' of these ' + PASSED.length + ' answer it. Two carry an explicit re-entry condition, which turns a no into a maybe with a date on it.',
+        aiLabel:'Proposal · screening memo from a dropped deck', aiCost:memoCost,
+        aiBody:'Drafted against the six-dimension rubric with page references back into the deck, so every claim in the memo can be checked. Where the deck is silent on a dimension the memo says so rather than scoring it zero.',
+        aiAccept:'Open the memo', aiFoot:'Page-referenced receipts throughout.' },
+
+      { id:'id3', badge:'ID3', route:'/deals/commit', zone:'Commit', arch:'LEDGER', railPage:'Deals',
+        title:'Deals · Commit', h1:'Commit room',
+        blurb:'Compressed shows the vote tally. The full ledger adds every vote with its rationale, the conflict declarations, the allocation math and the minutes — the artifact a fund shows its LPs to prove process.',
+        sub:'IC votes, memos, allocation math and minutes.',
+        cmpTitle:'Aperture · IC ' + (quorumMet ? 'quorum met' : 'awaiting quorum'),
+        cmpBody:cast + ' of ' + eligible + ' eligible voted, 1 recused. Approved with conditions.',
+        viewMore:'View more · ' + PARTNERS.length + ' partners, rationales and minutes →',
+        filters: fil(['This deal','All decisions','Conditions','Minutes'], 0), ops:['Export minutes','Add condition','Close vote'],
+        adds:[ { label:'Eligible voters', value:String(eligible), note:'1 recused for conflict' },
+          { label:'Votes cast', value:cast + ' of ' + eligible, note:quorumMet ? 'quorum of ' + QUORUM + ' met' : 'quorum not met' },
+          { label:'Approvals', value:String(approvals), note:'1 conditional' },
+          { label:'Conditions', value:'1', note:'IP chain of title' } ],
+        instTitle:'Vote ledger', instMeta:'Rationale required · recusal renders, never hides',
+        cols:'1fr 1.1fr 2.2fr', head:['Partner','Vote','Rationale'],
+        rows: voteRows,
+        instNote:'D. Raman is an angel in the company and declared it before the memo circulated, so the vote renders as recused and is excluded from the denominator — ' + cast + ' of ' + eligible
+          + ', not of ' + PARTNERS.length + '. A rationale is mandatory on every vote, because a tally without reasons is not a record a fund can defend.',
+        aiLabel:'Proposal · IC memo from the pipeline', aiCost:icMemoCost,
+        aiBody:'Assembled from everything the pipeline already holds — screening score with its rubric, the diligence verdicts, the terms, and the two open conditions. Every figure traces to the row it came from, so the memo can be audited rather than trusted.',
+        aiAccept:'Open the memo', aiFoot:'Long context — the whole pipeline is in the prompt.' },
+
+      { id:'id4', badge:'ID4', route:'/deals/closing', zone:'Closing', arch:'COLLECTION', railPage:'Deals',
+        title:'Deals · Closing', h1:'Closing',
+        blurb:'Compressed shows progress to close. The full collection adds the checklist templates, the wire trail and the signature archive — and it is honest that the platform records the movement of money rather than moving it.',
+        sub:'Checklist templates, wires, documents and signatures.',
+        cmpTitle:'Aperture · ' + done + ' of ' + CLOSE.length + ' cleared',
+        cmpBody:blocking + ' item blocks the wire: the IC condition on IP chain of title.',
+        viewMore:'View more · ' + CLOSE.length + ' items, wire trail, signatures →',
+        filters: fil(['This close','Blocking','Documents','Wires'], 0), ops:['Apply template','Export packet','Record wire'],
+        adds:[ { label:'Cleared', value:done + ' of ' + CLOSE.length, note:'checklist template applied' },
+          { label:'Blocking', value:String(blocking), note:'carried from the IC vote' },
+          { label:'Signatures', value:'2 of 2', note:'term sheet and SAFE' },
+          { label:'Funds moved', value:'$0', note:'held pending the condition' } ],
+        instTitle:'Closing checklist', instMeta:'Blocking items gate the wire, not just the count',
+        cols:'1.5fr 1fr .8fr 1.7fr', head:['Item','State','Owner','Note'],
+        rows: closeRows,
+        instNote:'The IP condition arrived from the Commit vote rather than being typed here, which is why it can block the wire — a condition that lives only in the minutes is a condition nobody enforces. Wire instructions are verified by phone because email-only verification is how funds get defrauded.',
+        aiLabel:'Proposal · closing packet cover note', aiCost:coverCost,
+        aiBody:'A one-page cover for counsel: what is executed, what remains, and the single condition holding the transfer. States plainly that the platform records the wire and the banks move it — the packet is evidence, not a payment instruction.',
+        aiAccept:'Open the note', aiFoot:'Screened before it leaves the firm.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

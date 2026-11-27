@@ -1,0 +1,29 @@
+{
+  "skill": "unit-economics-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "stripe.revenue": {
+        "arpa_usd": 150
+      },
+      "grow.records": {
+        "acquisition_spend_usd": 6000,
+        "new_customers": 20
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "300",
+      "150"
+    ],
+    "must_say_not_recorded": [
+      "lifetime value"
+    ],
+    "must_not_include": [
+      "LTV:CAC of"
+    ]
+  }
+}

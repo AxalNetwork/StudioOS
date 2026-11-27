@@ -1,0 +1,1030 @@
+/**
+ * HQ · Support — the three queues, read from what HQ already records (D204,
+ * canvas H22, which draws Y1).
+ *
+ * WHAT WAS WRONG. `/admin/hq-support` drew its escalation queue from
+ * `hq_escalations` and marked the other two — HQ-held users, and subsidiary
+ * administrators filing about the Admin product — "Not recorded", on the ground
+ * that no ticket persona separated them. Every fact those two queues need is
+ * already on HQ's own database:
+ *
+ *   · a ticket names its requester. The one INSERT (`routes/tickets.ts`) binds
+ *     the signed-in user's id — although the baseline leaves `user_id` nullable,
+ *     which is why `not_on_record` exists below rather than being assumed away;
+ *   · `users.role` and `users.is_active` say what that account is now;
+ *   · `licence_admins` (UNIQUE user_id, migration 190) says exactly which
+ *     accounts administer which licence.
+ *
+ * And every account — every subsidiary administrator included — lives on HQ's
+ * database today, because no branch has been provisioned. So the page refused
+ * figures its own database holds: the class D150 corrected on Home and D152 on
+ * Security.
+ *
+ * ONE DEFINITION OF OPEN. `OPEN_TICKET_STATUSES` is what HQ Home's "Queue
+ * backlog" tile and this page both mean by an open ticket, and `ticketBacklog`
+ * is HQ Home's read, moved here verbatim so there is one place it lives. The
+ * five persona buckets below foot to its `open` — asserted in the tests rather
+ * than assumed, because two reads that each define "open" for themselves are
+ * how a tile and a desk come to disagree.
+ *
+ * EVERY READ HAS ITS OWN FAILURE. A read that fails answers
+ * `{ available: false, reason }` and the page renders it as unreadable — never
+ * as zero, never by borrowing another read's figure. A read that hits its
+ * ceiling answers `complete: false`, and a count that was cut is never shown as
+ * the total (D131).
+ */
+import type { Env } from '../types';
+import { ageHours } from './approvalSources';
+import {
+  ticketSlaBandForPriority, tallySlaBands, HQ_TICKET_SLA_HOURS, type SlaBand, type TierHours,
+} from './supportSlaPolicy';
+
+/**
+ * What "open" means for a ticket, on every surface that counts one.
+ *
+ * TYPED AS A TUPLE, and the SQL writes its two `?` as literal text rather than
+ * joining them from this array — `check-sql-prepare` refuses a `${}` inside
+ * `DB.prepare`, and it is right to. Typing the length means a third status is a
+ * compile error at the bind site rather than a silent under-bind, and a test
+ * counts the placeholders against it (the `OPEN_NOTICE_STATUSES` precedent in
+ * `routes/admin_hq.ts`).
+ */
+export const OPEN_TICKET_STATUSES: readonly ['open', 'in_progress'] = ['open', 'in_progress'];
+
+/** How many tickets one read of the open queue will count before its count stops being a total. */
+export const OPEN_TICKET_CEILING = 5000;
+
+/** How many items a queue lists. The rest are counted, and the page says so. */
+export const SUPPORT_LIST_LIMIT = 25;
+
+export type TicketBacklog = { by_status: Record<string, number>; open: number };
+
+/**
+ * The ticket queue by status — HQ Home's read, moved here unchanged (D204).
+ *
+ * It throws on an unreadable table rather than answering zero; each caller
+ * turns that into its own unreadable state, because HQ Home's wording and this
+ * page's are different sentences about the same fact.
+ */
+export async function ticketBacklog(env: Env): Promise<TicketBacklog> {
+  const t = await env.DB.prepare(
+    'SELECT status, COUNT(*) AS n FROM tickets GROUP BY status',
+  ).all<{ status: string; n: number }>();
+  const byStatus: Record<string, number> = {};
+  for (const row of t.results || []) byStatus[String(row.status)] = Number(row.n) || 0;
+  let open = 0;
+  for (const s of OPEN_TICKET_STATUSES) open += byStatus[s] || 0;
+  return { by_status: byStatus, open };
+}
+
+/**
+ * The five places an open ticket can land.
+ *
+ * Two of them are H22's queues (`hq_held`, `admin_product`); the other three are
+ * tickets that are real and open but belong to neither, and the page counts
+ * them under the queues so the whole backlog is accounted for.
+ */
+export const TICKET_PERSONAS = [
+  'hq_held', 'admin_product', 'hq_staff', 'account_closed', 'not_on_record',
+] as const;
+export type TicketPersona = (typeof TICKET_PERSONAS)[number];
+
+/** The two personas that are H22's queues. */
+export const QUEUE_PERSONAS: readonly TicketPersona[] = ['hq_held', 'admin_product'];
+
+/**
+ * Who filed a ticket — read from the requester's account AS IT STANDS NOW.
+ *
+ * FIRST MATCH WINS, and the order is the decision:
+ *
+ *   1. No account: `user_id` is NULL, or the row it named is gone.
+ *   2. The account is closed. D145's terminate demotes, deactivates and detaches
+ *      a licence's administrators, so without this bucket a terminated licence's
+ *      admins would be filed as HQ-held users — people HQ holds directly — when
+ *      they are people HQ has just stopped holding at all.
+ *   3. Bound in `licence_admins`: a subsidiary administrator, asking about the
+ *      Admin product. The BINDING beats the role, which covers D134's
+ *      demote-then-detach window — an account demoted and not yet detached still
+ *      administers a licence as far as the ledger says.
+ *   4. `role = 'admin'` with no licence: HQ's own staff, which is not a customer
+ *      queue.
+ *   5. Anyone else: an HQ-held user — an account HQ holds directly, in no branch.
+ *
+ * THE LICENCE'S KIND IS NEVER READ. A white-label's administrators are still
+ * administrators filing about the Admin product, which is the queue H30 puts
+ * them in; a kind filter here would hide exactly them.
+ *
+ * NOW, NOT AS FILED — and since D5030 (#5030) that is only half the story.
+ * This function says what the account is NOW. The queue a ticket belongs to is
+ * `queuePersonaOf`: the persona `filingSnapshot` recorded when it was filed,
+ * and this function's answer only for a ticket filed before that record
+ * existed. The page shows both where they differ.
+ * H22's "HQ-held users" is also narrower than H9's "every account on HQ's
+ * database": H9's groups every account that LIVES on HQ, staff and licence
+ * administrators included, while this queue is the customers among them.
+ */
+export function personaOf(row: {
+  account_id: number | null;
+  requester_active: number | null;
+  requester_role: string | null;
+  licence_uid: string | null;
+}): TicketPersona {
+  if (row.account_id === null || row.account_id === undefined) return 'not_on_record';
+  if (Number(row.requester_active) !== 1) return 'account_closed';
+  if (row.licence_uid) return 'admin_product';
+  if (row.requester_role === 'admin') return 'hq_staff';
+  return 'hq_held';
+}
+
+export type OpenTicketRow = {
+  id: number; title: string; status: string; priority: string; created_at: string;
+  account_id: number | null; requester_name: string | null; requester_email: string | null;
+  requester_role: string | null; requester_active: number | null;
+  licence_uid: string | null; licence_ref: string | null; licence_brand: string | null;
+  /**
+   * D5030 (#5030) — the context the ticket was FILED in, written once by the
+   * INSERT (the 202611082048 migration). All null on a ticket filed before
+   * that, or when this database has not applied it: then nothing recorded the
+   * filing, and the queue falls back to current standing, flagged as such.
+   */
+  filed_persona?: string | null; filed_role?: string | null;
+  filed_licence_uid?: string | null; filed_branch_code?: string | null;
+  filed_licence_ref?: string | null; filed_licence_brand?: string | null;
+};
+
+export type OpenTicketsRead =
+  | {
+      available: true; complete: boolean; rows: OpenTicketRow[];
+      /** D5030 — `false` when the filing columns could not be read: every row is then queued from current standing. */
+      snapshot_readable?: boolean;
+    }
+  | { available: false; reason: string };
+
+/** How a ticket's queue was decided (D5030): from what was recorded at filing, or from current standing because nothing was. */
+export type QueueBasis = 'as_filed' | 'current_standing';
+
+/**
+ * The queue a ticket belongs to (D5030, #5030). THE FILING WINS: a ticket
+ * filed by a licence's Administrator stays in the About-Admin queue after
+ * that account is demoted, closed or detached — its ownership is historical,
+ * and `personaOf` (standing now) is shown beside it, not instead of it.
+ *
+ * A ticket with no filing record — filed before the snapshot existed — is
+ * queued from current standing, and `basis` says so. Nothing is inferred into
+ * the snapshot: current standing is not what the filing was.
+ */
+export function queuePersonaOf(row: OpenTicketRow): { persona: TicketPersona; basis: QueueBasis; licence_uid: string | null } {
+  const filed = row.filed_persona;
+  if (filed && (TICKET_PERSONAS as readonly string[]).includes(filed)) {
+    return { persona: filed as TicketPersona, basis: 'as_filed', licence_uid: row.filed_licence_uid ?? null };
+  }
+  return { persona: personaOf(row), basis: 'current_standing', licence_uid: row.licence_uid ?? null };
+}
+
+export const TICKETS_UNREADABLE =
+  'The ticket queue could not be read on this database, so how many tickets are waiting is unknown — not none.';
+
+/**
+ * Every open ticket with its requester's standing, oldest first — ONE read.
+ *
+ * THIS READ TOUCHES NO COLUMN MIGRATION 273 ADDED. The mirror columns belong to
+ * the sync strip, which reads them separately and fails on its own; a database
+ * that has not applied 273 still has queues.
+ *
+ * `licence_admins` is UNIQUE(user_id), so the joins cannot multiply a ticket.
+ * `id` breaks ties because `created_at` is one-second resolution.
+ */
+export async function readOpenTickets(env: Env): Promise<OpenTicketsRead> {
+  const shape = (all: OpenTicketRow[], snapshotReadable: boolean): OpenTicketsRead => {
+    const complete = all.length <= OPEN_TICKET_CEILING;
+    return {
+      available: true, complete, rows: complete ? all : all.slice(0, OPEN_TICKET_CEILING),
+      snapshot_readable: snapshotReadable,
+    };
+  };
+  // D5030 — the filing snapshot first. A database without its migration fails
+  // this statement alone, and the queue is read as it was before, with every
+  // row flagged as classified by current standing.
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at,
+              u.id AS account_id, u.name AS requester_name, u.email AS requester_email,
+              u.role AS requester_role, u.is_active AS requester_active,
+              tl.uid AS licence_uid, tl.licence_ref AS licence_ref, tl.brand_name AS licence_brand,
+              t.filed_persona, t.filed_role, t.filed_licence_uid, t.filed_branch_code,
+              fl.licence_ref AS filed_licence_ref, fl.brand_name AS filed_licence_brand
+         FROM tickets t
+         LEFT JOIN users u ON u.id = t.user_id
+         LEFT JOIN licence_admins la ON la.user_id = u.id
+         LEFT JOIN territory_licences tl ON tl.id = la.licence_id
+         LEFT JOIN territory_licences fl ON fl.uid = t.filed_licence_uid
+        WHERE t.status IN (?, ?)
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<OpenTicketRow>();
+    return shape(res.results || [], true);
+  } catch {
+    // fall through to the read without the snapshot
+  }
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at,
+              u.id AS account_id, u.name AS requester_name, u.email AS requester_email,
+              u.role AS requester_role, u.is_active AS requester_active,
+              tl.uid AS licence_uid, tl.licence_ref AS licence_ref, tl.brand_name AS licence_brand
+         FROM tickets t
+         LEFT JOIN users u ON u.id = t.user_id
+         LEFT JOIN licence_admins la ON la.user_id = u.id
+         LEFT JOIN territory_licences tl ON tl.id = la.licence_id
+        WHERE t.status IN (?, ?)
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<OpenTicketRow>();
+    return shape(res.results || [], false);
+  } catch {
+    return { available: false, reason: TICKETS_UNREADABLE };
+  }
+}
+
+export type SupportTicketItem = {
+  id: number;
+  title: string;
+  status: string;
+  priority: string;
+  age_hours: number | null;
+  /** Derived from priority and age against HQ's inherited P1/P2/P3 hours (D455). */
+  sla_band: SlaBand | null;
+  requester: string | null;
+  /** The licence the queue attributes it to: the one administered at filing, or now when nothing was recorded. */
+  licence: { uid: string; licence_ref: string | null; brand_name: string | null } | null;
+  /** D5030 — whether the queue comes from the filing record or, lacking one, from current standing. */
+  basis: QueueBasis;
+  /** D5030 — what was recorded at filing. Null when nothing was. */
+  filed: { persona: string; role: string | null; licence_uid: string | null; branch_code: string | null } | null;
+  /** D5030 — the requester's standing now, always: shown beside the filing when the two differ. */
+  current: { persona: TicketPersona; licence_uid: string | null; licence_ref: string | null };
+  /** D5030 — true when the filing record and today's standing name a different queue or licence. */
+  standing_changed: boolean;
+};
+
+export type PersonaBucket = {
+  /** Null when the read hit its ceiling: a cut count is not a total. */
+  count: number | null;
+  oldest_age_hours: number | null;
+  /**
+   * The SLA bands, for H22's two queues only (D459). Null for the three
+   * buckets outside them, which nobody bands, and null when the read was cut —
+   * band totals would under-count. `undated` counts tickets with no readable age.
+   */
+  bands: { ok: number; due_soon: number; past: number; undated: number } | null;
+  /** The oldest `SUPPORT_LIST_LIMIT`, oldest first. Exact even past the ceiling, because the read is ordered. */
+  items: SupportTicketItem[];
+  /**
+   * D5030 — how many of the bucket were queued from current standing because
+   * no filing context was recorded. Null when the read was cut.
+   */
+  from_current_standing: number | null;
+};
+
+export type TicketQueues = {
+  complete: boolean;
+  /** D5030 — false when the filing columns could not be read on this database. */
+  snapshot_readable: boolean;
+  /** Every open ticket, all five buckets — HQ Home's Queue backlog. Null past the ceiling. */
+  open: number | null;
+  buckets: Record<TicketPersona, PersonaBucket>;
+};
+
+/** Sort one read into its five buckets. Pure, so it is tested without a database. */
+/**
+ * `tierHours` is HQ's stored SLA tiers (D482). Null when the store could not
+ * be read: then no ticket is banded (`sla_band` null, `bands` null), rather
+ * than banded against hours HQ may since have changed.
+ */
+export function summariseTickets(
+  read: { complete: boolean; rows: OpenTicketRow[]; snapshot_readable?: boolean }, nowMs: number,
+  tierHours: TierHours | null = HQ_TICKET_SLA_HOURS,
+): TicketQueues {
+  const buckets = {} as Record<TicketPersona, PersonaBucket>;
+  const bandScratch = {} as Record<TicketPersona, Array<SlaBand | null>>;
+  for (const p of TICKET_PERSONAS) {
+    buckets[p] = { count: 0, oldest_age_hours: null, bands: null, items: [], from_current_standing: 0 };
+    bandScratch[p] = [];
+  }
+  for (const row of read.rows) {
+    const q = queuePersonaOf(row);
+    const now = personaOf(row);
+    const bucket = buckets[q.persona];
+    const age = ageHours(row.created_at, nowMs);
+    const slaBand = tierHours ? ticketSlaBandForPriority(age, String(row.priority ?? ''), tierHours) : null;
+    bucket.count = (bucket.count || 0) + 1;
+    if (q.basis === 'current_standing') bucket.from_current_standing = (bucket.from_current_standing || 0) + 1;
+    bandScratch[q.persona].push(slaBand);
+    // Rows arrive oldest first, so the first dated row a bucket sees is its oldest.
+    if (bucket.oldest_age_hours === null && age !== null) bucket.oldest_age_hours = age;
+    if (bucket.items.length < SUPPORT_LIST_LIMIT) {
+      const asFiled = q.basis === 'as_filed';
+      const licence = asFiled
+        ? (row.filed_licence_uid
+          ? { uid: row.filed_licence_uid, licence_ref: row.filed_licence_ref ?? null, brand_name: row.filed_licence_brand ?? null }
+          : null)
+        : (row.licence_uid ? { uid: row.licence_uid, licence_ref: row.licence_ref, brand_name: row.licence_brand } : null);
+      bucket.items.push({
+        id: Number(row.id),
+        title: String(row.title ?? ''),
+        status: String(row.status ?? ''),
+        priority: String(row.priority ?? ''),
+        age_hours: age,
+        sla_band: slaBand,
+        requester: row.requester_name || row.requester_email || null,
+        licence,
+        basis: q.basis,
+        filed: asFiled
+          ? {
+            persona: String(row.filed_persona), role: row.filed_role ?? null,
+            licence_uid: row.filed_licence_uid ?? null, branch_code: row.filed_branch_code ?? null,
+          }
+          : null,
+        current: { persona: now, licence_uid: row.licence_uid ?? null, licence_ref: row.licence_ref ?? null },
+        standing_changed: asFiled && (now !== q.persona || (row.licence_uid ?? null) !== (row.filed_licence_uid ?? null)),
+      });
+    }
+  }
+  if (!read.complete) {
+    for (const p of TICKET_PERSONAS) {
+      buckets[p].count = null;
+      buckets[p].bands = null;
+      buckets[p].from_current_standing = null;
+    }
+  } else if (tierHours) {
+    for (const p of QUEUE_PERSONAS) {
+      buckets[p].bands = tallySlaBands(bandScratch[p]);
+    }
+  }
+  return {
+    complete: read.complete,
+    snapshot_readable: read.snapshot_readable !== false,
+    open: read.complete ? read.rows.length : null,
+    buckets,
+  };
+}
+
+// ─── Tickets filed on a branch host (D485) ────────────────────────────────
+
+/**
+ * What a branch tells HQ about the tickets its administrators filed on its own
+ * host, into its own database — the cells H22's matrix used to mark "On the
+ * branch" because no branch call returned tickets.
+ *
+ * WHOSE TICKETS: an ACTIVE account with `role = 'admin'` on the branch's
+ * database. On a branch nobody is a Super Admin (D106), so its administrators
+ * are exactly its admins: the About-Admin queue's persona, read where they
+ * file. A branch member's own ticket is the branch's to answer, not HQ's, and
+ * does not travel.
+ *
+ * WHAT TRAVELS: the count, the oldest filing time, and the oldest
+ * `SUPPORT_LIST_LIMIT` items with their title, priority, status, filing time
+ * and requester's display name. HQ ages and bands them with its own tier
+ * hours, so a branch ticket bands exactly as an HQ one does. A read past the
+ * ceiling says so, and HQ then shows no count for it.
+ */
+export type BranchTicketItem = {
+  id: number; title: string; status: string; priority: string; created_at: string; requester: string | null;
+};
+export type BranchTicketsRead =
+  | { available: true; complete: boolean; count: number; oldest_created_at: string | null; items: BranchTicketItem[] }
+  | { available: false; reason: string };
+
+export const BRANCH_TICKETS_UNREADABLE =
+  'This branch\'s ticket queue could not be read on its database, so how many its administrators have waiting is unknown — not none.';
+
+export async function readBranchAdminTickets(env: Env): Promise<BranchTicketsRead> {
+  type Row = {
+    id: number; title: string; status: string; priority: string; created_at: string;
+    requester_name: string | null; requester_email: string | null;
+  };
+  const shape = (all: Row[]): BranchTicketsRead => {
+    const complete = all.length <= OPEN_TICKET_CEILING;
+    const rows = complete ? all : all.slice(0, OPEN_TICKET_CEILING);
+    return {
+      available: true,
+      complete,
+      count: rows.length,
+      oldest_created_at: rows.length ? String(rows[0].created_at) : null,
+      items: rows.slice(0, SUPPORT_LIST_LIMIT).map((r) => ({
+        id: Number(r.id),
+        title: String(r.title ?? ''),
+        status: String(r.status ?? ''),
+        priority: String(r.priority ?? ''),
+        created_at: String(r.created_at ?? ''),
+        requester: r.requester_name || r.requester_email || null,
+      })),
+    };
+  };
+  // D5030 (#5030) — a ticket an administrator FILED stays HQ's to see after
+  // that account is demoted or closed: the filing record decides, and current
+  // standing only for a ticket filed before the record existed. A database
+  // without the filing columns is read as before.
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at, u.name AS requester_name, u.email AS requester_email
+         FROM tickets t
+         LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.status IN (?, ?)
+          AND (t.filed_persona = 'admin_product'
+               OR (t.filed_persona IS NULL AND u.role = 'admin' AND u.is_active = 1))
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<Row>();
+    return shape(res.results || []);
+  } catch {
+    // fall through to the read without the filing record
+  }
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at, u.name AS requester_name, u.email AS requester_email
+         FROM tickets t
+         JOIN users u ON u.id = t.user_id
+        WHERE t.status IN (?, ?) AND u.role = 'admin' AND u.is_active = 1
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<Row>();
+    return shape(res.results || []);
+  } catch {
+    return { available: false, reason: BRANCH_TICKETS_UNREADABLE };
+  }
+}
+
+/**
+ * D5030 (#5030) — the support context a ticket is filed in, computed by the
+ * same rules `personaOf` applies, at the moment of filing. Written once by the
+ * INSERT and never updated, so later changes to the account cannot move it.
+ *
+ * ON A BRANCH (`branchCode` set) the queue is the branch's own split
+ * (`readBranchAdminTickets`): an active administrator files about the Admin
+ * product; anyone else is the branch's member, whose ticket the branch answers.
+ *
+ * NEVER THROWS. A standing that cannot be read answers all-null — nothing
+ * recorded — rather than a guess; the ticket is still filed, and is queued from
+ * current standing like any ticket without a record.
+ */
+export type FilingSnapshot = {
+  filed_persona: string | null; filed_role: string | null;
+  filed_licence_uid: string | null; filed_branch_code: string | null;
+};
+export const NO_FILING_SNAPSHOT: FilingSnapshot = {
+  filed_persona: null, filed_role: null, filed_licence_uid: null, filed_branch_code: null,
+};
+
+export async function filingSnapshot(env: Env, userId: number, branchCode: string | null): Promise<FilingSnapshot> {
+  try {
+    if (branchCode) {
+      const u = await env.DB.prepare('SELECT role, is_active FROM users WHERE id = ?')
+        .bind(userId).first<{ role: string | null; is_active: number | null }>();
+      if (!u) return NO_FILING_SNAPSHOT;
+      const admin = u.role === 'admin' && Number(u.is_active) === 1;
+      return {
+        filed_persona: admin ? 'admin_product' : 'branch_member',
+        filed_role: u.role ?? null,
+        filed_licence_uid: null,
+        filed_branch_code: branchCode,
+      };
+    }
+    const row = await env.DB.prepare(
+      `SELECT u.id AS account_id, u.role AS requester_role, u.is_active AS requester_active,
+              tl.uid AS licence_uid
+         FROM users u
+         LEFT JOIN licence_admins la ON la.user_id = u.id
+         LEFT JOIN territory_licences tl ON tl.id = la.licence_id
+        WHERE u.id = ?`,
+    ).bind(userId).first<{ account_id: number; requester_role: string | null; requester_active: number | null; licence_uid: string | null }>();
+    if (!row) return NO_FILING_SNAPSHOT;
+    let branch: string | null = null;
+    if (row.licence_uid) {
+      // Its own try: a registry that cannot be read leaves the branch unknown,
+      // not the whole filing context.
+      try {
+        const d = await env.DB.prepare('SELECT code FROM licence_deployments WHERE licence_uid = ?')
+          .bind(row.licence_uid).first<{ code: string }>();
+        branch = d?.code ?? null;
+      } catch { branch = null; }
+    }
+    return {
+      filed_persona: personaOf(row),
+      filed_role: row.requester_role ?? null,
+      filed_licence_uid: row.licence_uid ?? null,
+      filed_branch_code: branch,
+    };
+  } catch {
+    return NO_FILING_SNAPSHOT;
+  }
+}
+
+/** One branch's line on HQ's page: its state, and when read, its queue aged and banded with HQ's hours. */
+export type BranchTicketLine =
+  | {
+      code: string; label: string; state: 'ok'; complete: boolean;
+      /** Null past the branch's ceiling: a cut count is not a total. */
+      count: number | null;
+      oldest_age_hours: number | null;
+      bands: { ok: number; due_soon: number; past: number; undated: number } | null;
+      items: Array<Omit<SupportTicketItem, 'licence' | 'basis' | 'filed' | 'current' | 'standing_changed'> & { created_at: string }>;
+    }
+  | { code: string; label: string; state: 'unreadable' | 'not_deployed'; reason: string };
+
+/**
+ * Age and band one branch's answer. Pure. `tierHours` null (HQ's tier store
+ * unreadable) bands nothing, as for HQ's own tickets. The bands cover only the
+ * items that travelled, so they are given only when every open ticket did.
+ */
+export function branchTicketLine(
+  code: string, label: string, read: BranchTicketsRead, nowMs: number, tierHours: TierHours | null,
+): BranchTicketLine {
+  if (!read.available) return { code, label, state: 'unreadable', reason: read.reason };
+  const items = read.items.map((x) => {
+    const age = ageHours(x.created_at, nowMs);
+    return {
+      id: x.id, title: x.title, status: x.status, priority: x.priority, created_at: x.created_at,
+      age_hours: age,
+      sla_band: tierHours ? ticketSlaBandForPriority(age, x.priority, tierHours) : null,
+      requester: x.requester,
+    };
+  });
+  const whole = read.complete && read.count === read.items.length;
+  return {
+    code, label, state: 'ok', complete: read.complete,
+    count: read.complete ? read.count : null,
+    oldest_age_hours: read.oldest_created_at ? ageHours(read.oldest_created_at, nowMs) : null,
+    bands: whole && tierHours ? tallySlaBands(items.map((i) => i.sla_band)) : null,
+    items,
+  };
+}
+
+// ─── The GitHub sync strip ────────────────────────────────────────────────
+
+/** The window the strip counts over. The SQL below writes it as a literal, and a test holds the two equal. */
+export const SYNC_WINDOW_HOURS = 24;
+
+/**
+ * The create-to-mirror lag (D459), derived from what is stored.
+ *
+ * Filing a ticket writes the ticket row, then — in the same request, once
+ * GitHub answers — one `ticket_sync_events` row keyed `out:create:ticket-<id>`
+ * (`routes/tickets.ts`). Both `created_at` columns are `datetime('now')`, so the
+ * gap between them is how long the ticket took to reach GitHub, to the second.
+ *
+ * WHAT IS NOT A LAG. A ticket with no create event (the mirror failed, or no
+ * token is configured) has no lag, and a ticket mirrored later by the backfill
+ * writes `out:backfill:ticket-<id>` instead, which measures the backfill's
+ * timing rather than the filing's. Neither is averaged in, and neither is read
+ * as zero: the first is counted in `unmeasured` so the average says how many
+ * tickets it leaves out.
+ */
+export const SYNC_CREATE_EVENT_PREFIX = 'out:create:ticket-';
+
+export const SYNC_LAG_NONE =
+  'Not recorded: no ticket filed in this window reached GitHub, so there is no delay to average.';
+
+export const SYNC_LAG_UNREADABLE =
+  'The mirror event log (ticket_sync_events) could not be read on this database, so the delay is unknown — not zero.';
+
+export type SyncLag =
+  | { value: number; unit: 'seconds'; measured: number; unmeasured: number; max: number }
+  | { value: null; reason: string; unmeasured?: number };
+
+export const SYNC_UNREADABLE =
+  'The mirror status could not be read on this database. Its columns arrive with migration 273.';
+
+export type TicketSync =
+  | {
+      available: true;
+      window_hours: number;
+      synced: number;
+      failed: number;
+      not_configured: number;
+      lag: SyncLag;
+    }
+  | { available: false; reason: string };
+
+/**
+ * What the ticket→GitHub mirror did in the last day, from the tickets
+ * themselves (migration 273's columns).
+ *
+ * NO SCHEMA BOOTSTRAP. `ensureTicketSyncSchema` runs up to ten ALTERs, which is
+ * a write on a page that only reads; a database without 273 answers
+ * unreadable, which is true, rather than being altered by someone looking.
+ *
+ * The comparison normalises BOTH sides with `datetime()`: the column is written
+ * `datetime('now')` today, and wrapping it is what keeps that from mattering
+ * (D124/D125 — `attempted_at` is on `check-timestamp-comparisons`' list).
+ */
+export async function readTicketSync(env: Env): Promise<TicketSync> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT github_sync_status AS state, COUNT(*) AS n
+         FROM tickets
+        WHERE datetime(github_sync_attempted_at) > datetime('now', '-24 hours')
+        GROUP BY github_sync_status`,
+    ).all<{ state: string | null; n: number }>();
+    const by: Record<string, number> = {};
+    for (const row of res.results || []) by[String(row.state)] = Number(row.n) || 0;
+    return {
+      available: true,
+      window_hours: SYNC_WINDOW_HOURS,
+      synced: by.synced || 0,
+      failed: by.failed || 0,
+      not_configured: by.not_configured || 0,
+      lag: await readSyncLag(env),
+    };
+  } catch {
+    return { available: false, reason: SYNC_UNREADABLE };
+  }
+}
+
+/**
+ * The average create-to-mirror lag over tickets filed in the window. Its own
+ * read with its own failure: an unreadable event log costs the lag, never the
+ * counts beside it.
+ */
+export async function readSyncLag(env: Env): Promise<SyncLag> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(e.id) AS measured,
+              COUNT(*) - COUNT(e.id) AS unmeasured,
+              AVG((julianday(e.created_at) - julianday(t.created_at)) * 86400.0) AS avg_s,
+              MAX((julianday(e.created_at) - julianday(t.created_at)) * 86400.0) AS max_s
+         FROM tickets t
+         LEFT JOIN ticket_sync_events e ON e.event_key = ? || t.id
+        WHERE datetime(t.created_at) > datetime('now', '-24 hours')`,
+    ).bind(SYNC_CREATE_EVENT_PREFIX).first<{ measured: number; unmeasured: number; avg_s: number | null; max_s: number | null }>();
+    const measured = Number(row?.measured ?? 0);
+    const unmeasured = Number(row?.unmeasured ?? 0);
+    if (!measured || row?.avg_s == null) return { value: null, reason: SYNC_LAG_NONE, unmeasured };
+    return {
+      value: Math.round(Number(row.avg_s)),
+      unit: 'seconds',
+      measured,
+      unmeasured,
+      max: Math.round(Number(row.max_s)),
+    };
+  } catch {
+    return { value: null, reason: SYNC_LAG_UNREADABLE };
+  }
+}
+
+/** How many of the latest attempts HQ · Platform lists (D213). */
+export const RECENT_SYNC_LIMIT = 10;
+/** An error is clipped here: it is GitHub's message, and one line is enough to act on. */
+export const SYNC_ERROR_CLIP = 200;
+
+export type RecentSyncAttempts =
+  | {
+      available: true;
+      items: Array<{
+        ticket_id: number;
+        issue_number: number | null;
+        status: string | null;
+        error: string | null;
+        attempted_at: string;
+      }>;
+    }
+  | { available: false; reason: string };
+
+/**
+ * D213 — the latest mirror attempts, one per ticket, newest first.
+ *
+ * ONE ROW PER TICKET, BECAUSE THAT IS WHAT IS STORED. A ticket keeps only its
+ * latest attempt (migration 273), so this is not a log of failures and says
+ * so where it is drawn: a ticket that failed and later synced shows the sync.
+ *
+ * NO TITLE AND NO REQUESTER. This list is about the mirror's health; what a
+ * ticket says stays on Support, which each row links to. And no schema
+ * bootstrap, for `readTicketSync`'s reason: a database without 273 answers
+ * unreadable, which is true, rather than being altered by a read.
+ */
+export async function readRecentSyncAttempts(env: Env): Promise<RecentSyncAttempts> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT id, github_issue_number, github_sync_status, github_sync_error, github_sync_attempted_at
+         FROM tickets
+        WHERE github_sync_attempted_at IS NOT NULL
+        ORDER BY datetime(github_sync_attempted_at) DESC, id DESC
+        LIMIT ?`,
+    ).bind(RECENT_SYNC_LIMIT).all<{
+      id: number;
+      github_issue_number: number | null;
+      github_sync_status: string | null;
+      github_sync_error: string | null;
+      github_sync_attempted_at: string;
+    }>();
+    return {
+      available: true,
+      items: (res.results || []).map((row) => ({
+        ticket_id: Number(row.id),
+        issue_number: row.github_issue_number == null ? null : Number(row.github_issue_number),
+        status: row.github_sync_status == null ? null : String(row.github_sync_status),
+        error: row.github_sync_error ? String(row.github_sync_error).slice(0, SYNC_ERROR_CLIP) : null,
+        attempted_at: String(row.github_sync_attempted_at),
+      })),
+    };
+  } catch {
+    return { available: false, reason: SYNC_UNREADABLE };
+  }
+}
+
+// ─── The tenant × queue matrix ────────────────────────────────────────────
+
+export type SupportLicence = { uid: string; licence_ref: string; brand_name: string; status: string };
+export type SupportDeployment = { code: string; licence_uid: string; hostname: string };
+
+export type LicencesRead = { available: true; rows: SupportLicence[] } | { available: false; reason: string };
+export type DeploymentsRead = { available: true; rows: SupportDeployment[] } | { available: false; reason: string };
+
+export const LICENCES_UNREADABLE =
+  'The licence ledger could not be read on this database, so which tenant each item belongs to is unknown.';
+export const DEPLOYMENTS_UNREADABLE =
+  'The deployment registry could not be read on this database (migration 258), so which licence has a branch is unknown — not none.';
+
+/** The licence ledger, in HQ Home's order (`routes/admin_hq.ts`). */
+export async function readSupportLicences(env: Env): Promise<LicencesRead> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT uid, licence_ref, brand_name, status FROM territory_licences ORDER BY
+         CASE status WHEN 'active' THEN 0 WHEN 'suspended' THEN 1
+                     WHEN 'pending_activation' THEN 2 WHEN 'draft' THEN 3 ELSE 4 END,
+         licence_ref`,
+    ).all<{ uid: string; licence_ref: string; brand_name: string; status: string }>();
+    return { available: true, rows: res.results || [] };
+  } catch {
+    return { available: false, reason: LICENCES_UNREADABLE };
+  }
+}
+
+/**
+ * Which licence has a branch. UNREADABLE IS ITS OWN STATE here, unlike
+ * `admin_hq.ts`'s `deployedBranches`, which reads a missing registry as an empty
+ * one: that is right for a fan-out that only adds `not_deployed` rows, and wrong
+ * for a matrix whose cells mean "does not apply" when there is no branch.
+ */
+export async function readSupportDeployments(env: Env): Promise<DeploymentsRead> {
+  try {
+    const res = await env.DB.prepare(
+      'SELECT code, licence_uid, hostname FROM licence_deployments ORDER BY code',
+    ).all<{ code: string; licence_uid: string; hostname: string }>();
+    return { available: true, rows: res.results || [] };
+  } catch {
+    return { available: false, reason: DEPLOYMENTS_UNREADABLE };
+  }
+}
+
+/**
+ * One cell of the matrix: a measured count with the age of its oldest item, or
+ * no value and the reason there is none. Never a bare dash, never a zero that
+ * was not counted.
+ */
+export type MatrixCell =
+  | {
+      value: number; oldest_age_hours: number | null;
+      /** About Admin on a branch (D485): how many were filed on its host, and how many on axal.vc. */
+      on_branch?: number; on_hq?: number;
+    }
+  | {
+      value: null;
+      why: 'does_not_apply' | 'branch_database' | 'unreadable' | 'incomplete';
+      reason: string;
+    };
+
+export type MatrixRow = {
+  key: string;
+  kind: 'hq' | 'licence' | 'unattributed';
+  label: string;
+  licence_ref: string | null;
+  status: string | null;
+  branch_code: string | null;
+  escalations: MatrixCell;
+  hq_held: MatrixCell;
+  about_admin: MatrixCell;
+};
+
+export const MATRIX_REASONS = {
+  hqEscalations: 'HQ raises no escalation to itself: an escalation is what a branch pushes up to HQ.',
+  hqAboutAdmin: 'The About-Admin queue is subsidiary administrators. HQ’s own staff are counted under the queues, as staff.',
+  licenceHqHeld: 'An HQ-held account belongs to no branch, so no licence has one.',
+  undeployedEscalations: 'No branch is deployed for this licence, so nothing can be raised from it.',
+  unattributedHqHeld: 'An HQ-held account belongs to no branch.',
+  unattributedAboutAdmin: 'A ticket names its requester’s licence, so none is unattributed.',
+  escalationsIncomplete: 'More open escalations than one read counts, so a per-branch count would be a cut count.',
+  ticketsIncomplete: 'More open tickets than one read counts, so this cell would be a cut count.',
+  deploymentUnknown: 'Whether this licence has a branch could not be read, so whether its administrators file here or on their own host is unknown.',
+} as const;
+
+type EscalationLike = { branch_code: string; created_at: string };
+
+type Tally = { n: number; oldest: number | null };
+
+function tally(map: Map<string, Tally>, key: string, age: number | null): void {
+  const t = map.get(key) || { n: 0, oldest: null };
+  t.n += 1;
+  // Oldest first again, so the first dated item a key sees is its oldest.
+  if (t.oldest === null && age !== null) t.oldest = age;
+  map.set(key, t);
+}
+
+const counted = (t: Tally | undefined): MatrixCell => ({ value: t?.n || 0, oldest_age_hours: t?.oldest ?? null });
+const absent = (why: 'does_not_apply' | 'branch_database' | 'unreadable' | 'incomplete', reason: string): MatrixCell =>
+  ({ value: null, why, reason });
+
+/**
+ * Tenant × queue — H22's matrix, built from reads already made. Pure.
+ *
+ * THE HQ ROW COMES FIRST, and it is not decoration: Y1's own rule is that a
+ * table without it totals more than its rows, because HQ-held accounts belong to
+ * no licence.
+ *
+ * A LICENCE ROW is every licence that holds or is preparing a territory —
+ * draft, pending activation, active, suspended. A terminated licence appears
+ * only while an open item is still attributed to it, and the rest are counted
+ * in `omitted_terminated` so the omission is stated rather than silent.
+ *
+ * ABOUT-ADMIN ON A DEPLOYED LICENCE IS NULL, NEVER THE SMALLER HQ-SIDE COUNT.
+ * Its administrators file on their own host into that branch's database, and no
+ * branch call returns tickets. The tickets filed on axal.vc are real and are in
+ * the queue above; shown here they would read as the branch's whole load, which
+ * understates it by construction.
+ */
+export function buildTenantMatrix(input: {
+  licences: SupportLicence[];
+  deployments: DeploymentsRead;
+  escalations: { available: true; complete: boolean; items: EscalationLike[] } | { available: false; reason: string };
+  tickets: OpenTicketsRead;
+  nowMs: number;
+  /** D485 — each branch's own About-Admin queue, by branch code. Absent: no branch was asked. */
+  branchTickets?: Map<string, BranchTicketLine>;
+}): { rows: MatrixRow[]; omitted_terminated: number } {
+  const { licences, deployments, escalations, tickets, nowMs, branchTickets } = input;
+
+  const deploymentByLicence = new Map<string, SupportDeployment>();
+  const licenceByCode = new Map<string, string>();
+  if (deployments.available) {
+    for (const d of deployments.rows) {
+      deploymentByLicence.set(String(d.licence_uid), d);
+      licenceByCode.set(String(d.code).toLowerCase(), String(d.licence_uid));
+    }
+  }
+
+  const escalationsByCode = new Map<string, Tally>();
+  if (escalations.available) {
+    for (const e of escalations.items) {
+      tally(escalationsByCode, String(e.branch_code).toLowerCase(), ageHours(e.created_at, nowMs));
+    }
+  }
+
+  const aboutByLicence = new Map<string, Tally>();
+  const hqHeld: Tally = { n: 0, oldest: null };
+  if (tickets.available) {
+    for (const row of tickets.rows) {
+      // D5030 — the queue as filed, so a demoted administrator's ticket stays
+      // on the licence it was filed under.
+      const { persona, licence_uid: licenceUid } = queuePersonaOf(row);
+      const age = ageHours(row.created_at, nowMs);
+      if (persona === 'admin_product' && licenceUid) tally(aboutByLicence, licenceUid, age);
+      if (persona === 'hq_held') {
+        hqHeld.n += 1;
+        if (hqHeld.oldest === null && age !== null) hqHeld.oldest = age;
+      }
+    }
+  }
+
+  const ticketCell = (t: Tally | undefined): MatrixCell => {
+    if (!tickets.available) return absent('unreadable', tickets.reason);
+    if (!tickets.complete) return absent('incomplete', MATRIX_REASONS.ticketsIncomplete);
+    return counted(t);
+  };
+
+  const escalationCell = (licenceUid: string): MatrixCell => {
+    if (!deployments.available) return absent('unreadable', deployments.reason);
+    const dep = deploymentByLicence.get(licenceUid);
+    if (!dep) return absent('does_not_apply', MATRIX_REASONS.undeployedEscalations);
+    if (!escalations.available) return absent('unreadable', escalations.reason);
+    if (!escalations.complete) return absent('incomplete', MATRIX_REASONS.escalationsIncomplete);
+    return counted(escalationsByCode.get(String(dep.code).toLowerCase()));
+  };
+
+  const aboutCell = (licenceUid: string): MatrixCell => {
+    if (!tickets.available) return absent('unreadable', tickets.reason);
+    if (!deployments.available) return absent('unreadable', MATRIX_REASONS.deploymentUnknown);
+    const dep = deploymentByLicence.get(licenceUid);
+    const line = dep && branchTickets ? branchTickets.get(String(dep.code).toLowerCase()) : undefined;
+    if (dep && line) {
+      // D485 — the branch answered for its own host, so the cell is the whole
+      // load: what its administrators filed there, plus what they filed here.
+      const host = dep.hostname || `${dep.code}.axal.vc`;
+      if (line.state === 'not_deployed') {
+        const here = aboutByLicence.get(licenceUid)?.n || 0;
+        const filedHere = tickets.complete
+          ? ` ${here} filed on axal.vc ${here === 1 ? 'is' : 'are'} in the queue above.`
+          : '';
+        return absent(
+          'branch_database',
+          `Its administrators file on ${host}, into that branch’s own database, and HQ has no binding to ask it yet: ${line.reason}${filedHere}`,
+        );
+      }
+      if (line.state !== 'ok') return absent('unreadable', `The tickets filed on ${host} could not be read: ${line.reason}`);
+      if (!tickets.complete) return absent('incomplete', MATRIX_REASONS.ticketsIncomplete);
+      if (line.count === null) {
+        return absent('incomplete', `More open tickets on ${host} than one read counts, so this cell would be a cut count.`);
+      }
+      const here = aboutByLicence.get(licenceUid);
+      const ages = [here?.oldest ?? null, line.oldest_age_hours].filter((a): a is number => a !== null);
+      return {
+        value: line.count + (here?.n || 0),
+        oldest_age_hours: ages.length ? Math.max(...ages) : null,
+        on_branch: line.count,
+        on_hq: here?.n || 0,
+      };
+    }
+    if (dep) {
+      const here = aboutByLicence.get(licenceUid)?.n || 0;
+      const filedHere = tickets.complete
+        ? ` ${here} filed on axal.vc ${here === 1 ? 'is' : 'are'} in the queue above.`
+        : '';
+      return absent(
+        'branch_database',
+        `Its administrators file on ${dep.hostname || `${dep.code}.axal.vc`}, into that branch’s own database, and no branch call returns tickets.${filedHere}`,
+      );
+    }
+    return ticketCell(aboutByLicence.get(licenceUid));
+  };
+
+  const rows: MatrixRow[] = [{
+    key: 'hq',
+    kind: 'hq',
+    label: 'HQ',
+    licence_ref: null,
+    status: null,
+    branch_code: null,
+    escalations: absent('does_not_apply', MATRIX_REASONS.hqEscalations),
+    hq_held: ticketCell(hqHeld),
+    about_admin: absent('does_not_apply', MATRIX_REASONS.hqAboutAdmin),
+  }];
+
+  // A terminated licence is left out only when the reads PROVE nothing open is
+  // attributed to it. A failed or cut read proves nothing, so the licence stays
+  // listed and its cells say why they are blank — "omitted because empty" would
+  // otherwise be a claim no read made.
+  const ticketsKnown = tickets.available && tickets.complete;
+  let omittedTerminated = 0;
+  for (const l of licences) {
+    const dep = deploymentByLicence.get(l.uid);
+    if (l.status === 'terminated') {
+      const escalationsKnown = !deployments.available
+        ? false
+        : !dep || (escalations.available && escalations.complete);
+      const escalated = dep ? (escalationsByCode.get(String(dep.code).toLowerCase())?.n || 0) : 0;
+      const filed = aboutByLicence.get(l.uid)?.n || 0;
+      if (escalationsKnown && ticketsKnown && escalated + filed === 0) { omittedTerminated += 1; continue; }
+    }
+    rows.push({
+      key: l.uid,
+      kind: 'licence',
+      label: l.brand_name,
+      licence_ref: l.licence_ref,
+      status: l.status,
+      branch_code: dep ? dep.code : null,
+      escalations: escalationCell(l.uid),
+      hq_held: absent('does_not_apply', MATRIX_REASONS.licenceHqHeld),
+      about_admin: aboutCell(l.uid),
+    });
+  }
+
+  // An escalation whose branch maps to no listed licence. Only countable when
+  // every read it needs answered in full; otherwise there is no row, because a
+  // row claiming "unattributed: 0" would be a count nobody made.
+  if (deployments.available && escalations.available && escalations.complete) {
+    const known = new Set(licences.map((l) => l.uid));
+    const orphan: Tally = { n: 0, oldest: null };
+    const codes: string[] = [];
+    for (const [code, t] of escalationsByCode) {
+      const uid = licenceByCode.get(code);
+      if (uid && known.has(uid)) continue;
+      orphan.n += t.n;
+      if (t.oldest !== null && (orphan.oldest === null || t.oldest > orphan.oldest)) orphan.oldest = t.oldest;
+      codes.push(code);
+    }
+    if (orphan.n > 0) {
+      rows.push({
+        key: 'unattributed',
+        kind: 'unattributed',
+        label: `Unattributed (${codes.sort().join(', ')})`,
+        licence_ref: null,
+        status: null,
+        branch_code: null,
+        escalations: counted(orphan),
+        hq_held: absent('does_not_apply', MATRIX_REASONS.unattributedHqHeld),
+        about_admin: absent('does_not_apply', MATRIX_REASONS.unattributedAboutAdmin),
+      });
+    }
+  }
+
+  return { rows, omitted_terminated: omittedTerminated };
+}

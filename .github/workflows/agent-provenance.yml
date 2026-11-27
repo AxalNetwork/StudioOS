@@ -1,0 +1,131 @@
+name: Agent provenance
+
+# D8068 (#8068): every commit an `agent/**` pull request adds carries the identity chain
+# (AGENTS.md § "Identity trailers"). Advisory: the job is continue-on-error until the owner
+# adds `provenance` to main's required checks. A branch outside agent/** is skipped by the
+# script itself (verdict `skipped`), so the job still reports and still keeps the artifact.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# One run per pull request; a newer push cancels the superseded run. A merge-queue entry
+# gets its own group (the run id), so it is never cancelled.
+concurrency:
+  group: agent-provenance-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  provenance:
+    name: provenance
+    if: github.event_name == 'merge_group' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test the parser against AGENTS.md
+        run: node scripts/ci/agent-provenance.test.mjs
+      - name: Resolve the range and the trusted check
+        id: range
+        env:
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MG_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MG_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          MG_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == pull_request ]]; then
+            number="$PR_NUMBER"; branch="$PR_HEAD_REF"; base="$PR_BASE_SHA"; head="$PR_HEAD_SHA"
+          else
+            # gh-readonly-queue/main/pr-<n>-<sha>: the queued PR's own commits, not the squash.
+            [[ "$MG_HEAD_REF" =~ ^refs/heads/gh-readonly-queue/main/pr-([0-9]+)-[0-9a-f]{40}$ ]] || { echo "::error::unreadable merge group ref"; exit 1; }
+            # D8692: the head is the fetched one, bound to the candidate below; the API gives only the branch name.
+            number="${BASH_REMATCH[1]}"; base="$MG_BASE_SHA"
+            branch=$(gh api "repos/$REPO/pulls/$number" --jq .head.ref)
+          fi
+          [[ "$number" =~ ^[0-9]+$ && "$base" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::unreadable pull request range"; exit 1; }
+          git fetch --no-tags --quiet origin "refs/pull/$number/head"
+          if [[ "$EVENT" != pull_request ]]; then head=$(git rev-parse FETCH_HEAD); fi
+          [[ "$head" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::unreadable pull request range"; exit 1; }
+          [[ "$(git rev-parse FETCH_HEAD)" == "$head" ]] || { echo "::error::the pull request head moved"; exit 1; }
+          # The check that judges a branch is its base's copy; only the PR that adds it runs its own.
+          if git cat-file -e "$base:scripts/ci/agent-provenance.mjs" 2>/dev/null; then
+            BASE_SHA="$base"
+            git show "$BASE_SHA:scripts/ci/agent-provenance.mjs" > "$RUNNER_TEMP/agent-provenance.mjs"
+            source=base
+          else
+            cp scripts/ci/agent-provenance.mjs "$RUNNER_TEMP/agent-provenance.mjs"
+            source=pr
+          fi
+          # D8692: the candidate's only parent is the base and its tree is the base merged with this head,
+          # or the job checks commits that are not in the candidate. A base copy from before #8692 lacks
+          # --bind, so the candidate's own copy proves it.
+          if [[ "$EVENT" != pull_request ]]; then
+            bind="$RUNNER_TEMP/agent-provenance.mjs"
+            grep -q -- "'--bind'" "$bind" || bind=scripts/ci/agent-provenance.mjs
+            node "$bind" --bind --base "$base" --head "$head" --candidate "$MG_HEAD_SHA" \
+              || { echo "::error::pull request head $head is not bound to merge group candidate $MG_HEAD_SHA"; exit 1; }
+          fi
+          {
+            echo "base=$base"
+            echo "head=$head"
+            echo "source=$source"
+          } >> "$GITHUB_OUTPUT"
+          printf 'branch<<EOF_BRANCH\n%s\nEOF_BRANCH\n' "$branch" >> "$GITHUB_OUTPUT"
+      # #8606: a commit GitHub wrote by merging another pull request into this branch is that
+      # pull request's merge, and its own commits were checked on its own branch. The API, not
+      # the commit's author or message, says which commits those are: a merged pull request
+      # whose merge_commit_sha is the commit. Only commits GitHub committed are looked up.
+      - name: List pull requests merged into the branch
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RANGE_BASE: ${{ steps.range.outputs.base }}
+          RANGE_HEAD: ${{ steps.range.outputs.head }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pr-merges.txt"; : > "$out"
+          while read -r sha email; do
+            [[ "$email" == noreply@github.com ]] || continue
+            merged=$(gh api "repos/$REPO/commits/$sha/pulls" --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"$sha\") | .number] | length")
+            if [[ "$merged" =~ ^[1-9][0-9]*$ ]]; then echo "$sha" >> "$out"; fi
+          done < <(git log --format='%H %cE' --max-count=251 "$RANGE_BASE..$RANGE_HEAD" --)
+          echo "pull request merges in the range: $(wc -l < "$out")"
+      - name: Check the identity chain
+        env:
+          RANGE_BASE: ${{ steps.range.outputs.base }}
+          RANGE_HEAD: ${{ steps.range.outputs.head }}
+          BRANCH: ${{ steps.range.outputs.branch }}
+          SOURCE: ${{ steps.range.outputs.source }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A base copy from before #8606 does not take --pr-merges; it judges as it always did.
+          extra=()
+          if grep -q -- "'--pr-merges'" "$RUNNER_TEMP/agent-provenance.mjs"; then extra=(--pr-merges "$RUNNER_TEMP/pr-merges.txt"); fi
+          node "$RUNNER_TEMP/agent-provenance.mjs" --base "$RANGE_BASE" --head "$RANGE_HEAD" --branch "$BRANCH" --out "$RUNNER_TEMP/provenance.json" --source "$SOURCE" "${extra[@]}"
+      - name: Keep provenance.json
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: provenance
+          path: ${{ runner.temp }}/provenance.json
+          if-no-files-found: warn
+          retention-days: 30

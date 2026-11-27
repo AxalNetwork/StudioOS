@@ -1,0 +1,4 @@
+{
+  "isSelf || isAdmin ? '' : ' AND published = 1' @ routes/assessment.ts": 1,
+  "isSelf || isAdmin ? '' : ' AND r.published = 1' @ routes/assessment.ts": 1
+}

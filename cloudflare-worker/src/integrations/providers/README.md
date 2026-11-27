@@ -1,0 +1,144 @@
+# Provider implementations
+
+One file per provider. Each module:
+
+1. Imports the shared `ProviderImpl` interface from `../registry`.
+2. Implements `connect`, plus any of `sync`, `push`, `webhook`,
+   `disconnect`, `buildAuthorizeUrl` it supports.
+3. Calls `registerProvider({ key: '<provider_key>', ...impl })` at module
+   top-level so the route layer picks it up.
+4. Flips its registry entry's `status` from `'coming_soon'` to `'live'`
+   or `'beta'` in `../registry.ts`, and its page entry in
+   `../connectorPages.ts`: tagline, description, the tools its calls make,
+   and prompts only if Eadwyn reads it. `cloudflare-worker/test/connector_pages_d753.test.ts`
+   fails until every request that writes is named by a tool (D753).
+5. An OAuth provider implements `ready(env)`; `connector_readiness_d751.test.ts`
+   fails otherwise (D751).
+6. An OAuth provider exports its `redirectUri(env)`, built with
+   `oauthCallbackUrl` (`../../util/url.ts`), and `../../routes/admin_integration_keys.ts`'s
+   `CALLBACK_URL` lists it, so HQ → Integration keys shows the URL the
+   provider sends. `tsc` enforces the list for managed keys (D751, #1882).
+
+GitHub's per-module feeds (D782, #2110) live in `github/`, one file per
+part, each called by one line from `github.ts`'s sync: `github/roadmap.ts`
+gives Product roadmap its milestones, release rows and Shipped marks (#2111). `github/mvp.ts`
+makes each must-have follow its pull request, and records each release's checks
+on the must-haves (#2112). Both retain exact commit evidence for deployment joins: merged PRs store their merge commit SHA and releases resolve their tag to its commit (#2414, migration 534).
+
+The module is then imported once from the worker entry point
+(`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
+call runs at boot.
+
+## Downstream tasks landing here
+
+- Task #2 — `hubspot.ts`
+- Task #3 — `calendly.ts`
+- Task #4 — `salesforce.ts`
+- Task #5 — `carta.ts`
+- Task #6 — `slack.ts`
+- Task #7 — `docusign.ts`
+- Task #8 — `crunchbase.ts`
+- Task #9 — `affinity.ts`
+- D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445). `accessToken` renews the user token under an exclusive encrypted D1 lease, with a KV hint and compare-and-swap writes; `disconnect` revokes the grant (#1883). The install link reads the non-secret `GITHUB_APP_SLUG` (#1884), with no guessed default.
+- D782 (#2114) — `github/`: what GitHub feeds beyond `github.ts`'s own landings, one file per Build module. `github/solutionDesign.ts` reads each chosen repository's README, `docs/`, `doc/` and `adr/` Markdown (at most 40 files and 200 KB) and its languages and topics; `syncGithub` calls it with one line, handing in its authenticated GET, so the file imports nothing from `github.ts` and the Build route can import its read, Accept and Dismiss without registering the provider.
+- D1096 (#2961) — `vercel.ts`: a Vercel Integration's read-only sign-in (Read on projects, deployments and domains; a wider grant is refused and uninstalled), Choose projects (`action('projects')` records what the installation reaches; `validateConfig` takes only those), and a sync that records `vercel_installations` and each chosen project's facts in `vercel_projects` (migration 589). Its only transport is `../../services/vercel/api.ts`. `clearVercelRows` deletes a connection's Vercel rows; parts 2-4 add their tables to it. The webhook receiver is `../../routes/vercel_webhook.ts`. D1097 (#2962): the sync also reads each project's production health and opens and closes `vercel_health_events` through `../../services/vercel/health.ts`, marked `sync` or `webhook`. D1098 (#2963): it keeps each project's newest deployments in `vercel_deployments` through `../../services/vercel/deployments.ts`.
+- D782 (#2115) — `github/team.ts` reads each chosen repository's contributors and their commits in the last 90 days (Founding team; the founder matches each login to a founder, never guessed), and `github/company.ts` its owner and licence (Company creation; a personal account's repository proposes the IP step). Logins are personal data: only the project's members read them, and disconnecting deletes them.
+- D1084 (#2949) — `github/lovableMark.ts`: the founder's "Synced with Lovable" mark on a picked repository, `synced_with` in the GitHub connection's config. GitHub's `validateConfig` checks it (picked repositories only, `lovable` or `null`), Build's Solution design and Prototype / MVP read it, and a sync never sets or clears it.
+- D848 (#2469) — `github.ts` and `stripe.ts` each export a `ConnectorAdapter` (`../contract.ts`) and call `registerConnectorAdapter` beside `registerProvider`. The adapter reuses the provider's own `connect`, `disconnect` and `revokeGranted`, runs only read tools its page names (`execute`), checks the token with one read (`health`) and reduces its errors to a fixed category (`classifyGithubError`, `classifyStripeError`). Mercury follows once #2468 merges.
+- D684 (#1577) — Zoom is a registry provider (`zoom`) whose implementation is
+  NOT in this folder: it lives with the other interview channels in
+  `cloudflare-worker/src/services/channels/zoom.ts`, which calls
+  `registerProvider` at module load and is imported by
+  `cloudflare-worker/src/routes/founder_validate_meetings.ts`.
+- D751 (#1880) — each OAuth provider's `ready` reads `oauthCredsReady`, the
+  cache its `ensureCreds` reads, so `GET /available`'s `configured` and the
+  start's refusal agree. Zoom's `ready` lives in
+  `cloudflare-worker/src/services/channels/zoom.ts` (all three Zoom secrets).
+- D710 (#1775) — Mercury's HQ entity connection is NOT made here: a Super
+  Admin adds it per Axal organization, kept in its own store and synced
+  read-only by `cloudflare-worker/src/services/mercury/`, behind
+  `cloudflare-worker/src/routes/admin_mercury.ts`.
+- D1385 (#3731) — `posthog.ts` is a founder's own PostHog, read only, in
+  Notion's shape: `connect` refuses a support session and a paste (Sign in
+  with PostHog only), `disconnect` revokes at PostHog, best effort, and
+  every read is `cloudflare-worker/src/services/posthog/reads.ts`.
+- D1085 (#2950) — `notion.ts` is a founder's own Notion, read-only, through
+  Notion's MCP server. It registers `connect` (a support session is refused;
+  a token paste is refused: Sign in with Notion only), `disconnect` (the grant
+  revoked, best effort, then the tokens deleted), `revokeGranted` and `ready`.
+  The sign-in is the generic MCP route's (D1080); every read is
+  `cloudflare-worker/src/services/notion/reads.ts`.
+- D855 §4 (#3733 part 1) — `linear.ts` is a member's own Linear, read-only,
+  through Linear's read-only MCP server (`https://mcp.linear.app/mcp/readonly`,
+  grant `read`). It registers the same four functions as `notion.ts` and a
+  D848 `ConnectorAdapter` (pattern `mcp`) whose six read tools are the
+  record's allowlist and whose `classifyLinearError` keeps a spent request or
+  complexity counter as `rate_limited`. Every read is
+  `cloudflare-worker/src/services/linear/reads.ts`. No member can connect it
+  yet: the generic sign-in needs a `REGISTRY` entry, which a later part adds.
+- D855 §4 (#3733 part 2) — `cloudflare.ts` is a member's own Cloudflare,
+  read-only, through Cloudflare's REST API (pattern C), never an MCP server.
+  It registers `connect` (410 `sign_in_only`, 403 for a support session),
+  `disconnect` and `revokeGranted` (nothing to end: no grant is issued yet)
+  and a D848 `ConnectorAdapter` (pattern `api`) with seven read tools. Its
+  `classifyCloudflareError` keeps Cloudflare's five-minute block as
+  `rate_limited`. Every read is `cloudflare-worker/src/services/cloudflare/api.ts`.
+  No member can connect it yet.
+- D713 (#1778) — `mercury.ts` is a member's own Mercury, for founders and
+  partners (`personal_roles`). It registers `connect` and nothing else: no
+  sync, push, webhook, preview or action. Connect takes a Read Only token,
+  refuses each failure with its own `ConnectRefusal` (a support session, a
+  webhook secret, a write scope, an Axal entity's organization), and is read
+  on demand by `cloudflare-worker/src/services/mercuryPersonal.ts`. Decision
+  3's entity check lives here, so both share it.
+- D752 (#1886) — investors hold one too, on HQ only
+  (`personal_hq_only_roles`); off HQ the route answers 403
+  `purpose_not_allowed` before the provider, which refuses again. Connect
+  stores the capabilities of the caller's role's variant
+  (`personalMercuryFor`, `registry.ts`).
+- D881 (#2554) — members connect only by Sign in with Mercury
+  (`cloudflare-worker/src/routes/mercury_oauth.ts`). `connect` takes no token: after the support-session
+  and role refusals, every token, new or a replace, is 410
+  `token_connect_retired` ("Connect Mercury with Sign in with Mercury."),
+  and nothing reaches Mercury or is stored. A token row kept from before D881
+  keeps reading until the member signs in or disconnects;
+  `/api/mercury/personal/status` gives it `LEGACY_TOKEN_NOTICE`.
+
+## Credential handling
+
+Never log raw credentials. Return them from `connect()` as a plain
+object — the route layer encrypts and persists via
+`cloudflare-worker/src/integrations/secrets.ts` (column cipher + AAD scoped to the row's uid).
+
+## OAuth providers
+
+Use `cloudflare-worker/src/integrations/oauth.ts` `buildPkce()` inside your
+`buildAuthorizeUrl` so the verifier is bound to the signed state. The
+callback handler in `cloudflare-worker/src/routes/integrations.ts` will hand the verifier back
+to your `connect()` via `input.config.pkce_verifier`.
+
+Carta (#2634 part 1) defaults new OAuth connections to Playground. The chosen
+`is_demo` flag rides in signed state and the saved connection config; exchange,
+refresh, issuer reads and revocation all use that environment. Legacy rows
+without the flag retain their original production environment. The account
+choice reuses DocuSign's existing selector.
+
+Carta investor grants (#2634) request only `read_investor_*` scopes and save
+`config.audience = investor`; founder/legacy rows remain issuer grants.
+Investor reads go through `../cartaInvestor.ts` and
+`../../routes/carta_investor.ts`, one page at a time. They are live, read-only,
+and never enter founder cap-table stores or the six-hour issuer cron.
+An expanded refresh grant is revoked before any API retry or persistence.
+`audience` and environment cannot be changed through settings; reconnect.
+
+A refused expanded Carta refresh marks its row `error` with a static code,
+then revokes the refused token; future reads ask to reconnect. Legacy Carta
+rows held by other roles keep their own Disconnect path but never enter the
+issuer scheduler or manual sync. A failed local read-log write has its own
+503 code, separate from a Carta read failure.
+- D2407 (#2407 part 1) — `beehiiv.ts` is a founder's own Beehiiv newsletter,
+  read only, in PostHog's shape: `connect` refuses a support session and a
+  key paste (Sign in with Beehiiv only), `disconnect` revokes at Beehiiv, best
+  effort, and removes the connection's `beehiiv_publication_links` rows while
+  its landed figures and ledger stay. Every read is
+  `cloudflare-worker/src/services/beehiiv/reads.ts`.

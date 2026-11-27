@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Approvals › Partner profiles</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Partner profiles</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:860px;line-height:1.55">A review queue, oldest first, and a full record to decide from. Drawn for an admin; Unbind is the one Super Admin control. Sample today is [24 Oct 2026]. A profile opens as a centred lightbox rather than a side drawer.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Partner Profiles Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['PRF1', 'To review · Admin · desktop 1440, light', 'Four tiles, then the queue oldest first: how long each profile has waited, who it is, where it came from, what they said brings them, their entity, their account and their identity check. The moved notice is for an old Admin Console link. Finn Mock and one invited partner with no account complete the seven waiting.', [D('PRF1')]],
+      ['PRF2', 'All profiles · Admin · desktop 1440, light', 'Profiles captured and decided per week, with decisions not recorded before [7 Sep 2026]; onboarding categories, with Founder split by track; status chips; and every profile with search, filters, sort and pages.', [D('PRF2')]],
+      ['PRF3', 'One profile · onboarding chat · lightbox over PRF1', 'Who they are, Eadwyn’s summary, the conversation and the history on the left; the Decision card on the right. Chloé’s row stays lit in the queue behind it. Founder track details show only for a Strategic Scale founder.', [D('PRF3'), D('PRF3b', 'Founder track details · Strategic Scale only', 900), D('PRF3c', 'First agreement · the select, open', 700)]],
+      ['PRF4', 'One profile · other sources', 'Ben Sample from a partner invitation, Dev Testcase with answers to Eadwyn, and a draft with nothing to review yet.', [D('PRF4a', 'Ben Sample · Partner invitation', 1200), D('PRF4b', 'Dev Testcase · Eadwyn questions', 1200), D('PRF4c', 'A draft', 900)]],
+      ['PRF5', 'Decision dialogs', 'Each dialog says what it changes, who is told and what is recorded. E is not a dialog: the tax ID shows for 60 seconds. F is Super Admin only; an Admin sees one sentence instead.', [D('PRF5a', 'A · Verify and send', 680), D('PRF5b', 'B · Verify, no agreement', 680), D('PRF5c', 'C · Reject', 680), D('PRF5d', 'D · Reopen', 680), D('PRF5e', 'E · Tax ID shown', 680), D('PRF5f', 'F · Unbind · Super Admin', 680)]],
+      ['PRF6', 'Send results', 'What the record says after Verify and send: sent, not delivered, not ready, and the plan check that stops before anything is saved.', [D('PRF6', false, 1200)]],
+      ['PRF7', 'Empty', 'The queue with nothing waiting, and a studio with no partner profiles yet. A measured zero shows as 0.', [D('PRF7a', 'Queue empty', 1440, 720), D('PRF7b', 'No profiles ever', 1440, 720)]],
+      ['PRF8', 'Loading', 'Header, tabs and toolbar at once. Tab counts and tiles are grey bars, eight skeleton rows, and a Reading dot on the Eadwyn spine.', [D('PRF8')]],
+      ['PRF9', 'Error and partial', 'The list failed with its reference; the queue without identity checks; inside the record, a profile that could not be read and a conversation whose live updates are off.', [D('PRF9a', 'List failed', 1440, 760), D('PRF9b', 'Partial'), D('PRF9c', 'Record failed · live chat offline', 1200)]],
+      ['PRF10', 'No permission', 'A member who is not an admin, a studio whose admin access HQ has paused, and Unbind as an Admin sees it.', [D('PRF10a', 'Not an admin', 1440, 640), D('PRF10b', 'Admin access paused', 1440, 640), D('PRF10c', 'Unbind, as an Admin sees it', 680)]],
+      ['PRF11', 'Phone · 390 wide', 'The queue as cards; the record as a full-screen page with Verify and Reject in a sticky bar; agreement and notes on their own sheet.', [P('PRF11a', 'To review'), P('PRF11b', 'One profile'), P('PRF11c', 'Agreement and notes')]],
+      ['PRF12', 'To review · dark', 'PRF1 in the dark colours; the amber pills keep their fill.', [D('PRF12')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

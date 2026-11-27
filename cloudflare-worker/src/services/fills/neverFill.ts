@@ -1,0 +1,172 @@
+/**
+ * The fields Eadwyn never fills — the Worker's copy of
+ * `frontend/src/lib/neverFill.js` (D777, D1147). Read that file's header for the six
+ * kinds and how a rule matches; this one carries the same rules and the same
+ * matcher, and `test/never_fill.test.ts` fails when the two disagree.
+ *
+ * WHY A COPY AND NOT AN IMPORT. The Worker bundle does not reach into
+ * `frontend/`, and the SPA does not reach into the Worker. Two copies kept equal
+ * by a test is how this repo already holds its other client/server pairs.
+ *
+ * WHERE IT IS ENFORCED. The propose route refuses to store a proposal whose
+ * target is one of these fields, the accept route refuses to apply one before
+ * anything is written, and `recordFill` refuses to file provenance against one —
+ * the last because every fill path ends there, so a path added later that forgets
+ * the first two still cannot record Eadwyn as the author of a signature.
+ */
+
+export type NeverFillCategory = 'signature_consent' | 'payment_amount' | 'identity_number' | 'legal_attestation' | 'score_rating' | 'money_term';
+export interface NeverFillRule {
+  category: NeverFillCategory;
+  label: string;
+  tables: readonly string[];
+  columns: readonly string[];
+  fields?: readonly string[];
+  exceptions?: readonly string[];
+}
+
+export const NEVER_FILL_RULES: readonly NeverFillRule[] = Object.freeze([
+  {
+    category: 'score_rating',
+    label: 'Scores and ratings',
+    // D1256: a review, a weighting and the sharing switch are a person's acts too.
+    tables: ['readiness_scores', 'venture_scorecards', 'venture_score_reviews', 'investor_scope_weights', 'venture_score_sharing'],
+    columns: ['score', 'scores', 'rating', 'ratings'],
+  },
+  {
+    category: 'signature_consent',
+    label: 'Signatures and consents',
+    tables: [
+      'advisor_proof_consents',
+      'channel_consents',
+      'partner_proof_consents',
+      'user_promotion_consent',
+    ],
+    columns: [
+      'consent', 'consents', 'consented',
+      'e_sign', 'esign', 'esignature',
+      'initials',
+      'signature', 'signatures', 'signed', 'signer', 'signatory',
+    ],
+  },
+  {
+    category: 'payment_amount',
+    label: 'Money amounts on a payment',
+    tables: [
+      'account_subscriptions',
+      'advisor_payout_accounts',
+      'advisor_payouts',
+      'capital_call_receipts',
+      'deal_transfers',
+      'engagement_invoices',
+      'entity_bank_accounts',
+      'fund_capital_calls',
+      'fund_distributions',
+      'payout_commissions',
+      'payouts',
+      'portfolio_distributions',
+      'promo_codes',
+      'promo_redemptions',
+      'referral_payouts',
+    ],
+    columns: [
+      'amount_cents', 'amount_due', 'amount_paid',
+      'call_amount', 'charge', 'charge_amount',
+      'distribution_amount', 'payment_amount', 'payout', 'payout_amount',
+      'refund', 'refund_amount', 'wire_amount',
+    ],
+  },
+  {
+    category: 'identity_number',
+    label: 'Identity numbers',
+    tables: [
+      'kyc_partner_imports',
+    ],
+    columns: [
+      'account_number', 'bic', 'driver_licence', 'driver_license',
+      'ein', 'iban', 'id_number', 'licence_number', 'license_number',
+      'national_id', 'passport', 'routing_number', 'sin', 'sort_code',
+      'ssn', 'swift', 'tax_id', 'tin', 'vat_number',
+    ],
+  },
+  {
+    category: 'legal_attestation',
+    label: 'Legal attestations',
+    tables: [
+      'capital_attestations',
+    ],
+    columns: [
+      'accreditation', 'accredited', 'affirmed',
+      'attest', 'attestation', 'attestations', 'attested', 'attests',
+      'certified', 'certify', 'sworn',
+    ],
+  },
+  {
+    category: 'money_term',
+    // D1325 (#3486, #2431): every money amount and term, not only the plan's
+    // inputs. Commitments, valuations, caps, discounts, cap-table amounts and
+    // SAFE terms are a person's (CAPITAL #2424, CAPTABLE #2432).
+    label: 'Money amounts and terms',
+    tables: ['financial_models', 'pct',
+      'commitments', 'safe_issuances', 'fund_position_valuations',
+      'cap_table_holders', 'cap_table_issuances', 'cap_table_option_pools', 'cap_table_securities', 'cap_table_share_classes', 'cap_table_vesting',
+      'captable_holders', 'captable_scenarios', 'captable_securities'],
+    exceptions: ['project_market_assumptions.runway'],
+    fields: ['uof_scenarios.amount_to_raise_cents', 'uof_scenarios.target_runway_months', 'uof_scenarios.cash_cents', 'uof_scenarios.start_month', 'uof_scenarios.raise_month', 'uof_scenario_lines.share_pct', 'uof_milestones.cost_cents', 'use_of_funds_hires.annual_cents', 'use_of_funds_hires.start_month', 'projects.use_of_funds', 'projects.use_of_funds_meta', 'projects.funding_needed'],
+    columns: ['cents', 'amount_to_raise', 'amount_to_raise_cents', 'funding_needed', 'share_pct',
+      'target_runway_months', 'runway_months', 'runway', 'cash_cents', 'cash_balance', 'burn',
+      'burn_cents', 'net_burn', 'hire_cost', 'annual_cents', 'annual_cost', 'cost_cents', 'forecast_driver',
+      'use_of_funds', 'use_of_funds_meta', 'milestone_costs',
+      'valuation_cap', 'pre_money', 'post_money', 'pre_money_valuation', 'post_money_valuation'],
+  },
+]);
+
+/** `signatureName`, `Signature-Name` and `signature_name` all fold to `signature_name`. */
+export function foldFieldName(name: unknown): string {
+  return String(name ?? '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/** Does `words` contain `token`'s words, contiguously and in order? */
+function hasWords(words: readonly string[], token: string): boolean {
+  const want = token.split('_');
+  for (let i = 0; i + want.length <= words.length; i += 1) {
+    if (want.every((w, j) => words[i + j] === w)) return true;
+  }
+  return false;
+}
+
+/**
+ * Why this field is never filled — `{ category, label }` — or null when it may be.
+ *
+ * `field` is `table.column` or a bare field name. Anything that is not a string
+ * with a name in it is null: there is nothing to refuse, and the caller's own
+ * checks decide whether a nameless fill is a fill at all.
+ */
+export function neverFillReason(field: unknown): { category: NeverFillCategory; label: string } | null {
+  const folded = foldFieldName(field);
+  if (!folded) return null;
+  const dot = folded.lastIndexOf('.');
+  const table = dot >= 0 ? folded.slice(0, dot) : '';
+  const column = dot >= 0 ? folded.slice(dot + 1) : folded;
+  const words = column.split('_').filter(Boolean);
+  for (const rule of NEVER_FILL_RULES) {
+    if (rule.exceptions?.includes(folded)) continue;
+    if ((table && rule.tables.includes(table)) || rule.fields?.includes(folded)
+      || rule.columns.some((t) => hasWords(words, t))) {
+      return { category: rule.category, label: rule.label };
+    }
+  }
+  return null;
+}
+
+export const isNeverFill = (field: unknown): boolean => neverFillReason(field) !== null;
+
+/** The sentence a refusal shows. The SPA's refusal says the same. */
+export function neverFillMessage(field: unknown): string {
+  const why = neverFillReason(field);
+  return why ? `Eadwyn never fills this field (${why.label.toLowerCase()}). Enter it yourself.` : '';
+}

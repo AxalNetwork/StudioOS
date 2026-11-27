@@ -1,0 +1,4 @@
+{
+  "fields.join(', ') @ models/funds.ts": 2,
+  "scope.sql @ models/funds.ts": 1
+}

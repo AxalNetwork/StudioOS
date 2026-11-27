@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contracts v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">HQ · Contracts &amp; Corporate Governance · v2 redesign</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Contracts — a legal-operations workspace</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Four workflow tabs (Agreements · Templates · Corporate Governance · Closings), with NDAs and partner deals as agreement categories and Forms and Document types in a Library menu. There are three separate lifecycles, plus Restricted and Incomplete overlays: an approved template wears a dashed “Approved for use” tag; only executed instruments get the solid ink “Executed” seal. Rows show what state things are in instead of what data is missing. AI research and counsel approval never share a style. Everything stays on the StudioOS HQ shell, tokens and type, with Eadwyn collapsed to a rail. Boards CT-90 to CT-94 are the written spec: problem → design → benefit, component inventory, interaction specs, accessibility notes and implementation mapping.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#6b6577">Sample now: Sat 7 Nov 2026 · Super Admin on the HQ shell · fictional counterparties and counsel; entities shown as Delaware LLCs (to confirm)</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Contracts v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const S = (b, hh) => D(b, false, 1200, 0, 12, hh);
+    const boards = [
+      ['CT-01', 'Contracts overview · desktop', 'An operational header, not a dashboard: six measures, each a link to its records, then short queues for stalled signatures, data repairs and legal review, and a one-line governance summary. The tab row carries the four workflows; Forms and Document types sit in Library at the right.', [F('CT01', false, 1000)]],
+      ['CT-02', 'Agreements table · with quick panel', 'A dense table built around meaning. “Sent 12 May 2026 · Awaiting signature” replaces “No signature date”; stalled age is factual, not an error. Unlinked recipients get a quiet dashed ⚭ Link. The only amber row is a contradiction: marked signed with no execution evidence. Categories (NDAs, Partner deals…) are chips, not tabs. The 420px quick panel keeps the existing side-panel idea; Open workspace → is for substantive work.', [F('CT02', false, 1000)]],
+      ['CT-03', 'Corporate Governance overview', 'Group header with the 100% / 100% structure and four counts, each linking to its records. Beneficial-owner details sit behind a Super Admin control. One row per entity: latest executed, last review, outstanding issue, next action, record-state counts. No health score.', [F('CT03')]],
+      ['CT-04', 'Axal VC Holdings LLC', 'Entity facts strip, then the seven record types Holdings should hold. Signing authority shows Missing — expected; Member Register and Ownership records are Restricted; IP ownership documents are Incomplete (2 of 3 assignments executed).', [F('CT04')]],
+      ['CT-05', 'Axal VC Management LLC', 'Outstanding issue: the Management–GP services agreement expired on 30 Jun 2026. Compliance records show Not recorded — add if applicable, which is different from Delegation of Authority’s Missing — expected.', [F('CT05')]],
+      ['CT-06', 'Axal VC GP LLC', 'Two expected records missing (Fund-formation approvals, Authorized signatories). The Operating Agreement row shows v1 executed alongside A&R v3 in review.', [F('CT06')]],
+      ['CT-07', 'Document workspace', 'Overview · Document · Versions · Legal Review · Activity · Related. The header always states the in-force executed version beside any draft. A · Overview with all required facts, unresolved issues and contextual Eadwyn actions. B · Document preview with a version picker and contents. C · Immutable versions with In force, Approved, Latest and Superseded markers and hashes.', [F('CT07a', 'A · Overview'), F('CT07b', 'B · Document', 1000), F('CT07c', 'C · Versions')]],
+      ['CT-08', 'Legal Review', 'All eleven review fields, bound to the reviewed version’s hash. Eadwyn research is a dashed lavender panel labelled “AI research · not approval”; the counsel decision is a solid ink panel only counsel can complete. Earlier counsel approvals carry the ⚖ seal.', [F('CT08', false, 1000)]],
+      ['CT-09', 'Restricted template', 'Restricted — Legal Review Required, with the reason. View, Review history and Request legal review are the only actions; Generate, Use template and Publish are listed as not available, not shown as buttons.', [F('CT09')]],
+      ['CT-10', 'Incomplete template', 'Template incomplete, with the agreed copy and a requirements checklist (2 of 6 met). Actions: Complete template, Assign reviewer, View requirements. Jurisdiction reads “Not set — not assumed”.', [F('CT10')]],
+      ['CT-11', 'Related-document warning', 'Amendment No. 2 to the Fund I LPA raises a non-destructive banner: 4 related documents may require review, with Review affected documents. The tree shows each dependant’s type and status; nothing is rewritten.', [F('CT11')]],
+      ['CT-12', 'Execution evidence', 'An explicit choice: Signed through StudioOS envelope, or Upload externally signed document. A · Envelope chosen, bound to approved v2 and its hash. B · Upload chosen with draft v3 selected: an inline error blocks it, so a draft can’t establish execution.', [F('CT12a', 'A · StudioOS envelope'), F('CT12b', 'B · External upload · draft rejected')]],
+      ['CT-13', 'Search results', 'Cross-object search for “LPA”. Every result shows object type, entity, status and version; current versions are the default and 6 historical versions are counted, not shown. Eight plain filters, no filter builder.', [F('CT13')]],
+      ['CT-14', 'Mobile', 'A · Agreements as structured rows with lifecycle state first and repair actions at 44px. B · A governance record that keeps entity context, next action and legal-review state at the top, with sections as rows. C · A high-risk action (Mark executed) in a bottom sheet with evidence shown and typed confirmation, so it can’t be triggered by a stray tap.', [P('CT14a', 'A · Agreements'), P('CT14b', 'B · Governance record'), P('CT14c', 'C · High-risk confirm')]],
+      ['CT-15', 'Cross-border agreement', 'For a Netherlands counterparty: jurisdiction, governing law as chosen (not defaulted to Delaware), countries of performance, tax, data-transfer mechanism, local counsel and sanctions/trade. Two open checks keep Send for signature disabled, with the reason given.', [F('CT15')]],
+      ['CT-16', 'High-risk action', 'Activate template: permission-gated (Super Admin), explains what changes, who is told and what is recorded (including the counsel approval it relies on), needs a reason and typed confirmation, and is logged in Security.', [F('CT16')]],
+      ['CT-90', 'Spec · Recommendations', 'Current problem → proposed design → operational benefit, for every major change.', [S('CT90', 1500)]],
+      ['CT-91', 'Spec · State system and component inventory', 'The three lifecycles, overlays, record states and review provenance as rendered, plus every component and the StudioOS primitive it extends.', [S('CT91', 1500)]],
+      ['CT-92', 'Spec · Interaction specifications', 'Routing, drill-downs, panels, repairs, expected records, review binding, server-side action guards, evidence, high-risk confirmation, search and outcome messaging.', [S('CT92', 1200)]],
+      ['CT-93', 'Spec · Accessibility notes', 'What each pattern is built to do and what must be tested in the built product. Static boards don’t demonstrate WCAG compliance.', [S('CT93', 1000)]],
+      ['CT-94', 'Spec · Implementation notes', 'Tokens, components to reuse, the data fields the UI relies on, permissions and open questions for product.', [S('CT94', 1300)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+**✅ Here is the exact, ready-to-copy prompt** for Replit Agent to implement a secure inactivity timeout + automatic logout for the entire dashboard.
+
+### First, the recommended settings (you can change them in the prompt if you want):
+- Timeout: **20 minutes** of inactivity
+- Warning modal appears at **1 minute** remaining
+- Fully automatic logout on timeout
+- Clears sensitive data on logout
+
+---
+
+**Copy and paste this entire prompt into Replit Agent:**
+
+```
+You are the senior frontend security engineer for Axal StudioOS. Implement a secure **inactivity timeout with automatic logout** across the entire dashboard (all protected pages).
+
+Exact requirements:
+
+- Inactivity timeout: 20 minutes (1200000 ms)
+- Track activity on: mousemove, keydown, click, scroll, touchstart
+- Reset timer on any user activity
+- When 1 minute remains: show a clean modal with countdown ("You will be logged out in 60 seconds due to inactivity")
+- On timeout: automatically call the logout endpoint and redirect to login page
+- On logout: clear localStorage, sessionStorage, and any sensitive data
+- Make the timer global and work on every dashboard page (Partner Dashboard, Pipeline, Settings, Admin Console, etc.)
+
+Implementation details:
+- Create a new file `frontend/js/inactivity-timer.js`
+- Include this script in all protected HTML pages (dashboard.html, pipeline.html, settings.html, etc.)
+- Use a single shared timer instance
+- Add a nice, non-intrusive modal for the countdown warning with "Stay Logged In" and "Logout Now" buttons
+
+Build this step-by-step:
+1. First create the full `frontend/js/inactivity-timer.js` with timer logic, activity listeners, warning modal, and auto-logout.
+2. Then include the script in the main dashboard layout and all protected pages.
+3. Then test the timer thoroughly (simulate inactivity and verify logout).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+**What this will deliver:**
+- Secure automatic logout after 20 minutes of inactivity
+- Clear warning modal with countdown
+- "Stay Logged In" option for good UX
+- Works across all dashboard pages
+- Cleans up sensitive data on logout
+
+**Tip:** After Replit finishes, you can easily change the timeout to 15 or 30 minutes by editing the number in `inactivity-timer.js`.
+
+Would you like me to also give you a prompt to make the timeout **configurable per user in Settings** (so admins or users can choose their own timeout)? Just say the word.

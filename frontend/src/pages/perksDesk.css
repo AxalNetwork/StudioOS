@@ -1,0 +1,18 @@
+/* The standalone Perks marketplace fills the app content column, without an
+   AI rail. The shell is flush for this path (SHARED_FULL_BLEED), and the
+   listing body supplies its own gutters. */
+.perks-desk { min-height: 100%; background: #f3f2f5; color: #252331; }
+.perks-canvas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: #f8f7f9;
+  border-bottom: 1px solid #e6e2eb;
+  min-height: 100%;
+}
+.perks-main { min-width: 0; padding: 28px; }
+.dark .perks-desk { background: #201d27; color: #eee9f2; }
+.dark .perks-canvas { background: #282430; border-color: #403947; }
+@media (max-width: 900px) {
+  .perks-canvas { display: block; }
+  .perks-main { padding: 20px; }
+}

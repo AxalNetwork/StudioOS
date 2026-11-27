@@ -1,0 +1,37 @@
+#29 - Advisor Research Section
+What & Why
+Build the Advisor profile's Research section — an external-intelligence and knowledge workspace covering Market, Companies, Documents, AI Research, and News. Structurally this mirrors the already-built investor Research section, so the investor Research pages are the primary reference; the goal is an advisor-scoped version replacing the shell stubs.
+Done looks like
+* Market reads like an intelligence workspace: Industries, Sectors, Trends, Macro analysis, and Geography as tabs, with detail panels.
+* Companies covers a Startup database, Unicorn database, Public companies, an Exit database, and Funding rounds, filterable and searchable, with a company detail panel.
+* Documents is a searchable document library: Pitch decks, Investment memos, PDFs, Contracts, and Research papers, with search/filter and a detail panel.
+* AI Research offers clearly-labelled placeholder AI surfaces: AI Search, AI Analyst, Comparable Companies, Market Maps, and Company Reports — every AI surface is visibly marked as sample output.
+* News is a categorized feed: Industry, Portfolio, Competitor, Funding, Acquisitions, and IPO news with category filtering.
+* Every tab, filter, and detail panel renders with mock data — no blank views and no console errors.
+Out of scope
+* Real backend/API wiring and live market/news/document feeds — mock data only.
+* The App shell, sidebar, and routing (delivered by the Advisor shell foundation task).
+* Network and Advisory sections (separate tasks).
+Steps
+1. Market — Build the Industries/Sectors/Trends/Macro/Geography tabs with detail panels.
+2. Companies — Build the company/exit/funding-round databases with filters, search, and a detail panel.
+3. Documents — Build the searchable document library with type/source filters and a detail panel.
+4. AI Research — Build AI Search, AI Analyst, Comparables, Market Maps, and Company Reports as clearly-labelled sample surfaces.
+5. News — Build the categorized news feed with category filtering.
+6. Mock data — Seed a dedicated advisor Research data module with realistic, deterministic placeholder records, structured to be swapped for live data later. Reuse the investor Research data shape where it fits.
+7. Verify — Click through every tab, filter, and detail panel across all five pages; confirm no blank states or console errors.
+Architectural constraints
+* Reuse the shared section kit (components/section) and the investor Research pages as structural references; keep advisor code under its own pages/advisor/research/ and data/advisor/ files.
+* AI surfaces must be clearly labelled as sample/placeholder output.
+* Deterministic mock data only: demo "today" is 2026-07-11; no Date.now, Math.random, or zero-argument new Date().
+Relevant files
+* frontend/src/pages/investor/research/MarketPage.jsx
+* frontend/src/pages/investor/research/CompaniesPage.jsx
+* frontend/src/pages/investor/research/DocumentsPage.jsx
+* frontend/src/pages/investor/research/AIPage.jsx
+* frontend/src/pages/investor/research/NewsPage.jsx
+* frontend/src/data/investor/research.js
+Dependencies
+Advisor profile shell: sidebar, routes, and page stubs
+
+Open task

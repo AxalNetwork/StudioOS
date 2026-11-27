@@ -1,0 +1,75 @@
+Objective
+  Documentation currently has an "Admin" section visible to all logged-
+  in users. Admin docs (Admin Console, Monitoring, Due Diligence,
+  Trust Center oversight, Infrastructure tab) must be admin-role-only.
+
+Tasks
+  1. frontend/src/pages/docs/sections/index.js
+     Add `roles: ['admin']` to every Admin-related section entry.
+     Sections to flag:
+       - admin/admin-console
+       - admin/monitoring-observability
+       - admin/user-analytics
+       - admin/due-diligence
+       - admin/partner-invitations
+       - admin/trust-center-oversight
+       - admin/infrastructure
+       - admin/contracts
+       - admin/integration-keys
+       - admin/audit-log
+     Any section without an explicit roles array is public.
+
+  2. frontend/src/pages/docs/DocsLayout.jsx
+     Filter the left rail by user.role:
+       - admin sees everything
+       - non-admin never sees sections flagged ['admin']
+     Also filter the search index — admin-only content excluded from
+     non-admin searches.
+
+  3. Direct-URL access:
+     Wrap /docs/admin/* routes with a guard that 404s for non-admin
+     users (not 403 — pretend the page doesn't exist).
+
+  4. Audit: grep frontend/src/pages/docs/sections/ for any reference
+     to admin features in non-admin sections (e.g. a "see also Admin
+     Monitoring" link in the Account section). Remove or gate them.
+
+  5. Commit a one-line note in CLAUDE.md under "Doc visibility":
+       "Admin docs are admin-only. Never link to them from
+        public-facing docs or marketing pages."
+
+Acceptance
+  - Logged-out, founder, investor, mentor, and partner users do NOT
+    see any Admin entry in the docs left rail.
+  - Admin sees the Admin group.
+  - Visiting /docs/admin/anything as a non-admin returns 404.
+  - Docs search results for non-admins contain zero admin pages.  Objective
+  Documentation currently has an "Admin" section visible to all logged-
+  in users. Admin docs (Admin Console, Monitoring, Due Diligence,
+  Trust Center oversight, Infrastructure tab) must be admin-role-only.
+
+Tasks
+  1. frontend/src/pages/docs/sections/index.js
+     Add `roles: ['admin']` to every Admin-related section entry.
+     Sections to flag:
+       - admin/admin-console
+       - admin/monitoring-observability
+       - admin/user-analytics
+       - admin/due-diligence
+       - admin/partner-invitations
+       - admin/trust-center-oversight
+       - admin/infrastructure
+       - admin/contracts
+       - admin/integration-keys
+       - admin/audit-log
+     Any section without an explicit roles array is public.
+
+  2. frontend/src/pages/docs/DocsLayout.jsx
+     Filter the left rail by user.role:
+       - admin sees everything
+       - non-admin never sees sections flagged ['admin']
+     Also filter the search index — admin-only content excluded from
+     non-admin searches.
+
+  3. Direct-URL access:
+     Wrap /docs/admin/* routes with a guard that 404s for non-admin

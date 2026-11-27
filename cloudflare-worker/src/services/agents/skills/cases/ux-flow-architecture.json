@@ -1,0 +1,34 @@
+{
+  "skill": "ux-flow-architecture",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "UX Flow Architecture",
+        "task_scope": "Architects task-oriented product flows including branching, system states, errors and recovery paths.",
+        "evidence": [
+          "branching task flow and recovery"
+        ],
+        "omitted_field": "completion state"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for branching task flow and recovery."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "branching task flow and recovery"
+    ],
+    "must_say_not_recorded": [
+      "completion state"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

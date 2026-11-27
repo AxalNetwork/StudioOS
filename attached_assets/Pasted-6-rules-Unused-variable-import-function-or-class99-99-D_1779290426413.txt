@@ -1,0 +1,129 @@
+6 rules
+Unused variable, import, function or class99 (99)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Note
+JavaScript
+Unused import40 (40)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Note
+Python
+Empty except23 (23)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Note
+Python
+Missing space in string concatenation12 (12)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Warning
+JavaScript
+Unused global variable9 (9)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Note
+Python
+Useless assignment to local variable7 (7)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Warning
+JavaScript
+Unused local variable4 (4)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Note
+Python
+Useless conditional3 (3)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Warning
+JavaScript
+Overwritten property2 (2)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Error
+JavaScript
+First parameter of a method is not named 'self'2 (2)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Note
+Python
+Identical operands1 (1)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Warning
+JavaScript
+Superfluous trailing arguments1 (1)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Warning
+JavaScript
+Variable defined multiple times1 (1)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Warning
+Python
+Use of a print statement at module level1 (1)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Note
+Python
+Redundant assignment1 (1)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Reliability
+Error
+Python
+Redundant comparison1 (1)
+Detected by CodeQL · Last seen
+47 minutes ago
+on main in
+b47cfbe
+Maintainability
+Warning
+Python

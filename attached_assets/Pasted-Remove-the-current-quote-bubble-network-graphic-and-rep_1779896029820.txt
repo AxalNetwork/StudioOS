@@ -1,0 +1,48 @@
+Remove the current quote-bubble network graphic and replace it with a premium revenue proof illustration for the Validation slide.
+
+Goal:
+The right side of the Validation slide should no longer show quotation marks or abstract network bubbles. Replace it with a clean, investor-friendly revenue graphic that visually proves traction.
+
+Design direction:
+- Use a revenue-focused illustration, not a generic dashboard.
+- Prefer a compact upward revenue chart, payment trail, or milestone-based proof graphic.
+- The visual should feel editorial, minimal, and credible.
+- Keep the Axal palette: soft violet, neutral white, subtle gold accents only if needed.
+- Avoid clutter, loud colors, and generic finance UI styling.
+
+Recommended structure:
+- Show a simple revenue progression or payment proof sequence.
+- Include one strong headline metric, such as:
+  - total revenue,
+  - recurring revenue,
+  - number of paying customers,
+  - or first confirmed payment.
+- Add a small supporting label like “revenue proof” or “paid validation.”
+- If useful, show a compact line chart, bar chart, or stepped milestone card with visible growth.
+- If no real revenue exists yet, show a graceful pre-revenue state instead of fake numbers.
+
+Data requirements:
+- Pull revenue from the existing New Founders Revenue input if it exists.
+- If the field does not exist, build it and store:
+  - total revenue,
+  - paying customers,
+  - first payment date,
+  - recurring revenue,
+  - and/or paid pilot status.
+- The illustration must read from structured revenue data, not hardcoded text.
+
+Slide behavior:
+- The Validation slide should pair the 0–5 customer validation chart with the new revenue proof graphic.
+- The revenue graphic should sit in the same right-side area where the quote bubble illustration currently lives.
+- Keep the overall slide premium, clean, and easy to scan.
+
+Acceptance criteria:
+- Quote icons and bubble nodes are removed.
+- A revenue proof illustration replaces them.
+- The slide clearly shows validation through real revenue or a graceful pending state.
+- The design feels polished and credible for an investor deck.
+
+Implementation note:
+- Reuse the existing Validation slide layout.
+- Only swap the right-side visual block.
+- Keep all typography, spacing, and deck styling consistent with Axal.

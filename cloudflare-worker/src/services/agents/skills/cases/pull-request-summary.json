@@ -1,0 +1,31 @@
+{
+  "skill": "pull-request-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "open_prs": [
+          {
+            "title": "Migrate booking API to v2",
+            "author": "Lena Ortiz",
+            "age_days": 9,
+            "review": "changes requested",
+            "checks": "failing"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Migrate booking API to v2",
+      "9"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "approved"
+    ]
+  }
+}

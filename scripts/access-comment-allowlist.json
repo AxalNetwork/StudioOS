@@ -1,0 +1,26 @@
+{
+  "note": "Every comment under cloudflare-worker/src that mentions Cloudflare Access, quoted in part and vouched for. Task #33 took the Access middleware off /api/admin/*, /api/monitoring/* and /api/infra/* (index.ts records why); seventeen comments in twelve files went on describing the removed perimeter as live, so a reader believed the admin API had an identity layer in front of it that it does not have. What is still true is listed here. An entry is a file, a phrase copied from the comment (whitespace is collapsed, so wrapping does not matter), and one line saying why the sentence is true. A mention no entry quotes fails; an entry whose phrase is no longer in any comment of its file fails, so this list cannot outlive the sentences it vouches for. Never a line number: a line number goes stale with the next edit above it.",
+  "resolve_with": "Correct the comment to say what is true — the gate is requireAdmin or requireSuperAdmin in the handler, and Access guards only the two KYC document routes in index.ts. Add an entry here only for a sentence that is true, with the reason it is.",
+  "entries": [
+    { "file": "index.ts", "phrase": "Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and /api/infra was REMOVED.", "reason": "The removal record itself: it says the perimeter is gone, which is the fact every other comment has to agree with." },
+    { "file": "index.ts", "phrase": "app.axal.vc/api/admin/* fetches could not carry the Cf-Access-Jwt-Assertion header — requireCfAccess() then fail-closed with 403 for legitimate admins", "reason": "Why it was removed, in the past tense; true as history." },
+    { "file": "index.ts", "phrase": "Do NOT re-add requireCfAccess() here", "reason": "A warning against restoring the perimeter without the re-engage checklist; it describes a rule, not a live gate." },
+    { "file": "index.ts", "phrase": "Task #15 — Cloudflare Access on sensitive R2 read endpoints.", "reason": "Introduces the two KYC document mounts directly below it, which are the only requireCfAccess() mounts left." },
+    { "file": "index.ts", "phrase": "eSign document downloads are deliberately NOT behind CF Access.", "reason": "States a route Access does not cover, and why; true." },
+    { "file": "index.ts", "phrase": "a Cloudflare Access path wildcard (`*/document`) would catch the public route too", "reason": "Explains why eSign stays RBAC-only; a design argument, not a claim that a perimeter exists." },
+    { "file": "index.ts", "phrase": "it should also carry the same requireCfAccess() middleware", "reason": "Forward guidance for an unbuilt route, naming the middleware the KYC mounts above it already use." },
+    { "file": "middleware/cfAccess.ts", "phrase": "Task #33 — Cloudflare Access JWT verification middleware.", "reason": "The middleware's own header, describing the mechanism, not where it is mounted." },
+    { "file": "middleware/cfAccess.ts", "phrase": "MUST carry a valid `Cf-Access-Jwt- Assertion` header", "reason": "What the middleware requires of a request on a route it guards; true of the KYC mounts." },
+    { "file": "middleware/cfAccess.ts", "phrase": "app.use('/api/kyc/admin/:userId/document', requireCfAccess());", "reason": "Quotes the first real mount in index.ts, which topology_d209.test.ts holds to CF_ACCESS_PATHS." },
+    { "file": "middleware/cfAccess.ts", "phrase": "app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());", "reason": "Quotes the second real mount in index.ts." },
+    { "file": "middleware/rateLimit.ts", "phrase": "(csrf, lastActive, cfAccess)", "reason": "Names the cfAccess module as a sibling that uses `import type`; a statement about imports, not about gating." },
+    { "file": "routes/admin_articles.ts", "phrase": "There is NO Cf-Access perimeter in front of /api/admin.", "reason": "Says the perimeter is absent; true." },
+    { "file": "routes/admin_articles.ts", "phrase": "could not carry the Cf-Access-Jwt-Assertion header and every legitimate admin got a fail-closed 403", "reason": "Why it was removed, in the past tense." },
+    { "file": "routes/admin_assessment.ts", "phrase": "It used to claim a `/api/admin/*` Cf-Access perimeter", "reason": "Records that the header once made the false claim, in the past tense." },
+    { "file": "routes/admin_exploring.ts", "phrase": "(no requireCfAccess — see Task #33 note in index.ts)", "reason": "Says there is no Access gate; true." },
+    { "file": "services/tenancyScope.ts", "phrase": "src/middleware/ has cfAccess, csrf, rateLimit, requireTier", "reason": "Lists the modules in the middleware folder; a statement about files, not about what they gate." },
+    { "file": "services/topology.ts", "phrase": "where Cloudflare Access is mounted", "reason": "Names a fact the topology page derives from the source; it asserts nothing about where." },
+    { "file": "services/topology.ts", "phrase": "every `requireCfAccess()` mount", "reason": "Says the test holds CF_ACCESS_PATHS to every real mount — the two KYC routes." },
+    { "file": "types.ts", "phrase": "Cloudflare Access verification (middleware/cfAccess.ts).", "reason": "The env vars' comment, corrected: it names the middleware and, in the next sentence, the only routes it gates." }
+  ]
+}

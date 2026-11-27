@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .ct-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .ct-page{background:#f6f5f8;color:#18181b}
+    .ct-surface{background:#ffffff}
+    .ct-sunken{background:#faf9fc}
+    .ct-border{border-color:#e5e3ec}
+    .ct-bd-b{border-bottom-color:#e5e3ec}
+    .ct-bd-t{border-top-color:#e5e3ec}
+    .ct-bd-l{border-left-color:#e5e3ec}
+    .ct-text{color:#18181b}
+    .ct-muted{color:#6b6577}
+    .ct-strong{color:#3f3f46}
+    .ct-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+    .ct-track{background:#e9e7ef}
+
+    .ct-page.ct-dark{background:#0a090e;color:#ececf1}
+    .ct-dark .ct-surface{background:#17161d}
+    .ct-dark .ct-sunken{background:#1d1b25}
+    .ct-dark .ct-border{border-color:#2a2833}
+    .ct-dark .ct-bd-b{border-bottom-color:#2a2833}
+    .ct-dark .ct-bd-t{border-top-color:#2a2833}
+    .ct-dark .ct-bd-l{border-left-color:#2a2833}
+    .ct-dark .ct-text{color:#ececf1}
+    .ct-dark .ct-muted{color:#a5a0b2}
+    .ct-dark .ct-strong{color:#dcd9e4}
+    .ct-dark .ct-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .ct-dark .ct-track{background:#26232f}
+
+    .ct-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .ct-btn:hover{filter:brightness(1.05)}
+    .ct-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .ct-seg{cursor:pointer;transition:background .13s,color .13s}
+    .ct-row{transition:background .12s}
+    .ct-row:hover{background:#faf9fc}
+    .ct-dark .ct-row:hover{background:#1d1b25}
+    .ct-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .ct-fade{animation:ctFade .2s ease}
+    @keyframes ctFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:99px;outline:none;cursor:pointer}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#7c3aed;border:2.5px solid #fff;box-shadow:0 1px 3px rgba(10,9,14,.28);cursor:pointer}
+    .ct-dark input[type=range]::-webkit-slider-thumb{border-color:#17161d}
+    input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#7c3aed;border:2.5px solid #fff;cursor:pointer}
+    input,select{font-family:inherit;outline:none}
+    input:focus,select:focus{border-color:#7c3aed}
+    @media (max-width:1080px){.ct-2{grid-template-columns:1fr!important}.ct-3{grid-template-columns:1fr!important}.ct-4{grid-template-columns:1fr 1fr!important}.ct-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="ct-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="ct-surface ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1400px;margin:0 auto;padding:14px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ pieIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="ct-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Cap Table</div>
+            <div class="ct-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="{{ syncChip }}">{{ syncLabel }}</span>
+          <div class="ct-btn ct-border ct-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="7">
+          <div class="ct-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1400px;margin:0 auto;padding:22px 24px 90px">
+
+  <!-- ============ 1 · CAP TABLE ============ -->
+  <sc-if value="{{ tabTable }}">
+  <div class="ct-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Current ownership</div>
+        <div class="ct-muted" style="font-size:13px;margin-top:5px">{{ tableSub }}</div>
+      </div>
+      <div class="ct-sunken ct-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ basisTabs }}" as="b" hint-placeholder-count="2">
+          <div class="ct-seg" onClick="{{ b.go }}" style="{{ b.style }}">{{ b.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="ct-2" style="display:grid;grid-template-columns:1fr 316px;gap:16px;align-items:start">
+
+      <!-- table -->
+      <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="ct-wide">
+          <div class="ct-sunken ct-bd-b" style="display:grid;grid-template-columns:2.2fr 1.1fr 1fr .9fr 1.1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:760px">
+            <div class="ct-muted ct-th" style="padding:9px 20px">Holder</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px">Security</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px;text-align:right">Shares</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px;text-align:right">{{ pctHeader }}</div>
+            <div class="ct-muted ct-th" style="padding:9px 20px 9px 12px;text-align:right">Cost basis</div>
+          </div>
+          <sc-for list="{{ classGroups }}" as="g" hint-placeholder-count="4">
+            <div>
+              <div class="ct-sunken ct-bd-b" style="display:flex;align-items:center;gap:10px;padding:8px 20px;border-bottom-width:1px;border-bottom-style:solid">
+                <span style="width:8px;height:8px;border-radius:2px;background:{{ g.color }};flex:none"></span>
+                <div class="ct-strong ct-th" style="min-width:0;flex:1">{{ g.name }}</div>
+                <div class="ct-muted ct-num" style="font-size:10.5px">{{ g.summary }}</div>
+              </div>
+              <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+                <div class="ct-row ct-bd-b" style="display:grid;grid-template-columns:2.2fr 1.1fr 1fr .9fr 1.1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:760px;background:{{ r.rowBg }}">
+                  <div style="padding:11px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+                    <div style="{{ r.avStyle }}">{{ r.initials }}</div>
+                    <div style="min-width:0">
+                      <div class="ct-strong" style="font-size:12.5px;font-weight:{{ r.weight }}">{{ r.name }}</div>
+                      <div class="ct-muted" style="font-size:10.5px;margin-top:1px">{{ r.meta }}</div>
+                    </div>
+                  </div>
+                  <div style="padding:11px 12px"><span style="{{ r.secChip }}">{{ r.security }}</span></div>
+                  <div class="ct-num ct-strong" style="padding:11px 12px;font-size:12px;font-weight:600;text-align:right">{{ r.shares }}</div>
+                  <div class="ct-num ct-text" style="padding:11px 12px;font-size:12.5px;font-weight:700;text-align:right">{{ r.pct }}</div>
+                  <div class="ct-num ct-muted" style="padding:11px 20px 11px 12px;font-size:11.5px;text-align:right">{{ r.basis }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div class="ct-sunken" style="display:grid;grid-template-columns:2.2fr 1.1fr 1fr .9fr 1.1fr;align-items:center;min-width:760px">
+            <div class="ct-text" style="padding:13px 20px;font-size:12px;font-weight:800">{{ totalLabel }}</div>
+            <div style="padding:13px 12px"></div>
+            <div class="ct-num ct-text" style="padding:13px 12px;font-size:12.5px;font-weight:800;text-align:right">{{ totalShares }}</div>
+            <div class="ct-num ct-text" style="padding:13px 12px;font-size:12.5px;font-weight:800;text-align:right">100.0%</div>
+            <div class="ct-num ct-strong" style="padding:13px 20px 13px 12px;font-size:11.5px;font-weight:600;text-align:right">{{ totalBasis }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- donut + notes -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="ct-muted ct-th" style="margin-bottom:14px">By class</div>
+          <div style="display:flex;justify-content:center">
+            <div style="position:relative;width:168px;height:168px">
+              <svg viewBox="0 0 42 42" style="width:100%;height:100%;transform:rotate(-90deg)">
+                <sc-for list="{{ donut }}" as="d" hint-placeholder-count="4">
+                  <circle cx="21" cy="21" r="15.9" fill="none" stroke="{{ d.color }}" stroke-width="5.2" stroke-dasharray="{{ d.dash }}" stroke-dashoffset="{{ d.offset }}"></circle>
+                </sc-for>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                <div class="ct-num ct-text" style="font-size:21px;font-weight:700;letter-spacing:-.028em;line-height:1">{{ totalShares }}</div>
+                <div class="ct-muted ct-th" style="font-size:8.5px;margin-top:3px">{{ donutLabel }}</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:16px">
+            <sc-for list="{{ donut }}" as="d" hint-placeholder-count="4">
+              <div class="ct-bd-t" style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top-width:1px;border-top-style:solid">
+                <span style="width:9px;height:9px;border-radius:3px;background:{{ d.color }};flex:none"></span>
+                <div class="ct-strong" style="font-size:11.5px;font-weight:600;min-width:0;flex:1">{{ d.name }}</div>
+                <div class="ct-num ct-text" style="font-size:11.5px;font-weight:700">{{ d.pct }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 20px">
+          <div class="ct-muted ct-th" style="margin-bottom:10px">Convertibles outstanding</div>
+          <div class="ct-muted" style="font-size:11.5px;line-height:1.65">{{ convertNote }}</div>
+          <div class="ct-btn ct-sunken ct-border ct-strong" onClick="{{ goModel }}" style="margin-top:12px;padding:9px 0;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;text-align:center">Model the conversion →</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 2 · MODELING ============ -->
+  <sc-if value="{{ tabModel }}">
+  <div class="ct-fade">
+    <div style="margin-bottom:16px">
+      <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Model the next round</div>
+      <div class="ct-muted" style="font-size:13px;margin-top:5px;max-width:620px;line-height:1.6">Every outstanding SAFE converts on its own terms — cap price against discount price, whichever gives the holder more shares. MFN holders inherit the best terms in the stack before conversion.</div>
+    </div>
+
+    <div class="ct-2" style="display:grid;grid-template-columns:296px 1fr;gap:16px;align-items:start">
+
+      <!-- inputs -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="ct-muted ct-th">Round inputs</div>
+          <div style="display:flex;flex-direction:column;gap:15px;margin-top:14px">
+            <sc-for list="{{ modelInputs }}" as="m" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                  <div class="ct-strong" style="font-size:11.5px;font-weight:600">{{ m.label }}</div>
+                  <div class="ct-num ct-text" style="font-size:13px;font-weight:700">{{ m.display }}</div>
+                </div>
+                <input class="ct-track" type="range" min="{{ m.min }}" max="{{ m.max }}" step="{{ m.step }}" value="{{ m.value }}" onChange="{{ m.set }}" style="width:100%;margin-top:9px">
+                <div class="ct-muted" style="font-size:10.5px;margin-top:5px;line-height:1.45">{{ m.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="ct-bd-t" style="margin-top:16px;padding-top:14px;border-top-width:1px;border-top-style:solid;display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ modelDerived }}" as="d" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;gap:10px">
+                <div class="ct-muted" style="font-size:11.5px">{{ d.k }}</div>
+                <div class="ct-num ct-strong" style="font-size:11.5px;font-weight:700">{{ d.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- conversion detail -->
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px">
+            <div class="ct-muted ct-th">SAFE conversion</div>
+          </div>
+          <sc-for list="{{ conversions }}" as="c" hint-placeholder-count="2">
+            <div class="ct-bd-b" style="padding:14px 20px;border-bottom-width:1px;border-bottom-style:solid">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <div class="ct-strong" style="font-size:12.5px;font-weight:700;min-width:0;flex:1">{{ c.name }}</div>
+                <sc-if value="{{ c.mfn }}"><span style="{{ mfnChip }}">MFN</span></sc-if>
+              </div>
+              <div class="ct-muted ct-num" style="font-size:10.5px;margin-top:3px">{{ c.terms }}</div>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+                <sc-for list="{{ c.paths }}" as="p" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="{{ p.markStyle }}"></span>
+                    <div style="font-size:11px;font-weight:{{ p.weight }};color:{{ p.tone }};min-width:0;flex:1">{{ p.label }}</div>
+                    <div class="ct-num" style="font-size:11px;font-weight:{{ p.weight }};color:{{ p.tone }}">{{ p.price }}</div>
+                    <div class="ct-num" style="font-size:11px;font-weight:{{ p.weight }};color:{{ p.tone }};width:64px;text-align:right">{{ p.shares }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="ct-bd-t" style="margin-top:10px;padding-top:9px;border-top-width:1px;border-top-style:solid">
+                <div class="ct-muted" style="font-size:10.5px;line-height:1.5">{{ c.explain }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- post-round table -->
+      <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="ct-muted ct-th">Post-round · fully diluted</div>
+          <div class="ct-muted ct-num" style="font-size:11px">{{ postSummary }}</div>
+        </div>
+        <div class="ct-wide">
+          <div class="ct-sunken ct-bd-b" style="display:grid;grid-template-columns:2fr 1.05fr 1fr .85fr .85fr 1.15fr;border-bottom-width:1px;border-bottom-style:solid;min-width:800px">
+            <div class="ct-muted ct-th" style="padding:9px 20px">Holder</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px">Security</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px;text-align:right">Shares</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px;text-align:right">Before</div>
+            <div class="ct-muted ct-th" style="padding:9px 12px;text-align:right">After</div>
+            <div class="ct-muted ct-th" style="padding:9px 20px 9px 12px;text-align:right">Delta</div>
+          </div>
+          <sc-for list="{{ postRows }}" as="r" hint-placeholder-count="8">
+            <div class="ct-row ct-bd-b" style="display:grid;grid-template-columns:2fr 1.05fr 1fr .85fr .85fr 1.15fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:800px;background:{{ r.rowBg }}">
+              <div style="padding:11px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+                <div style="{{ r.avStyle }}">{{ r.initials }}</div>
+                <div style="min-width:0">
+                  <div class="ct-strong" style="font-size:12.5px;font-weight:{{ r.weight }}">{{ r.name }}</div>
+                  <div class="ct-muted" style="font-size:10.5px;margin-top:1px">{{ r.meta }}</div>
+                </div>
+              </div>
+              <div style="padding:11px 12px"><span style="{{ r.secChip }}">{{ r.security }}</span></div>
+              <div class="ct-num ct-strong" style="padding:11px 12px;font-size:12px;font-weight:600;text-align:right">{{ r.shares }}</div>
+              <div class="ct-num ct-muted" style="padding:11px 12px;font-size:11.5px;text-align:right">{{ r.before }}</div>
+              <div class="ct-num ct-text" style="padding:11px 12px;font-size:12.5px;font-weight:700;text-align:right">{{ r.after }}</div>
+              <div style="padding:11px 20px 11px 12px;text-align:right">
+                <span style="{{ r.deltaChip }}">{{ r.delta }}</span>
+              </div>
+            </div>
+          </sc-for>
+          <div class="ct-sunken" style="display:grid;grid-template-columns:2fr 1.05fr 1fr .85fr .85fr 1.15fr;align-items:center;min-width:800px">
+            <div class="ct-text" style="padding:13px 20px;font-size:12px;font-weight:800">Fully diluted</div>
+            <div style="padding:13px 12px"></div>
+            <div class="ct-num ct-text" style="padding:13px 12px;font-size:12.5px;font-weight:800;text-align:right">{{ postTotalShares }}</div>
+            <div class="ct-num ct-muted" style="padding:13px 12px;font-size:11.5px;text-align:right">100.0%</div>
+            <div class="ct-num ct-text" style="padding:13px 12px;font-size:12.5px;font-weight:800;text-align:right">100.0%</div>
+            <div style="padding:13px 20px 13px 12px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 3 · POOL ============ -->
+  <sc-if value="{{ tabPool }}">
+  <div class="ct-fade">
+    <div style="margin-bottom:16px">
+      <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Option pool</div>
+      <div class="ct-muted" style="font-size:13px;margin-top:5px;max-width:620px;line-height:1.6">A pool created in-round comes out of the pre-money valuation, which means the founders pay for it, not the incoming investor. Both readings are shown below because only one of them is what actually happens.</div>
+    </div>
+
+    <div class="ct-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+
+      <!-- pool math -->
+      <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <div class="ct-muted ct-th">Target pool, post-money</div>
+          <div class="ct-num ct-text" style="font-size:15px;font-weight:700">{{ poolTargetLabel }}</div>
+        </div>
+        <input class="ct-track" type="range" min="0" max="25" step="0.5" value="{{ poolTarget }}" onChange="{{ setPool }}" style="width:100%;margin-top:10px">
+        <div class="ct-muted" style="font-size:10.5px;margin-top:5px">Existing pool is {{ existingPoolPct }} post-money. The top-up is the difference.</div>
+
+        <div class="ct-bd-t" style="margin-top:18px;padding-top:16px;border-top-width:1px;border-top-style:solid">
+          <div class="ct-muted ct-th" style="margin-bottom:11px">Who pays for the top-up</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ poolMath }}" as="p" hint-placeholder-count="5">
+              <div class="ct-bd-t" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+                <div style="min-width:0;flex:1">
+                  <div class="ct-strong" style="font-size:12px;font-weight:{{ p.weight }}">{{ p.k }}</div>
+                  <sc-if value="{{ p.note }}"><div class="ct-muted" style="font-size:10.5px;line-height:1.45;margin-top:2px">{{ p.note }}</div></sc-if>
+                </div>
+                <div class="ct-num" style="font-size:12.5px;font-weight:{{ p.weight }};color:{{ p.tone }};flex:none">{{ p.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="ct-sunken ct-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:13px 15px;margin-top:16px">
+          <div class="ct-strong" style="font-size:11.5px;font-weight:700">{{ poolHonestTitle }}</div>
+          <div class="ct-muted" style="font-size:11px;line-height:1.6;margin-top:5px">{{ poolHonestBody }}</div>
+        </div>
+      </div>
+
+      <!-- burn-down -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+            <div class="ct-muted ct-th">Pool utilisation</div>
+            <div class="ct-muted ct-num" style="font-size:11px">{{ poolUtilLine }}</div>
+          </div>
+          <div class="ct-track" style="height:11px;border-radius:99px;overflow:hidden;display:flex;margin-top:12px">
+            <sc-for list="{{ poolBars }}" as="b" hint-placeholder-count="3">
+              <div style="{{ b.style }}" title="{{ b.label }}"></div>
+            </sc-for>
+          </div>
+          <div class="ct-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
+            <sc-for list="{{ poolStats }}" as="s" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="width:8px;height:8px;border-radius:2px;background:{{ s.color }};flex:none"></span>
+                  <div class="ct-muted ct-th" style="font-size:9px">{{ s.k }}</div>
+                </div>
+                <div class="ct-num ct-text" style="font-size:16px;font-weight:700;letter-spacing:-.02em;margin-top:5px">{{ s.v }}</div>
+                <div class="ct-muted ct-num" style="font-size:10px;margin-top:1px">{{ s.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="ct-muted ct-th">Grants against the pool</div>
+            <div class="ct-muted ct-num" style="font-size:10.5px">{{ grantCount }}</div>
+          </div>
+          <div class="ct-wide">
+            <div class="ct-sunken ct-bd-b" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1.2fr;border-bottom-width:1px;border-bottom-style:solid;min-width:460px">
+              <div class="ct-muted ct-th" style="padding:8px 20px">Grantee</div>
+              <div class="ct-muted ct-th" style="padding:8px 10px;text-align:right">Granted</div>
+              <div class="ct-muted ct-th" style="padding:8px 10px;text-align:right">Vested</div>
+              <div class="ct-muted ct-th" style="padding:8px 20px 8px 10px">Vesting</div>
+            </div>
+            <sc-for list="{{ grants }}" as="g" hint-placeholder-count="5">
+              <div class="ct-row ct-bd-b" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1.2fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:460px">
+                <div style="padding:11px 20px;min-width:0">
+                  <div class="ct-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.name }}</div>
+                  <div class="ct-muted" style="font-size:10px;margin-top:1px">{{ g.role }}</div>
+                </div>
+                <div class="ct-num ct-strong" style="padding:11px 10px;font-size:11.5px;font-weight:600;text-align:right">{{ g.granted }}</div>
+                <div class="ct-num" style="padding:11px 10px;font-size:11.5px;font-weight:600;text-align:right;color:{{ g.vestTone }}">{{ g.vested }}</div>
+                <div style="padding:11px 20px 11px 10px">
+                  <div class="ct-track" style="height:4px;border-radius:99px;overflow:hidden">
+                    <div style="{{ g.barStyle }}"></div>
+                  </div>
+                  <div class="ct-muted ct-num" style="font-size:9.5px;margin-top:4px">{{ g.note }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 4 · DILUTION ============ -->
+  <sc-if value="{{ tabDilution }}">
+  <div class="ct-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Dilution over time</div>
+        <div class="ct-muted" style="font-size:13px;margin-top:5px;max-width:600px;line-height:1.6">{{ dilutionSub }}</div>
+      </div>
+      <div style="flex:none;text-align:right">
+        <div class="ct-muted ct-th">Founders</div>
+        <div style="display:flex;align-items:baseline;gap:8px;justify-content:flex-end;margin-top:5px">
+          <div class="ct-num ct-muted" style="font-size:13px">{{ founderStart }}</div>
+          <div class="ct-muted" style="font-size:12px">→</div>
+          <div class="ct-num ct-text" style="font-size:18px;font-weight:700;letter-spacing:-.022em">{{ founderNow }}</div>
+        </div>
+        <div class="ct-num ct-muted" style="font-size:10.5px;margin-top:2px">{{ founderDrop }} across 5 events</div>
+      </div>
+    </div>
+
+    <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+      <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div class="ct-muted ct-th">Ownership by round</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <sc-for list="{{ timelineLegend }}" as="l" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="width:9px;height:9px;border-radius:2px;background:{{ l.color }};flex:none"></span>
+              <div class="ct-muted" style="font-size:10.5px">{{ l.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <sc-for list="{{ timeline }}" as="r" hint-placeholder-count="5">
+        <div class="ct-bd-b" style="padding:15px 22px;border-bottom-width:1px;border-bottom-style:solid;background:{{ r.rowBg }}">
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <div class="ct-text" style="font-size:13px;font-weight:700;letter-spacing:-.01em">{{ r.name }}</div>
+            <div class="ct-muted ct-num" style="font-size:10.5px">{{ r.when }}</div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:9px">
+              <div class="ct-num ct-text" style="font-size:13px;font-weight:700">{{ r.founders }}</div>
+              <span style="{{ r.deltaChip }}">{{ r.delta }}</span>
+            </div>
+          </div>
+          <div class="ct-track" style="height:14px;border-radius:5px;overflow:hidden;display:flex;margin-top:9px">
+            <sc-for list="{{ r.bars }}" as="b" hint-placeholder-count="3">
+              <div style="{{ b.style }}" title="{{ b.label }}"></div>
+            </sc-for>
+          </div>
+          <div class="ct-muted" style="font-size:11px;line-height:1.5;margin-top:7px">{{ r.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 5 · WATERFALL ============ -->
+  <sc-if value="{{ tabWaterfall }}">
+  <div class="ct-fade">
+    <div style="margin-bottom:16px">
+      <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Waterfall preview</div>
+      <div class="ct-muted" style="font-size:13px;margin-top:5px;max-width:600px;line-height:1.6">A single-scenario read on who gets what. Multi-tranche stacks, seniority ordering, and management carve-outs live in the full exit-waterfall tool.</div>
+    </div>
+
+    <div class="ct-2" style="display:grid;grid-template-columns:296px 1fr;gap:16px;align-items:start">
+      <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <div class="ct-muted ct-th">Exit value</div>
+          <div class="ct-num ct-text" style="font-size:16px;font-weight:700">{{ exitLabel }}</div>
+        </div>
+        <input class="ct-track" type="range" min="10" max="400" step="5" value="{{ exitValue }}" onChange="{{ setExit }}" style="width:100%;margin-top:10px">
+        <div class="ct-bd-t" style="margin-top:16px;padding-top:14px;border-top-width:1px;border-top-style:solid">
+          <div class="ct-muted ct-th" style="margin-bottom:9px">Liquidation preference</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <sc-for list="{{ prefTabs }}" as="p" hint-placeholder-count="3">
+              <div class="ct-seg" onClick="{{ p.go }}" style="{{ p.style }};text-align:left">{{ p.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="ct-sunken ct-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:12px 14px;margin-top:14px">
+          <div class="ct-muted" style="font-size:11px;line-height:1.6">{{ waterNote }}</div>
+        </div>
+        <div class="ct-btn ct-border ct-strong" style="margin-top:12px;padding:9px 0;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;text-align:center;display:flex;align-items:center;justify-content:center;gap:7px">
+          Open exit waterfall
+          <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px">
+            <div class="ct-muted ct-th">By class</div>
+          </div>
+          <sc-for list="{{ waterfall }}" as="w" hint-placeholder-count="2">
+            <div class="ct-bd-b" style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom-width:1px;border-bottom-style:solid;flex-wrap:wrap">
+              <span style="width:9px;height:9px;border-radius:2px;background:{{ w.color }};flex:none"></span>
+              <div style="min-width:0;flex:1">
+                <div class="ct-strong" style="font-size:12.5px;font-weight:700">{{ w.name }}</div>
+                <div class="ct-muted ct-num" style="font-size:10.5px;margin-top:2px">{{ w.meta }}</div>
+              </div>
+              <span style="{{ w.chip }}">{{ w.state }}</span>
+              <div style="text-align:right;flex:none;min-width:96px">
+                <div class="ct-num ct-text" style="font-size:14px;font-weight:700">{{ w.proceeds }}</div>
+                <div class="ct-num ct-muted" style="font-size:10.5px;margin-top:1px">{{ w.multiple }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="ct-muted ct-th">Common holders</div>
+            <div class="ct-muted ct-num" style="font-size:10.5px">{{ perCommonLabel }} per share</div>
+          </div>
+          <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:10px 20px">
+            <div class="ct-muted" style="font-size:11px;line-height:1.55">{{ strikeNote }}</div>
+          </div>
+          <sc-for list="{{ holderProceeds }}" as="h" hint-placeholder-count="4">
+            <div class="ct-row ct-bd-b" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom-width:1px;border-bottom-style:solid;background:{{ h.rowBg }}">
+              <div style="{{ h.avStyle }}">{{ h.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="ct-strong" style="font-size:12.5px;font-weight:{{ h.weight }}">{{ h.name }}</div>
+                <sc-if value="{{ h.net }}"><div class="ct-muted" style="font-size:10px;margin-top:1px">{{ h.net }}</div></sc-if>
+              </div>
+              <div class="ct-num ct-muted" style="font-size:11.5px;flex:none;width:76px;text-align:right">{{ h.shares }}</div>
+              <div class="ct-num ct-muted" style="font-size:11.5px;flex:none;width:52px;text-align:right">{{ h.pct }}</div>
+              <div class="ct-num ct-text" style="font-size:13px;font-weight:700;flex:none;width:82px;text-align:right">{{ h.proceeds }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 6 · 409A ============ -->
+  <sc-if value="{{ tabA409 }}">
+  <div class="ct-fade">
+    <div style="margin-bottom:16px">
+      <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">409A valuation</div>
+      <div class="ct-muted" style="font-size:13px;margin-top:5px;max-width:600px;line-height:1.6">{{ a409Sub }}</div>
+    </div>
+
+    <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+      <div style="display:flex;align-items:center;gap:26px;flex-wrap:wrap">
+        <div style="flex:none">
+          <div class="ct-muted ct-th">Current valuation</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:7px">
+            <div class="ct-num ct-text" style="font-size:32px;font-weight:700;letter-spacing:-.035em">{{ a409.value }}</div>
+            <div class="ct-muted" style="font-size:12px">{{ a409.per }}</div>
+          </div>
+          <div class="ct-muted ct-num" style="font-size:11px;margin-top:5px">Dated {{ a409.dated }} · {{ a409.provider }}</div>
+        </div>
+        <div class="ct-bd-l" style="flex:1;min-width:260px;padding-left:24px;border-left-width:1px;border-left-style:solid">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+            <div class="ct-muted ct-th">Safe harbour remaining</div>
+            <div class="ct-num ct-strong" style="font-size:12px;font-weight:700">{{ a409.daysLeft }} days</div>
+          </div>
+          <div class="ct-track" style="height:8px;border-radius:99px;overflow:hidden;margin-top:9px">
+            <div style="{{ expiryBar }}"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px">
+            <div class="ct-muted ct-num" style="font-size:10px">{{ a409.dated }}</div>
+            <div class="ct-muted ct-num" style="font-size:10px">expires {{ a409.expires }}</div>
+          </div>
+          <div class="ct-muted" style="font-size:11px;line-height:1.55;margin-top:9px">Method: {{ a409.method }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:14px;overflow:hidden">
+      <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 22px">
+        <div class="ct-muted ct-th">Event triggers</div>
+      </div>
+      <sc-for list="{{ triggers }}" as="t" hint-placeholder-count="4">
+        <div class="ct-bd-b" style="display:flex;align-items:flex-start;gap:14px;padding:13px 22px;border-bottom-width:1px;border-bottom-style:solid;flex-wrap:wrap">
+          <div style="min-width:170px;flex:none">
+            <div class="ct-strong" style="font-size:12.5px;font-weight:600">{{ t.k }}</div>
+          </div>
+          <span style="{{ t.chip }}">{{ t.state }}</span>
+          <div class="ct-muted" style="font-size:11.5px;line-height:1.55;min-width:0;flex:1">{{ t.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 7 · SHARING ============ -->
+  <sc-if value="{{ tabShare }}">
+  <div class="ct-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="ct-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Stakeholder sharing</div>
+        <div class="ct-muted" style="font-size:13px;margin-top:5px;max-width:600px;line-height:1.6">{{ shareNote }}</div>
+      </div>
+      <div class="ct-sunken ct-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ shareTabs }}" as="s" hint-placeholder-count="3">
+          <div class="ct-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="ct-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span style="width:15px;height:15px;display:flex;flex:none;color:{{ violet }}" dangerouslySetInnerHTML="{{ eyeIcon }}"></span>
+          <div class="ct-text" style="font-size:14px;font-weight:800;letter-spacing:-.014em">{{ audLabel }} view</div>
+        </div>
+        <div class="ct-muted" style="font-size:12px;margin-top:5px">{{ audScope }}</div>
+
+        <div class="ct-sunken ct-border" style="border-width:1px;border-style:solid;border-radius:10px;padding:10px 13px;margin-top:14px;display:flex;align-items:center;gap:10px">
+          <div class="ct-num ct-strong" style="font-size:11px;font-weight:600;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ shareLink }}</div>
+          <div class="ct-btn ct-muted" style="flex:none;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700">
+            <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ copyIcon }}"></span>
+            Copy
+          </div>
+        </div>
+
+        <div class="ct-bd-t" style="margin-top:16px;padding-top:14px;border-top-width:1px;border-top-style:solid">
+          <div class="ct-muted ct-th" style="margin-bottom:9px">Can see</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ audSees }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;gap:9px;align-items:flex-start">
+                <span style="width:12px;height:12px;display:flex;flex:none;margin-top:2px;color:{{ grnTone }}" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                <div class="ct-strong" style="font-size:11.5px;line-height:1.5">{{ s }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ audHasHides }}">
+          <div class="ct-bd-t" style="margin-top:14px;padding-top:14px;border-top-width:1px;border-top-style:solid">
+            <div class="ct-muted ct-th" style="margin-bottom:9px">Cannot see</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ audHides }}" as="h" hint-placeholder-count="4">
+                <div style="display:flex;gap:9px;align-items:flex-start">
+                  <span class="ct-muted" style="width:12px;height:12px;display:flex;flex:none;margin-top:2px" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                  <div class="ct-muted" style="font-size:11.5px;line-height:1.5">{{ h }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div class="ct-surface ct-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="ct-sunken ct-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px">
+          <div class="ct-muted ct-th">Access log</div>
+        </div>
+        <sc-for list="{{ accessLog }}" as="a" hint-placeholder-count="5">
+          <div class="ct-row ct-bd-b" style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom-width:1px;border-bottom-style:solid">
+            <div style="{{ a.avStyle }}">{{ a.initials }}</div>
+            <div style="min-width:0;flex:1">
+              <div class="ct-strong" style="font-size:12.5px;font-weight:600">{{ a.who }}</div>
+              <div class="ct-muted" style="font-size:10.5px;margin-top:1px">{{ a.role }} · {{ a.meta }}</div>
+            </div>
+            <span style="{{ a.chip }}">{{ a.action }}</span>
+            <div class="ct-muted ct-num" style="font-size:10.5px;flex:none">{{ a.when }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme:'light', tab:'table', basis:'fd',
+    roundSize:6.0, preMoney:24.0, poolTarget:12.5,
+    exitValue:120, share:'investor', prefEdit:'1x-non' };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const BLU = dark ? '#93b4fc' : '#1e40af';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      pie: this.ic('<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M12 3v9h9A9 9 0 0 0 12 3z"/>'),
+      sliders: this.ic('<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/>'),
+      pool: this.ic('<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8V6a5 5 0 0 1 10 0v2"/>'),
+      chart: this.ic('<path d="M3 3v18h18"/><path d="m6 15 4-5 4 3 5-7"/>'),
+      water: this.ic('<path d="M3 6h6v14H3zM9 10h6v10H9zM15 14h6v6h-6z"/>'),
+      stamp: this.ic('<path d="M6 20h12"/><path d="M8 16h8v-2a4 4 0 0 0-1.5-3.1A3 3 0 0 1 13.5 8V6a1.5 1.5 0 0 0-3 0v2a3 3 0 0 1-1 2.9A4 4 0 0 0 8 14z"/>'),
+      share: this.ic('<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.3M8.3 13.2l7.4 4.3"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.5),
+      alert: this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      eye: this.ic('<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>'),
+      lock: this.ic('<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      link: this.ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>'),
+      out: this.ic('<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+      copy: this.ic('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', dark ? '#c4b5fd' : V7);
+    const cBlue = chip('rgba(29,78,216,.1)', BLU);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const av = (bg, sz) => 'width:'+(sz||26)+'px;height:'+(sz||26)+'px;border-radius:8px;background:'+bg+';color:#fff;font-size:'+(sz>=40?'14px':'9.5px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap';
+
+    const n0 = (x) => Math.round(x).toLocaleString('en-US');
+    const pct1 = (x) => x.toFixed(1) + '%';
+    const usd = (x) => x >= 1e6 ? '$' + (x/1e6).toFixed(x % 1e6 === 0 ? 1 : 2) + 'M' : x >= 1e3 ? '$' + n0(x/1e3) + 'k' : '$' + x.toFixed(2);
+    const usdEx = (x) => '$' + n0(x);
+
+    // ============ COMPANY · current cap table ============
+    const CLASS_COLOR = { Common:'#7c3aed', 'Series Seed':'#1d4ed8', Options:'#0f766e', SAFE:'#b45309' };
+
+    const HOLDERS = [
+      { k:'ada', name:'Ada Ferreira', initials:'AF', bg:'#7c3aed', meta:'Co-founder & CEO', cls:'Common', sec:'Common', shares:4200000, basis:420, you:true },
+      { k:'jon', name:'Jonas Wexler', initials:'JW', bg:'#1d4ed8', meta:'Co-founder & CTO', cls:'Common', sec:'Common', shares:3300000, basis:330 },
+      { k:'adv', name:'Advisor grants (2)', initials:'AD', bg:'#334155', meta:'M. Oyelaran, S. Baptiste', cls:'Common', sec:'Common', shares:120000, basis:12 },
+      { k:'pool', name:'Option pool', initials:'OP', bg:'#0f766e', meta:'1,150,000 granted · 250,000 available', cls:'Options', sec:'Options', shares:1400000, basis:0 },
+    ];
+    // Outstanding convertibles — not shares yet
+    const SAFES = [
+      { k:'meridian', name:'Meridian Seed Fund', initials:'MS', bg:'#b45309', amount:1500000, cap:12000000, disc:0, mfn:false,
+        meta:'Post-money SAFE · Mar 2025' },
+      { k:'kestrel', name:'Kestrel Angels', initials:'KA', bg:'#be185d', amount:500000, cap:0, disc:20, mfn:true,
+        meta:'Post-money SAFE · MFN · Jun 2025' },
+    ];
+
+    const issuedShares = HOLDERS.reduce((a,h) => a + h.shares, 0);
+    const preRoundFD = issuedShares; // pool already counted in full
+    const existingPoolShares = 1400000;
+    const poolGranted = 1150000;
+    const poolVested = 612500;
+
+    // ============ 2 · CONVERSION MATH ============
+    const roundSize = st.roundSize * 1e6;
+    const preMoney = st.preMoney * 1e6;
+    const postMoney = preMoney + roundSize;
+
+    // MFN: inherits the best cap in the stack. Meridian's $12M cap is the only cap → Kestrel takes it,
+    // and keeps its own 20% discount, using whichever yields more shares.
+    const bestCap = Math.min.apply(null, SAFES.filter(s => s.cap > 0).map(s => s.cap));
+
+    // Pool top-up sits in the pre-money, so it dilutes existing holders (incl. converting SAFEs).
+    const poolTargetPct = st.poolTarget / 100;
+
+    // Solve iteratively: SAFE conversion depends on price, price depends on the pre-money
+    // share count, which depends on SAFE shares and the pool top-up. Converges in a few passes.
+    let pps = preMoney / preRoundFD;
+    let safeShares = {}, poolTopUp = 0, newShares = 0, postFD = 0;
+    for (let i = 0; i < 40; i++) {
+      let total = 0;
+      SAFES.forEach(s => {
+        const cap = s.mfn ? (s.cap > 0 ? Math.min(s.cap, bestCap) : bestCap) : s.cap;
+        const capPrice = cap > 0 ? cap / preRoundFD : Infinity;
+        const discPrice = s.disc > 0 ? pps * (1 - s.disc/100) : Infinity;
+        const price = Math.min(capPrice, discPrice);
+        const sh = s.amount / price;
+        safeShares[s.k] = sh; total += sh;
+      });
+      const preConvFD = preRoundFD + total;
+      newShares = roundSize / pps;
+      // pool top-up so that pool = target % of post-money FD
+      const denomNoPool = preConvFD + newShares;
+      const targetPoolShares = poolTargetPct * (denomNoPool + Math.max(0, poolTargetPct * denomNoPool / (1 - poolTargetPct))) ;
+      poolTopUp = Math.max(0, (poolTargetPct * (denomNoPool - existingPoolShares) - existingPoolShares * (1 - poolTargetPct)) / (1 - poolTargetPct));
+      postFD = denomNoPool + poolTopUp;
+      // price is set on pre-money FD including converted SAFEs and the new pool
+      const preFDForPrice = preConvFD + poolTopUp;
+      const nextPps = preMoney / preFDForPrice;
+      if (Math.abs(nextPps - pps) < 1e-9) { pps = nextPps; break; }
+      pps = nextPps;
+    }
+    newShares = roundSize / pps;
+    const totalSafeShares = SAFES.reduce((a,s) => a + safeShares[s.k], 0);
+    postFD = preRoundFD + totalSafeShares + poolTopUp + newShares;
+
+    const conversions = SAFES.map(s => {
+      const cap = s.mfn ? (s.cap > 0 ? Math.min(s.cap, bestCap) : bestCap) : s.cap;
+      const capPrice = cap > 0 ? cap / preRoundFD : Infinity;
+      const discPrice = s.disc > 0 ? pps * (1 - s.disc/100) : Infinity;
+      const capWins = capPrice <= discPrice;
+      const paths = [];
+      if (cap > 0) paths.push({ label:'Cap ' + usd(cap), price:'$' + capPrice.toFixed(4), shares: n0(s.amount / capPrice), win: capWins });
+      if (s.disc > 0) paths.push({ label:'Discount ' + s.disc + '%', price:'$' + discPrice.toFixed(4), shares: n0(s.amount / discPrice), win: !capWins });
+      return { name:s.name, mfn:s.mfn,
+        terms: usd(s.amount) + ' · ' + (s.cap ? 'cap ' + usd(s.cap) : 'no cap') + (s.disc ? ' · ' + s.disc + '% discount' : '') ,
+        paths: paths.map(p => ({ label:p.label, price:p.price, shares:p.shares,
+          weight: p.win ? '700' : '500', tone: p.win ? (dark ? '#c4b5fd' : V7) : MUT,
+          markStyle:'width:7px;height:7px;border-radius:50%;flex:none;background:'+(p.win ? V : (dark ? '#3a3648' : '#d4d0dc')) })),
+        explain: s.mfn
+          ? 'MFN pulls in the best cap in the stack (' + usd(bestCap) + '), then takes the better of that and its own ' + s.disc + '% discount — ' + (capWins ? 'the cap' : 'the discount') + ' wins at this price. Converts to ' + n0(safeShares[s.k]) + ' shares.'
+          : 'Cap price against the round price of $' + pps.toFixed(4) + ' — ' + (capWins ? 'the cap wins' : 'the round price wins') + '. Converts to ' + n0(safeShares[s.k]) + ' shares.',
+      };
+    });
+
+    // ---- current table (pre-round) ----
+    const fd = st.basis === 'fd';
+    // "Outstanding" means issued and outstanding shares — unexercised options are excluded
+    // from BOTH the numerator and the denominator, exactly as unconverted SAFEs already are.
+    const currentDenom = fd ? preRoundFD : (preRoundFD - existingPoolShares);
+    const CLS_ORDER = ['Common','Options'];
+    const classGroups = CLS_ORDER.map(cls => {
+      const rows = HOLDERS.filter(h => h.cls === cls);
+      const counted = cls === 'Options' && !fd;
+      const sh = rows.reduce((a,h) => a + h.shares, 0);
+      return { name:cls === 'Options' ? 'Options & equity awards' : 'Common stock', color: CLASS_COLOR[cls],
+        summary: counted ? n0(sh) + ' reserved · excluded' : n0(sh) + ' · ' + pct1(sh / currentDenom * 100),
+        rows: rows.map(h => ({ name:h.name, initials:h.initials,
+          meta: counted ? h.meta + ' · not outstanding until exercised' : h.meta, avStyle: av(h.bg),
+          weight: h.you ? '800' : '600',
+          rowBg: h.you ? (dark ? 'rgba(124,58,237,.06)' : 'rgba(124,58,237,.03)') : 'transparent',
+          security:h.sec, secChip: chip(CLASS_COLOR[h.cls]+(dark?'2e':'16'), dark ? '#dcd9e4' : CLASS_COLOR[h.cls]),
+          shares: counted ? '—' : n0(h.shares),
+          pct: counted ? '—' : pct1(h.shares / currentDenom * 100),
+          basis: h.basis ? usdEx(h.basis) : '—' })) };
+    }).concat([{
+      name:'Convertibles outstanding · not yet shares', color: CLASS_COLOR.SAFE,
+      summary: usd(SAFES.reduce((a,s) => a + s.amount, 0)) + ' principal',
+      rows: SAFES.map(s => ({ name:s.name, initials:s.initials, meta:s.meta, avStyle: av(s.bg),
+        weight:'600', rowBg:'transparent',
+        security:'SAFE', secChip: chip(CLASS_COLOR.SAFE+(dark?'2e':'16'), dark ? '#dcd9e4' : CLASS_COLOR.SAFE),
+        shares:'—', pct:'—', basis: usdEx(s.amount) })) }]);
+
+    const donutRaw = [
+      { name:'Founders · common', n: 7500000, color:'#7c3aed' },
+      { name:'Advisors · common', n: 120000, color:'#334155' },
+      { name:'Option pool', n: existingPoolShares, color:'#0f766e' },
+    ];
+    const donutTotal = donutRaw.reduce((a,d) => a + d.n, 0);
+    let acc = 0;
+    const donut = donutRaw.map(d => {
+      const frac = d.n / donutTotal * 100;
+      const o = { name:d.name, color:d.color, pct: pct1(d.n / currentDenom * 100),
+        dash: frac.toFixed(2) + ' ' + (100 - frac).toFixed(2), offset: (100 - acc).toFixed(2) };
+      acc += frac; return o;
+    });
+
+    // ---- post-round rows ----
+    const postHolders = HOLDERS.map(h => {
+      const sh = h.k === 'pool' ? h.shares + poolTopUp : h.shares;
+      return { k:h.k, name: h.k === 'pool' ? 'Option pool' : h.name, initials:h.initials, bg:h.bg,
+        meta: h.k === 'pool' ? n0(poolGranted) + ' granted · ' + n0(existingPoolShares - poolGranted + poolTopUp) + ' available' : h.meta,
+        sec:h.sec, cls:h.cls, shares:sh, before: h.shares / preRoundFD * 100, you:h.you };
+    }).concat(SAFES.map(s => ({
+      k:s.k, name:s.name, initials:s.initials, bg:s.bg, meta:'converted · ' + n0(safeShares[s.k]) + ' shares',
+      sec:'Series A', cls:'Series Seed', shares: safeShares[s.k], before: 0, isSafe:true,
+    }))).concat([{
+      k:'newlead', name:'Thornbury Capital', initials:'TC', bg:'#116632', meta:'Series A lead · ' + usd(roundSize),
+      sec:'Series A', cls:'Series Seed', shares: newShares, before: 0, isNew:true,
+    }]);
+
+    const postRows = postHolders.map(h => {
+      const after = h.shares / postFD * 100;
+      const d = after - h.before;
+      const isNewMoney = h.isSafe || h.isNew;
+      return { name:h.name, initials:h.initials, meta:h.meta, avStyle: av(h.bg),
+        weight: h.you ? '800' : '600',
+        rowBg: h.you ? (dark ? 'rgba(124,58,237,.06)' : 'rgba(124,58,237,.03)') : 'transparent',
+        security:h.sec, secChip: chip(CLASS_COLOR[h.cls]+(dark?'2e':'16'), dark ? '#dcd9e4' : CLASS_COLOR[h.cls]),
+        shares: n0(h.shares),
+        before: isNewMoney ? '—' : pct1(h.before),
+        after: pct1(after),
+        delta: isNewMoney ? 'new' : (d >= 0 ? '+' : '') + d.toFixed(1) + ' pts',
+        deltaChip: isNewMoney ? cViolet : d >= 0 ? cGreen : cRed };
+    });
+
+    const modelInputs = [
+      { label:'Round size', display: usd(roundSize), value:String(st.roundSize), min:'1', max:'15', step:'0.5',
+        note:'New money in the priced round.', set:(e) => this.setState({ roundSize: parseFloat(e.target.value) }) },
+      { label:'Pre-money valuation', display: usd(preMoney), value:String(st.preMoney), min:'8', max:'60', step:'1',
+        note:'Pool top-up comes out of this figure.', set:(e) => this.setState({ preMoney: parseFloat(e.target.value) }) },
+      { label:'Pool target, post-money', display: st.poolTarget.toFixed(1) + '%', value:String(st.poolTarget), min:'0', max:'25', step:'0.5',
+        note:'Existing pool counts toward this.', set:(e) => this.setState({ poolTarget: parseFloat(e.target.value) }) },
+    ];
+    const effPre = preMoney;
+    const modelDerived = [
+      { k:'Post-money', v: usd(postMoney) },
+      { k:'Price per share', v:'$' + pps.toFixed(4) },
+      { k:'New shares issued', v: n0(newShares) },
+      { k:'SAFE shares', v: n0(totalSafeShares) },
+      { k:'Pool top-up', v: n0(poolTopUp) },
+      { k:'Post-round FD', v: n0(postFD) },
+    ];
+
+    // ============ 3 · POOL MATH ============
+    const preConvFD2 = preRoundFD + totalSafeShares;
+    const poolAfter = existingPoolShares + poolTopUp;
+    const founderBefore = 7500000 / preRoundFD * 100;
+    const founderAfter = 7500000 / postFD * 100;
+    // Counterfactual: same round with no top-up
+    const ppsNoPool = preMoney / preConvFD2;
+    const newSharesNoPool = roundSize / ppsNoPool;
+    const fdNoPool = preConvFD2 + newSharesNoPool;
+    const founderNoPool = 7500000 / fdNoPool * 100;
+    const investorWithPool = newShares / postFD * 100;
+    const investorNoPool = newSharesNoPool / fdNoPool * 100;
+    const founderCost = founderNoPool - founderAfter;
+    const investorCost = investorNoPool - investorWithPool;
+
+    const poolMath = [
+      { k:'Pool after top-up', v: n0(poolAfter) + ' sh', note: pct1(poolAfter / postFD * 100) + ' of post-money fully diluted', weight:'700', tone:INK },
+      { k:'Top-up issued', v: n0(poolTopUp) + ' sh', note:'New shares created inside the pre-money', weight:'600', tone:INK },
+      { k:'Founders, with top-up', v: pct1(founderAfter), note:'', weight:'600', tone:INK },
+      { k:'Founders, if no top-up', v: pct1(founderNoPool), note:'Same round size and pre-money, pool left as-is', weight:'600', tone:MUT },
+      { k:'Cost to founders', v: '−' + founderCost.toFixed(1) + ' pts', note:'', weight:'700', tone:AMB },
+      { k:'Cost to incoming investor', v: (investorCost >= -0.05 && investorCost <= 0.05 ? '0.0' : (investorCost >= 0 ? '−' : '+') + Math.abs(investorCost).toFixed(1)) + ' pts', note:'Their cheque buys the same percentage either way', weight:'700', tone:GRN },
+    ];
+    const poolHonestTitle = 'The pre-money pool shuffle, stated plainly';
+    const poolHonestBody = 'A pool created in-round is issued before the money lands, so it comes out of the pre-money share count. The investor still gets '
+      + pct1(investorWithPool) + ' for ' + usd(roundSize) + '; the founders absorb ' + founderCost.toFixed(1)
+      + ' points to fund it. Moving the pool to post-money would shift that cost to the investor, which is why the placement is negotiated rather than assumed.';
+
+    const poolAvailable = existingPoolShares - poolGranted + poolTopUp;
+    const poolBars = [
+      { label:'Vested ' + n0(poolVested), n:poolVested, color:'#116632' },
+      { label:'Unvested ' + n0(poolGranted - poolVested), n:poolGranted - poolVested, color:'#0f766e' },
+      { label:'Available ' + n0(poolAvailable), n:poolAvailable, color: dark ? '#2f2c3a' : '#d9d5e2' },
+    ].map(b => ({ label:b.label, style:'width:'+(b.n / poolAfter * 100).toFixed(2)+'%;height:100%;background:'+b.color }));
+    const poolStats = [
+      { k:'Vested', v: n0(poolVested), sub: pct1(poolVested / poolAfter * 100) + ' of pool', color:'#116632' },
+      { k:'Granted, unvested', v: n0(poolGranted - poolVested), sub: pct1((poolGranted - poolVested) / poolAfter * 100) + ' of pool', color:'#0f766e' },
+      { k:'Available', v: n0(poolAvailable), sub: pct1(poolAvailable / poolAfter * 100) + ' of pool', color: dark ? '#3a3648' : '#c9c4d6' },
+    ];
+
+    const GRANTS = [
+      { name:'Priya Raghunathan', role:'VP Engineering', granted:340000, vested:212500, note:'4yr / 1yr cliff · 25 mo in' },
+      { name:'Dmitri Volkov', role:'Head of Product', granted:280000, vested:157500, note:'4yr / 1yr cliff · 22 mo in' },
+      { name:'Nkechi Adeyemi', role:'Founding AE', granted:190000, vested:106875, note:'4yr / 1yr cliff · 22 mo in' },
+      { name:'Engineering (6 grants)', role:'IC level', granted:265000, vested:112625, note:'4yr / 1yr cliff · avg 17 mo' },
+      { name:'Ops & GTM (4 grants)', role:'IC level', granted:75000, vested:23000, note:'4yr / 1yr cliff · avg 12 mo' },
+    ];
+    const grants = GRANTS.map(g => ({ name:g.name, role:g.role, granted: n0(g.granted), vested: n0(g.vested),
+      vestTone: GRN, note:g.note,
+      barStyle:'height:100%;width:'+(g.vested / g.granted * 100).toFixed(0)+'%;border-radius:99px;background:'+(dark ? '#6ee7b7' : '#116632') }));
+
+    // ============ 4 · DILUTION TIMELINE ============
+    // Derived from cumulative share counts, not written down — so each row foots to 100%
+    // and the founder headline traces to a real baseline.
+    const EVENTS = [
+      { name:'Incorporation', when:'Jan 2024', f:7500000, a:0, p:0,
+        note:'7,500,000 common issued to two founders' },
+      { name:'Pool created', when:'Aug 2024', f:7500000, a:0, p:1400000,
+        note:'1,400,000 reserved for employee grants' },
+      { name:'Advisor grants', when:'Nov 2024', f:7500000, a:120000, p:1400000,
+        note:'120,000 to two advisors' },
+      { name:'Seed SAFEs', when:'Mar–Jun 2025', f:7500000, a:120000, p:1400000,
+        note:'$2.0M raised · unconverted, so no dilution yet' },
+    ];
+    const ROUNDS = EVENTS.map(e => {
+      const tot = e.f + e.a + e.p;
+      return { name:e.name, when:e.when, note:e.note,
+        founders: e.f / tot * 100, advisors: e.a / tot * 100, pool: e.p / tot * 100, investors:0 };
+    });
+    const modeled = { name:'Series A · modeled', when:'Modeled',
+      founders: founderAfter, investors: (totalSafeShares + newShares) / postFD * 100,
+      pool: poolAfter / postFD * 100, advisors: 120000 / postFD * 100,
+      note: usd(roundSize) + ' at ' + usd(preMoney) + ' pre · SAFEs convert' };
+    const timeline = ROUNDS.concat([modeled]).map((r,i,arr) => {
+      const segs = [
+        { n:r.founders, color:'#7c3aed', label:'Founders ' + pct1(r.founders) },
+        { n:r.advisors, color:'#334155', label:'Advisors ' + pct1(r.advisors) },
+        { n:r.pool, color:'#0f766e', label:'Pool ' + pct1(r.pool) },
+        { n:r.investors, color:'#116632', label:'Investors ' + pct1(r.investors) },
+      ].filter(s => s.n > 0.05);
+      const prev = i > 0 ? arr[i-1].founders : null;
+      const d = prev === null ? null : r.founders - prev;
+      return { name:r.name, when:r.when, note:r.note,
+        modeled: r.name.indexOf('modeled') > -1,
+        founders: pct1(r.founders),
+        delta: d === null ? '' : (d >= 0 ? '+' : '') + d.toFixed(1) + ' pts',
+        deltaChip: d === null ? cGrey : Math.abs(d) < 0.05 ? cGrey : d < 0 ? cRed : cGreen,
+        bars: segs.map(s => ({ label:s.label, style:'width:'+s.n.toFixed(2)+'%;height:100%;background:'+s.color })) };
+    });
+    const timelineLegend = [
+      { label:'Founders', color:'#7c3aed' }, { label:'Advisors', color:'#334155' },
+      { label:'Option pool', color:'#0f766e' }, { label:'Investors', color:'#116632' },
+    ];
+
+    // ============ 5 · WATERFALL ============
+    const exit = st.exitValue * 1e6;
+    const PREF = { '1x-non':{ label:'1× non-participating', mult:1, part:false },
+                   '1x-part':{ label:'1× participating', mult:1, part:true },
+                   '1.5x-non':{ label:'1.5× non-participating', mult:1.5, part:false } };
+    const pref = PREF[st.prefEdit];
+    const investedA = roundSize + SAFES.reduce((a,s) => a + s.amount, 0);
+    const prefAmount = investedA * pref.mult;
+    const prefShares = totalSafeShares + newShares;
+    const prefPctFD = prefShares / postFD;
+    const convertValue = exit * prefPctFD;
+    const takesPref = !pref.part && prefAmount > convertValue;
+    const prefProceeds = pref.part ? prefAmount + (exit - prefAmount) * prefPctFD
+      : Math.max(prefAmount, convertValue);
+    // Never-granted pool shares cannot receive proceeds — excluding them keeps the
+    // per-holder rows footing to the class total.
+    const unallocatedPool = Math.max(0, poolAfter - poolGranted);
+    const commonPool = exit - prefProceeds;
+    const commonShares = postFD - prefShares - unallocatedPool;
+    const perCommon = commonShares > 0 ? commonPool / commonShares : 0;
+    const strike = 1.42;
+    const optionCost = poolGranted * strike;
+
+    const waterfall = [
+      { name:'Series A preferred', meta: prefShares ? n0(prefShares) + ' sh · ' + usd(investedA) + ' invested' : '',
+        chip: takesPref ? cAmber : cGreen, state: takesPref ? 'Takes preference' : 'Converts to common',
+        proceeds: usd(prefProceeds), multiple: (prefProceeds / investedA).toFixed(2) + '×', color:'#116632' },
+      { name:'Common & granted options', meta: n0(commonShares) + ' sh · founders, advisors, granted options',
+        chip: cGrey, state:'Residual', proceeds: usd(commonPool),
+        multiple: '$' + perCommon.toFixed(3) + ' / sh', color:'#7c3aed' },
+      { name:'Unallocated pool', meta: n0(unallocatedPool) + ' sh · never granted',
+        chip: cGrey, state:'No proceeds', proceeds: usd(0),
+        multiple:'returns to common on close', color: dark ? '#3a3648' : '#d9d5e2' },
+    ];
+    const holderProceeds = [
+      { name:'Ada Ferreira', sh:4200000, you:true, bg:'#7c3aed', initials:'AF' },
+      { name:'Jonas Wexler', sh:3300000, bg:'#1d4ed8', initials:'JW' },
+      { name:'Granted options', sh:poolGranted, bg:'#0f766e', initials:'OP', opt:true },
+      { name:'Advisors', sh:120000, bg:'#334155', initials:'AD' },
+    ].map(h => ({ name:h.name, initials:h.initials, avStyle: av(h.bg), you: !!h.you,
+      weight: h.you ? '800' : '600',
+      rowBg: h.you ? (dark ? 'rgba(124,58,237,.06)' : 'rgba(124,58,237,.03)') : 'transparent',
+      shares: n0(h.sh), pct: pct1(h.sh / postFD * 100),
+      proceeds: usd(h.sh * perCommon - (h.opt ? h.sh * strike : 0)),
+      net: h.opt ? 'net of $' + strike.toFixed(2) + ' strike' : '' }));
+
+    // ============ 6 · 409A ============
+    const A409 = { value:'$1.42', per:'per common share', dated:'Feb 14, 2026', expires:'Feb 14, 2027',
+      daysLeft: 185, provider:'Kestrel Valuation Partners', method:'OPM backsolve to Seed SAFE terms' };
+    const triggers = [
+      { k:'Series A closes', state:'Will trigger', chip:cAmber, note:'A priced round is a material event — a fresh 409A is required before the next grant, regardless of the current expiry.' },
+      { k:'12-month expiry', state: A409.daysLeft + ' days', chip: A409.daysLeft < 90 ? cAmber : cGreen, note:'Safe-harbour presumption lapses on ' + A409.expires + ' even with no other event.' },
+      { k:'Secondary sale above 409A', state:'None recorded', chip:cGreen, note:'A common-stock sale materially above the current valuation would invalidate it.' },
+      { k:'Material change in business', state:'None recorded', chip:cGreen, note:'A large new contract, a pivot, or an acquisition offer all qualify.' },
+    ];
+
+    // ============ 7 · SHARING ============
+    const AUDIENCES = {
+      investor: { label:'Investor', scope:'Classes, totals, and their own position',
+        sees:['All share classes and totals','Their own holding and cost basis','Fully-diluted percentages by class','Convertibles outstanding, in aggregate'],
+        hides:['Other holders\u2019 individual positions','Individual employee grants','Vesting schedules','409A valuation detail'] },
+      lawyer: { label:'Counsel', scope:'Everything, unredacted',
+        sees:['Every holder and position','All grants, vesting, and exercise history','409A reports and board consents','Convertible instruments in full'],
+        hides:[] },
+      employee: { label:'Employee', scope:'Their own grants only',
+        sees:['Their own grants, vested and unvested','Their vesting schedule and cliff date','Current 409A price per share','Estimated value at a given exit price'],
+        hides:['Company-wide cap table','Other employees\u2019 grants','Investor positions and terms','Total company ownership breakdown'] },
+    };
+    const aud = AUDIENCES[st.share];
+    const shareTabs = Object.keys(AUDIENCES).map(k => ({ label: AUDIENCES[k].label, style: seg(st.share === k),
+      go: () => this.setState({ share:k }) }));
+    const ACCESS_LOG = [
+      { who:'Thornbury Capital', role:'Investor link', initials:'TC', bg:'#116632', when:'Aug 15, 14:22', action:'Viewed', chip:cBlue, meta:'3rd view · Austin, TX' },
+      { who:'Halvorsen & Reed LLP', role:'Counsel link', initials:'HR', bg:'#334155', when:'Aug 14, 09:07', action:'Downloaded', chip:cViolet, meta:'Exported XLSX · New York, NY' },
+      { who:'Meridian Seed Fund', role:'Investor link', initials:'MS', bg:'#b45309', when:'Aug 12, 16:48', action:'Viewed', chip:cBlue, meta:'1st view · London, UK' },
+      { who:'Priya Raghunathan', role:'Employee link', initials:'PR', bg:'#0f766e', when:'Aug 11, 20:15', action:'Viewed', chip:cBlue, meta:'Own grant only · Bengaluru, IN' },
+      { who:'Kestrel Angels', role:'Investor link', initials:'KA', bg:'#be185d', when:'Aug 4, 11:30', action:'Link expired', chip:cGrey, meta:'Not renewed' },
+    ];
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'table', l:'Cap table', i:I.pie },
+      { k:'model', l:'Model round', i:I.sliders },
+      { k:'pool', l:'Option pool', i:I.pool },
+      { k:'dilution', l:'Dilution', i:I.chart },
+      { k:'waterfall', l:'Waterfall', i:I.water },
+      { k:'a409', l:'409A', i:I.stamp, flag: A409.daysLeft < 90 ? '!' : '' },
+      { k:'share', l:'Sharing', i:I.share },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (st.tab === t.k ? V : 'rgba(180,83,9,.15)') + ';color:' + (st.tab === t.k ? '#fff' : AMB),
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? (dark ? '#c4b5fd' : V7) : MUT)
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    return {
+      themeClass: dark ? 'ct-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      pieIcon:I.pie, checkIcon:I.check, alertIcon:I.alert, clockIcon:I.clock,
+      eyeIcon:I.eye, lockIcon:I.lock, linkIcon:I.link, outIcon:I.out, copyIcon:I.copy,
+      chromeSub:'Vantage Grid, Inc. · Delaware C-Corp · ' + n0(preRoundFD) + ' shares issued',
+      syncChip: cGreen, syncLabel:'Carta synced 2h ago',
+      tabs,
+      tabTable: st.tab === 'table', tabModel: st.tab === 'model', tabPool: st.tab === 'pool',
+      tabDilution: st.tab === 'dilution', tabWaterfall: st.tab === 'waterfall',
+      tabA409: st.tab === 'a409', tabShare: st.tab === 'share',
+      mfnChip: cAmber,
+
+      // 1
+      tableSub:'Two founders, two advisors, a ' + pct1(existingPoolShares / preRoundFD * 100) + ' pool, and ' + usd(SAFES.reduce((a,s) => a + s.amount, 0)) + ' of SAFEs not yet converted.',
+      basisTabs: [{ k:'fd', l:'Fully diluted' }, { k:'out', l:'Outstanding' }].map(b => ({
+        label:b.l, style: seg(st.basis === b.k), go: () => this.setState({ basis:b.k }) })),
+      pctHeader: fd ? 'FD %' : 'Outstanding %',
+      classGroups, donut, donutLabel: fd ? 'fully diluted' : 'outstanding',
+      totalLabel: fd ? 'Fully diluted total' : 'Outstanding total',
+      totalShares: n0(currentDenom),
+      totalBasis: usdEx(HOLDERS.reduce((a,h) => a + h.basis, 0) + SAFES.reduce((a,s) => a + s.amount, 0)),
+      convertNote: SAFES.length + ' SAFEs totalling ' + usd(SAFES.reduce((a,s) => a + s.amount, 0))
+        + ' sit outside the share count until a priced round. Shown as a class here so the table does not read as if they do not exist.',
+      goModel: () => this.setState({ tab:'model' }),
+
+      // 2
+      modelInputs, modelDerived, conversions, postRows,
+      postTotalShares: n0(postFD),
+      postSummary: usd(roundSize) + ' at ' + usd(preMoney) + ' pre · $' + pps.toFixed(4) + '/sh',
+
+      // 3
+      poolTarget:String(st.poolTarget), poolTargetLabel: st.poolTarget.toFixed(1) + '%',
+      setPool: (e) => this.setState({ poolTarget: parseFloat(e.target.value) }),
+      existingPoolPct: pct1(existingPoolShares / postFD * 100),
+      poolMath, poolHonestTitle, poolHonestBody,
+      poolBars, poolStats,
+      poolUtilLine: n0(poolGranted) + ' of ' + n0(poolAfter) + ' granted · ' + pct1(poolGranted / poolAfter * 100),
+      grants, grantCount: GRANTS.length + ' grant lines',
+
+      // 4
+      timeline: timeline.map(r => Object.assign({}, r, {
+        rowBg: r.modeled ? (dark ? 'rgba(124,58,237,.06)' : 'rgba(124,58,237,.03)') : 'transparent' })),
+      timelineLegend, violet:V, grnTone:GRN,
+      dilutionSub:'Founder ownership from incorporation to the modeled Series A. SAFEs show no dilution until they convert, which is the point people miss.',
+      founderStart: pct1(ROUNDS[0].founders), founderNow: pct1(founderAfter),
+      founderDrop: (founderAfter - ROUNDS[0].founders).toFixed(1) + ' pts',
+
+      // 5
+      exitValue:String(st.exitValue), exitLabel: usd(exit),
+      setExit: (e) => this.setState({ exitValue: parseFloat(e.target.value) }),
+      prefTabs: Object.keys(PREF).map(k => ({ label: PREF[k].label, style: seg(st.prefEdit === k),
+        go: () => this.setState({ prefEdit:k }) })),
+      waterfall, holderProceeds,
+      waterNote: takesPref
+        ? 'At ' + usd(exit) + ' the preference (' + usd(prefAmount) + ') beats converting (' + usd(convertValue) + '), so Series A takes its money off the top and common splits the rest.'
+        : 'At ' + usd(exit) + ' converting (' + usd(convertValue) + ') beats the preference (' + usd(prefAmount) + '), so Series A converts and everyone shares pro rata.',
+      perCommonLabel:'$' + perCommon.toFixed(3),
+      strikeNote:'Granted options are shown net of the $' + strike.toFixed(2) + ' strike (' + usd(optionCost) + ' total exercise cost). The ' + n0(unallocatedPool) + ' never-granted pool shares receive nothing.',
+
+      // 6
+      a409:A409, triggers,
+      a409Sub:'Safe-harbour valuation for common stock. Grants priced below the current 409A create a tax exposure for the employee, not the company.',
+      expiryPct: (A409.daysLeft / 365 * 100).toFixed(0) + '%',
+      expiryBar:'height:100%;width:'+(A409.daysLeft / 365 * 100).toFixed(0)+'%;border-radius:99px;background:'+(A409.daysLeft < 90 ? (dark ? '#fcd34d' : '#b45309') : V),
+
+      // 7
+      shareTabs, aud, audLabel: aud.label, audScope: aud.scope,
+      audSees: aud.sees, audHides: aud.hides, audHasHides: aud.hides.length > 0,
+      shareLink:'axal.vc/c/vantage-grid/' + st.share + '-9f2c4e',
+      accessLog: ACCESS_LOG,
+      shareNote:'Links are scoped server-side, not by hiding rows in the browser. A revoked link stops resolving immediately, and every open is logged with time and location.',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build v2 Roadmap and Team · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.bx-nav{display:flex;flex-direction:column;gap:2px;margin:2px 0 4px 18px;border-left:1px solid var(--hair);padding-left:6px}
+.bx-nav a{min-height:30px;font-size:12.5px;font-weight:600;color:var(--mu)!important;display:flex;align-items:center;padding:0 10px;border-radius:8px}
+.bx-nav a[aria-current=page]{background:var(--lav);color:var(--vt)!important;font-weight:800}
+.bx-nav .bx-sub{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px 2px}
+.bx-tabs{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.bx-tabs a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.bx-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.bx-tabs a span{font:600 10.5px var(--mo);margin-left:5px;color:var(--mu)}
+.bx-next{border:1.5px solid var(--lavE);background:var(--card);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 20px;align-items:center;position:relative;overflow:hidden}
+.bx-next:before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#7c3aed}
+.bx-next h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.bx-next .m{font:600 12.5px var(--mo);color:var(--mu)}
+.bx-next q{font-size:13px;color:var(--ink);font-style:italic}
+.bx-health{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.bx-health>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.bx-health>div:last-child{border-right:0}
+.bx-health small{font-size:11.5px;color:var(--mu)}
+.bx-health b{font:700 17px var(--mo)}
+.bx-health em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.bx-mods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx-mod{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.bx-mod b{font-size:13.5px}
+.bx-mod .v{font-size:12.5px}
+.bx-mod .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;font:500 11px var(--mo);color:var(--mu)}
+.bx-prop{border:1px solid var(--hair);border-radius:12px;background:var(--card);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) 220px;gap:0}
+.bx-prop>div{padding:14px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:7px}
+.bx-prop>div:last-child{border-right:0}
+.bx-prop h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.bx-lbl{font:700 9.5px var(--mo);letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.bx-ev{display:flex;flex-direction:column;gap:5px}
+.bx-ev a{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 12.5px var(--sg);color:var(--ink)!important}
+.bx-ev a:after{content:'→';color:var(--vt)}
+.bx-sugg{border:1px dashed var(--lavE);background:var(--lav);border-radius:10px;padding:9px 11px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.bx-sugg .bx-row{display:flex;gap:6px}
+.bx-dec{display:flex;flex-direction:column;gap:6px}
+.bx-dec .btn{justify-content:center}
+.bx-acc{display:grid;grid-template-columns:minmax(0,1fr) 220px 160px 80px;gap:12px;align-items:center;padding:9px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-acc:first-child{border-top:0}
+.bx-chain{display:flex;flex-direction:column;gap:0}
+.bx-node{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;position:relative;padding-bottom:14px}
+.bx-node:before{content:'';position:absolute;left:10px;top:20px;bottom:0;width:2px;background:var(--hair2)}
+.bx-node:last-child:before{display:none}
+.bx-node i{width:22px;height:22px;border-radius:999px;border:2px solid #7c3aed;background:var(--card);display:grid;place-items:center;font:800 10px var(--mo);font-style:normal;color:var(--vt)}
+.bx-node .bx-c{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;background:var(--card);display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.bx-node .bx-c q{font-style:italic}
+.bx-node .bx-meta{display:flex;gap:8px;flex-wrap:wrap;font:500 11px var(--mo);color:var(--mu);align-items:center}
+.bx-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.bx-three>div{padding:12px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;position:relative}
+.bx-three>div:last-child{border-right:0}
+.bx-three b{font:700 20px var(--mo)}
+.bx-three small{font-size:12px;color:var(--mu)}
+.bx-stg{display:flex;gap:3px;align-items:center}
+.bx-stg i{width:18px;height:6px;border-radius:2px;background:var(--hair2);display:block}
+.bx-stg i.d{background:#7c3aed}
+.bx-stg i.n{background:transparent;border:1px dashed var(--hair2)}
+.bx-stg i.u{background:transparent;border:1.5px solid var(--neg)}
+.bx-trail li{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:12px;align-items:start;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-trail li:first-child{border-top:0}
+.bx-trail .s{font-weight:800}
+.bx-kb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bx-kb>section{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.bx-kb h3{font:800 12px var(--sg);display:flex;justify-content:space-between}
+.bx-card{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:9px 11px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.bx-card b{font-size:13px}
+.bx-card .bx-meta{font:500 10.5px var(--mo);color:var(--mu);display:flex;gap:6px;flex-wrap:wrap}
+.bx-fnd{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx-check li{display:grid;grid-template-columns:24px minmax(0,1.5fr) 110px 120px 130px 120px;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx-check li:first-child{border-top:0}
+.bx-check .ic3{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;font:800 11px var(--sg)}
+.ic3.ok{background:var(--posBg);color:var(--pos)}.ic3.no{border:1.5px solid var(--hair2);color:var(--mu)}.ic3.at{background:var(--amBg);color:var(--amT)}
+.bx-dest{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.bx-dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px;font-size:12px;background:var(--card)}
+.bx-dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.bx-dest b{font-size:14px}
+.bx-frz{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12px}
+.bx-frz b{font-weight:700}
+.bx-auth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:760px}
+.bx-auth .bx-l{background:#18181b;color:#fff;padding:48px;display:flex;flex-direction:column;justify-content:space-between}
+.bx-auth main{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg)}
+.bx-authcard{width:420px;background:var(--card);border:1px solid var(--hair);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:12px}
+.bx-authcard .btn{min-height:44px;justify-content:center}
+.bx-cookie{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;gap:12px;align-items:center;font-size:12px}
+.bx-states{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.bx-tag{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);border:1px solid var(--hair);background:var(--raised);color:var(--mu);white-space:nowrap}
+.bx-tag.nr{border-style:dashed;background:transparent;font-style:italic;font-weight:600}
+.bx-tag.ne{border-color:transparent;background:transparent;color:var(--mu);font-weight:600}
+.bx-tag.ur{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.bx-tag.pr{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.bx-tag.at{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.bx-tag.ro{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.bx-tag.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.bx-tag.dn{color:#fff;background:var(--pos);border-color:var(--pos)}
+.mc>.bx-tag,.cd>.bx-tag,.bx-mod>.bx-tag{align-self:flex-start}
+.bx-check .bx-tag{justify-self:start}
+.cd>.ptag,.bd>.ptag{align-self:flex-start}
+.bx-states{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.cv .selb{background:var(--card);color:var(--ink)}
+.bx2-guide{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:28px 30px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.bx2-guide h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.bx2-guide p{font-size:13.5px;color:var(--mu);max-width:620px;line-height:1.55}
+.bx2-guide ol{display:flex;flex-direction:column;gap:6px;margin:4px 0 2px;padding-left:18px;list-style:decimal;font-size:13px}
+.bx2-src{border:1px solid var(--hair);border-radius:12px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.bx2-src>.hd2{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bx2-src>.hd2 b{font-size:12.5px}
+.bx2-src ul{display:flex;flex-direction:column}
+.bx2-src li{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx2-src li:first-child{border-top:0}
+.bx2-stage{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bx2-stage>div{display:flex;flex-direction:column;gap:8px}
+.bx2-stage .lab{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bx2-ask{border:1px solid var(--lavE);background:var(--lav);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.bx2-ask .q{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 10px;border:1px solid var(--lavE);border-radius:9px;background:var(--card);font-size:12.5px;color:var(--mu)}
+.bx2-ask .chips2{display:flex;gap:6px;flex-wrap:wrap}
+.bx2-ask .chips2 button{min-height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--lavE);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.bx2-util{display:flex;gap:14px;align-items:center;font-size:12.5px;color:var(--mu);padding:8px 2px}
+.bx2-util a{font-weight:700}
+.bx2-priv{position:sticky;top:0;z-index:2;display:flex;gap:10px;align-items:center;padding:9px 14px;border-radius:10px;background:#7f1d1d;color:#fff;font-size:12.5px;font-weight:600}
+.bx2-priv b{font-weight:800}
+.bx2-sys li{display:grid;grid-template-columns:110px 150px 140px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bx2-sys li:first-child{border-top:0}
+.bx2-nav{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.sp.eadx{align-items:stretch;padding:0;gap:0}
+.sh>.sp.eadx{max-width:none;width:340px!important}
+.bur-bk{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border:1.5px dashed #7c3aed;border-radius:6px;color:var(--vt);background:transparent;font:700 10.5px var(--mo);white-space:nowrap}
+.bur-pol{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border:1.5px solid var(--amD);border-radius:6px;color:var(--amT);background:var(--amBg);font:700 10.5px var(--mo);white-space:nowrap}
+.bx-tag.bur-rf{color:var(--ink);background:var(--raised);border:1.5px solid var(--ink)}
+.bx-tag.bur-pv{color:var(--vt);background:transparent;border:1.5px dotted var(--vi)}
+.bx-tag.bur-st{color:var(--amT);background:transparent;border:1px dashed var(--amD)}
+.bx-tag.bur-pa{color:var(--ink);background:transparent;border:1px solid var(--hair2);border-left:3px solid var(--mu)}
+.bur-mono{font:500 11px var(--mo);color:var(--mu)}
+.bur-nx{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:13px;font-weight:600}
+.bur-nx .eye{color:var(--vt)}
+.bur-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.bur-strip.bur-sm{grid-template-columns:repeat(auto-fit,minmax(0,1fr))}
+.bur-strip>div{padding:10px 12px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:2px;min-width:0}
+.bur-strip>div:last-child{border-right:0}
+.bur-strip small{font-size:11.5px;color:var(--mu)}
+.bur-strip b{font:700 18px var(--mo)}
+.bur-strip em{font-style:normal;font:500 10px var(--mo);color:var(--mu)}
+.bur-seg{display:inline-flex;border:1px solid var(--hair2);border-radius:9px;overflow:hidden;background:var(--card)}
+.bur-seg button{min-height:32px;padding:0 13px;font:700 12.5px var(--sg);border:0;background:transparent;color:var(--mu);border-right:1px solid var(--hair2);flex:1}
+.bur-seg button:last-child{border-right:0}
+.bur-seg button[aria-checked=true]{background:var(--lav);color:var(--vt);box-shadow:inset 0 -2px 0 #7c3aed}
+.bur-seg button span{font:600 10.5px var(--mo);margin-left:3px}
+.bur-seg4{display:flex;width:100%}
+.bur-seg4 button{min-height:44px;padding:0 6px}
+.bur-rm{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:16px;align-items:start}
+.bur-cols{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.bur-col{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.bur-col h3{display:flex;justify-content:space-between;align-items:center;font:800 12.5px var(--sg);padding:2px 4px}
+.bur-col h3 span{font:600 10.5px var(--mo);color:var(--mu)}
+.bur-card{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:5px;font-size:11.5px;min-width:0}
+.bur-card.sel{border:2px solid #7c3aed}
+.bur-card.sv{opacity:.7;border-style:dashed}
+.bur-card>b{font-size:12.5px;font-weight:700}
+.bur-card .m{font:500 10.5px var(--mo);color:var(--mu);display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.bur-card .m i{font-style:italic}
+.bur-card .bx-tag,.bur-li .bx-tag{font-size:10.5px;padding:0 6px;white-space:normal}
+.bur-card .nt{font-size:11.5px}
+.bur-chip{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 7px;border-radius:6px;font:600 10.5px var(--sg);background:var(--lav);color:var(--vt);border:1px solid var(--lavE)}
+.bur-chip.bur-kp{background:var(--raised);color:var(--ink);border-color:var(--hair2)}
+.bur-row{display:flex;gap:4px;flex-wrap:wrap;align-items:center;min-width:0}
+.bur-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.bur-pt{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px;font-size:12px;min-width:0}
+.bur-pt h3{font-size:12.5px;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bur-li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:5px 0;border-top:1px solid var(--hair);align-items:center;font-size:12px}
+.bur-vb{display:flex;align-items:flex-end;gap:26px;height:110px;padding:0 6px}
+.bur-vb>div{display:flex;flex-direction:column;align-items:center;gap:4px;width:48px}
+.bur-vb b{font:700 12px var(--mo)}
+.bur-vb i{display:block;width:100%;background:#7c3aed;border-radius:4px 4px 0 0}
+.bur-vb small{font:600 10.5px var(--mo);color:var(--mu)}
+.bur-wk{display:flex;align-items:flex-end;gap:4px;height:40px;border-bottom:1px solid var(--hair2)}
+.bur-wk i{display:block;flex:1;background:var(--vi);border-radius:2px 2px 0 0}
+.bur-sug{border:1px solid var(--lavE);background:var(--lav);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.5}
+.bur-sug.bur-nbs{border-style:dashed;background:transparent}
+.bur-cite{display:flex;gap:6px;flex-wrap:wrap}
+.bur-cite a{font:600 11.5px var(--sg);padding:1px 8px;border-radius:6px;border:1px solid var(--lavE);background:var(--card)}
+.bur-foot{font:600 11px var(--mo);color:var(--vt);border-top:1px solid var(--lavE);padding-top:6px}
+.bur-tl{position:relative;width:1110px;overflow:hidden}
+.bur-mo{position:absolute;top:0;font:600 10.5px var(--mo);color:var(--mu);padding-left:4px}
+.bur-gl{position:absolute;top:22px;border-left:1px dashed var(--hair2)}
+.bur-lane{position:absolute;left:0;right:0;border-top:1px solid var(--hair);background:transparent}
+.bur-lane b{position:absolute;left:8px;top:8px;font:800 12.5px var(--sg)}
+.bur-pin{position:absolute;display:flex;align-items:center;gap:5px;height:26px;padding:0 8px 0 4px;border:1px solid var(--hair2);border-radius:7px;background:var(--card);font-size:11.5px;white-space:nowrap;z-index:2}
+.bur-pin i{font-style:normal;color:var(--vt);font-size:11px}
+.bur-pin.dn i{color:var(--pos)}
+.bur-pin.late{border-color:var(--amE)}
+.bur-pin .bx-tag{font-size:10px;padding:0 5px}
+.bur-od{position:absolute;height:8px;border:1px solid var(--amD);border-radius:4px;background:repeating-linear-gradient(135deg,var(--amBg) 0 4px,var(--amE) 4px 6px);z-index:1}
+.bur-today{position:absolute;top:22px;border-left:2px solid var(--ink);z-index:1}
+.bur-today em{position:absolute;bottom:-16px;left:4px;font:700 10px var(--mo);font-style:normal;white-space:nowrap;background:var(--card);padding:0 3px}
+.bur-svg{position:absolute;left:0;top:0;z-index:1;pointer-events:none}
+.bur-tray li{display:grid;grid-template-columns:minmax(0,1fr) 80px 140px auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.bur-tray li:first-child{border-top:0}
+.bur-key{border:1px dashed var(--hair2);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:5px;font-size:11.5px}
+.bur-key b{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.bur-key>span{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.bur-fe{font:700 10px var(--mo);padding:1px 6px;border-radius:5px;border:1px solid var(--hair2);color:var(--ink)}
+.bur-sec{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--hair);padding-top:10px}
+.bur-sec h3{font-size:12.5px;font-weight:800;margin-bottom:2px}
+.btn.bur-del{color:var(--neg)!important;border-color:var(--negE)}
+.btn.bur-delp{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.bur-cf{position:absolute;left:40px;right:40px;bottom:80px;z-index:7;background:var(--card);border:1.5px solid var(--neg);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-size:13px;line-height:1.5}
+.bur-cf h3{font-size:15px;font-weight:800}
+.bur-none{font-size:11.5px;color:var(--mu);padding:8px 4px}
+.bur-st4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bur-sk{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--hair);border-radius:8px;background:var(--card)}
+.bur-sk i{display:block;height:8px;border-radius:4px;background:var(--skel)}
+.bur-skb{display:block;height:16px;width:28px;border-radius:4px;background:var(--skel)}
+.bur-skbar{height:24px;border-radius:8px;background:var(--skel)}
+.bur-ref{display:flex;flex-direction:column;gap:6px;font-size:12.5px;border:1.5px solid var(--ink);border-radius:10px;padding:12px}
+.bur-ref p{color:var(--mu)}
+.bur-g{font:800 18px var(--sg)}
+.bur-refp{max-width:620px;margin:80px auto 0;display:flex;flex-direction:column;gap:12px;align-items:flex-start;border:1.5px solid var(--ink);border-radius:14px;padding:28px;background:var(--card)}
+.bur-refp h1{font-size:22px;font-weight:800}
+.bur-refp p{font-size:13.5px;color:var(--mu);line-height:1.55}
+.bx2-priv.bur-ban{position:static;font-size:11.5px;flex-wrap:wrap}
+.bur-pchips{display:flex;flex-wrap:wrap;gap:6px}
+.bur-pchips span{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--hair);background:var(--card)}
+.bur-pchips b{font:700 12px var(--mo)}
+.bur-opt{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:1px solid var(--hair);border-radius:10px;font-size:13px}
+.bur-opt.on{border:2px solid #7c3aed;background:var(--lav)}
+.bur-opt span{font-size:11.5px;color:var(--mu);margin-left:auto}
+.bur-pm{display:flex;flex-direction:column;gap:6px}
+.bur-pm h3{font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.bur-split{display:flex;height:34px;border-radius:9px;overflow:hidden;border:1px solid var(--hair2)}
+.bur-split span{display:flex;align-items:center;padding:0 8px;font:700 11px var(--sg);color:#fff;white-space:nowrap;overflow:hidden;border-right:1px solid var(--card)}
+.bur-split span:nth-child(3){color:#18181b}
+.bur-split .bur-pool{background:var(--card);color:var(--ink);border:1.5px dotted var(--vi);border-right:1.5px dotted var(--vi)}
+.bur-split .bur-un{background:repeating-linear-gradient(135deg,var(--card) 0 5px,var(--hair2) 5px 7px);color:var(--ink);border-right:0}
+.bur-split.bur-sp span{font-size:0;padding:0}
+.bur-leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px}
+.bur-leg li{display:flex;align-items:center;gap:6px}
+.bur-leg i{width:12px;height:12px;border-radius:3px;display:block}
+.bur-leg i.bur-pool{border:1.5px dotted var(--vi)}
+.bur-leg i.bur-un{background:repeating-linear-gradient(135deg,var(--card) 0 3px,var(--hair2) 3px 5px);border:1px solid var(--hair2)}
+.bur-ft{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start}
+.bur-vest{display:flex;flex-direction:column;gap:6px}
+.bur-vr{display:grid;grid-template-columns:110px auto minmax(0,1fr);gap:12px;align-items:center;font-size:12.5px;min-height:34px}
+.bur-vax{min-height:16px}
+.bur-trk{position:relative;height:34px;border-radius:6px;background:var(--raised)}
+.bur-vax .bur-trk{height:16px;background:transparent}
+.bur-trk em{position:absolute;font:600 10px var(--mo);font-style:normal;color:var(--mu)}
+.bur-vb2{position:absolute;top:17px;height:12px;border:1px solid #7c3aed;border-radius:4px;background:var(--card);overflow:hidden}
+.bur-vb2 i{display:block;height:100%;background:#7c3aed}
+.bur-cl{position:absolute;top:2px;bottom:2px;border-left:2px solid var(--ink)}
+.bur-cl em,.bur-cl0 em{left:4px;top:1px;white-space:nowrap;color:var(--ink);font-size:9.5px}
+.bur-cl0{position:absolute;top:2px;bottom:2px}
+.bur-tday{position:absolute;top:-2px;bottom:-2px;border-left:2px dashed var(--neg)}
+.bur-nrt{display:flex;align-items:center;padding:0 8px;border:1px dashed var(--hair2);background:transparent}
+.bur-nrt span{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--mu)}
+.bur-nb{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.bur-nb .btn[disabled]{border-style:dashed;color:var(--mu)!important;background:transparent}
+.bur-form{display:flex;flex-direction:column;gap:10px}
+.bur-form .inp{min-width:0}
+.bur-err{border:1.5px solid var(--neg)!important}
+.bur-errt{font-size:12px;color:var(--neg);font-weight:700;margin-top:4px}
+.bur-fs{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.bur-fs legend{font-size:12px;font-weight:700;margin-bottom:4px}
+.bur-vprev{display:flex;flex-direction:column;gap:3px;border:1px solid var(--hair);border-radius:10px;padding:8px 10px;font-size:12px;background:var(--raised)}
+.bur-would{margin:0 16px 14px;border:1.5px dashed #7c3aed;border-radius:10px;padding:8px 10px;font-size:11.5px;color:var(--mu)}
+.bur-nosplit{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12.5px}
+.bur-nosplit>span:first-child{font:800 14px var(--mo);color:var(--mu)}
+.bur-nosplit.bur-u{border:1px solid var(--negE);background:var(--negBg);color:var(--neg)}
+.bur-pvb{height:8px;border-radius:4px;background:var(--raised);border:1px solid var(--hair2);overflow:hidden}
+.bur-pvb i{display:block;height:100%;background:#7c3aed}
+.bur-tags{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start}
+.bur-vr>.bur-mono{white-space:nowrap}
+.bur-pb>*{flex-shrink:0}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "BUR25", "options": ["BUR25", "BUR25B", "BUR25C", "BUR26", "BUR27", "BUR27B", "BUR28A", "BUR28B", "BUR28C", "BUR29", "BUR29B", "BUR30A", "BUR30B", "BUR30C", "BUR30D", "BUR31", "BUR31B", "BUR31C", "BUR32", "BUR33A", "BUR33B", "BUR33C", "BUR34", "BUR35A", "BUR35B", "BUR35C", "BUR36A", "BUR36B", "BUR37"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'BUR25';
+    const dark = ['BUR36A', 'BUR36B'].includes(B);
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const BNAV = [['Overview'], ['Plan'], ['Progress'], ['Tools'], ['sub', 'Modules'], ['Solution design'], ['Prototype / MVP'], ['Product roadmap'], ['Founding team'], ['Company creation'], ['Operating systems']];
+    const bnav = (cur) => '<nav class="bx-nav" aria-label="Build">' + J(BNAV.map(n => n[0] === 'sub' ? '<span class="bx-sub">' + n[1] + '</span>' : '<a href="#"' + (n[0] === cur ? ' aria-current="page"' : '') + '>' + n[0] + '</a>')) + '<a href="#" style="font-size:12px">Work board ↗</a></nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><div class="selb" style="font-size:12px"><span>Northline</span><span aria-hidden="true">▾</span></div></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Build' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Build' ? bnav(cur) : ''))) + '</nav></aside>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">GL</span></div></div>';
+    const rail = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Build" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; const w = o.w || 1440; return '<div class="cv" style="' + VARS + ';width:' + w + 'px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="sh" style="min-height:' + (o.h || 900) + 'px' + (w < 1000 ? ';grid-template-columns:0 minmax(0,1fr) 44px' : '') + '">' + (w < 1000 ? '<div></div>' : side(o.cur || 'Overview')) + '<div class="mn">' + top + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+
+    /* ================= Build v2 addendum · Product roadmap (BD25–BD30) and Founding team (BD31–BD35) ================= */
+    const BK = (n, what) => '<span class="bur-bk" title="Needs backend work">◇ ' + n + (what ? ' · ' + what : '') + '</span>';
+    const POL = (t) => '<span class="bur-pol" title="Owner decision">⚑ ' + t + '</span>';
+    /* Platform States (D5129) plus the module's own words; each has a glyph and a word, never colour alone */
+    const T = {
+      'Not recorded': ['nr', '○'], 'Not applicable': ['ne', '–'], None: ['ne', '∅'], Unavailable: ['ur', '!'], Refused: ['bur-rf', '⊘'],
+      Stale: ['bur-st', '◷'], Partial: ['bur-pa', '◑'], Provisional: ['bur-pv', '≈'], Modelled: ['bur-pv', '≈'], Record: ['ro', '■'],
+      Late: ['at', '▲'], Blocked: ['ur', '✕'], Unlinked: ['at', '◌'], Awaiting: ['at', '⧗'], Signed: ['ok', '✓'], Filed: ['ok', '✓'], Due: ['', '◔'],
+      Done: ['ok', '✓'], 'In flight': ['pr', '◐'], Blocks: ['', '→'], Saving: ['pr', '◌'], 'Save failed': ['ur', '!'],
+      Published: ['ok', '✓'], 'In review': ['pr', '◐'], Draft: ['', '○'], Rejected: ['ne', '✕'], 'Supporting evidence': ['ro', 'ⓘ'], 'Read only': ['ro', '⊘'], Solo: ['', '●'], Advance: ['ok', '✓'], 'Keep searching': ['pr', '◐']
+    };
+    const tg = (s, label) => { const x = T[s] || ['', '•']; return '<span class="bx-tag ' + x[0] + '"><span aria-hidden="true">' + x[1] + '</span>' + (label || s) + '</span>'; };
+    const NR = tg('Not recorded'), UN = tg('Unavailable');
+    const rhead = (title, q, next, cta, status) => '<div class="crumb"><a href="#">Build</a>/<b>' + title + '</b></div><header class="ph1"><div><h1>' + title + '</h1><p>' + q + '</p>' + (next || status ? '<div class="bur-nx">' + (next ? '<span class="eye">Next</span><span>' + next + '</span>' : '') + (status ? '<span class="bur-mono">' + status + '</span>' : '') + '</div>' : '') + '</div><div class="acts">' + (cta || '') + '</div></header>';
+    const nt = (tone, ic, h, d, act) => '<div class="nt ' + tone + '"' + (tone === 'r' ? ' role="alert"' : '') + '><span class="ic" aria-hidden="true">' + ic + '</span><div><b>' + h + '</b>' + (d ? '<div>' + d + '</div>' : '') + (act ? '<button type="button" class="btn bsm" style="margin-top:6px">' + act + '</button>' : '') + '</div></div>';
+    const box = (t, inner) => '<section class="cd" style="gap:8px;min-width:0"><div class="ch"><h2 style="font-size:13px">' + t + '</h2></div>' + inner + '</section>';
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const phone = (title, body, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative;overflow:hidden"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd bur-pb" style="overflow:hidden">' + body + '</div>' + (sheet || '') + '</div></div>';
+    const railWith = (title, inner) => '<aside class="sp eadx" aria-label="Eadwyn" style="min-width:0;overflow:hidden;box-sizing:border-box"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><b style="font-size:13.5px">Eadwyn · ' + title + '</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1">' + inner + '</div><div style="padding:12px 16px;border-top:1px solid var(--hair)"><div class="inp" style="min-width:0;min-height:38px">Ask about ' + title + '…</div></div></aside>';
+    const pageRail = (body, o, railHtml) => page(body, o).replace('<aside class="sp" aria-label="Eadwyn">', '§').replace(/§[\s\S]*?<\/aside>/, railHtml).replace('<div class="sh" style="min-height:', '<div class="sh" style="grid-template-columns:196px minmax(0,1fr) 340px;min-height:');
+    const banner = '<div class="bx2-priv" role="status"><span aria-hidden="true">⚠</span><span><b>Super Admin preview of Northline’s Founder view.</b> Anything you save is recorded as you, Super Admin. GitHub logins and commit counts are not shown to you.</span><a href="#" style="color:#fecaca;margin-left:auto;font-weight:800">Exit preview</a></div>';
+
+    /* ---------- Product roadmap data (18 items, all time) ---------- */
+    // [title, col, owner, date, late, theme, kpi, state, waitsOn, blocks]
+    const KPI_ACT = 'Activation rate · 41% · PostHog';
+    const IT = {
+      now: [['Account setup', 'A', '18 Nov', 0, 'Setup takes two days', KPI_ACT, 'In flight', null, 2], ['Billing page', 'B', '12 Oct', 1, null, 'Paid conversions', 'Blocked', 'Account setup', 0], ['Team invites v2', null, null, 0, null, null, 'In flight', null, 0]],
+      next: [['Data import', 'B', '4 Dec', 0, 'Migration in week 1', null, 'Blocked', 'Account setup', 0], ['Usage analytics', null, '2 Nov', 1, 'Churn risk', null, 'Provisional', null, 0], ['Role templates', 'A', '15 Jan', 0, 'Permissions confusing', KPI_ACT, 'Provisional', null, 1], ['Audit log', null, null, 0, null, null, 'Provisional', null, 0]],
+      later: [['SSO', null, '26 Feb', 0, 'Enterprise asks', null, 'Blocked', 'Role templates', 0], ['Public API', 'B', '2 Mar', 0, null, 'Weekly active teams', 'Provisional', null, 0], ['Mobile app', null, null, 0, null, null, 'Provisional', null, 0], ['Slack alerts', null, null, 0, 'Missed handoffs', null, 'Provisional', null, 0], ['Custom domains', null, null, 0, 'Enterprise asks', null, 'Provisional', null, 0]],
+      done: [['Onboarding checklist', 'A', '10 Nov', 0, 'Setup takes two days', KPI_ACT, 'Done', null, 0], ['Bulk invite', 'B', '5 Nov', 0, null, KPI_ACT, 'Done', null, 0], ['Signup flow', 'A', '21 Oct', 0, null, 'Signups', 'Done', null, 0], ['Pricing page v1', 'B', '6 Oct', 0, null, 'Signups', 'Done', null, 0], ['Landing page', 'A', '22 Sep', 0, null, 'Signups', 'Done', null, 0], ['Waitlist', 'A', '28 Aug', 0, 'Demand', null, 'Done', null, 0]]
+    };
+    const COLS = [['now', 'Now'], ['next', 'Next'], ['later', 'Later'], ['done', 'Done']];
+    const who = (x) => x === 'A' ? '[Founder A]' : x === 'B' ? '[Founder B]' : x;
+    const card = (c, o) => {
+      o = o || {};
+      const links = c[4] || c[5] ? '<div class="bur-row">' + (c[4] ? '<span class="bur-chip" title="Feedback theme">' + c[4] + '</span>' : '') + (c[5] ? '<span class="bur-chip bur-kp" title="KPI">' + c[5] + '</span>' : '') + '</div>' : '<div class="bur-row">' + tg('Unlinked', 'Unlinked · no theme, no KPI') + '</div>';
+      const state = c[6] === 'Blocked' ? tg('Blocked', 'Blocked · waits on [' + c[7] + ']') : c[6] === 'Done' ? tg('Done') : tg(c[6] === 'In flight' ? 'In flight' : 'Provisional', c[6]);
+      const date = c[3] ? tg('Late', 'Late · due ' + c[2]) : '<span>' + (c[2] || '<i>No date</i>') + '</span>';
+      return '<article class="bur-card' + (o.sel ? ' sel' : '') + (o.saving ? ' sv' : '') + '"><b>[' + c[0] + ']</b><div class="m"><span>' + (c[1] ? who(c[1]) : '<i>No owner</i>') + '</span><span aria-hidden="true">·</span>' + date + '</div>' + links + '<div class="bur-row">' + state + (c[8] ? tg('Blocks', 'Blocks ' + c[8]) : '') + '</div>' + (o.extra || '') + '</article>';
+    };
+    const STRIP = [['Now', '3', 'items · all time'], ['Next', '4', 'items · all time'], ['Later', '5', 'items · all time'], ['Done', '6', 'items · all time'], ['Shipped this month', '2', 'items · Nov'], ['Late', '2', 'past target date, not Done'], ['Unlinked', '3', 'no theme, no KPI']];
+    const strip = (cells, cls) => '<section class="bur-strip' + (cls ? ' ' + cls : '') + '" aria-label="Roadmap figures">' + J(cells.map(s => '<div><small>' + s[0] + '</small><b>' + s[1] + '</b><em>' + s[2] + '</em></div>')) + '</section>';
+    const viewSwitch = (cur) => '<div class="bur-seg" role="radiogroup" aria-label="View"><button type="button" role="radio" aria-checked="' + (cur === 'Board') + '">Board</button><button type="button" role="radio" aria-checked="' + (cur === 'Timeline') + '">Timeline</button></div>';
+    const rmTools = (cur, extra) => '<div class="tools" style="justify-content:space-between"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + viewSwitch(cur) + '<button type="button" class="dd">Column ▾</button><button type="button" class="dd">Theme ▾</button><button type="button" class="dd">KPI ▾</button>' + (extra || '') + '</div><a class="btn t bsm" href="#">Dependencies and Scenarios · /build/roadmap ↗</a></div>';
+    const cols = (sel, lim) => '<div class="bur-cols">' + J(COLS.map(([k, l]) => '<section class="bur-col" aria-label="' + l + '"><h3>' + l + '<span>' + IT[k].length + ' items</span></h3>' + J(IT[k].slice(0, lim || 9).map((c, i) => card(c, { sel: sel === c[0] }))) + '</section>')) + '</div>';
+    const SHIP = [['Aug', 1], ['Sep', 1], ['Oct', 2], ['Nov', 2]];
+    const shipBars = () => '<section class="cd" style="gap:10px"><div class="ch"><h2>Items shipped per month</h2><span class="sm">items moved to Done · 2026 · months with none are not listed</span></div><div class="bur-vb" role="img" aria-label="Items shipped: Aug 1, Sep 1, Oct 2, Nov 2">' + J(SHIP.map(s => '<div><b>' + s[1] + '</b><i style="height:' + (s[1] * 34) + 'px"></i><small>' + s[0] + '</small></div>')) + '</div></section>';
+    const RELS = [['v0.6', '10 Nov', '[Onboarding checklist]', 'Live 10 Nov'], ['v0.5', '5 Nov', '[Bulk invite]', 'Live 6 Nov'], ['v0.4', '21 Oct', '[Signup flow]', 'Live 21 Oct'], ['v0.3', '6 Oct', '[Pricing page v1]', 'Live 6 Oct'], ['v0.2', '22 Sep', '[Landing page]', 'Not recorded'], ['v0.1', '28 Aug', '[Waitlist]', 'Not recorded']];
+    const ghPart = (state) => '<section class="bur-pt" aria-label="From GitHub"><h3>From GitHub<span class="bur-mono">synced 14:02 today</span></h3>' + (state === 'un' ? nt('r', '!', 'Unavailable', 'GitHub’s milestones and releases could not be read. The board is unaffected.', 'Try again') : state === 'empty' ? '<p style="font-size:12px;color:var(--mu)">No milestone or release from GitHub yet. Connect GitHub and sync to bring them in.</p><a class="btn bsm" href="#" style="align-self:flex-start">Open Build › Tools</a>' :
+      '<span class="bx-lbl">Milestones · soonest first</span>' + J([['MVP', 'due 18 Nov', '2 of 4 shipped'], ['Beta', 'due 15 Jan', '0 of 2 shipped']].map(m => '<div class="bur-li"><span><b>' + m[0] + '</b> <span class="bur-mono">' + m[1] + '</span></span><span class="bur-mono">' + m[2] + '</span></div>'))
+      + '<span class="bx-lbl" style="margin-top:4px">Releases · newest first</span>' + J(RELS.slice(0, state === 'many' ? 4 : 6).map(r => '<div class="bur-li"><span><b class="bur-mono" style="color:var(--ink)">' + r[0] + '</b> <span class="bur-mono">' + r[1] + '</span> · ' + r[2] + '</span><span class="bur-mono">1 item</span></div>')) + (state === 'many' ? '<span class="bur-mono">and 8 more releases</span>' : '')) + '</section>';
+    const WK = [3, 4, 2, 5, 6, 3, 4, 7, 5, 6, 4, 5];
+    const vcPart = (state) => '<section class="bur-pt" aria-label="From Vercel"><h3>From Vercel<span class="bur-mono">production · 12 weeks</span></h3>' + (state === 'un' ? nt('r', '!', 'Unavailable', 'Vercel deployments could not be read. The board is unaffected.', 'Try again') : state === 'empty' ? '<p style="font-size:12px;color:var(--mu)">No production deploy recorded in the last 12 weeks.</p>' :
+      '<div class="bur-wk" role="img" aria-label="Production deploys per week, last 12 weeks, 54 in total">' + J(WK.map(n => '<i style="height:' + (n * 5) + 'px"></i>')) + '</div><div class="bur-mono">54 production deploys · per week, 12 weeks to 14 Nov</div>'
+      + '<dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Failed share</dt><dd class="bur-mono" style="color:var(--ink)">7% · 4 of 54</dd><dt>Median build</dt><dd class="bur-mono" style="color:var(--ink)">1m 48s</dd><dt>Rollbacks</dt><dd class="bur-mono" style="color:var(--ink)">1 · promotions 2</dd></dl>'
+      + '<span class="bx-lbl">Live on · per release</span>' + J(RELS.slice(0, 4).map(r => '<div class="bur-li"><span class="bur-mono" style="color:var(--ink)">' + r[0] + '</span><span class="bur-mono">' + r[3] + '</span></div>'))) + '</section>';
+    const RM_Q = 'Decide what ships now, see what waits on what, and which items move a feedback theme or a KPI.';
+    const rmHead = (o) => { o = o || {}; return rhead('Product roadmap', RM_Q, o.next === undefined ? 'Move the next planned item into Now <a href="#" class="btn t bsm">Open Next</a>' : o.next, o.cta === undefined ? '<button type="button" class="btn p">Add item</button>' : o.cta, o.status === undefined ? '18 items · GitHub synced 14:02 today · Vercel read 14:20' : o.status); };
+    const roadmapBoard = (o) => { o = o || {}; return rmHead(o) + strip(STRIP) + rmTools('Board') + '<div class="bur-rm"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">' + cols(o.sel) + shipBars() + '</div><div class="bur-side">' + ghPart() + vcPart() + '</div></div>'; };
+
+    /* Eadwyn · Argue the ordering (BD25 B) */
+    const argue = (none) => '<div class="prm"><button type="button">Argue the ordering</button><button type="button">What should move into Now?</button><button type="button">Which items have no KPI?</button></div>'
+      + (none ? '<div class="cs2"><span class="eye">Argue the ordering</span><p style="font-size:12.5px;line-height:1.55">Nothing in the record argues for a different order. Every Now item has a key result in progress, and nothing in Next records more progress than Now.</p><p class="raw">No suggestion is kept. The order stays yours.</p></div>'
+        : '<section class="bur-sug" aria-label="Suggested"><span class="eye">Suggested · Argue the ordering</span><p><b>Swap [Team invites v2] (Now) and [Role templates] (Next).</b></p><p>[Team invites v2] records no key result and no quarter. [Role templates] has one key result, “Admins set roles in under 2 minutes”, at 40%, set for Q1.</p><div class="bur-cite"><a href="#">[Team invites v2]</a><a href="#">[Role templates]</a></div><div class="bur-row" style="gap:6px"><button type="button" class="btn bsm">Keep argument</button><button type="button" class="btn bsm">Edit wording</button><button type="button" class="btn t bsm">Discard</button></div><p class="bur-foot">This writes an argument, never an order. Moving items stays your action.</p></section>'
+          + '<p class="raw">Reads each item’s title, column, quarter and key results only (rail option draft:build/roadmap). It does not read owners, dates, themes or dependencies.</p>');
+
+    /* ---------- BD26 timeline ---------- */
+    const MW = 135, TODAY = 2 * MW + 13 / 30 * MW;
+    const dx = (m, d) => Math.round(m * MW + (d - 1) / 30 * MW);
+    const LANES = [['Now', 2, [['Account setup', 2, 18, 0, 0], ['Billing page', 1, 12, 1, 1]]], ['Next', 2, [['Usage analytics', 2, 2, 0, 1], ['Data import', 3, 4, 1, 0], ['Role templates', 4, 15, 0, 0]]], ['Later', 2, [['SSO', 5, 26, 0, 0], ['Public API', 6, 2, 1, 0]]], ['Done', 3, [['Landing page', 0, 22, 0, 0], ['Signup flow', 1, 21, 0, 0], ['Pricing page v1', 1, 6, 1, 0], ['Onboarding checklist', 2, 10, 1, 0], ['Bulk invite', 2, 5, 2, 0]]]];
+    const RH = 34;
+    const timeline = () => {
+      let y = 30; const pos = {}; let lanes = '';
+      LANES.forEach(([name, rowsN, its]) => {
+        const h = rowsN * RH + 12;
+        lanes += '<div class="bur-lane" style="top:' + y + 'px;height:' + h + 'px"><b>' + name + '</b></div>';
+        its.forEach(([t, m, d, r, late]) => {
+          const x = dx(m, d), top = y + 6 + r * RH; pos[t] = [late ? Math.round(TODAY + 6) : x, top + 13];
+          if (late) lanes += '<div class="bur-od" style="left:' + (160 + x) + 'px;top:' + (top + 9) + 'px;width:' + Math.round(TODAY - x) + 'px" aria-hidden="true"></div><div class="bur-pin late" style="left:' + (160 + TODAY + 6) + 'px;top:' + top + 'px"><b>[' + t + ']</b>' + tg('Late', 'Late · due ' + d + ' ' + ['Sep', 'Oct', 'Nov'][m]) + '</div>';
+          else lanes += '<div class="bur-pin' + (name === 'Done' ? ' dn' : '') + '" style="left:' + (160 + x) + 'px;top:' + top + 'px"><i aria-hidden="true">' + (name === 'Done' ? '✓' : '◆') + '</i><b>[' + t + ']</b></div>';
+        });
+        y += h + 6;
+      });
+      const link = (a, b) => { const p = pos[a], q = pos[b]; const x1 = 160 + p[0] + 2, x2 = 160 + q[0] - 2, y1 = p[1] + (q[1] > p[1] ? 13 : -13), y2 = q[1]; return '<path d="M' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + (y1 + (y2 - y1) * .7) + ', ' + (x2 - 30) + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" fill="none" stroke="var(--neg)" stroke-width="1.5" marker-end="url(#ar)"/>'; };
+      const months = ['Sep 2026', 'Oct', 'Nov', 'Dec', 'Jan 2027', 'Feb', 'Mar'];
+      return '<section class="cd" style="padding:14px 16px;gap:10px"><div class="ch"><h2>Timeline · by target date</h2><span class="sm">16 dated items · 1 earlier than Sep ([Waitlist], Done) · 5 without a date below</span></div>'
+        + '<div class="bur-tl" style="height:' + (y + 20) + 'px">' + J(months.map((mo, i) => '<span class="bur-mo" style="left:' + (160 + i * MW) + 'px">' + mo + '</span>')) + J(months.map((mo, i) => '<span class="bur-gl" style="left:' + (160 + i * MW) + 'px;height:' + (y - 24) + 'px"></span>'))
+        + lanes + '<span class="bur-today" style="left:' + (160 + TODAY) + 'px;height:' + (y - 6) + 'px"><em>Today · 14 Nov</em></span>'
+        + '<svg class="bur-svg" width="1110" height="' + y + '" aria-hidden="true"><defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--neg)"/></marker></defs>' + link('Account setup', 'Billing page') + link('Account setup', 'Data import') + link('Role templates', 'SSO') + '</svg></div>'
+        + '<p class="raw">Connectors run from the item that blocks to the item that waits (red, arrowhead). Late: an amber hatched span from the target date to today, the word Late and the date. Waiting items also carry “Blocked · waits on …” in the board and the sheet.</p></section>';
+    };
+    const tray = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>No date recorded · 5 items</h2><span class="sm">not placed on the timeline</span></div><ul class="bur-tray">' + J([['Team invites v2', 'Now'], ['Audit log', 'Next'], ['Mobile app', 'Later'], ['Slack alerts', 'Later'], ['Custom domains', 'Later']].map(t => '<li><b>[' + t[0] + ']</b><span class="bur-mono">' + t[1] + '</span>' + NR + '<button type="button" class="btn bsm">Add a date</button></li>')) + '</ul></section>';
+
+    /* ---------- BD27 item sheet ---------- */
+    const sheet27 = (confirm) => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="ish" style="width:600px"><div class="drh"><div class="tr"><span class="eye">Product roadmap · item</span><button type="button" class="ib" aria-label="Close item">✕</button></div><h2 id="ish">[Account setup]</h2><div class="mt">' + tg('In flight') + tg('Blocks', 'Blocks 2') + '<span class="bur-mono">Now · due 18 Nov</span></div></div>'
+      + '<div class="drb" style="gap:14px">'
+      + '<div class="bur-key"><b>Marked on this sheet</b><span>' + tg('Done', 'Built today') + ' fields, Move, Edit, Dependencies, Feedback, GitHub</span><span><span class="bur-fe">Frontend</span> Delete (the route exists) · removing the Public roadmap section</span><span>' + BK('Worker', 'remove the item’s okr_dependencies rows on delete') + '</span></div>'
+      + '<dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>Item</dt><dd>[Account setup]</dd><dt>Column</dt><dd>Now <a href="#" class="btn t bsm">Move to…</a></dd><dt>Owner</dt><dd>[Founder A]</dd><dt>Date</dt><dd class="bur-mono" style="color:var(--ink)">18 Nov 2026</dd><dt>Answers</dt><dd><span class="bur-chip">Setup takes two days</span></dd><dt>Moves</dt><dd><span class="bur-chip bur-kp">' + KPI_ACT + '</span> <span class="bur-mono">read 13:55 today</span></dd><dt>Feature</dt><dd><a href="#">[One-day setup wizard] · Prototype / MVP →</a></dd></dl>'
+      + '<section class="bur-sec"><h3>Dependencies</h3><div class="bur-li"><span>Waits on</span>' + tg('None', 'Nothing') + '</div><div class="bur-li"><span>Blocks <a href="#">[Billing page]</a></span>' + tg('Blocked') + '</div><div class="bur-li"><span>Blocks <a href="#">[Data import]</a></span>' + tg('Blocked') + '</div><button type="button" class="btn bsm" style="align-self:flex-start">Add a dependency</button><p class="raw">Add a dependency asks for one: Waits on, or Blocks. A loop is refused.</p></section>'
+      + '<section class="bur-sec"><h3>Feedback it answers</h3><div class="bur-li"><span>“Setup takes two days” · 4 interviews</span><a href="#" class="bur-mono">Open theme →</a></div></section>'
+      + '<section class="bur-sec"><h3>GitHub</h3><div class="bur-li"><span>Issue #38 · northline/app</span><span class="bur-mono">open</span></div><div class="bur-li"><span>Milestone MVP</span><span class="bur-mono">due 18 Nov</span></div><div class="bur-li"><span>Shipped in</span>' + tg('None', 'No release yet') + '</div></section>'
+      + '<section class="bur-sec"><h3>Activity</h3>' + J([['12 Nov', '[Founder A]', 'Date set to 18 Nov'], ['3 Nov', '[Founder A]', 'Moved Next → Now'], ['28 Oct', '[Founder B]', 'Added “Billing page waits on this”']].map(a => '<div class="bur-li"><span><span class="bur-mono">' + a[0] + '</span> · ' + a[1] + ' · ' + a[2] + '</span></div>')) + '</section>'
+      + '</div><div class="drf" style="display:flex;flex-direction:row;justify-content:space-between;align-items:center"><button type="button" class="btn bur-del">Delete item</button><div style="display:flex;gap:8px"><button type="button" class="btn">Edit</button><button type="button" class="btn p">Move to Done</button></div></div>'
+      + (confirm ? '<div class="bur-cf" role="alertdialog" aria-labelledby="cfh"><h3 id="cfh">Delete [Account setup]?</h3><p>[Account setup] waits on nothing and blocks [Billing page] and [Data import]; those links stop showing. [Billing page] and [Data import] stop showing as Blocked by it.</p><p class="raw">Its GitHub issue and the moves already logged are not deleted.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Keep item</button><button type="button" class="btn bur-delp">Delete [Account setup]</button></div></div>' : '')
+      + '</aside>';
+
+    /* ---------- BD28 zero, few, many ---------- */
+    const rmZero = () => rmHead({ next: 'Add the first item', status: '0 items' }) + '<section class="bx2-guide"><span class="eye">No items</span><h2>No roadmap items yet. Now, Next and Later appear here.</h2><p>Add the first thing you plan to ship. Link it to a feedback theme or a KPI so you can see what it moves.</p></section><div class="g"><div style="grid-column:span 6">' + ghPart('empty') + '</div><div style="grid-column:span 6">' + vcPart('empty') + '</div></div><p class="raw">At zero: no figure strip, no filters, no switch, no empty columns. One action: Add item.</p>';
+    const FEW = [['Account setup', 'A', '18 Nov', 0, 'Setup takes two days', KPI_ACT, 'In flight', null, 0], ['Billing page', 'B', '12 Oct', 1, null, 'Paid conversions', 'In flight', null, 0], ['Team invites v2', null, null, 0, null, null, 'Provisional', null, 0]];
+    const rmFew = () => rmHead({ status: '3 items · GitHub synced 14:02 today' }) + strip([['Now', '2', 'items · all time'], ['Next', '1', 'items · all time'], ['Later', '0', 'items · all time'], ['Done', '0', 'items · all time'], ['Shipped this month', '0', 'items · Nov'], ['Late', '1', 'past target date, not Done'], ['Unlinked', '1', 'no theme, no KPI']])
+      + '<div class="tools">' + viewSwitch('Board') + '<span class="raw">Filters appear from 10 items.</span></div><div class="bur-cols">' + J([['Now', [FEW[0], FEW[1]]], ['Next', [FEW[2]]], ['Later', []], ['Done', []]].map(c => '<section class="bur-col"><h3>' + c[0] + '<span>' + c[1].length + ' items</span></h3>' + (c[1].length ? J(c[1].map(x => card(x))) : '<p class="bur-none">∅ No items in ' + c[0] + '</p>') + '</section>')) + '</div>';
+    const manyCol = (n, name, items) => '<section class="bur-col"><h3>' + name + '<span>' + n + ' items</span></h3>' + J(items.map(x => card(x))) + '<p class="bur-mono" style="padding:2px 4px">… 6 more cards: the first 8 show</p><button type="button" class="btn bsm">Show ' + (n - 8) + ' more</button></section>';
+    const rmMany = () => rmHead({ status: '60 items · page 1 of 2 · GitHub synced 14:02 today' }) + strip([['Now', '9', 'items · all time'], ['Next', '14', 'items · all time'], ['Later', '23', 'items · all time'], ['Done', '14', 'items · all time'], ['Shipped this month', '3', 'items · Nov'], ['Late', '—', '◇ exact count needs the Worker'], ['Unlinked', '—', '◇ exact count needs the Worker']])
+      + '<div class="bur-row" style="gap:8px">' + BK('#6034', 'Late and Unlinked over a paged list need one Worker aggregate') + '<span class="raw">Unpaged lists count them in the frontend.</span></div>'
+      + rmTools('Board')
+      + '<div class="bur-cols">' + manyCol(9, 'Now', IT.now.slice(0, 2)) + manyCol(14, 'Next', IT.next.slice(0, 2)) + manyCol(23, 'Later', IT.later.slice(0, 2)) + manyCol(14, 'Done', IT.done.slice(0, 2)) + '</div>'
+      + '<div class="qft" style="border:1px solid var(--hair);border-radius:10px;background:var(--card)"><span>32 of 60 items · page 1 of 2 · each column shows its first 8</span><span class="pb"><button type="button" aria-label="Previous page">‹</button><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button" aria-label="Next page">›</button></span></div>';
+
+    /* ---------- BD29 states ---------- */
+    const skel = '<div class="bur-sk"><i style="width:40%"></i><i></i><i style="width:70%"></i></div>';
+    const STATES29 = [
+      ['Loading', '<div class="bur-strip bur-sm">' + J(['Now', 'Next', 'Later', 'Done'].map(l => '<div><small>' + l + '</small><span class="bur-skb"></span></div>')) + '</div><div class="bur-cols" style="grid-template-columns:repeat(4,1fr)">' + J([1, 2, 3, 4].map(() => '<div class="bur-col">' + skel + skel + '</div>')) + '</div><span class="raw" role="status">Loading the roadmap…</span>'],
+      ['Not recorded · on a card', card(['Audit log', null, null, 0, null, null, 'Provisional', null, 0]) + '<p class="raw">No owner, No date and Unlinked are words, not blanks. A PostHog KPI no longer tracked reads “Not recorded: no longer tracked”.</p>'],
+      ['Unavailable · the roadmap read fails', strip([['Now', 'Unavailable', '! could not be read'], ['Late', 'Unavailable', '! could not be read']], 'bur-sm') + nt('r', '!', 'Product roadmap is unavailable', 'The items could not be read. Nothing is shown as 0. Your items are not changed.', 'Try again')],
+      ['Unavailable · one part only', ghPart('un') + '<p class="raw">The board, the strip and From Vercel keep working.</p>'],
+      ['Refused · partner or investor', '<div class="bur-ref"><span class="bur-g" aria-hidden="true">⊘</span><b>Product roadmap is the venture founder’s workspace.</b><p>You don’t have access to Northline’s Build. No access request is offered here.</p><a href="#" class="btn bsm">Back to Portfolio</a></div>'],
+      ['Admin viewing', banner.replace('bx2-priv', 'bx2-priv bur-ban') + '<p class="raw">The board reads and edits as Super Admin (BD22). From GitHub shows milestones and releases; no login or commit count appears for an admin.</p>'],
+      ['Plan limit · Add item refused', nt('a', '!', 'Your plan’s roadmap item limit is reached', 'Add item was refused. Nothing was added. Upgrade to add more, or move an item to Done.', 'See plans') + '<p class="raw">The upgrade sheet comes from the plan gate (ensureTier) and is the shared one.</p>'],
+      ['Saving · then save failed on a move', card(IT.next[1], { saving: 1, extra: tg('Saving', 'Moving to Now…') }) + card(IT.next[1], { extra: nt('r', '!', 'Move failed', 'The card stays in Next. Your edit is kept.', 'Try again') })]
+    ];
+    const states29 = () => crop('<span class="eye">Product roadmap · states · a failed read says Unavailable, never 0</span><div class="bur-st4">' + J(STATES29.map(s => box(s[0], s[1]))) + '</div>', 1400);
+    const refusedPage = () => page('<div class="bur-refp"><span class="bur-g" aria-hidden="true">⊘</span><h1>Product roadmap is the venture founder’s workspace.</h1><p>You opened /build/product-roadmap for Northline as a partner. Build is shown to the venture’s founders, admins and active Lab members only. No access is granted from here.</p><a class="btn" href="#">Back to Portfolio</a><span class="raw">State: Refused · the route turns the reader away before any read</span></div>', { h: 620, cur: 'Product roadmap' });
+
+    /* ---------- BD30 phone ---------- */
+    const seg4 = (cur) => '<div class="bur-seg bur-seg4" role="radiogroup" aria-label="Column">' + J(COLS.map(([k, l]) => '<button type="button" role="radio" aria-checked="' + (l === cur) + '">' + l + ' <span>' + IT[k].length + '</span></button>')) + '</div>';
+    const chipsStrip = '<div class="bur-pchips">' + J(STRIP.map(s => '<span><b>' + s[1] + '</b> ' + s[0] + (s[0] === 'Shipped this month' ? ' · Nov' : '') + '</span>')) + '</div>';
+    const pRoad = () => phone('Product roadmap', '<p style="font-size:13px;color:var(--mu)">' + RM_Q + '</p><div class="bur-nx"><span class="eye">Next</span><span>Move the next planned item into Now</span></div><button type="button" class="btn p" style="min-height:48px">Add item</button>' + chipsStrip + '<div style="display:flex;gap:8px">' + viewSwitch('Board').replace('bur-seg"', 'bur-seg" style="flex:1"') + '</div>' + seg4('Now') + J(IT.now.map(c => card(c, { extra: '<button type="button" class="btn bsm" style="min-height:44px!important;align-self:flex-start">Move to…</button>' }))));
+    const pMove = () => phone('Product roadmap', seg4('Now') + J(IT.now.slice(0, 2).map(c => card(c))), '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mv"><div class="grab" aria-hidden="true"></div><div style="padding:12px 18px 24px;display:flex;flex-direction:column;gap:10px"><h2 id="mv" style="font-size:17px;font-weight:800">Move [Account setup] to…</h2><p class="raw">Now · In flight · blocks 2</p>' + J([['Now', 'current'], ['Next', ''], ['Later', ''], ['Done', 'marks it shipped this month']].map((o, i) => '<label class="bur-opt' + (i === 3 ? ' on' : '') + '"><input type="radio" name="mv"' + (i === 3 ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '><b>' + o[0] + '</b><span>' + o[1] + '</span></label>')) + '<button type="button" class="btn p" style="min-height:48px">Move to Done</button><button type="button" class="btn t" style="min-height:44px">Cancel</button></div></div>');
+    const pTimeline = () => phone('Product roadmap', '<div style="display:flex">' + viewSwitch('Timeline').replace('bur-seg"', 'bur-seg" style="flex:1"') + '</div><p class="raw">By target date, grouped by month · Today 14 Nov</p>'
+      + J([['Oct 2026', [['Billing page', 'Now', tg('Late', 'Late · due 12 Oct') + tg('Blocked', 'Blocked')]]], ['Nov 2026', [['Usage analytics', 'Next', tg('Late', 'Late · due 2 Nov')], ['Account setup', 'Now', '<span class="bur-mono">18 Nov</span> ' + tg('Blocks', 'Blocks 2')]]], ['Dec 2026', [['Data import', 'Next', '<span class="bur-mono">4 Dec</span> ' + tg('Blocked', 'Blocked')]]], ['Jan 2027', [['Role templates', 'Next', '<span class="bur-mono">15 Jan</span>']]]].map(g => '<section class="bur-pm"><h3>' + g[0] + '</h3>' + J(g[1].map(i => '<div class="mc"><div class="r1"><b>[' + i[0] + ']</b><span class="bur-mono">' + i[1] + '</span></div><div class="bur-row">' + i[2] + '</div></div>')) + '</section>'))
+      + '<button type="button" class="disc" style="min-height:52px"><b>No date recorded</b><span>5 items · Add a date</span><i aria-hidden="true">›</i></button><button type="button" class="disc" style="min-height:52px"><b>From GitHub</b><span>2 milestones · 6 releases</span><i aria-hidden="true">›</i></button><button type="button" class="disc" style="min-height:52px"><b>From Vercel</b><span>54 deploys · 12 weeks</span><i aria-hidden="true">›</i></button>');
+    const pItem = () => phone('Item', '<a class="btn t" href="#" style="min-height:44px;align-self:flex-start">‹ Product roadmap</a><h1 style="font-size:20px;font-weight:800">[Account setup]</h1><div class="bur-row">' + tg('In flight') + tg('Blocks', 'Blocks 2') + '</div><dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>Column</dt><dd>Now</dd><dt>Owner</dt><dd>[Founder A]</dd><dt>Date</dt><dd class="bur-mono" style="color:var(--ink)">18 Nov 2026</dd><dt>Answers</dt><dd><span class="bur-chip">Setup takes two days</span></dd><dt>Moves</dt><dd><span class="bur-chip bur-kp">Activation rate · 41%</span></dd></dl>'
+      + '<section class="bur-sec"><h3>Dependencies</h3><div class="bur-li"><span>Waits on</span>' + tg('None', 'Nothing') + '</div><div class="bur-li"><span>Blocks [Billing page]</span>' + tg('Blocked') + '</div><div class="bur-li"><span>Blocks [Data import]</span>' + tg('Blocked') + '</div><button type="button" class="btn" style="min-height:44px">Add a dependency</button></section><button type="button" class="btn p" style="min-height:48px">Move to…</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn" style="min-height:44px">Edit</button><button type="button" class="btn bur-del" style="min-height:44px">Delete</button></div>');
+
+    /* ---------- Founding team data ---------- */
+    // [name, role, equity, vesting text, vestedPct, agreement, agreementDate, f83, colour]
+    const FD = [['[Founder A]', 'CEO', 45, '4 years · 1-year cliff · from 1 Sep 2025', 29, 'Signed', '2 Oct 2026', ['Filed', 'Filed 20 Oct 2026'], '#7c3aed'], ['[Founder B]', 'CTO', 25, '4 years · no cliff · from 1 Nov 2026', 0, 'Awaiting', null, ['Due', 'Due 1 Dec 2026'], '#a78bfa'], ['[Founder C]', 'COO', 8, null, null, null, null, null, '#c4b5fd']];
+    const split = (o) => { o = o || {}; const segs = (o.fd || FD).map((f, i) => [f[0] + ' · ' + f[2] + '%', f[2], f[8], '']).concat(o.noPool ? [] : [['Option pool · ' + (o.pool || 10) + '% · Modelled', o.pool || 10, 'pool', '']]).concat(o.un === 0 ? [] : [['Unallocated · ' + (o.un || 12) + '%', o.un || 12, 'un', '']]);
+      return '<div class="bur-split" role="img" aria-label="' + segs.map(s => s[0]).join(', ') + '">' + J(segs.map(s => '<span class="' + (s[2] === 'pool' ? 'bur-pool' : s[2] === 'un' ? 'bur-un' : '') + '" style="width:' + s[1] + '%' + (s[2] !== 'pool' && s[2] !== 'un' ? ';background:' + s[2] : '') + '">' + (s[1] > 9 ? s[0].replace(' · Modelled', '') : '') + '</span>')) + '</div>'
+        + '<ul class="bur-leg">' + J(segs.map(s => '<li><i class="' + (s[2] === 'pool' ? 'bur-pool' : s[2] === 'un' ? 'bur-un' : '') + '" style="' + (s[2] !== 'pool' && s[2] !== 'un' ? 'background:' + s[2] : '') + '" aria-hidden="true"></i>' + s[0].replace(' · Modelled', '') + (s[2] === 'pool' ? ' ' + tg('Modelled', 'Modelled · from the saved model') : '') + '</li>')) + '</ul>'; };
+    const f83 = (f) => f[7] ? tg(f[7][0], f[7][1]) : '<span class="bur-row">' + tg('None', 'No 83(b) filing recorded') + '<a href="#" class="btn bsm">Add 83(b) filing</a></span>';
+    const agr = (f) => f[5] ? tg(f[5], f[5] + (f[6] ? ' · ' + f[6] : '')) : NR;
+    const fTable = (o) => { o = o || {}; return '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 16px"><h2>Founders · 3</h2><span class="sm">equity and vesting today</span></div><table class="etb"><thead><tr><th scope="col">Founder</th><th scope="col">Role</th><th scope="col">Equity</th><th scope="col">Vesting</th><th scope="col">Agreement</th><th scope="col">83(b)</th></tr></thead><tbody>'
+      + J(FD.map(f => '<tr><td><b>' + f[0] + '</b></td><td>' + f[1] + '</td><td class="bur-mono" style="color:var(--ink)">' + (o.un ? UN : f[2] + '%') + '</td><td>' + (o.un ? UN : f[3] ? '<span style="font-size:12px">' + f[3] + '</span><div class="bur-mono">' + f[4] + '% vested today</div>' : '<span class="bur-row">' + NR + '<a href="#" class="btn bsm">Record vesting</a></span>') + '</td><td>' + agr(f) + '</td><td>' + f83(f) + '</td></tr>')) + '</tbody></table></section>'; };
+    /* vesting timeline: Sep 2025 → Dec 2030, 64 months */
+    const VW = 540, VM = 64, vx = (m) => Math.round(m / VM * VW), VT = 14.4;
+    const vest = () => '<section class="cd" style="gap:10px"><div class="ch"><h2>Vesting</h2><span class="sm">vested % today · 14 Nov 2026</span></div><div class="bur-vest">'
+      + '<div class="bur-vr bur-vax"><span></span><div class="bur-trk" style="width:' + VW + 'px">' + J([['2026', 4], ['2027', 16], ['2028', 28], ['2029', 40], ['2030', 52]].map(y => '<em style="left:' + vx(y[1]) + 'px">' + y[0] + '</em>')) + '</div><span></span></div>'
+      + J([['[Founder A]', 0, 48, 12, 29], ['[Founder B]', 14, 48, 0, 0]].map(r => '<div class="bur-vr"><b>' + r[0] + '</b><div class="bur-trk" style="width:' + VW + 'px"><span class="bur-vb2" style="left:' + vx(r[1]) + 'px;width:' + vx(r[2]) + 'px"><i style="width:' + (r[4] ? vx(VT - r[1]) : 0) + 'px"></i></span>' + (r[3] ? '<span class="bur-cl" style="left:' + vx(r[1] + r[3]) + 'px" title="Cliff"><em>cliff 1 Sep 2026</em></span>' : '<span class="bur-cl0" style="left:' + vx(r[1]) + 'px"><em>no cliff</em></span>') + '<span class="bur-tday" style="left:' + vx(VT) + 'px"></span></div><span class="bur-mono" style="color:var(--ink)">' + r[4] + '% vested</span></div>'))
+      + '<div class="bur-vr"><b>[Founder C]</b><div class="bur-trk bur-nrt" style="width:' + VW + 'px"><span>' + NR + ' No vesting start, cliff or term recorded</span></div><a href="#" class="btn bsm">Record vesting</a></div>'
+      + '</div><p class="raw">Today line at 14 Nov 2026. Filled: vested today. Fully vested: [Founder A] 1 Sep 2029 · [Founder B] 1 Nov 2030.</p></section>';
+    const agreeCard = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>Co-founder agreement</h2><span class="sm">latest document per founder</span></div>' + J(FD.map(f => '<div class="bur-li"><span>' + f[0] + '</span>' + agr(f) + '</div>')) + '<div class="bur-nb"><button type="button" class="btn bsm" disabled>Signatures n of m</button>' + BK('#6034', 'per-party signatures not stored') + '</div><div class="bur-row" style="gap:8px"><a class="btn bsm" href="#">Draft the co-founder agreement · Raise › Legal engine ›</a></div><div class="bur-nb"><button type="button" class="btn bsm" disabled>Send for signature</button>' + BK('#6034', 'founders can’t be staged signers') + '</div></section>';
+    const f83Card = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>83(b) elections</h2><span class="sm">from Company creation</span></div>' + J(FD.map(f => '<div class="bur-li"><span>' + f[0] + '</span>' + f83(f) + '</div>')) + '<p class="raw">Each opens its filing in Company creation.</p></section>';
+    const decCard = (o) => '<section class="cd" style="gap:8px"><div class="ch"><h2>Solo or co-founder</h2></div><div class="bur-row" style="gap:8px">' + (o === 'solo' ? tg('Solo', 'Solo') + '<span class="bur-mono">decided 20 Oct 2026</span>' : o === 'none' ? NR + '<span style="font-size:12px">No decision recorded</span>' : tg('Advance', 'Advance with a candidate') + '<span class="bur-mono">decided 20 Oct 2026</span>') + '</div></section>';
+    const contrib = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>Contributions log</h2><span class="sm">3 entries</span></div>' + J([['12 Nov', '[Founder A]', 'Closed the first 3 design partners'], ['10 Nov', '[Founder B]', 'Shipped the setup wizard prototype'], ['3 Nov', '[Founder C]', 'Ran 6 customer interviews']].map(c => '<div class="bur-li"><span><span class="bur-mono">' + c[0] + '</span> · ' + c[1] + ' · ' + c[2] + '</span></div>')) + '</section>';
+    const codeCard = (admin, un) => '<section class="cd" style="gap:8px"><div class="ch"><h2>From code</h2>' + tg('Supporting evidence', 'Supporting evidence only') + '</div>' + (un ? nt('r', '!', 'Unavailable', 'Contributors could not be read. The split and vesting are unaffected.', 'Try again') : admin ? '<p style="font-size:12.5px">3 logins arrived from GitHub in the last 90 days.</p><p class="raw">Logins and commit counts are shown to the venture’s founders and the company’s members only.</p>'
+      : '<span class="bx-lbl">northline/app · commits, last 90 days</span><div class="bur-li"><span>[Founder B]</span><span class="bur-mono">142</span></div><div class="bur-li"><span>[Founder A]</span><span class="bur-mono">38</span></div><span class="bx-lbl">Logins not yet matched</span><div class="bur-li"><span class="bur-mono" style="color:var(--ink)">dev-k · 21</span><a href="#" class="btn bsm">Map to a founder</a></div><p class="raw">Never sets equity or vesting.</p>') + '</section>';
+    const hireCard = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>Roles in Grow · 4</h2><span class="sm">by stage, now</span></div><div class="bur-tags">' + tg('Published', 'Published 2') + tg('In review', 'In review 1') + tg('Draft', 'Draft 1') + tg('Rejected', 'Rejected 0') + '</div>' + J([['Founding engineer', 'Engineering', 'starts 4 Jan 2027', 'Published'], ['Product designer', 'Product', 'starts 1 Feb 2027', 'In review']].map(r => '<div class="bur-li"><span><b>' + r[0] + '</b> · ' + r[1] + ' · <span class="bur-mono">' + r[2] + '</span></span>' + tg(r[3]) + '</div>')) + '<a class="btn bsm" href="#" style="align-self:flex-start">Open Team expansion →</a></section>';
+    const FT_Q = 'Agree the split and vesting, get the co-founder agreement signed, and file each founder’s 83(b).';
+    const ftHead = (o) => { o = o || {}; return rhead('Founding team', FT_Q, o.next === undefined ? 'Record founder vesting · [Founder C] has none' : o.next, o.cta === undefined ? '<button type="button" class="btn p">Record vesting for [Founder C]</button>' : o.cta, o.status === undefined ? '3 founders · cap table read 14:20 today' : o.status); };
+    const teamBoard = (o) => { o = o || {}; return (o.banner ? banner : '') + ftHead() + '<section class="cd" style="gap:10px"><div class="ch"><h2>The split</h2><span class="sm">today · of 100%</span></div>' + split() + '</section>' + fTable()
+      + '<div class="bur-ft"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">' + vest() + '<div class="g"><div style="grid-column:span 6">' + agreeCard() + '</div><div style="grid-column:span 6;display:flex;flex-direction:column;gap:14px">' + f83Card() + decCard() + '</div></div>' + contrib() + '</div><div style="display:flex;flex-direction:column;gap:14px;min-width:0">' + hireCard() + codeCard(o.admin) + '</div></div>'; };
+    const eadTeam = () => '<div class="bur-nb">' + BK('#6034', 'Eadwyn has no Founding team option today') + '</div><p class="raw">“Its tool is the cap table, which runs no model.” (railOptions/founder.js). Drawn as not built.</p>'
+      + J([['[Founder C] has no vesting recorded.', 'Opens Record vesting, prefilled 4 years · 1-year cliff.'], ['Unallocated is above 0.', 'Opens Edit split in Raise › Cap table.']].map(p => '<section class="bur-sug bur-nbs"><span class="eye">Proposal · from the record</span><p><b>' + p[0] + '</b></p><p>' + p[1] + '</p><div class="bur-row" style="gap:6px"><button type="button" class="btn bsm" disabled>Accept</button><button type="button" class="btn bsm" disabled>Edit</button><button type="button" class="btn t bsm" disabled>Discard</button></div></section>'));
+
+    /* ---------- BD32 founder sheet ---------- */
+    const sheet32 = () => '<div class="dim1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="fsh" style="width:620px"><div class="drh"><div class="tr"><span class="eye">Founding team · founder</span><button type="button" class="ib" aria-label="Close">✕</button></div><h2 id="fsh">Edit [Founder C]</h2><div class="mt"><span class="bur-mono">COO · 8% · vesting not recorded</span></div></div><div class="drb" style="gap:14px">'
+      + '<div class="bur-form"><div class="fld"><label>Name</label><div class="inp">[Founder C]</div></div><div class="fld"><label>Email</label><div class="inp">founder.c@northline.example</div></div><div class="fld"><label>Role</label><div class="inp">COO</div></div>'
+      + '<div class="fld"><label>Equity %</label><div class="bur-row" style="gap:10px"><div class="inp bur-err" style="width:110px">24</div><span class="bur-mono">Unallocated: 12% · up to 20% for [Founder C] (8% + 12%)</span></div><p class="bur-errt" role="alert">! That takes the cap table over 100%. The unallocated share is 20%.</p></div>'
+      + '<fieldset class="bur-fs"><legend>Vesting</legend>' + J([['4 years, 1-year cliff', 1], ['4 years, no cliff', 0], ['Custom: total and cliff months', 0]].map(v => '<label class="bur-opt' + (v[1] ? ' on' : '') + '"><input type="radio" name="vp"' + (v[1] ? ' checked' : '') + '><b>' + v[0] + '</b></label>')) + '<div class="fld"><label>Start date</label><div class="inp bur-mono">1 Nov 2026</div></div></fieldset>'
+      + '<div class="bur-vprev"><b>Vesting timeline</b><span class="bur-mono">start 1 Nov 2026 · cliff 1 Nov 2027 · fully vested 1 Nov 2030</span></div></div>'
+      + '<section class="bur-sec"><h3>Agreement and 83(b)</h3><div class="bur-li"><span>Co-founder agreement</span>' + NR + '</div><div class="bur-li"><span>83(b)</span><span class="bur-row">' + tg('None', 'No 83(b) filing recorded') + '<a href="#" class="btn bsm">Add 83(b) filing</a></span></div></section>'
+      + '<section class="bur-sec"><h3>Contributions</h3><div class="bur-li"><span><span class="bur-mono">3 Nov</span> · Ran 6 customer interviews</span></div><div class="bur-row" style="gap:6px"><div class="inp" style="flex:1;min-width:0">What did [Founder C] contribute?</div><button type="button" class="btn bsm">Log</button></div></section>'
+      + '<section class="bur-sec"><h3>Cap table</h3><div class="bur-li"><span>Common shares</span><span class="bur-mono">800,000 of 10,000,000</span></div><a class="btn bsm" href="#" style="align-self:flex-start">Edit split · Raise › Cap table ↗</a></section>'
+      + '</div><div class="drf" style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:10px"><div class="bur-nb"><button type="button" class="btn bsm" disabled>Remove founder</button>' + BK('#6034', 'no holder delete') + '</div><div style="display:flex;gap:8px"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Save</button></div></div>'
+      + '<div class="bur-would"><b>If Remove existed:</b> [Founder C]’s 8% and vesting would go; Unallocated would read 20%. Today, remove a holder in Raise › Cap table.</div></aside>';
+
+    /* ---------- BD33 zero, solo, many ---------- */
+    const ftZero = () => ftHead({ next: 'Add founder', cta: '<button type="button" class="btn p">Add founder</button>', status: '0 founders' }) + '<section class="bx2-guide"><span class="eye">No founders</span><h2>No founders yet. The equity split and vesting appear here.</h2><p>Add each founder with their role and equity. The founder is added to the cap table.</p></section>' + hireCard();
+    const SOLO = [['[Founder A]', 'CEO', 90, '4 years · 1-year cliff · from 1 Sep 2025', 29, null, null, ['Filed', 'Filed 20 Oct 2026'], '#7c3aed']];
+    const ftSolo = () => ftHead({ next: 'File 83(b) · done · nothing outstanding', cta: '', status: '1 founder · solo' }) + '<section class="cd" style="gap:10px"><div class="ch"><h2>The split</h2><span class="sm">today · of 100%</span></div>' + split({ fd: SOLO, un: 0 }) + '</section><div class="g"><div style="grid-column:span 6">' + decCard('solo') + '</div><div style="grid-column:span 6"><section class="cd" style="gap:8px"><div class="ch"><h2>Co-founder agreement</h2></div><div class="bur-row" style="gap:8px">' + tg('Not applicable') + '<span style="font-size:12.5px">A solo founder has no co-founder agreement.</span></div></section></div></div>';
+    const FD4 = [['[Founder A]', 'CEO', '40%'], ['[Founder B]', 'CTO', '25%'], ['[Founder C]', 'COO', '8%'], ['[Founder D]', 'CPO', null]];
+    const ftMany = () => ftHead({ next: 'Record founder vesting · [Founder C] has none', cta: '<button type="button" class="btn p">Record vesting for [Founder C]</button>', status: '4 founders · option pool 10% · Record' }) + '<section class="cd" style="gap:10px"><div class="ch"><h2>The split</h2><span class="sm">today</span></div><div class="bur-nosplit"><span aria-hidden="true">○</span><span>One or more founder ownership percentages are not recorded. The bar is not drawn.</span><a href="#" class="btn bsm">Record [Founder D]’s equity</a></div><p class="raw">Option pool 10% · ' + tg('Record', 'Record · cap table register') + '</p></section>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="etb"><thead><tr><th>Founder</th><th>Role</th><th>Equity</th></tr></thead><tbody>' + J(FD4.map(f => '<tr><td><b>' + f[0] + '</b></td><td>' + f[1] + '</td><td class="bur-mono" style="color:var(--ink)">' + (f[2] || NR) + '</td></tr>')) + '</tbody></table></section>';
+
+    /* ---------- BD34 states ---------- */
+    const STATES34 = [
+      ['Loading', '<div class="bur-skbar"></div>' + skel + skel + '<span class="raw" role="status">Loading the founding team…</span>'],
+      ['Not recorded', '<dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>Equity</dt><dd>' + NR + '</dd><dt>Vesting</dt><dd>' + NR + '</dd><dt>Agreement</dt><dd>' + NR + '</dd><dt>83(b)</dt><dd>' + tg('None', 'No 83(b) filing recorded') + '</dd><dt>83(b)</dt><dd>' + tg('Due', '83(b) · No due date recorded') + '</dd><dt>Decision</dt><dd>' + NR + '</dd></dl>'],
+      ['Too little', '<div class="bur-nosplit"><span aria-hidden="true">0</span><span>Ownership percentages sum to zero; no split can be drawn.</span></div><p class="raw">A measured 0 is a value, shown as 0%, not as Not recorded.</p>'],
+      ['Unavailable · cap table read fails', '<div class="bur-nosplit bur-u"><span aria-hidden="true">!</span><span>The split is unavailable: the cap table could not be read.</span><button type="button" class="btn bsm">Try again</button></div><dl class="kv2" style="grid-template-columns:90px minmax(0,1fr)"><dt>Equity</dt><dd>' + UN + '</dd><dt>Vesting</dt><dd>' + UN + '</dd><dt>Decision</dt><dd>' + tg('Advance', 'Advance · 20 Oct') + '</dd><dt>Log</dt><dd>3 entries</dd></dl>'],
+      ['Unavailable · From code only', codeCard(false, true)],
+      ['Refused · partner or investor', '<div class="bur-ref"><span class="bur-g" aria-hidden="true">⊘</span><b>Founding team is the venture founder’s workspace.</b><p>You don’t have access to Northline’s Build. No access request is offered here.</p></div>'],
+      ['Admin viewing · plan gate', banner.replace('bx2-priv', 'bx2-priv bur-ban') + nt('a', '!', 'Cap table edits need a paid plan', 'Saving the split was refused by the cap table’s plan gate. Nothing changed.', 'See plans')],
+      ['Saving · then save failed', '<div class="bur-row" style="gap:8px">' + tg('Saving', 'Saving vesting…') + '</div>' + nt('r', '!', 'Vesting was not saved', 'The form keeps 4 years · 1-year cliff from 1 Nov 2026.', 'Try again')]
+    ];
+    const states34 = () => crop('<span class="eye">Founding team · states · Not recorded, 0 and Unavailable never look alike</span><div class="bur-st4">' + J(STATES34.map(s => box(s[0], s[1]))) + '</div>', 1400);
+
+    /* ---------- BD35 phone ---------- */
+    const pfCard = (f) => '<div class="mc" style="gap:6px"><div class="r1"><b>' + f[0] + '</b><span class="bur-mono">' + f[1] + ' · ' + f[2] + '%</span></div>' + (f[3] ? '<div class="bur-pvb"><i style="width:' + f[4] + '%"></i></div><span class="bur-mono">' + f[4] + '% vested · ' + f[3].replace(' · from ', ' · ') + '</span>' : '<span class="bur-row">' + NR + '<span style="font-size:12px">vesting</span></span><a href="#" class="btn" style="min-height:44px">Record vesting</a>') + '<div class="bur-row" style="gap:6px">' + agr(f) + (f[7] ? tg(f[7][0], '83(b) · ' + f[7][1]) : tg('None', 'No 83(b) filing')) + '</div></div>';
+    const pTeam = () => phone('Founding team', '<p style="font-size:13px;color:var(--mu)">' + FT_Q + '</p><button type="button" class="btn p" style="min-height:48px">Record vesting for [Founder C]</button><section class="cd" style="padding:12px;gap:8px"><b style="font-size:13px">The split · today</b>' + split().replace('class="bur-split"', 'class="bur-split bur-sp"') + '</section>' + J(FD.map(pfCard)));
+    const pTeam2 = () => phone('Founding team', '<section class="cd" style="padding:12px;gap:8px"><b>Solo or co-founder</b>' + tg('Advance', 'Advance with a candidate') + '<span class="bur-mono">decided 20 Oct 2026</span></section>'
+      + '<section class="cd" style="padding:12px;gap:8px"><b>Roles in Grow · 4</b><div class="bur-row" style="gap:6px">' + tg('Published', 'Published 2') + tg('In review', 'In review 1') + tg('Draft', 'Draft 1') + '</div><a class="btn" href="#" style="min-height:44px">Open Team expansion</a></section>'
+      + '<section class="cd" style="padding:12px;gap:8px"><b>From code</b>' + tg('Supporting evidence', 'Supporting evidence only') + '<div class="bur-li"><span>[Founder B]</span><span class="bur-mono">142 commits · 90 days</span></div><div class="bur-li"><span class="bur-mono" style="color:var(--ink)">dev-k · 21</span><a href="#" class="btn" style="min-height:44px">Map</a></div></section>'
+      + '<button type="button" class="disc" style="min-height:52px"><b>Co-founder agreement</b><span>1 signed · 1 awaiting · 1 not recorded</span><i aria-hidden="true">›</i></button><button type="button" class="disc" style="min-height:52px"><b>Contributions log</b><span>3 entries</span><i aria-hidden="true">›</i></button>');
+    const pVest = () => phone('Founding team', '<b>[Founder C]</b>', '<div class="dim2"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pv" style="max-height:780px"><div class="grab" aria-hidden="true"></div><div style="padding:12px 18px 24px;display:flex;flex-direction:column;gap:10px"><h2 id="pv" style="font-size:17px;font-weight:800">Record vesting · [Founder C]</h2>'
+      + J([['4 years, 1-year cliff', 1], ['4 years, no cliff', 0], ['Custom', 0]].map(v => '<label class="bur-opt' + (v[1] ? ' on' : '') + '" style="min-height:48px"><input type="radio" name="pvv"' + (v[1] ? ' checked' : '') + '><b>' + v[0] + '</b></label>')) + '<div class="fld"><label>Start date</label><div class="inp bur-mono" style="min-height:44px">1 Nov 2026</div></div><p class="bur-mono">cliff 1 Nov 2027 · fully vested 1 Nov 2030</p><button type="button" class="btn p" style="min-height:48px">Save vesting</button><button type="button" class="btn t" style="min-height:44px">Cancel</button></div></div>');
+
+    /* ---------- BD37 findings and handoff ---------- */
+    const handoff37 = () => dk('<h1>Findings and handoff · Product roadmap and Founding team</h1><p>Checked against <code>main</code> 6d7712c6d1 (14 Nov 2026); the brief was written against 45e7c55fa6 and every row below still holds. No live browser session was run for this canvas: the findings are read from source. The live check of /build/product-roadmap and /build/founding-team (desktop and 390) is still owed before build.</p>'
+      + '<h2>Findings</h2>' + tbl(['Basis', 'Finding'], [
+        ['source', 'Both module pages exist (<code>cycle_build.ts</code> <code>roadmap()</code>, <code>founding()</code>); BD9 and BD10 changed copy only. The module read already returns the column counts, Shipped this month, the shipped-per-month bars, GitHub and Vercel parts, the option pool and its source, and the co-founder decision.'],
+        ['source', 'Late and Unlinked are not Worker facts. Unpaged, the frontend derives them from the rows; paged (D4603), they need one aggregate.'],
+        ['source', 'Item states come from <code>services/okrGraph.ts</code>: Done, else Blocked when a blocker is not Done, else In flight in Now, else Provisional. There is no At risk state.'],
+        ['source', 'Deleting an item (<code>DELETE /api/progress/roadmap/okr/:id</code>) leaves its <code>okr_dependencies</code> rows; they stop showing. The module page offers no Delete today.'],
+        ['source', 'The item record’s Public roadmap section says “Ventures have no public roadmap page.” Option A removes the section.'],
+        ['source', 'Eadwyn “Argue the ordering” is real (rail option <code>draft:build/roadmap</code>, <code>research.ts</code>). Its gather reads title, column, quarter and key results only; it cannot argue from dates, owners, themes or dependencies.'],
+        ['source', 'Founding team: equity above the unallocated share is refused with that figure. On an edit the figure excludes the founder being edited (BD32 shows 20%, not 12%).'],
+        ['source', 'No route deletes a cap-table holder. Staged e-sign signers accept company, investor and axal only. The Worker’s own fact: “individual signing status is not” recorded.'],
+        ['source', 'Eadwyn has no Founding team option (<code>railOptions/founder.js</code>).'],
+        ['source', 'Access: <code>canWrite</code> lets the owner and an admin write; the frontend route admits founders, admins and active Lab members only, so a partner is turned away. GitHub logins and commit counts are shown to founders and company members only.']])
+      + '<h2>Per board</h2>' + tbl(['Board', 'Frontend only', 'Worker field on a store that exists', 'New Worker route or store (◇)'], [
+        ['BD25 Board', 'Figure strip; Late and Unlinked over an unpaged list; card layout; Board / Timeline switch; GitHub and Vercel parts; Eadwyn Suggested block', '—', 'Late and Unlinked over a paged list (one aggregate)'],
+        ['BD26 Timeline', 'Placement by target date, today line, No date tray; connectors from <code>GET /api/founder/roadmap/:projectId</code>', '—', '—'],
+        ['BD27 Item sheet', 'Delete in the foot with the confirm (route exists); remove the Public roadmap section', '—', 'Delete also removes the item’s <code>okr_dependencies</code> rows'],
+        ['BD28 Zero, few, many', 'Zero guide; filters from 10 items; Show N more; paging', '—', 'Exact Late and Unlinked when paged'],
+        ['BD29 States', 'Loading, Not recorded, Unavailable per part, Refused, saving and failed save', '—', '—'],
+        ['BD30 Phone', 'Segmented column control, Move to… sheet, Timeline grouped by month, folded parts', '—', '—'],
+        ['BD31 Founding team', 'Split bar with Unallocated, founders table, hiring card, From code, primary-action order', '83(b), agreement date, contributions, vesting start, cliff and total months on the module read (today only the founder record reads them)', 'Signatures n of m; Send for signature; Eadwyn on Founding team'],
+        ['BD32 Founder sheet', 'Preset choice, unallocated hint, refusal text, vesting preview', '—', 'Remove founder (holder delete that also removes vesting and recomputes the split)'],
+        ['BD33 / BD34 / BD35', 'Zero, solo, many; states; phone cards and sheets', '—', '—'],
+        ['/build/roadmap', 'Option A: stays as the Dependencies and Scenarios view, linked from Product roadmap; its Board and Timeline chips go', '—', '—']])
+      + '<h2>Handoffs</h2><p>A roadmap item opens its linked feature in Prototype / MVP and its KPI in Grow › Revenue and traction. Founding team hands off to Raise › Cap table (the split carries), Raise › Legal engine › Founders (split and roles prefill the agreement), Company creation (the 83(b) filing for that founder) and Grow › Team expansion.</p>'
+      + '<h2>Questions for the owner · drawn as option A</h2>' + tbl(['Question', 'Drawn'], [['Where /build/roadmap goes', POL('A') + ' kept as Dependencies and Scenarios, linked from the board'], ['Public roadmap', POL('A') + ' removed from the module; nothing records it'], ['Remove a founder', POL('A') + ' drawn ◇ in BD32; Worker task to file'], ['Signatures on the agreement', POL('A') + ' n of m and Send for signature drawn ◇']])
+      + '<h2>Accessibility</h2><p>Board / Timeline and the phone column control are native radio groups with arrow keys. Late, Blocked, Unlinked, Awaiting, Modelled and Unavailable each carry a word and a glyph. Drag is never the only way to move: Move to… exists on every card and sheet. Phone targets are 44px, primary actions 48px. The split bar has a text legend and an accessible name listing every segment.</p><p>Northline and every founder, item, figure and date here are fictional sample data.</p>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'BUR25') html = page(roadmapBoard(), { h: 1300, cur: 'Product roadmap' });
+    else if (B === 'BUR25B') html = pageRail(rmHead() + strip(STRIP) + rmTools('Board') + cols(), { h: 1080, cur: 'Product roadmap' }, railWith('Product roadmap', argue()));
+    else if (B === 'BUR25C') html = crop('<span class="eye">Eadwyn · nothing argues for a change</span>' + argue(true), 380);
+    else if (B === 'BUR26') html = page(rmHead() + strip(STRIP) + rmTools('Timeline') + timeline() + tray(), { h: 1180, cur: 'Product roadmap' });
+    else if (B === 'BUR27') html = page(roadmapBoard({ sel: 'Account setup' }), { h: 1300, cur: 'Product roadmap', overlay: sheet27() });
+    else if (B === 'BUR27B') html = page(roadmapBoard({ sel: 'Account setup' }), { h: 1100, cur: 'Product roadmap', overlay: sheet27(true) });
+    else if (B === 'BUR28A') html = page(rmZero(), { h: 760, cur: 'Product roadmap' });
+    else if (B === 'BUR28B') html = page(rmFew(), { h: 780, cur: 'Product roadmap' });
+    else if (B === 'BUR28C') html = page(rmMany(), { h: 1260, cur: 'Product roadmap' });
+    else if (B === 'BUR29') html = states29();
+    else if (B === 'BUR29B') html = refusedPage();
+    else if (B === 'BUR30A') html = pRoad();
+    else if (B === 'BUR30B') html = pMove();
+    else if (B === 'BUR30C') html = pTimeline();
+    else if (B === 'BUR30D') html = pItem();
+    else if (B === 'BUR31') html = page(teamBoard(), { h: 1420, cur: 'Founding team' });
+    else if (B === 'BUR31B') html = crop('<span class="eye">Eadwyn on Founding team · not built</span>' + eadTeam(), 380);
+    else if (B === 'BUR31C') html = page(teamBoard({ banner: 1, admin: 1 }), { h: 1480, cur: 'Founding team' });
+    else if (B === 'BUR32') html = page(teamBoard(), { h: 1300, cur: 'Founding team', overlay: sheet32() });
+    else if (B === 'BUR33A') html = page(ftZero(), { h: 640, cur: 'Founding team' });
+    else if (B === 'BUR33B') html = page(ftSolo(), { h: 640, cur: 'Founding team' });
+    else if (B === 'BUR33C') html = page(ftMany(), { h: 760, cur: 'Founding team' });
+    else if (B === 'BUR34') html = states34();
+    else if (B === 'BUR35A') html = pTeam();
+    else if (B === 'BUR35B') html = pTeam2();
+    else if (B === 'BUR35C') html = pVest();
+    else if (B === 'BUR36A') html = page(roadmapBoard(), { h: 1300, cur: 'Product roadmap' });
+    else if (B === 'BUR36B') html = page(teamBoard(), { h: 1420, cur: 'Founding team' });
+    else if (B === 'BUR37') html = handoff37();
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

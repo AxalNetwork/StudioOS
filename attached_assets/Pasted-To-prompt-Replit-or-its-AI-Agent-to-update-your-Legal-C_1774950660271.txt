@@ -1,0 +1,44 @@
+To prompt Replit (or its AI Agent) to update your "Legal & Compliance" section, you need to be specific about the **UI components** (the list items) and the **backend logic** (what happens when they are clicked).
+
+Here are a few ways to phrase this, depending on how much of the work you want the Agent to do:
+
+### Option 1: The "Add to UI" Prompt
+*Best if you just want the visual list updated to match your screenshot.*
+
+> "In the **Legal & Compliance** section of the Axal.vc dashboard, add four new interactive list items to the 'Available Templates' card. Use the same styling as the existing list with a document icon on the left. The items are:
+> 1. **SAFE Agreement**
+> 2. **Corporate Bylaws**
+> 3. **Equity Split Agreement**
+> 4. **IP License Agreement**
+> Ensure they follow the existing hover states and typography."
+
+---
+
+### Option 2: The "Functional" Prompt
+*Best if you want the app to actually handle file downloads or open an editor.*
+
+> "Update the **Legal & Compliance** page to include a template library. 
+> 1. Add a card titled 'Available Templates'.
+> 2. Include list items for: **SAFE Agreement, Corporate Bylaws, Equity Split Agreement,** and **IP License Agreement**.
+> 3. When a user clicks a template, it should [trigger a PDF download / open a modal showing the document text / navigate to a new document editor]. 
+> 4. Please ensure the UI is clean, using a light gray background for the list items and standard document icons."
+
+---
+
+### Option 3: The "Full Backend" Prompt
+*Best if you want Replit to generate the actual legal text for these files too.*
+
+> "I need to expand the **Legal & Compliance** module for Axal.vc. 
+> 1. Create a new component for 'Available Templates' as seen in the mockup. 
+> 2. Add: **SAFE Agreement, Corporate Bylaws, Equity Split Agreement,** and **IP License Agreement**.
+> 3. For each template, create a boilerplate markdown file in a `/templates` directory so that when a partner clicks the item, they can view the standard legal text. 
+> 4. Use a consistent layout with the rest of the dashboard."
+
+---
+
+### Pro-Tip for Replit:
+If your Replit project is already running, you can **attach the screenshot** you showed me directly to the Replit Agent chat. 
+
+**Say this:** *"I've attached a screenshot of the UI I want. Please replicate this 'Available Templates' list exactly in the Legal & Compliance section of the app. Use Lucide-react icons for the document symbols."*
+
+**Which of these templates is most urgent for you to have functional first?** (I can help you draft the actual boilerplate text for the Equity Split or SAFE if you need it.)

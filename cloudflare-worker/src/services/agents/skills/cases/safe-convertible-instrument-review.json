@@ -1,0 +1,91 @@
+{
+  "skill": "safe-convertible-instrument-review",
+  "version": 2,
+  "note": "D7700 (#7700): synthetic selected-document golden case, re-derived from complete versioned passage text; a missing discount is stated by the instrument, not a typed field.",
+  "input": {
+    "records": {
+      "cap_table.read": {
+        "as_of": "2026-09-30",
+        "fully_diluted_shares": 10000000,
+        "definitions": {
+          "company_capitalization": "Fully diluted, including the option pool and all SAFEs, excluding the new money"
+        },
+        "holders": [
+          {
+            "name": "Founders",
+            "shares": 8000000
+          },
+          {
+            "name": "Option pool",
+            "shares": 2000000
+          }
+        ]
+      },
+      "data_room.index": {
+        "document_status": "read",
+        "document": {
+          "ref": "data_room_file:00000000000000000000000000000002",
+          "file_uid": "00000000000000000000000000000002",
+          "name": "Post-money SAFE, Harbor Angels (synthetic)",
+          "content_type": "application/pdf",
+          "version": 2,
+          "updated_at": "2026-04-03 12:00:00",
+          "text_indexed_at": "2026-04-03 12:01:00",
+          "version_digest": "sha256:e3524cf150ffce31ecd5883076a20d5e32f0baef6038e664b3ede2d193f44287",
+          "passages": [
+            {
+              "ref": "data_room_passage:00000000000000000000000000000002:0",
+              "seq": 0,
+              "text": "Post-money SAFE, Harbor Angels (synthetic). Version v2, dated 2026-04-03. Investment: 500,000 USD. Valuation cap: 10,000,000 USD. No discount rate is stated in this complete instrument. Conversion trigger: Equity Financing of at least 2,000,000 USD."
+            },
+            {
+              "ref": "data_room_passage:00000000000000000000000000000002:1",
+              "seq": 1,
+              "text": "Company capitalization: Fully diluted, including the option pool and all SAFEs, excluding the new money. No maturity date is stated in this complete instrument."
+            }
+          ],
+          "coverage": {
+            "returned": 2,
+            "total": 2,
+            "omitted": 0,
+            "complete": true,
+            "first": 0
+          },
+          "page": {
+            "after": null,
+            "next": null
+          }
+        },
+        "source": "data_room_passages"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [],
+    "must_say_not_recorded": [
+      "discount rate"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ],
+    "refusal": {
+      "mode": "ask_for_input",
+      "subject": "discount rate"
+    },
+    "structure": {
+      "sections": [
+        "Terms",
+        "Conversion",
+        "Open questions"
+      ],
+      "ordered": true
+    },
+    "evidence": {
+      "cite": [
+        "data_room_passage:00000000000000000000000000000002:0",
+        "data_room_passage:00000000000000000000000000000002:1"
+      ]
+    }
+  }
+}

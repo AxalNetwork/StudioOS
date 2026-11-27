@@ -1,0 +1,45 @@
+{
+  "$id": "deckSource",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "uid",
+    "deck_source",
+    "extraction"
+  ],
+  "properties": {
+    "uid": {
+      "type": "string"
+    },
+    "deck_source": {
+      "type": "boolean"
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "as_of"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "queued",
+            "done",
+            "no_values",
+            "unreadable"
+          ]
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "const": "owner_confirmation_required"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Exam Readiness · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · #8667 · from the 25 Nov production audit</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning exam readiness: one policy summary, a safe start, a draft preview and recoverable attempts</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The exam page (/learning/exams/:uid) and the Exams tab of Learning, for the observed exam “What can you substantiate?” (lesson 10 of 10 of Evidence-based pitch narratives: 8 questions, untimed, 75% pass mark, 3 attempts, a draft). One h1 and one “Before you start” card hold the four facts, one sentence on what starting does, and one action. While attempts are reading, unreadable or not recorded, Start stays visible but off with its reason and Retry is the primary; a failed read is never 0 and never “no limit”. A draft says who can see it and that the first attempt fixes the questions before the action; the author preview, which records nothing, is a proposal. The in-attempt confirmation, submit confirmation, result and retry screens use synthetic data and are labelled Synthetic. Answers appear only where the attempt’s reveal policy allows. Platform States words and glyphs (D5129); violet dashed ◇ tags mark data or backend work, amber ⚑ tags the owner questions drawn as option A. Every route change stays with #8288.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · the course and exam titles and policy are as observed on axal.vc on 25 Nov; [Maya Ruiz], [Northwind Labs], [Iris Chen], the questions, attempts and scores are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Exam Readiness Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['EX0', 'Route', 'The steps from the Exams tab or the syllabus to a marked attempt, each naming its desktop and phone board, with the branches: attempts unreadable, an open attempt, an author on a draft, and the preview.', [C('LEX00', false, 1440, 640)]],
+      ['EX1', 'Before · observed 25 Nov', 'The draft exam as production drew it for a Super Admin: the title twice, untimed three times, Attempts left “Could not be read” beside a live Start exam, and the draft warning after the facts.', [F('LEX01', false, 1000)]],
+      ['EX2', 'Before you start · member', 'One h1. One card: Questions 8, No time limit, Pass mark 75% (6 of 8 right), Attempts left 3 of 3, one sentence on what starting does, and Start attempt 1 of 3. Then an open attempt (Resume uses no attempt) and no attempts left.', [F('LEX02', 'Loaded', 900), F('LEX02B', 'Attempt open · synthetic', 900), F('LEX02C', 'None left · synthetic', 900)]],
+      ['EX3', 'Before you start · Super Admin on a draft', 'Draft visibility and the freeze sentence sit above the facts, before the action. Preview without an attempt is the primary (◇ proposed, ⚑ Q1 A); Start a counted attempt is secondary and confirms first.', [F('LEX03', false, 960)]],
+      ['EX4', 'Attempts: loading, failure, retry, loaded', 'The exact transition. Start is visible and off, with its reason, until the attempts read succeeds; Retry is the one primary while it fails. Then the intro failing, a limit not sent (Not recorded) and a real no-limit.', [C('LEX04', 'The transition', 1440, 560), C('LEX04B', 'Intro unreadable · not recorded · no limit', 1440, 300)]],
+      ['EX5', 'Author preview · proposed', 'A preview that is not an attempt: nothing recorded, attempts stay at 3, questions stay editable. Keyed answers from the Studio read; no score (⚑ Q2 A). The technical dependency is annotated beside it.', [F('LEX05', false, 940)]],
+      ['EX6', 'Exams tab', 'Published catalogue only. Unavailable, then Retry, then its own empty state “No exams published yet”; a Super Admin also sees that one draft is in Studio. Then the read failure, a search miss and a synthetic published row.', [F('LEX06', 'Empty · Super Admin', 820), C('LEX06B', 'Failed · search miss · published', 1440, 330)]],
+      ['EX7', 'In the attempt · proposed and synthetic', 'Start confirmation naming the cost; one question a screen with the account save state; review before submit (on main, restyled); submit confirmation naming the unanswered question.', [F('LEX07', 'Confirm start', 900), F('LEX08', 'Question', 860), F('LEX09', 'Review', 860), F('LEX10', 'Confirm submit', 860)]],
+      ['EX8', 'Result and retry · synthetic', 'Attempt 1 not passed, 63%, with right and wrong, correct answers, explanations and Revise links because its reveal is score and answers. Attempt 2 passed, 88%, on a score-only variant: answers hidden. Retry confirms attempt 2 of 3. Start errors in the route’s words.', [F('LEX11', 'Not passed · answers revealed', 1300), F('LEX11B', 'Passed · score only', 900), F('LEX12', 'Try again', 900), C('LEX13', 'Start refused · not confirmed · save failing', 1440, 300)]],
+      ['EX9', 'Phone 390 × 844', 'The same route stacked: preflight, attempts unreadable with Retry, the start sheet, a question with sticky Back and Next, review, result, the Exams tab empty state and the draft for a Super Admin.', [P('LEX20', '2 · Before you start'), P('LEX21', '2a · Unreadable'), P('LEX22', '3 · Confirm'), P('LEX23', '4 · Question'), P('LEX24', '5 · Review'), P('LEX25', '7 · Result'), P('LEX26', '1 · Exams tab'), P('LEX27', '2c · Draft')]],
+      ['EX10', 'Components and accessibility', 'Variants of each fact, the start action, status words and attempt rows. Focus order and accessible names on the unreadable preflight, and a long title wrapping at 1440 and 390.', [C('LEX30', 'Variants', 1440, 700), C('LEX31', 'Focus order · names · wrapping', 1440, 720)]],
+      ['Handoff', 'Engineering handoff', 'What main has, with files; frontend-only work; ◇ data or backend; ⚑ owner questions with option A drawn; the acceptance list mapped to boards; coordination with #8288 and the sibling canvases.', [W('LEX99')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

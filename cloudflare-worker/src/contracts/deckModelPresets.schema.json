@@ -1,0 +1,61 @@
+{
+  "$id": "deckModelPresets",
+  "title": "GET /api/decks/:id/model-presets (D1549, #3796)",
+  "description": "The reply the deck v2 adapter's `presets` method passes through (`routes/deck_model_presets.ts`): the preset in force (the stored one, Custom when the deck holds picks of its own, Balanced when it holds neither), the stored preset or null, the four options, and per element group the model each preset runs its lead element on, the model the next run resolves to, and HQ's lock. A model is a catalogue id or null; a name is null when the model is. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "project_id", "preset", "stored", "options", "groups", "locks"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "project_id": { "type": "integer", "minimum": 1 },
+    "preset": { "enum": ["fast", "balanced", "best", "custom"] },
+    "stored": { "enum": ["fast", "balanced", "best", null] },
+    "options": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id", "label"],
+        "properties": { "id": { "enum": ["fast", "balanced", "best", "custom"] }, "label": { "enum": ["Fast", "Balanced", "Best", "Custom"] } }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["group", "label", "lead", "presets", "resolved", "lock"],
+        "properties": {
+          "group": { "type": "string" },
+          "label": { "type": "string" },
+          "lead": { "type": "string" },
+          "presets": {
+            "type": "array", "minItems": 3, "maxItems": 3,
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["preset", "model", "name", "plan_locked"],
+              "properties": { "preset": { "enum": ["fast", "balanced", "best"] }, "model": {}, "name": {}, "plan_locked": { "type": "boolean" } }
+            }
+          },
+          "resolved": {
+            "type": "object", "additionalProperties": false, "required": ["model", "name", "source", "locked"],
+            "properties": {
+              "model": {}, "name": {},
+              "source": { "enum": ["org_lock", "area", "deck_element", "deck_group", "deck_preset", "member_element", "member_group", "org_default", "default", "none"] },
+              "locked": { "type": "boolean" }
+            }
+          },
+          "lock": { "$ref": "#/$defs/lockOrNone" }
+        }
+      }
+    },
+    "locks": { "type": "array", "items": { "$ref": "#/$defs/groupLock" } }
+  },
+  "$defs": {
+    "lockOrNone": {
+      "description": "null, or { model, name, line } when HQ locked the group.",
+      "additionalProperties": false, "required": ["model", "name", "line"],
+      "properties": { "model": { "type": "string" }, "name": {}, "line": { "const": "Set by Axal VC HQ" } }
+    },
+    "groupLock": {
+      "type": "object", "additionalProperties": false, "required": ["group", "label", "model", "name", "line"],
+      "properties": { "group": { "type": "string" }, "label": { "type": "string" }, "model": { "type": "string" }, "name": {}, "line": { "const": "Set by Axal VC HQ" } }
+    }
+  }
+}

@@ -1,0 +1,59 @@
+You are the senior database engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The full platform is already built in this Replit (FastAPI with routers, async job queue, Replit Auth, RBAC, Partner Dashboard, Refer & Earn, Pipeline Board, spin-out automation, Legal/Capital Engine, VC Fund, liquidity/exits, integrations, monitoring, etc.).
+
+Implement a **complete, consistent D1 schema + lightweight ORM** for every table in the system.
+
+Exact requirements:
+
+1. **Full D1 Schema (all tables)**
+   Create / update the following tables with proper columns, foreign keys, indexes, constraints, and timestamps:
+
+   - users (extend existing: add partner_since, total_earnings, network_score, verified_badges, last_active, referrer_id)
+   - referrals, referral_chains, commissions, payouts
+   - deals / projects, project_stages, mvp_tasks, metrics_snapshots, decision_gates
+   - user_preferences, match_scores
+   - workflows, workflow_tasks, shared_services_log
+   - syndicates, syndicate_members, marketplace_profiles
+   - activity_logs, system_metrics, rate_limit_logs
+   - legal_documents, subsidiaries, capital_calls, diligence_checklists, compliance_records, spinout_events
+   - liquidity_events, secondary_listings, exit_matches
+   - vc_funds, limited_partners, fund_distributions
+   - job_queue
+   - integrations, integration_logs
+
+   Include all previously defined columns + any missing ones for consistency (timestamps, indexes on FKs, status fields, json columns where needed).
+
+2. **Lightweight ORM Layer**
+   - Create `backend/models.py` with Pydantic v2 models for **every** table above.
+   - Create `backend/db.py` with:
+     - D1 connection helper
+     - Generic CRUD helpers: create(table, data), get_by_id(table, id), update(table, id, data), delete(table, id), query(sql, params)
+     - All queries use prepared statements (no raw string concatenation)
+     - Transaction support for multi-table operations
+     - Migration runner that creates all tables + indexes if they don't exist
+
+3. **Migration System**
+   - Provide a single migration script that can be run on startup or manually.
+   - Make it idempotent (checks if table exists before creating).
+   - Seed sample data for testing (one VC fund, one LP, one project, one referral, etc.).
+
+4. **Integration**
+   - Update all existing routers to import and use the new ORM helpers instead of raw D1 queries.
+   - Ensure job queue and event-driven architecture use the ORM.
+   - Add a startup event in main.py that runs the migration automatically.
+
+5. **Best Practices**
+   - All timestamps use CURRENT_TIMESTAMP
+   - Proper indexes on frequently queried columns (user_id, deal_id, status, created_at)
+   - Foreign key constraints where appropriate
+   - JSON columns for flexible data (metrics, payload, config, etc.)
+   - Lightweight — no heavy ORM, only Pydantic + raw prepared statements
+
+Build this step-by-step:
+1. First create backend/db.py and backend/models.py with the complete schema and ORM helpers.
+2. Then implement the full migration script that creates all tables + indexes.
+3. Then update all existing routers to use the new ORM (show diffs for key files).
+4. Finally add migration to startup and seed initial data.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

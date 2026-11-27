@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Support · v2 · #5034</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Support — Queue, Branches, Delivery and Policy</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">One page becomes four workspaces under /admin/hq-support. Queue leads with what needs a decision now: past SLA, due soon, open and oldest, then HQ escalations in SLA bands and HQ-hosted tickets, with subsidiaries folded to one line. The healthy empty queue (SU01a) is the real production state and a first-class “All clear”, not a stack of zero cards. Escalations are answered or declined with a reason in a sheet over the queue; recorded at HQ and delivered to the branch are separate states. Branches shows each subsidiary’s source state and never turns an unreadable branch into zero. Delivery is the resend workspace. Policy edits the P1/P2/P3 ticket SLA and says plainly that the policy is not yet distributed to subsidiaries. Eadwyn offers support prompts and drafts only; model and usage fold away.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 8 Nov 2026, 14:30 UTC · production queue is empty (SU01a); populated boards use sample subsidiaries (Axal VC France, Germany, Spain) and sample people</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Support v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['HQS1', 'Queue · all clear (production state)', 'What production shows today: no open escalations and no open HQ tickets. One “All clear” block with when it was last checked, the two sources it covers, and Subsidiaries “No support sources connected” as one line. No zero-filled card grid.', [F('SU01a', false, 700)]],
+      ['HQS2', 'Queue · active', 'Action required: Past SLA 2, Due soon 4, Open 18, Oldest 104h. HQ escalations in Past SLA, Due soon and Open bands with kind filters; HQ-hosted tickets oldest risk first; subsidiaries summarised in one line that links to Branches. Due soon follows the backend window, min(24h, half the limit).', [F('SU01b', false, 1500)]],
+      ['HQS3', 'Escalation decision sheet', 'Review opens a sheet over the queue, which keeps its scroll position. The request is quoted, Record answer and Decline are the two options (escalations are never withdrawn), and a decline needs its reason.', [F('SU02', false, 1000)]],
+      ['HQS4', 'Decision outcomes', 'Saving, recorded at HQ and delivered, recorded at HQ but not delivered (with Resend), refused, and outcome unknown. Recorded and delivered are never merged.', [C('SU03', false, 1440, 500)]],
+      ['HQS5', 'Branches', 'Support by subsidiary: France and Germany connected with their own counts; Spain unavailable with Retry. Its branch-hosted tickets are not counted, while its escalations are held at HQ and still shown. The matrix says Does not apply, On the branch or Unreadable instead of zero.', [F('SU04a', false, 900), C('SU04b', 'No subsidiaries connected', 940, 150)]],
+      ['HQS6', 'Delivery', 'Decisions recorded at HQ and their delivery to the branch: two failed with Resend, then a healthy board where everything was delivered. Durable delivery history is backend work.', [F('SU05a', 'Degraded', 820), F('SU05b', 'Healthy', 560)]],
+      ['HQS7', 'Policy', 'Ticket SLA (P1 24h, P2 48h, P3 96h; 1–720 whole hours), how filing priority maps to tiers, and the fixed escalation deadlines by kind. The warning that the policy is not distributed to subsidiaries stays until versioned distribution ships.', [F('SU06', false, 1200)]],
+      ['HQS8', 'Policy · editing states', 'Invalid ordering with the field and rule named, saving, saved at HQ (not yet distributed), and outcome unknown, which re-reads the policy and never claims nothing changed.', [C('SU07a', 'Invalid', 760, 345), C('SU07b', 'Saving', 760, 320), C('SU07c', 'Saved at HQ', 760, 205), C('SU07d', 'Outcome unknown', 760, 185)]],
+      ['HQS9', 'Phone · queue', 'The four workspaces as tabs, the action summary as a 2×2 grid, and escalation cards with a full-width Review. The empty queue keeps the All clear block.', [P('SU08a', 'Active'), P('SU08b', 'All clear')]],
+      ['HQS10', 'Phone · decision sheet', 'A bottom sheet with the quoted request, the two options and full-width actions.', [P('SU09', false)]],
+      ['HQS11', 'Phone · Branches, Delivery and Policy', 'Each workspace as a single column; Policy reads on the phone, editing stays on desktop.', [P('SU10a', 'Branches'), P('SU10b', 'Delivery'), P('SU10c', 'Policy')]],
+      ['HQS12', 'Loading and failure', 'Initial loading, a quiet refresh that keeps rows in place, a branch that did not answer, an incomplete total shown as “18+” with its reason (never a smaller exact number), an unreadable HQ table, a measured empty queue, a stale branch, a delivery failure, no GitHub token, a degraded mirror, an unreadable policy, and offline.', [C('SU11', false, 1440, 670)]],
+      ['HQS13', 'Accessibility and components', 'Landmarks, tab semantics, SLA pills that carry text and icon, focus handling for the sheet, and the component inventory.', [W('SU12')]],
+      ['SU13', 'Dark · queue with Eadwyn open', 'The active queue in dark mode with the rail open: support prompts first and a draft reply the admin can use; Eadwyn never answers, declines, resends or changes policy.', [F('SU13', false, 1500)]],
+      ['SU14', 'Backend fit and handoff', 'What today’s routes support, and what needs engineering: per-kind counts (#5030), branch reads that do not block the queue (#5031), policy distribution (#5032), answer/resend/SLA-save feedback (#5033) and durable delivery history (#5035).', [W('SU14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

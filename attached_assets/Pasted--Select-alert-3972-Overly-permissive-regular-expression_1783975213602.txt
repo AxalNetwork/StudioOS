@@ -1,0 +1,144 @@
+
+Select alert #3972
+Overly permissive regular expression range
+Medium
+#3972 opened 4 minutes ago • Detected by CodeQL in backend/.../services/organizations_import.py :57
+main
+
+Select alert #3961
+Log Injection
+Medium
+#3961 opened yesterday • Detected by CodeQL in backend/.../routes/admin_github.py :262
+main
+
+Select alert #3986
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3986 opened 2 minutes ago • Detected by Semgrep OSS in backend/.../models/migrations.py :2474
+main
+
+Select alert #3985
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3985 opened 2 minutes ago • Detected by Semgrep OSS in backend/.../models/migrations.py :2409
+main
+
+Select alert #3984
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3984 opened 2 minutes ago • Detected by Semgrep OSS in backend/.../models/migrations.py :2400
+main
+
+Select alert #3971
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3971 opened 8 hours ago • Detected by Semgrep OSS in backend/.../models/migrations.py :2300
+main
+
+Select alert #3970
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3970 opened 8 hours ago • Detected by Semgrep OSS in backend/.../models/migrations.py :605
+main
+
+Select alert #3969
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3969 opened 8 hours ago • Detected by Semgrep OSS in backend/.../models/migrations.py :586
+main
+
+Select alert #3968
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3968 opened 8 hours ago • Detected by Semgrep OSS in backend/.../models/migrations.py :534
+main
+
+Select alert #3967
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3967 opened 8 hours ago • Detected by Semgrep OSS in backend/.../models/migrations.py :308
+main
+
+Select alert #3983
+Unused variable, import, function or class
+Note
+#3983 opened 2 minutes ago • Detected by CodeQL in frontend/.../growth/PartnershipsPage.jsx :6
+main
+
+Select alert #3982
+Unused variable, import, function or class
+Note
+#3982 opened 2 minutes ago • Detected by CodeQL in frontend/.../research/CompaniesPage.jsx :7
+main
+
+Select alert #3981
+Unused variable, import, function or class
+Note
+#3981 opened 2 minutes ago • Detected by CodeQL in frontend/.../research/FundsResearchPage.jsx :7
+main
+
+Select alert #3980
+Unused variable, import, function or class
+Note
+#3980 opened 2 minutes ago • Detected by CodeQL in frontend/.../research/AIResearchPage.jsx :7
+main
+
+Select alert #3979
+Unused variable, import, function or class
+Note
+#3979 opened 2 minutes ago • Detected by CodeQL in frontend/.../network/IntroductionsPage.jsx :2
+main
+
+Select alert #3978
+Unused variable, import, function or class
+Note
+#3978 opened 2 minutes ago • Detected by CodeQL in frontend/.../data/investorPipeline.js :23
+main
+
+Select alert #3966
+Unused variable, import, function or class
+Note
+#3966 opened 8 hours ago • Detected by CodeQL in frontend/.../operations/PortfolioPage.jsx :1
+main
+
+Select alert #3965
+Unused variable, import, function or class
+Note
+#3965 opened 8 hours ago • Detected by CodeQL in frontend/.../research/MarketPage.jsx :7
+main
+
+Select alert #3962
+Unused variable, import, function or class
+Note
+#3962 opened 8 hours ago • Detected by CodeQL in frontend/.../advisory/ContractsPage.jsx :6
+main
+
+Select alert #3977
+Unused import
+Note
+#3977 opened 4 minutes ago • Detected by CodeQL in backend/.../routes/organizations.py :16
+main
+
+Select alert #3976
+Cyclic import
+Note
+#3976 opened 4 minutes ago • Detected by CodeQL in backend/.../routes/network_introductions.py :37
+main
+
+Select alert #3975
+Cyclic import
+Note
+#3975 opened 4 minutes ago • Detected by CodeQL in backend/.../routes/network_introductions.py :36
+main
+
+Select alert #3974
+Cyclic import
+Note
+#3974 opened 4 minutes ago • Detected by CodeQL in backend/.../api/deps.py :5
+main
+
+Select alert #3973
+Cyclic import
+Note
+#3973 opened 4 minutes ago • Detected by CodeQL in backend/.../routes/auth.py :477
+main

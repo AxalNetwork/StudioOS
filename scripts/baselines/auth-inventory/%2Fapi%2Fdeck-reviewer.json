@@ -1,0 +1,29 @@
+{
+  "DELETE /api/deck-reviewer/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/deck-reviewer/:id/raw": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/deck-reviewer/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/deck-reviewer/:id/export": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "Only the review's owner exports it (user_id = caller). Every other account, an admin and the Super Admin included, gets the same 404 a missing id gets; no credentials or a disabled owner get 401."
+  },
+  "PATCH /api/deck-reviewer/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

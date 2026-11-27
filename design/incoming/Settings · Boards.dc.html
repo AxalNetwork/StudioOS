@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Companies and projects</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Settings</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">ST1 to ST6. One Settings entry at the bottom of the sidebar, with the scope under it. Company settings has Team, General, Legal and Projects; project settings has Team and General. Team is drawn on the Team canvas.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="6">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Settings Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const H = { st1a: 860, st1b: 860, st1c: 860, st1d: 844, st2: 1120, st2b: 1120, st2c: 1120, st3: 720, st3b: 720, st4: 900, st4b: 900, st4c: 900, st5: 640, st6a: 640, st6b: 560, st6c: 1100, st6d: 235, st6e: 1120, st6f: 844 };
+    const F = (v, cap, w) => { const d = /-d$/.test(v); const h = H[v.replace(/-d$/, '')]; return { v, cap, wst: `width:${w}px;height:${h}px;border-radius:${w < 400 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h}px` }; };
+    return { groups: [
+      { id: 'ST1', t: 'Sidebar', fr: [F('st1a', 'Expanded · company · Settings open', 520), F('st1b', 'Expanded · project', 520), F('st1c', 'Collapsed · tooltip', 520), F('st1d', 'Phone drawer', 390)] },
+      { id: 'ST2', t: 'Company settings · General', fr: [F('st2', 'General', 1440), F('st2b', 'Something changed', 1440), F('st2c', 'Saved', 1440)] },
+      { id: 'ST3', t: 'Project settings · General', fr: [F('st3', 'A project in a company', 1440), F('st3b', 'A standalone project', 1440)] },
+      { id: 'ST4', t: 'Legal', fr: [F('st4', 'Legal facts', 1440), F('st4b', 'Edit legal facts', 1440), F('st4c', 'A member who cannot edit', 1440)] },
+      { id: 'ST5', t: 'Projects', fr: [F('st5', 'The company’s projects', 1440)] },
+      { id: 'ST6', t: 'States', fr: [F('st6a', 'Loading', 1440), F('st6b', 'Could not be read', 1440), F('st6c', 'Read-only member', 1440), F('st6d', 'Leave without saving?', 1440), F('st6e', 'Save failed', 1440), F('st6f', 'Phone', 390), F('st2-d', 'Dark · General', 1440), F('st4-d', 'Dark · Legal', 1440)] }
+    ] };
+  }
+}
+</script>
+</body></html>

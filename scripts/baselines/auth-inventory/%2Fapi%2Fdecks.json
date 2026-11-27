@@ -1,0 +1,14 @@
+{
+  "GET /api/decks/print-export/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The print token (deck-print tag, HMAC, expiry) is the credential. A forged, expired or tampered token, another route's token and any session with no token get the same 403 naming no deck."
+  },
+  "GET /api/decks/share/:token/nda": {
+    "review": "record_without_ownership_check",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}

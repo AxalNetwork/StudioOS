@@ -1,0 +1,30 @@
+/* D564 (#1168) — the founder's /studio. The zones are styled with the app's
+   utility classes; this file keeps the page frame and the Eadwyn-unavailable
+   card, which the regulated-wording scan reads by its markup. */
+.fs-root {
+  max-width: 1440px;
+  margin: auto;
+  padding-bottom: 12px;
+  font-family: var(--font-app);
+}
+
+.fs-advisor-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #e8e4ef;
+  border-radius: 14px;
+  background: #f8f7fb;
+  padding: 16px 18px;
+}
+.fs-advisor-unavailable-main { display: flex; gap: 12px; min-width: 0; }
+.fs-advisor-mark { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: #f3effe; color: #6d28d9; }
+.fs-advisor-title { display: flex; align-items: baseline; gap: 8px; }
+.fs-advisor-title h3 { font-size: 14px; font-weight: 800; }
+.fs-advisor-title span { font-size: 11px; color: #777184; }
+.fs-advisor-unavailable p { font-size: 12.5px; color: #777184; margin-top: 2px; }
+.fs-advisor-unavailable-note { display: grid; font-size: 11px; color: #777184; }
+.fs-advisor-unavailable-note strong { color: #292638; font-size: 12.5px; }
+:root[data-theme="dark"] .fs-advisor-unavailable, .dark .fs-advisor-unavailable { background: rgba(17, 24, 39, .4); border-color: #374151; }
+:root[data-theme="dark"] .fs-advisor-unavailable-note strong, .dark .fs-advisor-unavailable-note strong { color: #fff; }

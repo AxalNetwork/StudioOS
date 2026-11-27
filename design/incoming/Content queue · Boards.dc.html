@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · HQ › Content</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Content queue</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">ART1 to ART18. One page with four tabs, Pipeline, Calendar, Authors and Performance, and a review drawer for each article. Drawn for the Super Admin unless a board says Admin. Desktop boards at 1440 wide, phone frames at 390. Times are shown in Europe/Lisbon, which is UTC+1 until 25 Oct and UTC+0 after.</p>
+</header>
+
+<section id="ART1" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART1</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Pipeline · board view · Super Admin · desktop 1440</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">Cards are not dragged between columns. Each action opens its dialog from the review drawer.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: stage counts · reviewer · author profile, sector and read time in the list · open comments · rounds</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a1" hint-size="1440px,1120px"></dc-import></div>
+</section>
+
+<section id="ART2" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART2</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Pipeline · list view · three crops</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: search, filters, sort, totals and paging over the whole queue</span></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Row menu open on “Pricing before product”</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a2" hint-size="1440px,820px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Filters panel open · In review and Changes requested picked</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a2f" hint-size="1440px,820px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Sort options open</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a2s" hint-size="1440px,820px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ART3" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART3</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Review drawer · Article tab · desktop 1440, over ART1</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">The “As readers see it · Markdown” switch works. Paragraph 3 shows the Comment button a hover or focus brings up.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: approved_by · rounds</span></div>
+<div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+<div style="width:1440px;height:1120px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a3" hint-size="1440px,1120px"></dc-import></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">The sticky footer, stage by stage</span><div style="width:840px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a3f" hint-size="840px,560px"></dc-import></div><span style="font-size:12.5px;color:#3f3a47;max-width:760px">An Admin sees the Published footer without “Feature on Articles…”.</span></div>
+</div>
+</section>
+
+<section id="ART4" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART4</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Review drawer · Comments tab · desktop 1440</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: who resolved · edited mark · author replies</span></div>
+<div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+<div style="width:1440px;height:1120px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a4" hint-size="1440px,1120px"></dc-import></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Variant · an Admin viewing another admin’s comment</span><div style="width:840px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a4v" hint-size="840px,760px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ART5" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART5</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Review drawer · Revisions and Details · two crops</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: who saved each revision · a revision’s text for the compare · featured · the weekly count</span></div>
+<div style="display:flex;gap:40px;align-items:flex-start">
+<div style="width:840px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a5r" hint-size="840px,900px"></dc-import></div>
+<div style="width:840px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a5d" hint-size="840px,860px"></dc-import></div>
+</div>
+</section>
+
+<section id="ART6" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART6</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Action dialogs · 560 wide</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">B is a new rule, waiting on the owner’s answer. An Admin sees only “Ask another admin”.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">Approve, Request changes, Reject and Unpublish dialogs ask for a reason the author reads, where the brief asks for one.</span></div>
+<div style="width:1248px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a6" hint-size="1248px,2000px"></dc-import></div>
+</section>
+
+<section id="ART7" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART7</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Calendar · month · desktop 1440</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: a calendar read by date range</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a7" hint-size="1440px,1060px"></dc-import></div>
+</section>
+
+<section id="ART8" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART8</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Calendar · week, with a move · crop</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">Fri 09:00 to Sat 11:00, dropped. Every chip also has “Move…”, so no drag is needed.</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a8" hint-size="1440px,640px"></dc-import></div>
+</section>
+
+<section id="ART9" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART9</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Authors · desktop 1440</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: an authors read with followers, the weekly count and the approval rate</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a9" hint-size="1440px,820px"></dc-import></div>
+</section>
+
+<section id="ART10" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART10</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Author drawer · desktop 1440, over ART9</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: followers count · review history</span></div>
+<div style="width:1440px;height:960px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a10" hint-size="1440px,960px"></dc-import></div>
+</section>
+
+<section id="ART11" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART11</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Performance · desktop 1440, light</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: views per week (drawn as not recorded)</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a11" hint-size="1440px,1460px"></dc-import></div>
+</section>
+
+<section id="ART12" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART12</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Performance · desktop 1440, dark</h2></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #374151;box-shadow:0 20px 50px rgba(24,24,27,.18)"><dc-import name="Content Queue Page" v="a12" hint-size="1440px,1460px"></dc-import></div>
+</section>
+
+<section id="ART13" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART13</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Empty · three frames</h2></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">No articles yet · measured zeros</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a13a" hint-size="1440px,520px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">No match · the chips stay</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a13b" hint-size="1440px,400px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Calendar · nothing scheduled</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a13c" hint-size="1440px,480px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ART14" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART14</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Loading · desktop 1440</h2></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a14" hint-size="1440px,820px"></dc-import></div>
+</section>
+
+<section id="ART15" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART15</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Error and partial · four frames</h2></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">The Pipeline failed · never empty columns</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a15a" hint-size="1440px,300px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Drawer partial · the article read, its comments did not</span><div style="width:1440px;height:1000px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a15b" hint-size="1440px,1000px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Performance partial · Views by sector could not be read</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a15c" hint-size="1440px,1180px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">A stale action, as a toast</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a15d" hint-size="1440px,820px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ART16" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART16</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Admin view · desktop 1440</h2><span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;background:#f4f3f7;border:1px solid #dedbe5;color:#57525e;font-size:12px;font-weight:700"><span style="width:8px;height:8px;border-radius:999px;background:#6b6577"></span>Admin</span></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">What differs: no “Feature on Articles…”; Edit and Delete only on their own comments; dialog B shows “Ask another admin” only.</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a16" hint-size="1440px,1080px"></dc-import></div>
+</section>
+
+<section id="ART17" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART17</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">No permission · two panels</h2></div>
+<div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">An Admin opens the Content overview</span><div style="width:1000px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a17a" hint-size="1000px,560px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">A member opens a forwarded review link</span><div style="width:1000px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Content Queue Page" v="a17b" hint-size="1000px,560px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ART18" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ART18</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Content queue · phone 390 · four frames</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">Every tap target at least 44 by 44 px. The secondary review actions open in a “More” sheet.</span></div>
+<div style="display:flex;gap:40px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">1 · Pipeline, one column</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Content Queue Page" v="a18a" hint-size="390px,844px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">2 · Filters bottom sheet</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Content Queue Page" v="a18d" hint-size="390px,844px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">3 · Review, full screen</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Content Queue Page" v="a18b" hint-size="390px,844px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">4 · Calendar as an agenda</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Content Queue Page" v="a18c" hint-size="390px,844px"></dc-import></div></div>
+</div>
+</section>
+
+</div>
+</x-dc>
+</body></html>

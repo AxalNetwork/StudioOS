@@ -1,0 +1,8 @@
+/* #3717: a short pitch page and its rail fill the space above the app footer.
+   Only the pages using PitchPage opt in; no viewport or footer height is fixed. */
+[data-app-main]:has(> .pitch-page-frame) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+}
+.pitch-page-frame { flex: 1 0 auto; }

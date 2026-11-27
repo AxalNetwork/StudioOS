@@ -1,0 +1,29 @@
+import { request } from '../api.js';
+
+// D659 (#1472) — the Validate cycle's shared read and its manual writes,
+// mounted by the Worker at `/api/cycles/validate`. Every call names the
+// project with `?project=`; reads return #1469's Figure and Card shapes.
+const q = (projectId) => `project=${encodeURIComponent(projectId)}`;
+
+export const cycleValidateApi = {
+  overview: (projectId) => request(`/cycles/validate/overview?${q(projectId)}`),
+  module: (projectId, slug, { q: search = '', filter = '', sort = '', page = 1 } = {}) => {
+    const params = new URLSearchParams({ project: String(projectId), q: search, filter, sort, page: String(page) });
+    return request(`/cycles/validate/modules/${encodeURIComponent(slug)}?${params}`);
+  },
+  marketReadiness: (projectId) => request(`/cycles/validate/market-readiness?${q(projectId)}`),
+  setInterviewSegment: (projectId, interviewId, segmentId) => request(`/cycles/validate/interviews/${encodeURIComponent(interviewId)}/segment?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ segment_id: segmentId }) }),
+  setInterviewStage: (projectId, interviewId, stage) => request(`/cycles/validate/interviews/${interviewId}/stage?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ stage }) }),
+  setWaitlistTarget: (projectId, value) => request(`/cycles/validate/waitlist-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  // D685 §5.12: the monthly interviews target Validate's phone meter reads; null clears it.
+  setInterviewsTarget: (projectId, value) => request(`/cycles/validate/interviews-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  // D5997 (#5997): the venture's "Trying to learn:" line; null or '' clears it.
+  setObjective: (projectId, value) => request(`/cycles/validate/objective?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  setMarketMark: (projectId, item, done) => request(`/cycles/validate/market-marks/${encodeURIComponent(item)}?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ done }) }),
+  addMarketSource: (projectId, data) => request(`/cycles/validate/market-sources?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),
+  removeMarketSource: (projectId, sourceId) => request(`/cycles/validate/market-sources/${sourceId}?${q(projectId)}`, { method: 'DELETE' }),
+  setEvidenceStrength: (projectId, linkId, strength) => request(`/cycles/validate/evidence-links/${linkId}/strength?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ strength }) }),
+  // D6007 (#6007, V24): two to four segments side by side, in the order given; and the venture's one primary ICP.
+  compareSegments: (projectId, ids) => request(`/cycles/validate/segments/compare?${q(projectId)}&ids=${ids.map((id) => encodeURIComponent(id)).join(',')}`),
+  setPrimarySegment: (projectId, segmentId, primary) => request(`/cycles/validate/segments/${encodeURIComponent(segmentId)}/primary?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ primary }) }),
+};

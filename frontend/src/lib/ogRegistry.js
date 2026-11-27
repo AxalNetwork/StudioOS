@@ -1,0 +1,723 @@
+/**
+ * Canonical Open Graph / social-preview metadata for every public route.
+ *
+ * WHY THIS FILE EXISTS
+ * --------------------
+ * axal.vc is a Vite SPA. Every route is served by the *same* `index.html`
+ * (worker static assets, `not_found_handling = "single-page-application"`), so
+ * every route used to advertise the same `og:title` and the same `og:image`.
+ * Link-preview crawlers — WhatsApp, iMessage, Facebook, LinkedIn, Slack — do
+ * not execute JavaScript, so the client-side `usePageMeta()` updates in
+ * `seo.js` were invisible to them: they only ever read the static shell.
+ *
+ * This module is the single source of truth for what each route should
+ * advertise. Three consumers read it, which is what keeps them in agreement:
+ *
+ *   1. `scripts/prerender-og.mjs`  — bakes the tags into per-route HTML at
+ *      build time, so crawlers get correct tags in the raw HTTP response.
+ *   2. `usePageMeta()` in `seo.js` — applies the same values client-side, so
+ *      in-app navigation and the browser tab stay consistent.
+ *   3. `scripts/validate-og-tags.mjs` — asserts the built output actually
+ *      carries them, and fails CI when a route drifts.
+ *
+ * Copy here is deliberately grounded in what the pages actually say. When you
+ * add a route, add its entry here — do not inline meta tags anywhere else.
+ */
+// NB: the `.js` extension is required — plain Node ESM (the build scripts) does
+// not resolve extensionless specifiers the way Vite does.
+import { OG_MANIFEST } from './ogManifest.js';
+// D6995 (#6995): the static body's page words, where a page keeps them in a plain module. Both load in plain
+// Node (no React, explicit `.js` specifiers), which `frontend/test/initial_html_6995.test.mjs` checks.
+import { HOME_HEADLINE_TEXT, HOME_OFFER, HOME_PRIMARY } from './siteHome.js';
+import { DOORS } from './siteDoors.js';
+
+/** A door page's primary action, as the page draws it. */
+const doorPrimary = (key) => ({ label: DOORS[key].primary.t, to: DOORS[key].primary.to });
+
+/*
+ * DEPENDENCY NOTE — this module imports the generated manifest and two plain
+ * modules of page words (`siteHome.js`, `siteDoors.js`, D6995), on
+ * purpose, and nothing else. Build scripts (`prerender-og.mjs`, `validate-og-tags.mjs`) import it
+ * from plain Node with no `node_modules` present, so it must not reach into the
+ * React tree. That is also why the four audience-page descriptions below are
+ * inlined rather than imported from `../data/productPages`: that module pulls
+ * `./pricing` → `../components/PaywallModal`, which drags in React.
+ *
+ * The copy is therefore duplicated, and duplicated copy drifts — so
+ * `validate-og-tags.mjs` re-reads `productPages.js` as *source text* and fails
+ * the build if the two ever disagree.
+ */
+
+export const SITE_URL = 'https://axal.vc';
+
+/**
+ * NOTE — the codebase disagrees with itself about the site name: the static
+ * `frontend/index.html` shipped `og:site_name = "Global Venture Partner
+ * Network"` while `seo.js` used "Axal VC StudioOS". We standardise on the
+ * `seo.js` value because that is what the running app applies today; changing
+ * the public brand string is a product decision, not a metadata fix.
+ */
+export const SITE_NAME = 'Axal VC StudioOS';
+
+/** Where generated cards live, relative to the site root. */
+export const OG_IMAGE_DIR = '/og';
+
+/** Last-resort sitewide card. Should rarely be the resolved image. */
+export const DEFAULT_OG_KEY = 'default';
+
+/**
+ * Section defaults. A route that has no card of its own resolves to its
+ * section's card rather than to one sitewide image — so /articles/<slug> looks
+ * like an article, not like the homepage.
+ */
+export const SECTION_OG_KEYS = {
+  home: 'home',
+  'spinout-lab': 'spinout-lab',
+  product: 'product',
+  content: 'content',
+  company: 'company',
+};
+
+/**
+ * #3705: record-card families from the social-cards canvas that no
+ * fixed route uses yet. The generator draws them now; the Worker card injector
+ * (D1439) points record links at `profile` (and `event` for an event without
+ * an https cover), and the private-link card (#3705 Part D) uses `private`.
+ */
+export const FAMILY_OG_KEYS = ['event', 'profile', 'private'];
+
+/**
+ * Public routes, in sitemap order.
+ *
+ * - `path`        exact pathname (no trailing slash except the root)
+ * - `title`       page-specific, WITHOUT the site-name suffix
+ * - `description` page-specific, 1–2 sentences
+ * - `key`         card image key → `/og/<key>.png`; omit to inherit the section
+ * - `type`        og:type
+ * - `section`     drives the fallback card and prefix matching
+ * - `prefix`      when true, sub-paths (`/articles/whatever`) inherit this entry
+ * - `heading`     D6995: the page's own h1, written into its HTML before JavaScript runs (default: `title`)
+ * - `summary`     D6995: one or two sentences of its offer, as the page says them (default: `description`)
+ * - `primaryLink` D6995: `{ label, to }`, the page's main action (default: Join Axal VC, `/register`)
+ */
+const ROUTES = [
+  {
+    path: '/',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: HOME_HEADLINE_TEXT,
+    summary: HOME_OFFER,
+    primaryLink: HOME_PRIMARY,
+    title: 'StudioOS, the founder workspace', // #6988 (X6): the page title's words
+    // D1379: says what the app does, for Google's OAuth verification as much as for a link preview.
+    description:
+      'Axal VC is a venture studio platform: founders validate an idea with customer interviews, form the company and raise, with partners and investors in one network.',
+    key: 'home',
+    type: 'website',
+    section: 'home',
+  },
+  {
+    path: '/spinout-lab',
+    title: 'Spin-Out Lab',
+    description:
+      'Four weeks of execution with the whole arsenal and a cohort beside you: discovery, market sizing, formation and the raise, behind gates that open on evidence.',
+    key: 'spinout-lab',
+    type: 'website',
+    section: 'spinout-lab',
+    prefix: true,
+  },
+
+  // ---- Audience product pages -------------------------------------------
+  // Mirrors PRODUCT_PAGES[*].meta in `../data/productPages.js` verbatim.
+  // Kept in sync by the cross-check in `scripts/validate-og-tags.mjs`.
+  {
+    path: '/for-founders',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: DOORS.founders.h1,
+    summary: DOORS.founders.who,
+    primaryLink: doorPrimary('founders'),
+    title: 'For Founders',
+    description:
+      'A founder workspace for customer interviews, your pitch deck and venture scoring.',
+    key: 'product-founders',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/for-investors',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: DOORS.investors.h1,
+    summary: DOORS.investors.who,
+    primaryLink: doorPrimary('investors'),
+    title: 'For Investors & LPs',
+    description:
+      'Source, screen and diligence better deals in less time. AI scoring, a built-in CRM, warm founder intros and portfolio visibility for angels, funds and LPs.',
+    key: 'product-investors',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/for-service-partners',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: DOORS.partners.h1,
+    summary: DOORS.partners.who,
+    primaryLink: doorPrimary('partners'),
+    title: 'For Operating Partners',
+    description:
+      'List your services in the Axal VC marketplace, get in front of funded founders, and turn network trust into inbound leads. Distribution for legal, design, GTM and technical partners.',
+    key: 'product-service-partners',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/for-advisors',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: DOORS.advisors.h1,
+    summary: DOORS.advisors.who,
+    primaryLink: doorPrimary('advisors'),
+    title: 'For Advisors',
+    description:
+      'Build a credible advisor profile, get matched with founders who need your expertise, and run sessions through structured office hours on the Axal VC network.',
+    key: 'product-advisors',
+    type: 'website',
+    section: 'product',
+  },
+
+  // ---- Company / conversion ---------------------------------------------
+  {
+    path: '/pricing',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Pricing',
+    summary: 'Pay for the cycles you are in. Eligible paid plans include an AI allowance; Free users can add AI tokens to use supported models.',
+    title: 'Pricing',
+    description:
+      'Simple, transparent pricing for founders and investors. Start free, upgrade when you raise.',
+    key: 'pricing',
+    type: 'website',
+    section: 'company',
+  },
+  // D6996 (#6996): the catalogue page; plans are compared on /pricing, so it no longer shares that title.
+  // The company section's card, so no new image. Its words are the sections a visitor reads there.
+  {
+    path: '/pricing/products',
+    title: 'Products and token packs',
+    description:
+      'Profile bundles, how AI is priced and token packs, with prices read from the live catalogue. Signed-in members also buy add-ons and redeem promo codes here.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    // D4297 (#4297): the Influencer program; the company section's card, so no new image.
+    path: '/influencers',
+    title: 'Influencers',
+    description:
+      'Share your own handle. When someone subscribes through it, you earn a share of their subscription for a set period.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/demo',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'See it live',
+    summary: "Pick the conversation that fits — we'll meet you where you are.",
+    title: 'Book a demo',
+    description:
+      'See Axal VC StudioOS live — pick a product demo, investor brief, or partnership intro.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/about',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'We are early because that is where the outcome is decided.',
+    summary: 'Axal VC is a Geneva-based venture firm investing at pre-seed in technology companies with durable, systemic problems to solve. We built an operating platform because writing checks earlier only works if you can see more.',
+    primaryLink: { label: 'Meet the team', to: '/team' },
+    title: 'Firm',
+    description:
+      'Axal VC is a Geneva-based venture firm investing at pre-seed in technology companies with durable, systemic problems to solve.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/team',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'About',
+    summary: 'The story behind Axal VC.',
+    title: 'Team',
+    description:
+      'Who we are, how the studio operates, and why we build companies alongside the founders we back.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/methodology',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Validate. Build. Raise. Grow.',
+    summary: 'Axal VC gives ventures the system, network, and operating discipline to move from an uncertain opportunity to a validated, built, funded, and growing company.',
+    primaryLink: { label: 'Explore the Spin-Out Lab', to: '/spinout-lab' },
+    title: 'Methodology',
+    description:
+      'Axal VC gives ventures the system, network, and operating discipline to move from an uncertain opportunity to a validated, built, funded, and growing company.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/platform',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'One system. Founders, partners, and capital — working from the same record.',
+    summary: 'Every tool writes into a shared model. Nothing is re-entered, nothing drifts, and no one is reading a stale version of the truth.',
+    title: 'Platform',
+    description:
+      'One system. Founders, partners, and capital — working from the same record. Every tool writes into a shared model.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/administrators',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Run your territory from one console.',
+    summary: 'For the person who runs a territory: an Axal VC subsidiary or a white-label operator. Both use the same console.',
+    primaryLink: { label: 'Request a licence', to: '/contact?topic=licence' },
+    title: 'For Administrators',
+    description:
+      'Run your territory from one console. For an Axal VC subsidiary or a white-label operator — both use the same console.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/intelligence',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Intelligence',
+    summary: 'Eadwyn is the Personal Assistant inside Axal VC.',
+    title: 'Intelligence',
+    description:
+      'Eadwyn is the Personal Assistant inside Axal VC. Intelligence includes Research: a large database of markets, companies, and funds.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/contact',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Tell us what you are building.',
+    summary: 'Three sentences is enough. We read everything and reply within five business days — including when the answer is no.',
+    title: 'Contact',
+    description: 'Talk to the Axal VC team — founders, investors, advisors, and service partners.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/newsletter',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Hear from Axal VC.',
+    summary: 'Pick what you want to read. Each one is its own email, and you can change them at any time.',
+    title: 'Newsletter',
+    description: 'The Axal VC Brief and our other newsletters: portfolio news, founder calls, events, insights and announcements.',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Content surfaces --------------------------------------------------
+  {
+    path: '/articles',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Articles',
+    summary: 'Writing on company formation, pre-seed underwriting, and what we learn from running cohorts. Published as we learn it, not on a content calendar.',
+    title: 'Articles',
+    description:
+      'Long-form writing from Axal VC founders, investors, partners, and the studio.',
+    key: 'articles',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    path: '/jobs',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Jobs',
+    summary: 'Open roles across Axal VC portfolio companies and the firm itself. Every listing is posted directly by the hiring founder.',
+    title: 'Jobs',
+    description: 'Open roles across Axal VC portfolio companies and the firm itself.',
+    key: 'jobs',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    path: '/events',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Programs & Events',
+    summary: 'Cohorts, demo days, LP briefings, and office hours.',
+    title: 'Programs & Events',
+    description: 'Cohorts, demo days, LP briefings, and office hours.',
+    key: 'event',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  // D6966 (#6966): the public Programs index. Prefix, so a /programs/<key> page that has no entry
+  // of its own previews as the index; each program's own page is prerendered from its map entry
+  // (`frontend/src/pages/programs/catalog/`, read by scripts/lib/programCatalog.mjs), so adding a
+  // program adds no row here.
+  {
+    path: '/programs',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Programs',
+    summary: 'What Axal VC runs, who each programme is for and how to take part. Each one opens its own presentation, with a PDF you can download.',
+    title: 'Programs',
+    description: 'What Axal VC runs, who each programme is for and how to take part, each with a presentation and a PDF.',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    // D7121 (#7121): the public Wellness presentation. Its words are the page's purpose sentence; it names no
+    // expert, member or entry. `/wellbeing`, the private workspace, has no entry and is never the shared link.
+    path: '/programs/wellness',
+    title: 'Wellness · Programs',
+    description:
+      'A private place in your Axal VC account to check in with yourself each week, find qualified support and book a 1:1 session on your own terms.',
+    type: 'website',
+    section: 'content',
+  },
+  {
+    path: '/circles',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Communities & Circles',
+    summary: 'Circles are small, closed peer groups that meet on a fixed cadence. Membership is capped so the conversation stays specific — no open channels, no broadcast.',
+    title: 'Communities & Circles',
+    description: 'Focused communities inside the Axal VC network.',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    path: '/directory',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Directory',
+    summary: 'Directory access is verified — members see full profiles and can request warm introductions.',
+    title: 'Directory',
+    description: 'Operating partners listed in the Axal VC network.',
+    type: 'website',
+    section: 'content',
+    prefix: true,
+  },
+  {
+    path: '/resources',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Resources',
+    summary: 'Directory, writing, programs, circles, and open roles. Members see full profiles and request introductions; the rest is open to read.',
+    title: 'Resources',
+    description: 'Directory, writing, programs, circles, and open roles across the Axal VC network.',
+    type: 'website',
+    section: 'content',
+  },
+  {
+    path: '/authors',
+    title: 'Authors',
+    description: 'Writers publishing on Axal VC.',
+    key: 'authors',
+    type: 'profile',
+    section: 'content',
+    prefix: true,
+  },
+
+  // ---- Product transparency ---------------------------------------------
+  {
+    path: '/changelog',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Changelog',
+    summary: "Every shipped change to Axal VC StudioOS — tagged by who it's for.",
+    title: 'Changelog',
+    description: "What's new in Axal VC StudioOS — every shipped change, tagged by audience.",
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/status',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'System status',
+    summary: 'Service health and availability across Axal VC StudioOS.',
+    title: 'System status',
+    description: 'Real-time health of Axal VC StudioOS services, and the days with no incident reported since records began.',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Legal & compliance -------------------------------------------------
+  // Footer-linked from every public page, so after the marketing pages these
+  // are the most-crawled URLs on the site — and the ones most often pasted
+  // into a chat when someone asks what the terms are.
+  {
+    path: '/terms',
+    title: 'Terms of Service',
+    description:
+      'The agreement governing use of the Axal VC platform — definitions and parties, acceptance and acknowledgments, and the scope of what the platform does.',
+    key: 'terms',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/privacy',
+    title: 'Privacy Policy',
+    description:
+      'How Axal VC collects, uses, and protects Non-Public Personal Information, and the privacy role each of the three operating entities plays.',
+    key: 'privacy',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/privacy/interviews',
+    title: 'When a founder records you',
+    description:
+      'What is kept when a founder using Axal VC records an interview with you, why, who can read it, how long it is kept, and how to say no or ask for deletion.',
+    key: 'privacy-interviews',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/risk-disclosures',
+    title: 'Risk Disclosures & Disclaimers',
+    description:
+      'Investing in private, early-stage companies carries a high degree of risk and suits only sophisticated investors who can afford to lose their entire investment.',
+    key: 'risk-disclosures',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Trust center (#3705) ---------------------------------------------
+  // The public trust center and its five tabs (`pages/site/trustCenterModel.js`
+  // TABS). Copy is the page's own: its headline and each tab's subject. The
+  // Subprocessors line says the list is with counsel, as the tab does.
+  {
+    path: '/trust',
+    title: 'Trust center',
+    description: 'How we protect your data and your money: security, data and privacy, subprocessors, documents and how to report a vulnerability.',
+    key: 'trust',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/security',
+    title: 'Security',
+    description: 'How Axal VC hosts the platform, signs you in, encrypts your data, backs it up and tests it.',
+    key: 'trust-security',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/data',
+    title: 'Data and privacy',
+    description: 'Who holds your data on Axal VC, and what you can do about it.',
+    key: 'trust-data',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/subprocessors',
+    title: 'Subprocessors',
+    description: 'The services that process data for Axal VC. The list is being reviewed by counsel.',
+    key: 'trust-subprocessors',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/documents',
+    title: 'Documents',
+    description: 'Axal VC’s legal documents and when each was last updated.',
+    key: 'trust-documents',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/disclosure',
+    title: 'Disclosure',
+    description: 'Report a vulnerability privately. We answer by severity, within set times, and take no legal action against good-faith research.',
+    key: 'trust-disclosure',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Help Center (#6996) ----------------------------------------------
+  // The home's own words. Prefix, so each guide page takes the company card; each public guide's own
+  // title and description come from the guide index (`pages/docs/helpMeta.js`, read in Node by
+  // scripts/lib/helpGuides.mjs), so adding a public guide adds no row here.
+  {
+    path: '/help',
+    heading: 'How can we help?',
+    summary: 'Search the public guides, or browse them by area. Sign in to search every guide.',
+    title: 'Help Center',
+    description: 'Search the public Axal VC guides or browse them by area. Members sign in to search every guide.',
+    type: 'website',
+    section: 'company',
+    prefix: true,
+  },
+
+  // ---- Auth entry points --------------------------------------------------
+  // /register is a genuinely shared link rather than just a form: referral
+  // landings arrive as /register?ref=… (see the apex routing notes in
+  // wrangler.toml), so it gets previewed in chat clients far more often than
+  // its place in the nav suggests.
+  {
+    path: '/register',
+    title: 'Create your account',
+    description:
+      'Join the Axal VC network as a founder, investor, advisor, or service partner.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/login',
+    title: 'Sign in',
+    description: 'Sign in to Axal VC StudioOS.',
+    type: 'website',
+    section: 'company',
+    // D4582: the sign-in form is a way in, not something to find in a search. `noindex, follow` is carried three ways,
+    // each checked on its own: this meta tag (prerender and client navigation), and an `X-Robots-Tag` header for the
+    // path in `frontend/public/_headers`. `/register` is shared and indexed as before.
+    robots: 'noindex, follow',
+  },
+
+  // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
+  // A full public marketing page, built to be shared; the four audience
+  // pages beside it were removed (owner, #2297). Copy is the page's own hero.
+  {
+    path: '/lp/spinout-demo-day',
+    // D6995: the page's own words, written into its HTML before JavaScript runs.
+    heading: 'Axal VC Spin-Out Demo Day.',
+    summary: "See what 28 days of focused, structured building really produces. Find out if you're ready for the next cohort.",
+    title: 'Spin-Out Lab Demo Day',
+    description:
+      'Evidence-led and founder-honest — no polished pitches, just real companies showing real work at the end of a 28-day sprint.',
+    type: 'website',
+    section: 'spinout-lab',
+  },
+];
+
+export const OG_ROUTES = ROUTES;
+
+/** Every distinct card key the generator must render. */
+export function ogImageKeys() {
+  const keys = new Set([DEFAULT_OG_KEY, ...Object.values(SECTION_OG_KEYS), ...FAMILY_OG_KEYS]);
+  for (const r of ROUTES) if (r.key) keys.add(r.key);
+  return [...keys];
+}
+
+/** Normalise a pathname: strip query/hash and any trailing slash (except root). */
+export function normalisePath(pathname) {
+  if (!pathname || typeof pathname !== 'string') return '/';
+  let p = pathname.split('?')[0].split('#')[0];
+  if (!p.startsWith('/')) p = `/${p}`;
+  if (p.length > 1 && p.endsWith('/')) p = p.replace(/\/+$/, '') || '/';
+  return p;
+}
+
+/**
+ * Resolve the registry entry for a pathname.
+ *
+ * Exact match wins; otherwise the longest `prefix: true` entry whose path is a
+ * true path-segment prefix (so `/jobs-board` never matches `/jobs`). Returns
+ * null when nothing matches — callers fall back to the sitewide default.
+ */
+export function ogEntryFor(pathname) {
+  const p = normalisePath(pathname);
+  const exact = ROUTES.find((r) => r.path === p);
+  if (exact) return exact;
+
+  let best = null;
+  for (const r of ROUTES) {
+    if (!r.prefix || r.path === '/') continue;
+    if (p === r.path || p.startsWith(`${r.path}/`)) {
+      if (!best || r.path.length > best.path.length) best = r;
+    }
+  }
+  return best;
+}
+
+/**
+ * Fallback hierarchy for the card image, highest priority first:
+ *
+ *   1. an explicit absolute/rooted image passed by the caller (a curated card
+ *      for one specific page or post)
+ *   2. the page's own generated card          (`entry.key`)
+ *   3. the section's generated card           (`SECTION_OG_KEYS[entry.section]`)
+ *   4. the sitewide brand card                (`DEFAULT_OG_KEY`)
+ *
+ * Levels 2–4 are all real files produced by `scripts/generate-og-images.mjs`,
+ * so level 4 should be rare in practice rather than the universal answer it
+ * used to be.
+ */
+export function ogImageKeyFor(entry) {
+  if (entry?.key) return entry.key;
+  const sectionKey = entry?.section ? SECTION_OG_KEYS[entry.section] : null;
+  return sectionKey || DEFAULT_OG_KEY;
+}
+
+/** Absolute, cache-busted URL for a card key. */
+export function ogImageUrl(key) {
+  const version = OG_MANIFEST[key];
+  const q = version ? `?v=${version}` : '';
+  return `${SITE_URL}${OG_IMAGE_DIR}/${key}.png${q}`;
+}
+
+/** Absolute URL for a site path. */
+export function absoluteUrl(pathname) {
+  return `${SITE_URL}${normalisePath(pathname)}`;
+}
+
+/**
+ * The complete tag set for a route — the one function every consumer calls, so
+ * prerendered HTML, the client-side hook, and the validator cannot disagree.
+ *
+ * `overrides.image` accepts a rooted path or absolute URL and takes priority
+ * over every generated card (fallback level 1). That is the hook a CMS entry or
+ * a hand-curated post card uses.
+ */
+export function ogTagsFor(pathname, overrides = {}) {
+  const path = normalisePath(pathname);
+  const entry = ogEntryFor(path);
+
+  const title = overrides.title || entry?.title || SITE_NAME;
+  const fullTitle = title === SITE_NAME ? SITE_NAME : `${title} — ${SITE_NAME}`;
+  const description = overrides.description || entry?.description || '';
+  const type = overrides.type || entry?.type || 'website';
+
+  let image;
+  if (overrides.image) {
+    image = /^https?:\/\//i.test(overrides.image)
+      ? overrides.image
+      : `${SITE_URL}${overrides.image.startsWith('/') ? '' : '/'}${overrides.image}`;
+  } else {
+    image = ogImageUrl(ogImageKeyFor(entry));
+  }
+
+  return {
+    path,
+    title: fullTitle,
+    description,
+    url: absoluteUrl(path),
+    image,
+    type,
+    siteName: SITE_NAME,
+    card: 'summary_large_image',
+    imageAlt: title,
+    /** D4582: the route's robots directive, or null when it has none (indexable by default). */
+    robots: overrides.robots || entry?.robots || null,
+  };
+}
+
+/** D6995 (#6995): the default main action of a route's static body. */
+export const DEFAULT_PRIMARY_LINK = Object.freeze({ label: 'Join Axal VC', to: '/register' });
+
+/**
+ * D6995 (#6995): what `scripts/prerender-og.mjs` writes inside `#root` for a route, before JavaScript runs:
+ * the page's heading, its offer and its main action. A route with no words of its own uses its title and
+ * description; `overrides` (a program page's title and description) win over the registry, as in `ogTagsFor`.
+ */
+export function staticBodyFor(pathname, overrides = {}) {
+  const entry = ogEntryFor(normalisePath(pathname));
+  const exact = entry && entry.path === normalisePath(pathname);
+  return {
+    heading: overrides.title || (exact && entry.heading) || entry?.title || SITE_NAME,
+    summary: overrides.description || (exact && entry.summary) || entry?.description || '',
+    primaryLink: (exact && entry.primaryLink) || DEFAULT_PRIMARY_LINK,
+  };
+}

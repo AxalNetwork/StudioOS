@@ -1,0 +1,344 @@
+Perfect — here is the **exact step-by-step setup on the Google side (Workspace + Cloud)** so your Gmail API works cleanly in production.
+
+This is the part most people mess up — I’ll make it **bulletproof + Axal-grade**.
+
+---
+
+# 🧠 PART 1 — Google Workspace (Domain + Email Identity)
+
+If you want:
+👉 `noreply@axal.io` (recommended)
+
+## ✅ 1. Set up Google Workspace
+
+Go to:
+👉 Google Workspace
+
+### Steps:
+
+1. Add your domain (`axal.io`)
+2. Verify domain ownership (DNS)
+3. Create email:
+
+   * `noreply@axal.io`
+   * or `hello@axal.io`
+
+---
+
+## 🔐 2. Enable Gmail Access
+
+In Admin Console:
+👉 [https://admin.google.com](https://admin.google.com)
+
+* Go to:
+
+  * Apps → Google Workspace → Gmail
+* Ensure Gmail is **enabled for your users**
+
+---
+
+## ⚠️ 3. Enable API Access (IMPORTANT)
+
+In Admin Console:
+
+* Security → Access and data control → API Controls
+* Enable:
+  ✅ “Allow users to access Google APIs”
+
+---
+
+# ☁️ PART 2 — Google Cloud (API + OAuth)
+
+Go to:
+👉 Google Cloud Console
+
+---
+
+## 🏗️ 1. Create Project
+
+* Click **New Project**
+* Name: `axal-email-system`
+
+---
+
+## 🔌 2. Enable Gmail API
+
+* Go to: APIs & Services → Library
+* Search: **Gmail API**
+* Click → Enable
+
+---
+
+## 🔑 3. Configure OAuth Consent Screen
+
+This is critical.
+
+### Steps:
+
+* Go to: APIs & Services → OAuth consent screen
+
+### Choose:
+
+* External (or Internal if Workspace-only)
+
+---
+
+### Fill:
+
+* App name: `Axal`
+* User support email: your email
+* Developer email: your email
+
+---
+
+### Scopes:
+
+Add:
+
+```bash
+https://www.googleapis.com/auth/gmail.send
+```
+
+---
+
+### Test Users (IMPORTANT if external)
+
+Add:
+
+* Your email
+* Any test emails
+
+---
+
+## 🔐 4. Create OAuth Credentials
+
+Go to:
+
+* APIs & Services → Credentials
+
+Click:
+👉 Create Credentials → OAuth client ID
+
+---
+
+### Choose:
+
+* Application type: **Web application**
+
+---
+
+### Set:
+
+**Authorized redirect URI:**
+
+```bash
+https://developers.google.com/oauthplayground
+```
+
+---
+
+### Save → You get:
+
+```bash
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+```
+
+---
+
+# 🔁 PART 3 — Generate Refresh Token (CRUCIAL STEP)
+
+Go to:
+👉 OAuth 2.0 Playground
+
+---
+
+## ⚙️ 1. Configure Playground
+
+Click ⚙️ (top right):
+
+* ✅ Use your own OAuth credentials
+* Paste:
+
+  * Client ID
+  * Client Secret
+
+---
+
+## 🔐 2. Authorize
+
+In Step 1:
+
+Paste scope:
+
+```bash
+https://www.googleapis.com/auth/gmail.send
+```
+
+Click:
+👉 Authorize APIs
+
+---
+
+## 🔁 3. Exchange Token
+
+Click:
+👉 Exchange authorization code for tokens
+
+---
+
+## ✅ You get:
+
+```json
+{
+  "access_token": "...",
+  "refresh_token": "..."
+}
+```
+
+---
+
+### ⚠️ IMPORTANT
+
+* Copy **refresh_token**
+* This is what your backend uses permanently
+
+---
+
+# 🔐 PART 4 — Replit Secrets
+
+Add:
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://developers.google.com/oauthplayground
+GOOGLE_REFRESH_TOKEN=...
+GMAIL_SENDER_EMAIL=noreply@axal.io
+```
+
+---
+
+# 🧪 PART 5 — Test It
+
+Run your API:
+
+1. Register user
+2. Check inbox
+3. You should receive:
+
+✅ Real email (not console log)
+
+---
+
+# ⚠️ COMMON ISSUES (READ THIS)
+
+## ❌ “Invalid grant”
+
+→ Refresh token expired or wrong
+👉 Regenerate in OAuth Playground
+
+---
+
+## ❌ “Unauthorized”
+
+→ Gmail API not enabled
+👉 Re-check API Library
+
+---
+
+## ❌ “Access blocked”
+
+→ OAuth consent not approved
+
+👉 Fix:
+
+* Add yourself as test user
+* Or publish app
+
+---
+
+## ❌ Emails not sending
+
+→ Check:
+
+* Sender email matches Workspace account
+* Gmail enabled for that user
+
+---
+
+# 🔒 PRODUCTION HARDENING (VERY IMPORTANT)
+
+## 1. Publish OAuth App
+
+In OAuth screen:
+
+* Click “Publish App”
+
+---
+
+## 2. Domain-wide trust (Workspace)
+
+Optional but powerful:
+
+In Admin Console:
+
+* Security → API Controls → Domain-wide delegation
+
+This allows:
+👉 Sending emails across org (later scaling)
+
+---
+
+## 3. Use Dedicated Email Identity
+
+Do NOT use personal Gmail.
+
+Use:
+
+* `noreply@axal.io`
+* `deals@axal.io`
+
+---
+
+# 🧠 ARCHITECTURE NOTE (FOR YOU)
+
+This setup becomes:
+
+👉 **Your identity + communication backbone**
+
+You can now power:
+
+* Investor onboarding
+* Deal alerts
+* Private deal rooms
+* Founder communications
+
+---
+
+# ⚡ WHAT YOU SHOULD DO NEXT
+
+Now that Gmail API works:
+
+### 1. Add email templates
+
+* Welcome
+* Verification
+* Deal alert
+
+### 2. Connect to your notification system
+
+* Event → Email trigger
+
+### 3. Add tracking (later)
+
+* Opens
+* Clicks
+* Engagement scoring
+
+---
+
+If you want next step, I can:
+
+* Design **high-end Axal email templates (VC-grade aesthetic)**
+* Or connect this directly into your **deal alert engine + notification system**

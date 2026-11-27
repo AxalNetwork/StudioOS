@@ -1,0 +1,7 @@
+{
+  "GET /api/digest": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  }
+}

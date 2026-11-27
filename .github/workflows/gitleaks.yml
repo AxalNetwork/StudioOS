@@ -1,0 +1,121 @@
+name: gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # #4107: `scan` is a required check, so it runs on each merge queue entry.
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+# Catches accidental secret commits before they hit production. Runs on every
+# PR + push to main so we never have a window where main contains a leaked
+# credential.
+#
+# NOTE: We invoke the gitleaks CLI directly instead of `gitleaks/gitleaks-action`.
+# As of 2024 the Action requires a paid `GITLEAKS_LICENSE` secret for org
+# repos. The CLI is unchanged and remains free + open-source.
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# A push to main and a merge-queue entry each get their own group (the run id),
+# so neither is ever cancelled.
+concurrency:
+  group: gitleaks-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scan:
+    name: scan
+    runs-on: ubuntu-latest
+    # Full history of every branch. Five minutes cancelled a slow fetch
+    # before gitleaks ran, and the check then reads as a failed secret scan.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Full history so gitleaks can scan any commit that touched the PR.
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Load trusted scanner installer
+        id: scanner_pins
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          MAIN_SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            pull_request) trusted="$PR_BASE" ;;
+            merge_group) trusted="$GROUP_BASE" ;;
+            push|schedule)
+              [[ "$REF" == refs/heads/main ]] || exit 1
+              trusted="$MAIN_SHA" ;;
+            *) echo "Unsupported scanner acquisition event" >&2; exit 1 ;;
+          esac
+          [[ "$trusted" =~ ^[0-9a-f]{40}$ ]] || { echo "Missing trusted scanner base" >&2; exit 1; }
+          git cat-file -e "$trusted^{commit}" || git fetch --no-tags origin "$trusted" --depth=1
+          installer="$RUNNER_TEMP/trusted-scanner-installer"
+          mkdir -p "$installer"
+          for source in install-scanner.mjs scanner-acquisition.mjs scanner-tools.json; do
+            git show "$trusted:scripts/ci/$source" > "$installer/$source"
+          done
+          echo "installer=$installer/install-scanner.mjs" >> "$GITHUB_OUTPUT"
+          node "$installer/install-scanner.mjs" gitleaks --metadata
+      - name: Restore pinned gitleaks archive
+        id: scanner_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+      - name: Install gitleaks
+        id: install_scanner
+        run: node "${{ steps.scanner_pins.outputs.installer }}" gitleaks
+      - name: Save verified gitleaks archive on main only
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.install_scanner.outcome == 'success' && steps.scanner_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.scanner_pins.outputs.cache-file }}
+          key: ${{ steps.scanner_pins.outputs.key }}
+      - name: Determine scan range
+        id: range
+        run: |
+          # Scan only the commits introduced by this push / PR rather than the
+          # entire public history. A new secret is still caught on the commit
+          # that introduces it, but CI no longer fails forever on historical
+          # leaks that cannot be rewritten without breaking every fork, open
+          # Dependabot PR and the backup mirror (see the `commits` allowlist in
+          # .gitleaks.toml for the running list of those unchangeable findings).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "logopts=--log-opts=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            # #4107: the queue entry is main (base_sha) plus the queued PRs, so
+            # the range is every commit the queue would merge.
+            echo "logopts=--log-opts=${{ github.event.merge_group.base_sha }}..${{ github.event.merge_group.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "logopts=--log-opts=-1" >> "$GITHUB_OUTPUT"
+            else
+              echo "logopts=--log-opts=${BEFORE}..${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - name: Run gitleaks
+        run: |
+          # Uses the project-specific config which extends the upstream default
+          # ruleset and adds project allowlists. Commit range scoped above.
+          gitleaks detect \
+            --config=.gitleaks.toml \
+            --source=. \
+            ${{ steps.range.outputs.logopts }} \
+            --redact \
+            --verbose \
+            --no-banner \
+            --exit-code=1

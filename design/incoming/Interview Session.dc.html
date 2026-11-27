@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0}a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    .is{container-type:inline-size}
+    @container (max-width:760px){.is-side,.is-rail{display:none!important}.is-shell{grid-template-columns:minmax(0,1fr)!important}.is-main{padding:14px!important}.is-g2{grid-template-columns:minmax(0,1fr)!important}}
+  </style>
+</helmet>
+<div class="is" style="background:#f8f8fa;font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;color:#18181b;-webkit-font-smoothing:antialiased;min-height:100%">
+<div class="is-shell" style="display:grid;grid-template-columns:196px minmax(0,1fr) 300px;min-height:100%">
+  <aside class="is-side" style="background:#fff;border-right:1px solid #ececf1;padding:14px 0;display:flex;flex-direction:column">
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><div style="{{ s.row }}"><span style="width:14px;height:14px;display:block;flex:none" sc-camel-dangerously-set-inner-h-t-m-l="{{ s.icon }}"></span><span>{{ s.t }}</span></div></sc-for>
+  </aside>
+
+  <main class="is-main" style="padding:22px 24px 30px;display:flex;flex-direction:column;gap:14px;min-width:0">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span style="{{ eyebrow }}">Validate · Customer research · Interview session</span>
+      <h1 style="margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.025em">{{ h1 }}</h1>
+      <div style="font-size:13px;line-height:1.5;color:#4a4553;max-width:760px">{{ sub }}</div>
+    </div>
+
+    <!-- START SHEET -->
+    <sc-if value="{{ is.start }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ card }};padding:16px;display:flex;flex-direction:column;gap:14px;max-width:760px">
+        <span style="{{ lbl }}">How is this conversation happening?</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ channels }}" as="c" hint-placeholder-count="5"><span style="{{ c.style }}">{{ c.t }}</span></sc-for></div>
+        <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px;align-items:center"><span style="color:#6b6577">Interviewee</span><span style="font-weight:600">[Interviewee] · [Company]</span><span style="color:#6b6577">Tests</span><span style="font-weight:600">[Hypothesis]</span><span style="color:#6b6577">Language</span><span style="font-weight:600">Detect ▾</span><span style="color:#6b6577">Consent</span><span style="font-weight:600;color:#047857">Recording consented · [12 Oct]</span></div>
+        <div style="border-top:1px solid #ececf1;padding-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:12.5px;color:#4a4553">Transcribe with <b>[Whisper Large v3 Turbo]</b> · Structure with <b>[Llama 3.3 70B Fast]</b> · <a href="#">Change</a></span><span style="{{ btn.primary }}">Start recording</span></div>
+      </div>
+    </sc-if>
+
+    <!-- RECORDING -->
+    <sc-if value="{{ is.record }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ card }};padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="display:flex;gap:10px;align-items:center"><span style="width:9px;height:9px;border-radius:50%;background:#b91c1c"></span><span style="font-size:15px;font-weight:800">[42:06]</span><span style="{{ pill.grey }}">Video call</span><span style="{{ pill.grey }}">{{ langPill }}</span></span>
+        <span style="display:flex;gap:6px"><span style="{{ btn.ghost }}">Pause</span><span style="{{ btn.primary }}">Stop and transcribe</span></span>
+      </div>
+      <div style="{{ card }};overflow:hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="display:flex;gap:8px;align-items:center"><span style="font-weight:800;font-size:15px">Live transcript</span><span style="{{ pill.amber }}">Draft</span></span><span style="font-size:11.5px;color:#6b6577">{{ liveModel }}</span></div>
+        <sc-if value="{{ liveOn }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ lines }}" as="l" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:70px 100px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:13px;line-height:1.5"><span style="color:#a1a1aa;font-size:11.5px">{{ l.ts }}</span><span><span style="{{ l.whoStyle }}">{{ l.who }}</span></span><span style="color:#4a4553">{{ l.text }}</span></div></sc-for>
+          <div style="padding:10px 16px;font-size:12px;color:#6b6577;line-height:1.5">{{ speakerNote }} The final transcript replaces this one when the recording stops; the session keeps only the final.</div>
+        </sc-if>
+        <sc-if value="{{ liveOff }}" hint-placeholder-val="{{ false }}"><div style="padding:22px 16px;font-size:13px;color:#6b6577;line-height:1.55">Live transcript is off. The transcript appears after the recording stops, from the final transcript model.</div></sc-if>
+      </div>
+    </sc-if>
+
+    <!-- TEXT CHAT -->
+    <sc-if value="{{ is.text }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ card }};overflow:hidden">
+        <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;gap:8px;align-items:center"><span style="font-weight:800;font-size:15px">Messages</span><span style="{{ pill.grey }}">Text chat · no audio</span></div>
+        <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:70px 100px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:13px;line-height:1.5"><span style="color:#a1a1aa;font-size:11.5px">{{ m.ts }}</span><span><span style="{{ m.whoStyle }}">{{ m.who }}</span></span><span style="color:#4a4553">{{ m.text }}</span></div></sc-for>
+      </div>
+    </sc-if>
+
+    <!-- REVIEW -->
+    <sc-if value="{{ is.review }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ card }};padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:12.5px;color:#4a4553">Final transcript by <b>[Whisper Large v3 Turbo]</b> · structured by <b>[Llama 3.3 70B Fast]</b></span><span style="display:flex;gap:6px;flex-wrap:wrap"><span style="{{ btn.ghost }}">Re-transcribe with… <span style="color:#6b6577;font-weight:600">≈ [$0.02]</span></span><span style="{{ btn.ghost }}">Re-structure with… <span style="color:#6b6577;font-weight:600">≈ [$0.004]</span></span></span></div>
+      <div class="is-g2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
+        <div style="{{ card }};overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;font-size:15px">Proposed placements</span><span style="{{ pill.violet }}">Draft by Eadwyn</span></div>
+          <sc-for list="{{ placements }}" as="p" hint-placeholder-count="4"><div style="padding:10px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:5px"><span style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px"><span style="font-weight:700">{{ p.module }}</span><span style="{{ p.stStyle }}">{{ p.st }}</span></span><span style="font-size:12.5px;color:#4a4553">{{ p.text }}</span><span style="font-size:11.5px;color:#6d28d9">cites {{ p.cite }}</span><sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}"><span style="display:flex;gap:6px"><span style="{{ btn.small }}">Accept</span><span style="{{ btn.smallGhost }}">Edit first</span><span style="{{ btn.smallQuiet }}">Discard</span></span></sc-if></div></sc-for>
+          <div style="padding:10px 16px;font-size:12px;color:#6b6577">A re-run replaces only proposals not yet accepted. Accepted findings stay where they landed.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="{{ card }};overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:800;font-size:15px">Compare runs</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;font-size:12px"><div style="padding:8px 12px;border-right:1px solid #ececf1;border-bottom:1px solid #ececf1;font-weight:700">Run 1 · [Llama 3.3 70B Fast]</div><div style="padding:8px 12px;border-bottom:1px solid #ececf1;font-weight:700">Run 2 · [DeepSeek V4 Flash]</div>
+            <sc-for list="{{ compare }}" as="c" hint-placeholder-count="3"><div style="padding:8px 12px;border-right:1px solid #ececf1;border-bottom:1px solid #f4f3f7;color:#4a4553">{{ c.a }}</div><div style="padding:8px 12px;border-bottom:1px solid #f4f3f7;color:#4a4553">{{ c.b }}</div></sc-for></div>
+            <div style="padding:10px 12px;display:flex;gap:6px"><span style="{{ btn.small }}">Keep run 2</span><span style="{{ btn.smallGhost }}">Keep run 1</span></div></div>
+          <div style="{{ card }};overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;font-size:15px">Models</span><a href="#" style="font-size:12px;font-weight:700">Usage →</a></div>
+            <sc-for list="{{ receipt }}" as="r" hint-placeholder-count="3"><div style="padding:9px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:2px;font-size:12.5px"><span style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:700">{{ r.job }} · {{ r.model }}</span><span style="font-weight:700">{{ r.cost }}</span></span><span style="font-size:11.5px;color:#6b6577">{{ r.detail }}</span><sc-if value="{{ r.fallback }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#92400e">{{ r.fallback }}</span></sc-if></div></sc-for></div>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <!-- SESSION RAIL -->
+  <aside class="is-rail" style="background:#fff;border-left:1px solid #ececf1;padding:16px 14px 24px;min-width:0;display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;font-size:14px">Eadwyn</span><span style="font-size:11.5px;color:#6b6577">Collapse ›</span></div>
+
+    <sc-if value="{{ railAsk }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:8px"><span style="{{ lbl }}">Ask about this session</span>
+        <div style="border:1px solid #ececf1;border-radius:10px;padding:9px 11px;font-size:12.5px;color:#a1a1aa">What did they say about price?</div>
+        <sc-for list="{{ answers }}" as="a" hint-placeholder-count="2"><div style="border:1px solid #e6dcff;background:#faf7ff;border-radius:10px;padding:10px 11px;display:flex;flex-direction:column;gap:4px"><span style="font-size:12.5px;line-height:1.5">{{ a.text }}</span><span style="font-size:11px;color:#6d28d9">{{ a.cite }}</span></div></sc-for>
+        <span style="font-size:11px;color:#6b6577">Answers run on [Llama 3.3 70B Fast].</span>
+      </div>
+      <div style="border:1px solid #ececf1;border-radius:10px;padding:10px 11px;display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Allowance</span>
+        <sc-for list="{{ meter }}" as="m" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:3px"><span style="display:flex;justify-content:space-between;font-size:12px"><span>{{ m.k }}</span><span style="font-weight:700">{{ m.v }}</span></span><sc-if value="{{ m.pct }}" hint-placeholder-val="{{ false }}"><div style="height:5px;border-radius:99px;background:#f4f3f7"><div style="height:5px;border-radius:99px;background:#7c3aed;width:{{ m.pct }}"></div></div></sc-if></div></sc-for>
+        <a href="#" style="font-size:11.5px;font-weight:700">Account › Usage →</a>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ railPick }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:8px"><span style="{{ lbl }}">Speech to text</span>
+        <sc-if value="{{ hasAudio }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ sttGroups }}" as="g" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;font-weight:700;color:#4a4553">{{ g.t }} <span style="font-weight:500;color:#6b6577">· {{ g.d }}</span></span>
+              <sc-for list="{{ g.rows }}" as="m" hint-placeholder-count="3"><div style="{{ m.wrap }}"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:12px;font-weight:800">{{ m.name }}</span><span style="display:flex;gap:3px"><sc-for list="{{ m.pills }}" as="p" hint-placeholder-count="2"><span style="{{ p.style }}">{{ p.t }}</span></sc-for></span></div><sc-if value="{{ m.id }}" hint-placeholder-val="{{ true }}"><span style="font:400 10.5px ui-monospace,Menlo,monospace;color:#6b6577;word-break:break-all">{{ m.id }}</span></sc-if><span style="font-size:11px;color:#4a4553;line-height:1.45">{{ m.why }}</span><span style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#6b6577">{{ m.price }}</span><span style="font-weight:700">{{ m.est }}</span></span><sc-if value="{{ m.blocked }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#b91c1c">{{ m.blocked }}</span></sc-if></div></sc-for>
+            </div>
+          </sc-for>
+          <span style="font-size:11px;color:#6b6577">Language: Detect ▾ · speaker labels where the model returns them.</span>
+        </sc-if>
+        <sc-if value="{{ noAudio }}" hint-placeholder-val="{{ false }}"><div style="border:1px dashed #d4d1dc;border-radius:10px;padding:10px 11px;font-size:12px;color:#6b6577">No audio in this session.</div></sc-if>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Structuring</span>
+        <sc-for list="{{ structRows }}" as="m" hint-placeholder-count="3"><div style="{{ m.wrap }}"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:12px;font-weight:800">{{ m.name }}</span><span style="display:flex;gap:3px"><sc-for list="{{ m.pills }}" as="p" hint-placeholder-count="1"><span style="{{ p.style }}">{{ p.t }}</span></sc-for></span></div><span style="font:400 10.5px ui-monospace,Menlo,monospace;color:#6b6577;word-break:break-all">{{ m.id }}</span><span style="font-size:11px;color:#4a4553;line-height:1.45">{{ m.why }}</span><span style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#6b6577">{{ m.price }}</span><span style="font-weight:700">{{ m.est }}</span></span><sc-if value="{{ m.blocked }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#b91c1c">{{ m.blocked }}</span></sc-if></div></sc-for>
+      </div>
+      <span style="font-size:11px;color:#6b6577;line-height:1.5">Runs on Cloudflare Workers AI. No audio is sent to any other speech service. Choices are remembered for Validate.</span>
+    </sc-if>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;step&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;record&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;start&quot;,&quot;record&quot;,&quot;liveoff&quot;,&quot;text&quot;,&quot;review&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const step = this.props.step ?? 'record'; // start | record | liveoff | text | review
+    const pillS = (fg, bg, bd) => 'font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:99px;padding:2px 6px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px solid ' + bd;
+    const P = { def: { t: 'Default', style: pillS('#6d28d9', '#f6f2ff', '#e6dcff') }, rt: { t: 'Real-time', style: pillS('#047857', '#ecfdf5', '#a7f3d0') }, batch: { t: 'Batch', style: pillS('#4a4553', '#f4f3f7', '#ececf1') }, beta: { t: 'Beta', style: pillS('#92400e', '#fffbeb', '#fcd34d') }, ret: { t: 'Retired', style: pillS('#6b6577', '#fff', '#d4d1dc') } };
+    const pill = { grey: 'font-size:10.5px;font-weight:700;border-radius:99px;padding:2px 8px;white-space:nowrap;color:#6b6577;background:#f4f3f7;border:1px solid #ececf1', amber: 'font-size:10.5px;font-weight:700;border-radius:99px;padding:2px 8px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d', violet: 'font-size:10.5px;font-weight:700;border-radius:99px;padding:2px 8px;color:#6d28d9;background:#f6f2ff;border:1px solid #e6dcff', ok: 'font-size:10.5px;font-weight:700;border-radius:99px;padding:2px 8px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0' };
+    const sel = (on, dis) => 'border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:4px;' + (dis ? 'border:1px solid #ececf1;background:#fafafb;opacity:.6' : on ? 'border:1px solid #7c3aed;background:#faf7ff' : 'border:1px solid #ececf1;background:#fff');
+    const R = (name, id, why, price, est, pills, on, blocked) => ({ name, id, why, price, est, pills, wrap: sel(on, !!blocked), blocked: blocked || '' });
+    const liveOff = step === 'liveoff';
+    const sttGroups = [
+      { t: 'Live transcript', d: 'while recording, streamed', rows: [
+        R('[Deepgram Nova-3]', '@cf/deepgram/nova-3', 'Real-time and batch; speaker labels.', '[$0.0092 / min] streaming', '[42 min] ≈ [$0.39]', [P.rt, P.batch], !liveOff),
+        R('[Deepgram Flux]', '@cf/deepgram/flux', 'Built for conversation; knows when each speaker has finished.', '[$0.0077 / min]', '[42 min] ≈ [$0.32]', [P.rt], false),
+        R('Off', '', 'The transcript appears only after the recording stops.', '', 'no cost', [], liveOff) ] },
+      { t: 'Final transcript', d: 'kept by the session, structured by Eadwyn', rows: [
+        R('[Whisper Large v3 Turbo]', '@cf/openai/whisper-large-v3-turbo', 'Multilingual, can translate to English, filters out silence.', '[$0.0005 / min]', '[42 min] ≈ [$0.02]', [P.def, P.batch], true),
+        R('[Deepgram Nova-3]', '@cf/deepgram/nova-3', 'Batch, with speaker labels.', '[$0.0052 / min]', '[42 min] ≈ [$0.22]', [P.batch], false),
+        R('[Whisper]', '@cf/openai/whisper', 'Multilingual, with word timings.', '[$0.0005 / min]', '[42 min] ≈ [$0.02]', [P.batch], false),
+        R('[Whisper Tiny EN]', '@cf/openai/whisper-tiny-en', 'English only, fastest.', '[$0.0005 / min]', '[42 min] ≈ [$0.02]', [P.beta], false, step === 'record' ? 'Cannot be picked: English only, and the detected language is [French].' : '') ] },
+    ];
+    const structRows = [
+      R('[Llama 3.3 70B Fast]', '@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'Long transcripts, good placements.', '[$0.293 / M in · $2.253 / M out]', '≈ [$0.004]', [P.def], true),
+      R('[DeepSeek V4 Flash]', '@cf/deepseek-ai/deepseek-v4-flash-0731', 'Very long context, cheap repeated questions.', '[$0.440 / M in · $1.320 / M out]', '≈ [$0.005]', [], false),
+      R('[Llama 3.1 8B Fast]', '@cf/meta/llama-3.1-8b-instruct-fp8-fast', 'Fastest and cheapest; short sessions.', '[$0.045 / M in · $0.384 / M out]', '≈ [$0.0006]', [], false, 'Cannot be picked: the transcript is longer than it accepts.'),
+      R('[Llama 3.1 70B]', '@cf/meta/llama-3.1-70b-instruct', 'Kept only for past runs.', '[$0.293 / M in · $2.253 / M out]', '—', [P.ret], false, 'Retired: kept for past runs only.'),
+    ];
+    const ch = (t, on) => ({ t, style: 'font-size:12px;font-weight:700;padding:7px 12px;border-radius:99px;white-space:nowrap;border:1px solid ' + (on ? '#7c3aed' : '#ececf1') + ';background:' + (on ? '#f6f2ff' : '#fff') + ';color:' + (on ? '#6d28d9' : '#4a4553') });
+    const me = 'font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;color:#6d28d9;background:#f6f2ff;border:1px solid #e6dcff', them = 'font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0', unk = 'font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;color:#6b6577;background:#fff;border:1px dashed #d4d1dc';
+    const lines = [{ ts: '[38:12]', who: 'Me', whoStyle: me, text: '[Question about how they handle it today.]' }, { ts: '[38:40]', who: '[Interviewee]', whoStyle: them, text: '[Answer, as transcribed live.]' }, { ts: '[40:02]', who: 'Speaker ?', whoStyle: unk, text: '[Passage with no speaker yet — tap to assign.]' }, { ts: '[41:55]', who: '[Interviewee]', whoStyle: them, text: '[Answer about price.]' }];
+    const ic = (p) => ({ __html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + p + '</svg>' });
+    const ICONS = { Studio: ic('<path d="M4 11 12 4l8 7v9H4Z"/>'), Validate: ic('<path d="M20 6 9 17l-5-5"/>'), Build: ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'), Raise: ic('<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'), Grow: ic('<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>'), Network: ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'), Research: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'), 'Spin-Out Lab': ic('<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-6h6v6"/>') };
+    const side = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', 'Spin-Out Lab'].map(t => ({ t, icon: ICONS[t], row: 'display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:12.5px;' + (t === 'Validate' ? 'color:#7c3aed;background:#f6f2ff;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed' : 'color:#4a4553;font-weight:600') }));
+    const H = { start: ['New interview session', 'Choose the channel. Audio channels transcribe; text chat and manual entry go straight to structuring.'], record: ['Recording · [Interviewee]', 'The live transcript is a draft. The final transcript replaces it when the recording stops.'], liveoff: ['Recording · [Interviewee]', 'Live transcript is off for this session.'], text: ['Text chat · [Interviewee]', 'No audio, so speech to text is hidden. Eadwyn structures the messages.'], review: ['Review · [Interviewee]', 'Accept, edit or discard what Eadwyn proposes for each Validate module.'] }[step];
+    const is = { start: step === 'start', record: step === 'record' || liveOff, text: step === 'text', review: step === 'review' };
+    return {
+      langPill: step === 'record' ? 'Language · detected [French]' : 'Language · detected [English]',
+      side, h1: H[0], sub: H[1], is, pill, sttGroups, structRows, lines,
+      card: 'background:#fff;border:1px solid #ececf1;border-radius:12px', lbl: 'font-size:10px;font-weight:800;color:#7d7889;text-transform:uppercase;letter-spacing:.09em', eyebrow: 'font-size:10px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.09em',
+      btn: { primary: 'font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 13px;white-space:nowrap', ghost: 'font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:9px;border:1px solid #ececf1;background:#fff;white-space:nowrap', small: 'font-size:11.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:7px;padding:5px 10px', smallGhost: 'font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid #ececf1', smallQuiet: 'font-size:11.5px;font-weight:700;padding:5px 8px;color:#6b6577' },
+      channels: ['In person', 'Video call', 'Phone call', 'Text chat', 'Manual entry'].map((t, i) => ch(t, i === 1)),
+      liveOn: !liveOff, liveOff, liveModel: liveOff ? 'Off' : '[Deepgram Nova-3] · real-time',
+      speakerNote: 'Speakers come from the model where it returns them; tap a passage once to assign "Me" or the customer, and the rest follows.',
+      msgs: [{ ts: '[10:02]', who: 'Me', whoStyle: me, text: '[Message]' }, { ts: '[10:05]', who: '[Interviewee]', whoStyle: them, text: '[Message]' }, { ts: '[10:09]', who: '[Interviewee]', whoStyle: them, text: '[Message about price]' }],
+      placements: [{ module: 'Problem discovery', text: '[Pain theme] · Severe', cite: '[12:40]–[13:05]', st: 'Proposed', stStyle: pill.violet, open: true }, { module: 'Customer research', text: 'ICP fit: Strong · [reason]', cite: '[03:10]', st: 'Accepted', stStyle: pill.ok, open: false }, { module: 'Demand and urgency signals', text: 'Need-to-have · would pay [$..]', cite: '[41:55]', st: 'Proposed', stStyle: pill.violet, open: true }, { module: 'Experiments and evidence', text: 'Supports [Hypothesis] · Pattern', cite: '[22:18]', st: 'Proposed', stStyle: pill.violet, open: true }],
+      compare: [{ a: '[Pain theme] · Severe', b: '[Pain theme] · Moderate' }, { a: 'ICP fit: Strong', b: 'ICP fit: Strong' }, { a: 'Need-to-have', b: 'Not recorded · no clear signal' }],
+      receipt: [{ job: 'Transcribed', model: '[Whisper Large v3 Turbo]', detail: '[42] min of audio', cost: '[$0.021]', fallback: '' }, { job: 'Structured', model: '[Llama 3.3 70B Fast]', detail: '[14.2k] in · [1.1k] out', cost: '[$0.0067]', fallback: '' }, { job: 'Re-structured', model: '[DeepSeek V4 Flash]', detail: '[14.2k] in · [1.3k] out', cost: '[$0.0080]', fallback: 'Fallback answered: [first choice] timed out.' }],
+      railAsk: step === 'review', railPick: step !== 'review', hasAudio: step !== 'text', noAudio: step === 'text',
+      answers: [{ text: '[What they said about price, in one line.]', cite: 'cites [41:55] and [42:30]' }, { text: '[What they pay today.]', cite: 'cites [18:02]' }],
+      meter: [{ k: 'This session', v: '[$0.036]', pct: '' }, { k: 'Today', v: '[$0.42] of [$2.00]', pct: '21%' }, { k: 'This month', v: '[$6.10] of [$40.00]', pct: '15%' }],
+    };
+  }
+}
+</script>
+
+
+<div id="__claude_design_branding"><style>#__claude_design_branding{position:fixed;right:16px;bottom:16px;z-index:2147483646;display:flex;align-items:center;gap:7px;height:30px;padding:0 5px 0 10px;border-radius:999px;font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:12.5px;font-weight:400;line-height:1;letter-spacing:normal;text-transform:none;color:#141413;background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 0 0 .5px rgba(31,30,29,.14),0 2px 10px rgba(0,0,0,.09)}
+#__claude_design_branding *{box-sizing:border-box;margin:0}
+#__claude_design_branding a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+#__claude_design_branding a:hover span{text-decoration:underline}
+#__claude_design_branding svg{flex:none}
+#__claude_design_branding a svg{color:#D97757}
+#__claude_design_branding button{width:20px;height:20px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:currentColor;opacity:.55;border:0;background:none;cursor:pointer;flex:none;font:inherit;transition:opacity .14s}
+#__claude_design_branding button:hover{opacity:1;background:rgba(127,127,127,.22)}
+@media print{#__claude_design_branding{display:none}}</style><a href="https://claude.com/product/design" target="_blank" rel="noopener noreferrer"><svg width="14" height="14" viewBox="0 0 20 21" fill="none" aria-hidden="true"><path fill="currentColor" d="M9.99902 0C15.5258 0.000170936 19.999 4.50643 19.999 10.0547C19.999 11.7656 19.5863 12.9976 18.7861 13.8203C17.9924 14.6362 16.9465 14.9138 15.9854 15.0078C15.05 15.0993 14.0097 15.0262 13.2549 15.0186C12.8524 15.0145 12.5177 15.0267 12.2441 15.0703C11.9682 15.1144 11.8143 15.1813 11.7305 15.2432C11.4745 15.4322 11.3353 15.7121 11.2656 16.1602C11.2303 16.3875 11.2168 16.6362 11.209 16.9131C11.2017 17.1715 11.1986 17.4893 11.1807 17.7705C11.1469 18.2975 11.0495 19.0865 10.4199 19.5908C9.7846 20.0996 8.88652 20.1057 7.85449 19.877C7.36399 19.7682 6.88652 19.6232 6.42578 19.4453C2.66989 17.9949 0.000187748 14.3414 0 10.0547C0 4.50643 4.47223 0.000171048 9.99902 0ZM9.99902 1.60547C5.36781 1.60564 1.60547 5.38391 1.60547 10.0547C1.60566 13.6582 3.84823 16.7296 7.00391 17.9482C7.39027 18.0974 7.79085 18.2184 8.20215 18.3096C9.1375 18.5169 9.384 18.3633 9.41602 18.3379C9.4524 18.3087 9.54558 18.1915 9.5791 17.668C9.5947 17.4239 9.59473 17.1786 9.60352 16.8672C9.61179 16.5742 9.62831 16.2435 9.67969 15.9131C9.78359 15.2455 10.0474 14.4906 10.7764 13.9521C11.1479 13.6778 11.5842 13.5493 11.9912 13.4844C12.4007 13.4191 12.8434 13.4088 13.2705 13.4131C14.1753 13.4222 15.0071 13.4905 15.8291 13.4102C16.6257 13.3322 17.2249 13.1235 17.6357 12.7012C18.0401 12.2855 18.3935 11.5261 18.3936 10.0547C18.3936 5.38391 14.6302 1.60564 9.99902 1.60547ZM5.11621 9.86719C5.86386 9.91468 6.45486 10.5348 6.45508 11.2939C6.45506 12.0838 5.81519 12.7245 5.02539 12.7246C4.28481 12.7246 3.67573 12.1617 3.60254 11.4404L3.59473 11.2939L3.60156 11.1533C3.66942 10.4596 4.23282 9.91186 4.93359 9.86719H5.11621ZM14.9814 7.19141C15.729 7.23889 16.3199 7.85919 16.3203 8.61816C16.3203 9.40801 15.6804 10.0487 14.8906 10.0488C14.1501 10.0487 13.5409 9.48586 13.4678 8.76465L13.46 8.61816L13.4668 8.47754C13.5348 7.78403 14.0983 7.23618 14.7988 7.19141H14.9814ZM6.4541 4.93457C7.20161 4.9822 7.79275 5.60231 7.79297 6.36133C7.79288 7.151 7.15291 7.7917 6.36328 7.79199C5.62274 7.79199 5.01369 7.22903 4.94043 6.50781L4.93262 6.36133L4.93945 6.2207C5.00731 5.52698 5.5707 4.97922 6.27148 4.93457H6.4541ZM11.3867 3.59668C12.1343 3.64419 12.7253 4.26436 12.7256 5.02344C12.7256 5.81326 12.0857 6.45393 11.2959 6.4541C10.5553 6.4541 9.94622 5.89123 9.87305 5.16992L9.86523 5.02344L9.87207 4.88281C9.93996 4.18912 10.5033 3.64133 11.2041 3.59668H11.3867Z"></path></svg><span>Made with Claude Design</span></a><button type="button" aria-label="Dismiss" onclick="this.parentElement.remove()"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></button></div></body></html>

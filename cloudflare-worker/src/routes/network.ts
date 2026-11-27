@@ -1,0 +1,992 @@
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { requireAuth, requireSuperAdmin } from '../auth';
+import { hashEmail } from '../util/hashEmail';
+import { generateUniqueShortReferralCode } from '../services/referrals/codes';
+import { resolveReferralCode } from '../services/referrals/resolveCode';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
+import { isInfluencer, payoutGate, payoutReadiness } from '../services/influencer/payoutReadiness';
+import { logAdminAction } from '../services/adminAudit';
+import { FIRING_RULES, termsPayment } from '../services/referralPartnerTerms';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
+
+const network = new Hono<{ Bindings: Env }>();
+
+const MIGRATED = new WeakMap<object, boolean>();
+async function ensureSchema(env: Env) {
+  if (MIGRATED.get(bindingKey(env))) return;
+  const db = env.DB;
+  const stmts = [
+    `ALTER TABLE users ADD COLUMN referral_code TEXT`,
+    // Task #4 (DH) — back-compat column for historical AXAL-XXXXXX(XX)
+    // codes. Defensive ALTER + index here so dev/SQLite stays self-
+    // healing even before migration 051 is applied to remote D1.
+    `ALTER TABLE users ADD COLUMN legacy_referral_code TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_users_legacy_referral_code ON users(legacy_referral_code)`,
+    `CREATE TABLE IF NOT EXISTS referrals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      referrer_id INTEGER NOT NULL,
+      referred_id INTEGER NOT NULL UNIQUE,
+      referral_code TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      converted_at TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`,
+    `CREATE TABLE IF NOT EXISTS commissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      referral_id INTEGER,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      source_type TEXT NOT NULL,
+      source_id TEXT,
+      status TEXT NOT NULL DEFAULT 'accrued',
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      paid_at TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_commissions_user ON commissions(user_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_commissions_event ON commissions(user_id, source_type, source_id)`,
+    `CREATE TABLE IF NOT EXISTS payouts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      status TEXT NOT NULL DEFAULT 'requested',
+      payout_method TEXT NOT NULL,
+      payout_details TEXT,
+      failure_reason TEXT,
+      processed_by INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      completed_at TIMESTAMP,
+      -- Migration 409 (D572 part 3b), named here so a table this creates
+      -- matches one the migrations built.
+      destination_label TEXT,
+      destination_last4 TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_payouts_user ON payouts(user_id)`,
+    `CREATE TABLE IF NOT EXISTS commission_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_key TEXT NOT NULL UNIQUE,
+      source_type TEXT NOT NULL,
+      amount_cents INTEGER,
+      percentage_bps INTEGER,
+      description TEXT,
+      active INTEGER DEFAULT 1
+    )`,
+    // D572 (migration 393): which payout claimed which commission, the
+    // payout's own uid, when an admin moved or failed it, and who last
+    // edited a rule. Mirrored here so a dev database that has not run 393
+    // still serves the routes below.
+    `CREATE TABLE IF NOT EXISTS payout_commissions (
+      payout_id INTEGER NOT NULL REFERENCES payouts(id),
+      commission_id INTEGER NOT NULL REFERENCES commissions(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (payout_id, commission_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_payout_commissions_commission ON payout_commissions(commission_id)`,
+    `ALTER TABLE payouts ADD COLUMN uid TEXT`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_payouts_uid ON payouts(uid)`,
+    `ALTER TABLE payouts ADD COLUMN processed_at TEXT`,
+    `ALTER TABLE payouts ADD COLUMN failed_at TEXT`,
+    `ALTER TABLE commission_rules ADD COLUMN updated_at TEXT`,
+    `ALTER TABLE commission_rules ADD COLUMN updated_by INTEGER REFERENCES users(id)`,
+    // D958 (migration 563): which terms paid a commission, and the refund
+    // reversal's columns. Mirrored here so a dev database that has not run 563
+    // still serves the engine.
+    `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
+    `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
+    // D4292 (migration 202611031345): when a held subscription commission becomes payable.
+    `ALTER TABLE commissions ADD COLUMN payable_at TEXT`,
+  ];
+  for (const s of stmts) { try { await db.prepare(s).run(); } catch {} }
+
+  // Seed default rules (idempotent via INSERT OR IGNORE)
+  const seeds: Array<[string, string, number | null, number | null, string]> = [
+    ['referral_kyc_approved', 'kyc_approved', 5000, null, '$50 flat when a referred user completes KYC'],
+    ['referral_deal_funded', 'deal_funding', null, 200, '2% of funding amount when referred user closes a deal'],
+    ['referral_lp_onboarded', 'lp_onboarded', 500000, null, '$5,000 flat for successful LP onboarding'],
+    ['referral_spinout', 'spinout', null, 100, '1% of spin-out raise'],
+    ['referral_partner_fee', 'partner_fee', 25000, null, '$250 flat for new operating partner'],
+  ];
+  for (const [key, st, amt, bps, desc] of seeds) {
+    try {
+      await db.prepare(`INSERT OR IGNORE INTO commission_rules (rule_key, source_type, amount_cents, percentage_bps, description) VALUES (?, ?, ?, ?, ?)`).bind(key, st, amt, bps, desc).run();
+    } catch {}
+  }
+  MIGRATED.set(bindingKey(env), true);
+}
+
+// Task #4 (DH) — Brand-new codes use the 6-char Crockford-base32 short
+// form (no AXAL- prefix). Pre-existing users keep their (truncated) short
+// code in users.referral_code and the original `AXAL-XXXXXX(XX)` in
+// users.legacy_referral_code (via migration 051) so historical invite
+// URLs still resolve via resolveReferralCode().
+async function ensureReferralCode(env: Env, userId: number): Promise<string> {
+  const row = await env.DB
+    .prepare(`SELECT referral_code FROM users WHERE id = ?`)
+    .bind(userId)
+    .first<{ referral_code: string | null }>();
+  const existing = row?.referral_code || '';
+  // Detect codes still in the old `AXAL-XXXXXX(XX)` shape (e.g. dev DBs
+  // that haven't run migration 051 yet) and rotate them to the short
+  // form transparently — the legacy value is moved to
+  // legacy_referral_code so back-compat resolution keeps working.
+  if (existing && !existing.startsWith('AXAL-') && existing.length <= 32) {
+    return existing;
+  }
+  const fresh = await generateUniqueShortReferralCode(env);
+  if (existing.startsWith('AXAL-')) {
+    await env.DB
+      .prepare(`UPDATE users SET legacy_referral_code = COALESCE(legacy_referral_code, ?), referral_code = ? WHERE id = ?`)
+      .bind(existing, fresh, userId)
+      .run();
+  } else {
+    await env.DB
+      .prepare(`UPDATE users SET referral_code = ? WHERE id = ?`)
+      .bind(fresh, userId)
+      .run();
+  }
+  return fresh;
+}
+
+// Internal: called by other routes (kyc.ts, etc.) when a milestone fires.
+// Looks up the user's referrer (if any) and creates a commission per the rule.
+export async function fireCommissionEvent(
+  env: Env,
+  referredUserId: number,
+  ruleKey: string,
+  sourceId: string,
+  amountForBps: number = 0,
+): Promise<void> {
+  await ensureSchema(env);
+  const sql = getSQL(env);
+  try {
+    const refRows = await sql`SELECT id, referrer_id FROM referrals WHERE referred_id = ${referredUserId}`;
+    if (!refRows.length) return;
+    const referral = refRows[0];
+
+    const ruleRows = await sql`SELECT * FROM commission_rules WHERE rule_key = ${ruleKey}`;
+    if (!ruleRows.length) return;
+    const rule: any = ruleRows[0];
+
+    // D958 (O-TERMS A): a referral partner's active signed terms pay first,
+    // within their caps, and pay no L2 or L3 bonus. A spent cap pays nothing;
+    // the standard rule does not step in for it. Terms are a signed contract,
+    // so they pay even when HQ has switched the standard rule off.
+    const terms = await termsPayment(env, referral.referrer_id, ruleKey, amountForBps);
+    if (terms) {
+      if (terms.amount_cents <= 0) return;
+      const paid = await env.DB.prepare(
+        `INSERT OR IGNORE INTO commissions (user_id, referral_id, amount_cents, currency, source_type, source_id, status, description, terms_id) VALUES (?, ?, ?, ?, ?, ?, 'accrued', ?, ?)`
+      ).bind(referral.referrer_id, referral.id, terms.amount_cents, terms.currency, rule.source_type, sourceId,
+        `Under signed terms: ${rule.description || ruleKey}${terms.capped === 'none' ? '' : ' (capped)'}`, terms.terms_id).run();
+      if (!paid.meta?.changes) return;
+      await sql`UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP WHERE id = ${referral.id} AND status != 'converted'`;
+      return;
+    }
+    if (Number(rule.active) !== 1) return;
+
+    const amountCents = rule.amount_cents
+      ? rule.amount_cents
+      : rule.percentage_bps
+        ? Math.round((amountForBps * rule.percentage_bps) / 10000)
+        : 0;
+    if (amountCents <= 0) return;
+
+    // Idempotency: DB-enforced via UNIQUE INDEX on (user_id, source_type, source_id).
+    // INSERT OR IGNORE silently no-ops on conflict so retries are safe.
+    const insertResult = await env.DB.prepare(
+      `INSERT OR IGNORE INTO commissions (user_id, referral_id, amount_cents, source_type, source_id, status, description) VALUES (?, ?, ?, ?, ?, 'accrued', ?)`
+    ).bind(referral.referrer_id, referral.id, amountCents, rule.source_type, sourceId, rule.description).run();
+    if (!insertResult.meta?.changes) return; // already credited; do not log a second time
+    await sql`UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP WHERE id = ${referral.id} AND status != 'converted'`;
+
+    // The commission row above is the record of what was earned. It no longer
+    // forks into a Stripe Connect payout ledger: Connect was removed in the
+    // referrals redesign, and referral rewards now settle off-platform against
+    // the milestone labels shown in the pipeline.
+
+    const referrerRow = await sql`SELECT email, id FROM users WHERE id = ${referral.referrer_id}`;
+    if (referrerRow.length) {
+      const dollars = (amountCents / 100).toFixed(2);
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('commission_earned', ${`You earned $${dollars} commission (${rule.description})`}, ${await hashEmail(referrerRow[0].email)}, ${referrerRow[0].id})`;
+    }
+    // Fire L2/L3 compounding bonuses (idempotent via UNIQUE index on commissions(user_id, source_type, source_id))
+    try {
+      const { fireCompoundingBonuses } = await import('./networkfx');
+      await fireCompoundingBonuses(env, referredUserId, amountCents, rule.source_type, sourceId);
+    } catch (e: any) {
+      console.error('[networkfx] fireCompoundingBonuses failed', { referredUserId, sourceId, err: String(e?.message || e) });
+    }
+  } finally { await sql.end(); }
+}
+
+
+// Task #8 — Universal referral commission for PURCHASES (any SKU).
+//
+// Called from the billing `payment_intent.succeeded` webhook when a PI carries
+// `metadata.referral_code` + `metadata.referrer_user_id` (stamped at PI
+// creation from the buyer's first-touch attribution). Computes a commission
+// from the product's `commission_pct` catalog metadata, records a commission
+// row (idempotent on the PI id), and hands it to the post-charge Connect
+// payout pipeline so refunds can later reverse it. Unlike `fireCommissionEvent`
+// this is attribution-driven (cookie/query-param), not rule-keyed, so it does
+// not require a `commission_rules` row and is NOT limited to subscriptions.
+export async function firePurchaseCommission(
+  env: Env,
+  args: {
+    buyerUserId: number;
+    referrerUserId: number;
+    referralCode: string;
+    paymentIntentId: string;
+    amountCents: number;
+    currency?: string;
+    commissionPct: number;
+    productName?: string;
+  },
+): Promise<void> {
+  // Self-referral guard + sane inputs.
+  if (!args.referrerUserId || args.referrerUserId === args.buyerUserId) return;
+  if (!Number.isFinite(args.amountCents) || args.amountCents <= 0) return;
+  const pct = Number(args.commissionPct);
+  if (!Number.isFinite(pct) || pct <= 0) return;
+  const commissionCents = Math.round((args.amountCents * Math.min(pct, 100)) / 100);
+  if (commissionCents <= 0) return;
+
+  await ensureSchema(env);
+  const currency = (args.currency || 'USD').toUpperCase();
+  const description = args.productName
+    ? `Referral commission (${pct}% of ${args.productName})`
+    : `Referral commission (${pct}% of purchase)`;
+
+  // Idempotent on (user_id, source_type, source_id) — UNIQUE index seeded in
+  // ensureSchema. source_id is the PaymentIntent id so a webhook retry no-ops
+  // on the row itself; `isNew` gates the once-only side effects below.
+  const ins = await env.DB.prepare(
+    `INSERT OR IGNORE INTO commissions
+       (user_id, referral_id, amount_cents, currency, source_type, source_id, status, description)
+     VALUES (?, NULL, ?, ?, 'purchase', ?, 'accrued', ?)`,
+  ).bind(args.referrerUserId, commissionCents, currency, args.paymentIntentId, description).run();
+  const isNew = ((ins.meta?.changes ?? 0) as number) > 0;
+
+  // Resolve the commission row whether we just inserted it OR it already
+  // existed. We ALWAYS (re)attempt the payout handoff so a webhook retry can
+  // recover from a transient failure on the first delivery (the row insert
+  // would have succeeded but the payout creation could have thrown) — the
+  // handoff is itself idempotent via UNIQUE(redemption_id) inside the helper.
+  const row = await env.DB.prepare(
+    `SELECT id FROM commissions WHERE user_id = ? AND source_type = 'purchase' AND source_id = ? LIMIT 1`,
+  ).bind(args.referrerUserId, args.paymentIntentId).first<{ id: number }>();
+  if (!row?.id) return;
+
+  // The post-charge Connect payout hand-off was removed with Stripe Connect.
+  // The commission row remains the record of what the purchase earned.
+
+  // Once-only side effects — only on the first delivery that created the row.
+  if (!isNew) return;
+
+  // Stamp the converting PI onto the buyer's attribution row (first-touch).
+  try {
+    const { markAttributionConverted } = await import('../services/referralAttribution');
+    await markAttributionConverted(env, args.buyerUserId, args.paymentIntentId);
+  } catch (e) {
+    console.warn('[refer-earn] markAttributionConverted failed:', (e as Error).message);
+  }
+
+  // Activity log for the referrer (best-effort).
+  try {
+    const referrerRow = await env.DB.prepare(`SELECT id, email FROM users WHERE id = ?`)
+      .bind(args.referrerUserId).first<{ id: number; email: string }>();
+    if (referrerRow?.email) {
+      const dollars = (commissionCents / 100).toFixed(2);
+      await env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('commission_earned', ?, ?, ?)`,
+      ).bind(`You earned $${dollars} commission (${description})`, await hashEmail(referrerRow.email), referrerRow.id).run();
+    }
+  } catch (e) {
+    console.warn('[refer-earn] purchase commission activity log failed:', (e as Error).message);
+  }
+}
+
+// Task #10 — Notify every inviter whose still-unjoined invite to this
+// user's email is now eligible. Reads pending rows, stamps
+// joined_notified_at FIRST (so a concurrent re-entry can't double-fire),
+// then calls notify() per row. Worst case on partial failure is a
+// notification stamp without a delivered notification — strictly better
+// than the duplicate-celebration alternative for an upbeat-but-not-
+// critical UX event. Guarded by the new `joined_notified_at` column
+// (migrations/047_invite_joined_notified.sql + lazy ALTER in email.ts).
+async function fireJoinedInviteNotifications(env: Env, newUserId: number): Promise<void> {
+  const recipientRow: any = await env.DB.prepare(
+    `SELECT id, email, COALESCE(name, email) AS name FROM users WHERE id = ?`
+  ).bind(newUserId).first();
+  if (!recipientRow?.email) return;
+  const recipientName = String(recipientRow.name || recipientRow.email);
+  // Pull every still-eligible invite + the sender's id so notify() can
+  // resolve channels/prefs from users.notification_prefs. We filter on
+  // status='joined' (the previous UPDATE already set it for this user)
+  // and joined_notified_at IS NULL for idempotency. Bound to a sane
+  // page so a malformed bulk import can't stall registration.
+  let rows: any[] = [];
+  try {
+    const r: any = await env.DB.prepare(
+      `SELECT id, sender_user_id
+         FROM referral_invites
+        WHERE LOWER(recipient_email) = LOWER(?)
+          AND status = 'joined'
+          AND signed_up_user_id = ?
+          AND joined_notified_at IS NULL
+        LIMIT 50`
+    ).bind(recipientRow.email, newUserId).all();
+    rows = r?.results || [];
+  } catch (e: any) {
+    // joined_notified_at column may not exist on the oldest dev DBs —
+    // the lazy ensureSchema in email.ts adds it on first /invites read.
+    // Trigger that path inline so registration still fires the notify.
+    if (/no such column.*joined_notified_at/i.test(String(e?.message || ''))) {
+      try {
+        await env.DB.prepare(
+          `ALTER TABLE referral_invites ADD COLUMN joined_notified_at TIMESTAMP`
+        ).run();
+      } catch { /* duplicate — fine */ }
+      const r2: any = await env.DB.prepare(
+        `SELECT id, sender_user_id
+           FROM referral_invites
+          WHERE LOWER(recipient_email) = LOWER(?)
+            AND status = 'joined'
+            AND signed_up_user_id = ?
+            AND joined_notified_at IS NULL
+          LIMIT 50`
+      ).bind(recipientRow.email, newUserId).all();
+      rows = r2?.results || [];
+    } else {
+      throw e;
+    }
+  }
+  if (!rows.length) return;
+  const { notify } = await import('../services/notify');
+  const seenIds = new Set<number>();
+  let pending = rows;
+  // Loop in pages of 50 (the SELECT cap) until no more eligible rows
+  // remain. Belt-and-suspenders against the rare case where one
+  // recipient has been invited by >50 senders. `seenIds` defends
+  // against an infinite loop if the stamp UPDATE ever fails to mark a
+  // row (e.g. transient D1 error).
+  let safety = 0;
+  while (pending.length && safety++ < 20) {
+    for (const row of pending) {
+      const inviteId = Number(row.id);
+      if (seenIds.has(inviteId)) continue;
+      seenIds.add(inviteId);
+      const senderId = Number(row.sender_user_id);
+      if (!Number.isFinite(senderId) || senderId === newUserId) continue;
+      // Race-safe idempotency: stamp FIRST, and only fire notify() if
+      // THIS execution actually flipped joined_notified_at from NULL
+      // (meta.changes === 1). Concurrent attachReferral calls for the
+      // same recipient — possible on retried registrations — will see
+      // changes === 0 here and skip the notify, even though their
+      // earlier SELECT returned the same row.
+      let changed = 0;
+      try {
+        const r: any = await env.DB.prepare(
+          `UPDATE referral_invites
+              SET joined_notified_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND joined_notified_at IS NULL`
+        ).bind(inviteId).run();
+        changed = Number(r?.meta?.changes ?? 0);
+      } catch (e: any) {
+        console.error('[attachReferral] joined_notified_at stamp failed:', e?.message);
+        continue;
+      }
+      if (changed === 0) continue; // another worker already notified
+      try {
+        await notify(env, {
+          userId: senderId,
+          type: 'referral_invite_joined',
+          category: 'proactive_nudges',
+          title: `${recipientName} just joined via your invite`,
+          body: `${recipientName} signed up using your referral link — you'll earn $50 when they complete KYC, plus 2% on any deal they fund. Track progress on your referrals page.`,
+          link: '/referrals',
+          payload: { invite_id: inviteId, joined_user_id: newUserId },
+          channels: ['in_app', 'email'],
+        });
+      } catch (e: any) {
+        console.error('[attachReferral] notify referral_invite_joined failed:', e?.message);
+      }
+    }
+    // Re-page in case >50 inviters exist for this recipient.
+    try {
+      const r: any = await env.DB.prepare(
+        `SELECT id, sender_user_id
+           FROM referral_invites
+          WHERE LOWER(recipient_email) = LOWER(?)
+            AND status = 'joined'
+            AND signed_up_user_id = ?
+            AND joined_notified_at IS NULL
+          LIMIT 50`
+      ).bind(recipientRow.email, newUserId).all();
+      pending = r?.results || [];
+    } catch {
+      pending = [];
+    }
+  }
+}
+
+// Internal: called from auth registration to attach a referrer
+export async function attachReferral(env: Env, newUserId: number, refCode: string): Promise<boolean> {
+  if (!refCode) return false;
+  await ensureSchema(env);
+  // Task #4 (DH) — resolve through the back-compat helper so historical
+  // `AXAL-XXXXXX(XX)` invite URLs still attach correctly.
+  const referrerId = await resolveReferralCode(env, refCode);
+  if (!referrerId) return false;
+  if (referrerId === newUserId) return false; // self-referral guard
+  const sql = getSQL(env);
+  try {
+    const existing = await sql`SELECT id FROM referrals WHERE referred_id = ${newUserId}`;
+    if (existing.length) return false;
+    await sql`INSERT INTO referrals (referrer_id, referred_id, referral_code, status) VALUES (${referrerId}, ${newUserId}, ${refCode}, 'pending')`;
+    // Task #4 — close the loop on the inviter's "Sent invitations" panel.
+    // Any prior referral_invites row from THIS referrer to this user's email
+    // gets stamped with the new user_id + status='joined'. Idempotent — only
+    // touches rows where signed_up_user_id IS NULL. We do NOT scope by
+    // referrer here because a user might join via a different sender's link;
+    // the lazy backfill in GET /api/email/invites picks up that case too.
+    try {
+      await env.DB.prepare(
+        `UPDATE referral_invites
+            SET signed_up_user_id = ?, status = 'joined'
+          WHERE signed_up_user_id IS NULL
+            AND LOWER(recipient_email) = (
+                  SELECT LOWER(email) FROM users WHERE id = ?
+                )`
+      ).bind(newUserId, newUserId).run();
+    } catch (e: any) {
+      console.error('[attachReferral] referral_invites stamp failed:', e?.message);
+    }
+    // Task #10 — fire a one-time "X just joined via your invite"
+    // notification to every inviter who sent this email and hasn't
+    // already been notified for this signup. Idempotent via the
+    // `joined_notified_at` column added in 047_invite_joined_notified.sql:
+    // only rows where the column IS NULL are eligible, and we stamp
+    // them in the same statement that picks them. A user may have been
+    // invited by multiple senders — they all get one notification.
+    // All failures are logged and never block registration.
+    try {
+      await fireJoinedInviteNotifications(env, newUserId);
+    } catch (e: any) {
+      console.error('[attachReferral] joined-notify failed:', e?.message);
+    }
+    // Build compounding chain (L1, L2, L3) — log any failure so silent revenue loss is detectable
+    try {
+      const { buildReferralChain } = await import('./networkfx');
+      await buildReferralChain(env, newUserId, referrerId);
+    } catch (e: any) {
+      console.error('[networkfx] buildReferralChain failed', { newUserId, referrerId, err: String(e?.message || e) });
+    }
+    return true;
+  } finally { await sql.end(); }
+}
+
+// ---------- REFERRAL ENDPOINTS ----------
+
+network.get('/referral/code', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const code = await ensureReferralCode(c.env, user.id);
+  const baseUrl = c.env.APP_URL || 'https://axal.vc';
+  // Task #4 (DH) — surface the legacy AXAL- code (if present) so the
+  // Refer & Earn UI can show the "Previous code also works" tooltip.
+  let legacyCode: string | null = null;
+  try {
+    const row = await c.env.DB
+      .prepare(`SELECT legacy_referral_code FROM users WHERE id = ?`)
+      .bind(user.id)
+      .first<{ legacy_referral_code: string | null }>();
+    legacyCode = row?.legacy_referral_code || null;
+  } catch {
+    // Column missing on a very stale dev DB — treat as "no legacy code".
+  }
+  return c.json({
+    code,
+    legacy_code: legacyCode,
+    link: `${baseUrl}/?ref=${code}`,
+    register_link: `${baseUrl}/register?ref=${code}`,
+  });
+});
+
+network.get('/referral/list', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  // D572 — `referred_role` is the account's role as it stands now, which is
+  // what the sign-up list shows. `users.role` is NOT NULL, so every row has one.
+  const rows = await sql`
+    SELECT r.id, r.status, r.created_at, r.converted_at,
+           u.id as referred_user_id, u.name as referred_name, u.email as referred_email, u.kyc_status,
+           u.role as referred_role
+    FROM referrals r
+    JOIN users u ON u.id = r.referred_id
+    WHERE r.referrer_id = ${user.id}
+    ORDER BY r.created_at DESC
+  `;
+  await sql.end();
+  return c.json(rows);
+});
+
+// ---------- COMMISSIONS ----------
+
+// D572 part 2 (#1183, S1 from Codex's review of #1191): every `/admin/*`
+// route here is SUPER ADMIN ONLY. They read or change every user's
+// commissions, payouts and rules with no tenant or role filter, and an admin
+// can hold referral commissions too, so `requireAdmin` let any admin read a
+// colleague's earnings and settle their payouts. The same gate as
+// `/admin/platform/take-rate`. It is HQ only: on a branch deployment these
+// answer that the ledger is HQ's.
+
+/**
+ * D572 — balances per currency. A sum across currencies is not a figure, so
+ * `balance_cents` and `lifetime_cents` stay as they were only while the
+ * account's commissions are in one currency; with more than one they are null
+ * and `mixed_currency` says why. `claimed_cents` is what payouts have claimed
+ * (status `paid`), whether or not that payout has completed yet.
+ */
+function currencyTotals(rows: any[]) {
+  const by_currency = rows.map((r) => ({
+    currency: r.currency || 'USD',
+    balance_cents: Number(r.balance_cents) || 0,
+    claimed_cents: Number(r.claimed_cents) || 0,
+    // D4292: held 30 days before it is payable; never in the balance a payout claims.
+    held_cents: Number(r.held_cents) || 0,
+    lifetime_cents: Number(r.lifetime_cents) || 0,
+  }));
+  const single = by_currency.length <= 1;
+  return {
+    balance_cents: single ? (by_currency[0]?.balance_cents ?? 0) : null,
+    lifetime_cents: single ? (by_currency[0]?.lifetime_cents ?? 0) : null,
+    mixed_currency: !single,
+    by_currency,
+  };
+}
+
+network.get('/commissions/me', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  try {
+    // `payout_id` is the payout that last claimed the commission, from the
+    // link history (migration 393); null when no payout has claimed it, or
+    // when it was claimed before payouts recorded their commissions.
+    const rows = await sql`
+      SELECT c.*,
+             (SELECT MAX(pc.payout_id) FROM payout_commissions pc WHERE pc.commission_id = c.id) AS payout_id
+      FROM commissions c WHERE c.user_id = ${user.id} ORDER BY c.created_at DESC`;
+    const totals = await sql`
+      SELECT currency,
+             SUM(CASE WHEN status = 'accrued' THEN amount_cents ELSE 0 END) AS balance_cents,
+             SUM(CASE WHEN status = 'paid' THEN amount_cents ELSE 0 END) AS claimed_cents,
+             SUM(CASE WHEN status = 'pending' THEN amount_cents ELSE 0 END) AS held_cents,
+             SUM(amount_cents) AS lifetime_cents
+      FROM commissions WHERE user_id = ${user.id} GROUP BY currency ORDER BY currency`;
+    return c.json({ ...currencyTotals(totals as any[]), commissions: rows });
+  } finally { await sql.end(); }
+});
+
+network.get('/admin/commissions', async (c) => {
+  await requireSuperAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT c.*, u.email, u.name,
+           (SELECT MAX(pc.payout_id) FROM payout_commissions pc WHERE pc.commission_id = c.id) AS payout_id
+    FROM commissions c JOIN users u ON u.id = c.user_id ORDER BY c.created_at DESC LIMIT 500`;
+  await sql.end();
+  return c.json(rows);
+});
+
+network.get('/admin/commission-rules', async (c) => {
+  await requireSuperAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT r.*, u.name AS updated_by_name
+    FROM commission_rules r LEFT JOIN users u ON u.id = r.updated_by
+    ORDER BY r.rule_key`;
+  await sql.end();
+  // D958: `fires` is true only where an event pays the rule today (OD4 is open).
+  return c.json((rows as any[]).map((r) => ({ ...r, fires: FIRING_RULES.has(r.rule_key) })));
+});
+
+/** The bounds a rule edit is held to. A rule pays a flat amount or a share, never both. */
+const RULE_AMOUNT_MAX_CENTS = 100_000_000;
+const RULE_BPS_MAX = 10_000;
+const RULE_DESCRIPTION_MAX = 300;
+
+function ruleIntOrNull(v: unknown, max: number): number | null | 'bad' {
+  if (v === null) return null;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > max) return 'bad';
+  return v;
+}
+
+/**
+ * D572 — edit one commission rule. Admin only, like the read beside it. The
+ * body may carry any of `amount_cents`, `percentage_bps`, `description` and
+ * `active`; what it leaves out keeps its value. After the edit the rule must
+ * pay exactly one of a flat amount or a share, because `fireCommissionEvent`
+ * reads the amount first and falls back to the share. Every edit is logged
+ * through `logAdminAction` with the values before and after, and the row
+ * records who changed it and when.
+ */
+network.patch('/admin/commission-rules/:key', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  await ensureSchema(c.env);
+  const key = c.req.param('key');
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return refuse(c, 400, { code: 'invalid_body', message: 'Send the fields to change as JSON.' });
+  }
+  const before: any = await c.env.DB.prepare('SELECT * FROM commission_rules WHERE rule_key = ?').bind(key).first();
+  if (!before) return refuse(c, 404, { code: 'rule_not_found', message: 'No commission rule has that key.' });
+
+  const next = {
+    amount_cents: before.amount_cents ?? null,
+    percentage_bps: before.percentage_bps ?? null,
+    description: before.description ?? null,
+    active: Number(before.active ?? 1) ? 1 : 0,
+  };
+  if ('amount_cents' in body) {
+    const v = ruleIntOrNull(body.amount_cents, RULE_AMOUNT_MAX_CENTS);
+    if (v === 'bad') return refuse(c, 400, { code: 'invalid_amount', message: `A flat amount is whole cents from 0 to ${RULE_AMOUNT_MAX_CENTS}, or null.` });
+    next.amount_cents = v;
+  }
+  if ('percentage_bps' in body) {
+    const v = ruleIntOrNull(body.percentage_bps, RULE_BPS_MAX);
+    if (v === 'bad') return refuse(c, 400, { code: 'invalid_share', message: `A share is whole basis points from 0 to ${RULE_BPS_MAX}, or null.` });
+    next.percentage_bps = v;
+  }
+  if ('description' in body) {
+    if (body.description !== null && typeof body.description !== 'string') {
+      return refuse(c, 400, { code: 'invalid_description', message: 'A description is text, or null.' });
+    }
+    const d = body.description === null ? null : body.description.trim();
+    if (d && d.length > RULE_DESCRIPTION_MAX) {
+      return refuse(c, 400, { code: 'description_too_long', message: `A description is at most ${RULE_DESCRIPTION_MAX} characters.` });
+    }
+    next.description = d || null;
+  }
+  if ('active' in body) {
+    if (typeof body.active !== 'boolean') return refuse(c, 400, { code: 'invalid_active', message: '`active` is true or false.' });
+    next.active = body.active ? 1 : 0;
+  }
+  if ((next.amount_cents === null) === (next.percentage_bps === null)) {
+    return refuse(c, 400, {
+      code: 'rule_amount_ambiguous',
+      message: 'A rule pays exactly one of a flat amount or a share. Set one and clear the other.',
+    });
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE commission_rules
+        SET amount_cents = ?, percentage_bps = ?, description = ?, active = ?,
+            updated_at = datetime('now'), updated_by = ?
+      WHERE rule_key = ?`,
+  ).bind(next.amount_cents, next.percentage_bps, next.description, next.active, admin.id, key).run();
+  await logAdminAction(c.env, admin.id, admin.email, 'commission_rule.updated', {
+    rule_key: key,
+    before: {
+      amount_cents: before.amount_cents ?? null,
+      percentage_bps: before.percentage_bps ?? null,
+      description: before.description ?? null,
+      active: Number(before.active ?? 1) ? 1 : 0,
+    },
+    after: next,
+  });
+  const row = await c.env.DB.prepare(
+    'SELECT r.*, u.name AS updated_by_name FROM commission_rules r LEFT JOIN users u ON u.id = r.updated_by WHERE r.rule_key = ?',
+  ).bind(key).first();
+  return c.json(row);
+});
+
+// ---------- PAYOUTS ----------
+
+/**
+ * D572 — each payout row with the ids of the commissions it claimed, from
+ * `payout_commissions`. A payout requested before migration 393 has no uid
+ * and no link rows, so its `commission_ids` is null (not recorded) rather
+ * than an empty list, which would claim it took nothing.
+ */
+/** D713: fetch only evidence for the already-authorized payout rows.
+ * Chunk below D1's bind limit; one query per page of ids, never per payout. */
+async function withPayoutMatches(env: Env, payouts: any[]): Promise<any[]> {
+  const matches = new Map<number, { posted_on: string; last_four: string }>();
+  for (let offset = 0; offset < payouts.length; offset += 80) {
+    const ids = payouts.slice(offset, offset + 80).map((p) => p.id);
+    const rows = await env.DB.prepare(`SELECT target_id, posted_on, account_last_four AS last_four
+      FROM mercury_personal_matches WHERE target_kind = 'payout' AND state = 'confirmed'
+      AND target_id IN (${ids.map(() => '?').join(',')})`).bind(...ids)
+      .all<{ target_id: number; posted_on: string; last_four: string }>();
+    for (const row of rows.results || []) matches.set(row.target_id, { posted_on: row.posted_on, last_four: row.last_four });
+  }
+  return payouts.map((p) => ({ ...p, bank_match: matches.get(p.id) ?? null }));
+}
+
+async function withCommissionIds(env: Env, payouts: any[]): Promise<any[]> {
+  if (!payouts.length) return payouts;
+  const ids = payouts.map((p) => p.id);
+  const ph = ids.map(() => '?').join(',');
+  const links = await env.DB.prepare(
+    `SELECT payout_id, commission_id FROM payout_commissions WHERE payout_id IN (${ph}) ORDER BY commission_id`,
+  ).bind(...ids).all<{ payout_id: number; commission_id: number }>();
+  const byPayout = new Map<number, number[]>();
+  for (const l of links.results || []) {
+    const list = byPayout.get(l.payout_id) || [];
+    list.push(l.commission_id);
+    byPayout.set(l.payout_id, list);
+  }
+  return payouts.map((p) => ({ ...p, commission_ids: byPayout.get(p.id) ?? (p.uid ? [] : null) }));
+}
+
+/**
+ * D572 part 3b (the owner's Q1 = A) — where a payout is sent, as the partner
+ * would recognise it: a label and the last 4 characters of the account or
+ * wallet. The full details stay with the processor, out of band, so nothing
+ * that could move money is stored. Both are optional and go together: one
+ * without the other is refused, because "···· 4821" with no name, or a name
+ * with no account, cannot be told apart from another destination.
+ */
+export function readPayoutDestination(label: unknown, last4: unknown):
+  | { label: string | null; last4: string | null }
+  | { error: { code: string; message: string } } {
+  const l = label == null ? '' : String(label).trim();
+  const f = last4 == null ? '' : String(last4).trim();
+  if (!l && !f) return { label: null, last4: null };
+  if (!l || !f) {
+    return { error: { code: 'destination_incomplete', message: 'Name the destination and give its last 4 characters, or leave both out.' } };
+  }
+  // No control characters: the label is printed on the admin's queue.
+  if (l.length > 60 || /[\u0000-\u001f\u007f]/.test(l)) {
+    return { error: { code: 'invalid_destination_label', message: 'A destination label is at most 60 characters of plain text.' } };
+  }
+  if (!/^[A-Za-z0-9]{4}$/.test(f)) {
+    return { error: { code: 'invalid_destination_last4', message: 'Give exactly the last 4 letters or digits of the account or wallet, and nothing more.' } };
+  }
+  return { label: l, last4: f.toUpperCase() };
+}
+
+network.get('/payouts/me', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  try {
+    const rows = await sql`SELECT * FROM payouts WHERE user_id = ${user.id} ORDER BY created_at DESC`;
+    const payouts = await withCommissionIds(c.env, rows as any[]);
+    return c.json(await withPayoutMatches(c.env, payouts));
+  } finally { await sql.end(); }
+});
+
+network.post('/payout/request', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const {
+    amount_cents, payout_method, payout_details, currency, destination_label, destination_last4,
+  } = await c.req.json().catch(() => ({}));
+
+  const amt = parseInt(amount_cents);
+  if (!amt || amt < 1000) return c.json({ error: 'Minimum payout is $10.00' }, 400);
+  if (!['stripe', 'wire', 'crypto'].includes(payout_method)) return c.json({ error: 'Invalid payout_method (stripe|wire|crypto)' }, 400);
+  const destination = readPayoutDestination(destination_label, destination_last4);
+  if ('error' in destination) return refuse(c, 400, destination.error);
+
+  const sql = getSQL(c.env);
+  try {
+    const accrued = (await sql`SELECT id, amount_cents, currency FROM commissions WHERE user_id = ${user.id} AND status = 'accrued' ORDER BY created_at ASC, id ASC`) as any[];
+
+    // D572 — ONE CURRENCY PER PAYOUT. The payout takes the currency of the
+    // commissions it claims, so a balance held in two currencies needs the
+    // request to say which; a request that names none on a one-currency
+    // balance takes that currency.
+    const held = [...new Set(accrued.map((r) => r.currency || 'USD'))].sort();
+    let cur: string;
+    if (currency != null && String(currency).trim() !== '') {
+      cur = String(currency).trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(cur)) {
+        return refuse(c, 400, { code: 'invalid_currency', message: 'A currency is a three-letter code, such as USD or EUR.' });
+      }
+    } else if (held.length > 1) {
+      return refuse(c, 400, {
+        code: 'currency_required',
+        message: `Your balance is held in ${held.join(', ')}. A payout claims one currency; choose which.`,
+        extra: { currencies: held },
+      });
+    } else {
+      cur = held[0] || 'USD';
+    }
+    // D4294 (#4294, D4289 P5) — an influencer's payout waits on identity, the
+    // tax form, the current terms, the $50 minimum and one request a month.
+    // Each refusal names its reason; anyone else's request is unchanged.
+    if (await isInfluencer(c.env, user.id)) {
+      const gate = payoutGate(await payoutReadiness(c.env, user.id), amt, cur);
+      if (gate) return refuse(c, gate.status, { code: gate.code, message: gate.message, extra: gate.extra });
+    }
+    const pool = accrued.filter((r) => (r.currency || 'USD') === cur);
+    const balance = pool.reduce((s, r) => s + (Number(r.amount_cents) || 0), 0);
+    if (amt > balance) return c.json({ error: `Insufficient balance. Available: ${(balance / 100).toFixed(2)} ${cur}` }, 400);
+
+    // Reserve whole commissions, oldest first.
+    let remaining = amt;
+    const usedIds: number[] = [];
+    for (const row of pool) {
+      if (remaining <= 0) break;
+      if (row.amount_cents > remaining) {
+        // For simplicity we don't split commissions — payouts must equal sum of full commission rows.
+        return c.json({ error: 'Amount must match sum of available commissions. Try amount=' + suffixAmount(balance, cur) + ` (full balance) or a smaller value matching commission row(s).` }, 400);
+      }
+      remaining -= row.amount_cents;
+      usedIds.push(row.id);
+    }
+    if (remaining !== 0) return c.json({ error: 'Amount does not align with available commissions' }, 400);
+
+    const detailsJson = payout_details ? JSON.stringify(payout_details) : null;
+    const uid = crypto.randomUUID().replace(/-/g, '');
+
+    // ONE ATOMIC BATCH, AND EVERY STEP CONDITIONED ON THE FIRST. The INSERT
+    // writes the payout only if every chosen commission is still accrued,
+    // still this user's and in this currency. The link rows and the claim
+    // then require the payout with this uid to exist. Before D572 the claim
+    // ran unconditionally, so a request that lost a race on one commission
+    // still marked the rest paid with no payout behind them.
+    const ph = usedIds.map(() => '?').join(',');
+    const insertSql = `INSERT INTO payouts (uid, user_id, amount_cents, currency, status, payout_method, payout_details,
+        destination_label, destination_last4)
+      SELECT ?, ?, ?, ?, 'requested', ?, ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM commissions WHERE id IN (${ph}) AND user_id = ? AND status = 'accrued' AND currency = ?) = ?
+      RETURNING *`;
+    const linkSql = `INSERT INTO payout_commissions (payout_id, commission_id)
+      SELECT p.id, c.id FROM payouts p JOIN commissions c ON c.user_id = p.user_id
+       WHERE p.uid = ? AND c.id IN (${ph}) AND c.status = 'accrued'`;
+    const claimSql = `UPDATE commissions SET status = 'paid', paid_at = CURRENT_TIMESTAMP
+      WHERE id IN (${ph}) AND user_id = ? AND status = 'accrued'
+        AND EXISTS (SELECT 1 FROM payouts WHERE uid = ?)`;
+
+    const batchResult = await c.env.DB.batch([
+      c.env.DB.prepare(insertSql).bind(
+        uid, user.id, amt, cur, payout_method, detailsJson, destination.label, destination.last4,
+        ...usedIds, user.id, cur, usedIds.length,
+      ),
+      c.env.DB.prepare(linkSql).bind(uid, ...usedIds),
+      c.env.DB.prepare(claimSql).bind(...usedIds, user.id, uid),
+    ]);
+
+    const insertedRows = (batchResult[0].results as any[]) || [];
+    if (insertedRows.length !== 1) {
+      return c.json({ error: 'Your balance changed during the request (concurrent payout). Please refresh and retry.' }, 409);
+    }
+    const payout = { ...insertedRows[0], commission_ids: [...usedIds].sort((a, b) => a - b) };
+
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: ${suffixAmount(amt, cur)} via ${payout_method}`}, ${await hashEmail(user.email)}, ${user.id})`;
+    return c.json(payout);
+  } finally { await sql.end(); }
+});
+
+network.patch('/admin/payouts/:id/process', async (c) => {
+  const adminUser = await requireSuperAdmin(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { action, failure_reason } = await c.req.json().catch(() => ({ action: 'complete' }));
+  if (!['complete', 'fail', 'process'].includes(action)) return c.json({ error: 'action must be complete|fail|process' }, 400);
+
+  const sql = getSQL(c.env);
+  try {
+    const rows = await sql`SELECT p.*, u.email, u.name FROM payouts p JOIN users u ON u.id = p.user_id WHERE p.id = ${id}`;
+    if (!rows.length) return c.json({ error: 'Payout not found' }, 404);
+    const p: any = rows[0];
+    const money = suffixAmount(p.amount_cents, p.currency || 'USD');
+    // D572 — each step moves only a payout still open for it. A completed or
+    // failed payout is final: completing a failed one would pay commissions
+    // that were given back, and failing a completed one would give back
+    // commissions that were paid.
+    const notOpen = () => refuse(c, 409, {
+      code: 'payout_not_open',
+      message: `This payout is ${p.status}, so it cannot be moved to ${action === 'process' ? 'processing' : action === 'complete' ? 'completed' : 'failed'}.`,
+    });
+
+    if (action === 'process') {
+      const r = await c.env.DB.prepare(
+        `UPDATE payouts SET status = 'processing', processed_by = ?, processed_at = datetime('now') WHERE id = ? AND status = 'requested'`,
+      ).bind(adminUser.id, id).run();
+      if (!r.meta?.changes) return notOpen();
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_processing', ${`Your payout of ${money} is being processed.`}, ${await hashEmail(p.email)}, ${p.user_id})`;
+      return c.json({ status: 'processing' });
+    }
+    if (action === 'complete') {
+      // Real Stripe Connect would happen here if STRIPE_SECRET_KEY is set; skipping actual API call.
+      const r = await c.env.DB.prepare(
+        `UPDATE payouts SET status = 'completed', processed_by = ?, processed_at = datetime('now'), completed_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND status IN ('requested', 'processing')`,
+      ).bind(adminUser.id, id).run();
+      if (!r.meta?.changes) return notOpen();
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_completed', ${`Your payout of ${money} was completed via ${p.payout_method}.`}, ${await hashEmail(p.email)}, ${p.user_id})`;
+      return c.json({ status: 'completed' });
+    }
+    if (action === 'fail') {
+      const reason = failure_reason || 'Payout failed';
+      // THE DEFECT D572 FIXES. A failed payout gives its commissions back to
+      // `accrued`, so the partner can request them again. In one batch with
+      // the status change, and only for commissions this payout was the last
+      // to claim and that are still `paid`: a commission reopened and claimed
+      // again by a later payout is that payout's now. The second statement
+      // also requires this payout to be failed, so a refused transition
+      // reopens nothing.
+      const batch = await c.env.DB.batch([
+        c.env.DB.prepare(
+          `UPDATE payouts SET status = 'failed', failure_reason = ?, processed_by = ?, processed_at = datetime('now'), failed_at = datetime('now')
+            WHERE id = ? AND status IN ('requested', 'processing')`,
+        ).bind(reason, adminUser.id, id),
+        c.env.DB.prepare(
+          `UPDATE commissions SET status = 'accrued', paid_at = NULL
+            WHERE status = 'paid'
+              AND id IN (SELECT commission_id FROM payout_commissions WHERE payout_id = ?)
+              AND (SELECT MAX(pc.payout_id) FROM payout_commissions pc WHERE pc.commission_id = commissions.id) = ?
+              AND EXISTS (SELECT 1 FROM payouts WHERE id = ? AND status = 'failed')`,
+        ).bind(id, id, id),
+      ]);
+      if (!batch[0].meta?.changes) return notOpen();
+      const reopened = Number(batch[1].meta?.changes) || 0;
+      // A payout requested before migration 393 recorded no commissions, so
+      // there is nothing to reopen and the response says so rather than
+      // reading as "none were claimed".
+      const unlinked = !p.uid;
+      const note = unlinked
+        ? 'This payout was requested before payouts recorded their commissions, so none could be reopened automatically.'
+        : `${reopened} commission${reopened === 1 ? '' : 's'} returned to your balance.`;
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_failed', ${`Your payout of ${money} failed: ${reason}. ${note}`}, ${await hashEmail(p.email)}, ${p.user_id})`;
+      return c.json({ status: 'failed', commissions_reopened: reopened, unlinked });
+    }
+  } finally { await sql.end(); }
+});
+
+network.get('/admin/payouts', async (c) => {
+  await requireSuperAdmin(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  try {
+    // D572 — the processor's name beside the id. LEFT JOIN: a payout nobody
+    // has moved yet has no processor.
+    const rows = await sql`
+      SELECT p.*, u.email, u.name, pu.name AS processed_by_name
+      FROM payouts p
+      JOIN users u ON u.id = p.user_id
+      LEFT JOIN users pu ON pu.id = p.processed_by
+      ORDER BY p.created_at DESC LIMIT 200`;
+    const payouts = await withCommissionIds(c.env, rows as any[]);
+    return c.json(await withPayoutMatches(c.env, payouts));
+  } finally { await sql.end(); }
+});
+
+export default network;

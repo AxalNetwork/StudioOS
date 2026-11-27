@@ -1,0 +1,8 @@
+{
+  "case": "learning-discovery",
+  "episode": "00000000-0000-4000-8000-000000000000",
+  "count": 3,
+  "revision": "a1cdc90d551d058bc9c9bca651b5ca7f6a934ea8",
+  "source": "offline-fixture",
+  "classification": "ordinary-ui-regression"
+}

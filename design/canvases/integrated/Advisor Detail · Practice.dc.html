@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#047857;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:40px 48px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 16px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:3px;padding:2px 6px;white-space:nowrap}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:284px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .seam{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .seamd{width:5px;height:5px;border-radius:50%;background:#0891b2;flex:none}
+    .cons{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:4px;padding:2px 7px;white-space:nowrap;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca}
+    .consd{width:6px;height:6px;border-radius:50%;background:#dc2626;flex:none}
+    .prop{background:#f2fdf7;border:1px solid #a7f3d0;border-radius:11px;padding:13px 15px}
+    .proph{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#065f46;background:#d9f7e7;border:1px solid #a7f3d0;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #047857;background:#047857;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .dead{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#f4f4f6;color:#a8a4b4;cursor:not-allowed}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .bulk{font-size:11.5px;font-weight:600;color:#047857;cursor:pointer}
+  </style>
+</helmet>
+
+<section class="ab" style="padding-bottom:26px">
+  <div class="ab-hd"><a class="ab-id" href="#pr">PR</a><span class="ab-nm">Advisor · Practice — all five detail pages</span><span class="ab-sub">emerald · /practice/*</span></div>
+  <div class="ab-sub" style="max-width:980px">The five pages D2 indexes for this workspace, drawn in full. Each is an instance of its archetype and obeys the D1 contract: filters and saved views, bulk operations, complete history, export, zone configuration, and batch AI with cost shown before it runs. Earnings is the exemplar already drawn in D4 and appears here for completeness of the set.</div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
+    <sc-for list="{{ setIndex }}" as="s" hint-placeholder-count="5">
+      <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:6px 12px">
+        <span style="font-size:11.5px;font-weight:700">{{ s.name }}</span>
+        <span class="arch" style="{{ s.chip }}">{{ s.arch }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<!-- ══════════ PR1 · OPPORTUNITIES ══════════ -->
+<section class="ab" id="pr1">
+  <div class="ab-hd"><a class="ab-id" href="#pr1">PR1</a><span class="ab-nm">Opportunities</span><span class="arch" style="{{ chipFeed }}">FEED</span><span class="ab-sub">/practice/opportunities</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPractice }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Practice</span><span>‹</span><span style="font-weight:700;color:#18181b">Opportunities</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Opportunities</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every request that has ever arrived, what you did about it, and the terms you sent when you said yes.</div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ o_views }}" as="v" hint-placeholder-count="5"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span style="font-size:11px;color:#615c6e;margin-left:6px">·</span>
+        <span class="bulk">Bulk: decline with template</span>
+        <span class="bulk">Export decision log</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ o_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Awaiting a decision</span><span class="zs">Sorted by what expires first, not what arrived first</span></div>
+        <div style="display:grid;gap:10px">
+          <sc-for list="{{ o_open }}" as="r" hint-placeholder-count="3">
+            <div style="{{ r.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:700">{{ r.who }}</span>
+                  <span style="{{ r.kindStyle }}">{{ r.kind }}</span>
+                  <sc-if value="{{ r.seam }}"><span class="seam"><span class="seamd"></span>{{ r.seam }}</span></sc-if>
+                </div>
+                <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ r.ask }}</div>
+                <div class="num" style="font-size:10.5px;color:{{ r.metaInk }};margin-top:5px">{{ r.meta }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap">
+                <span class="acc">Accept with terms</span><span class="gho">Decline</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Decision history</span><span class="zs">Only here · 34 decided</span></div>
+          <div style="display:grid;grid-template-columns:1.1fr .8fr .7fr 1.4fr;gap:10px">
+            <span class="th">Requester</span><span class="th">Decision</span><span class="th">When</span><span class="th">Reason</span>
+          </div>
+          <sc-for list="{{ o_history }}" as="h" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:1.1fr .8fr .7fr 1.4fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600">{{ h.who }}</span>
+              <span class="td"><span style="{{ h.pill }}">{{ h.decision }}</span></span>
+              <span class="td num">{{ h.when }}</span>
+              <span class="td">{{ h.reason }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ o_historyNote }}</div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Terms templates</span><span class="zs">Configuration · only here</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ o_templates }}" as="t" hint-placeholder-count="3">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:11px 13px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <span style="font-size:12px;font-weight:700">{{ t.name }}</span>
+                  <span class="num" style="font-size:10.5px;color:#615c6e">{{ t.used }}</span>
+                </div>
+                <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ t.body }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="prop" style="margin-top:12px">
+            <div class="proph"><span class="propb">Proposal · engagement</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ o_cost }}</span></div>
+            <div style="font-size:12px;color:#14532d;line-height:1.65">{{ o_draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Send</span><span class="gho">Edit terms</span><span class="dis">Discard</span><span class="shield" style="margin-left:auto">Screened</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Practice" hint-size="100%,660px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ PR2 · ENGAGEMENTS ══════════ -->
+<section class="ab" id="pr2">
+  <div class="ab-hd"><a class="ab-id" href="#pr2">PR2</a><span class="ab-nm">Engagements</span><span class="arch" style="{{ chipBoard }}">WORK BOARD</span><span class="ab-sub">/practice/engagements</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPractice }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Practice</span><span>‹</span><span style="font-weight:700;color:#18181b">Engagements</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Engagements</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every client with their scope, contract state and renewal date — including the two that ended, because a practice is judged on renewals.</div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ e_views }}" as="v" hint-placeholder-count="5"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span style="font-size:11px;color:#615c6e;margin-left:6px">·</span>
+        <span class="bulk">Bulk: send renewal notice</span>
+        <span class="bulk">Export contract pack</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ e_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Board</span><span class="zs">By contract state · drag to advance</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+          <sc-for list="{{ e_lanes }}" as="l" hint-placeholder-count="4">
+            <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:11px;padding:11px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span class="lbl" style="font-size:9px">{{ l.name }}</span>
+                <span class="num" style="font-size:10.5px;font-weight:700;color:#615c6e">{{ l.n }}</span>
+              </div>
+              <div style="display:grid;gap:8px;margin-top:10px">
+                <sc-for list="{{ l.cards }}" as="c" hint-placeholder-count="2">
+                  <div style="{{ c.cardStyle }}">
+                    <div style="font-size:12px;font-weight:700">{{ c.client }}</div>
+                    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.45">{{ c.scope }}</div>
+                    <div class="num" style="font-size:10px;color:{{ c.dueInk }};margin-top:6px;font-weight:600">{{ c.due }}</div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ l.empty }}">
+                  <div style="font-size:10.5px;color:#615c6e;padding:9px 0;line-height:1.5">{{ l.empty }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Renewal history</span><span class="zs">Only here · the number that judges a practice</span></div>
+          <div style="display:grid;grid-template-columns:1.1fr .7fr .7fr 1.3fr;gap:10px">
+            <span class="th">Client</span><span class="th">Cycles</span><span class="th">Outcome</span><span class="th">Note</span>
+          </div>
+          <sc-for list="{{ e_renewals }}" as="r" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:1.1fr .7fr .7fr 1.3fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600">{{ r.client }}</span>
+              <span class="td num">{{ r.cycles }}</span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.outcome }}</span></span>
+              <span class="td">{{ r.note }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ e_renewNote }}</div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Scope on file</span><span class="zs">What each contract actually says</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ e_scopes }}" as="s" hint-placeholder-count="3">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:11px 13px">
+                <div style="font-size:12px;font-weight:700">{{ s.client }}</div>
+                <div style="font-size:10.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ s.inc }}</div>
+                <div style="font-size:10.5px;color:#b45309;margin-top:5px;line-height:1.55">{{ s.exc }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">Exclusions are stored as first-class text, not as an absence. "Not in scope: fundraising introductions" is the sentence that prevents the conversation.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Practice" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ PR3 · DELIVERY ══════════ -->
+<section class="ab" id="pr3">
+  <div class="ab-hd"><a class="ab-id" href="#pr3">PR3</a><span class="ab-nm">Delivery</span><span class="arch" style="{{ chipColl }}">COLLECTION</span><span class="ab-sub">/practice/delivery</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPractice }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Practice</span><span>‹</span><span style="font-weight:700;color:#18181b">Delivery</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Delivery</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every work product, every version, and whether anyone opened it.</div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ d_views }}" as="v" hint-placeholder-count="5"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span style="font-size:11px;color:#615c6e;margin-left:6px">·</span>
+        <span class="bulk">Bulk: nudge unopened</span>
+        <span class="bulk">Export as client pack</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ d_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">All work products</span><span class="zs">Version history and open state · only here</span></div>
+        <div style="display:grid;gap:10px">
+          <sc-for list="{{ d_items }}" as="i" hint-placeholder-count="5">
+            <div style="{{ i.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:700">{{ i.name }}</span>
+                  <span class="tag">{{ i.version }}</span>
+                  <sc-if value="{{ i.consent }}"><span class="cons"><span class="consd"></span>{{ i.consent }}</span></sc-if>
+                </div>
+                <div style="font-size:11.5px;color:#615c6e;margin-top:5px">{{ i.client }}</div>
+                <sc-if value="{{ i.seam }}"><div style="font-size:10.5px;color:#0e7490;margin-top:5px;line-height:1.5;font-variant-numeric:tabular-nums">{{ i.seam }}</div></sc-if>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;flex:none">
+                <div style="text-align:right">
+                  <div class="num" style="font-size:11px;color:#615c6e">{{ i.versions }}</div>
+                  <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ i.sent }}</div>
+                </div>
+                <span style="{{ i.pill }}">{{ i.state }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ d_openNote }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Version trail</span><span class="zs">Meridian pricing model</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ d_trail }}" as="t" hint-placeholder-count="4">
+              <div style="display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <span class="num" style="font-size:10.5px;font-weight:800;color:#047857;flex:none;width:26px">{{ t.v }}</span>
+                <div style="min-width:0">
+                  <div style="font-size:11.5px;font-weight:600">{{ t.what }}</div>
+                  <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ t.when }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Batch · follow-ups from sessions</span><span class="zs">Consent-gated at the source</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Batch · 3 follow-ups</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ d_cost }}</span></div>
+            <div style="font-size:12px;color:#14532d;line-height:1.65">{{ d_batch }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Run batch</span><span class="gho">Pick sessions</span><span class="dis">Not now</span><span class="shield" style="margin-left:auto">Screened before send</span></div>
+          </div>
+          <div style="border:1px solid #fecaca;background:#fffbfb;border-radius:11px;padding:12px 14px;margin-top:12px">
+            <div style="font-size:11.5px;color:#7f1d1d;line-height:1.6">{{ d_consentNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Practice" hint-size="100%,720px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ PR4 · SESSIONS ══════════ -->
+<section class="ab" id="pr4">
+  <div class="ab-hd"><a class="ab-id" href="#pr4">PR4</a><span class="ab-nm">Sessions</span><span class="arch" style="{{ chipFeed }}">FEED</span><span class="ab-sub">/practice/sessions</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPractice }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Practice</span><span>‹</span><span style="font-weight:700;color:#18181b">Sessions</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Sessions</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">The full calendar, the rules that generate it, and the booking links that fill it.</div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ s_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span style="font-size:11px;color:#615c6e;margin-left:6px">·</span>
+        <span class="bulk">Block a date range</span>
+        <span class="bulk">Export to calendar</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ s_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Two weeks</span><span class="zs">Compressed shows one · recording state per slot</span></div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px">
+          <sc-for list="{{ s_week1 }}" as="d" hint-placeholder-count="5">
+            <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:10px;padding:10px">
+              <div class="lbl" style="font-size:9px">{{ d.day }}</div>
+              <div style="display:grid;gap:6px;margin-top:9px">
+                <sc-for list="{{ d.slots }}" as="s" hint-placeholder-count="2">
+                  <div style="{{ s.style }}">
+                    <div class="num" style="font-size:10.5px;font-weight:700">{{ s.time }}</div>
+                    <div style="font-size:10px;margin-top:3px;line-height:1.35">{{ s.who }}</div>
+                    <sc-if value="{{ s.rec }}"><span class="cons" style="margin-top:5px;font-size:8.5px"><span class="consd"></span>Recording</span></sc-if>
+                    <sc-if value="{{ s.gated }}"><span style="display:inline-block;margin-top:5px;font-size:8.5px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:2px 5px">HELD · UNPAID</span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-top:9px">
+          <sc-for list="{{ s_week2 }}" as="d" hint-placeholder-count="5">
+            <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:10px;padding:10px">
+              <div class="lbl" style="font-size:9px">{{ d.day }}</div>
+              <div style="display:grid;gap:6px;margin-top:9px">
+                <sc-for list="{{ d.slots }}" as="s" hint-placeholder-count="2">
+                  <div style="{{ s.style }}">
+                    <div class="num" style="font-size:10.5px;font-weight:700">{{ s.time }}</div>
+                    <div style="font-size:10px;margin-top:3px;line-height:1.35">{{ s.who }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ s_gateNote }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Availability rules</span><span class="zs">Configuration</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ s_rules }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid #f6f5f9">
+                <span style="font-size:11.5px;color:#3f3a49">{{ r.k }}</span>
+                <span class="num" style="font-size:11.5px;font-weight:700">{{ r.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">{{ s_ruleNote }}</div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Session types</span><span class="zs">What can be booked</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ s_types }}" as="t" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <div style="min-width:0">
+                  <div style="font-size:11.5px;font-weight:700">{{ t.name }}</div>
+                  <div class="num" style="font-size:10px;color:#615c6e;margin-top:3px">{{ t.dur }}</div>
+                </div>
+                <span class="num" style="font-size:11.5px;font-weight:800;flex:none">{{ t.price }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Booking links</span><span class="zs">Only here</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ s_links }}" as="l" hint-placeholder-count="3">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px">
+                <div class="num" style="font-size:10.5px;font-family:ui-monospace,Menlo,monospace;color:#047857;word-break:break-all">{{ l.url }}</div>
+                <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ l.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Practice" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ PR5 · EARNINGS ══════════ -->
+<section class="ab" id="pr5">
+  <div class="ab-hd"><a class="ab-id" href="#pr5">PR5</a><span class="ab-nm">Earnings</span><span class="arch" style="{{ chipLedger }}">LEDGER</span><span class="ab-sub">/practice/earnings · drawn in full as D4</span></div>
+  <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px;max-width:940px">
+    <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Earnings is the LEDGER exemplar and is drawn at full fidelity on the system canvas as <strong>D4</strong> — revenue by client and type, the platform cut as an explicit line, all three payout states, payout history, and the quarter narrated. It is listed here so the Practice set reads as complete rather than as four of five.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+      <sc-for list="{{ pr5Stats }}" as="s" hint-placeholder-count="4">
+        <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:10px;padding:12px 14px">
+          <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+          <div class="num" style="font-size:18px;font-weight:800;letter-spacing:-.02em;margin-top:5px;color:{{ s.ink }}">{{ s.value }}</div>
+          <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.45">{{ s.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">{{ pr5Note }}</div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      prac:  this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      coh:   this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/>'),
+      exp:   this.ic('<circle cx="12" cy="9" r="5"/><path d="M8.5 13.5 7 22l5-2.5L17 22l-1.5-8.5"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>')
+    };
+    const EM = '#047857', EMT = '#f0fdf6';
+    const rows = [['Home',I.home],['Practice',I.prac],['Cohorts',I.coh],['Expertise',I.exp],['Network',I.net],['Research',I.res],['Practice Settings',I.cog]];
+    const navPractice = rows.map(([label, icon]) => ({ label, icon,
+      style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+        + (label === 'Practice'
+            ? 'font-weight:700;color:' + EM + ';background:' + EMT + ';box-shadow:inset 2px 0 0 ' + EM
+            : 'font-weight:600;color:#4a4553') }));
+
+    const ARCH = {
+      'WORK BOARD': ['#f5f2ff','#6d28d9','#e6dcff'],
+      'LEDGER':     ['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION': ['#f0fdff','#0e7490','#a5edf5'],
+      'FEED':       ['#f2fdf7','#047857','#a7f3d0'],
+      'MATCH':      ['#fffbf2','#b45309','#fde68a'],
+      'ANALYTICS':  ['#fdf2f8','#a21caf','#f5d0fe']
+    };
+    const chip = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+
+    const seg = (on) => 'font-size:11.5px;font-weight:' + (on ? '700' : '600')
+      + ';padding:6px 12px;border-radius:8px;cursor:pointer;'
+      + (on ? 'background:#f2fdf7;color:#047857;border:1px solid #a7f3d0'
+            : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
+    const views = (list) => list.map((l, i) => ({ label:l, style:seg(i === 0) }));
+
+    const P = (t, map) => {
+      const c = map[t] || ['#f4f4f6','#615c6e','#e4e4e8'];
+      return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none;white-space:nowrap';
+    };
+    const ST = {
+      'Accepted':['#ecfdf5','#047857','#a7f3d0'], 'Declined':['#f4f4f6','#615c6e','#e4e4e8'],
+      'Expired':['#fef2f2','#b91c1c','#fecaca'], 'Opened':['#ecfdf5','#047857','#a7f3d0'],
+      'Sent':['#f2fdf7','#065f46','#a7f3d0'], 'Not started':['#fef2f2','#b91c1c','#fecaca'],
+      'Draft':['#fffbeb','#92400e','#fde68a'], 'Renewed':['#ecfdf5','#047857','#a7f3d0'],
+      'Ended':['#f4f4f6','#615c6e','#e4e4e8'], 'Active':['#ecfdf5','#047857','#a7f3d0']
+    };
+    const usd = (n) => '$' + n.toLocaleString('en-US');
+    const c4 = (n) => '$' + n.toFixed(4);
+    const c5 = (n) => '$' + n.toFixed(5);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const PROP = run(4800, 900, 0.351, 0.555);       // Mistral Small · proposals
+    const FOLLOW_ONE = run(9200, 780, 0.045, 0.384); // Llama 3.1 8B · per follow-up
+
+    // ══ ONE engagement record: the board, renewal history and scope all derive from it ══
+    const ENG = [
+      { client:'Meridian Labs', scope:'2 sessions/mo', lane:'Signed', due:'Renews Nov 4', cycles:5, outcome:'Renewed',
+        note:'Fifth cycle. Longest-running.', inc:'Two sessions a month, one written review per cycle.',
+        exc:'Not in scope: fundraising introductions, board attendance.' },
+      { client:'Halverton', scope:'Monthly review', lane:'Signed', due:'Renews Sep 4', cycles:3, outcome:'Renewed',
+        note:'Third cycle. Renewal notice due in nine days.', inc:'One monthly review, async questions between.',
+        exc:'Not in scope: implementation work, hiring interviews.' },
+      { client:'Novacraft Labs', scope:'Sprint, 6 weeks', lane:'Renewal due', due:'Ends Aug 29', cycles:1, outcome:'Active',
+        note:'First cycle ending. Renewal not yet discussed.', inc:'Six-week sprint, weekly session, final teardown.',
+        exc:'Not in scope: anything after the teardown ships.' },
+      { client:'Verwood', scope:'Advisory, equity', lane:'Signed', due:'Renews Sep 11', cycles:2, outcome:'Renewed',
+        note:'Equity, not cash. Grant vests over two years.', inc:'Monthly session, quarterly written review.',
+        exc:'Not in scope: cash invoicing — this one is equity only.' },
+      { client:'Thornbury Capital', scope:'Expert calls', lane:'Signed', due:'Per call', cycles:4, outcome:'Active',
+        note:'Investor-side. Billed per call, no retainer.', inc:'Diligence calls on request, 60 minutes each.',
+        exc:'Not in scope: written diligence memos.' },
+      { client:'Aperture', scope:'Proposal out', lane:'Proposed', due:'Sent Aug 21', cycles:0, outcome:'Active',
+        note:'Awaiting their answer.', inc:'Proposed: three months, two sessions a month.',
+        exc:'Proposed exclusion: no fundraising work.' },
+      { client:'Kelp Bio', scope:'Terms drafted', lane:'Drafting', due:'Not sent', cycles:0, outcome:'Active',
+        note:'Draft terms, not sent.', inc:'Draft: three months, pricing and packaging.',
+        exc:'Draft exclusion: no implementation.' },
+      { client:'Solano Health', scope:'Ended Jun', lane:'Ended', due:'Ended Jun 30', cycles:2, outcome:'Ended',
+        note:'Two cycles, then they hired in-house. Good outcome.', inc:'Was: monthly review.',
+        exc:'—' },
+      { client:'Brackish', scope:'Ended Mar', lane:'Ended', due:'Ended Mar 14', cycles:1, outcome:'Ended',
+        note:'One cycle. Wrong fit — they wanted execution.', inc:'Was: single sprint.',
+        exc:'—' }
+    ];
+    const LANES = ['Drafting','Proposed','Signed','Ended'];
+    const laneCards = (name) => ENG.filter(e => e.lane === name || (name === 'Signed' && e.lane === 'Renewal due'));
+    const e_lanes = LANES.map(name => {
+      const cards = laneCards(name);
+      return { name, n:String(cards.length),
+        empty: cards.length === 0 ? 'Nothing here.' : null,
+        cards: cards.map(c => ({
+          client:c.client, scope:c.scope, due:c.due,
+          dueInk: c.lane === 'Renewal due' ? '#b45309' : '#615c6e',
+          cardStyle:'border:1px solid ' + (c.lane === 'Renewal due' ? '#fde68a;background:#fffdf5' : '#ececf1;background:#fff')
+            + ';border-radius:9px;padding:10px 11px' })) };
+    });
+    // Active = under contract. A draft that was never sent and a proposal awaiting an answer
+    // are not engagements, so this filters on LANE, not on the placeholder outcome field.
+    const active = ENG.filter(e => e.lane === 'Signed' || e.lane === 'Renewal due');
+    const renewedN = ENG.filter(e => e.outcome === 'Renewed').length;
+    const endedN = ENG.filter(e => e.outcome === 'Ended').length;
+    const decidedCycles = renewedN + endedN;
+
+    // ══ ONE slot record for the two-week grid. Every count and the rules note derive from it. ══
+    const WEEK1 = [
+      { day:'Mon 24', slots:[{ time:'10:00', who:'Novacraft · sprint', booked:true, rec:true }] },
+      { day:'Tue 25', slots:[{ time:'11:00', who:'Thornbury · expert call', booked:true }, { time:'14:00', who:'Meridian Labs', booked:true, rec:true }] },
+      { day:'Wed 26', slots:[{ time:'09:00', who:'Open', open:true }, { time:'15:00', who:'Kelp Bio · intro', free:true, gated:true }] },
+      { day:'Thu 27', slots:[{ time:'13:00', who:'Halverton · review', booked:true, rec:true }] },
+      { day:'Fri 28', slots:[{ time:'10:00', who:'Open', open:true }, { time:'11:00', who:'Open', open:true }] }
+    ];
+    const WEEK2 = [
+      { day:'Mon 31', slots:[{ time:'10:00', who:'Novacraft · sprint', booked:true }] },
+      { day:'Tue 1', slots:[{ time:'14:00', who:'Meridian Labs', booked:true }] },
+      { day:'Wed 2', slots:[{ time:'09:00', who:'Open', open:true }, { time:'15:00', who:'Open', open:true }] },
+      { day:'Thu 3', slots:[{ time:'13:00', who:'Verwood · monthly', booked:true }] },
+      { day:'Fri 4', slots:[{ time:'10:00', who:'Blocked · writing', blocked:true }] }
+    ];
+    const ALL_SLOTS = WEEK1.concat(WEEK2).reduce((a, d) => a.concat(d.slots), []);
+    const bookedN = ALL_SLOTS.filter(s => s.booked).length;
+    const paidN = ALL_SLOTS.filter(s => s.booked && !s.free).length;
+    const freeN = ALL_SLOTS.filter(s => s.booked && s.free).length;
+    const openN = ALL_SLOTS.filter(s => s.open).length;
+    const heldN = ALL_SLOTS.filter(s => s.gated).length;
+    const totalN = ALL_SLOTS.length;
+    const slotStyle = (s) => 'border-radius:7px;padding:8px 9px;border:1px solid '
+      + (s.gated ? '#fde68a;background:#fffdf5;color:#92400e'
+          : (s.blocked ? '#e2e1e8;background:#f4f4f6;color:#615c6e'
+              : (s.booked ? '#a7f3d0;background:#f2fdf7;color:#065f46' : '#ececf1;background:#fff;color:#615c6e')));
+    const mapWeek = (w) => w.map(d => ({ day:d.day, slots:d.slots.map(s => ({
+      time:s.time, who:s.who, rec:!!s.rec, gated:!!s.gated, style:slotStyle(s) })) }));
+
+    // ══ Cash earnings record. Verwood is absent by design — PR2 records it as an equity
+    // engagement, and a cash gross cannot span a client that bills no cash. ══
+    const CASH = [
+      { client:'Meridian Labs', sessions:6, retainer:13500 },
+      { client:'Halverton', sessions:9, retainer:0 },
+      { client:'Novacraft Labs', sessions:4, retainer:9000 },
+      { client:'Thornbury Capital', sessions:5, retainer:0 }
+    ];
+    const RATE = 300, CUT = 0.15;
+    const grossOf = (c) => c.sessions * RATE + c.retainer;
+    const cashGross = CASH.reduce((a, c) => a + grossOf(c), 0);
+    const cashCut = Math.round(cashGross * CUT);
+    const topCash = CASH.slice().sort((a, b) => grossOf(b) - grossOf(a))[0];
+
+    return {
+      navPractice,
+      chipFeed: chip('FEED'), chipBoard: chip('WORK BOARD'), chipColl: chip('COLLECTION'), chipLedger: chip('LEDGER'),
+      setIndex: [
+        ['Opportunities','FEED'], ['Engagements','WORK BOARD'], ['Delivery','COLLECTION'],
+        ['Sessions','FEED'], ['Earnings','LEDGER']
+      ].map(([name, arch]) => ({ name, arch, chip:chip(arch) })),
+
+      // ── PR1 · Opportunities ──
+      o_views: views(['Awaiting decision','Accepted','Declined','Expired','All time']),
+      o_stats: [
+        { label:'Awaiting you', value:'3', note:'1 expires tomorrow', ink:'#18181b' },
+        { label:'Accept rate', value:'38%', note:'13 of 34 decided', ink:'#18181b' },
+        { label:'Median decision', value:'2 d', note:'from arrival to answer', ink:'#047857' },
+        { label:'Expired unanswered', value:'4', note:'silence costs the referral', ink:'#b91c1c' }
+      ],
+      o_open: [
+        { who:'Kelp Bio', kind:'Founder', seam:'Referred by Novacraft', metaInk:'#b45309',
+          ask:'Three months on pricing and packaging, pre-seed. Two sessions a month plus written reviews.',
+          meta:'Arrived Aug 23 · expires tomorrow · budget stated $4–5k/mo', due:true },
+        { who:'Thornbury Capital', kind:'Investor', seam:null, metaInk:'#615c6e',
+          ask:'One paid expert call — pricing diligence on a workflow company they are screening.',
+          meta:'Arrived Aug 24 · your rate applies · no conflict flagged', due:false },
+        { who:'Aperture', kind:'Founder', seam:'From the Lab cohort', metaInk:'#615c6e',
+          ask:'Ongoing, open scope. No budget stated and no specific question.',
+          meta:'Arrived Aug 21 · second approach · first was declined on scope', due:false }
+      ].map(r => ({ who:r.who, kind:r.kind, seam:r.seam, ask:r.ask, meta:r.meta, metaInk:r.metaInk,
+        kindStyle:P(r.kind, { Founder:['#f0fdf6','#065f46','#a7f3d0'], Investor:['#f5f5ff','#3730a3','#c7d2fe'] }),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:13px 15px;border:1px solid '
+          + (r.due ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' })),
+      o_history: [
+        { who:'Novacraft Labs', decision:'Accepted', when:'Jul 14', reason:'Exact fit, referred, budget stated.' },
+        { who:'Ostara', decision:'Declined', when:'Jul 2', reason:'Wanted implementation, not advice.' },
+        { who:'Aperture', decision:'Declined', when:'Jun 18', reason:'Open scope, no question. Asked them to come back specific.' },
+        { who:'Linden Grove', decision:'Expired', when:'Jun 4', reason:'Never answered. They went elsewhere.' },
+        { who:'Verwood', decision:'Accepted', when:'May 9', reason:'Equity terms, longer horizon.' }
+      ].map(h => ({ ...h, pill:P(h.decision, ST) })),
+      o_historyNote: 'Four requests expired without an answer, which is worse than four declines — a decline preserves the referral, silence spends it. The decision log exists so that pattern is visible rather than felt.',
+      o_templates: [
+        { name:'Standard retainer', used:'used 6×', body:'Two sessions a month, one written review, async between. Ninety-day term, thirty-day notice.' },
+        { name:'Fixed sprint', used:'used 4×', body:'Six weeks, weekly session, one teardown deliverable. Nothing after the teardown ships.' },
+        { name:'Expert call, investor-side', used:'used 9×', body:'Single 60-minute call, billed at rate, conflict check before booking.' }
+      ],
+      o_cost: '≈ ' + c4(PROP),
+      o_draft: 'Drafted from Kelp Bio\u2019s request against the standard retainer template: three months, two sessions a month, one written review per cycle, $4,500. Names the exclusions too — fundraising introductions are not in this package.',
+
+      // ── PR2 · Engagements ──
+      e_views: views(['All','Signed','Renewal due','Ended','By client']),
+      e_stats: [
+        { label:'Active', value:String(active.length), note:'2 retainers, 1 sprint, 1 equity, 1 per-call', ink:'#18181b' },
+        { label:'Renewal due', value:'1', note:'Novacraft, ends Aug 29', ink:'#b45309' },
+        { label:'Renewal rate', value:Math.round(renewedN / decidedCycles * 100) + '%', note:renewedN + ' renewed of ' + decidedCycles + ' decided', ink:'#047857' },
+        { label:'Ended', value:String(endedN), note:'one good, one wrong fit', ink:'#615c6e' }
+      ],
+      e_lanes,
+      e_renewals: ENG.filter(e => e.cycles > 0).map(e => ({
+        client:e.client, cycles:String(e.cycles), outcome:e.outcome, note:e.note, pill:P(e.outcome, ST) })),
+      e_renewNote: 'Renewal rate is ' + renewedN + ' of ' + decidedCycles + ' cycles that reached a decision — the two that ended are counted, because a rate that excludes its failures is not a rate. Solano ended well: they hired the role in-house, which is the outcome advice is supposed to produce.',
+      e_scopes: ENG.filter(e => e.lane === 'Signed' || e.lane === 'Renewal due').slice(0, 3).map(e => ({
+        client:e.client, inc:e.inc, exc:e.exc })),
+
+      // ── PR3 · Delivery ──
+      d_views: views(['All','Unopened','Opened','Draft','By client']),
+      d_stats: [
+        { label:'Work products', value:'23', note:'across 6 clients', ink:'#18181b' },
+        { label:'Unopened', value:'2', note:'sent, not read', ink:'#b45309' },
+        { label:'Median to open', value:'19 h', note:'from send', ink:'#047857' },
+        { label:'Never opened', value:'1', note:'Verwood board brief, Aug 22', ink:'#b91c1c' }
+      ],
+      d_items: [
+        { name:'Q2 advisory review', client:'Halverton', version:'v3', versions:'3 versions', sent:'Sent Aug 20', state:'Opened',
+          seam:'Opened twice · 9 min on retention · 1h ago', consent:null },
+        { name:'Pricing tier model', client:'Meridian Labs', version:'v2 draft', versions:'2 versions', sent:'Not sent', state:'Not started',
+          seam:null, consent:null },
+        { name:'Board brief · Aug', client:'Verwood', version:'v1', versions:'1 version', sent:'Sent Aug 22', state:'Sent',
+          seam:'Not opened in 4 days', consent:null },
+        { name:'Packaging teardown', client:'Novacraft Labs', version:'v4', versions:'4 versions', sent:'Sent Aug 19', state:'Opened',
+          seam:'Opened Aug 20 · replied', consent:null },
+        { name:'Session follow-up · Aug 24', client:'Halverton', version:'v1', versions:'1 version', sent:'Sent Aug 25', state:'Opened',
+          seam:'Opened 3h ago', consent:'From recorded session · consent Aug 24' }
+      ].map(i => ({ ...i, pill:P(i.state, ST),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:13px 15px;border:1px solid '
+          + (i.state === 'Not started' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' })),
+      d_openNote: 'Open state is the only honest measure of a deliverable. Verwood\u2019s board brief has sat unopened for four days, which is worth one message before the next one ships on top of it.',
+      d_trail: [
+        { v:'v4', what:'Two-tier structure, annual prepay added', when:'Aug 19 · sent' },
+        { v:'v3', what:'Mid tier removed after the Aug 12 session', when:'Aug 14' },
+        { v:'v2', what:'Three tiers, seat-based', when:'Aug 8' },
+        { v:'v1', what:'First pass from the Aug 5 teardown', when:'Aug 6' }
+      ],
+      d_cost: '≈ ' + c4(FOLLOW_ONE * 3) + ' · 3 follow-ups',
+      d_batch: 'Three sessions this week were recorded with consent. One follow-up each — commitments made, who owns them, by when — at '
+        + c5(FOLLOW_ONE) + ' apiece. Sessions without consent are excluded from the batch, not silently summarized.',
+      d_consentNote: 'Only the recorded sessions appear in this batch. Two other sessions happened this week and are not eligible: no recording, so no transcript, so nothing for the model to work from. That is the gate working, not a gap.',
+
+      // ── PR4 · Sessions ──
+      s_views: views(['Two weeks','Month','Past sessions','Unpaid held']),
+      s_stats: [
+        { label:'Booked, next 14 d', value:String(bookedN),
+          note:paidN + ' paid' + (freeN ? ', ' + freeN + ' free intro' : ' · no free intros booked'), ink:'#18181b' },
+        { label:'Open slots', value:String(openN), note:'after buffers and cap · ' + totalN + ' slots in the grid', ink:'#047857' },
+        { label:'Held unpaid', value:String(heldN), note:'booked while payout pending', ink:'#b45309' },
+        { label:'Weekly cap', value:'6', note:'paid sessions, self-set', ink:'#18181b' }
+      ],
+      s_week1: mapWeek(WEEK1),
+      s_week2: mapWeek(WEEK2),
+      s_gateNote: 'Wed 15:00 is held rather than charged: Kelp Bio booked a free intro while the payout account was still verifying. Both sides see it as unpaid, and it is counted under held rather than under booked. A slot that silently fails to charge is worse than one that says so.',
+      s_rules: [
+        { k:'Weekly paid cap', v:'6' }, { k:'Buffer between sessions', v:'15 min' },
+        { k:'Minimum notice', v:'24 h' }, { k:'Blackout', v:'Fri afternoons' }
+      ],
+      s_ruleNote: 'Of the ' + totalN + ' slots in this grid, ' + bookedN + ' are booked, ' + heldN
+        + ' is held unpaid and 1 is manually blocked — leaving ' + openN
+        + ' open. The rules above govern how many slots exist at all, not which of these are taken: the cap ceilings a week at 6 paid, and the blackout is why no Friday afternoon appears here to begin with.',
+      s_types: [
+        { name:'Intro call', dur:'20 min · one per client', price:'Free' },
+        { name:'Single session', dur:'60 min · recorded on consent', price:'$300' },
+        { name:'Five-session pack', dur:'over 10 weeks', price:'$1,250' },
+        { name:'Monthly retainer', dur:'2 sessions + async', price:'$4,500' }
+      ],
+      s_links: [
+        { url:'axal.vc/b/priyanka/intro', note:'Free intro only. Public, on your profile.' },
+        { url:'axal.vc/b/priyanka/session', note:'Paid single session. Requires a verified payout account.' },
+        { url:'axal.vc/b/priyanka/cohort-4', note:'Cohort 4 founders only. Bypasses the paid gate.' }
+      ],
+
+      // ── PR5 · Earnings pointer ──
+      pr5Stats: [
+        { label:'Q3 cash gross', value:usd(cashGross), note:'sessions and retainers', ink:'#18181b' },
+        { label:'Platform cut', value:usd(cashCut), note:Math.round(CUT * 100) + '% of gross', ink:'#b45309' },
+        { label:'You received', value:usd(cashGross - cashCut), note:'across ' + CASH.length + ' cash-paying clients', ink:'#047857' },
+        { label:'Concentration', value:Math.round(grossOf(topCash) / cashGross * 100) + '%', note:topCash.client + ' alone', ink:'#92400e' }
+      ],
+      pr5Note: 'These four figures are the same record D4 draws in full — gross, the cut charged per line, net, and the concentration number the compressed zone cannot show. '
+        + CASH.length + ' clients appear here against ' + active.length + ' on the board, because Verwood bills in equity: '
+        + 'a two-year vesting grant instead of an invoice. It is real compensation and it is not in this total, which is why an advisory practice needs both pages.'
+    };
+  }
+}
+</script>
+</body>
+</html>

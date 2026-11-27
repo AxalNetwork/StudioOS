@@ -1,0 +1,42 @@
+You are the senior security + frontend engineer for Axal StudioOS. Fix the following 4 specific Turnstile issues:
+
+1. wrangler.toml does not document TURNSTILE_SITEKEY (public site key)
+2. Frontend .env.example is missing VITE_TURNSTILE_SITE_KEY
+3. Failed Turnstile attempts are not logged to activity_logs
+4. The public referral flow (and Refer & Earn page) may need the widget where appropriate
+
+Fix everything with these exact changes:
+
+1. **wrangler.toml**
+   - Add under [vars]:
+     TURNSTILE_SITEKEY = "0x4AAAAAAA..."   # Public site key (safe to expose)
+
+2. **.env.example**
+   - Add:
+     VITE_TURNSTILE_SITE_KEY=0x4AAAAAAA...   # For frontend Vite build
+
+3. **Backend Turnstile verification**
+   - In the verify_turnstile helper (auth.py or wherever it lives):
+     - On failure, log to activity_logs with:
+       action_type = "turnstile_failed"
+       entity_type = "registration"
+       metadata = {"ip": ip, "email": email, "error": error_message}
+     - Return clear 403 response with user-friendly message.
+
+4. **Frontend updates**
+   - Update the public registration/signup page (index.html or /register) to include the Turnstile widget using VITE_TURNSTILE_SITE_KEY.
+   - On the Refer & Earn page (/refer-earn.html): add the widget to any public-facing action if present, otherwise ensure the referral link flow passes the token when a new user registers via ?ref=CODE.
+   - Store the Turnstile token in a hidden field and include it in the registration POST request as "turnstile_token".
+
+5. **Referral flow**
+   - When a user lands on /register?ref=CODE, the Turnstile widget must appear and the token must be sent with the registration request.
+
+Build this step-by-step:
+1. First update wrangler.toml and .env.example with the correct Turnstile keys.
+2. Then enhance the backend verification to log failed attempts to activity_logs.
+3. Then update the public registration page and Refer & Earn page with the Turnstile widget (use VITE_TURNSTILE_SITE_KEY).
+4. Finally test end-to-end: visit a referral link → complete registration with Turnstile → verify success + failed attempt is logged.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

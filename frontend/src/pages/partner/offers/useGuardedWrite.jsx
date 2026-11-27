@@ -1,0 +1,178 @@
+import React, { useCallback, useRef, useState } from 'react';
+import { isNoPartnerProfile, offerGhostButtonClass } from '../kit';
+
+/**
+ * Offers · one way to write a record and tell the truth about it (#4688).
+ *
+ * Visibility, Proof and Audience fit each wrote through their own `run()`, and
+ * each `run()` caught the failure and returned normally. The caller's cleanup
+ * (`setAdding(false)`, reset the fields, close the row editor) came after the
+ * await, so it ran whether the write had persisted or not: a refused save
+ * closed the form and threw away what the partner had typed. This hook is the
+ * one place that decides what "saved" means.
+ *
+ * THE CONTRACT.
+ *
+ *   `save(write, { scope, saved, onSaved })`
+ *
+ *   - `write` is an async function that performs ONE write and throws if it
+ *     did not persist. It is kept on the failure note, so Retry repeats exactly
+ *     that write without the partner retyping anything.
+ *   - `onSaved` is the success cleanup (close the editor, reset the fields).
+ *     It runs ONLY after `write` resolved, and it runs on a Retry too, because
+ *     it belongs to the save rather than to the click that started it.
+ *   - The editor stays mounted and every field stays filled on failure; the
+ *     note names the failure beside the form.
+ *   - `load` is the zone's refresh and must resolve to true/false rather than
+ *     throw. A write that persisted but whose refresh failed is a DIFFERENT
+ *     result from a write that failed: the note says it saved, offers only a
+ *     reload of the read, and never offers the write again, because offering
+ *     it again is how a duplicate gets created.
+ *
+ * `reload` is the zone's own `load` plus one rule: a read that succeeds clears
+ * the "saved, could not refresh" note, so an old warning cannot outlive the
+ * read it was about.
+ */
+/** D4836: only a field-naming validation response may supply its sentence to a failed-write note. */
+export function writeFailureText(error, fallback = 'That did not save.') {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || ({ validation_error: 422, forbidden: 403, conflict: 409, session_expired: 401, network_error: 0 })[code];
+  if (status === 400 || status === 422) {
+    const field = error?.field || error?.data?.field;
+    const message = typeof error?.message === 'string' ? error.message.trim() : '';
+    if (typeof field === 'string' && /^[a-z][\w.[\]-]{0,79}$/i.test(field) && message && message.length <= 500) return message;
+    return 'Check the fields and try again.';
+  }
+  if (status === 401) return 'Sign in again before saving.';
+  if (status === 403) return 'Your account cannot make this change.';
+  if (status === 404) return 'This record is no longer available. Your entries are kept.';
+  if (status === 409) return 'This conflicts with a newer change. Your entries are kept.';
+  if (status === 429) return 'Too many changes at once. Wait a moment and try again.';
+  if (status >= 500) return 'Axal could not save this right now. Try again.';
+  if (error instanceof TypeError || code === 'network_error' || error?.status === 0) return 'Axal could not be reached. Check your connection and try again.';
+  return fallback;
+}
+
+/**
+ * #4845 (D4845): the sentence a FAILED READ shows inside an Offers zone's
+ * Unavailable state (#5129's `SectionState`, "<what> could not be read. …").
+ * It is chosen by the failure's kind and never taken from the response: a read
+ * that fails carries whatever the server or the network layer said, and that
+ * text is not written for a member.
+ */
+export const READ_FAILURE_DEFAULT = 'Nothing here is out of date; it just isn’t shown.';
+export function readFailureText(error) {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || ({ forbidden: 403, session_expired: 401, rate_limited: 429, network_error: 0 })[code];
+  if (status === 401) return 'Your session has ended. Sign in again to see it.';
+  if (status === 403) return 'This account cannot read it.';
+  if (status === 429) return 'Too many requests at once. Wait a moment and try again.';
+  if (error instanceof TypeError || code === 'network_error' || error?.status === 0) return 'Axal could not be reached. Check your connection and try again.';
+  return READ_FAILURE_DEFAULT;
+}
+
+/**
+ * What a zone keeps as `state.error` when its read throws: the no-firm refusal
+ * as it came, so `isNoPartnerProfile(state.error)` still sees it (and the zone
+ * draws `NoPartnerProfile`, never this text), and otherwise the written
+ * sentence above. So the raw response never reaches `ZoneBody`.
+ */
+export function zoneReadError(error) {
+  const raw = typeof error?.message === 'string' ? error.message : '';
+  return isNoPartnerProfile(raw) ? raw : readFailureText(error);
+}
+
+/**
+ * D4844: the field a refused save names, so the editor can put the sentence on
+ * that field (OF-02b). Only a bounded 400/422 naming a well-formed field counts,
+ * the same rule `writeFailureText` uses for the sentence; anything else is null.
+ */
+export function writeFailureField(error) {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || (code === 'validation_error' ? 422 : 0);
+  if (status !== 400 && status !== 422) return null;
+  const field = error?.field || error?.data?.field;
+  return typeof field === 'string' && /^[a-z][\w.[\]-]{0,79}$/i.test(field) ? field : null;
+}
+
+export function useGuardedWrite(load) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  const save = useCallback(async (write, opts = {}) => {
+    const { scope, saved = 'Saved.', onSaved, failed = 'That did not save.' } = opts;
+    setBusy(true);
+    setNote(null);
+    try {
+      await write();
+    } catch (e) {
+      setNote({
+        ok: false, scope, text: writeFailureText(e, failed), field: writeFailureField(e),
+        retry: () => save(write, opts),
+      });
+      setBusy(false);
+      return { ok: false };
+    }
+    // Persisted. Everything below is about the READ, never about the write.
+    try { onSaved?.(); } catch { /* cleanup must not turn a saved write into a failure */ }
+    const refreshed = await loadRef.current();
+    setNote(refreshed
+      ? { ok: true, scope, text: saved }
+      : {
+        ok: true, scope, refreshFailed: true,
+        text: `${saved.replace(/\.$/, '')}. The list could not be refreshed, so it may not show this yet. Nothing needs to be done again: reload it.`,
+      });
+    setBusy(false);
+    return { ok: true, refreshed };
+  }, []);
+
+  const reload = useCallback(async () => {
+    const ok = await loadRef.current();
+    if (ok) setNote((n) => (n?.refreshFailed ? null : n));
+    return ok;
+  }, []);
+
+  const clearNote = useCallback(() => setNote(null), []);
+
+  return { busy, note, save, reload, clearNote };
+}
+
+/** The note that belongs to one form or row; a saved-but-unrefreshed note is the zone's. */
+export const scopedNote = (note, scope) => (note && note.scope === scope && !note.refreshFailed ? note : null);
+
+/** The note the zone itself shows: a refresh that failed, or the first record being added. */
+export const zoneNote = (note) => (note && (note.refreshFailed || (note.ok && note.scope === 'new')) ? note : null);
+
+/**
+ * The note, with the one button its state allows. A failed write offers Retry
+ * (the same write). A saved write whose refresh failed offers Reload and
+ * nothing that writes. A plain success offers nothing.
+ */
+export function WriteNote({ note, busy = false, onReload }) {
+  if (!note) return null;
+  const tone = !note.ok
+    ? 'text-red-700 dark:text-red-300'
+    : note.refreshFailed ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-300';
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="write-note">
+      {/* D4844: a tick, a cross or a warning sign leads the sentence, so saved,
+          not saved and saved-but-not-refreshed differ by shape, not colour alone. */}
+      <p role={note.ok ? 'status' : 'alert'} className={`flex items-start gap-1.5 text-[13px] font-semibold ${tone}`} data-save-status={!note.ok ? 'not-saved' : note.refreshFailed ? 'saved-unrefreshed' : 'saved'}>
+        <span aria-hidden="true">{!note.ok ? '✕' : note.refreshFailed ? '!' : '✓'}</span>
+        <span>{note.text}</span>
+      </p>
+      {!note.ok && note.retry && (
+        <button type="button" className={offerGhostButtonClass} disabled={busy} onClick={() => note.retry()}>
+          Retry
+        </button>
+      )}
+      {note.refreshFailed && onReload && (
+        <button type="button" className={offerGhostButtonClass} disabled={busy} onClick={() => onReload()}>
+          Reload the list
+        </button>
+      )}
+    </div>
+  );
+}

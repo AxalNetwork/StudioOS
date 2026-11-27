@@ -1,0 +1,68 @@
+{
+  "skill": "activation-friction-analysis",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "build.records": {
+        "record_id": "activation-definition-03",
+        "unit": "account",
+        "entry": "signup_completed",
+        "steps": [
+          "signup_completed",
+          "setup_completed",
+          "first_export_confirmed"
+        ],
+        "completion_window_days": 7
+      },
+      "grow.records": {
+        "record_id": "activation-cohort-18",
+        "cohort_start": "2026-10-01",
+        "cohort_end": "2026-10-07",
+        "as_of": "2026-10-20",
+        "complete_observation": true,
+        "same_cohort_ordered_unique_accounts": true,
+        "counts": {
+          "signup_completed": 100,
+          "setup_completed": 60,
+          "first_export_confirmed": 45
+        },
+        "raw_signup_events_including_retries": 120,
+        "time_to_value": null
+      },
+      "validate.records": {
+        "record_id": "interview-batch-06",
+        "consented": true,
+        "participants": 2,
+        "selection": "Volunteers who requested setup help",
+        "observations": [
+          {
+            "session_id": "session-01",
+            "finding": "The import mapping screen was confusing"
+          },
+          {
+            "session_id": "session-02",
+            "finding": "No sample file was visible during setup"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "45%",
+      "40 accounts",
+      "15 accounts",
+      "hypothesis"
+    ],
+    "must_say_not_recorded": [
+      "time to value"
+    ],
+    "must_not_include": [
+      "These interviews prove the cause",
+      "Activation is 100%",
+      "The cohort contains 120 accounts"
+    ]
+  }
+}

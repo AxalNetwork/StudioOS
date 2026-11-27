@@ -1,0 +1,1455 @@
+import type { Context } from 'hono';
+import { revokeAllGrants } from './mcp/grants';
+import { SignJWT, jwtVerify } from 'jose';
+import type { Env, User, JWTPayload } from './types';
+import { getSQL } from './db';
+import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, FREEZING_STATUSES } from './util/authErrors';
+import { hasMfaEnrolled, readAdminMfaPolicy } from './services/adminMfaPolicy';
+import { recordSecurityEvent } from './services/securityEvents';
+import { heldLicences, holdsLicence, isLicence, type Licence } from './services/accountLicences';
+
+// Contexts live for one request. Repeated requireAuth/requireRole calls share
+// exactly one grant lookup, always keyed to the selected token's subject.
+const requestLicences = new WeakMap<Context<{ Bindings: Env }>, Map<number, Promise<Licence[]>>>();
+
+const JWT_ALGORITHM = 'HS256';
+export const JWT_EXPIRY_HOURS = 24;
+
+/**
+ * Phase A5 — call this exactly once at the start of every request handler
+ * so weak/missing JWT_SECRET fails the whole request, not just the auth
+ * paths. Cloudflare Workers do not have a startup hook, so the next-best
+ * place is the top of the `fetch` handler in `index.ts`.
+ *
+ * Dev/preview workers can use shorter secrets for local convenience.
+ */
+export function assertJwtSecretStrength(env: Env): void {
+  // Accept either STUDIOOS_ENV (FastAPI convention) or ENVIRONMENT (the var
+  // wrangler.toml actually sets in production). Otherwise the strength check
+  // silently no-ops in prod, which defeats the whole guard.
+  const envName = (env.STUDIOOS_ENV || env.ENVIRONMENT || 'dev').toLowerCase();
+  if (envName !== 'production' && envName !== 'prod' && envName !== 'staging') return;
+  const secret = env.JWT_SECRET || '';
+  if (!secret) throw new Error(`JWT_SECRET must be set in ${envName}`);
+  const len = new TextEncoder().encode(secret).byteLength;
+  if (len < 32) {
+    throw new Error(`JWT_SECRET must be at least 32 bytes in ${envName}; got ${len} bytes`);
+  }
+}
+
+/**
+ * T9 — SCORING_HMAC_SECRET enforcement.
+ *
+ * The Epic-5 score-integrity HMAC derives an HKDF domain-separated subkey
+ * from JWT_SECRET when SCORING_HMAC_SECRET is unset (see
+ * services/scoreIntegrity.ts:deriveScoringKey). That derivation keeps the
+ * score-signing key cryptographically independent from the auth-signing key
+ * even in dev, but production still requires a DEDICATED secret so the two
+ * keys never share a root. Refuse to boot in production unless an explicit
+ * SCORING_HMAC_SECRET (≥32 bytes) is provisioned. Dev/preview tolerate the
+ * derived fallback but log a one-shot warning so the operator sees it.
+ *
+ * Provision via:
+ *   openssl rand -hex 32 | npx wrangler secret put SCORING_HMAC_SECRET --env=production
+ */
+let _scoringSecretWarned = false;
+export function assertScoringHmacSecret(env: Env): void {
+  const envName = (env.STUDIOOS_ENV || env.ENVIRONMENT || 'dev').toLowerCase();
+  const isProd = envName === 'production' || envName === 'prod';
+  const explicit = env.SCORING_HMAC_SECRET || '';
+  if (isProd) {
+    const len = explicit ? new TextEncoder().encode(explicit).byteLength : 0;
+    if (!explicit) {
+      throw new Error(
+        'SCORING_HMAC_SECRET is required in production. Provision via ' +
+        '`npx wrangler secret put SCORING_HMAC_SECRET --env=production` ' +
+        '(generate with `openssl rand -hex 32`).',
+      );
+    }
+    if (len < 32) {
+      throw new Error(
+        `SCORING_HMAC_SECRET must be at least 32 bytes in production; got ${len} bytes.`,
+      );
+    }
+    return;
+  }
+  if (!explicit && !_scoringSecretWarned) {
+    _scoringSecretWarned = true;
+    console.warn(
+      '[boot] SCORING_HMAC_SECRET is unset — deriving an HKDF domain-separated ' +
+      'subkey from JWT_SECRET for Epic-5 score signing. This is allowed in ' +
+      'dev/preview only; production boot will refuse to start without it.',
+    );
+  }
+}
+
+function getSecretKey(env: Env) {
+  // Defense in depth: also check here in case a caller bypassed the
+  // top-level guard. The `assert` helper is the canonical entry point.
+  assertJwtSecretStrength(env);
+  return new TextEncoder().encode(env.JWT_SECRET || '');
+}
+
+/**
+ * A support session is thirty minutes, not a day.
+ *
+ * Until 2026-09-10 `POST /admin/impersonate/:userId` minted the ORDINARY
+ * 24-hour token, so an admin who opened a support session kept a credential
+ * that acts AS that person for the rest of the day — long after the support
+ * ended, and with nothing on screen saying so. The Admin · Super canvas draws
+ * "Expiry · 30 minutes · hard" on that flow; this is the number that makes
+ * the label true rather than the label being a claim about a control that
+ * did not exist. Extending is a deliberate act that mints a fresh token and
+ * is recorded, so the audit trail shows how long support actually held the
+ * account rather than one open-ended entry.
+ */
+export const IMPERSONATION_EXPIRY_MINUTES = 30;
+
+/**
+ * D248 — the most a support session may last, extensions included, measured
+ * from `impersonation_sessions.started_at`: two hours, the first thirty
+ * minutes and three extensions.
+ *
+ * WHY A CEILING AT ALL. Extend minted a fresh thirty minutes on any session
+ * whose `ended_at` was NULL, and nothing read `started_at`. An HQ session whose
+ * tab was closed keeps `ended_at` NULL for ever — the support-session sweep
+ * skips HQ rows by design (util/supportSessionSweep.ts) — so Extend could
+ * revive a session days old, on a reason typed days ago.
+ *
+ * WHY TWO HOURS. The session exists to fix one thing in someone's account.
+ * Two hours of continuous access is already long for that; past it, the work
+ * is a new visit, and a new visit is a new session: a new reason, and a new
+ * notice to the person whose account it is (D248 tells them on open). The
+ * number is a judgement, stated here and on the H20 card, not a measured
+ * limit.
+ *
+ * An extension that would carry the session past this is refused, so no
+ * token minted for a session ever outlives `started_at + ceiling`.
+ */
+export const IMPERSONATION_CEILING_MINUTES = 120;
+
+export async function createJWT(
+  env: Env,
+  userId: number,
+  email: string,
+  role: string,
+  impersonatedBy?: number,
+  jti?: string,
+  // Only the impersonation paths pass this. Everything else keeps the
+  // ordinary session length, so the ~460 existing call sites are untouched.
+  expiresIn: string = `${JWT_EXPIRY_HOURS}h`,
+  // D4669 — the support session this token belongs to. Only the two
+  // support-session mints pass it (routes/admin.ts, rpc/branchOps.ts).
+  supportSessionId?: number,
+) {
+  const payload: Record<string, unknown> = {
+    user_id: userId,
+    email,
+    role,
+  };
+  if (impersonatedBy) payload.impersonated_by = impersonatedBy;
+  // Epic 3 — jti binds the token to a row in user_sessions so individual
+  // sessions can be revoked from /settings without nuking every device.
+  // Optional for back-compat with existing in-flight tokens.
+  if (jti) payload.jti = jti;
+  if (supportSessionId) payload.sid = supportSessionId;
+
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: JWT_ALGORITHM })
+    .setIssuedAt()
+    .setExpirationTime(expiresIn)
+    .sign(getSecretKey(env));
+}
+
+export async function decodeJWT(env: Env, token: string): Promise<JWTPayload> {
+  const { payload } = await jwtVerify(token, getSecretKey(env), { algorithms: [JWT_ALGORITHM] });
+  return payload as unknown as JWTPayload;
+}
+
+/**
+ * T6 — Read the JWT from either `Authorization: Bearer ...` (legacy / Bearer
+ * flow used by impersonation, websocket subprotocols and signed-download
+ * URLs) OR the `studioos_auth` httpOnly cookie (cookie flow used by
+ * api.js → /api/* calls).
+ *
+ * Task #4 — When BOTH are present we no longer blindly prefer Bearer. A
+ * cross-account session leak was possible: an admin impersonation Bearer
+ * lingering in localStorage would override the fresh cookie minted by
+ * the next user's sign-in, dropping them into the admin's account.
+ * Precedence is now resolved by `pickAuthToken` against the decoded
+ * payloads — Bearer only wins when it is the SAME identity as the
+ * cookie OR a legitimate impersonation Bearer (impersonated_by ===
+ * cookie.user_id). Otherwise the cookie (the freshest sign-in) wins.
+ */
+export function extractJwtCandidates(c: Context<{ Bindings: Env }>): { bearer: string | null; cookie: string | null } {
+  const authHeader = c.req.header('Authorization');
+  const bearer = (authHeader && authHeader.startsWith('Bearer ')) ? (authHeader.slice(7) || null) : null;
+  let cookie: string | null = null;
+  const cookieHeader = c.req.header('Cookie') || '';
+  // On a branch the session cookie is `studioos_auth_<code>`. HQ's
+  // `studioos_auth`, which the browser also sends to every subdomain, is
+  // not ours there and is skipped by name (D104, util/branch.ts).
+  const cookieName = authCookieName(c.env);
+  if (cookieHeader) {
+    for (const part of cookieHeader.split(';')) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq === -1) continue;
+      if (trimmed.slice(0, eq) === cookieName) {
+        cookie = trimmed.slice(eq + 1) || null;
+        break;
+      }
+    }
+  }
+  return { bearer, cookie };
+}
+
+/**
+ * Pure, exported for unit tests. Given decoded Bearer + Cookie payloads
+ * (or nulls when the slot is empty / undecodable), decide which token's
+ * session should authenticate this request.
+ *
+ *   - Cookie only present                       → 'cookie'
+ *   - Bearer only present                       → 'bearer'
+ *   - Both present, same user_id                → 'bearer' (back-compat)
+ *   - Both present, Bearer is admin impersonating cookie.user_id → 'bearer'
+ *   - Both present, identities differ           → 'cookie'  (the fresh sign-in
+ *                                                            always wins over a
+ *                                                            stale Bearer)
+ *   - Neither present                           → null
+ */
+export type TokenChoice = 'bearer' | 'cookie' | null;
+export function pickAuthToken(opts: {
+  bearer: { user_id?: number; impersonated_by?: number } | null;
+  cookie: { user_id?: number } | null;
+}): TokenChoice {
+  const { bearer, cookie } = opts;
+  if (!bearer && !cookie) return null;
+  if (!bearer) return 'cookie';
+  if (!cookie) return 'bearer';
+  if (bearer.impersonated_by && cookie.user_id && Number(bearer.impersonated_by) === Number(cookie.user_id)) {
+    return 'bearer';
+  }
+  if (bearer.user_id && cookie.user_id && Number(bearer.user_id) === Number(cookie.user_id)) {
+    return 'bearer';
+  }
+  return 'cookie';
+}
+
+/**
+ * Select and decode the authenticating JWT for this request, applying the
+ * cross-identity precedence above. Returns null when neither side decodes.
+ * Used by getCurrentUser and requireFactor so both look at the same session.
+ */
+export async function selectJwt(c: Context<{ Bindings: Env }>): Promise<{ token: string; payload: JWTPayload } | null> {
+  const { bearer, cookie } = extractJwtCandidates(c);
+  if (!bearer && !cookie) return null;
+  let bP: JWTPayload | null = null;
+  let cP: JWTPayload | null = null;
+  if (bearer) { try { bP = await decodeJWT(c.env, bearer); } catch { bP = null; } }
+  if (cookie) { try { cP = await decodeJWT(c.env, cookie); } catch { cP = null; } }
+  const choice = pickAuthToken({ bearer: bP as any, cookie: cP as any });
+  // Task #4 — audit-log every time we discarded a Bearer in favour of a
+  // cookie for a DIFFERENT identity. This is the cross-account leak
+  // signal — without the log there's no way to alert on it post-hoc.
+  // Fire-and-forget; the auth path must not block on activity_logs.
+  if (choice === 'cookie' && bP && cP && Number(bP.user_id) !== Number(cP.user_id)
+      && Number(bP.impersonated_by || 0) !== Number(cP.user_id)) {
+    try {
+      const ctx = (c as { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } }).executionCtx;
+      const p = c.env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, user_id) VALUES (?, ?, ?)`
+      ).bind(
+        'cross_session_bearer_discarded',
+        JSON.stringify({
+          bearer_user_id: Number(bP.user_id),
+          cookie_user_id: Number(cP.user_id),
+          bearer_impersonated_by: bP.impersonated_by ? Number(bP.impersonated_by) : null,
+          path: c.req.path || null,
+        }),
+        Number(cP.user_id),
+      ).run().catch((e: unknown) => console.warn('[auth:selectJwt] audit log failed', e));
+      if (ctx?.waitUntil) ctx.waitUntil(p);
+    } catch (e) { console.warn('[auth:selectJwt] audit log dispatch failed', e); }
+  }
+  if (choice === 'bearer' && bearer && bP) return { token: bearer, payload: bP };
+  if (choice === 'cookie' && cookie && cP) return { token: cookie, payload: cP };
+  // Chosen side failed to decode — fall back to the other if it did.
+  if (bearer && bP) return { token: bearer, payload: bP };
+  if (cookie && cP) return { token: cookie, payload: cP };
+  return null;
+}
+
+/**
+ * Task #4 — Sign-in handlers call this AFTER authenticating `newUserId` to
+ * revoke any incoming Bearer/cookie session that belongs to a DIFFERENT
+ * user. Without this, a stale admin JWT in localStorage (or a stale
+ * `studioos_auth` cookie still scoped to .axal.vc from a prior browser
+ * user) keeps a valid `user_sessions` row that could be replayed from
+ * outside the browser even after the SPA's identity-change purge cleared
+ * localStorage. Defence-in-depth alongside the `pickAuthToken` precedence
+ * fix and the SPA-side purge in useAuthSync.jsx.
+ *
+ * Idempotent + fire-and-forget-safe: errors are logged, never thrown.
+ */
+export async function revokeStaleCrossIdentitySession(
+  c: Context<{ Bindings: Env }>,
+  newUserId: number,
+): Promise<void> {
+  try {
+    const { bearer, cookie } = extractJwtCandidates(c);
+    const toks = [bearer, cookie].filter(Boolean) as string[];
+    for (const tok of toks) {
+      let payload: JWTPayload | null = null;
+      try { payload = await decodeJWT(c.env, tok); } catch { continue; }
+      if (!payload?.jti || !payload?.user_id) continue;
+      if (Number(payload.user_id) === Number(newUserId)) continue;
+      try {
+        await c.env.DB.prepare(
+          "UPDATE user_sessions SET revoked_at = datetime('now') " +
+            "WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
+        ).bind(payload.jti, Number(payload.user_id)).run();
+        try {
+          await c.env.DB.prepare(
+            `INSERT INTO activity_logs (action, details, user_id) VALUES (?, ?, ?)`
+          ).bind(
+            'session_revoked_on_signin',
+            JSON.stringify({
+              prior_user_id: Number(payload.user_id),
+              new_user_id: Number(newUserId),
+              jti: payload.jti,
+              impersonated_by: payload.impersonated_by ? Number(payload.impersonated_by) : null,
+            }),
+            Number(newUserId),
+          ).run();
+        } catch {}
+      } catch (e) {
+        console.warn('[auth:revokeStaleCrossIdentitySession] revoke failed', e);
+      }
+    }
+  } catch (e) {
+    console.warn('[auth:revokeStaleCrossIdentitySession] outer failure', e);
+  }
+}
+
+/**
+ * #4573 H1 — the caller is resolved once per request.
+ *
+ * Before H1 every `getCurrentUser` / `requireAuth` / `requireAdmin` call ran the
+ * whole resolution again: the user row, licences, MI Pro, recovery state, the
+ * Super Admin elevation and the session check, so a signed-in request read the
+ * caller two to four times (rate limit, then the route, then its helpers). The
+ * answer is now memoized on the request context, keyed on the raw credentials
+ * the request carries (the bearer and the session cookie), so a different token
+ * on the same context can never reuse another's answer.
+ *
+ * - Only a resolved user is kept. A null answer (no credentials, a refused or
+ *   revoked session, or a read that failed inside the resolution) and a throw are
+ *   not, so the next call in the request resolves again, exactly as before H1.
+ * - Each caller gets its own shallow copy, so a handler that edits the user it was
+ *   given (or its licence list) cannot change what another caller sees.
+ * - A route that changes the caller's own user, session or side-table rows and
+ *   then needs the fresh answer IN THE SAME REQUEST calls `forgetCurrentUser(c)`
+ *   first. None does today (audited at H1: no handler writes those rows and then
+ *   resolves the caller again).
+ */
+const requestCallers = new WeakMap<Context<{ Bindings: Env }>, Map<string, Promise<User | null>>>();
+
+/** Drop this request's memoized caller, so the next `getCurrentUser` reads it again. */
+export function forgetCurrentUser(c: Context<{ Bindings: Env }>): void {
+  requestCallers.delete(c);
+}
+
+export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+  const { bearer, cookie } = extractJwtCandidates(c);
+  const key = `${bearer ?? ''}\u0000${cookie ?? ''}`;
+  let byKey = requestCallers.get(c);
+  if (!byKey) { byKey = new Map(); requestCallers.set(c, byKey); }
+  let pending = byKey.get(key);
+  if (!pending) {
+    const p = resolveCurrentUser(c);
+    pending = p;
+    byKey.set(key, p);
+    const memo = byKey;
+    const drop = () => { if (memo.get(key) === p) memo.delete(key); };
+    p.then((u) => { if (!u) drop(); }, drop);
+  }
+  const u = await pending;
+  if (!u) return null;
+  const copy = { ...u, licences: u.licences ? [...u.licences] : u.licences };
+  Object.defineProperty(copy, 'support_session', { value: !!u.support_session, enumerable: false });
+  return copy;
+}
+
+async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+  const sel = await selectJwt(c);
+  if (!sel) return null;
+  try {
+    const payload = sel.payload;
+    const sql = getSQL(c.env);
+    const users = await sql`SELECT * FROM users WHERE id = ${payload.user_id}` as unknown as User[];
+    await sql.end();
+    if (users.length === 0 || !users[0].is_active) return null;
+    const u = users[0];
+    // D5366: service-level write gates do not receive Hono's Context. Carry
+    // the selected JWT's support-session fact on the request-local caller,
+    // non-enumerably so spreading a user into a response cannot expose it.
+    Object.defineProperty(u, 'support_session', { value: !!payload.impersonated_by, enumerable: false });
+    let licenceReads = requestLicences.get(c);
+    if (!licenceReads) { licenceReads = new Map(); requestLicences.set(c, licenceReads); }
+    if (!licenceReads.has(u.id)) {
+      licenceReads.set(u.id, heldLicences(c.env.DB, u).catch(error => {
+        // A missing migration/read failure cannot grant additional access.
+        // Preserve primary-only access; the account licence read reports its
+        // own unavailable state rather than fabricating an empty grant list.
+        console.warn('[auth] account licences unreadable', error);
+        return isLicence(u.role) ? [u.role] : [];
+      }));
+    }
+    u.licences = await licenceReads.get(u.id)!;
+    // MI Pro subscription state lives in the mi_pro_subscriptions side table
+    // (the `users` table is at D1's hard 100-column limit, and D1 also rejects
+    // any result set wider than 100 columns — so we cannot JOIN it into the
+    // SELECT * above). Hydrate it with a small keyed lookup so userHasMiPro()
+    // and the MI Pro routes keep reading user.mi_subscription_* unchanged.
+    // Best-effort: a missing row/table leaves the user on the free tier.
+    try {
+      const mi = await c.env.DB.prepare(
+        'SELECT status, subscription_id, plan, period_end, stripe_customer_id FROM mi_pro_subscriptions WHERE user_id = ?'
+      ).bind(payload.user_id).first<{
+        status: string | null; subscription_id: string | null; plan: string | null;
+        period_end: string | null; stripe_customer_id: string | null;
+      }>();
+      const mu = u as User & {
+        mi_subscription_status?: string | null; mi_subscription_id?: string | null;
+        mi_subscription_plan?: string | null; mi_subscription_period_end?: string | null;
+        mi_stripe_customer_id?: string | null;
+      };
+      mu.mi_subscription_status = mi?.status ?? 'free';
+      mu.mi_subscription_id = mi?.subscription_id ?? null;
+      mu.mi_subscription_plan = mi?.plan ?? null;
+      mu.mi_subscription_period_end = mi?.period_end ?? null;
+      mu.mi_stripe_customer_id = mi?.stripe_customer_id ?? null;
+    } catch (e) {
+      console.warn('[auth] mi_pro_subscriptions hydrate failed', (e as Error).message);
+    }
+    // D189 — the two post-recovery deadlines live in `user_recovery_state`
+    // for the SAME reason as MI Pro above, and it is worth stating because it
+    // rules out the obvious alternative: a `LEFT JOIN` would make the result
+    // set 102 columns wide and D1 rejects any result wider than 100, so the
+    // small keyed lookup is not a preference here, it is the only shape.
+    //
+    // `060_auth_recovery.sql:53,57` declared these as columns on `users` and
+    // they could NEVER land — `users` is at the 100-column cap, measured at
+    // 100 in production on 2026-09-22 and 100 on a fresh build. 060 is below
+    // BASELINE_CUTOFF, so a bootstrap MARKED it applied without running it,
+    // and the ledger has said "applied" ever since while no environment has
+    // ever had the columns. Migration 277 moves the fact to a side table.
+    //
+    // THE KEY NAMES ARE THE OLD COLUMN NAMES, deliberately. Three readers ask
+    // for them off this object — middleware/recoveryCoolOff.ts, the step-up
+    // check below, and routes/auth.ts's /me payload — and hydrating under the
+    // same names is what lets all three stay byte-for-byte unchanged. They
+    // hold ISO-8601 and every one of those readers compares them in
+    // JavaScript, never in SQL; see 277's header before writing a predicate.
+    //
+    // Best-effort like its two siblings: a database that has not applied 277
+    // leaves both undefined, which is exactly today's behaviour — the
+    // session-scoped deadline below carries the load, and the cool-off simply
+    // does not fire. A throw here would 500 every authenticated request.
+    try {
+      const rec = await c.env.DB.prepare(
+        'SELECT cooling_off_until, step_up_due_at FROM user_recovery_state WHERE user_id = ?'
+      ).bind(payload.user_id).first<{
+        cooling_off_until: string | null; step_up_due_at: string | null;
+      }>();
+      const ru = u as User & {
+        recovery_cooling_off_until?: string | null; recovery_step_up_due_at?: string | null;
+      };
+      ru.recovery_cooling_off_until = rec?.cooling_off_until ?? null;
+      ru.recovery_step_up_due_at = rec?.step_up_due_at ?? null;
+    } catch (e) {
+      console.warn('[auth] user_recovery_state hydrate failed', (e as Error).message);
+    }
+    // The Super Admin elevation lives in the `super_admins` side table for the
+    // same 100-column reason (migration 199). Hydrated for every request so
+    // `isSuperAdmin` reads the table's answer and never a column: a database
+    // that applied the first version of 199 still carries `users.is_super_admin`
+    // saying every admin is elevated, and SELECT * would hand that back.
+    await hydrateSuperAdmin(c.env, u);
+    // D4669 — the token's standing: the account's sign-out floor, its own
+    // session row, and (for a support session) the support-session record and
+    // the operator who opened it. One function, shared with the realtime
+    // upgrade, so no door checks less than this one. An unreadable store is a
+    // refusal, never a pass.
+    const standing = await sessionStanding(c.env, payload, u);
+    if (!standing.ok) return null;
+    const sessionStepUpDue: string | null = standing.stepUpDue;
+    // Task #50 / Task IB — lower-assurance step-up deadline. When a session
+    // was minted via the email-magic recovery layer OR the BLOCK-AUTH-01
+    // magic-link sign-in ('email_only'), the user has 7 days to re-enrol a
+    // strong factor. Once that deadline elapses without re-enrolment, every
+    // subsequent request returns 401 EXCEPT the narrow re-enrol surface and
+    // the logout endpoint. This is the "auto-relock" enforcement. We prefer
+    // the SESSION-scoped deadline (user_sessions.step_up_due_at); the second
+    // operand is now the `user_recovery_state` row hydrated above.
+    // CORRECTED, D189 — this comment used to say the fallback existed
+    // "because the users.recovery_step_up_due_at column is unapplied/broken
+    // in prod (060)". That was true and understated: the column could never
+    // land, `users` being at D1's 100-column cap, and it is now a side table
+    // (migration 277). The preference order is KEPT rather than removed —
+    // D111's narrow-don't-delete — because the session-scoped deadline is
+    // still the belt to this store's braces: it survives a `user_recovery_state`
+    // read that fails, and it is per-session where this is per-account.
+    //
+    // THIS IS A LIVE BEHAVIOUR CHANGE AND IT IS THE POINT. Until 277 the
+    // second operand was always undefined, so the auto-relock only ever fired
+    // for sessions that carried their own deadline. It now also fires for an
+    // account whose recovery recorded one, which is what Task #50 designed
+    // and what has never run in production. To put it back to sleep without
+    // undoing anything: prefer `sessionStepUpDue` alone on the next line. The
+    // cool-off stays recorded and enforced either way.
+    // NOTE: the relock allowlist below currently exposes ONLY the TOTP re-enrol
+    // surface — passkey enrolment (/api/auth/passkey/*) is intentionally not a
+    // relock-recovery path yet, so a relocked user recovers via TOTP, then can
+    // add a passkey from a fresh full-assurance session.
+    const stepUpDue = sessionStepUpDue || ((u as any).recovery_step_up_due_at as string | null);
+    if (stepUpDue) {
+      let expired = false;
+      try { expired = new Date(stepUpDue).getTime() < Date.now(); } catch {}
+      if (expired) {
+        const path = c.req.path || '';
+        // Allow the user to log out + look at /me + complete TOTP re-enrol.
+        // Allowlist mirrors actually-mounted routes:
+        //   /api/auth/me            — read profile + recovery_pending
+        //   /api/auth/logout        — sign out
+        //   /api/settings/totp/re-enrol/* — fresh post-recovery TOTP pair
+        //                                  (Task #50, doesn't require existing code)
+        //   /api/settings/totp/enrol/*     — first-time optional TOTP enrolment
+        //                                  (Task #11, relocked email_only sessions
+        //                                  recover by enrolling an authenticator)
+        //   /api/settings/totp/repair      — swap secrets when current code still works
+        //   /api/settings/totp/recovery-codes/regenerate — fresh backup codes
+        //   /api/settings/sessions  — view + revoke sessions
+        //   /api/settings           — read settings root (the SPA mounts the page)
+        const ALLOWED = [
+          '/api/auth/me', '/api/auth/logout',
+          '/api/settings',
+          '/api/settings/totp/re-enrol', '/api/settings/totp/re-enrol/start',
+          '/api/settings/totp/re-enrol/confirm',
+          '/api/settings/totp/enrol',
+          '/api/settings/totp/repair',
+          '/api/settings/totp/recovery-codes/regenerate',
+          '/api/settings/sessions',
+        ];
+        const allowed = ALLOWED.some((p) => path === p || path.startsWith(p + '/'));
+        if (!allowed) return null;
+      }
+    }
+    return u;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * D4669 — WHETHER A SIGNED TOKEN STILL STANDS, beyond its signature and expiry.
+ *
+ * Every door that accepts a session token asks this: `getCurrentUser` for
+ * HTTP, and the realtime upgrade, which decodes its own token. Before D4669
+ * the upgrade checked neither the floor nor the session row, and the HTTP
+ * path treated an unreadable session store as "no row to check".
+ *
+ *   1. The account's floor (`users.jwt_min_iat`): sign-out-everywhere and HQ's
+ *      "Sign out account" raise it, and every older token is refused.
+ *   2. A support-session token carries `sid`, its `impersonation_sessions`
+ *      row, and that row must be open, for this account, opened by this
+ *      operator (`impersonated_by`; 0 for a branch's HQ support session). HQ's operator must
+ *      still be an active administrator whose own sign-out floor is not above
+ *      the token, so signing the operator out ends the support sessions they
+ *      hold. Ending the record ends the token on its next request.
+ *   3. A token with a `jti` must match a `user_sessions` row that is not
+ *      revoked.
+ *
+ * Any store that cannot be read is a refusal (`*_unavailable`). A token
+ * without its binding (`jti`, or `sid` for an HQ support session) is a shape
+ * no mint path issues any more — `session_containment_d4669.test.ts` holds
+ * every `createJWT` call site to that — and one still in flight from before
+ * is held to the floor and its own expiry alone.
+ *
+ * `support_session_unbound` covers a `sid` that names no row, or a row for
+ * another account or another operator.
+ */
+export type SessionStanding =
+  | { ok: true; stepUpDue: string | null }
+  | {
+    ok: false;
+    reason:
+      | 'below_floor'
+      | 'session_unknown'
+      | 'session_revoked'
+      | 'session_store_unavailable'
+      | 'support_session_unbound'
+      | 'support_session_ended'
+      | 'support_session_unavailable'
+      | 'support_operator_signed_out';
+  };
+
+function iatSeconds(iat: unknown): number | null {
+  if (typeof iat !== 'number' || !Number.isFinite(iat)) return null;
+  return iat > 1e12 ? Math.floor(iat / 1000) : iat;
+}
+
+export async function sessionStanding(
+  env: Env,
+  payload: JWTPayload,
+  user: { id: number; jwt_min_iat?: number | null },
+): Promise<SessionStanding> {
+  const iat = iatSeconds(payload.iat);
+  const floor = Number(user.jwt_min_iat ?? 0);
+  if (floor > 0 && iat !== null && iat < floor) return { ok: false, reason: 'below_floor' };
+
+  const operator = payload.impersonated_by ? Number(payload.impersonated_by) : 0;
+  if (payload.sid !== undefined && payload.sid !== null) {
+    const sid = Number(payload.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return { ok: false, reason: 'support_session_unbound' };
+    type SupportRecord = {
+      admin_user_id: number; target_user_id: number; ended_at: string | null;
+      admin_active: number | null; admin_role: string | null; admin_min_iat: number | null;
+    };
+    let rec: SupportRecord | null;
+    try {
+      rec = await env.DB.prepare(
+        `SELECT i.admin_user_id, i.target_user_id, i.ended_at,
+                a.is_active AS admin_active, a.role AS admin_role, a.jwt_min_iat AS admin_min_iat
+           FROM impersonation_sessions i
+           LEFT JOIN users a ON a.id = i.admin_user_id
+          WHERE i.id = ?`,
+      ).bind(sid).first<SupportRecord>();
+    } catch (e) {
+      console.warn('[auth] support-session record unreadable', (e as Error).message);
+      return { ok: false, reason: 'support_session_unavailable' };
+    }
+    if (!rec) return { ok: false, reason: 'support_session_unbound' };
+    if (Number(rec.target_user_id) !== Number(user.id) || Number(rec.admin_user_id) !== operator) {
+      return { ok: false, reason: 'support_session_unbound' };
+    }
+    if (rec.ended_at) return { ok: false, reason: 'support_session_ended' };
+    if (operator) {
+      if (!Number(rec.admin_active) || String(rec.admin_role ?? '').toLowerCase() !== 'admin') {
+        return { ok: false, reason: 'support_operator_signed_out' };
+      }
+      const opFloor = Number(rec.admin_min_iat ?? 0);
+      if (opFloor > 0 && iat !== null && iat < opFloor) {
+        return { ok: false, reason: 'support_operator_signed_out' };
+      }
+    }
+  }
+
+  const jti = payload.jti;
+  if (!jti) return { ok: true, stepUpDue: null };
+  let sess: { revoked_at: string | null; step_up_due_at?: string | null } | null;
+  try {
+    try {
+      sess = await env.DB.prepare(
+        'SELECT revoked_at, step_up_due_at FROM user_sessions WHERE jti = ? AND user_id = ?',
+      ).bind(jti, payload.user_id).first<{ revoked_at: string | null; step_up_due_at: string | null }>();
+    } catch (e) {
+      // Only a database that has not added the step-up column falls back to
+      // the base check; any other failure is the store being unreadable.
+      if (!/no such column/i.test(String((e as Error)?.message ?? ''))) throw e;
+      sess = await env.DB.prepare(
+        'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?',
+      ).bind(jti, payload.user_id).first<{ revoked_at: string | null }>();
+    }
+  } catch (e) {
+    console.warn('[auth] session store unreadable', (e as Error)?.message);
+    return { ok: false, reason: 'session_store_unavailable' };
+  }
+  if (!sess) return { ok: false, reason: 'session_unknown' };
+  if (sess.revoked_at) return { ok: false, reason: 'session_revoked' };
+  try {
+    // T22.6 — Coalesce last_seen_at writes. Only update if the row's
+    // existing value is >5 min old. Prevents a write per request on a
+    // hot session (which serialises through D1 and inflates write QPS).
+    await env.DB.prepare(
+      "UPDATE user_sessions SET last_seen_at = datetime('now') " +
+        "WHERE jti = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-5 minutes'))"
+    ).bind(jti).run();
+  } catch {}
+  return { ok: true, stepUpDue: sess.step_up_due_at ?? null };
+}
+
+export async function requireAuth(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await getCurrentUser(c);
+  if (!user) throw new Error('Unauthorized');
+  return user;
+}
+
+export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') throw new Error('Admin required');
+  await refuseWithoutRequiredMfa(c, user);
+  await refuseWhileFrozen(c, user);
+  return user;
+}
+
+// One setting read per request, however many gates ask.
+const requestMfaPolicy = new WeakMap<Context<{ Bindings: Env }>, Promise<boolean>>();
+
+/**
+ * D5249 — "Require MFA for admins", option B (enrol-first). While the HQ
+ * setting is on, an admin without MFA reaches no route behind `requireAdmin`
+ * (and so none behind `requireSuperAdmin`, which is layered on it), reads
+ * included: the answer is a 403 naming where to enrol. Enrolment itself is
+ * `requireAuth` (`/api/settings/totp/*`, passkeys), so the refusal cannot
+ * close the way back.
+ *
+ * WHAT IT COSTS: nothing for an admin with MFA, which the user row already
+ * says; one keyed `platform_settings` read per request for one without.
+ * On a branch it does nothing: the setting is HQ's, and only HQ's Super Admin
+ * route writes it. An unreadable setting reads as off (services/adminMfaPolicy.ts).
+ */
+async function refuseWithoutRequiredMfa(c: Context<{ Bindings: Env }>, user: User): Promise<void> {
+  if (hasMfaEnrolled(user as any)) return;
+  if (branchOf(c.env)) return;
+  let on = requestMfaPolicy.get(c);
+  if (!on) {
+    on = readAdminMfaPolicy(c.env).then((p) => p.on);
+    requestMfaPolicy.set(c, on);
+  }
+  if (await on) throw new Error(ADMIN_MFA_REQUIRED);
+}
+
+/**
+ * D135 — THE COMPLIANCE FREEZE, and it lives here rather than in a path list.
+ *
+ * The ladder's middle rung: HQ notifies, and an admin who does not act is
+ * frozen until they do. "Frozen" has to mean something on every surface an
+ * admin can write through, and there are 271 `requireAdmin` call sites across
+ * 51 files. A list of frozen paths in `index.ts` would go stale the next time a
+ * route is added — the exact failure D106 avoided by putting the branch gate
+ * inside `hydrateSuperAdmin` rather than beside the routes. One edit here
+ * covers every one of them, including the ones nobody has written yet.
+ *
+ * FOUR THINGS IT DELIBERATELY DOES NOT DO:
+ *
+ *  - IT NEVER GATES A READ. `requireBranchNotSuspended` already states the rule
+ *    for its branch-side twin — "READS ARE NEVER GATED BY IT" — and the reason
+ *    is sharper here: an admin who cannot see what they were asked cannot do
+ *    the thing that lifts the freeze. GET, HEAD and OPTIONS pass untouched.
+ *  - IT NEVER FREEZES THE SUPER ADMIN, and the code says so rather than relying
+ *    on there being nobody to do it. HQ issues the notices; a HQ frozen by its
+ *    own ladder could not lift anybody's.
+ *  - IT DOES NOTHING ON A BRANCH. `admin_notices` is HQ's table; a branch has
+ *    the twin above, reading its own pushed licence copy. Two tiers, two
+ *    lookups, neither pretending to be the other.
+ *  - AN UNREADABLE TABLE IS NOT A FREEZE. A database that has not applied
+ *    migration 264 reads as not frozen, on `requireBranchNotSuspended`'s stated
+ *    reasoning: being frozen is a claim somebody MADE, and inferring it from a
+ *    missing row would freeze every admin during the window between deploy and
+ *    migration — exactly when somebody is trying to work.
+ *
+ * WHAT HOLDS THE FREEZE is a notice in `overdue` (the sweep moved it there when
+ * its deadline passed unanswered) or `rejected` (HQ read the response and did
+ * not accept it). An `issued` notice inside its window freezes nothing: the
+ * admin has been told and has time to act, which is the rung before this one.
+ *
+ * THE LOOKUP SELECTS THE NOTICE, NOT A COUNT, and costs the same. A 423 that
+ * cannot say which notice caused it leaves the holder with nothing to act on,
+ * and this is the one row that answers it.
+ */
+async function refuseWhileFrozen(c: Context<{ Bindings: Env }>, user: User): Promise<void> {
+  const method = String(c.req.method || '').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+  const notice = await freezingNotice(c.env, user);
+  if (!notice) return;
+  const err: any = new Error(ADMIN_FROZEN);
+  err.notice = notice;
+  throw err;
+}
+
+/** The notice that freezes this admin's writes, or null: `refuseWhileFrozen`'s rule without the method. */
+async function freezingNotice(env: Env, user: User): Promise<{ uid: string; subject: string; respond_by: string; status: string } | null> {
+  if (branchOf(env)) return null;
+  if (isSuperAdmin(user as any)) return null;
+  try {
+    return await env.DB.prepare(
+      `SELECT uid, subject, respond_by, status
+         FROM admin_notices
+        WHERE user_id = ? AND status IN (?, ?)
+        ORDER BY datetime(respond_by)
+        LIMIT 1`,
+    ).bind(user.id, ...FREEZING_STATUSES).first<{ uid: string; subject: string; respond_by: string; status: string }>();
+  } catch (e) {
+    console.warn('[compliance] admin_notices unreadable on a write gate', (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * #4046 (B4): whether `requireAdmin` would refuse this admin's write (D135), for
+ * a gate that is not a route's own, such as Fill's record scope for a program
+ * proposal, whose undo goes through `/api/fills` and never meets `requireAdmin`.
+ */
+export async function adminWritesFrozen(env: Env, user: User): Promise<boolean> {
+  return !!(await freezingNotice(env, user));
+}
+
+/**
+ * Read the elevation for one account from the `super_admins` side table.
+ *
+ * `users` sits at D1's 100-column ceiling, so migration 199 keeps the
+ * elevation beside the row rather than on it, and `getCurrentUser`'s
+ * `SELECT *` cannot JOIN it in either (D1 also refuses a result set wider
+ * than 100 columns). One keyed lookup, for admin accounts only.
+ *
+ * FAILS CLOSED. A missing table (a database that has not applied 199) or a
+ * failed read answers 0 and is logged: the gate this feeds must never say
+ * yes because it could not ask. Every caller that holds a user row from
+ * `SELECT * FROM users` — `getCurrentUser`, the impersonation target — goes
+ * through `hydrateSuperAdmin` so the row's own `is_super_admin`, if a
+ * database still carries the column from the first version of 199, is
+ * overwritten by the table's answer.
+ */
+export async function loadSuperAdminFlag(env: Env, userId: number): Promise<0 | 1> {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT user_id FROM super_admins WHERE user_id = ?',
+    ).bind(userId).first<{ user_id: number }>();
+    return row ? 1 : 0;
+  } catch (e) {
+    console.warn('[auth] super_admins hydrate failed; reading as not elevated', (e as Error).message);
+    return 0;
+  }
+}
+
+/**
+ * Set `user.is_super_admin` from the side table, unconditionally.
+ *
+ * ON A BRANCH THE ANSWER IS ALWAYS 0, AND THE TABLE IS NEVER ASKED (D106).
+ * This one line is what closes HQ's whole console on a subsidiary Worker, and
+ * it is here rather than in a path list in `index.ts` because EVERY
+ * super-admin route is reached through `requireSuperAdmin` → `isSuperAdmin`
+ * → this flag, and a list of paths is a thing that goes stale the next time a
+ * route is added.
+ *
+ * THE COUNT USED TO BE WRITTEN HERE AND IT WENT STALE, which is the same
+ * failure one sentence up warns about. It said 24; when D132 came to cite it
+ * the real figure was 40, across eleven route files. A number in prose has no
+ * guard behind it, so it is gone rather than corrected — the property is that
+ * they all funnel through this flag, and that is what the sentence now says.
+ *
+ * WHY THE EMPTY TABLE WAS NOT ALREADY THE GATE. A branch database is
+ * bootstrapped from the baseline with `BASELINE_CUTOFF = 219`, so migration
+ * 207 — the single super-admin holder — is MARKED, never executed, and
+ * `super_admins` starts empty. That is correct but it is not a gate: it is a
+ * data state, and one `INSERT INTO super_admins` on a branch database, by
+ * anyone who can reach it, would reopen every HQ route over branch data. The
+ * refusal has to be a property of the deployment, not of a row count, so the
+ * test for this asserts the deny with a `super_admins` row PRESENT.
+ */
+export async function hydrateSuperAdmin<T extends { id: number; role?: string | null }>(
+  env: Env, user: T,
+): Promise<T & { is_super_admin: 0 | 1 }> {
+  const isAdminRole = String(user.role ?? '').toLowerCase() === 'admin';
+  const onBranch = branchOf(env) !== null;
+  const flag: 0 | 1 = isAdminRole && !onBranch ? await loadSuperAdminFlag(env, Number(user.id)) : 0;
+  (user as T & { is_super_admin: 0 | 1 }).is_super_admin = flag;
+  return user as T & { is_super_admin: 0 | 1 };
+}
+
+/**
+ * Is this admin also the franchisor?
+ *
+ * `super_admin` is an ELEVATION on `admin`, not a role beside it — see
+ * migration 199. The role stays `admin` so all 468 existing `role === 'admin'`
+ * checks keep passing; a `super_admins` row adds the one power on top, and
+ * `hydrateSuperAdmin` copies it onto the user object this reads.
+ *
+ * D1 hands integers back as numbers and some fixtures use booleans, so the
+ * check is on truthiness of a coerced number rather than `=== 1`: a value
+ * that is missing entirely (a row nobody hydrated, a test fixture predating
+ * 199) reads as 0 and the answer is NO. Failing closed is the whole point of
+ * the gate.
+ */
+export function isSuperAdmin(user: Pick<User, 'role'> & { is_super_admin?: unknown }): boolean {
+  if (String((user as any)?.role ?? '').toLowerCase() !== 'admin') return false;
+  return Number((user as any)?.is_super_admin ?? 0) === 1;
+}
+
+/**
+ * The gate for franchising: issuing, re-terming, suspending, renewing and
+ * terminating a territory licence, and naming who administers one.
+ *
+ * Deliberately layered on `requireAdmin` rather than replacing it, so the
+ * error a non-admin sees is unchanged and only the last step is new. An admin
+ * on HQ who holds no elevation gets "Super admin required" — a different
+ * sentence from "Admin required", because it is a different fact about them
+ * and the support queue should not have to guess which one happened.
+ *
+ * ON A BRANCH THE REFUSAL IS EARLIER AND SAYS SOMETHING ELSE (D106).
+ * `hydrateSuperAdmin` already answers 0 on a branch, so the `isSuperAdmin`
+ * line below would refuse anyway — but it would refuse with "Super admin
+ * required", which reads as "ask HQ to elevate you" and is untrue: there is
+ * no elevation to grant on this deployment, and the franchising ledger it
+ * guards is not in this database. The explicit check names the real fact and
+ * does not depend on the hydrate having run.
+ */
+export async function requireSuperAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  if (!isSuperAdmin(user as any)) throw new Error('Super admin required');
+  return user;
+}
+
+/**
+ * D776 PR 2 (#2093): an HQ administrator, Admin or Super Admin. A branch's
+ * administrator is refused, because HQ › AI allowances reads HQ's own
+ * deployment. Unlike `requireSuperAdmin`, a plain HQ admin passes.
+ */
+export async function requireHqAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  return user;
+}
+
+/**
+ * The gate for authoring what HQ owns and every branch reads: the master
+ * contract templates and the assessment questions (D.9, D106).
+ *
+ * WHAT IT IS NOT. It is not an elevation check — a plain HQ admin authors
+ * these today and still does. It is a check on the DEPLOYMENT: the library a
+ * branch renders is a copy HQ pushed, so a write accepted on a branch would
+ * edit that copy, diverge it from HQ's, and be silently overwritten by the
+ * next push. Refusing is the honest answer and it names the route back.
+ *
+ * READS ARE NOT GATED, on purpose. A branch must be able to list templates,
+ * fetch one, see its versions and preview it — that is the S5 template
+ * picker. Only authoring stops, and assessment `rescore` stops with it
+ * nowhere: results belong to the branch (S4).
+ */
+export async function requireHqAuthoring(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_AUTHORING_ONLY);
+  return user;
+}
+
+/**
+ * Refuse a decision write while HQ has this branch's licence suspended
+ * (D107). A no-op on HQ, where there is no `branch_licence` row and no
+ * licence above this deployment to suspend it.
+ *
+ * WHY THIS IS NOT `requireAdmin` PLUS A FLAG. The caller has already
+ * established who may act; this establishes whether the DEPLOYMENT may act
+ * at all, which is a different question with a different answer shape — hence
+ * a separate call rather than a fifth clause inside an admin gate, and hence
+ * 423 rather than 403.
+ *
+ * IT DOES NOT AUTHENTICATE. Every call site puts it AFTER its own admin gate,
+ * so an anonymous caller still gets 401 rather than learning the branch's
+ * licence state. The order matters and the tests pin it.
+ *
+ * AN UNREADABLE COPY DOES NOT FREEZE THE BRANCH. A branch whose migration 256
+ * has not been applied, or whose licence HQ has not pushed yet, reads as NOT
+ * suspended: suspension is a claim HQ makes, and inferring it from a missing
+ * row would freeze every branch during the window between bootstrap and the
+ * first push — exactly when its principal is trying to work.
+ *
+ * D985 — THE GRANT GATE STANDS BEHIND IT. A write that starts something under
+ * a program (an admission, a host approval, a certificate, a mentor
+ * assignment, a perk going live, a Refer & Earn acceptance) then calls
+ * `programRefusal` (services/programEnforcement.ts): 403 when the branch's
+ * licence does not hold the program, or holds it paused, ended or outside its
+ * dates. Same order, same posture on a missing copy; a different answer,
+ * because it is a different claim — this one is about the licence, that one
+ * about one program on it. `branchFreeze.js`'s Programs row lists both.
+ */
+export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): Promise<void> {
+  if (!branchOf(c.env)) return;
+  let status = '';
+  try {
+    const row = await c.env.DB.prepare('SELECT status FROM branch_licence WHERE id = 1')
+      .first<{ status: string }>();
+    status = String(row?.status ?? '').toLowerCase();
+  } catch (e) {
+    console.warn('[branch] branch_licence unreadable on a write gate', (e as Error).message);
+    return;
+  }
+  if (status !== 'suspended') return;
+
+  // D142 — THE REASON IS READ SEPARATELY, AND CANNOT UNFREEZE THE BRANCH.
+  //
+  // The first draft selected `status, suspended_at, suspended_note` together,
+  // which reads as tidier and is a hole: on any database whose `branch_licence`
+  // is narrower than migration 256 the widened SELECT throws `no such column`,
+  // the catch above treats that as "unreadable, so not suspended", and a branch
+  // HQ suspended goes on trading. A unit fixture caught it — the freeze test
+  // went 200 where it had been 423 — which is the D133 lesson arriving from the
+  // other side: there, fixtures narrower than the schema made a present row
+  // read as absent; here, one made an enforced freeze read as lifted.
+  //
+  // So the decision is made on `status` alone, exactly as it was before this
+  // change, and the reason is decoration fetched afterwards. A copy that cannot
+  // say WHY it is suspended is still suspended, and the shell renders a stated
+  // absence rather than a lifted freeze.
+  let since: string | null = null;
+  let reason: string | null = null;
+  try {
+    const row = await c.env.DB.prepare(
+      'SELECT suspended_at, suspended_note FROM branch_licence WHERE id = 1',
+    ).first<{ suspended_at: string | null; suspended_note: string | null }>();
+    since = row?.suspended_at ?? null;
+    reason = row?.suspended_note ?? null;
+  } catch (e) {
+    console.warn('[branch] suspension reason unreadable; the freeze still holds', (e as Error).message);
+  }
+  // The message stays the sentence `AUTH_ERROR_STATUSES` keys on, so every
+  // existing reader is unchanged; what is new is the two fields hung off it,
+  // which `branchSuspendedBody` turns into the `code` the shell keys on.
+  throw Object.assign(new Error(BRANCH_SUSPENDED), { since, reason });
+}
+
+/**
+ * RBAC: ensure the authenticated user has one of the allowed roles.
+ * Throws "Forbidden" (mapped to 403 by the global error handler) otherwise.
+ * Admin always passes.
+ */
+export async function requireRole(
+  c: Context<{ Bindings: Env }>,
+  ...roles: Array<'admin' | 'partner' | 'founder' | 'investor' | 'advisor' | 'guest'>
+): Promise<User> {
+  const user = await requireAuth(c);
+  if (user.role === 'admin') return user;
+  if (!roles.includes(user.role as any) && !roles.some(role => isLicence(role) && holdsLicence(user, role))) throw new Error('Forbidden');
+  return user;
+}
+
+/**
+ * IDOR guard. Returns true if the user is allowed to read/touch a row that
+ * belongs to `ownerFounderId`. Admins always pass; founders only
+ * pass when the row's founder_id matches their own.
+ */
+export function canAccessFounderResource(user: User, ownerFounderId: number | null | undefined): boolean {
+  // Relationship predicate (was a Phase-0.1 blanket admin/partner/investor
+  // bypass — see the 2026-06-25 audit, M2).
+  //
+  // #2460: Operating Partners are outside members, not studio-wide staff.
+  // This synchronous founder-level predicate cannot verify a project tie.
+  // Until #2438 defines that tie, a partner receives no grant here. The
+  // separate deal-room reader retains its explicit partner permission.
+  //
+  // INVESTORS get NO access through this predicate. An investor's only path to
+  // founder data is the NDA-gated, fail-closed `maskFounderForInvestor` view
+  // (projects list/detail, dashboard, private-data). The routes that call THIS
+  // predicate (financials, scoring, progress, pipeline, deals, legal docs,
+  // admin-only resources carry NO mask, so letting an investor through leaks unmasked
+  // founder data regardless of any NDA — a cross-founder IDOR. The one place an
+  // investor still needs a masked fallback, `projects.get('/:id')`, keeps its
+  // own `user.role !== 'investor'` branch so the mask below still runs.
+  if (user.role === 'admin') return true;
+  if (ownerFounderId == null) return false;
+  // Founder role only — and only their own row. Gating on the role (not merely
+  // a matching founder_id) means a non-founder principal that happens to carry
+  // a residual founder_id (e.g. a founder later converted to an investor) can
+  // never bypass into the un-masked data this predicate guards.
+  return holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === ownerFounderId;
+}
+
+/**
+ * Which rows of `entities` a principal may list.
+ *
+ * Returns a scope rather than a boolean because `entities` carries no owner
+ * column: ownership is derived through `projects.entity_id`, so the caller has
+ * to turn this into a WHERE clause. Keeping the decision here (and out of the
+ * SQL) is what makes it testable — `GET /api/legal/entities` lives in
+ * legal.ts, whose import graph is too heavy for the strip-types test gate.
+ *
+ * Entity-list policy remains separate from the founder-resource guard:
+ * admin/partner retain its existing exemption; a founder reaches entities their projects point
+ * at; everyone else gets nothing. `'none'` is the default for investor,
+ * exploring and any future role, because unlike the projects list there is no
+ * masked entity view to fall back on — an entity row is a company's legal
+ * name, jurisdiction and parent chain, with nothing safe left after masking.
+ */
+export type EntityListScope =
+  | { kind: 'all' }
+  | { kind: 'own_projects'; founderId: number }
+  | { kind: 'none' };
+
+export function entityListScope(user: User): EntityListScope {
+  if (user.role === 'admin' || holdsLicence(user, 'partner')) return { kind: 'all' };
+  // Role-gated, not merely founder_id-gated — a principal converted to another
+  // role may still carry a residual founder_id, and must not read through it.
+  if (holdsLicence(user, 'founder') && !!user.founder_id) {
+    return { kind: 'own_projects', founderId: user.founder_id };
+  }
+  return { kind: 'none' };
+}
+
+/** Phase 0.1 — true iff viewer may see capital / LP / fund cashflow data.
+ * Strictly admin or investor. Mirrors `services.access_policy.can_view_lp_data`. */
+export function canViewLpData(user: User | null | undefined): boolean {
+  return !!user && (user.role === 'admin' || holdsLicence(user, 'investor'));
+}
+
+/** Phase 0.1 — true iff viewer may see partner-side demand boards.
+ * Strictly admin or partner. */
+export function canViewPartnerDemand(user: User | null | undefined): boolean {
+  return !!user && (user.role === 'admin' || holdsLicence(user, 'partner'));
+}
+
+/**
+ * Task #6 — Step-up factor enforcement.
+ *
+ * `requireFactor(c, 'totp')` resolves the JWT's `jti` to its row in
+ * `user_sessions` and asserts the session's `factor` column matches.
+ * High-risk routes (admin impersonation, billing checkout/portal, contract
+ * void, DD report generation) call this so a session that only authenticated
+ * via SMS can never reach them — TOTP is always required for these surfaces
+ * regardless of which factors the user has enrolled.
+ *
+ * Throws 'TOTP required' (mapped to 403 by the global error handler).
+ * Sessions whose `factor` is NULL (pre-Task-#6 mint or impersonation Bearer
+ * tokens that never created a session row) fail closed: the user must
+ * sign back in with TOTP to step up.
+ */
+export async function requireFactor(
+  c: Context<{ Bindings: Env }>,
+  factor: 'totp',
+): Promise<User> {
+  const user = await requireAuth(c);
+  try {
+    // Task #4 — share the same selection logic getCurrentUser used so a stale
+    // cross-identity Bearer can't step up via its own jti.
+    const sel = await selectJwt(c);
+    if (!sel) throw new Error('TOTP required');
+    const jti = sel.payload?.jti as string | undefined;
+    if (!jti) throw new Error('TOTP required');
+    try {
+      const row = await c.env.DB.prepare(
+        'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?'
+      ).bind(jti, user.id).first<{ factor: string | null }>();
+      if (!row || row.factor !== factor) throw new Error('TOTP required');
+    } catch (e) {
+      if ((e as Error).message === 'TOTP required') throw e;
+      // user_sessions table missing or query failure → fail closed.
+      throw new Error('TOTP required');
+    }
+    return user;
+  } catch (e) {
+    // D200 — a privileged gate turning an AUTHENTICATED caller away is
+    // recorded, and then the refusal stands exactly as before. The wrap sits
+    // below requireAuth on purpose: a caller with no session is not a gate
+    // refusal, it is a sign-in that never happened.
+    await recordGateRefusal(c, user, factor, 'factor_required');
+    throw e;
+  }
+}
+
+/**
+ * D200 — record a privileged gate refusing an authenticated caller in
+ * security_events. Never throws: the refusal it sits beside must reach the
+ * caller unchanged whatever the ledger does.
+ */
+async function recordGateRefusal(
+  c: Context<{ Bindings: Env }>,
+  user: User,
+  factor: string,
+  detail: string,
+): Promise<void> {
+  let ip: string | undefined;
+  try { ip = c.req.header('cf-connecting-ip') || undefined; } catch { ip = undefined; }
+  await recordSecurityEvent(c.env, {
+    kind: 'gate',
+    factor,
+    outcome: 'refused',
+    detail,
+    userId: Number(user.id),
+    email: user.email,
+    ip,
+    supportUserId: await supportOperatorOf(c, Number(user.id)),
+  });
+}
+
+/**
+ * D4691 — who is really calling, when the caller is a support session: the
+ * operator's HQ id from an impersonation token, 0 for a branch support token
+ * (its session row's factor names it; the operator is held at HQ), or null
+ * when the account holder is acting as themselves. Never throws: it only
+ * labels a security event, so a failed read labels nothing.
+ */
+export async function supportOperatorOf(c: Context<{ Bindings: Env }>, userId: number): Promise<number | null> {
+  try {
+    const sel = await selectJwt(c);
+    const by = Number(sel?.payload?.impersonated_by);
+    if (Number.isSafeInteger(by) && by > 0) return by;
+    const jti = typeof sel?.payload?.jti === 'string' ? sel.payload.jti : null;
+    if (!jti) return null;
+    const row = await c.env.DB.prepare(
+      'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?',
+    ).bind(jti, userId).first<{ factor: string | null }>();
+    return row?.factor === 'hq_support' ? 0 : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
+export const STEP_UP_TTL_MINUTES = 15;
+
+/** Parse a SQLite/D1 timestamp. CURRENT_TIMESTAMP is 'YYYY-MM-DD HH:MM:SS'
+ *  (UTC, no zone); ISO strings already carry T/Z. Returns NaN on failure. */
+function parseSqlTs(s: string | null | undefined): number {
+  if (!s) return NaN;
+  const iso = s.includes('T') ? s : s.replace(' ', 'T') + 'Z';
+  return Date.parse(iso);
+}
+
+/**
+ * Task IB (BLOCK-AUTH-03) — step-up auth. Stricter than requireFactor: the
+ * session must have been minted via a STRONG factor (TOTP or passkey) AND that
+ * factor (or an explicit POST /api/auth/step-up) must be RECENT (within
+ * ttlMinutes). Otherwise throws 'step_up_required' (mapped to 403
+ * {code:'step_up_required', ttl_minutes}) so the SPA can prompt for a fresh
+ * TOTP and retry. SMS / recovery-code / magic-link / google sessions can never
+ * satisfy step-up.
+ */
+export async function requireStepUp(
+  c: Context<{ Bindings: Env }>,
+  ttlMinutes: number = STEP_UP_TTL_MINUTES,
+): Promise<User> {
+  const user = await requireAuth(c);
+  const deny = (): never => {
+    const e: any = new Error('step_up_required');
+    e.ttlMinutes = ttlMinutes;
+    throw e;
+  };
+  try {
+    const sel = await selectJwt(c);
+    const jti = sel?.payload?.jti as string | undefined;
+    if (!jti) deny();
+
+    let row: { factor: string | null; created_at: string | null; last_step_up_at?: string | null } | null = null;
+    try {
+      row = await c.env.DB.prepare(
+        'SELECT factor, created_at, last_step_up_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+      ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null; last_step_up_at: string | null }>();
+    } catch {
+      // last_step_up_at column not migrated yet — fall back to factor+created_at.
+      try {
+        row = await c.env.DB.prepare(
+          'SELECT factor, created_at FROM user_sessions WHERE jti = ? AND user_id = ?'
+        ).bind(jti, user.id).first<{ factor: string | null; created_at: string | null }>();
+      } catch { row = null; }
+    }
+    if (!row) deny();
+
+    const strong = row!.factor === 'totp' || row!.factor === 'passkey';
+    const candidates: number[] = [];
+    // A fresh strong-factor login counts as a step-up for its first ttl window.
+    if (strong) { const t = parseSqlTs(row!.created_at); if (!Number.isNaN(t)) candidates.push(t); }
+    // An explicit /step-up always counts, regardless of the original factor.
+    const stamped = parseSqlTs(row!.last_step_up_at);
+    if (!Number.isNaN(stamped)) candidates.push(stamped);
+
+    const mostRecent = candidates.length ? Math.max(...candidates) : 0;
+    if (!mostRecent || Date.now() - mostRecent > ttlMinutes * 60 * 1000) deny();
+    return user;
+  } catch (e) {
+    // D200 — see requireFactor: recorded below requireAuth, refusal unchanged.
+    await recordGateRefusal(c, user, 'step_up', 'step_up_required');
+    throw e;
+  }
+}
+
+/**
+ * The write bar for a super-admin act that changes who holds power: a
+ * TOTP-MINTED session, a RECENT step-up, then the elevation — the order
+ * `routes/admin.ts`'s `POST /impersonate` checks them in, which is the route
+ * that set this bar in the first place.
+ *
+ * WHY IT IS HERE AND NOT IN THE ROUTER THAT FIRST NEEDED IT. It was written
+ * privately inside `routes/admin_super_admins.ts` when granting the elevation
+ * was the only act that wanted it. D134 gives the same bar to promoting an
+ * account to admin and to demoting one, in two more files — and three copies
+ * of a three-line gate is how two of them come to check only two of the three.
+ * `frontend/src/lib/README.md` states the rule for the SPA and it is the same
+ * rule here: if a helper appears in two places, put it in one.
+ *
+ * WHAT EACH STEP BUYS, because a reader who does not know will eventually
+ * "simplify" one away:
+ *  - `requireFactor(c, 'totp')` is a fact about how the session was MINTED. A
+ *    session that authenticated by SMS, magic link or Google can never satisfy
+ *    it, whatever the holder does afterwards.
+ *  - `requireStepUp(c)` is a fact about WHEN. A TOTP session left open on a
+ *    desk for a day is not a person at a keyboard; the step-up is.
+ *  - `requireSuperAdmin(c)` is a fact about WHO, and it is last because the
+ *    other two are cheap and this one is the answer people quote.
+ *
+ * IT IS NOT A REPLACEMENT FOR `requireSuperAdmin` ON READS. Reading the
+ * franchising ledger needs the elevation and nothing more; a step-up on every
+ * list would train the holder to type a TOTP code without reading why.
+ */
+export async function requireSuperAdminWriteBar(c: Context<{ Bindings: Env }>): Promise<User> {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  return await requireSuperAdmin(c);
+}
+
+/**
+ * The floor a sign-out-everywhere must write, and THE `+1` IS THE WHOLE POINT.
+ *
+ * `getCurrentUser` compares `tokenIat < minIat` — **strictly** (see the minIat
+ * check above). So a token whose `iat` EQUALS the floor survives. Write a bare
+ * `Math.floor(Date.now() / 1000)` and every token minted in that same wall-clock
+ * second stays valid, which is precisely the session a revoke is racing: the one
+ * just issued. One second later the floor is indistinguishable from a correct
+ * one, so the gap never shows up in a manual test and never shows up in a log.
+ *
+ * D165 EXTRACTED THIS BECAUSE THREE SITES HAD ALREADY LOST IT. The rule was
+ * stated in a comment on `POST /settings/sessions/revoke-all` and re-typed by
+ * hand at three more `jwt_min_iat` writers in the same file — the email-change
+ * revoke, the post-recovery TOTP re-enrolment and the TOTP repair — and all
+ * three re-typed it WITHOUT the `+1`, while their own copy told the user "all
+ * sessions invalidated". Arithmetic that must not vary is arithmetic with one
+ * definition; that is this function, and it is exported so the one site that
+ * cannot call `bumpJwtMinIat` (it writes a second column atomically) can still
+ * share the floor rather than re-typing it a fifth time.
+ */
+export function jwtMinIatFloor(): number {
+  return Math.floor(Date.now() / 1000) + 1;
+}
+
+/**
+ * NICE-AUTH-04 — sign-out-everywhere primitive. Bumps users.jwt_min_iat so
+ * every JWT issued at or before now is rejected on its next request (see the
+ * minIat check in getCurrentUser). Returns the new epoch-seconds floor.
+ *
+ * ITS CALLERS, WHICH THIS DOCSTRING USED TO GET WRONG. It said it was shared by
+ * `POST /api/auth/sign-out-everywhere` and `POST /api/settings/sessions/revoke-all`.
+ * The first was true; the second was not — `settings.ts` inlined the same UPDATE
+ * instead, so a sentence claiming the consolidation had happened was the reason
+ * nobody noticed it had not. D165 made it true and it is now:
+ *
+ *   routes/auth.ts        POST /api/auth/sign-out-everywhere
+ *   routes/settings.ts    POST /api/settings/sessions/revoke-all
+ *                         POST /api/settings/email/revoke      (email-change revoke)
+ *                         POST /api/settings/2fa/totp/repair   (re-pairing)
+ *   routes/admin_security.ts  POST /api/admin/security/force-reauth/:userId
+ *
+ * ONE SITE DELIBERATELY DOES NOT CALL IT — the post-recovery TOTP re-enrolment
+ * in `settings.ts`, which clears `user_recovery_state.step_up_due_at` and writes
+ * this floor
+ * in ONE statement. Splitting that into two writes to reuse this helper would
+ * open a window where the step-up nag is cleared and the lower-assurance session
+ * is still valid. It shares `jwtMinIatFloor()` instead, and says so in place.
+ */
+export async function bumpJwtMinIat(env: Env, userId: number): Promise<number> {
+  const nowSec = jwtMinIatFloor();
+  await env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE id = ?').bind(nowSec, userId).run();
+  // D666: signing out everywhere ends every AI assistant's grant too. Each
+  // tool call also refuses a grant older than this floor, so a failed revoke
+  // here still cannot leave a working connection behind.
+  await revokeAllGrants(env, userId);
+  return nowSec;
+}
+
+export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAuth(c);
+  // Task #2 — KYC is investor-only. Admins always bypass (for support);
+  // founders, partners, and advisors are never required to complete KYC
+  // and pass through. Only investors must be approved before reaching
+  // gated capital / deal-flow / signing endpoints.
+  if (user.role === 'admin') return user;
+  if (!holdsLicence(user, 'investor')) return user;
+  if ((user as any).kyc_status === 'approved') return user;
+  throw new Error('KYC required');
+}
+
+export async function hashToken(token: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * T6 — cookie helpers for the httpOnly auth migration.
+ *
+ * `studioos_auth` carries the JWT and is HttpOnly so XSS can't read it.
+ * `studioos_csrf` is a separate, JS-readable random token for the
+ * double-submit CSRF check (see middleware/csrf.ts). SameSite=Lax keeps
+ * top-level navigations working (email verification links, OAuth returns)
+ * while still blocking cross-site form POST attacks. Secure means it's only
+ * ever sent over HTTPS — fine in production (axal.vc is HTTPS-only); the
+ * dev backend (FastAPI on localhost) doesn't issue or check these cookies.
+ */
+const AUTH_COOKIE_TTL = JWT_EXPIRY_HOURS * 3600;
+
+export function generateCsrfToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Derive the cookie Domain attribute from the request host so a session
+// set by `app.axal.vc/api/auth/*` is also valid when the SPA loads on the
+// apex (`axal.vc/dashboard`, etc). Leaf-host scoping (the old default)
+// would log users out the moment they navigated between the two hosts.
+// Dev/preview (localhost / *.workers.dev) deliberately omits Domain so
+// host-only cookies still work. Exported for the Google state cookie (D722),
+// which has to cross the same two hosts the session does.
+export function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
+  const host = (c.req.header('host') || '').toLowerCase();
+  // A branch Worker's cookies are host-only, and their NAMES carry the branch
+  // code (util/branch.ts): a session minted on fr.axal.vc is never presented
+  // to dach.axal.vc or to HQ, and HQ's own `.axal.vc` cookies — which the
+  // browser keeps sending to every subdomain — are never read as the
+  // branch's. HQ itself keeps the registrable-domain cookie below because the
+  // Google callback still lands on app.axal.vc (OAUTH_CALLBACK_BASE_URL) and
+  // sets the cookie the SPA then reads on the apex; it can go host-only the
+  // day that redirect URI is registered on axal.vc. D104.
+  if (branchOf(c.env)) return '';
+  // Localhost / preview workers — host-only cookies (no cross-host issue)
+  if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.workers.dev')) {
+    return '';
+  }
+  // Derive registrable parent domain: app.axal.vc → .axal.vc
+  const parts = host.split('.');
+  if (parts.length >= 2) {
+    return `; Domain=.${parts.slice(-2).join('.')}`;
+  }
+  return '';
+}
+
+export function setAuthCookies(c: Context<{ Bindings: Env }>, jwt: string, csrf: string): void {
+  const dom = authCookieDomainAttr(c);
+  const common = `Secure; SameSite=Lax; Path=/${dom}; Max-Age=${AUTH_COOKIE_TTL}`;
+  c.header('Set-Cookie', `${authCookieName(c.env)}=${jwt}; HttpOnly; ${common}`, { append: true });
+  c.header('Set-Cookie', `${csrfCookieName(c.env)}=${csrf}; ${common}`, { append: true });
+}
+
+export function clearAuthCookies(c: Context<{ Bindings: Env }>): void {
+  const dom = authCookieDomainAttr(c);
+  // Clear with the derived Domain attribute (matches what we now set)
+  // AND without it, so any legacy host-only cookie issued before this
+  // change still gets cleaned up on logout. Two Set-Cookie headers per
+  // cookie is the standard pattern for cookie-domain migrations.
+  const authName = authCookieName(c.env);
+  const csrfName = csrfCookieName(c.env);
+  c.header('Set-Cookie', `${authName}=; HttpOnly; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  c.header('Set-Cookie', `${csrfName}=; Secure; SameSite=Lax; Path=/${dom}; Max-Age=0`, { append: true });
+  if (dom) {
+    c.header('Set-Cookie', `${authName}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`, { append: true });
+    c.header('Set-Cookie', `${csrfName}=; Secure; SameSite=Lax; Path=/; Max-Age=0`, { append: true });
+  }
+}
+
+export function generateToken(): string {
+  const bytes = new Uint8Array(36);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(36)).join('').slice(0, 48);
+}

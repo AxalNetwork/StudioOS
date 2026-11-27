@@ -1,0 +1,281 @@
+// D953 (#2371) — the five program pages whose board is "Programs" itself:
+// Perks (PG10), Learning (PG12), Referral partners (PG7), Investor cohort
+// access (PG11) and AI-native Venture (PG13). This file is the routed page at
+// each of their addresses and tab sub-paths (`guard(['admin'])` in App.jsx);
+// its default export is one `AdminBoardFrame` named "Programs", and the page
+// the address names sits in `ProgramBody` inside it. AI-native Venture was one
+// page with no tab strip until D5895 moved it into the generic shell.
+//
+// D963 (#2796, part 10) completes Referral partners (Overview, How it runs,
+// Queue, Activity, and its dialogs), Investor cohort access (Overview and
+// Activity, Give access and End access) and AI-native Venture (its tiles and
+// playbook, and the Super Admin's Edit and Publish), on parts 1, 5 and 6's
+// reads. Each header's status pill is part 1's registry's.
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { actionPrimary } from '../../../ui';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../../lib/shellRole';
+import AdminBoardFrame from '../AdminBoardFrame';
+import ActivityTab from './ActivityTab';
+import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
+import ProgramFrame from './ProgramFrame';
+import { AiNativeTabs, InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
+import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } from './InfluencerPages';
+import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
+import { LearningOverview, LearningParticipation, LearningPeople } from './LearningPages';
+import { PerksOverview, PerksParticipation, PerksQueue } from './PerksPages';
+import { Availability, Modules, OnRegistry, Participation, Settings } from './ProgramShellSections';
+import { shellModules } from './genericProgramModel';
+import { InvitePartner, PartnersOverview, PartnersParticipation, PartnersQueue, useQueueCount } from './ReferralPartners';
+import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
+import { EndAccessDialog, GiveAccessDialog, InvestorOverview, InvestorParticipation, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
+import { InvestorTabs } from './ProgramTabs';
+import { SUB, Tile } from './parts';
+import { STATUS_WORD } from './catalogueModel';
+import { totalOf } from './programPagesModel';
+import { useLearningReads, usePerksReads } from './useProgramReads';
+import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RECORDED, NOT_RUNNING_YET, READING, isReady, routeFor } from './programsModel';
+
+/**
+ * D5313 (#5313): Perks runs in the generic program shell (PG03a), the first of the nine built-in programs to move.
+ * The shell's six core sections, with Perks' screens where it has its own: Overview is its tiles, charts and credits
+ * above the shell's Capability modules; Playbook is How it runs (D962); Availability & grants, Participation and
+ * Settings are the shell's sections (`ProgramShellSections.jsx`), Participation on Perks' own claims; the Perk queue
+ * module is the Queue (D962), at `/queue` as MODULE_PATHS has it; History is the Activity read. Every address it had
+ * keeps its path. The registry read is the frame's, so a failed one marks only the sections that need it.
+ */
+function Perks({ tab, superAdmin }) {
+  const reads = usePerksReads(tab);
+  const detail = useProgramDetail('perks');
+  const n = totalOf(reads.inReview);
+  const queue = n !== null ? { text: n.toLocaleString('en-US'), amber: n > 0, title: 'Listings in review' } : null;
+  return (
+    <ProgramFrame detail={detail} program="perks" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<PerksTabs queue={queue} />}
+      actions={tab === 'queue' ? null : <Link to="/admin/programs/perks/queue" className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-perks-review">Review perk queue</Link>}>
+      {tab === 'overview' ? (
+        <>
+          <PerksOverview reads={reads} superAdmin={superAdmin} />
+          <Modules modules={shellModules('perks', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'how' ? <PlaybookEditor program="perks" superAdmin={superAdmin} detail={detail} testId="programs-perks-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <PerksParticipation reads={reads} /> : null}
+      {tab === 'queue' ? <PerksQueue reads={reads} /> : null}
+      {tab === 'activity' ? <ActivityTab program="perks" testId="programs-perks-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="perks" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
+    </ProgramFrame>
+  );
+}
+
+/**
+ * D5887 (#5887): Learning runs in the generic program shell (PG03a), the second of the nine to move, as D5313 moved
+ * Perks. Overview is its tiles, charts and programs table above the shell's Capability modules; Playbook is How it
+ * runs (D962); Availability & grants and Settings are the shell's sections, Participation is Learning's own
+ * enrolments; the Learners module is People, at `/people` as MODULE_PATHS has it; History is the Activity read. Every
+ * address it had keeps its path. The registry read is the frame's, so a failed one marks only the sections that need it.
+ */
+function Learning({ tab, superAdmin }) {
+  const [programUid, setProgramUid] = useState(null);
+  const [learnerOffset, setLearnerOffset] = useState(0);
+  const reads = useLearningReads(tab, programUid, learnerOffset);
+  const detail = useProgramDetail('learning');
+  return (
+    <ProgramFrame detail={detail} program="learning" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<LearningTabs />}>
+      {tab === 'overview' ? (
+        <>
+          <LearningOverview reads={reads} superAdmin={superAdmin} />
+          <Modules modules={shellModules('learning', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'how' ? <PlaybookEditor program="learning" superAdmin={superAdmin} detail={detail} testId="programs-learning-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <LearningParticipation reads={reads} superAdmin={superAdmin} /> : null}
+      {tab === 'people' ? <LearningPeople reads={reads} programUid={programUid} onPick={(uid) => { setProgramUid(uid); setLearnerOffset(0); }} offset={learnerOffset} onPage={setLearnerOffset} /> : null}
+      {tab === 'activity' ? <ActivityTab program="learning" testId="programs-learning-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="learning" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
+    </ProgramFrame>
+  );
+}
+
+/** D963: the header's status from part 1's registry, in the canvas's words; null until it answers. */
+const registryStatus = (detail) => (isReady(detail.read) ? STATUS_WORD[detail.read.data?.program?.status] || null : null);
+
+/** A page's reload counter and its open dialog. */
+function useDesk() {
+  const [tick, setTick] = useState(0);
+  const [dialog, setDialog] = useState(null);
+  const reload = () => setTick((t) => t + 1);
+  return { tick, reload, dialog, setDialog, close: () => setDialog(null) };
+}
+
+/**
+ * D5888 (#5888): Referral partners runs in the generic program shell (PG03a), as Perks does (D5313). Overview is its
+ * tiles, charts, Standard rules and partners table above the shell's Capability modules; Playbook is How it runs;
+ * Availability & grants and Settings are the shell's sections inside `OnRegistry`; Participation is the program's own
+ * summary; the Referral queue module is the Queue (D963), at `/queue` as MODULE_PATHS has it; History is the
+ * Activity read. The signed-terms dialogs open from any section, as before. A failed registry read marks only the
+ * sections that need it.
+ */
+function ReferralPartners({ tab, superAdmin }) {
+  const detail = useProgramDetail('referral-partners');
+  const desk = useDesk();
+  const queue = useQueueCount(desk.tick);
+  const open = { reload: desk.reload, dialog: desk.setDialog };
+  const d = desk.dialog;
+  const changed = () => desk.reload();
+  return (
+    <ProgramFrame detail={detail} program="referral-partners" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<PartnersTabs queue={queue} />}
+      actions={<InvitePartner className={`${actionPrimary} w-full sm:w-auto`} />}>
+      {tab === 'overview' ? (
+        <>
+          <PartnersOverview superAdmin={superAdmin} tick={desk.tick} open={open} />
+          <Modules modules={shellModules('referral-partners', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'how' ? <PlaybookEditor program="referral-partners" superAdmin={superAdmin} detail={detail} testId="programs-partners-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <PartnersParticipation tick={desk.tick} open={open} /> : null}
+      {tab === 'queue' ? <PartnersQueue superAdmin={superAdmin} tick={desk.tick} open={open} /> : null}
+      {tab === 'activity' ? <ActivityTab program="referral-partners" testId="programs-partners-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="referral-partners" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
+      {d?.kind === 'terms' ? <TermsDialog partner={d.partner} superAdmin={superAdmin} onClose={desk.close} onChanged={changed} onOpen={(kind, terms) => desk.setDialog({ kind, terms, partner: d.partner })} /> : null}
+      {d?.kind === 'approve' ? <ApproveDialog terms={d.terms || null} partner={d.partner || null} onClose={desk.close} onChanged={changed} /> : null}
+      {d?.kind === 'send' ? <SendDialog terms={d.terms || null} partner={d.partner || null} onClose={desk.close} onChanged={changed} /> : null}
+      {d?.kind === 'end' ? <EndTermsDialog partner={d.partner} onClose={desk.close} onChanged={changed} /> : null}
+      {d?.kind === 'rule' ? <RuleDialog rule={d.rule} onClose={desk.close} onChanged={changed} /> : null}
+    </ProgramFrame>
+  );
+}
+
+const BANNER = <p role="note" className="m-0 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3.5 py-2.5 text-[13px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="programs-investor-banner">{INVESTOR_BANNER}</p>;
+
+function InvestorCohorts({ tab, superAdmin }) {
+  const detail = useProgramDetail('investor-cohorts');
+  const desk = useDesk();
+  const reads = useInvestorReads(desk.tick);
+  const status = registryStatus(detail) || (detail.read.status === 'loading' ? READING : detail.read.status === 'error' ? 'Unavailable' : NOT_RECORDED);
+  const open = { reload: desk.reload, dialog: desk.setDialog, banner: BANNER };
+  const d = desk.dialog;
+  return (
+    <ProgramFrame detail={detail} program="investor-cohorts" superAdmin={superAdmin} status={status} tabs={<InvestorTabs />}
+      actions={<button type="button" onClick={() => desk.setDialog({ kind: 'give' })} className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-investor-give">Give access</button>}>
+      {tab === 'overview' ? (
+        <>
+          <InvestorOverview reads={reads} running={status === 'Live'} tick={desk.tick} open={open} />
+          <Modules modules={shellModules('investor-cohorts', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'how' ? <PlaybookEditor program="investor-cohorts" superAdmin={superAdmin} detail={detail} testId="programs-investor-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <InvestorParticipation summary={reads.summary} onRetry={desk.reload} /> : null}
+      {tab === 'activity' ? <ActivityTab program="investor-cohorts" testId="programs-investor-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="investor-cohorts" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
+      {d?.kind === 'give' ? <GiveAccessDialog reads={reads} onClose={desk.close} onGiven={desk.reload} /> : null}
+      {d?.kind === 'end' ? <EndAccessDialog grant={d.grant} onClose={desk.close} onEnded={desk.reload} /> : null}
+      {d?.kind === 'nda' ? <NdaSendDialog grant={d.grant} onClose={desk.close} onSent={desk.reload} /> : null}
+    </ProgramFrame>
+  );
+}
+
+/**
+ * D4298 (#4298, IN11): Influencers. Its own address opens Applications, where
+ * the work waits; the tab strip carries the count waiting on HQ.
+ */
+function Influencers({ tab, superAdmin }) {
+  const detail = useProgramDetail(INFLUENCER_KEY);
+  const [counts, setCounts] = useState(null);
+  const t = tab === 'overview' ? INFLUENCER_LANDING : tab;
+  const waiting = counts ? Number(counts.applied || 0) : null;
+  const queue = waiting !== null ? { text: waiting.toLocaleString('en-US'), amber: waiting > 0, title: 'Applications waiting on HQ' } : null;
+  return (
+    <ProgramFrame detail={detail} program={INFLUENCER_KEY} superAdmin={superAdmin} status={registryStatus(detail)} tabs={<InfluencerTabs queue={queue} />}>
+      {t === 'how' ? <PlaybookEditor program={INFLUENCER_KEY} superAdmin={superAdmin} detail={detail} testId="programs-influencer-how" /> : null}
+      {t === 'applications' ? <ApplicationsTab onCount={setCounts} /> : null}
+      {tab === 'overview' ? <Modules modules={shellModules(INFLUENCER_KEY, detail.read)} /> : null}
+      {t === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {t === 'participation' ? <Participation /> : null}
+      {t === 'influencers' ? <InfluencersTab /> : null}
+      {t === 'offers' ? <OffersTab superAdmin={superAdmin} /> : null}
+      {t === 'payouts' ? <PayoutsTab /> : null}
+      {t === 'activity' ? <ActivityTab program={INFLUENCER_KEY} testId="programs-influencer-activity" /> : null}
+      {t === 'settings' ? (
+        <>
+          <SettingsTab superAdmin={superAdmin} />
+          <OnRegistry detail={detail}>
+            {(data) => <Settings programKey={INFLUENCER_KEY} program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}
+          </OnRegistry>
+        </>
+      ) : null}
+    </ProgramFrame>
+  );
+}
+
+/** PG13's four tiles: the program has not run, so each reads "Not running yet", never 0. */
+const AI_TILES = ['Founders', 'Cohorts', 'Applications', 'Studios offered'].map((label) => ({
+  key: label.toLowerCase().replace(/ /g, '-'), label, state: 'placeholder', word: NOT_RUNNING_YET, reason: 'This program has not run.',
+}));
+
+/**
+ * AI-native Venture (PG13, PG13s). How it runs is part 1's playbook store:
+ * an Admin reads what HQ published, with the lock and "Set by HQ", and an
+ * unset section reads "Not set"; a Super Admin edits the draft and publishes
+ * it. Offer to studios waits for #2376 and part 3, so it is not drawn.
+ *
+ * D5895 (#5895): it runs in the generic program shell (PG03a), D5313's pattern. Overview keeps what the address
+ * showed (the tiles, the playbook and, for an Admin, the foot line, with their test ids) and adds Capability
+ * modules; Playbook is the same editor on its own; Availability & grants and Settings are the shell's sections inside
+ * `OnRegistry`; Participation is the shell's "Not recorded", because no store records who took part; History is the
+ * activity read. No module tab: the registry seeds none for it.
+ */
+function AiNativeVenture({ tab, superAdmin }) {
+  const detail = useProgramDetail('ai-native-venture');
+  const playbook = (
+    <>
+      <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{superAdmin ? 'How it runs · draft' : 'How it runs'}</h2>
+      <PlaybookEditor program="ai-native-venture" superAdmin={superAdmin} detail={detail} testId="programs-ai-native-how" />
+      {superAdmin ? null : <p className={`m-0 ${SUB}`} data-testid="programs-ai-native-foot">{AI_NATIVE_FOOT}</p>}
+    </>
+  );
+  return (
+    <ProgramFrame detail={detail} program="ai-native-venture" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<AiNativeTabs />}>
+      {tab === 'overview' ? (
+        <>
+          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="programs-ai-native-tiles">
+            {AI_TILES.map((t) => <Tile key={t.key} t={t} />)}
+          </div>
+          {playbook}
+          <Modules modules={shellModules('ai-native-venture', detail.read)} />
+        </>
+      ) : null}
+      {tab === 'how' ? playbook : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <Participation /> : null}
+      {tab === 'activity' ? <ActivityTab program="ai-native-venture" testId="programs-ai-native-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="ai-native-venture" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
+    </ProgramFrame>
+  );
+}
+
+function ProgramBody() {
+  const { pathname } = useLocation();
+  const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
+  const { program, tab } = routeFor(pathname);
+  if (program === 'perks') return <Perks tab={tab} superAdmin={superAdmin} />;
+  if (program === 'learning') return <Learning tab={tab} superAdmin={superAdmin} />;
+  if (program === 'referral-partners') return <ReferralPartners tab={tab} superAdmin={superAdmin} />;
+  if (program === 'investor-cohorts') return <InvestorCohorts tab={tab} superAdmin={superAdmin} />;
+  if (program === 'ai-native-venture') return <AiNativeVenture tab={tab} superAdmin={superAdmin} />;
+  if (program === INFLUENCER_KEY) return <Influencers tab={tab} superAdmin={superAdmin} />;
+  return null;
+}
+
+// D953 (#2371): the five pages whose board is Programs, in the Admin boards' frame.
+export default function ProgramPage() {
+  return (
+    <AdminBoardFrame workspace="Programs" note="Eadwyn reads the program figures on this page. Nothing changes until you act." data-testid="admin-board-program">
+      <ProgramBody />
+    </AdminBoardFrame>
+  );
+}

@@ -1,0 +1,1 @@
+| Portfolio · Boards | founder | — (the board grid PF1–PF8, PF6m, PF7) | — | as Portfolio Account Page | UPGRADE | D1413. The grid imports `Portfolio Account Page` by name. Its board → file map is D1413 §2. |

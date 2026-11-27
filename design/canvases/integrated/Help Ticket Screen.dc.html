@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <style>
+    .ht{container-type:inline-size;font-family:Inter,system-ui,sans-serif;color:#241f38;background:#f4f3f7;-webkit-font-smoothing:antialiased}
+    .ht a{color:#6d28d9;text-decoration:none}
+    @container (max-width:600px){.ht-pad{padding-left:16px!important;padding-right:16px!important}.ht-2{grid-template-columns:1fr!important}.ht-rail{width:auto!important}.ht-th{display:none!important}.ht-row{grid-template-columns:1fr!important;gap:6px!important}.ht-hide{display:none!important}.ht-tabs{overflow-x:auto;flex-wrap:nowrap!important}.ht-hd{flex-direction:column;align-items:flex-start!important}.ht-h1{font-size:20px!important}}
+  </style>
+</helmet>
+<div class="ht">
+  <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span><span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span><span style="font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577;margin-left:4px">Help</span></div>
+    <span class="ht-hide" style="font-family:'Roboto Mono',monospace;font-size:11px;color:#6b6577">{{ personaNote }}</span>
+  </div>
+
+  <div class="ht-pad" style="padding:20px 28px 30px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:12px;color:#6b6577;display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="3"><span style="color:{{ c.color }}">{{ c.t }}</span></sc-for></div>
+    <div class="ht-hd" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div style="min-width:0;display:flex;flex-direction:column;gap:8px">
+        <h1 class="ht-h1" style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em;line-height:1.15">{{ title }}</h1>
+        <sc-if value="{{ hasPills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ pills }}" as="p" hint-placeholder-count="4"><span style="{{ p.style }}">{{ p.t }}</span></sc-for></div></sc-if>
+      </div>
+      <sc-if value="{{ cta }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;font-weight:700;padding:10px 18px;border-radius:9px;background:#7c3aed;color:#fff;white-space:nowrap">{{ cta }}</span></sc-if>
+    </div>
+
+    <sc-if value="{{ banner.show }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:#fffdf5;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px"><span style="font-size:13px;font-weight:600;color:#92400e">{{ banner.t }}</span><span style="font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:9px;background:#fff;border:1px solid #fcd34d;color:#92400e;white-space:nowrap">{{ banner.cta }}</span></div></sc-if>
+
+    <!-- LIST (H3, H6) -->
+    <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+      <div class="ht-tabs" style="display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #e8e6ee"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5"><span style="{{ t.style }}">{{ t.t }} <span style="font-family:'Roboto Mono',monospace;font-size:11px;opacity:.7">{{ t.n }}</span></span></sc-for></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <sc-if value="{{ search }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e8e6ee;border-radius:9px;padding:8px 12px;font-size:13px;color:#a49ead;min-width:220px">{{ search }}</span></sc-if>
+        <sc-for list="{{ filters }}" as="f" hint-placeholder-count="2"><span style="font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:9px;background:#fff;border:1px solid #e8e6ee;color:#4a4459;white-space:nowrap">{{ f }} ▾</span></sc-for>
+        <span style="margin-left:auto;font-family:'Roboto Mono',monospace;font-size:11px;color:#6b6577">{{ count }}</span>
+      </div>
+      <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;overflow:hidden">
+        <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}"><div class="ht-th" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) 92px 84px 96px minmax(150px,1.6fr) 110px;gap:12px;padding:9px 16px;border-bottom:1px solid #f0eef5;font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577"><span>Ticket</span><span>Requester</span><span>Category</span><span>Priority</span><span>SLA</span><span>Status</span><span>Bounty / review</span><span>Tracker</span></div></sc-if>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+          <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+            <div class="ht-row" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) 92px 84px 96px minmax(150px,1.6fr) 110px;gap:12px;padding:12px 16px;border-bottom:1px solid #f0eef5;align-items:center;font-size:13px">
+              <span style="min-width:0"><span style="font-weight:700;display:block">{{ r.title }}</span><span style="font-size:12px;color:#6b6577;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.desc }}</span></span>
+              <span style="color:#6d28d9;font-weight:600">{{ r.who }}</span>
+              <span style="color:#4a4459;font-size:12.5px">{{ r.cat }}</span>
+              <span style="display:flex;flex-direction:column;gap:2px"><span style="{{ r.priStyle }}">{{ r.pri }}</span><span style="font-family:'Roboto Mono',monospace;font-size:10px;color:#6b6577">{{ r.tier }}</span></span>
+              <span><span style="{{ r.slaStyle }}">{{ r.sla }}</span></span>
+              <span><span style="{{ r.stStyle }}">{{ r.st }}</span></span>
+              <span style="min-width:0"><sc-if value="{{ r.chip }}" hint-placeholder-val="{{ false }}"><span style="{{ r.chipWrapStyle }}">{{ r.chip }}</span></sc-if></span>
+              <span style="font-family:'Roboto Mono',monospace;font-size:11.5px;color:{{ r.trColor }}">{{ r.tracker }}</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isMember }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:13px 16px;border-bottom:1px solid #f0eef5;display:flex;flex-direction:column;gap:7px">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><span style="font-weight:700;font-size:13.5px">{{ r.title }}</span><span style="font-family:'Roboto Mono',monospace;font-size:11px;color:#6b6577;white-space:nowrap">Updated {{ r.updated }}</span></div>
+              <div style="font-size:12.5px;color:#6b6577;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.desc }}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap"><span style="{{ r.typeStyle }}">{{ r.type }}</span><span style="{{ r.catStyle }}">{{ r.cat }}</span><span style="{{ r.priStyle }}">{{ r.pri }}</span><span style="{{ r.stStyle }}">{{ r.st }}</span><sc-if value="{{ r.chip }}" hint-placeholder-val="{{ false }}"><span style="{{ r.chipStyle }}">{{ r.chip }}</span></sc-if></div>
+            </div>
+          </sc-if>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- FORM (H4) -->
+    <sc-if value="{{ isForm }}" hint-placeholder-val="{{ false }}">
+      <div class="ht-2" style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start">
+        <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Title <span style="color:#b91c1c">·</span> required</span><span style="border:1px solid #ddd0fb;border-radius:9px;padding:10px 12px;font-size:14px;background:#fff">{{ form.title }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Type <span style="color:#b91c1c">·</span> required, no default</span><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"><sc-for list="{{ form.types }}" as="t" hint-placeholder-count="3"><div style="{{ t.style }}"><span style="font-weight:700;font-size:13px">{{ t.t }}</span><span style="font-size:11.5px;color:#6b6577">{{ t.d }}</span></div></sc-for></div><sc-if value="{{ form.isBug }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#047857;background:#eefbf5;border:1px solid #a7f3d0;border-radius:9px;padding:8px 12px">A confirmed bug earns credits when the fix ships.</span></sc-if></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Category</span><span style="border:1px solid #e8e6ee;border-radius:9px;padding:10px 12px;font-size:13.5px;display:flex;justify-content:space-between"><span>{{ form.cat }}</span><span style="color:#6b6577">▾</span></span><div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ form.cats }}" as="c" hint-placeholder-count="8"><span style="font-size:11px;color:#6b6577;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:99px;padding:2px 8px">{{ c }}</span></sc-for></div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Priority</span><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"><sc-for list="{{ form.pris }}" as="p" hint-placeholder-count="4"><div style="{{ p.style }}"><span style="font-weight:700;font-size:13px">{{ p.t }}</span><span style="font-size:11.5px;color:#6b6577;line-height:1.45">{{ p.d }}</span></div></sc-for></div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Description</span><span style="border:1px solid #e8e6ee;border-radius:9px;padding:10px 12px;font-size:13.5px;min-height:96px;color:#a49ead">{{ form.descPh }}</span></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><span style="font-size:12.5px;font-weight:600;padding:9px 15px;border-radius:9px;background:#fff;border:1px solid #e8e6ee;color:#4a4459">Cancel</span><span style="font-size:13px;font-weight:700;padding:10px 20px;border-radius:9px;background:#7c3aed;color:#fff">Open ticket</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9">These guides may answer it</span><sc-for list="{{ form.guides }}" as="g" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:2px;padding-bottom:9px;border-bottom:1px solid #f0eef5"><span style="font-size:13px;font-weight:700;color:#6d28d9">{{ g.t }}</span><span style="font-family:'Roboto Mono',monospace;font-size:10px;color:#6b6577">{{ g.m }}</span></div></sc-for><span style="font-size:11.5px;color:#6b6577">Matched on the title as you type.</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">After submit · three outcomes</span><sc-for list="{{ form.outcomes }}" as="o" hint-placeholder-count="3"><div style="{{ o.style }}"><span style="font-weight:700;font-size:13px">{{ o.t }}</span><span style="font-size:12px;line-height:1.5">{{ o.d }}</span></div></sc-for></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- DETAIL (H5, H7) -->
+    <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+      <div class="ht-2" style="display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+          <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:18px 20px;font-size:14px;line-height:1.7;color:#332e45">{{ detail.desc }}</div>
+          <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:14px 18px;display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+              <div style="display:flex;flex-direction:column;gap:5px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Status</span><div style="display:flex;gap:4px"><sc-for list="{{ detail.statusOpts }}" as="s" hint-placeholder-count="4"><span style="{{ s.style }}">{{ s.t }}</span></sc-for></div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Assignee</span><span style="border:1px solid #e8e6ee;border-radius:9px;padding:7px 12px;font-size:13px;display:flex;gap:10px"><span>{{ detail.assignee }}</span><span style="color:#6b6577">▾</span></span></div>
+              <sc-if value="{{ detail.reviewLink }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:12.5px;font-weight:700;color:#6d28d9">{{ detail.reviewLink }}</span></sc-if>
+            </div>
+          </sc-if>
+          <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;overflow:hidden">
+            <div style="padding:11px 18px;border-bottom:1px solid #f0eef5;font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Thread · {{ detail.replyCount }}</div>
+            <sc-for list="{{ detail.thread }}" as="m" hint-placeholder-count="3"><div style="display:flex;gap:12px;padding:14px 18px;border-bottom:1px solid #f0eef5"><span style="{{ m.avStyle }}">{{ m.init }}</span><div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><span style="font-weight:700;font-size:13px">{{ m.who }}</span><span style="{{ m.roleStyle }}">{{ m.role }}</span><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;color:#a49ead">{{ m.when }}</span></div><span style="font-size:13.5px;line-height:1.6;color:#332e45">{{ m.body }}</span></div></div></sc-for>
+            <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px;background:{{ detail.replyBg }}">
+              <span style="border:1px solid #e8e6ee;border-radius:9px;padding:10px 12px;font-size:13.5px;min-height:56px;color:#a49ead;background:#fff;opacity:{{ detail.replyOpacity }}">{{ detail.replyPh }}</span>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:12px;color:{{ detail.replyNoteColor }}">{{ detail.replyNote }}</span><span style="font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:9px;background:#7c3aed;color:#fff;opacity:{{ detail.replyOpacity }}">Reply</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="ht-rail" style="width:250px;display:flex;flex-direction:column;gap:12px">
+          <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:9px"><sc-for list="{{ detail.meta }}" as="k" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">{{ k.k }}</span><span style="font-size:13px;font-weight:600;color:{{ k.color }}">{{ k.v }}</span></div></sc-for></div>
+          <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#6b6577">Tracker</span><span style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;color:{{ detail.trColor }}">{{ detail.tracker }}</span><span style="font-size:12px;color:#6b6577;line-height:1.5">{{ detail.trNote }}</span><sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.5;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:8px 10px">{{ detail.trError }}</span></sc-if></div>
+          <div style="{{ detail.panelStyle }}"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em">{{ detail.panelLbl }}</span><span style="font-size:14px;font-weight:800;letter-spacing:-.01em;margin-top:6px;display:block">{{ detail.panelState }}</span><span style="font-size:12.5px;line-height:1.55;display:block;margin-top:4px">{{ detail.panelText }}</span></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- STATES STRIP -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:4px">
+      <sc-for list="{{ states }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"><span style="font-family:'Roboto Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.11em">{{ s.k }}</span><span style="font-size:12.5px;line-height:1.5;display:block;margin-top:4px">{{ s.v }}</span><sc-if value="{{ s.cta }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:700;display:block;margin-top:4px">{{ s.cta }}</span></sc-if></div></sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1080},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;h3&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;h3&quot;,&quot;h4&quot;,&quot;h5&quot;,&quot;h5b&quot;,&quot;h6&quot;,&quot;h7&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.screen ?? 'h3';
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', VE = '#ddd0fb', MUT = '#6b6577', HAIR = '#e8e6ee';
+    const pill = (fg, bg, bd) => 'font-size:11px;font-weight:600;border-radius:99px;padding:3px 9px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px solid ' + bd;
+    const P = {
+      grey: pill(MUT, '#f4f3f7', HAIR), violet: pill(VD, VT, VE), green: pill('#047857', '#eefbf5', '#a7f3d0'), amber: pill('#92400e', '#fffdf5', '#fcd34d'), red: pill('#b91c1c', '#fef2f2', '#fecaca'),
+      type: { Task: pill(MUT, '#f4f3f7', HAIR), Bug: pill('#b91c1c', '#fef2f2', '#fecaca'), Feature: pill(VD, VT, VE) },
+      pri: { Low: pill(MUT, '#f4f3f7', HAIR), Medium: pill(VD, VT, VE), High: pill('#92400e', '#fffdf5', '#fcd34d'), Urgent: pill('#b91c1c', '#fef2f2', '#fecaca') },
+      st: { Open: pill(VD, VT, VE), 'In progress': pill('#92400e', '#fffdf5', '#fcd34d'), Resolved: pill('#047857', '#eefbf5', '#a7f3d0'), Closed: pill(MUT, '#f4f3f7', HAIR) },
+      sla: { 'On time': pill('#047857', '#eefbf5', '#a7f3d0'), 'Due soon': pill('#92400e', '#fffdf5', '#fcd34d'), Overdue: pill('#b91c1c', '#fef2f2', '#fecaca') },
+    };
+    const TIER = { Urgent: 'P1 · 24 h', High: 'P2 · 48 h', Medium: 'P3 · 96 h', Low: 'P3 · 96 h' };
+    const CATS = ['Fund administration', 'Contracts', 'Access & permissions', 'Licence & seats', 'Billing', 'Data & reporting', 'Onboarding', 'Other'];
+    const chipFor = (c) => !c ? '' : /^Fixed: \[N\]|Confirmed|Approved/.test(c) ? P.green : /Declined|Not a bug|taken back|could not be read/.test(c) ? P.red : /Awaiting|Under review|Duplicate|no credits/.test(c) ? P.amber : P.grey;
+    const rowsBase = [
+      { title: '[Ticket title]', desc: '[First line of the description]', type: 'Bug', cat: 'Billing', pri: 'High', st: 'In progress', chip: 'Confirmed: being fixed', updated: '[date]', who: '[Member name]', sla: 'On time', tracker: '#[n]' },
+      { title: '[Ticket title]', desc: '[First line of the description]', type: 'Feature', cat: 'Data & reporting', pri: 'Medium', st: 'Open', chip: 'Awaiting review', updated: '[date]', who: '[Member name]', sla: 'Due soon', tracker: '#[n]' },
+      { title: '[Ticket title]', desc: '[First line of the description]', type: 'Task', cat: 'No category', pri: 'Low', st: 'Open', chip: '', updated: '[date]', who: '[Member name]', sla: 'Overdue', tracker: 'Not on the tracker' },
+      { title: '[Ticket title]', desc: '[First line of the description]', type: 'Bug', cat: 'Fund administration', pri: 'Urgent', st: 'Resolved', chip: 'Fixed: [N] credits', updated: '[date]', who: '[Member name]', sla: 'On time', tracker: '#[n]' },
+      { title: '[Ticket title]', desc: '[First line of the description]', type: 'Feature', cat: 'Onboarding', pri: 'Low', st: 'Closed', chip: 'Declined', updated: '[date]', who: '[Member name]', sla: 'On time', tracker: '#[n]' },
+    ].map(r => Object.assign(r, { typeStyle: P.type[r.type], catStyle: P.grey, priStyle: P.pri[r.pri], stStyle: P.st[r.st], chipStyle: chipFor(r.chip), chipWrapStyle: chipFor(r.chip).replace('white-space:nowrap', 'white-space:normal;display:inline-block;line-height:1.35'), tier: TIER[r.pri], slaStyle: P.sla[r.sla], trColor: r.tracker[0] === '#' ? VD : '#92400e' }));
+    const tab = (t, on) => ({ t, n: '[n]', style: 'display:flex;gap:6px;align-items:center;font-size:13px;font-weight:700;white-space:nowrap;padding:9px 12px;border-bottom:2px solid ' + (on ? V : 'transparent') + ';color:' + (on ? VD : MUT) });
+    const box = (sel) => 'display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:9px;border:1px solid ' + (sel ? V : HAIR) + ';background:' + (sel ? VT : '#fff');
+    const state = (k, v, cta, tone) => ({ k, v, cta: cta || '', style: 'padding:11px 13px;border-radius:12px;' + (tone === 'red' ? 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c' : tone === 'amber' ? 'background:#fffdf5;border:1px solid #fcd34d;color:#92400e' : 'background:#fff;border:1px solid ' + HAIR + ';color:' + MUT) });
+    const crumb = (arr) => arr.map((t, i) => ({ t: (i ? '/ ' : '') + t, color: i === arr.length - 1 ? '#241f38' : MUT }));
+    const commonForm = {
+      title: '[Ticket title, as the member typed it]',
+      types: [{ t: 'Task', d: 'Something to do', sel: false }, { t: 'Bug', d: 'Something broken', sel: true }, { t: 'Feature', d: 'Something new', sel: false }].map(t => Object.assign(t, { style: box(t.sel) })),
+      isBug: true, cat: 'Billing', cats: CATS,
+      pris: [{ t: 'Low', d: 'No one is blocked. Fix when convenient.' }, { t: 'Medium', d: 'Slows work down; a workaround exists.', sel: true }, { t: 'High', d: 'Blocks a task today.' }, { t: 'Urgent', d: 'Money, signatures or access are stuck.' }].map(p => Object.assign(p, { style: box(!!p.sel) })),
+      descPh: 'What happened, what you expected, and where in the product.',
+      guides: [{ t: '[Guide title]', m: '[Category] · [4 min read]' }, { t: '[Guide title]', m: '[Category] · [6 min read]' }, { t: '[Guide title]', m: '[Category] · [3 min read]' }],
+      outcomes: [
+        { t: 'Ticket #[n] opened', d: 'Saved and mirrored to the tracker. Replies are open.', tone: 'green' },
+        { t: 'Saved. Replies open once it reaches the tracker', d: 'Reason: [tracker error]. The team retries; you can follow it from Your tickets.', tone: 'amber' },
+        { t: 'A field needs attention', d: 'Type is required. Pick Task, Bug or Feature.', tone: 'red' },
+      ].map(o => Object.assign(o, { style: 'display:flex;flex-direction:column;gap:3px;padding:11px 13px;border-radius:12px;' + (o.tone === 'green' ? 'background:#eefbf5;border:1px solid #a7f3d0;color:#047857' : o.tone === 'amber' ? 'background:#fffdf5;border:1px solid #fcd34d;color:#92400e' : 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c') })),
+    };
+    const av = (bg, fg) => 'width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:11px;font-weight:700;background:' + bg + ';color:' + fg;
+    const thread = [
+      { init: '[M]', who: '[Member name]', role: 'Member', roleStyle: P.grey, when: '[date] · [time]', body: '[The member\u2019s first reply, adding a screenshot and the steps that reproduce it.]', avStyle: av(VT, VD) },
+      { init: '[S]', who: '[Support name]', role: 'Support', roleStyle: P.violet, when: '[date] · [time]', body: '[The team confirms the bug, names the fix version and the credits that follow when it ships.]', avStyle: av('#241f38', '#fff') },
+      { init: '[M]', who: '[Member name]', role: 'Member', roleStyle: P.grey, when: '[date] · [time]', body: '[Thanks; the member asks when the fix reaches their licence.]', avStyle: av(VT, VD) },
+    ];
+    const detailBase = (admin, onTracker) => ({
+      desc: '[The ticket description as written: what happened, what was expected, and where in the product it occurred. Two or three sentences.]',
+      replyCount: '[n] replies', thread,
+      replyBg: onTracker ? '#fff' : '#f4f3f7', replyOpacity: onTracker ? 1 : .5,
+      replyPh: onTracker ? 'Write a reply…' : 'Replies are closed',
+      replyNote: onTracker ? 'Replies go to the member and to the tracker.' : 'Replies open once this ticket is on the tracker.',
+      replyNoteColor: onTracker ? MUT : '#92400e',
+      meta: [{ k: 'Submitted', v: '[Member name] · [date]', color: '#241f38' }, { k: 'Last updated', v: '[date] · [time]', color: '#241f38' }, { k: 'Assigned to', v: admin || onTracker ? '[Support name]' : 'Not assigned yet', color: '#241f38' }],
+      tracker: onTracker ? '#[n] ↗' : 'Not on the tracker', trColor: onTracker ? VD : '#92400e',
+      trNote: onTracker ? 'Mirrored to the team\u2019s tracker. The number is the issue number there.' : 'The mirror failed when the ticket was saved. It is retried until it succeeds.',
+      trError: onTracker ? 'Mirror state: synced · last push [time]' : 'Mirror state: failed · [tracker error message] · Retry',
+      panelStyle: 'padding:14px 16px;border-radius:14px;' + (onTracker ? 'background:#eefbf5;border:1px solid #a7f3d0;color:#047857' : 'background:#fffdf5;border:1px solid #fcd34d;color:#92400e'),
+      panelLbl: 'Bounty', panelState: onTracker ? 'Fixed: [N] credits' : 'Under review',
+      panelText: onTracker ? 'The fix shipped and [N] credits were granted. Credits are worth US$1 each and are spent on Perks.' : 'The team is checking whether this is a bug. A confirmed bug earns credits when the fix ships.',
+      statusOpts: ['Open', 'In progress', 'Resolved', 'Closed'].map((t, i) => ({ t, style: 'font-size:12px;font-weight:600;padding:6px 10px;border-radius:7px;border:1px solid ' + (i === 1 ? V : HAIR) + ';background:' + (i === 1 ? VT : '#fff') + ';color:' + (i === 1 ? VD : MUT) })),
+      assignee: '[Support name]', reviewLink: admin ? 'Feature review queue →' : '',
+    });
+
+    const S = {
+      h3: { personaNote: 'Signed in · member', crumbs: crumb(['Help', 'Your tickets']), title: 'Your tickets', cta: 'Open a ticket', isList: true, isMember: true,
+        tabs: [tab('Open', true), tab('In progress'), tab('Resolved'), tab('Closed'), tab('All')], filters: ['Type', 'Category'], count: '[n] tickets', search: '', rows: rowsBase,
+        states: [state('Loading', 'Three rows of skeleton text where tickets will be.'), state('Empty', 'You have not opened a ticket.', 'Open a ticket'), state('Unreadable', 'Your tickets could not be read.', 'Try again', 'red')] },
+      h4: { personaNote: 'Signed in · member', crumbs: crumb(['Help', 'Your tickets', 'Open a ticket']), title: 'Open a ticket', isForm: true, form: commonForm,
+        states: [state('Guides', 'Up to three matching guides appear while the title is typed; none appear for an empty title.'), state('Bug note', 'Shown only when Type is Bug: a confirmed bug earns credits when the fix ships.', '', 'amber'), state('Field error', 'Title and Type are required. The error names the field.', '', 'red')] },
+      h5: { personaNote: 'Signed in · member', crumbs: crumb(['Help', 'Your tickets', '[Ticket title]']), title: '[Ticket title]', hasPills: true,
+        pills: [{ t: 'Bug', style: P.type.Bug }, { t: 'Billing', style: P.grey }, { t: 'High', style: P.pri.High }, { t: 'Resolved', style: P.st.Resolved }],
+        isDetail: true, detail: detailBase(false, true),
+        states: [state('Loading', 'Header and rail as skeletons; the thread shows three grey bars.'), state('Not found', 'This ticket does not exist or is not yours.', 'Back to your tickets', 'amber'), state('Unreadable', 'This ticket could not be read.', 'Try again', 'red')] },
+      h5b: { personaNote: 'Signed in · member', crumbs: crumb(['Help', 'Your tickets', '[Ticket title]']), title: '[Ticket title]', hasPills: true,
+        pills: [{ t: 'Feature', style: P.type.Feature }, { t: 'No category', style: P.grey }, { t: 'Medium', style: P.pri.Medium }, { t: 'Open', style: P.st.Open }],
+        isDetail: true, detail: Object.assign(detailBase(false, false), { panelStyle: 'padding:14px 16px;border-radius:14px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c', panelLbl: 'Review', panelState: 'Declined', panelText: 'Reason, as the Super Admin typed it: [reason].' }),
+        states: [state('Replies closed', 'The reply box is disabled until the ticket is on the tracker.', '', 'amber'), state('Review states', 'Awaiting review · Approved · Declined, with the typed reason.'), state('Bounty states', 'Under review · Confirmed: being fixed · Fixed: [N] credits · Fixed: no credits granted · Fixed: credits taken back · Fixed: credits could not be read · Not a bug · Duplicate.')] },
+      h6: { personaNote: 'Signed in · admin', crumbs: crumb(['Help', 'All tickets']), title: 'All tickets', isList: true, isAdmin: true,
+        banner: { show: true, t: '[n] saved tickets are not on the tracker', cta: 'Create missing issues (up to 25)' },
+        tabs: [tab('Open', true), tab('In progress'), tab('Resolved'), tab('Closed'), tab('All')], filters: ['Type', 'Category', 'Priority', 'SLA'], search: 'Search by title…', count: '[n] tickets · every member', rows: rowsBase,
+        states: [state('Loading', 'Skeleton rows; the banner waits for the count.'), state('Empty', 'No tickets match these filters.', 'Clear filters'), state('Unreadable', 'The queue could not be read.', 'Try again', 'red'), state('SLA tiers', 'Urgent P1 24 h · High P2 48 h · Medium and Low P3 96 h. HQ edits the hours.')] },
+      h7: { personaNote: 'Signed in · admin', crumbs: crumb(['Help', 'All tickets', '[Ticket title]']), title: '[Ticket title]', hasPills: true,
+        pills: [{ t: 'Feature', style: P.type.Feature }, { t: 'Data & reporting', style: P.grey }, { t: 'Medium', style: P.pri.Medium }, { t: 'In progress', style: P.st['In progress'] }, { t: 'P3 · Due soon', style: P.sla['Due soon'] }],
+        isDetail: true, isAdmin: true, detail: Object.assign(detailBase(true, false), { panelStyle: 'padding:14px 16px;border-radius:14px;background:' + VT + ';border:1px solid ' + VE + ';color:' + VD, panelLbl: 'Review', panelState: 'Awaiting review', panelText: 'Waiting for the Super Admin. Approved or Declined, with the typed reason, appears here and in the member\u2019s view.' }),
+        states: [state('Mirror failed', 'The tracker state shows the error and a Retry. Nobody can reply until it succeeds.', '', 'red'), state('Status change', 'Open · In progress · Resolved · Closed. The member sees the change in the thread.'), state('Unreadable', 'This ticket could not be read.', 'Try again', 'red')] },
+    };
+    const d = S[s] || S.h3;
+    return Object.assign({ cta: '', hasPills: false, pills: [], banner: { show: false, t: '', cta: '' }, isList: false, isMember: false, isAdmin: false, isForm: false, isDetail: false, tabs: [], filters: [], search: '', count: '', rows: [], form: commonForm, detail: detailBase(false, true), states: [] }, d);
+  }
+}
+</script>
+</body>
+</html>

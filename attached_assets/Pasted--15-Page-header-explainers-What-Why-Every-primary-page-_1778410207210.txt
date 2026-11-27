@@ -1,0 +1,35 @@
+#15 - Page header explainers
+What & Why
+Every primary page should have a short banner under its title explaining what the feature does and why it matters. Users can dismiss it with an X (synced server-side, not just localStorage). A "Learn more" link deep-links into the relevant Documentation section.
+
+Done looks like
+Every primary page renders an explainer card under the page title.
+Clicking X hides it on that page across reloads AND across devices (server-synced).
+"Learn more →" deep-links to the matching /docs#section/subsection anchor.
+Settings → Appearance has a "Help & explainers" section listing dismissed items with per-row "Restore" + a "Restore all" button.
+Pages whose pageKey isn't in the explainer map render nothing (no crash).
+Mobile: explainer collapses to a single-line summary + "?" expand button.
+Out of scope
+Animated walkthroughs or product tours.
+Personalized explainer copy per role (one set of copy for everyone).
+Explainers on the Docs page itself (deliberately none).
+Steps
+Component — Build frontend/src/components/PageExplainer.jsx accepting {pageKey, title, body, docPath}. Reads localStorage.dismissed_explainers; renders nothing if dismissed. Otherwise: icon + title + body + "Learn more →" route + X close. Closing pushes to localStorage AND POSTs to the server.
+Content map — Create frontend/src/lib/explainers.js exporting one entry per page (≤240 chars body each). Cover all primary pages listed in the prompt: dashboard, projects, customer_discovery, roadmap, brand_builder, pitch_deck, scoring, mentors, office_hours, cofounder_match, market_intel, capital, captable, funds, reserves, waterfall, liquidity, incorporate, cofounder_agreement, section_83b, compliance, kyc, esign, legal_templates, marketplace, partners, co_marketing, network_effects, public_directory, refer_earn, activity, tickets, integrations, settings, monitoring, admin, due_diligence, spinout_lab. documentation: null (no explainer).
+Worker endpoints — Add dismissed_explainers column (TEXT DEFAULT '[]') to user settings. New routes: GET /api/settings/explainers (returns dismissed list), POST /api/settings/explainer-dismissed {page_key}, POST /api/settings/explainer-restore {page_key | 'all'}. Ship as migration 014_explainers.sql.
+Hydration — On login (or first page load with auth), frontend fetches /api/settings/explainers and overwrites localStorage from the server. Server is source of truth; localStorage is the read cache.
+Settings → Appearance restore UI — New "Help & explainers" section listing each dismissed key with its title and a "Restore" button; plus a global "Restore all" button.
+Wiring — Mount <PageExplainer pageKey="..." /> directly under the <h1> of every primary page component. Check the existing header layout doesn't shift.
+Mobile collapsed mode — Below sm: breakpoint, render only the title + "?" button; expand panel on tap.
+Critical constraints
+DocsLayout uses slash-format anchors (#section-id/subsection-id) with data-anchor attributes — docPath strings in the explainer map MUST match the format used in frontend/src/pages/docs/sections/index.js.
+Don't introduce a new settings section — extend the existing cloudflare-worker/src/routes/settings.ts + services/userSettings.ts modules.
+The useToast hook auto-clears on unmount — don't replace it with raw setTimeout for the "Restored" confirmation.
+Relevant files
+frontend/src/pages/SettingsPage.jsx
+frontend/src/pages/docs/DocsLayout.jsx
+frontend/src/pages/docs/sections/index.js
+frontend/src/contexts/SettingsContext.jsx
+cloudflare-worker/src/routes/settings.ts
+cloudflare-worker/src/services/userSettings.ts
+cloudflare-worker/sql/migrations/002_user_settings.sql

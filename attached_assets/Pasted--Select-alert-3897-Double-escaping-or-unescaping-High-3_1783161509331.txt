@@ -1,0 +1,152 @@
+
+Select alert #3897
+Double escaping or unescaping
+High
+#3897 opened 10 hours ago • Detected by CodeQL in cloudflare-worker/.../services/webFetch.ts :100
+main
+
+Select alert #3890
+Polynomial regular expression used on uncontrolled data
+High
+#3890 opened 12 hours ago • Detected by CodeQL in backend/.../services/linkedin_import.py :152
+main
+
+Select alert #3889
+Polynomial regular expression used on uncontrolled data
+High
+#3889 opened 12 hours ago • Detected by CodeQL in backend/.../services/linkedin_import.py :50
+main
+
+Select alert #3898
+Semgrep Finding: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+Warning
+#3898 opened 10 hours ago • Detected by Semgrep OSS in cloudflare-worker/.../services/webFetch.ts :115
+main
+
+Select alert #3896
+Semgrep Finding: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+Warning
+#3896 opened 12 hours ago • Detected by Semgrep OSS in backend/.../routes/settings.py :637
+main
+
+Select alert #3872
+Semgrep Finding: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+Warning
+Test
+#3872 opened 2 days ago • Detected by Semgrep OSS in cloudflare-worker/test/brand_svg_sanitize.test.... :78
+main
+
+Select alert #3871
+Semgrep Finding: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+Warning
+Test
+#3871 opened 2 days ago • Detected by Semgrep OSS in cloudflare-worker/test/brand_svg_sanitize.test.... :64
+main
+
+Select alert #3870
+Semgrep Finding: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+Warning
+Test
+#3870 opened 2 days ago • Detected by Semgrep OSS in cloudflare-worker/test/brand_svg_sanitize.test.... :41
+main
+
+Select alert #3887
+Unused variable, import, function or class
+Note
+#3887 opened 13 hours ago • Detected by CodeQL in cloudflare-worker/.../routes/jobs_public.ts :31
+main
+
+Select alert #3886
+Unused variable, import, function or class
+Note
+#3886 opened 13 hours ago • Detected by CodeQL in cloudflare-worker/.../routes/jobs.ts :21
+main
+
+Select alert #3884
+Module is imported more than once
+Note
+#3884 opened 13 hours ago • Detected by CodeQL in backend/.../routes/settings.py :225
+main
+
+Select alert #3895
+Unused global variable
+Note
+#3895 opened 12 hours ago • Detected by CodeQL in backend/.../services/linkedin_import.py :117
+main
+
+Select alert #3894
+Empty except
+Note
+#3894 opened 12 hours ago • Detected by CodeQL in backend/.../routes/settings.py :665
+main
+
+Select alert #3893
+Empty except
+Note
+#3893 opened 12 hours ago • Detected by CodeQL in backend/.../routes/settings.py :659
+main
+
+Select alert #3892
+Empty except
+Note
+#3892 opened 12 hours ago • Detected by CodeQL in backend/.../services/linkedin_import.py :112
+main
+
+Select alert #3883
+Empty except
+Note
+#3883 opened 13 hours ago • Detected by CodeQL in backend/.../routes/settings.py :450
+main
+
+Select alert #3882
+Empty except
+Note
+#3882 opened 13 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :426
+main
+
+Select alert #3881
+Empty except
+Note
+#3881 opened 13 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :412
+main
+
+Select alert #3880
+Empty except
+Note
+#3880 opened 13 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :392
+main
+
+Select alert #3879
+Empty except
+Note
+#3879 opened 13 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :369
+main
+
+Select alert #3878
+Empty except
+Note
+#3878 opened 13 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :267
+main
+
+Select alert #3877
+Empty except
+Note
+#3877 opened 13 hours ago • Detected by CodeQL in backend/.../routes/follows.py :250
+main
+
+Select alert #3876
+Empty except
+Note
+#3876 opened 13 hours ago • Detected by CodeQL in backend/.../routes/follows.py :228
+main
+
+Select alert #3875
+Empty except
+Note
+#3875 opened 13 hours ago • Detected by CodeQL in backend/.../routes/follows.py :213
+main
+
+Select alert #3874
+Empty except
+Note
+#3874 opened 13 hours ago • Detected by CodeQL in backend/.../routes/follows.py :194

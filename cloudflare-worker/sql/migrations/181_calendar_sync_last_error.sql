@@ -1,0 +1,28 @@
+-- 181 — calendar_sync_records.last_error, which the sync writes into a catch
+-- that comments the column might not exist. It never did.
+--
+-- `services/calendar/sync.ts` cancels a mapped external event, and when the
+-- provider call fails it deliberately does NOT delete the mapping. Instead it
+-- stamps the row so the failure is visible:
+--
+--     // Stamp the row with an error so an admin / future retry job
+--     // can see it failed; do NOT delete the mapping.
+--     UPDATE calendar_sync_records
+--        SET last_error = …, last_synced_at = …
+--     …
+--     catch { /* last_error column may not exist yet — drop silently */ }
+--
+-- The inner catch is the tell: the author suspected the column was missing and
+-- wrote the code anyway. It is missing. So a cancel that fails at Google or
+-- Microsoft leaves a mapping row that looks healthy — same last_synced_at
+-- shape as a success, no record that anything went wrong — and the retry job
+-- the comment anticipates has nothing to select on.
+--
+-- Added rather than removed because the value is decided at the write site,
+-- which is the difference from corporate_profiles.kyb_status: here the writer
+-- exists and knows the answer, it just had nowhere to put it. `last_error` is
+-- also the established name for this on five other tables in the schema —
+-- telegram_channels, x_accounts, email_send_log, dead_letter_queue and the
+-- provider OAuth key rows — so the column matches the convention it belongs to.
+
+ALTER TABLE calendar_sync_records ADD COLUMN last_error TEXT;

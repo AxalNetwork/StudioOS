@@ -1,0 +1,38 @@
+{
+  "skill": "outbound-sequence-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "segment": "Multi-site dental groups",
+        "problems": [
+          {
+            "text": "No single view of bookings across sites",
+            "interviews": 5
+          }
+        ]
+      },
+      "grow.records": {
+        "wins": [
+          {
+            "customer": "Northgate Dental",
+            "named": true,
+            "result": "Booking time cut from 4 minutes to 1"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "No single view of bookings across sites",
+      "Northgate Dental"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "guaranteed results"
+    ]
+  }
+}

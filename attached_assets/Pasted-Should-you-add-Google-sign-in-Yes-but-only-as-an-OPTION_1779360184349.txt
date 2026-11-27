@@ -1,0 +1,112 @@
+Should you add Google sign-in?
+
+  Yes — but only as an OPTION, never the only path. Tradeoffs:
+
+  Pros
+    - Lowest friction for new signups (one-click).
+    - Email is verified by Google automatically; no verify step.
+    - Many founders / investors use Google Workspace.
+    - Removes "password reset" support burden for those users.
+
+  Cons
+    - Vendor dependency on a Google outage / account suspension.
+    - Account-siloing risk: same user signs up once via Google,
+      once via email + password, ends up with two accounts.
+    - Less control over session and 2FA than your own flow.
+    - Some users (especially security-conscious investors) avoid
+      "Sign in with X" buttons on principle.
+
+  Verdict
+    Add Google as Option B alongside magic link (Option A) and
+    password (Option C). Solve account-siloing with email-based
+    merging at first OAuth login.
+
+Tasks
+
+  1. OAuth app
+     Google Cloud Console > APIs & Services > Credentials >
+       Create OAuth 2.0 Client (Web application):
+       Authorized JavaScript origin: https://app.axal.vc
+       Authorized redirect URI: https://app.axal.vc/api/auth/google/callback
+     OAuth consent screen: External, Verified before high traffic.
+     Scopes: openid email profile (no calendar — that's a separate
+              client per Prompt KF).
+
+  2. Wrangler secrets
+     wrangler secret put GOOGLE_AUTH_CLIENT_ID
+     wrangler secret put GOOGLE_AUTH_CLIENT_SECRET
+
+  3. Worker routes
+     cloudflare-worker/src/routes/auth_google.ts
+       GET  /api/auth/google/start
+         → builds the authorize URL with state HMAC, redirects.
+       GET  /api/auth/google/callback
+         → exchanges code for tokens, fetches userinfo, links to
+           account.
+
+  4. Account linking + merging
+     On successful Google sign-in:
+       Look up users by google_sub (preferred) OR by email
+       (case-insensitive, lowercase).
+       If google_sub exists:           sign in.
+       Else if email exists, no google_sub:
+         If users.email_verified = 1   → link google_sub to that
+                                          user; sign in.
+         Else                            → require additional
+                                          verification (magic
+                                          link to email) before
+                                          merging, to prevent a
+                                          stranger linking their
+                                          Google account to an
+                                          unverified email row.
+       Else                            → create user with
+                                          email_verified=1,
+                                          subscription_tier='free',
+                                          google_sub stored.
+
+  5. Schema
+     ALTER TABLE users ADD COLUMN google_sub TEXT;
+     CREATE UNIQUE INDEX idx_users_google_sub
+       ON users(google_sub) WHERE google_sub IS NOT NULL;
+
+  6. Frontend
+     Signup page primary CTA: magic link.
+     Secondary options as cards:
+       - Continue with Google
+       - Continue with email + password
+     Settings > Security > Connected accounts: shows the linked
+     Google account; allows unlink (but blocks unlink if it would
+     leave no working sign-in method).
+
+  7. 2FA interaction
+     Google sign-in counts as ONE factor (proof of email control).
+     If the user has TOTP / passkey / SMS enrolled, still require
+     it after the Google round-trip — same step-up as the password
+     path.
+     Sensitive actions still gate on TOTP / passkey as per the
+     existing step-up middleware.
+
+  8. Sign-out
+     Sign out from Axal does NOT sign out from Google globally.
+     This is correct and standard. Communicate it once in
+     Settings > Security.
+
+  9. Tests
+     test/auth/google-link-existing-verified.test.ts
+     test/auth/google-link-unverified-blocked.test.ts
+     test/auth/google-fresh-signup.test.ts
+     test/auth/google-no-merge-double-account.test.ts
+
+Privacy
+  Only the openid + email + profile scopes are requested. No
+  Calendar / Drive / other access. Profile data NEVER stored beyond
+  google_sub, email, optional avatar URL.
+
+Acceptance
+  - New user clicking "Continue with Google" lands signed-in on
+    /dashboard in < 5 seconds.
+  - Existing magic-link user can later link Google in Settings.
+  - Two accounts with the same email cannot exist after this PR.
+  - Disconnecting Google when no other sign-in method exists is
+    blocked.
+  - Sensitive routes still require step-up for Google-only users.

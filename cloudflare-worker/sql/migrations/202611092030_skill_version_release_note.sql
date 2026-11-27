@@ -1,0 +1,23 @@
+-- 202611092030 — D4533 (#4533, part B1 of the owner's decisions, 2026-11-09): a release note on a skill version.
+-- Named by its UTC minute (D4106).
+--
+-- WHY A COLUMN. The owner chose (D4533 §11 B1, option c) a nullable note on
+-- the version row itself, for HQ and company versions alike, rather than a
+-- note inside the HQ manifest (HQ only) or a table of its own. The note is
+-- what the publisher says changed and why; nothing else records it.
+--
+--   agent_skill_versions.release_note   the publisher's note, 1 to 2000 characters once trimmed;
+--                                        NULL when none was written
+--
+-- IMMUTABLE WITH ITS ROW. A version row is never updated (759,
+-- `trg_agent_skill_versions_immutable`) or deleted (202611081919), so the note
+-- is written in the same INSERT as the version and never edited afterwards.
+-- A correction is the next version's note.
+--
+-- HISTORICAL ROWS. Nothing is backfilled: every version published before this
+-- file reads NULL, shown as "Not recorded", because nobody wrote a note then.
+--
+-- ALTER TABLE ... ADD COLUMN is not re-runnable; the migration ledger stops the replay.
+-- No BEGIN/COMMIT: D1 applies a migration file as one batch.
+
+ALTER TABLE agent_skill_versions ADD COLUMN release_note TEXT CHECK (release_note IS NULL OR (length(trim(release_note)) BETWEEN 1 AND 2000 AND length(release_note) <= 2000));

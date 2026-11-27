@@ -1,0 +1,845 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Axal VC connector API",
+    "version": "1.0.0",
+    "description": "Read-only access to the authenticated member's own Axal VC ventures (D1361). Authenticate with an OAuth access token from Axal VC's authorization server (the member signs in and ticks the companies on the consent page; PKCE S256 required) or with the member's own API key (`axk_\u2026`). Every request is re-checked against the member's current access. Nullable figures mean \"not recorded\", never zero."
+  },
+  "servers": [
+    {
+      "url": "https://axal.vc/api/connector/v1",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "axalOAuth": [
+        "validate:read"
+      ]
+    },
+    {
+      "memberApiKey": []
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "operationId": "getConnection",
+        "summary": "Check the connection",
+        "description": "The connection test. Any live key. Returns the key's own name, prefix, scopes and expiry, and the approved companies the member can still read. Never an email or a secret.",
+        "responses": {
+          "200": {
+            "description": "Connected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential: `invalid_token` (OAuth), or `invalid_key`, `revoked_key`, `expired_key` (API key). Carries `WWW-Authenticate: Bearer error=\"invalid_token\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: past the key's own requests per minute, the member's limit, or too many failed keys from this IP. `Retry-After: 60`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/companies": {
+      "get": {
+        "operationId": "listCompanies",
+        "summary": "List my companies",
+        "description": "The companies this key was approved for and the member can still read. Scope: validate:read.",
+        "responses": {
+          "200": {
+            "description": "The companies.",
+            "headers": {
+              "X-Axal-Execution-Id": {
+                "description": "One id per call, as the member's usage log shows it.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key (`invalid_key`, `revoked_key`, `expired_key`). Carries `WWW-Authenticate: Bearer error=\"invalid_token\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: past the key's own requests per minute, the member's limit, or too many failed keys from this IP. `Retry-After: 60`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`insufficient_tokens`, `spend_limit`, `ai_paused` or `budget_review` (the AI token ledger).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` (the key lacks the scope) or `refused` (the company is not on this key, the member no longer owns it, or the operation is not available, e.g. Build progress with no GitHub connection).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: Axal VC could not complete the call.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`timeout`: the call took too long and was stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/companies/{id}/validate-context": {
+      "get": {
+        "operationId": "getValidateContext",
+        "summary": "Get a company's Validate context",
+        "description": "Hypotheses and their status, pain themes, ideal-customer segments, open questions and interview counts. Interviewees are never named. Scope: validate:read.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A company id from GET /companies.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9999999999
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The context.",
+            "headers": {
+              "X-Axal-Execution-Id": {
+                "description": "One id per call, as the member's usage log shows it.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateContext"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key (`invalid_key`, `revoked_key`, `expired_key`). Carries `WWW-Authenticate: Bearer error=\"invalid_token\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: past the key's own requests per minute, the member's limit, or too many failed keys from this IP. `Retry-After: 60`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_company` or `invalid_hypothesis`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`insufficient_tokens`, `spend_limit`, `ai_paused` or `budget_review` (the AI token ledger).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` (the key lacks the scope) or `refused` (the company is not on this key, the member no longer owns it, or the operation is not available, e.g. Build progress with no GitHub connection).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: Axal VC could not complete the call.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`timeout`: the call took too long and was stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/companies/{id}/interview-guide": {
+      "get": {
+        "operationId": "getInterviewGuide",
+        "summary": "Get a customer-interview guide",
+        "description": "Questions built from the company's open hypotheses and strongest pain themes. Scope: validate:read.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A company id from GET /companies.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9999999999
+            }
+          },
+          {
+            "name": "hypothesis",
+            "in": "query",
+            "required": false,
+            "description": "Narrow to one hypothesis by its code (e.g. H2) or words from it. At most 200 characters.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The guide.",
+            "headers": {
+              "X-Axal-Execution-Id": {
+                "description": "One id per call, as the member's usage log shows it.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewGuide"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key (`invalid_key`, `revoked_key`, `expired_key`). Carries `WWW-Authenticate: Bearer error=\"invalid_token\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: past the key's own requests per minute, the member's limit, or too many failed keys from this IP. `Retry-After: 60`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_company` or `invalid_hypothesis`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`insufficient_tokens`, `spend_limit`, `ai_paused` or `budget_review` (the AI token ledger).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` (the key lacks the scope) or `refused` (the company is not on this key, the member no longer owns it, or the operation is not available, e.g. Build progress with no GitHub connection).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: Axal VC could not complete the call.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`timeout`: the call took too long and was stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/companies/{id}/build-progress": {
+      "get": {
+        "operationId": "getBuildProgress",
+        "summary": "Get a company's Build progress",
+        "description": "Roadmap items by column, releases, Prototype / MVP must-haves, and what the member's GitHub connection fed at its last sync, from Axal VC's records. Needs the member's GitHub connection switched on for the company. Scope: build:read.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A company id from GET /companies.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9999999999
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The progress.",
+            "headers": {
+              "X-Axal-Execution-Id": {
+                "description": "One id per call, as the member's usage log shows it.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildProgress"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key (`invalid_key`, `revoked_key`, `expired_key`). Carries `WWW-Authenticate: Bearer error=\"invalid_token\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`: past the key's own requests per minute, the member's limit, or too many failed keys from this IP. `Retry-After: 60`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_company` or `invalid_hypothesis`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "`insufficient_tokens`, `spend_limit`, `ai_paused` or `budget_review` (the AI token ledger).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` (the key lacks the scope) or `refused` (the company is not on this key, the member no longer owns it, or the operation is not available, e.g. Build progress with no GitHub connection).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: Axal VC could not complete the call.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "`timeout`: the call took too long and was stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "memberApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "axk_<12 lowercase letters or digits>_<43 base64url characters>",
+        "description": "The member's own Axal VC API key."
+      },
+      "axalOAuth": {
+        "type": "oauth2",
+        "description": "Axal VC's OAuth server. PKCE (S256) is required. The client for Lovable is minted by a Super Admin in HQ \u203a Integration keys \u203a Lovable connector.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://axal.vc/api/oauth/authorize",
+            "tokenUrl": "https://axal.vc/api/oauth/token",
+            "refreshUrl": "https://axal.vc/api/oauth/token",
+            "scopes": {
+              "validate:read": "Read Validate data",
+              "build:read": "Read Build progress, from the records your connected tools fed"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "A stable code."
+          },
+          "message": {
+            "type": "string",
+            "description": "A sentence Axal VC wrote."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Same as message."
+          }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CompanyList": {
+        "type": "object",
+        "required": [
+          "companies"
+        ],
+        "properties": {
+          "companies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Company"
+            }
+          }
+        }
+      },
+      "Connection": {
+        "type": "object",
+        "required": [
+          "connected",
+          "service",
+          "credential",
+          "companies"
+        ],
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "const": true
+          },
+          "service": {
+            "type": "string",
+            "const": "Axal VC"
+          },
+          "companies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Company"
+            }
+          },
+          "credential": {
+            "type": "object",
+            "required": [
+              "type",
+              "name",
+              "scopes",
+              "expires_at"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "oauth",
+                  "api_key"
+                ]
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The OAuth client's name, or the key's name."
+              },
+              "prefix": {
+                "type": "string",
+                "description": "API keys only: axk_ and the public key id; never the secret."
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "ValidateContext": {
+        "type": "object",
+        "required": [
+          "company",
+          "hypotheses",
+          "pain_themes",
+          "icp_segments",
+          "open_questions",
+          "interviews"
+        ],
+        "properties": {
+          "company": {
+            "type": "string"
+          },
+          "hypotheses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hypothesis": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence_links": {},
+                "strength": {}
+              }
+            }
+          },
+          "pain_themes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "theme": {
+                  "type": "string"
+                },
+                "mentions": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "severity": {}
+              }
+            }
+          },
+          "icp_segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "segment": {
+                  "type": "string"
+                },
+                "interviews": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "strong_fit": {},
+                "evidence": {}
+              }
+            }
+          },
+          "open_questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "interviews": {
+            "type": "object",
+            "properties": {
+              "recorded": {
+                "type": "integer"
+              },
+              "held": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "InterviewGuide": {
+        "type": "object",
+        "required": [
+          "company",
+          "hypotheses_covered",
+          "questions"
+        ],
+        "properties": {
+          "company": {
+            "type": "string"
+          },
+          "hypotheses_covered": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "question",
+                "why"
+              ],
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BuildProgress": {
+        "type": "object",
+        "required": [
+          "company",
+          "product_roadmap",
+          "prototype_mvp",
+          "from_github"
+        ],
+        "properties": {
+          "company": {
+            "type": "string"
+          },
+          "product_roadmap": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "integer"
+              },
+              "by_column": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "shipped": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "releases": {
+                "type": "integer"
+              },
+              "latest_release_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "prototype_mvp": {
+            "type": "object",
+            "properties": {
+              "must_haves": {
+                "type": "integer"
+              },
+              "built": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "in_progress": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "from_github": {
+            "type": "object",
+            "properties": {
+              "last_synced_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fed_by_module": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

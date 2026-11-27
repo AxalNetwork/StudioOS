@@ -1,0 +1,55 @@
+You are the senior Cloudflare AI engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The full platform is already built in this Replit (FastAPI with routers, async job queue, D1 ORM, Replit Auth, RBAC, Partner Dashboard, Pipeline Board, decision gates, spin-out automation, etc.).
+
+The cloudflare-worker/ai-workers/ directory currently exists but is empty/unimplemented.
+
+Fill it with **actual, production-ready Cloudflare AI Worker scripts** for:
+- Scoring (deal flow / idea scoring)
+- Traction review (metrics analysis + decision gate recommendation)
+- Equity allocation (fair split recommendation for spin-outs)
+
+Exact requirements:
+
+1. **Directory & Files**
+   - Create / update the folder `cloudflare-worker/ai-workers/`
+   - Add three files:
+     - scoring-worker.js
+     - traction-review-worker.js
+     - equity-allocation-worker.js
+
+2. **Each Worker (Cloudflare AI binding)**
+   - Use the official Cloudflare AI runtime bindings (e.g. `@cf/meta/llama-3-8b-instruct` or the latest available model).
+   - Each worker must export a `fetch` handler that:
+     - Accepts POST with JSON payload (e.g. { deal_id, metrics, context })
+     - Runs a well-crafted system + user prompt
+     - Returns structured JSON (score 0-100 + explanation, recommendation, or equity splits)
+     - Includes proper error handling and logging
+   - Keep responses fast and lightweight (under 2 seconds).
+
+3. **Specific Prompts & Outputs**
+   - **scoring-worker.js**: 100-point AI scoring for new ideas/projects. Return { score: number, explanation: string, strengths: [], risks: [] }
+   - **traction-review-worker.js**: Analyzes latest metrics_snapshot. Return { traction_score: number, recommendation: "continue|iterate|spinout_ready", explanation: string, key_insights: [] }
+   - **equity-allocation-worker.js**: Given founder, studio, and option pool details. Return { founder: number, studio: number, option_pool: number, explanation: string }
+
+4. **Integration with Existing Platform**
+   - Update the job queue handlers in `backend/jobs.py` (or wherever jobs are processed) to call these Workers via `fetch()` to the Worker URL or using Cloudflare binding.
+   - Add environment variables / wrangler bindings so the Workers can be invoked from the main backend.
+   - Update the relevant routers (pipeline.py, spinout.py, etc.) to enqueue the correct AI job type.
+
+5. **wrangler.toml Update**
+   - Add or update the [ai] section and any required bindings for these Workers.
+
+6. **Best Practices**
+   - Secure: no secrets in code, use Cloudflare secrets where needed.
+   - Observable: log every AI call with input/output summary.
+   - Fallback: if Cloudflare AI fails, gracefully fallback to Replit AI.
+   - Rate-limit aware: respect Cloudflare AI limits.
+
+Build this step-by-step:
+1. First create the three AI Worker .js files in cloudflare-worker/ai-workers/.
+2. Then update the job queue handlers to call these Workers.
+3. Then update wrangler.toml with AI bindings.
+4. Finally test end-to-end (trigger a scoring job, traction review, equity allocation from the pipeline).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

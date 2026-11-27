@@ -1,0 +1,34 @@
+{
+  "skill": "mobile-product-experience-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Mobile Product Experience Review",
+        "task_scope": "Reviews mobile task completion, navigation, touch interaction, accessibility and device-specific constraints.",
+        "evidence": [
+          "mobile task completion and recovery"
+        ],
+        "omitted_field": "offline state"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for mobile task completion and recovery."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "mobile task completion and recovery"
+    ],
+    "must_say_not_recorded": [
+      "offline state"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

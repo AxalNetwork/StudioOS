@@ -1,0 +1,32 @@
+#27 - Advisor Network Section
+What & Why
+Build out the Advisor profile's Network section — the people, organizations, and relationships workspace — replacing the shell stubs with tab-organized pages and realistic placeholder data. This is where an advisor discovers contacts, maps relationships, and reviews company profiles.
+Done looks like
+* Introductions page reads like a relationship-discovery workspace: browsable directory of contacts and organizations with the introduction categories from the spec surfaced as filters/tabs (Contacts, Organizations, Founders, CEOs, Executives, Investors, VC, Private Equity, Family Offices, Advisors, Experts, Board Members, Customers, Partners, Service Providers). Rows open a detail panel.
+* Relationships page reads like a network-intelligence workspace: relationship graph placeholder, mutual connections, relationship strength, interaction timeline, contact/meeting history, referrals, and warm introductions organized as tabs/cards.
+* Organizations page reads like a company-profile workspace: company profiles with employees, leadership, funding history, ownership, industry, locations, and documents, with a detail panel per organization.
+* Every tab, filter, and detail panel renders with mock data — no blank views and no console errors when switching tabs, filters, or records.
+Out of scope
+* Real backend/API wiring and a real data model — mock data only, kept easy to replace later.
+* The App shell, sidebar, and routing (delivered by the Advisor shell foundation task).
+* Advisory and Research sections (separate tasks).
+Steps
+1. Introductions — Build the contacts/organizations directory with the spec's introduction categories as filters/tabs, search, and a per-record detail panel.
+2. Relationships — Build the network-intelligence views (graph placeholder, mutual connections, strength, interaction timeline, contact/meeting history, referrals, warm intros) as tabs/cards.
+3. Organizations — Build company profiles with the spec's modules (employees, leadership, funding history, ownership, industry, locations, documents) and a detail panel.
+4. Mock data — Seed a dedicated advisor Network data module with realistic, deterministic placeholder records, structured to be swapped for live data later.
+5. Verify — Click through every tab, filter, and detail panel across all three pages; confirm no blank states or console errors.
+Architectural constraints
+* Reuse the shared section kit (components/section) and the investor pages as structural references; keep advisor code under its own pages/advisor/network/ and data/advisor/ files.
+* Deterministic mock data only: demo "today" is 2026-07-11; no Date.now, Math.random, or zero-argument new Date().
+Relevant files
+* frontend/src/pages/investor/network/IntroductionsPage.jsx
+* frontend/src/pages/investor/network/RelationshipsPage.jsx
+* frontend/src/pages/investor/network/OrganizationsPage.jsx
+* frontend/src/pages/investor/network/parts.jsx
+* frontend/src/data/investor/network.js
+* frontend/src/components/section/index.js
+Dependencies
+Advisor profile shell: sidebar, routes, and page stubs
+
+Open task

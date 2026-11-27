@@ -1,0 +1,52 @@
+⛅️ wrangler 4.86.0 (update available 4.87.0)
+─────────────────────────────────────────────
+Total Upload: 1041.60 KiB / gzip: 353.00 KiB
+Worker Startup Time: 26 ms
+Your Worker has access to the following bindings:
+Binding                                                       Resource                  
+env.PIPELINE_ROOM (PipelineRoom)                              Durable Object            
+env.ONBOARDING_CHAT (OnboardingChat)                          Durable Object            
+env.TOKENS (8dc26ed83d154d0ebbfcbc51f592d67c)                 KV Namespace              
+env.RATE_LIMITS (be811f14b6f342be961b8daa4513fb5b)            KV Namespace              
+env.JOB_QUEUE (studioos-job-queue)                            Queue                     
+env.DB (studioos-db)                                          D1 Database               
+env.VECTORIZE (axal-search)                                   Vectorize Index           
+env.FILES (studioos-files)                                    R2 Bucket                 
+env.AI                                                        AI                        
+env.APP_URL ("https://axal.vc")                               Environment Variable      
+env.GITHUB_REPO_OWNER ("AxalNetwork")                         Environment Variable      
+env.GITHUB_REPO_NAME ("StudioOS")                             Environment Variable      
+env.ENVIRONMENT ("production")                                Environment Variable      
+env.USE_CF_QUEUE ("true")                                     Environment Variable      
+
+Uploaded studioos (14.38 sec)
+Deployed studioos triggers (4.97 sec)
+  https://studioos.guillaumelauzier.workers.dev
+  schedule: * * * * *
+  Producer for studioos-job-queue
+  Consumer for studioos-job-queue
+Current Version ID: bbe52945-f36e-4880-ba7b-f0121d1ea8e6
+~/workspace$ npm install wrangler@4.87.0 --save-dev
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'wrangler@4.87.0',
+npm warn EBADENGINE   required: { node: '>=22.0.0' },
+npm warn EBADENGINE   current: { node: 'v20.20.0', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: '@cloudflare/kv-asset-handler@0.5.0',
+npm warn EBADENGINE   required: { node: '>=22.0.0' },
+npm warn EBADENGINE   current: { node: 'v20.20.0', npm: '10.8.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'miniflare@4.20260430.0',
+npm warn EBADENGINE   required: { node: '>=22.0.0' },
+npm warn EBADENGINE   current: { node: 'v20.20.0', npm: '10.8.2' }
+npm warn EBADENGINE }
+
+added 308 packages, and audited 309 packages in 10s
+
+96 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+~/workspace$ 

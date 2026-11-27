@@ -1,0 +1,115 @@
+{
+    "ok": true,
+    "result": [
+        {
+            "update_id": 158499496,
+            "channel_post": {
+                "message_id": 3,
+                "sender_chat": {
+                    "id": -1003877768632,
+                    "title": "Axal VC Alumni (Invite-only)",
+                    "type": "channel"
+                },
+                "chat": {
+                    "id": -1003877768632,
+                    "title": "Axal VC Alumni (Invite-only)",
+                    "type": "channel"
+                },
+                "date": 1779710452,
+                "text": "ping"
+            }
+        },
+        {
+            "update_id": 158499497,
+            "channel_post": {
+                "message_id": 2,
+                "sender_chat": {
+                    "id": -1003536576743,
+                    "title": "Axal VC Mentors (invite-only)",
+                    "type": "channel"
+                },
+                "chat": {
+                    "id": -1003536576743,
+                    "title": "Axal VC Mentors (invite-only)",
+                    "type": "channel"
+                },
+                "date": 1779710482,
+                "text": "ping"
+            }
+        },
+        {
+            "update_id": 158499498,
+            "channel_post": {
+                "message_id": 2,
+                "sender_chat": {
+                    "id": -1003969092439,
+                    "title": "Axal VC Founders (invite-only)",
+                    "type": "channel"
+                },
+                "chat": {
+                    "id": -1003969092439,
+                    "title": "Axal VC Founders (invite-only)",
+                    "type": "channel"
+                },
+                "date": 1779710491,
+                "text": "ping"
+            }
+        },
+        {
+            "update_id": 158499499,
+            "channel_post": {
+                "message_id": 5,
+                "sender_chat": {
+                    "id": -1003817039182,
+                    "title": "Axal VC Investors (invite-only)",
+                    "type": "channel"
+                },
+                "chat": {
+                    "id": -1003817039182,
+                    "title": "Axal VC Investors (invite-only)",
+                    "type": "channel"
+                },
+                "date": 1779710507,
+                "text": "ping"
+            }
+        },
+        {
+            "update_id": 158499500,
+            "channel_post": {
+                "message_id": 2,
+                "sender_chat": {
+                    "id": -1003908803205,
+                    "title": "Axal VC Partners (Invite-only)",
+                    "type": "channel"
+                },
+                "chat": {
+                    "id": -1003908803205,
+                    "title": "Axal VC Partners (Invite-only)",
+                    "type": "channel"
+                },
+                "date": 1779710596,
+                "text": "Ping"
+            }
+        },
+        {
+            "update_id": 158499501,
+            "channel_post": {
+                "message_id": 3,
+                "sender_chat": {
+                    "id": -1003936644339,
+                    "title": "Axal VC",
+                    "username": "axalvc",
+                    "type": "channel"
+                },
+                "chat": {
+                    "id": -1003936644339,
+                    "title": "Axal VC",
+                    "username": "axalvc",
+                    "type": "channel"
+                },
+                "date": 1779710622,
+                "text": "ping"
+            }
+        }
+    ]
+}

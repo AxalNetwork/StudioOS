@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    .ct-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .ct-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#A0AEC0}
+    .ct-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}.ct-btn:hover{filter:brightness(.97)}
+    .ct-card{cursor:pointer;transition:box-shadow .14s,border-color .14s}.ct-card:hover{box-shadow:0 6px 18px rgba(26,32,44,.08);border-color:#CBD5E0!important}
+    input,textarea,select{font-family:Inter,system-ui,sans-serif}
+    ::placeholder{color:#A0AEC0}
+    @media (max-width:1100px){.ct-3{grid-template-columns:1fr 1fr!important}.ct-split{grid-template-columns:1fr!important}}
+    @media (max-width:760px){.ct-3{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div style="min-height:100vh">
+
+  <!-- TOP BAR -->
+  <div style="border-bottom:1px solid #E2E8F0;background:#fff;padding:0 26px">
+    <div style="max-width:1360px;margin:0 auto;display:flex;align-items:center;gap:14px;height:56px;flex-wrap:wrap">
+      <a href="Brand & Landing Page.dc.html" class="ct-btn" style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#718096;flex:none">← Brand &amp; Pages</a>
+      <div style="width:1px;height:20px;background:#E2E8F0;flex:none"></div>
+      <div style="font-size:14px;font-weight:800;letter-spacing:-.015em;white-space:nowrap">Customer Templates</div>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <sc-for list="{{ stepper }}" as="sp" hint-placeholder-count="4">
+          <div class="ct-btn" onClick="{{ sp.go }}" style="{{ sp.style }}"><span class="ct-mono" style="opacity:.55;margin-right:6px">{{ sp.n }}</span>{{ sp.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1360px;margin:0 auto;padding:24px 26px 90px">
+
+    <!-- ===== STEP 1 — PICK PROJECT ===== -->
+    <sc-if value="{{ isProject }}">
+      <div class="ct-lbl" style="margin-bottom:6px">Step 1 of 4</div>
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Pick a project</h1>
+      <div style="font-size:13.5px;color:#718096;margin-top:6px;max-width:560px">Customer Templates prefills from the startup profile you\u2019ve already built elsewhere in the Lab, so there’s nothing to re-enter.</div>
+      <div class="ct-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px">
+        <sc-for list="{{ projects }}" as="pj" hint-placeholder-count="3">
+          <div class="ct-card" onClick="{{ pj.go }}" style="border:1px solid #E2E8F0;border-radius:14px;padding:20px 22px;background:#fff">
+            <div style="{{ pj.avStyle }}">{{ pj.initials }}</div>
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.015em;margin-top:12px">{{ pj.name }}</div>
+            <div style="font-size:12.5px;color:#718096;margin-top:4px;line-height:1.5">{{ pj.oneLiner }}</div>
+            <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+              <span style="{{ pj.sectorChip }}">{{ pj.sector }}</span>
+              <span style="{{ pj.weekChip }}">{{ pj.week }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ===== STEP 2 — LIBRARY ===== -->
+    <sc-if value="{{ isLibrary }}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <div>
+          <div class="ct-lbl" style="margin-bottom:6px">Step 2 of 4 · {{ activeProjectName }}</div>
+          <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Pick a recommended template</h1>
+        </div>
+        <div class="ct-btn" onClick="{{ backProject }}" style="font-size:12.5px;font-weight:600;color:#718096">Switch project</div>
+      </div>
+
+      <!-- recommended strip -->
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px 20px;margin-top:18px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="width:16px;height:16px;display:flex;color:#6B46C1" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+          <span class="ct-lbl" style="color:#6B46C1">Recommended for {{ activeProjectName }} · {{ activeSectorName }}</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <sc-for list="{{ recommended }}" as="rc" hint-placeholder-count="3">
+            <div class="ct-btn" onClick="{{ rc.go }}" style="{{ rc.pillStyle }}">
+              <div style="font-size:12.5px;font-weight:700">{{ rc.name }}</div>
+              <div style="font-size:11px;color:#718096;margin-top:1px">{{ rc.reason }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- filters -->
+      <div style="display:flex;gap:16px;margin-top:22px;flex-wrap:wrap;align-items:center">
+        <select onChange="{{ setSector }}" style="{{ selectStyle }}">
+          <sc-for list="{{ sectorOptions }}" as="so" hint-placeholder-count="6"><option>{{ so }}</option></sc-for>
+        </select>
+        <select onChange="{{ setArchetype }}" style="{{ selectStyle }}">
+          <sc-for list="{{ archetypeOptions }}" as="ao" hint-placeholder-count="6"><option>{{ ao }}</option></sc-for>
+        </select>
+        <select onChange="{{ setGoal }}" style="{{ selectStyle }}">
+          <sc-for list="{{ goalOptions }}" as="go" hint-placeholder-count="6"><option>{{ go }}</option></sc-for>
+        </select>
+        <div style="margin-left:auto;font-size:12px;color:#A0AEC0">{{ resultCount }} templates</div>
+      </div>
+
+      <div class="ct-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px">
+        <sc-for list="{{ templates }}" as="t" hint-placeholder-count="6">
+          <div class="ct-card" onClick="{{ t.go }}" style="border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;background:#fff">
+            <div style="{{ t.previewStyle }}">
+              <div style="{{ t.motifStyle }}" dangerouslySetInnerHTML="{{ t.motif }}"></div>
+              <div style="position:absolute;top:10px;left:10px;{{ t.badgeStyle }}">{{ t.universal }}</div>
+            </div>
+            <div style="padding:14px 16px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                <div style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ t.name }}</div>
+                <span style="{{ t.sectorChip }}">{{ t.sector }}</span>
+              </div>
+              <div style="font-size:11.5px;color:#718096;margin-top:5px;line-height:1.55">{{ t.useCase }}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #EDF2F7">
+                <span class="ct-lbl" style="font-size:9.5px">Converts for</span>
+                <span style="font-size:11px;font-weight:700;color:#6B46C1">{{ t.goal }}</span>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ===== STEP 3 — TUNE ===== -->
+    <sc-if value="{{ isTune }}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+        <div>
+          <div class="ct-lbl" style="margin-bottom:6px">Step 3 of 4 · {{ activeTemplateName }}</div>
+          <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Tune your page</h1>
+        </div>
+        <div class="ct-btn" onClick="{{ backLibrary }}" style="font-size:12.5px;font-weight:600;color:#718096">← Change template</div>
+      </div>
+
+      <div class="ct-split" style="display:grid;grid-template-columns:1fr 1.15fr;gap:18px;align-items:start">
+
+        <!-- controls -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px 20px">
+            <div class="ct-lbl" style="margin-bottom:12px">Hero · prefilled from startup profile</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <input value="{{ tune.headline }}" onChange="{{ setHeadline }}" placeholder="Headline" style="{{ inputStyle }}">
+              <textarea value="{{ tune.subhead }}" onChange="{{ setSubhead }}" rows="2" placeholder="Subhead" style="{{ inputStyle }};resize:vertical"></textarea>
+              <input value="{{ tune.cta }}" onChange="{{ setCta }}" placeholder="Primary CTA label" style="{{ inputStyle }}">
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px 20px">
+            <div class="ct-lbl" style="margin-bottom:12px">Proof &amp; trust</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <input value="{{ tune.metric }}" onChange="{{ setMetric }}" placeholder="Headline metric (e.g. 12 companies incorporated)" style="{{ inputStyle }}">
+              <input value="{{ tune.testimonial }}" onChange="{{ setTestimonial }}" placeholder="Testimonial quote" style="{{ inputStyle }}">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ trustToggles }}" as="tg" hint-placeholder-count="4">
+                  <div class="ct-btn" onClick="{{ tg.go }}" style="{{ tg.style }}">{{ tg.label }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px 20px">
+            <div class="ct-lbl" style="margin-bottom:12px">Section order</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ sectionOrder }}" as="se" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid #EDF2F7;border-radius:9px;background:#F8F8FA">
+                  <span class="ct-mono" style="font-size:11px;color:#A0AEC0;flex:none">{{ se.n }}</span>
+                  <span style="font-size:12.5px;font-weight:600;flex:1">{{ se.label }}</span>
+                  <span style="{{ se.tagStyle }}">{{ se.tag }}</span>
+                  <div class="ct-btn" onClick="{{ se.up }}" style="flex:none;font-size:11px;color:#A0AEC0;padding:2px 5px">↑</div>
+                  <div class="ct-btn" onClick="{{ se.down }}" style="flex:none;font-size:11px;color:#A0AEC0;padding:2px 5px">↓</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:18px 20px">
+            <div class="ct-lbl" style="margin-bottom:12px">Voice</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ voiceOptions }}" as="vo" hint-placeholder-count="4">
+                <div class="ct-btn" onClick="{{ vo.go }}" style="{{ vo.style }}">{{ vo.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- live preview -->
+        <div style="position:sticky;top:74px">
+          <div class="ct-lbl" style="margin-bottom:10px">Live preview</div>
+          <div style="border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;background:#fff">
+            <div style="display:flex;align-items:center;gap:7px;padding:10px 14px;border-bottom:1px solid #EDF2F7;background:#F8F8FA">
+              <span style="width:9px;height:9px;border-radius:50%;background:#FF5F57"></span>
+              <span style="width:9px;height:9px;border-radius:50%;background:#FEBC2E"></span>
+              <span style="width:9px;height:9px;border-radius:50%;background:#28C840"></span>
+              <span class="ct-mono" style="margin-left:8px;font-size:10.5px;color:#A0AEC0">{{ previewUrl }}</span>
+            </div>
+            <div style="{{ previewHeroStyle }}">
+              <span style="{{ previewSectorChip }}">{{ activeSectorName }}</span>
+              <div style="font-size:25px;font-weight:800;letter-spacing:-.02em;line-height:1.22;margin-top:14px">{{ tune.headline }}</div>
+              <div style="font-size:13px;line-height:1.6;margin-top:10px;opacity:.8;max-width:400px">{{ tune.subhead }}</div>
+              <div style="{{ previewCtaStyle }}">{{ tune.cta }}</div>
+            </div>
+            <div style="padding:18px 22px;border-top:1px solid #EDF2F7">
+              <div class="ct-mono" style="font-size:19px;font-weight:800;color:#6B46C1">{{ tune.metric }}</div>
+              <div style="font-size:12px;color:#718096;font-style:italic;margin-top:8px">“{{ tune.testimonial }}”</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:20px">
+        <div class="ct-btn" onClick="{{ goShare }}" style="padding:11px 22px;border-radius:10px;background:#6B46C1;color:#fff;font-size:13px;font-weight:700">Continue to share →</div>
+      </div>
+    </sc-if>
+
+    <!-- ===== STEP 4 — SHARE ===== -->
+    <sc-if value="{{ isShare }}">
+      <div class="ct-lbl" style="margin-bottom:6px">Step 4 of 4 · {{ activeTemplateName }}</div>
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Share your page</h1>
+      <div class="ct-split" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px;align-items:start">
+        <div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:24px 26px">
+          <div class="ct-lbl" style="margin-bottom:10px">Public URL</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input value="{{ publicUrl }}" readOnly="{{ true }}" style="{{ inputStyle }};flex:1;color:#4A5568"></input>
+            <div class="ct-btn" onClick="{{ copyUrl }}" style="padding:11px 16px;border-radius:9px;border:1px solid #E2E8F0;font-size:12px;font-weight:700;color:#3f3f46">{{ copyLabel }}</div>
+          </div>
+          <div style="display:flex;gap:9px;margin-top:14px">
+            <div class="ct-btn" onClick="{{ publish }}" style="{{ publishBtnStyle }}">{{ publishLabel }}</div>
+            <a href="Customer Discovery.dc.html" class="ct-btn" style="padding:11px 18px;border-radius:9px;border:1px solid #E2E8F0;font-size:13px;font-weight:600;color:#3f3f46">Route leads → Customer Discovery</a>
+          </div>
+          <div style="margin-top:22px;padding-top:18px;border-top:1px solid #EDF2F7">
+            <div class="ct-lbl" style="margin-bottom:8px">This page is optimized to convert for</div>
+            <div style="font-size:15px;font-weight:800;color:#6B46C1">{{ conversionGoal }}</div>
+            <div style="font-size:12px;color:#718096;margin-top:5px;line-height:1.6">{{ conversionNote }}</div>
+          </div>
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid #EDF2F7">
+            <div class="ct-lbl" style="margin-bottom:8px">Social preview</div>
+            <div style="border:1px solid #EDF2F7;border-radius:10px;padding:12px 14px;background:#F8F8FA">
+              <div style="font-size:12.5px;font-weight:700">{{ tune.headline }}</div>
+              <div style="font-size:11px;color:#A0AEC0;margin-top:3px">{{ publicUrl }}</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="ct-lbl" style="margin-bottom:10px">Final preview</div>
+          <div style="border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;background:#fff">
+            <div style="{{ previewHeroStyle }}">
+              <span style="{{ previewSectorChip }}">{{ activeSectorName }}</span>
+              <div style="font-size:25px;font-weight:800;letter-spacing:-.02em;line-height:1.22;margin-top:14px">{{ tune.headline }}</div>
+              <div style="font-size:13px;line-height:1.6;margin-top:10px;opacity:.8;max-width:400px">{{ tune.subhead }}</div>
+              <div style="{{ previewCtaStyle }}">{{ tune.cta }}</div>
+            </div>
+            <div style="padding:18px 22px;border-top:1px solid #EDF2F7">
+              <div class="ct-mono" style="font-size:19px;font-weight:800;color:#6B46C1">{{ tune.metric }}</div>
+              <div style="font-size:12px;color:#718096;font-style:italic;margin-top:8px">“{{ tune.testimonial }}”</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1360}}">
+class Component extends DCLogic {
+  state = { step:'project', project:'novacraft', sector:'All sectors', archetype:'All page types', goal:'All goals',
+    template:null, tune:null, order:null, voice:'Technical', trustFlags:{ metric:true, testimonial:true, logos:false },
+    published:false, copyLabel:'Copy' };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const P = '#6B46C1';
+    const chip = (bg,fg) => 'display:inline-block;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap';
+
+    // ---- projects (prefilled from other Spin-Out Lab tools) ----
+    const PROJECTS = [
+      { k:'novacraft', name:'NovaCraft AI', oneLiner:'Async workflow automation for distributed teams', sector:'B2B SaaS', week:'Week 2', avBg:'#6B46C1',
+        problem:'Distributed teams lose hours reconstructing status across four disconnected tools.',
+        solution:'One thread per decision, assembled automatically into a daily digest.',
+        icp:'Ops leads at 50–500 person distributed SaaS teams', traction:'12 companies incorporated · $2.4M raised by graduates', founder:'Guillaume L., ex-Ops lead' },
+      { k:'kelpbio', name:'Kelp Bio', oneLiner:'Seaweed-derived materials for industrial manufacturing', sector:'Deep Tech', week:'Week 4', avBg:'#15803d',
+        problem:'Petrochemical-derived materials dominate manufacturing despite a viable bio-based alternative.',
+        solution:'A scalable seaweed biopolymer process validated at pilot scale, licensed from university research.',
+        icp:'Materials procurement leads at mid-size manufacturers', traction:'University spin-out · 2 pilot partners', founder:'Diana K., PhD Materials Science' },
+      { k:'halyard', name:'Halyard Security', oneLiner:'Continuous identity risk monitoring for lean security teams', sector:'Cybersecurity', week:'Week 2', avBg:'#334155',
+        problem:'Security teams under 10 people cannot triage identity alerts fast enough to catch real threats.',
+        solution:'Automated identity-risk scoring that surfaces the 3% of alerts that matter.',
+        icp:'Heads of security at Series A–B companies', traction:'Solo founder · Cohort 4', founder:'James W., ex-security engineer' },
+    ];
+    const projects = PROJECTS.map(pj => ({
+      k:pj.k, name:pj.name, oneLiner:pj.oneLiner, sector:pj.sector, week:pj.week,
+      initials: pj.name.split(' ').map(w=>w[0]).slice(0,2).join(''),
+      avStyle:'width:38px;height:38px;border-radius:11px;background:'+pj.avBg+';color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center',
+      sectorChip: chip('rgba(107,70,193,.08)', P), weekChip: chip('#F1F0F5','#4A5568'),
+      go: () => this.setState({ project:pj.k, step:'library' }),
+    }));
+    const proj = PROJECTS.find(p => p.k===st.project) || PROJECTS[0];
+
+    // ---- sector visual DNA (shared design system, sector-varied expression) ----
+    const SECTORS = {
+      'AI / ML':               { hero:'#0F172A', accent:'#818CF8', motif:'<path d="M4 12h4l3-8 4 16 3-8h4"/>', tone:'Confident, systems-minded', proof:'Model accuracy · latency benchmarks · workflow diagrams' },
+      'B2B SaaS':               { hero:'#1E293B', accent:'#6B46C1', motif:'<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="7" rx="1"/><rect x="14" y="15" width="7" height="7" rx="1"/>', tone:'Practical, outcome-driven', proof:'ROI metrics · adoption logos · workflow screenshots' },
+      'Deep Tech':              { hero:'#111827', accent:'#22D3EE', motif:'<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2"/>', tone:'Precise, research-backed', proof:'Technical diagrams · citations · IP / patent markers' },
+      'Fintech':                { hero:'#0B1220', accent:'#34D399', motif:'<rect x="2" y="9" width="20" height="12" rx="2"/><path d="M2 12h20M7 16h3"/>', tone:'Controlled, high-clarity', proof:'Compliance badges · security architecture · uptime stats' },
+      'Climate Tech':           { hero:'#0F2A1F', accent:'#4ADE80', motif:'<path d="M3 17h4l3-6 3 6 3-10 3 10h2"/>', tone:'Grounded, systems-oriented', proof:'Measured impact figures · infrastructure diagrams' },
+      'Health Tech':            { hero:'#111C2E', accent:'#5EEAD4', motif:'<path d="M3 12h5l2-5 4 10 2-5h5"/>', tone:'Calm, human-centered', proof:'Clinical validation · compliance · outcome data' },
+      'Enterprise Software':    { hero:'#0E1420', accent:'#93C5FD', motif:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>', tone:'Mature, governance-first', proof:'SOC2/ISO badges · uptime SLAs · integration logos' },
+      'Developer Tools':        { hero:'#0A0F1A', accent:'#38BDF8', motif:'<path d="m7 8-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/>', tone:'Technical, docs-led', proof:'Code samples · latency benchmarks · GitHub stars' },
+      'Data Infrastructure':    { hero:'#0C1220', accent:'#A78BFA', motif:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="4" cy="6" r="1.4"/><circle cx="20" cy="12" r="1.4"/><circle cx="4" cy="18" r="1.4"/>', tone:'Foundational, reliable', proof:'Throughput / uptime metrics · architecture diagrams' },
+      'Robotics / Automation':  { hero:'#151515', accent:'#FB923C', motif:'<rect x="6" y="4" width="12" height="8" rx="2"/><path d="M9 12v4M15 12v4M7 20h10"/>', tone:'Industrial, precise', proof:'Cycle-time metrics · deployment footage · safety certs' },
+      'Cybersecurity':          { hero:'#0A0E17', accent:'#60A5FA', motif:'<path d="M12 3 4 6v6c0 5 4 8 8 9 4-1 8-4 8-9V6z"/>', tone:'Resilient, authoritative', proof:'Detection stats · certifications · incident response time' },
+      'Semiconductors / Hardware': { hero:'#141414', accent:'#F59E0B', motif:'<rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>', tone:'Engineered, exact', proof:'Performance benchmarks · fab partner logos · spec sheets' },
+      'Life Sciences Tech':     { hero:'#101B24', accent:'#2DD4BF', motif:'<path d="M12 2v6M9 8h6a3 3 0 0 1 3 3v0a6 6 0 0 1-6 6 6 6 0 0 1-6-6v0a3 3 0 0 1 3-3z"/>', tone:'Rigorous, translational', proof:'Study data · publication citations · platform validation' },
+      'Quantum / Advanced Computing': { hero:'#0B0F1E', accent:'#C084FC', motif:'<circle cx="7" cy="12" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="M9.5 10.5 14.5 8M9.5 13.5 14.5 15.5"/>', tone:'Conceptual, frontier-grade', proof:'Benchmark comparisons · research partnerships' },
+      'AI Infrastructure':      { hero:'#0D1117', accent:'#F472B6', motif:'<rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', tone:'Systems-level, high-performance', proof:'Throughput/GPU-hour metrics · uptime · deployment logos' },
+    };
+    const sectorName = proj.sector;
+    const sec = SECTORS[sectorName] || SECTORS['B2B SaaS'];
+
+    // ---- archetype library (universal + sector-variable modules) ----
+    const ARCH = [
+      { k:'homepage', name:'Homepage', tag:'Universal', goal:'Signup / demo', modules:['Hero','Logo strip','Problem/solution','Proof','CTA footer'] },
+      { k:'launch', name:'Product launch', tag:'Sector-tuned', goal:'Waitlist', modules:['Hero','Technical proof','Timeline','CTA footer'] },
+      { k:'waitlist', name:'Waitlist page', tag:'Universal', goal:'Waitlist', modules:['Hero','Problem','Proof','Email capture'] },
+      { k:'demo', name:'Demo request', tag:'Sector-tuned', goal:'Demo request', modules:['Hero','Trust architecture','Calendar CTA'] },
+      { k:'docs', name:'Docs-led overview', tag:'Sector-tuned', goal:'Signup', modules:['Hero','Code sample','API reference link','CTA footer'] },
+      { k:'trust', name:'Trust / security', tag:'Sector-tuned', goal:'Enterprise contact', modules:['Hero','Compliance badges','Architecture diagram','Contact CTA'] },
+    ];
+    // Different sectors surface different archetype subsets — not all 6 everywhere, mirroring the brief's "not universal across all sectors"
+    const SECTOR_ARCH = {
+      'Cybersecurity':['homepage','trust','demo','docs'], 'Enterprise Software':['homepage','trust','demo'],
+      'Developer Tools':['homepage','docs','launch','waitlist'], 'Data Infrastructure':['homepage','docs','trust'],
+      'AI Infrastructure':['homepage','docs','trust','demo'], 'Fintech':['homepage','trust','demo'],
+      'Deep Tech':['homepage','launch','trust'], 'Life Sciences Tech':['homepage','trust','launch'],
+      'Semiconductors / Hardware':['homepage','trust','launch'], 'Quantum / Advanced Computing':['homepage','launch','docs'],
+    };
+    const allowedArch = SECTOR_ARCH[sectorName] || ['homepage','launch','waitlist','demo'];
+
+    const templates = ARCH.filter(a => allowedArch.indexOf(a.k) > -1)
+      .filter(a => st.archetype==='All page types' || a.name===st.archetype)
+      .filter(a => st.goal==='All goals' || a.goal===st.goal)
+      .map(a => Object.assign({}, a, {
+        sector:sectorName, useCase: 'Best for: ' + a.modules.join(' → '),
+        sectorChip: chip('rgba(107,70,193,.08)', P),
+        universal: a.tag, badgeStyle: chip(a.tag==='Universal'?'rgba(255,255,255,.92)':'rgba(0,0,0,.55)', a.tag==='Universal'?'#3f3f46':'#fff'),
+        previewStyle:'height:110px;background:'+sec.hero+';position:relative;overflow:hidden',
+        motifStyle:'position:absolute;right:14px;bottom:-8px;width:70px;height:70px;color:'+sec.accent+';opacity:.85',
+        motif: this.ic(sec.motif, 1.4),
+        go: () => this.setState({ template:a.k, tune:this.buildTune(proj, sec, a), order:this.buildOrder(a), step:'tune' }),
+      }));
+
+    const recommended = ARCH.filter(a => allowedArch.indexOf(a.k) > -1).slice(0,3).map(a => ({
+      name:a.name, reason:'Matches ' + sectorName + ' · ' + a.goal,
+      pillStyle:'padding:10px 14px;border-radius:10px;border:1px solid rgba(107,70,193,.25);background:rgba(107,70,193,.05)',
+      go: () => this.setState({ template:a.k, tune:this.buildTune(proj, sec, a), order:this.buildOrder(a), step:'tune' }),
+    }));
+
+    const selectStyle = 'padding:9px 12px;border-radius:9px;border:1px solid #E2E8F0;background:#fff;font-size:12.5px;color:#3f3f46;outline:none';
+    const sectorOptions = ['All sectors'].concat(Object.keys(SECTORS));
+    const archetypeOptions = ['All page types','Homepage','Product launch','Waitlist page','Demo request','Docs-led overview','Trust / security'];
+    const goalOptions = ['All goals','Signup / demo','Waitlist','Demo request','Signup','Enterprise contact'];
+
+    // when the sector filter is touched independently of project, use it to preview other sectors' expression
+    const previewSectorName = st.sector === 'All sectors' ? sectorName : st.sector;
+    const previewSec = SECTORS[previewSectorName] || sec;
+
+    // ---- tune step ----
+    const activeArch = ARCH.find(a => a.k === st.template) || ARCH[0];
+    const tune = st.tune || this.buildTune(proj, sec, activeArch);
+    const order = st.order || this.buildOrder(activeArch);
+
+    const trustToggles = [
+      { k:'metric', label:'Headline metric' }, { k:'testimonial', label:'Testimonial' }, { k:'logos', label:'Logo strip' },
+    ].map(t => ({ label:t.label, go: () => this.setState(s => ({ trustFlags: Object.assign({}, s.trustFlags, { [t.k]: !s.trustFlags[t.k] }) })),
+      style:'padding:6px 12px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid '+(st.trustFlags[t.k]?P:'#E2E8F0')+';background:'+(st.trustFlags[t.k]?'rgba(107,70,193,.06)':'#fff')+';color:'+(st.trustFlags[t.k]?P:'#718096') }));
+
+    const VOICES = ['Technical','Confident','Warm','Editorial'];
+    const voiceOptions = VOICES.map(v => ({ label:v, go: () => this.setState({ voice:v }),
+      style:'padding:6px 13px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid '+(st.voice===v?P:'#E2E8F0')+';background:'+(st.voice===v?'rgba(107,70,193,.06)':'#fff')+';color:'+(st.voice===v?P:'#718096') }));
+
+    const sectionOrder = order.map((m,i) => ({
+      n: String(i+1).padStart(2,'0'), label:m.label, tag:m.universal?'Universal':'Sector-tuned',
+      tagStyle: chip(m.universal?'#F1F0F5':'rgba(107,70,193,.08)', m.universal?'#718096':P),
+      up: () => this.setState(s => ({ order: this.moveItem(s.order || order, i, -1) })),
+      down: () => this.setState(s => ({ order: this.moveItem(s.order || order, i, 1) })),
+    }));
+
+    const inputStyle = 'width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border:1px solid #E2E8F0;background:#F8F8FA;font-size:13px;color:#1A202C;outline:none';
+
+    const previewHeroStyle = 'padding:26px 24px;background:'+sec.hero+';color:#fff';
+    const previewSectorChip = chip('rgba(255,255,255,.12)', sec.accent);
+    const previewCtaStyle = 'display:inline-block;margin-top:16px;padding:10px 20px;border-radius:9px;background:'+sec.accent+';color:'+sec.hero+';font-size:12.5px;font-weight:800';
+
+    const conversionMap = { homepage:'Signup / demo', launch:'Waitlist', waitlist:'Waitlist', demo:'Demo request', docs:'Signup', trust:'Enterprise contact' };
+    const conversionGoal = conversionMap[st.template || 'homepage'];
+    const conversionNote = 'Set by the ' + activeArch.name.toLowerCase() + ' archetype — the CTA, form fields, and lead routing below are all tuned for this outcome, not left generic.';
+
+    return {
+      stepper: [
+        { n:'1', label:'Project', go: () => this.setState({ step:'project' }) },
+        { n:'2', label:'Template', go: () => this.setState({ step:'library' }) },
+        { n:'3', label:'Tune', go: () => st.tune && this.setState({ step:'tune' }) },
+        { n:'4', label:'Share', go: () => st.tune && this.setState({ step:'share' }) },
+      ].map(s => ({ n:s.n, label:s.label, go:s.go,
+        style:'padding:6px 12px;border-radius:8px;font-size:12px;font-weight:'+(st.step===['project','library','tune','share'][+s.n-1]?'700':'600')
+          +';color:'+(st.step===['project','library','tune','share'][+s.n-1]?P:'#A0AEC0') })),
+
+      isProject: st.step==='project', isLibrary: st.step==='library', isTune: st.step==='tune', isShare: st.step==='share',
+      projects,
+      activeProjectName: proj.name, activeSectorName: previewSectorName,
+      backProject: () => this.setState({ step:'project' }),
+      sparkIcon: this.ic('<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>', 1.7),
+      recommended, sectorOptions, archetypeOptions, goalOptions, selectStyle,
+      setSector: (e) => this.setState({ sector:e.target.value }),
+      setArchetype: (e) => this.setState({ archetype:e.target.value }),
+      setGoal: (e) => this.setState({ goal:e.target.value }),
+      templates, resultCount: String(templates.length),
+
+      activeTemplateName: activeArch.name, backLibrary: () => this.setState({ step:'library' }),
+      tune, inputStyle,
+      setHeadline: (e) => this.setState(s => ({ tune: Object.assign({}, s.tune, { headline:e.target.value }) })),
+      setSubhead: (e) => this.setState(s => ({ tune: Object.assign({}, s.tune, { subhead:e.target.value }) })),
+      setCta: (e) => this.setState(s => ({ tune: Object.assign({}, s.tune, { cta:e.target.value }) })),
+      setMetric: (e) => this.setState(s => ({ tune: Object.assign({}, s.tune, { metric:e.target.value }) })),
+      setTestimonial: (e) => this.setState(s => ({ tune: Object.assign({}, s.tune, { testimonial:e.target.value }) })),
+      trustToggles, voiceOptions, sectionOrder,
+      previewUrl: proj.name.toLowerCase().replace(/\s+/g,'') + '.axal.page',
+      previewHeroStyle, previewSectorChip, previewCtaStyle,
+      goShare: () => this.setState({ step:'share' }),
+
+      publicUrl: 'https://axal.page/' + proj.name.toLowerCase().replace(/\s+/g,'-') + '/' + (st.template || 'homepage'),
+      copyLabel: st.copyLabel,
+      copyUrl: () => { this.setState({ copyLabel:'Copied' }); setTimeout(() => this.setState({ copyLabel:'Copy' }), 1600); },
+      publish: () => this.setState({ published: !st.published }),
+      publishLabel: st.published ? 'Unpublish' : 'Publish page',
+      publishBtnStyle: 'padding:11px 18px;border-radius:9px;font-size:13px;font-weight:700;' + (st.published ? 'background:#fff;color:#B91C1C;border:1px solid rgba(185,28,28,.25)' : 'background:'+P+';color:#fff;border:none'),
+      conversionGoal, conversionNote,
+    };
+  }
+
+  buildTune(proj, sec, arch) {
+    const HEAD = {
+      homepage: proj.oneLiner, launch: proj.oneLiner + ' — now in early access.',
+      waitlist: 'Get early access to ' + proj.name + '.', demo: 'See ' + proj.name + ' on your own data.',
+      docs: proj.name + ', from your existing tools.', trust: proj.name + ' — built for teams that can\u2019t afford to guess.',
+    };
+    return {
+      headline: HEAD[arch.k] || proj.oneLiner,
+      subhead: proj.solution,
+      cta: arch.goal === 'Waitlist' ? 'Join the waitlist' : arch.goal === 'Demo request' ? 'Book a demo' : 'Get started',
+      metric: proj.traction,
+      testimonial: 'This is exactly the problem we didn’t know how to name until we saw it solved.',
+    };
+  }
+
+  buildOrder(arch) {
+    const UNIV = ['Hero','Logo strip','CTA footer'];
+    return (arch.modules || []).map(m => ({ label:m, universal: UNIV.indexOf(m) > -1 }));
+  }
+
+  moveItem(arr, i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= arr.length) return arr;
+    const next = arr.slice();
+    const tmp = next[i]; next[i] = next[j]; next[j] = tmp;
+    return next;
+  }
+}
+</script>
+</body>
+</html>

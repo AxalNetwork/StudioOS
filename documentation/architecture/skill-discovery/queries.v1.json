@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "decision": "D4538",
+  "note": "Labelled discovery scenarios (#4538). Skills are the source library's slugs (services/agents/skills/), except fixtures declared inline. `relevant` is best first; `acceptable` may also be returned; `must_not_return` names a skill with the eligibility code the gate must refuse it with (SKILL_DISCOVERY_CONTRACT.md). Checked by cloudflare-worker/test/skill_discovery_queries_4538.test.ts.",
+  "scenarios": [
+    {
+      "id": "runway-cfo",
+      "kind": "clear_task",
+      "task": "How many months of runway do we have left at the current burn?",
+      "agent": { "role": "cfo", "scope": "company", "tools": ["mercury.read", "grow.read"] },
+      "expect": { "outcome": "recommend", "relevant": ["cash-runway-snapshot"], "acceptable": [], "must_not_return": [] }
+    },
+    {
+      "id": "board-prep-ceo",
+      "kind": "clear_task",
+      "task": "Prepare talking points for next week's board meeting.",
+      "agent": { "role": "ceo", "scope": "company", "tools": ["project.read", "grow.read", "mercury.read", "compliance.read"] },
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["board-meeting-brief"],
+        "acceptable": ["cash-runway-snapshot"],
+        "must_not_return": [{ "skill": "weekly-kpi-digest", "code": "tool_not_approved", "tool": "stripe.read" }]
+      }
+    },
+    {
+      "id": "investor-update-ir",
+      "kind": "clear_task",
+      "task": "Draft this month's update to our investors.",
+      "output_kind": "draft",
+      "agent": { "role": "investor_relations", "scope": "company", "tools": ["mercury.read", "stripe.read", "raise.read", "build.read"] },
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["monthly-investor-update"],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "deck-claims-check", "code": "tool_not_approved", "tool": "grow.read" }]
+      }
+    },
+    {
+      "id": "nda-draft-counsel",
+      "kind": "clear_task",
+      "task": "Write a first draft of a mutual NDA for a new partner.",
+      "output_kind": "draft",
+      "agent": { "role": "general_counsel", "scope": "company", "tools": ["company.read", "network.read"] },
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["nda-first-draft"],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "nda-confidentiality-review", "code": "tool_not_approved", "tool": "data_room.read" }]
+      }
+    },
+    {
+      "id": "release-notes-cpo",
+      "kind": "output_constraint",
+      "task": "What shipped this week? Write it up for customers.",
+      "output_kind": "draft",
+      "agent": { "role": "cpo", "scope": "company", "tools": ["github.read", "vercel.read", "build.read"] },
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["release-notes-draft"],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "accessibility-check", "code": "output_mismatch" }]
+      },
+      "notes": "Accessibility check is runnable by this agent but writes a brief; the request asks for a draft."
+    },
+    {
+      "id": "accessibility-cto",
+      "kind": "clear_task",
+      "task": "Check the onboarding screen for accessibility problems.",
+      "agent": { "role": "cto", "scope": "project", "tools": ["build.read", "github.read"] },
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["accessibility-check"],
+        "acceptable": ["privacy-data-map"],
+        "must_not_return": []
+      }
+    },
+    {
+      "id": "churn-sales",
+      "kind": "clear_task",
+      "task": "Which customers look likely to churn this quarter?",
+      "agent": { "role": "sales", "scope": "company", "tools": ["grow.read"] },
+      "expect": { "outcome": "recommend", "relevant": ["churn-risk-review"], "acceptable": [], "must_not_return": [] }
+    },
+    {
+      "id": "postmortem-cto",
+      "kind": "clear_task",
+      "task": "Write up what went wrong in yesterday's outage.",
+      "output_kind": "draft",
+      "agent": { "role": "cto", "scope": "company", "tools": ["vercel.read", "build.read"] },
+      "expect": { "outcome": "recommend", "relevant": ["incident-postmortem-draft"], "acceptable": [], "must_not_return": [] }
+    },
+    {
+      "id": "pricing-ambiguous-cpo",
+      "kind": "ambiguous",
+      "task": "Help me with pricing.",
+      "agent": { "role": "cpo", "scope": "company", "tools": ["stripe.read", "grow.read", "validate.read", "research.read"] },
+      "expect": {
+        "outcome": "ambiguous",
+        "relevant": [],
+        "acceptable": ["pricing-page-review", "pricing-packaging-research-plan"],
+        "must_not_return": []
+      },
+      "notes": "Review today's pricing, or plan research for a new price? The right answer asks which."
+    },
+    {
+      "id": "contract-cmo-role-mismatch",
+      "kind": "role_mismatch",
+      "task": "Summarise the reseller contract in the data room.",
+      "agent": { "role": "cmo", "scope": "company", "tools": ["data_room.read"] },
+      "expect": {
+        "outcome": "no_suitable_skill",
+        "relevant": [],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "contract-summary", "code": "role_mismatch" }]
+      },
+      "notes": "The skill exists and the tool is granted, but the CMO role may not run it: explained, never recommended."
+    },
+    {
+      "id": "runway-missing-tool",
+      "kind": "missing_tool",
+      "task": "How many months of runway do we have left?",
+      "agent": { "role": "cfo", "scope": "company", "tools": ["grow.read"] },
+      "expect": {
+        "outcome": "no_suitable_skill",
+        "relevant": [],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "cash-runway-snapshot", "code": "tool_not_approved", "tool": "mercury.read" }]
+      },
+      "notes": "The right skill needs Mercury, which this agent is not granted: blocked with the tool named."
+    },
+    {
+      "id": "kpi-cross-company",
+      "kind": "cross_tenant",
+      "task": "Give me this week's KPI digest.",
+      "agent": { "role": "ceo", "scope": "company", "company": "acme", "tools": ["grow.read", "stripe.read"] },
+      "fixtures": [
+        { "slug": "kpi-digest-orbit", "scope": "company", "company": "orbit", "roles": ["ceo"], "tools": ["grow.read"], "output": "brief", "status": "published" }
+      ],
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["weekly-kpi-digest"],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "kpi-digest-orbit", "code": "not_found" }]
+      },
+      "notes": "Another company's skill is never returned, and never listed as blocked either."
+    },
+    {
+      "id": "retired-hq-skill",
+      "kind": "retired",
+      "task": "Summarise how vendor spend changed this month.",
+      "agent": { "role": "cfo", "scope": "company", "tools": ["mercury.read", "build.read"] },
+      "fixtures": [
+        { "slug": "vendor-spend-legacy", "scope": "hq", "roles": ["cfo"], "tools": ["mercury.read"], "output": "brief", "status": "retired" }
+      ],
+      "expect": {
+        "outcome": "recommend",
+        "relevant": ["vendor-spend-review"],
+        "acceptable": [],
+        "must_not_return": [{ "skill": "vendor-spend-legacy", "code": "skill_retired" }]
+      }
+    },
+    {
+      "id": "no-skill-travel",
+      "kind": "no_skill",
+      "task": "Book flights and a hotel for the team offsite.",
+      "agent": { "role": "coo", "scope": "company", "tools": ["project.read", "team.read"] },
+      "expect": { "outcome": "no_suitable_skill", "relevant": [], "acceptable": [], "must_not_return": [] }
+    },
+    {
+      "id": "no-skill-send-email",
+      "kind": "no_skill",
+      "task": "Email the investor update to all our investors now.",
+      "agent": { "role": "investor_relations", "scope": "company", "tools": ["mercury.read", "stripe.read", "raise.read", "build.read"] },
+      "expect": {
+        "outcome": "no_suitable_skill",
+        "relevant": [],
+        "acceptable": ["monthly-investor-update"],
+        "must_not_return": []
+      },
+      "notes": "Skills are read-only and draft; sending is not something any skill does. Offering the draft is acceptable, saying it will send is not."
+    }
+  ]
+}

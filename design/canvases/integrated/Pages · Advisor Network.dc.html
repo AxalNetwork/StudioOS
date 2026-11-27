@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#047857;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#065f46;background:#f0fdf6;border-color:#a7f3d0;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f0fdf6;border-color:#a7f3d0;color:#065f46;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f0fdf6;border:1px solid #a7f3d0;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#065f46;background:#dcfce7;border:1px solid #a7f3d0;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #047857;background:#047857;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .mine{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#065f46;background:#f0fdf6;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .gate{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:10.5px;color:#615c6e;margin-top:12px}
+    .step{display:flex;align-items:center;gap:7px}
+    .sd{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;flex:none}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="3">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /network</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#065f46;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Network</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">Priya Nair <span style="color:#615c6e;font-weight:600">· my book</span></span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="3">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE — primary composition where the product has no backing -->
+        <sc-if value="{{ p.empty }}">
+          <div class="card" style="padding:26px 28px;margin-top:14px;border-style:dashed;background:#fbfbfc">
+            <div style="max-width:640px">
+              <span class="lbl" style="color:#065f46">Nothing to roll up yet</span>
+              <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:9px">{{ p.empty.h }}</div>
+              <div style="font-size:12.5px;color:#4a4553;line-height:1.65;margin-top:8px">{{ p.empty.body }}</div>
+              <div style="display:flex;gap:8px;margin-top:15px;flex-wrap:wrap">
+                <span class="acc">{{ p.empty.cta }}</span><span class="gho">{{ p.empty.cta2 }}</span>
+              </div>
+              <div style="font-size:11px;color:#615c6e;margin-top:13px;line-height:1.6">{{ p.empty.honest }}</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="legend">
+          <span style="display:inline-flex;align-items:center;gap:6px"><span class="seam">From the Lab</span>came in through a Spin-Out Lab cohort — read-only to me</span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><span class="mine">Mine</span>my own book, editable</span>
+        </div>
+
+        <sc-if value="{{ p.steps }}">
+          <div class="card" style="padding:14px 17px;margin-top:13px">
+            <span class="lbl">Double opt-in · a state cannot be entered without its consent record</span>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:11px;flex-wrap:wrap">
+              <sc-for list="{{ p.steps }}" as="s" hint-placeholder-count="5">
+                <span class="step"><span class="sd" style="{{ s.style }}">{{ s.n }}</span><span style="font-size:11.5px;font-weight:700;color:#3f3a49">{{ s.t }}</span><sc-if value="{{ s.gate }}"><span class="gate">{{ s.gate }}</span></sc-if><sc-if value="{{ s.arrow }}"><span style="color:#c9c5d1">→</span></sc-if></span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                  <sc-if value="{{ c.mine }}"><span class="mine">{{ c.mine }}</span></sc-if>
+                  <sc-if value="{{ c.gate }}"><span class="gate">{{ c.gate }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                  <sc-if value="{{ c.sub }}"><span style="display:block;font-size:10px;color:#615c6e;margin-top:3px;line-height:1.45">{{ c.sub }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="emerald" page="Network" hint-size="100%,700px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const E = { ink:'#047857', deep:'#065f46', tint:'#f0fdf6' };
+    const ROWS = ['Home','Practice','Cohorts','Expertise','Network','Research','Trust','Practice Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Network' ? 'nav on' : 'nav',
+      style: label === 'Network' ? 'color:'+E.deep+';background:'+E.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+E.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Relationships','Introductions','Organizations'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Introductions' }));
+
+    const pill = (t) => {
+      const M = { 'Made':['#ecfdf5','#047857','#a7f3d0'], 'Both agreed':['#ecfdf5','#047857','#a7f3d0'],
+        'Client':['#ecfdf5','#047857','#a7f3d0'], 'Active':['#ecfdf5','#047857','#a7f3d0'],
+        'One side':['#fffbeb','#92400e','#fde68a'], 'Requested':['#fffbeb','#92400e','#fde68a'],
+        'Cohort':['#fffbeb','#92400e','#fde68a'], 'Going quiet':['#fffbeb','#92400e','#fde68a'],
+        'Declined':['#fef2f2','#b91c1c','#fecaca'], 'Stale':['#fef2f2','#b91c1c','#fecaca'],
+        'Fund':['#f5f5ff','#3730a3','#c7d2fe'], 'Firm':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Peer':['#f6f5f8','#615c6e','#e2e1e8'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, pill:null, seam:null, mine:null, gate:null, nr:false, sub:null, style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight','nine','ten'][n] || String(n);
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const plural = (n, s, p) => n === 1 ? s : (p || s + 's');
+
+    // Mistral Small 3.1 — the Network curation. Intro drafting is the work; tone is the deliverable.
+    const N_IN = 0.351, N_OUT = 0.555;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * N_IN + tout / 1e6 * N_OUT;
+
+    // ══ ONE book. Strength is derived from recorded interactions and shows its derivation;
+    // no synthesised warmth score is ever presented as a fact. ══
+    const BOOK = [
+      { name:'Rowan Whitfield', org:'Halverton', role:'CEO', kind:'Client',
+        last:'Aug 28, 2026', days:4, n:24, what:'Rate card session; agreed a Q4 follow-up.', src:'mine' },
+      { name:'Dev Raghunathan', org:'Novacraft Labs', role:'Founder', kind:'Cohort',
+        last:'Aug 26, 2026', days:6, n:9, what:'Pricing teardown, cohort 4 week 2.', src:'lab', srcT:'Cohort 4' },
+      { name:'Ines Marchetti', org:'Meridian Robotics', role:'Co-founder', kind:'Cohort',
+        last:'Aug 21, 2026', days:11, n:6, what:'Packaging sprint session two.', src:'lab', srcT:'Cohort 4' },
+      { name:'Aoife Brennan', org:'Thornbury Capital', role:'Partner', kind:'Fund',
+        last:'Jul 9, 2026', days:54, n:11, what:'Talked through two portfolio pricing problems.', src:'mine' },
+      { name:'Marta Kowalczyk', org:'Verwood', role:'Interim CPO', kind:'Peer',
+        last:'Feb 14, 2026', days:199, n:4, what:'Coffee before her move to interim CPO.', src:'mine' },
+      { name:'Tomás Ferreira', org:'Studio Vireo', role:'Principal', kind:'Peer',
+        last:null, days:null, n:2, what:'Introduced at a cohort demo day. Nothing logged since.', src:'lab', srcT:'Cohort 3' }
+    ];
+    const STALE_AT = 120, QUIET_AT = 45;
+    const mine = BOOK.filter(c => c.src === 'mine');
+    const fromLab = BOOK.filter(c => c.src === 'lab');
+    const stale = BOOK.filter(c => c.days !== null && c.days > STALE_AT);
+    const quiet = BOOK.filter(c => c.days !== null && c.days > QUIET_AT && c.days <= STALE_AT);
+    const undated = BOOK.filter(c => c.days === null);
+    const strength = (c) => {
+      if (c.days === null) return { nr:true };
+      const label = c.n >= 20 && c.days <= 30 ? 'Strong' : (c.n >= 6 && c.days <= 60 ? 'Working' : 'Thin');
+      return { nr:false, t:label, sub: c.n + ' recorded ' + plural(c.n, 'interaction') + ' · last ' + c.days + ' d ago' };
+    };
+    const dateState = (c) => c.days === null ? null : (c.days > STALE_AT ? 'Stale' : (c.days > QUIET_AT ? 'Going quiet' : null));
+    const bookRows = BOOK.slice().sort((a, b) => (b.days === null ? 1e4 : b.days) - (a.days === null ? 1e4 : a.days))
+      .map(c => {
+        const s = strength(c);
+        const ds = dateState(c);
+        return { rowStyle: (c.days !== null && c.days > STALE_AT) || c.days === null ? 'background:#fffafa' : '', cells:[
+          cell(c.name, { sub: c.role + ' · ' + c.org }),
+          cell('', { pill: c.kind }),
+          c.src === 'lab' ? cell('', { seam: c.srcT }) : cell('', { mine:'Mine' }),
+          c.days === null ? cell('', { nr:true }) : cell(c.last, ds ? { pill: ds } : {}),
+          cell(c.what),
+          s.nr ? cell('', { nr:true }) : cell(s.t, { sub: s.sub })
+        ]};
+      });
+
+    // ══ ONE introduction pipeline. Consent is a gate: a state is unreachable without it. ══
+    const STATES = ['Requested','One side','Both agreed','Made','Outcome'];
+    const INTRO = [
+      { who:'Rowan Whitfield → Aoife Brennan', state:'Made',
+        consent:'Both recorded Aug 14', outcome:'Met Aug 20. Thornbury passed on the round, kept the relationship.', src:'mine' },
+      { who:'Dev Raghunathan → Rowan Whitfield', state:'Both agreed',
+        consent:'Both recorded Aug 29', outcome:'Scheduling. Dev wants the rate-card story first-hand.', src:'lab', srcT:'Cohort 4' },
+      { who:'Ines Marchetti → Marta Kowalczyk', state:'One side',
+        consent:'Ines agreed Aug 27 · Marta not recorded', outcome:'Held at the gate until Marta answers.', src:'lab', srcT:'Cohort 4' },
+      { who:'Tomás Ferreira → Halverton', state:'Requested',
+        consent:'Neither recorded', outcome:'Asked Aug 30. Cannot advance.', src:'lab', srcT:'Cohort 3' },
+      { who:'Aoife Brennan → Meridian Robotics', state:'Declined',
+        consent:'Aoife declined Aug 8', outcome:'Terminal. Not re-asked — robotics is outside her mandate.', src:'mine' }
+    ];
+    const made = INTRO.filter(i => i.state === 'Made');
+    const gated = INTRO.filter(i => i.state === 'One side' || i.state === 'Requested');
+    const declined = INTRO.filter(i => i.state === 'Declined');
+    const introRows = INTRO.map(i => ({
+      rowStyle: i.state === 'Declined' ? 'opacity:.68' : (i.state === 'Requested' || i.state === 'One side' ? 'background:#fffcf5' : ''),
+      cells:[
+        cell(i.who, i.src === 'lab' ? { seam: i.srcT } : { mine:'Mine' }),
+        cell('', { pill: i.state }),
+        cell(i.consent, i.state === 'One side' || i.state === 'Requested' ? { gate:'Gated' } : {}),
+        cell(i.outcome)
+      ]}));
+    const stepRow = STATES.map((t, idx) => ({ n:String(idx + 1), t,
+      gate: idx === 1 || idx === 2 ? 'consent required' : null,
+      arrow: idx < STATES.length - 1,
+      style: idx <= 2 ? 'background:#fdf4ff;color:#86198f;border:1px solid #f5d0fe' : 'background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8' }));
+
+    // ══ Organizations — no aggregation exists in the product today, so the empty state leads. ══
+    const ORG = [
+      { org:'Halverton', kind:'Client', people:1, via:'Rate card rebuild, Jul 2026', src:'mine' },
+      { org:'Novacraft Labs', kind:'Cohort', people:1, via:'Cohort 4, week 2', src:'lab', srcT:'Cohort 4' },
+      { org:'Meridian Robotics', kind:'Cohort', people:1, via:'Cohort 4, packaging sprint', src:'lab', srcT:'Cohort 4' },
+      { org:'Thornbury Capital', kind:'Fund', people:1, via:'Two portfolio pricing conversations', src:'mine' },
+      { org:'Verwood', kind:'Firm', people:1, via:'Peer relationship, no engagement', src:'mine' },
+      { org:'Studio Vireo', kind:'Firm', people:1, via:'Cohort 3 demo day', src:'lab', srcT:'Cohort 3' }
+    ];
+    const labOrgs = ORG.filter(o => o.src === 'lab');
+    const orgRows = ORG.map(o => ({ rowStyle:'', cells:[
+      cell(o.org, o.src === 'lab' ? { seam: o.srcT } : { mine:'Mine' }),
+      cell('', { pill: o.kind }),
+      cell(o.people + ' ' + plural(o.people, 'person', 'people')),
+      cell(o.via),
+      cell('', { nr:true })
+    ]}));
+
+    const PAGES = [
+      { id:'an1', badge:'AN1', route:'/network/relationships', zone:'Relationships', arch:'COLLECTION',
+        title:'Network · Relationships', h1:'My relationship book',
+        blurb:'Person-level, with the last real interaction and its date. Strength appears only as a label derived from recorded interactions, printed alongside the count and recency it came from — a warmth number with no derivation behind it is a guess wearing a metric\u2019s clothes.',
+        sub:'People I know, what we last actually did, and how recently.',
+        cmpTitle:'Relationships · ' + BOOK.length + ' people',
+        cmpBody: mine.length + ' mine, ' + fromLab.length + ' from the Lab. ' + cap(nWord(stale.length)) + ' stale past ' + STALE_AT + ' days, ' + nWord(undated.length) + ' with nothing logged.',
+        viewMore:'View more · ' + BOOK.length + ' people, ' + (stale.length + undated.length) + ' needing attention →',
+        filters: fil(['Coldest first','All','Mine','From the Lab'], 0), ops:['Log interaction','Add person','Export'],
+        adds:[ { label:'People', value:String(BOOK.length), note:'across ' + new Set(BOOK.map(c => c.org)).size + ' organizations' },
+          { label:'Stale', value:String(stale.length), note:'nothing recorded in over ' + Math.round(STALE_AT / 30) + ' months' },
+          { label:'Going quiet', value:String(quiet.length), note:'past ' + QUIET_AT + ' days, not yet stale' },
+          { label:'Warmth score', nr:true, note:'no such number exists — strength is derived per row and shows its working' } ],
+        instTitle:'People', instMeta:'Coldest first · strength shows its derivation',
+        cols:'1.4fr .8fr .9fr 1.1fr 2fr 1.2fr',
+        head:['Person','Kind','Source','Last interaction','What we last did','Strength'],
+        rows: bookRows,
+        instNote:'Tomás Ferreira has two logged touches and no date, so his last-interaction cell says so and his strength reads "Not recorded" rather than "Thin" — two interactions with no dates cannot support a label. Marta Kowalczyk is 199 days stale and stays visible in red: a relationship going quiet is exactly what a book is for, and hiding it would leave the page flattering. The fourth stat card exists to say plainly that no warmth score is computed anywhere in this product.',
+        aiLabel:'AI fills the blanks · re-engagement lines', aiCost:c4(runCost(8400, 780)),
+        aiBody:'For the ' + nWord(stale.length + quiet.length) + ' relationships past ' + QUIET_AT + ' days, a line drafted from what was actually last discussed — Marta\u2019s move to interim CPO, Aoife\u2019s two portfolio problems — rather than a generic note. Drafts only; each one is sent by hand.',
+        aiAccept:'Open the drafts', aiFoot:'Written from logged interactions, nothing inferred.' },
+
+      { id:'an2', badge:'AN2', route:'/network/introductions', zone:'Introductions', arch:'MATCH ENGINE',
+        title:'Network · Introductions', h1:'Double opt-in introductions',
+        blurb:'A pipeline in which consent is structural: an introduction cannot enter a state whose consent is unrecorded, and the interface renders that as a gate rather than a warning. A decline is a normal terminal state and stays on the page.',
+        sub:'Requested → one side → both agreed → made → outcome.',
+        cmpTitle:'Introductions · ' + made.length + ' made',
+        cmpBody: gated.length + ' held at a consent gate, ' + declined.length + ' declined. ' + fromLab.length + ' of the people involved came from the Lab.',
+        viewMore:'View more · ' + INTRO.length + ' introductions, consent trail →',
+        filters: fil(['All','Gated','Made','Declined'], 0), ops:['New introduction','Consent log','Export'],
+        steps: stepRow,
+        instTitle:'Introduction pipeline', instMeta:'Consent is a gate, not a warning',
+        cols:'1.8fr 1fr 1.7fr 2.2fr',
+        head:['Introduction','State','Consent record','Where it stands'],
+        rows: introRows,
+        instNote:'Ines\u2019s introduction carries one consent and stops — the row names the missing half rather than flagging a risk, because the next state is not reachable, not merely unwise. Tomás\u2019s has neither consent and sits at Requested. Aoife\u2019s decline stays visible with its reason: robotics sits outside her mandate, which is worth keeping so the same ask is not made again in three months.',
+        aiLabel:'Suggested match · possible paths', aiCost:c4(runCost(9200, 860)),
+        aiBody:'Points to ' + nWord(2) + ' possible paths in the book: Rowan Whitfield has ' + BOOK[0].n
+          + ' recorded interactions and sits one step from two cohort founders working on the same pricing problem. Each arrives as a draft ask needing both consents before it can move — the suggestion introduces nobody.',
+        aiAccept:'Open as drafts', aiFoot:'Both consents still collected by hand.' },
+
+      { id:'an3', badge:'AN3', route:'/network/organizations', zone:'Organizations', arch:'COLLECTION',
+        title:'Network · Organizations', h1:'Organizations',
+        blurb:'Firms, funds and companies rolled up from the book, with the people known inside each. Honest about the backing: no aggregation over the relationship book exists in the product today, so the empty state is the primary composition and the table below shows the shape the roll-up would take.',
+        sub:'Organizations and the people I know inside them.',
+        empty:{ h:'The roll-up is not built yet.',
+          body:'Organizations would aggregate from the ' + BOOK.length + ' people in the book — grouping them by employer, attaching what each relationship produced, and marking which arrived through a Lab cohort. None of that runs today: the book stores an organization name as text on each person, with no organization record behind it.',
+          cta:'Build organization records', cta2:'View the book instead',
+          honest:'What follows is the shape the roll-up would take, rendered from the same ' + BOOK.length + ' people. Headcount, sector and stage columns are absent rather than estimated — the book holds none of them.' },
+        cmpTitle:'Organizations · not built',
+        cmpBody:'Would roll up from ' + BOOK.length + ' people across ' + ORG.length + ' organizations. No organization records exist yet.',
+        viewMore:'View more · empty state and intended shape →',
+        filters: fil(['All','Clients','Cohort','Funds'], 0), ops:['Build records','Import','Export'],
+        adds:[ { label:'Organizations in the book', value:String(ORG.length), note:'as text on people, not records' },
+          { label:'From the Lab', value:String(labOrgs.length), note:'read-only to me' },
+          { label:'Organization records', value:'0', note:'nothing to aggregate over yet' },
+          { label:'Headcount, sector', nr:true, note:'the book holds neither — never estimated' } ],
+        instTitle:'Intended shape', instMeta:'Rendered from people · not a live roll-up',
+        cols:'1.6fr .9fr .9fr 2fr 1fr',
+        head:['Organization','Kind','People known','How I know them','Headcount'],
+        rows: orgRows,
+        instNote:'Every row knows exactly ' + nWord(1) + ' person, which is the roll-up\u2019s real finding rather than a display artefact: each organization in this book rests on a single relationship, so it survives or ends with that one person. Headcount reads "Not recorded" on all ' + ORG.length + ' rows because the book stores no such field, and an estimate here would be the first invented number in a record of who this practice actually knows.',
+        aiLabel:'Draft · single-contact exposure', aiCost:c4(runCost(6600, 610)),
+        aiBody:'Points to every organization resting on one known person, and to which of those relationships is already stale — Verwood is held by Marta alone, 199 days quiet. Names the exposure; a second contact is a person\u2019s work to make.',
+        aiAccept:'Open the draft', aiFoot:'Counted from book entries.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({ empty:null, steps:null }, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

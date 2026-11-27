@@ -1,0 +1,240 @@
+/**
+ * D715 (#1780) — Mercury on Connectors: the words and rows a member's own
+ * Mercury draws, for a founder's, partner's or, on HQ, investor's connection
+ * (D713, #1778; D752, #1886). No React, no fetch.
+ *
+ * D880 (#2553): Axal VC's own accounts are not here. Their rows, words and
+ * sheet live under HQ, in `../admin/fundAdmin/`, and no member page imports
+ * them. A member page names them in one place only: `HQ_ACCOUNTS`, the line
+ * an admin reads on this connector's page, linking HQ's Bank accounts. The
+ * Worker's refusal code for a token or sign-in from Axal VC's own Mercury
+ * organization (`mercury_entity_account`) is matched below, because a member
+ * can meet it.
+ *
+ * The member's use words are keyed exactly as `GET /api/mercury/personal/status`
+ * names its uses (`routes/mercury_personal.ts`, D713): `venture_revenue`, `raise_receipts` and `venture_spend` (D752),
+ * `practice_income` and `partner_deals` (PR 3b), and `capital_attestation`
+ * (D752). The member words below are keyed by role (D752): a role without its
+ * own entry reads the founder's.
+ */
+
+const KIND_WORDS = { checking: 'Checking', savings: 'Savings' };
+export const UNREGISTERED_NOTE = 'Not in the bank-account registry, so it feeds no match.';
+
+/** One account as its kind and "ending NNNN", with its nickname. Never a number beyond the last four. */
+export function accountLine(account) {
+  const kind = Object.hasOwn(KIND_WORDS, account?.kind) ? KIND_WORDS[account.kind] : 'Account';
+  const four = typeof account?.last_four === 'string' && /^\d{4}$/.test(account.last_four) ? account.last_four : null;
+  const nickname = typeof account?.nickname === 'string' && account.nickname.trim() ? account.nickname.trim() : null;
+  return {
+    text: four ? `${kind} ending ${four}` : `${kind} · last four not recorded`,
+    nickname,
+    note: account?.registered === false || account?.registered === 0 ? UNREGISTERED_NOTE : null,
+  };
+}
+
+/** D880: an admin's line on this connector's page; the accounts themselves are HQ's. */
+export const HQ_ACCOUNTS = { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin/platform/bank-accounts' };
+/** A branch admin's search for Mercury. */
+export const BRANCH_MANAGED = 'Axal VC\'s own accounts are managed from HQ.';
+
+/** D752 (#1891): the `capital_attestation` use's door, to the LP workspace's proof of funds. */
+export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/spinout-lab/investor-workspace#proof-of-funds' };
+
+/**
+ * #1780 (canvas PR): each use row's door, to the screen where that use
+ * happens (#1778's screens, #1848). A use with no screen on `main` has no
+ * door: `raise_receipts` and `venture_spend` are matched and read from their
+ * own pages' panels, which this sheet does not link yet. `practice_income`
+ * lost its door with #2338: invoices were matched on the needs board's
+ * Engagements tab at `/partner/needs`, and the owner removed that page.
+ */
+export const USE_DOORS = {
+  venture_revenue: { text: 'Import from Mercury', href: '/spinout-lab/revenue' },
+  partner_deals: { text: 'Match a payout or settlement', href: '/partner/earnings' },
+  capital_attestation: ATTESTATION_DOOR,
+};
+
+// ── A member's own Mercury (decision 8) ───────────────────────────────────────
+
+export const MEMBER_GROUPS = {
+  uses: 'What StudioOS uses it for',
+  never: 'What it never does',
+  lands: 'Where it lands',
+  reads: 'How it reads',
+};
+
+/** Decision 8's use words, keyed as `routes/mercury_personal.ts` names the uses. */
+export const USE_WORDS = {
+  venture_revenue: 'Your venture\'s revenue. StudioOS lists the credits in your own Mercury account, and you pick the ones that are customer revenue. Only those become rows on your revenue ledger, marked Supported, with Mercury\'s amount and date.',
+  practice_income: 'Your practice income. Match an engagement invoice you issued to the credit that paid it.',
+  partner_deals: 'Your deals with Axal VC Management LLC. Match a payout or a partner-deal settlement to the bank line that settled it.',
+  // D752 (#1887): the Worker serves this key now; task raise-match-screens draws its match panel.
+  raise_receipts: 'Your venture\'s raise. Match an investor\'s wire to a committed prospect in your raise pipeline, or to a pending commitment on one of your deals.',
+  venture_spend: 'Your venture\'s spending, burn, cash and runway. When you ask, StudioOS reads your own Mercury and works out each month\'s money in, money out and net burn, with your cash on hand and your runway. Money from an Axal fund counts as financing, not income. Nothing is kept unless you save a month\'s burn, and your cash only if you tick it.',
+  capital_attestation: 'Proof of funds for a commitment you made: a deal commitment, your Fund I application or your Fund I commitment. When you ask, StudioOS checks the checking and savings accounts you pick and shares one dated statement with Axal\'s admins, "at least" an amount you choose. You can revoke it. Your balance is never stored or shown.',
+};
+
+/** Why a use is not drawn, in words, from the reason the status route gives. */
+export const USE_REASONS = {
+  hq_only: 'Your deals with Axal VC Management LLC are matched on HQ only.',
+  purpose_not_allowed: 'Your profile uses its own Mercury for nothing StudioOS lists.',
+};
+
+/**
+ * The uses group from the status read: one row per `available` use the model
+ * has words for, in the route's order. With none left, `rows` is empty and
+ * `reason` says why: `hq_only` when a held use is withheld off HQ, else that
+ * the profile holds none. A key without words is never drawn.
+ */
+export function usesRows(status) {
+  const uses = Array.isArray(status?.uses) ? status.uses : [];
+  const rows = uses
+    .filter((u) => u && u.available === true && Object.hasOwn(USE_WORDS, u.key))
+    .map((u) => ({ key: u.key, text: USE_WORDS[u.key] }));
+  if (rows.length) return { rows, reason: null };
+  const hqOnly = uses.some((u) => u?.reason === 'hq_only' && Object.hasOwn(USE_WORDS, u.key));
+  return { rows: [], reason: hqOnly ? USE_REASONS.hq_only : USE_REASONS.purpose_not_allowed };
+}
+
+const FOUNDER_PARTNER_NEVER = Object.freeze([
+  'It never sends, transfers or requests money, and never changes anything in Mercury.',
+  'It is never used for fund administration and never shows Axal VC\'s own accounts. StudioOS refuses a token from Axal VC\'s own Mercury organizations.',
+  'It reads your Mercury only when you connect it and while you open an import or a match. It keeps only the lines you import or match, never your balance, memos or counterparty names.',
+]);
+
+/** "What it never does", by role (D752). */
+export const NEVER_ROWS = Object.freeze({
+  founder: Object.freeze([
+    FOUNDER_PARTNER_NEVER[0],
+    FOUNDER_PARTNER_NEVER[1],
+    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. Your spending, cash and runway are shown only to you; saved only when you choose: a month\'s net burn and, if you tick it, your cash on hand. It keeps only those and the lines you import or match, never memos or counterparty names.',
+  ]),
+  partner: FOUNDER_PARTNER_NEVER,
+  investor: Object.freeze([
+    'It never sends, transfers or requests money, and never changes anything in Mercury.',
+    'It never shows Axal VC\'s own accounts. StudioOS refuses a token from Axal VC\'s own Mercury organizations.',
+    'It reads your accounts only when you connect it and while you prepare a statement. It keeps only the statements you share: an amount you choose, the date and your organization\'s name. Never a balance, an account number, a transaction or a counterparty.',
+  ]),
+});
+
+/** The role's "What it never does" rows, else the founder's. */
+export function neverRows(role) {
+  return Object.hasOwn(NEVER_ROWS, role) ? NEVER_ROWS[role] : NEVER_ROWS.founder;
+}
+
+const LANDS = {
+  founder: 'Only the venture you import into. Your spending is shown only to you; saved only when you choose',
+  partner: 'Only your own invoices, payouts and settlements',
+  investor: 'Only the statements you choose to share with Axal\'s admins',
+};
+
+/** "Where it lands" for this role, or null for a role that gets no personal row. */
+export function landsWords(role) {
+  return Object.hasOwn(LANDS, role) ? LANDS[role] : null;
+}
+
+export const READS_ROW = 'Only when you ask. No scheduled sync.';
+export const MEMBER_REPLACE = 'Sign in with Mercury again.';
+
+// ── D840 (#2346): Sign in with Mercury, through Mercury's MCP server ──────────
+
+/** The band's one action for a member's Mercury: since D881 (#2554), the only way in. */
+export const MCP_SIGN_IN = 'Sign in with Mercury';
+/** D881: a token row kept from before D881, in the Worker's words (`LEGACY_TOKEN_NOTICE`, `/api/mercury/personal/status`). */
+export const LEGACY_TOKEN_NOTICE = 'Connected with an API token. Sign in with Mercury to keep it connected after you reconnect.';
+/** How the connection reads, in "How it reads". */
+export const VIA_ROWS = Object.freeze({
+  oauth_mcp: 'Signed in with Mercury: read access only, through Mercury’s own MCP server.',
+  api_key: LEGACY_TOKEN_NOTICE,
+});
+
+/** "How it reads"'s second row, from the connection's `auth_type`; null when there is no connection. */
+export function viaRow(conn) {
+  if (!conn) return null;
+  return Object.hasOwn(VIA_ROWS, conn.auth_type) ? VIA_ROWS[conn.auth_type] : null;
+}
+
+/**
+ * The Worker's reason words on a failed sign-in's return
+ * (`routes/mercury_oauth.ts`' `CALLBACK_REASONS`), in the member's words.
+ * A reason not here gets the generic refusal; `access_denied` is a cancel.
+ */
+export const SIGN_IN_REASONS = Object.freeze({
+  invalid_state: 'That sign-in had expired or was already used. Nothing was connected. Sign in with Mercury again.',
+  csrf_mismatch: 'That sign-in was started in another browser or tab. Nothing was connected. Sign in with Mercury again from here.',
+  missing_code: 'Mercury did not finish the sign-in. Nothing was connected. Try again.',
+  not_allowed: 'Your profile cannot connect its own Mercury. Nothing was connected.',
+  token_exchange_failed: 'Mercury did not complete the sign-in. Nothing was connected. Try again.',
+  scope_refused: 'That sign-in granted more than read access, so it was refused and revoked. Nothing was connected.',
+  mercury_entity_account: 'This Mercury organization is one of Axal VC\'s own. Sign in to your own organization; Axal VC\'s accounts are managed only on HQ.',
+  bank_registry_unavailable: 'Axal\'s account registry could not be read, so the sign-in could not be checked. Nothing was saved; try again later.',
+  mercury_unreadable: 'Your Mercury account could not be read after you signed in. Nothing was saved; try again.',
+  discovery_failed: 'Mercury\'s sign-in could not be reached. Nothing was connected. Try again.',
+  callback_failed: 'The sign-in did not complete. Nothing was connected. Try again.',
+});
+
+/** The sentence for a failed sign-in's reason, or '' for one this map does not hold. */
+export function signInWords(reason) {
+  return Object.hasOwn(SIGN_IN_REASONS, reason) ? SIGN_IN_REASONS[reason] : '';
+}
+const FOUNDER_PARTNER_DISCONNECT = 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
+
+/** What disconnecting keeps, by role (D752). */
+export const MEMBER_DISCONNECT_NOTE = Object.freeze({
+  founder: 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.',
+  partner: FOUNDER_PARTNER_DISCONNECT,
+  // D884 (#2557): an investor connects by signing in with Mercury, so it is the sign-in that is revoked.
+  investor: 'Statements you shared stay with Axal\'s admins until you revoke them: disconnecting does not revoke them. Capacity, proposals and entries you accepted stay. Your Mercury sign-in is revoked.',
+});
+
+/** The role's disconnect note, else the founder's. */
+export function memberDisconnectNote(role) {
+  return Object.hasOwn(MEMBER_DISCONNECT_NOTE, role) ? MEMBER_DISCONNECT_NOTE[role] : MEMBER_DISCONNECT_NOTE.founder;
+}
+
+// ── The personal row in Yours and in Build (decision 9) ──────────────────────
+
+export const PERSONAL_DOES = 'Reads on request';
+export const PERSONAL_LAST_SYNC = 'Read on request';
+export const PERSONAL_COMPANIES = 'You';
+/** Yours' Feeds for a personal row the catalogue names no module for (D752: by role). */
+export function personalFeedsFallback(role) {
+  return role === 'investor' ? 'Statements you share' : 'Your own payments';
+}
+
+/** Decision 9's attention words, matched on the code `last_error` starts with. */
+export function personalAttention(lastError) {
+  const s = String(lastError || '');
+  if (/^mercury_entity_account\b/.test(s)) return 'Axal VC\'s own Mercury';
+  if (/^write_scope_refused\b/.test(s)) return 'Token can write';
+  if (/^(unauthorized|401)\b/.test(s)) return 'Token refused';
+  return 'Last read failed';
+}
+
+/** Build's failing-row banner, the attention words as written (not lower-cased). D881: the fix is the sign-in. */
+export function personalToolBanner(lastError) {
+  return `Mercury needs attention: ${personalAttention(lastError)}. Sign in with Mercury from its page.`;
+}
+
+// ── Not offered (decision 10) ─────────────────────────────────────────────────
+
+export const NOT_OFFERED = 'Mercury is not offered to your profile. Founders use it for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
+/** D752: an investor on a branch. */
+export const NOT_OFFERED_HQ_ONLY = 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.';
+
+/** Whether a search names Mercury: "mercury", or three or more of its first letters, in any case. */
+export function isMercurySearch(q) {
+  const t = String(q || '').trim().toLowerCase();
+  return t.length >= 3 && ('mercury'.startsWith(t) || t.startsWith('mercury'));
+}
+
+/**
+ * A "mercury" search with no Mercury row: the branch admin's sentence, the
+ * HQ-only one for an investor on a branch, else the profile one. Never a request.
+ */
+export function notOfferedSentence({ branchAdmin = false, role = null, onBranch = false } = {}) {
+  if (branchAdmin) return BRANCH_MANAGED;
+  if (role === 'investor' && onBranch) return NOT_OFFERED_HQ_ONLY;
+  return NOT_OFFERED;
+}

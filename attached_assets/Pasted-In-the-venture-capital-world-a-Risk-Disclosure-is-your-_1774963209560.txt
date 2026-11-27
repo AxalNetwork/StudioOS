@@ -1,0 +1,47 @@
+In the venture capital world, a **Risk Disclosure** is your most important "shield" against future litigation. It ensures that no investor can later claim they weren't warned about the volatile nature of startup investing. 
+
+On **Axal.vc**, this should be a standalone link in the footer, but it's also common practice to have investors "e-sign" or "check a box" specifically for this document during onboarding.
+
+---
+
+# RISK DISCLOSURES & DISCLAIMERS
+**Last Updated:** March 31, 2026
+
+Investment in private, early-stage companies (the "Securities") involves a high degree of risk and is suitable only for sophisticated investors who can afford the loss of their entire investment. By using the **Axal.vc** platform (the "Platform"), you acknowledge and accept the following risks:
+
+### 1. LOSS OF PRINCIPAL
+Statistically, most startup companies fail. Investments in the Securities are highly speculative. There is no guarantee of any return on your capital, and you should not invest any funds that you cannot afford to lose entirely.
+
+### 2. ILLIQUIDITY AND LACK OF RESALE
+Unlike stocks traded on a public exchange (like the NYSE or NASDAQ), the Securities are "restricted" and highly illiquid. 
+* **No Secondary Market:** There is currently no active public market for the Securities. 
+* **Holding Period:** You should expect to hold your investment for an indefinite period, often 7 to 10 years or more, until a "liquidity event" (such as an IPO or acquisition) occurs.
+* **Transfer Restrictions:** The Securities are subject to legal and contractual restrictions on resale. You may be prohibited from selling your interest without the express consent of the Issuer or Axal.
+
+### 3. DILUTION
+Startup companies typically require multiple rounds of funding. Each time a company raises additional capital, it issues new shares. This will likely "dilute" your percentage of ownership and may involve the issuance of new shares with rights superior to those of your Securities (e.g., liquidation preferences).
+
+### 4. LACK OF OPERATING HISTORY
+Many companies featured on the Platform are in the "seed" or "early stage" of development. They may have little or no track record of revenue or profitability. Their success depends heavily on the management team's ability to execute a business plan in a competitive market.
+
+### 5. VALUATION SUBJECTIVITY
+The "valuation" of a private company is not based on public market data. It is often a negotiation between the company and lead investors. There is no assurance that the valuation reflected on the Platform accurately represents the intrinsic value of the company or the price at which the Securities could be sold to a third party.
+
+### 6. NO RELIANCE ON AXAL.VC DATA
+While **Axal Management, LLC** performs certain due diligence, we do not guarantee the accuracy or completeness of the information provided by the companies (the "Issuers"). 
+* **Forward-Looking Statements:** Pitch decks and financial projections are "forward-looking statements" and are inherently unreliable. Actual results may differ materially from those projected.
+* **Third-Party Info:** Axal is not responsible for the truthfulness of information provided by founders or third-party data providers.
+
+### 7. MINORITY RIGHTS & CONTROL
+As a minority investor, you will generally have no power to influence the management or decisions of the companies in which you invest. You will be relying entirely on the company’s officers and directors.
+
+### 8. TAX CONSEQUENCES
+The federal, state, and local tax consequences of private equity investments are complex. You should consult with your own tax professional regarding the implications of holding these Securities, including the timing of K-1 distributions.
+
+---
+
+### Placement Advice for Axal.vc
+* **The "Above the Fold" Warning:** Some platforms place a 1-sentence version of this in the footer of *every* page: *"Investment in startups involves a high degree of risk and may result in the loss of your entire investment."*
+* **The Subscription Agreement:** This Risk Disclosure should be physically attached as an "Exhibit" to any subscription agreement or LLC operating agreement that your investors sign.
+
+**Since you're managing a platform, do you need a "Founder-facing" version of these legal docs, or are you strictly focused on the Investor-side right now?**

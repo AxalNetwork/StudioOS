@@ -1,0 +1,34 @@
+#14 - Notifications digest + quiet hours
+What & Why
+In Settings → Notifications, the Digest frequency and Quiet hours controls error on save because the frontend posts a settings shape the Worker doesn't accept. Make the round-trip clean, persist the values, and actually honor them in the email + push delivery code.
+
+Done looks like
+Saving Digest frequency persists and survives reload.
+Saving Quiet hours persists and survives reload.
+During quiet hours, email + push are suppressed for non-critical categories; activity_logs records suppressed_quiet_hours.
+Critical categories (security, billing, contract sign request) bypass quiet hours.
+Daily/weekly digest assembles a single email containing the suppressed notifications, sent at 09:00 in the user's timezone.
+Invalid input returns 400 with field-level errors surfaced inline, not 500 / not a toast.
+Out of scope
+Per-category quiet-hours overrides (single global window only).
+SMS/Slack quiet-hours wiring (email + push only).
+Timezone auto-detection from browser (user must pick from select).
+Backfilling digests for notifications sent before this task ships.
+Steps
+Schema — Extend SETTINGS_USER_COLUMNS with digest_frequency ('off'|'daily'|'weekly', default 'weekly'), quiet_hours_start / quiet_hours_end (TEXT HH:MM), quiet_hours_tz (IANA tz, default 'UTC'). Apply via lazy ensureSchema like sibling settings columns. Ship as migration cloudflare-worker/sql/migrations/013_notifications_digest.sql.
+GET/PUT /api/settings/notifications — Return + accept { categories, digest_frequency, quiet_hours_start, quiet_hours_end, quiet_hours_tz }. Zod-validate: digest_frequency enum, HH:MM regex, IANA tz check via Intl.supportedValuesOf('timeZone'). Return 400 with {field, message} on invalid input.
+Outbox + cron — New notification_outbox table buffers items when the user is in quiet hours OR has digest set. Scheduled cron at */15 * * * * evaluates each user's local time and flushes queued items as a single digest email at 09:00 user-tz daily / Monday 09:00 weekly.
+Suppression in dispatcher — Extend services/notify.ts with isInQuietHours(user) (compute in user tz). Critical categories bypass; non-critical ones either drop into the outbox (digest mode) or get logged as suppressed_quiet_hours and skipped.
+Frontend NotificationsSection — Replace the broken save with a single PUT matching the schema. Two HH:MM inputs + tz select (default = user.timezone). Allow blank → no quiet hours. Invalid times block save with inline field-level errors. Show "Send a daily digest at 9 AM (your time)" copy under the Digest dropdown.
+Migration apply note — Add a gotcha line to replit.md listing the new pending remote D1 migration once shipped.
+Critical constraints
+services/notify.ts already has an isInQuietHours helper from Task #1 settings work — extend it, don't duplicate.
+Critical categories list lives in services/notify.ts; reuse the existing constant.
+The notif_categories_inapp JSON column exists from Task #5 (assistant proactive_nudges); do NOT introduce a parallel categories column.
+Relevant files
+cloudflare-worker/src/routes/settings.ts
+cloudflare-worker/src/services/userSettings.ts
+cloudflare-worker/src/services/notify.ts
+cloudflare-worker/src/index.ts
+cloudflare-worker/sql/migrations/002_user_settings.sql
+frontend/src/pages/SettingsPage.jsx

@@ -1,0 +1,40 @@
+{
+  "skill": "ip-assignment-chain-of-title",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "asset": "Parser module",
+        "contributor": "Contractor K",
+        "commit": "cafe123",
+        "assignment_document": null
+      },
+      "github.repos": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Parser module",
+      "Contractor K",
+      "cafe123"
+    ],
+    "must_say_not_recorded": [
+      "assignment document"
+    ],
+    "must_not_include": [
+      "company owns all rights"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why assignment document is missing rather than inventing it.",
+    "Do not assert: company owns all rights.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Parser module; Contractor K; cafe123. assignment document: Not recorded. Human review required."
+}

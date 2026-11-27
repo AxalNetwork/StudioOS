@@ -1,0 +1,87 @@
+name: LFS budget
+
+on:
+  schedule:
+    # 09:00 UTC daily — picks up GitHub's nightly LFS-usage rollups.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      budget_threshold_pct:
+        description: "Alert when projected monthly LFS bandwidth exceeds this percent of the plan limit."
+        required: false
+        default: "80"
+
+permissions:
+  contents: read
+
+jobs:
+  budget:
+    name: Check LFS bandwidth vs 250 GB plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute projected usage and alert if over threshold
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
+          BUDGET_GB: "250"
+          BUDGET_THRESHOLD_PCT: ${{ github.event.inputs.budget_threshold_pct || '80' }}
+        run: |
+          set -euo pipefail
+
+          # GitHub does not expose per-repo LFS bandwidth via the REST API for
+          # all plans; the canonical source is the Billing API at the account
+          # level. We query the org/user billing endpoint and report the slice
+          # attributable to this repo when available, otherwise fall back to
+          # the account-wide figure.
+          #
+          # Endpoints attempted (first that returns 200 wins):
+          #   GET /orgs/{org}/settings/billing/shared-storage      (orgs)
+          #   GET /users/{user}/settings/billing/shared-storage    (user accounts)
+
+          BILLING_JSON=""
+          for url in \
+            "/orgs/${OWNER}/settings/billing/shared-storage" \
+            "/users/${OWNER}/settings/billing/shared-storage"; do
+            if BILLING_JSON=$(gh api "$url" 2>/dev/null); then
+              break
+            fi
+          done
+
+          if [ -z "$BILLING_JSON" ]; then
+            echo "::warning::Could not read shared-storage billing for ${OWNER}; skipping alert. Grant the workflow's GITHUB_TOKEN the 'billing:read' scope or run under a PAT."
+            exit 0
+          fi
+
+          # shared-storage payload shape:
+          # { "days_left_in_billing_cycle": 14,
+          #   "estimated_paid_storage_for_month": 0,
+          #   "estimated_storage_for_month": 123 }   (units: GB)
+          ESTIMATED_GB=$(echo "$BILLING_JSON" | jq -r '.estimated_storage_for_month // 0')
+          DAYS_LEFT=$(echo "$BILLING_JSON" | jq -r '.days_left_in_billing_cycle // 0')
+
+          # Crude month-end projection: assume linear burn.
+          # If we are N days into a 30-day cycle, projected = estimated * 30 / N.
+          DAYS_ELAPSED=$(( 30 - DAYS_LEFT ))
+          if [ "$DAYS_ELAPSED" -lt 1 ]; then DAYS_ELAPSED=1; fi
+          PROJECTED_GB=$(awk -v e="$ESTIMATED_GB" -v d="$DAYS_ELAPSED" 'BEGIN{printf "%.1f", e*30/d}')
+
+          PCT=$(awk -v p="$PROJECTED_GB" -v b="$BUDGET_GB" 'BEGIN{printf "%.1f", (p/b)*100}')
+
+          echo "LFS bandwidth — current MTD: ${ESTIMATED_GB} GB | projected month-end: ${PROJECTED_GB} GB | budget: ${BUDGET_GB} GB (${PCT}% of plan)"
+
+          OVER=$(awk -v p="$PCT" -v t="$BUDGET_THRESHOLD_PCT" 'BEGIN{print (p+0 > t+0) ? 1 : 0}')
+          if [ "$OVER" = "1" ]; then
+            if [ -z "${SLACK_OPS_WEBHOOK_URL:-}" ]; then
+              echo "::warning::Over threshold (${PCT}% > ${BUDGET_THRESHOLD_PCT}%) but SLACK_OPS_WEBHOOK_URL is not set."
+              exit 0
+            fi
+            TEXT=":rotating_light: *LFS budget alert* — ${REPO} is projected to use *${PROJECTED_GB} GB* (${PCT}%) of the ${BUDGET_GB} GB monthly LFS allotment. MTD: ${ESTIMATED_GB} GB. Threshold: ${BUDGET_THRESHOLD_PCT}%."
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data "$(jq -n --arg t "$TEXT" '{text:$t}')" \
+              "$SLACK_OPS_WEBHOOK_URL" >/dev/null
+            echo "Posted Slack alert."
+          else
+            echo "Under threshold (${PCT}% <= ${BUDGET_THRESHOLD_PCT}%). No alert."
+          fi

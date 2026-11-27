@@ -1,0 +1,77 @@
+{
+  "skill": "cloud-cost-capacity-review",
+  "version": 1,
+  "note": "Synthetic fixture only; all repositories, people, advisories, identifiers and measurements are invented for evaluation. No production data.",
+  "input": {
+    "records": {
+      "vercel.deployments": {
+        "id": "cloud-usage-118",
+        "environment": "fixture-production",
+        "currency": "USD",
+        "cost_scope": "Function compute excluding taxes and credits",
+        "periods": [
+          {
+            "id": "usage-week-a",
+            "start": "2026-10-20T00:00:00Z",
+            "end": "2026-10-27T00:00:00Z",
+            "total_requests": 1040000,
+            "successful_requests": 1000000,
+            "complete": true,
+            "recorded_cost_cents": 10000,
+            "currency": "USD"
+          },
+          {
+            "id": "usage-week-b",
+            "start": "2026-10-27T00:00:00Z",
+            "end": "2026-11-03T00:00:00Z",
+            "total_requests": 2080000,
+            "successful_requests": 2000000,
+            "complete": true,
+            "recorded_cost_cents": 16000,
+            "currency": "USD"
+          }
+        ],
+        "capacity": {
+          "configured_concurrency_limit": 100,
+          "average_concurrency": 30,
+          "peak_concurrency": null
+        },
+        "load_test_result": {
+          "status": "unreadable",
+          "reason": "Test result archive could not be read."
+        }
+      },
+      "build.records": {
+        "id": "infra-review-118",
+        "cost_metric": "USD per million successful requests",
+        "recorded_changes": [
+          {
+            "id": "cache-change-17",
+            "deployed_at": "2026-10-27T04:00:00Z",
+            "description": "Change cache expiration settings."
+          }
+        ],
+        "owner": "Imani Cole"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "usage-week-a",
+      "usage-week-b",
+      "80",
+      "20%",
+      "Unreadable",
+      "60%"
+    ],
+    "must_say_not_recorded": [
+      "peak concurrency"
+    ],
+    "must_not_include": [
+      "There are 70 concurrent requests of headroom",
+      "Savings are guaranteed",
+      "Capacity has been verified"
+    ]
+  }
+}

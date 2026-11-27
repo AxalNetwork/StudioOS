@@ -1,0 +1,40 @@
+{
+  "skill": "ai-regulatory-risk-screen",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "system": "Applicant ranker",
+        "use": "Ranks job candidates",
+        "human_review": null,
+        "deployment_jurisdiction": null
+      },
+      "build.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Applicant ranker",
+      "job candidates",
+      "counsel"
+    ],
+    "must_say_not_recorded": [
+      "deployment jurisdiction"
+    ],
+    "must_not_include": [
+      "legally low risk"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why deployment jurisdiction is missing rather than inventing it.",
+    "Do not assert: legally low risk.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Applicant ranker; job candidates; counsel. deployment jurisdiction: Not recorded. Human review required."
+}

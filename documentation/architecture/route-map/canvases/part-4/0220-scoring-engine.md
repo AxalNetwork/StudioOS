@@ -1,0 +1,5 @@
+| Scoring Engine | founder | `/spinout-lab/scoring` | `/spinout-lab/scoring` | {backend} | OUT OF SCOPE | Lab readiness tool, already built from this exact file (`SpinoutLabScoringPage.jsx:1-4`); ported components in `components/scoring/`. **D588:** the founder shares the latest official run with one named account, for a chosen audience, with an expiry and an open limit; the link is shown once and the token is stored only as a hash. |
+
+backend:
+- `scoring.ts`
+- `spinout_lab.ts`

@@ -1,0 +1,240 @@
+
+<style>
+  .axl { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:#ffffff; color:#111827; }
+  .axl * { box-sizing:border-box; margin:0; padding:0; }
+  .axl a { color:inherit; text-decoration:none; }
+
+  .axl-nav { display:flex; align-items:center; justify-content:space-between; padding:14px 28px; border-bottom:1px solid #e5e7eb; }
+  .axl-logo { display:flex; align-items:center; gap:10px; font-weight:600; font-size:17px; letter-spacing:-0.01em; }
+  .axl-mark { width:28px; height:28px; background:#7c3aed; color:#fff; border-radius:6px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .axl-nav-links { display:flex; gap:26px; font-size:14px; color:#4b5563; }
+  .axl-nav-links a:hover { color:#7c3aed; }
+  .axl-nav-cta { display:flex; gap:10px; }
+  .axl-btn { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:1px solid transparent; transition:background .15s; }
+  .axl-btn-founders { background:#059669; color:#fff; }
+  .axl-btn-founders:hover { background:#047857; }
+  .axl-btn-partners { background:#7c3aed; color:#fff; }
+  .axl-btn-partners:hover { background:#6d28d9; }
+  .axl-btn-ghost { background:transparent; border-color:#e5e7eb; color:#111827; }
+  .axl-btn-ghost:hover { background:#f9fafb; }
+  .axl-btn-primary { background:#7c3aed; color:#fff; }
+  .axl-btn-primary:hover { background:#6d28d9; }
+
+  .axl-hero { padding:72px 28px 48px; max-width:1120px; margin:0 auto; }
+  .axl-eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:12px; color:#7c3aed; background:#f5f3ff; padding:5px 12px; border-radius:999px; font-weight:500; margin-bottom:22px; }
+  .axl-eyebrow-dot { width:6px; height:6px; border-radius:50%; background:#7c3aed; }
+  .axl-h1 { font-size:52px; line-height:1.05; font-weight:700; letter-spacing:-0.03em; color:#0f172a; max-width:820px; }
+  .axl-h1 span { color:#7c3aed; }
+  .axl-sub { margin-top:18px; font-size:18px; line-height:1.55; color:#4b5563; max-width:560px; }
+  .axl-cta-row { margin-top:30px; display:flex; gap:12px; align-items:center; }
+  .axl-btn-lg { padding:12px 22px; font-size:14px; }
+
+  .axl-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin-top:56px; border-top:1px solid #e5e7eb; border-bottom:1px solid #e5e7eb; }
+  .axl-stat { padding:22px 24px; border-right:1px solid #e5e7eb; }
+  .axl-stat:last-child { border-right:none; }
+  .axl-stat-num { font-size:28px; font-weight:700; color:#0f172a; letter-spacing:-0.02em; }
+  .axl-stat-label { font-size:12px; color:#6b7280; margin-top:4px; text-transform:uppercase; letter-spacing:0.05em; }
+
+  .axl-section { max-width:1120px; margin:0 auto; padding:56px 28px; }
+  .axl-section-head { margin-bottom:32px; }
+  .axl-kicker { font-size:12px; color:#7c3aed; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; }
+  .axl-h2 { font-size:32px; font-weight:700; color:#0f172a; letter-spacing:-0.02em; }
+  .axl-h2-sub { margin-top:10px; font-size:15px; color:#4b5563; max-width:560px; line-height:1.55; }
+
+  .axl-engines { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#e5e7eb; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+  .axl-engine { background:#fff; padding:22px 22px 24px; cursor:pointer; transition:background .15s; }
+  .axl-engine:hover { background:#fafafa; }
+  .axl-engine-num { font-size:11px; color:#7c3aed; font-weight:600; letter-spacing:0.06em; }
+  .axl-engine-title { margin-top:8px; font-size:15px; font-weight:600; color:#0f172a; }
+  .axl-engine-desc { margin-top:6px; font-size:13px; color:#6b7280; line-height:1.55; }
+  .axl-engine-tag { display:inline-block; margin-top:12px; font-size:11px; padding:3px 9px; border-radius:4px; background:#f5f3ff; color:#7c3aed; font-weight:500; }
+
+  .axl-pipe-wrap { border:1px solid #e5e7eb; border-radius:12px; padding:20px; background:#fafafa; }
+  .axl-pipe-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .axl-pipe-title { font-size:13px; font-weight:600; color:#374151; }
+  .axl-pipe-live { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#16a34a; font-weight:500; }
+  .axl-pipe-live-dot { width:6px; height:6px; border-radius:50%; background:#16a34a; }
+  .axl-pipe-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .axl-pipe-col-head { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; display:flex; justify-content:space-between; }
+  .axl-pipe-count { background:#e5e7eb; color:#374151; padding:1px 7px; border-radius:4px; font-weight:500; }
+  .axl-card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+  .axl-card-name { font-size:13px; font-weight:500; color:#111827; }
+  .axl-card-meta { font-size:11px; color:#6b7280; margin-top:2px; }
+  .axl-card-score { display:inline-block; margin-top:6px; font-size:10px; padding:2px 7px; border-radius:4px; background:#f5f3ff; color:#7c3aed; font-weight:600; }
+  .axl-card-score.t1 { background:#dcfce7; color:#16803a; }
+
+  .axl-partners { padding:40px 28px; border-top:1px solid #e5e7eb; text-align:center; }
+  .axl-partners-h { font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:18px; }
+  .axl-partner-row { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+  .axl-partner-pill { padding:7px 14px; border:1px solid #e5e7eb; border-radius:999px; font-size:12px; color:#4b5563; }
+
+  .axl-cta-banner { margin:40px 28px 28px; border:1px solid #e5e7eb; border-radius:12px; padding:28px 32px; display:flex; justify-content:space-between; align-items:center; gap:24px; background:linear-gradient(to right, #faf5ff 0%, #ffffff 60%); }
+  .axl-cta-banner h3 { font-size:22px; font-weight:700; color:#0f172a; letter-spacing:-0.01em; }
+  .axl-cta-banner p { font-size:14px; color:#4b5563; margin-top:4px; max-width:440px; line-height:1.5; }
+
+  .axl-foot { padding:20px 28px; border-top:1px solid #e5e7eb; display:flex; justify-content:space-between; font-size:12px; color:#6b7280; }
+  .axl-foot a { margin-left:18px; }
+</style>
+
+<div class="axl">
+
+  <nav class="axl-nav">
+    <div class="axl-logo">
+      <div class="axl-mark">A</div>
+      <span>Axal</span>
+    </div>
+    <div class="axl-nav-links">
+      <a href="#">Network</a>
+      <a href="#">Platform</a>
+      <a href="#">Insights</a>
+      <a href="#">Contact</a>
+    </div>
+    <div class="axl-nav-cta">
+      <button class="axl-btn axl-btn-founders">Founders</button>
+      <button class="axl-btn axl-btn-partners">Partners</button>
+    </div>
+  </nav>
+
+  <section class="axl-hero">
+    <div class="axl-eyebrow"><span class="axl-eyebrow-dot"></span> For the global Axal partner network</div>
+    <h1 class="axl-h1">Venture capital, <span>networked.</span></h1>
+    <p class="axl-sub">One workspace for how global partners source, diligence, fund, and exit — together.</p>
+    <div class="axl-cta-row">
+      <button class="axl-btn axl-btn-primary axl-btn-lg" onclick="sendPrompt('Walk me through applying as an Axal Network partner')">Request access</button>
+      <button class="axl-btn axl-btn-ghost axl-btn-lg">See how it works</button>
+    </div>
+
+    <div class="axl-stats">
+      <div class="axl-stat"><div class="axl-stat-num">7</div><div class="axl-stat-label">Core engines</div></div>
+      <div class="axl-stat"><div class="axl-stat-num">100-pt</div><div class="axl-stat-label">Scoring algorithm</div></div>
+      <div class="axl-stat"><div class="axl-stat-num">18</div><div class="axl-stat-label">Legal templates</div></div>
+      <div class="axl-stat"><div class="axl-stat-num">Intake → exit</div><div class="axl-stat-label">Full lifecycle</div></div>
+    </div>
+  </section>
+
+  <section class="axl-section">
+    <div class="axl-section-head">
+      <div class="axl-kicker">The 7 engines</div>
+      <h2 class="axl-h2">Every function of a modern fund, in one place.</h2>
+      <p class="axl-h2-sub">Each engine owns a stage of the lifecycle. Together they close the loop.</p>
+    </div>
+
+    <div class="axl-engines">
+      <div class="axl-engine">
+        <div class="axl-engine-num">01 / INTELLIGENCE</div>
+        <div class="axl-engine-title">Market pulse &amp; signals</div>
+        <div class="axl-engine-desc">Sector signals, macro data, private rounds, studio benchmarks, high-conviction plays — all in one feed.</div>
+        <span class="axl-engine-tag">Live feed</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">02 / SCORING</div>
+        <div class="axl-engine-title">100-pt diligence engine</div>
+        <div class="axl-engine-desc">Market 25 · Team 20 · Product 15 · Capital 15 · Fit 15 · Distribution 10. Tier-1 triggers immediate spinout.</div>
+        <span class="axl-engine-tag">Automated</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">03 / ADVISORY</div>
+        <div class="axl-engine-title">AI strategy &amp; financials</div>
+        <div class="axl-engine-desc">Advisor for GTM, fundraising, team. Financial planner with burn and runway. Auto diligence checker.</div>
+        <span class="axl-engine-tag">AI-powered</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">04 / DEAL &amp; MATCH</div>
+        <div class="axl-engine-title">Pipeline + partner matching</div>
+        <div class="axl-engine-desc">Live kanban pipeline. Community voting with role-weights. Partner referral engine.</div>
+        <span class="axl-engine-tag">Real-time</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">05 / LEGAL</div>
+        <div class="axl-engine-title">18 templates, 4 layers</div>
+        <div class="axl-engine-desc">GP governance · fund formation · portfolio execution · compliance. LPAs auto-generated on fund creation.</div>
+        <span class="axl-engine-tag">Zero-trust</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">06 / OPERATIONS</div>
+        <div class="axl-engine-title">Tickets &amp; audit log</div>
+        <div class="axl-engine-desc">Every action logged. Support tickets auto-route to the right owner. Activity stream built for compliance.</div>
+        <span class="axl-engine-tag">Audited</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">07 / CAPITAL</div>
+        <div class="axl-engine-title">Funds, LPs, liquidity</div>
+        <div class="axl-engine-desc">Capital calls · distributions · LP portal with TVPI/DPI · secondary marketplace with AI fair value.</div>
+        <span class="axl-engine-tag">Idempotent</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">+ LIQUIDITY</div>
+        <div class="axl-engine-title">Secondary market for LPs</div>
+        <div class="axl-engine-desc">List shares. AI buyer matching. Atomic exit execution. Money in integer cents — no float drift.</div>
+        <span class="axl-engine-tag">New</span>
+      </div>
+      <div class="axl-engine">
+        <div class="axl-engine-num">+ REFER &amp; EARN</div>
+        <div class="axl-engine-title">Network growth engine</div>
+        <div class="axl-engine-desc">Quick share to X, LinkedIn, WhatsApp, Email. CSV contact import. Editable invite templates.</div>
+        <span class="axl-engine-tag">Partners</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="axl-section" style="padding-top:0;">
+    <div class="axl-pipe-wrap">
+      <div class="axl-pipe-head">
+        <div class="axl-pipe-title">Live pipeline · overview room</div>
+        <div class="axl-pipe-live"><span class="axl-pipe-live-dot"></span> connected</div>
+      </div>
+      <div class="axl-pipe-row">
+        <div>
+          <div class="axl-pipe-col-head">Sourced <span class="axl-pipe-count">12</span></div>
+          <div class="axl-card"><div class="axl-card-name">VerdaAI</div><div class="axl-card-meta">Deep tech · US · $2M</div><span class="axl-card-score">score 68</span></div>
+          <div class="axl-card"><div class="axl-card-name">ChainGov</div><div class="axl-card-meta">GovTech · EU · $800K</div><span class="axl-card-score">score 74</span></div>
+        </div>
+        <div>
+          <div class="axl-pipe-col-head">Scored <span class="axl-pipe-count">7</span></div>
+          <div class="axl-card"><div class="axl-card-name">EcoStruct</div><div class="axl-card-meta">CleanTech · CH · $5M</div><span class="axl-card-score">score 82</span></div>
+          <div class="axl-card"><div class="axl-card-name">MedLM</div><div class="axl-card-meta">HealthAI · SG · $1.5M</div><span class="axl-card-score">score 77</span></div>
+        </div>
+        <div>
+          <div class="axl-pipe-col-head">Active <span class="axl-pipe-count">3</span></div>
+          <div class="axl-card"><div class="axl-card-name">OmniPort</div><div class="axl-card-meta">FinTech · UAE · $8M</div><span class="axl-card-score">score 79</span></div>
+        </div>
+        <div>
+          <div class="axl-pipe-col-head">Funded <span class="axl-pipe-count">2</span></div>
+          <div class="axl-card"><div class="axl-card-name">NuraSync</div><div class="axl-card-meta">BioTech · IL · $3M</div><span class="axl-card-score t1">TIER-1 · 88</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="axl-partners">
+    <div class="axl-partners-h">Built with and for the Axal syndicate</div>
+    <div class="axl-partner-row">
+      <span class="axl-partner-pill">CMT Digital</span>
+      <span class="axl-partner-pill">a16z Crypto Startup School</span>
+      <span class="axl-partner-pill">Escape Velocity</span>
+      <span class="axl-partner-pill">IDG Vietnam</span>
+      <span class="axl-partner-pill">Artichoke Capital</span>
+      <span class="axl-partner-pill">Trident Digital</span>
+      <span class="axl-partner-pill">Blockchain Builders Fund</span>
+      <span class="axl-partner-pill">Movement Labs</span>
+    </div>
+  </section>
+
+  <div class="axl-cta-banner">
+    <div>
+      <h3>Join the network</h3>
+      <p>StudioOS is open to vetted VC partners, family offices, and angel syndicates.</p>
+    </div>
+    <button class="axl-btn axl-btn-primary axl-btn-lg" onclick="sendPrompt('Show me the StudioOS partner onboarding checklist')">Request access →</button>
+  </div>
+
+  <footer class="axl-foot">
+    <span>© 2026 Axal SA · Geneva, Switzerland</span>
+    <div>
+      <a href="#">Privacy</a>
+      <a href="#">Security</a>
+      <a href="#">Contact</a>
+    </div>
+  </footer>
+
+</div>

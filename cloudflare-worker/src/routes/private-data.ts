@@ -1,0 +1,156 @@
+import { holdsLicence, heldLicences } from '../services/accountLicences';
+/** `/api/private-data`: signed-in reads — the caller's profile, private market signals, portfolio metrics and a founder's record. */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { notRecorded, NOT_RECORDED_REASONS } from './market_intel';
+
+const privateData = new Hono<{ Bindings: Env }>();
+
+privateData.get('/profile', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  const result: any = { id: user.id, uid: user.uid, email: user.email, name: user.name, role: user.role, is_active: user.is_active, email_verified: user.email_verified, created_at: user.created_at };
+
+  if (user.founder_id) {
+    const f = await sql`SELECT * FROM founders WHERE id = ${user.founder_id}`;
+    if (f.length > 0) result.founder_profile = f[0];
+  }
+  if (user.partner_id) {
+    const p = await sql`SELECT * FROM partners WHERE id = ${user.partner_id}`;
+    if (p.length > 0) result.partner_profile = p[0];
+  }
+  await sql.end();
+  return c.json(result);
+});
+
+privateData.get('/market/private-signals', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'investor')) return c.json({ error: 'Insufficient permissions' }, 403);
+
+  // D538 (#1078): these signals and benchmarks were figures written into
+  // routes/market_intel.ts (sector multiples, sentiment, hiring claims,
+  // fifteen studio benchmarks) that nothing recorded. They are not recorded,
+  // so the route says so; a "global conviction" read off them is not drawn.
+  return c.json({
+    global_conviction: null,
+    signals: [],
+    signals_not_recorded: notRecorded(NOT_RECORDED_REASONS.sector_signals),
+    studio_benchmarks: null,
+    studio_benchmarks_not_recorded: notRecorded(NOT_RECORDED_REASONS.studio_benchmarks),
+    updated_at: new Date().toISOString(),
+  });
+});
+
+privateData.get('/portfolio/metrics', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+
+  if (user.role === 'founder') {
+    // Founders see only OFFICIAL, APPROVED, hash-verified snapshots — sandbox
+    // runs are practice and a flagged run reads as "no score yet" until admin
+    // signs off. Goes through getVerifiedLatestSnapshot so reads are audited.
+    // Company scoping: this is the founder's own dashboard, so it must agree
+    // with the project picker. The admin overview further down is untouched.
+    const pdCompanyId = await activeCompanyFor(c, user);
+    const baseProjects = !user.founder_id
+      ? []
+      : pdCompanyId === null
+        ? await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND deleted_at IS NULL`
+        : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND (company_id = ${pdCompanyId} OR company_id IS NULL) AND deleted_at IS NULL`;
+    const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
+    const projects = await Promise.all(
+      baseProjects.map(async (p: any) => {
+        const verified = await getVerifiedLatestSnapshot(c.env, p.id, {
+          role: user.role,
+          founderId: user.founder_id ?? null,
+          ownerFounderId: p.founder_id ?? null,
+          userId: user.id ?? null,
+        });
+        return { ...p, total_score: verified?.row.total_score ?? null, tier: verified?.row.tier ?? null };
+      }),
+    );
+    await sql.end();
+    return c.json({ role: 'founder', projects, total_projects: projects.length });
+  }
+
+  if (user.role === 'partner' || user.role === 'investor') {
+    // Preserve the actual role label so the UI can divergence partner vs
+    // investor surfaces (architect feedback — no role flattening).
+    const roleLabel = user.role;
+    const deals = user.partner_id ? await sql`SELECT d.*, p.name as project_name, p.sector FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.partner_id = ${user.partner_id} ORDER BY d.created_at DESC` : [];
+    const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
+    const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
+    // Task #3 (Y-1) — pull founder_user_id alongside each portfolio
+    // project so maskFounderForInvestor() can gate sensitive fields per
+    // investor↔founder pair. Investors with no active pairwise NDA see
+    // only {id, name, sector, stage, headline}; founders/admins/partners
+    // are unaffected (mask is a no-op outside the investor role).
+    const portfolioRaw = await sql`
+      SELECT p.*, u.id AS founder_user_id
+        FROM projects p
+        LEFT JOIN users u ON u.founder_id = p.founder_id
+       WHERE p.status IN ('spinout', 'active', 'tier_1', 'tier_2') AND p.deleted_at IS NULL`;
+    await sql.end();
+    let portfolio: any[] = portfolioRaw as any[];
+    if (user.role === 'investor') {
+      const { maskFounderForInvestor } = await import('../services/trust');
+      const { keepFindable } = await import('../services/investorFindable');
+      // D702 — left out, and out of the count below, when its founder chose
+      // "through introductions only" and this investor has no introduction.
+      const findable = await keepFindable(c.env, user, portfolioRaw as any[], (p: any) => p.id);
+      portfolio = await Promise.all(
+        findable.map((p: any) => maskFounderForInvestor(c.env, p, { viewerRole: 'investor', viewerUserId: user.id })),
+      );
+    }
+    // (re-open inside metrics calc below — `portfolio` is the masked list)
+    const portfolioCount = portfolio.length;
+
+    // Build queue #125 — this was shipped as `tvpi`, but committed/called
+    // is a CALL RATIO, not a multiple: it says how much of the fund is
+    // still uncalled and contains no value term at all. Renamed to what
+    // it measures (no frontend consumed the old key). Real TVPI comes
+    // from GET /api/positions/analytics, which has marks behind it.
+    const calledPct = Number(committed[0].total) > 0
+      ? Math.round(Number(called[0].total) / Number(committed[0].total) * 100) / 100
+      : null;
+    return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), called_pct: calledPct, portfolio_companies: portfolioCount }, portfolio });
+  }
+
+  const allProjects = await sql`SELECT * FROM projects WHERE deleted_at IS NULL`;
+  const active = allProjects.filter((p: any) => ['spinout', 'active', 'tier_1', 'tier_2'].includes(p.status));
+  const committed = await sql`SELECT COALESCE(SUM(commitment_amount), 0) as total FROM limited_partners`;
+  const called = await sql`SELECT COALESCE(SUM(invested_amount), 0) as total FROM limited_partners`;
+  const totalDeals = await sql`SELECT COUNT(*) as count FROM deals`;
+  const activeDeals = await sql`SELECT COUNT(*) as count FROM deals WHERE status IN ('applied', 'scored', 'active')`;
+  await sql.end();
+
+  return c.json({ role: 'admin', overview: { total_projects: allProjects.length, active_projects: active.length, total_deals: Number(totalDeals[0].count), active_deals: Number(activeDeals[0].count), total_committed: Number(committed[0].total), total_called: Number(called[0].total) }, portfolio: active });
+});
+
+privateData.get('/founder/:userId', async (c) => {
+  const user = await requireAuth(c);
+  const userId = parseInt(c.req.param('userId'));
+  if (user.role !== 'admin' && user.id !== userId) return c.json({ error: 'Access denied' }, 403);
+
+  const sql = getSQL(c.env);
+  const target = await sql`SELECT * FROM users WHERE id = ${userId}`;
+  if (target.length === 0 || !(await heldLicences(c.env.DB, target[0] as any)).includes('founder')) { await sql.end(); return c.json({ error: 'Founder not found' }, 404); }
+
+  // Two callers reach here: an admin looking at someone, and a founder looking
+  // at themselves. Only the self case narrows — narrowing the admin case would
+  // filter one person's projects by ANOTHER person's active company, which is
+  // not a company they can even select.
+  const selfCompanyId = user.role === 'admin' ? null : await activeCompanyFor(c, user);
+  const projects = !target[0].founder_id
+    ? []
+    : selfCompanyId === null
+      ? await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id} AND deleted_at IS NULL`
+      : await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id} AND (company_id = ${selfCompanyId} OR company_id IS NULL) AND deleted_at IS NULL`;
+  await sql.end();
+  return c.json({ role: 'founder', projects, total_projects: projects.length });
+});
+
+export default privateData;

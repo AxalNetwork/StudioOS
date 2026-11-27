@@ -1,0 +1,37 @@
+#18 - Support Consolidation & Account Trim
+What & Why
+Investor audit items ⑥ + ⑨ + ⑩ plus item ⑫'s mock-settlement label. The Support group is 8 pages where ~4 workspaces would do: the LP holdings table renders identically in Funds and Liquidity; TVPI/DPI is computed live in Funds but hand-authored in LP Reporting; capital calls appear in both Funds and Capital; Reserve Allocation and Exit Waterfall are two views of the same simulator engine and scenarios table. The Account group is an 11-item bucket with items that have no investor purpose, and the well-built tier system is experienced only as lock icons with invisible consumption. Consolidate Support into four coherent workspaces, trim Account, and make quota/paywalls legible.
+Done looks like
+* Support is four workspaces (sidebar rows stay, deep-linking to tabs): Portfolio (Health · Updates · Positions), Fund Ops (Funds admin · LP Reporting · capital calls), My LP Portal (canonical holdings · reports · calls), and Fund Modeling (Reserve Allocation + Exit Waterfall merged). Liquidity reads holdings from the canonical source; mock settlement is labeled "simulation".
+* One canonical holdings table and one capital-call store back these views (no duplicate/divergent copies).
+* The investor Account group is trimmed to account-relevant items (Advisors, Jobs, Articles, Partners removed from the investor nav).
+* Locked items show a blurred preview instead of a lock icon, and a quota card appears beside every paywall/402.
+Out of scope
+* The home quota bars (deal-desk task).
+Steps
+1. Merge Fund Modeling first (Reserve Allocation + Exit Waterfall over the shared simulator/scenarios), then consolidate Portfolio (Health/Updates/Positions) and Fund Ops, and stand up the canonical holdings table + single capital-call store that Funds/Liquidity/LP portal all read.
+2. Point Liquidity at the canonical holdings source and label mock settlement as simulation; assemble the My LP Portal view over the canonical holdings/reports/calls.
+3. Trim the investor Account group in the sidebar config (remove non-investor items) and add locked-tab blurred previews plus a quota card beside each 402/paywall.
+Constraints
+* Depends on the diligence→commit→ledger task for the canonical position/capital record shape and the DD de-admin nav changes (both touch positions/capital and the sidebar config).
+* Update BOTH changelogs for user-facing changes; pass npm run test:drift before merge.
+Relevant files
+* frontend/src/pages/PortfolioHealthPage.jsx
+* frontend/src/pages/PortfolioUpdatesPage.jsx
+* frontend/src/pages/PortfolioPositionsPage.jsx
+* frontend/src/pages/FundsPage.jsx
+* frontend/src/pages/LPReportingPage.jsx
+* frontend/src/pages/ReservesPage.jsx
+* frontend/src/pages/WaterfallPage.jsx
+* frontend/src/pages/LiquidityPage.jsx
+* frontend/src/sidebarConfig.js
+* frontend/src/components/InvestorQuotaBars.jsx
+* cloudflare-worker/src/routes/funds.ts
+* cloudflare-worker/src/routes/fund_simulator.ts
+* cloudflare-worker/src/routes/liquidity.ts
+* cloudflare-worker/src/routes/capital.ts
+* cloudflare-worker/src/routes/positions.ts
+Dependencies
+
+Wire Diligence → Commit → Ledger
+Main

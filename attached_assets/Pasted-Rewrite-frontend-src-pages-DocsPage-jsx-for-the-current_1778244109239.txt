@@ -1,0 +1,96 @@
+Rewrite frontend/src/pages/DocsPage.jsx for the current product surface. Constraints:
+- DO NOT mention the GitHub repository anywhere.
+- DO NOT include API/SDK/integration developer docs (the API is not ready).
+- Audience is end-users (founders, investors, partners, mentors).
+
+Content structure (left-rail nav, scrollable content with anchored sections):
+
+  GETTING STARTED
+    What is StudioOS
+    Choosing your path: Spin-Out Lab vs. Existing Company
+    Account roles explained (Founder, Investor, Partner, Mentor, Admin)
+    Onboarding walkthrough
+    Inviting your team
+
+  SPIN-OUT LAB (30-day sprint)
+    Overview & how unlocks work
+    Week 1: Idea & Problem Validation
+    Week 2: Solution Design & Roadmap
+    Week 3: Validation & Co-founder
+    Week 4: Incorporation & Capital
+    Graduating from the lab
+
+  BUILD
+    Projects
+    Customer Discovery
+    Roadmap (OKRs & Kanban)
+    Brand Builder
+    Pitch Deck
+
+  VALIDATE & GROW
+    Scoring
+    Mentors & booking sessions
+    Office Hours
+    Co-founder Match
+    Market Intelligence
+
+  CAPITAL & FINANCE
+    Capital (fundraise)
+    Investors & Pipeline
+    Cap Table
+    Funds, Reserves, Waterfall
+    Liquidity events
+
+  LEGAL & COMPLIANCE
+    Incorporation
+    Cofounder Agreement
+    Section 83(b) elections
+    Compliance basics
+    KYC
+    ESign
+    Legal Templates
+
+  NETWORK
+    Marketplace
+    Partners & Co-marketing
+    Public Directory
+    Refer & Earn
+    Network Effects
+
+  PORTAL EXPERIENCES
+    Founder Portal
+    Investor Portfolio Health
+    Partner Portal
+    Mentor Engagements
+
+  ACCOUNT
+    Settings overview (link to all 9 tabs from Prompt 6)
+    Subscription tiers (Free / Growth / Studio)
+    Notifications
+    Privacy & data export
+    Security (2FA, sessions)
+    Activity & audit log
+
+  TROUBLESHOOTING
+    Can't see my projects
+    Calendar not syncing
+    Billing & invoice issues
+    Contact support
+
+Each page should have: 1-paragraph overview, "How to use it" steps, tips, and
+"Related features" links. Use real screenshots from /public/docs-screenshots/ where
+they exist; otherwise use simple line-icon illustrations.
+
+Implementation:
+- Replace DocsPage.jsx (currently large/stale) with:
+  frontend/src/pages/docs/DocsLayout.jsx     (left rail, search, content area)
+  frontend/src/pages/docs/sections/*.jsx     (one file per top-level section)
+  frontend/src/pages/docs/sections/index.js  (manifest used by left rail and search)
+- Add full-text search over the docs content (client-side fuse.js).
+- Anchor links shareable (#getting-started/onboarding etc.).
+
+Acceptance:
+- All sections render and are reachable.
+- Search returns hits across pages with highlighted snippet.
+- No mentions of GitHub anywhere in copy.
+- No API/SDK/integration developer docs included.

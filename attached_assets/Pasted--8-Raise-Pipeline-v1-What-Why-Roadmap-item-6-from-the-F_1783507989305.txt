@@ -1,0 +1,48 @@
+#8 - Raise Pipeline v1
+What & Why
+Roadmap item #6 from the Founder UX audit. The Raise Pipeline is a skeleton: there is no active-round header, no way to add investors (form or CSV), the list is not a kanban, there is no prospect-to-contact link, and there are no investor updates — only a "Promote from Contacts hub" stub. Build a working fundraising pipeline founders can run a round from.
+Done looks like
+* The pipeline shows an active-round header (target, raised, close date) at the top.
+* Founders can add investor prospects via a form and via CSV import.
+* Prospects move through stages on a kanban board (drag between stages).
+* Opening a prospect shows a drawer that links the prospect to its underlying contact record.
+* Founders can post investor updates from the pipeline.
+Out of scope
+* Legal/document workflows (Legal Engine task) and investor-side portal views.
+* Payment or wiring of committed capital.
+Steps
+1. Round header — Add an active-round header summarizing target, amount raised, and timeline.
+2. Add investors — Provide an add-investor form and a CSV import that create prospects.
+3. Kanban stages — Render prospects as a kanban board with drag-to-move between fundraising stages.
+4. Prospect drawer — Add a prospect detail drawer that links each prospect to its contact record.
+5. Investor updates — Let founders compose and send investor updates from the pipeline.
+Architectural notes:
+* Backend lives in the Cloudflare Worker (worker-route-first).
+* cloudflare-worker/src/routes/capital.ts is also touched by the active investor-side consolidation task; coordinate additions there and renumber any new migration on collision (next free number is 143).
+Relevant files
+* frontend/src/pages/RaisePipelinePage.jsx
+* cloudflare-worker/src/routes/capital.ts
+ #8 - Raise Pipeline v1
+What & Why
+Roadmap item #6 from the Founder UX audit. The Raise Pipeline is a skeleton: there is no active-round header, no way to add investors (form or CSV), the list is not a kanban, there is no prospect-to-contact link, and there are no investor updates — only a "Promote from Contacts hub" stub. Build a working fundraising pipeline founders can run a round from.
+Done looks like
+* The pipeline shows an active-round header (target, raised, close date) at the top.
+* Founders can add investor prospects via a form and via CSV import.
+* Prospects move through stages on a kanban board (drag between stages).
+* Opening a prospect shows a drawer that links the prospect to its underlying contact record.
+* Founders can post investor updates from the pipeline.
+Out of scope
+* Legal/document workflows (Legal Engine task) and investor-side portal views.
+* Payment or wiring of committed capital.
+Steps
+1. Round header — Add an active-round header summarizing target, amount raised, and timeline.
+2. Add investors — Provide an add-investor form and a CSV import that create prospects.
+3. Kanban stages — Render prospects as a kanban board with drag-to-move between fundraising stages.
+4. Prospect drawer — Add a prospect detail drawer that links each prospect to its contact record.
+5. Investor updates — Let founders compose and send investor updates from the pipeline.
+Architectural notes:
+* Backend lives in the Cloudflare Worker (worker-route-first).
+* cloudflare-worker/src/routes/capital.ts is also touched by the active investor-side consolidation task; coordinate additions there and renumber any new migration on collision (next free number is 143).
+Relevant files
+* frontend/src/pages/RaisePipelinePage.jsx
+* cloudflare-worker/src/routes/capital.ts

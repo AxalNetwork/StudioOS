@@ -1,0 +1,34 @@
+{
+  "skill": "ip-assignment-chain-of-title",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "synthetic_fixture": true,
+        "skill_name": "IP Ownership and Assignment Chain Review",
+        "task_scope": "Traces IP title across founders, employees, contractors and entity transfers to detect chain-of-title gaps.",
+        "evidence": [
+          "continuous IP chain of title"
+        ],
+        "omitted_field": "contractor assignment"
+      },
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for continuous IP chain of title."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "continuous IP chain of title"
+    ],
+    "must_say_not_recorded": [
+      "contractor assignment"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -1,0 +1,94 @@
+name: magic-link round-trip probe
+
+# A 202 confirms the Worker accepted the mail for delivery. This probe checks
+# arrival in the dedicated inbox and the identity of the session issued by verify.
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 4 hours, on the half hour so it does not collide with the
+    # 6-hourly SPA smoke at :00. Far inside the 3-per-900s per-address limit.
+    - cron: '30 */4 * * *'
+
+# Both probes send a single-use link to the same test mailbox.
+concurrency:
+  group: production-magic-link-mailbox
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: magic-link round trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+
+      # The report checks the process exit code against its published classification.
+      - name: Magic-link round trip against production
+        id: probe
+        continue-on-error: true
+        env:
+          MAGIC_PROBE_EMAIL: ${{ secrets.MAGIC_PROBE_EMAIL }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+        run: |
+          set +e
+          node scripts/check-magic-link-live.mjs
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Report the outcome
+        if: ${{ !cancelled() }}
+        env:
+          PROBE_CODE: ${{ steps.probe.outputs.code }}
+          PROBE_CLASSIFICATION: ${{ steps.probe.outputs.classification }}
+        run: |
+          case "$PROBE_CODE/$PROBE_CLASSIFICATION" in
+            0/PASS)
+              echo '::notice title=Magic link verified::The session matches the dedicated test account.'
+              echo '### PASS — Fresh link delivered and test account signed in within budget.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            2/CONFIG_ERROR)
+              detail='Check the configuration error in the probe log. Required names are MAGIC_PROBE_EMAIL, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN. Timer overrides must be positive integer milliseconds.'
+              ;;
+            1/EDGE_CHALLENGED)
+              detail='Cloudflare challenged the start request. Mail delivery and sign-in were not checked. See the authenticated monitoring follow-up in #5345.'
+              ;;
+            1/EDGE_REFUSED)
+              detail='The runner received a Cloudflare HTTP 403. The response did not identify the specific rule. Mail delivery and sign-in were not checked.'
+              ;;
+            1/START_FAILURE)
+              detail='The start request failed or exceeded its latency budget. Check the HTTP status and stage results in the probe log.'
+              ;;
+            1/GMAIL_AUTH)
+              detail='The probe could not authenticate to the receiving mailbox. Check the dedicated Gmail OAuth client and refresh grant. Delivery and sign-in remain unverified.'
+              ;;
+            1/GMAIL_READ)
+              detail='The probe could not read the receiving mailbox. Check Gmail API access and the gmail.readonly grant. Delivery and sign-in remain unverified.'
+              ;;
+            1/DEPENDENCY_FAILURE)
+              detail='The mailbox service remained unavailable within the retry budget. Delivery and sign-in remain unverified.'
+              ;;
+            1/DELIVERY_FAILURE)
+              detail='The probe could read the mailbox but found no usable fresh link within the delivery budget. Check the queue, sender and mail template.'
+              ;;
+            1/VERIFY_FAILURE)
+              detail='A fresh link arrived. Verification did not establish a session for the expected test account.'
+              ;;
+            *)
+              PROBE_CLASSIFICATION=INFRA_FAILURE
+              detail='The probe produced no recognized result. Check runner setup and the first failed step.'
+              ;;
+          esac
+          echo "::error title=Magic-link probe $PROBE_CLASSIFICATION::$detail"
+          printf '### %s\n\n%s\n' "$PROBE_CLASSIFICATION" "$detail" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

@@ -1,0 +1,78 @@
+/**
+ * Guard: Crunchbase stays on the connectable Integrations path, not the
+ * Coming Soon waitlist. Project detail and Market Intel already call the
+ * worker; this file pins the UI contract that lets a user paste a user_key.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+test('registry lists Crunchbase as beta (Connect), not coming_soon', () => {
+  const src = readFileSync(resolve(root, 'cloudflare-worker/src/integrations/registry.ts'), 'utf8');
+  const block = src.slice(src.indexOf("key: 'crunchbase'"), src.indexOf("key: 'stripe'"));
+  assert.match(block, /status:\s*'beta'/);
+  assert.doesNotMatch(block, /status:\s*'coming_soon'/);
+  assert.match(block, /auth_type:\s*'api_key'/);
+});
+
+test('registry lists Carta and DocuSign as beta (Connect), not coming_soon', () => {
+  const src = readFileSync(resolve(root, 'cloudflare-worker/src/integrations/registry.ts'), 'utf8');
+  const carta = src.slice(src.indexOf("key: 'carta'"), src.indexOf("key: 'slack'"));
+  assert.match(carta, /status:\s*'beta'/);
+  assert.doesNotMatch(carta, /status:\s*'coming_soon'/);
+  assert.match(carta, /auth_type:\s*'oauth2'/);
+  const ds = src.slice(src.indexOf("key: 'docusign'"), src.indexOf("key: 'crunchbase'"));
+  assert.match(ds, /status:\s*'beta'/);
+  assert.doesNotMatch(ds, /status:\s*'coming_soon'/);
+  assert.match(ds, /auth_type:\s*'oauth2'/);
+});
+
+// D651 (#1463) — the connect form moved from the retired IntegrationsPage.jsx
+// into the Connectors sheet's `key` and `pre` views.
+test('the Connectors sheet has a Crunchbase user_key field', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/account/ConnectorSheet.jsx'), 'utf8');
+  assert.match(src, /data-testid=\{p\.key === 'crunchbase' \? 'crunchbase-user-key'/);
+  assert.match(src, /Crunchbase Basic user key/);
+  assert.match(src, /Daily Basic quota is 200 calls/);
+});
+
+test('the Connectors sheet sends DocuSign demo=0|1 and has an account picker', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/account/ConnectorSheet.jsx'), 'utf8');
+  assert.ok(src.includes('data-testid={`${p.key}-env-picker`}'));
+  assert.match(src, /p\.key === 'docusign' \|\| p\.key === 'carta'/);
+  // D753 (#1908): the start's params moved with the flow into useConnectFlow.js.
+  const flow = readFileSync(resolve(root, 'frontend/src/pages/account/useConnectFlow.js'), 'utf8');
+  assert.match(flow, /params\.demo = dsDemo \? '1' : '0'/);
+});
+
+test('SPA calls the three Crunchbase enrichment routes the worker mounts', () => {
+  const api = readFileSync(resolve(root, 'frontend/src/lib/api.js'), 'utf8');
+  assert.match(api, /\/crunchbase\/search\?/);
+  assert.match(api, /\/crunchbase\/projects\/\$\{projectId\}\/apply/);
+  assert.match(api, /\/crunchbase\/projects\/\$\{projectId\}\/competitors/);
+  const worker = readFileSync(resolve(root, 'cloudflare-worker/src/index.ts'), 'utf8');
+  assert.match(worker, /app\.route\('\/api\/crunchbase'/);
+  assert.match(worker, /integrations\/providers\/crunchbase/);
+});
+
+test('ProjectDetail lookup / apply / competitors are wired to api.crunchbase*', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/ProjectDetail.jsx'), 'utf8');
+  assert.match(src, /api\.crunchbaseSearch\(/);
+  assert.match(src, /api\.crunchbaseApply\(/);
+  assert.match(src, /api\.crunchbaseCompetitors\(/);
+});
+
+test('D1317: the Crunchbase lookup and Edit startup open as the shared right-side Sheet, at their own widths', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/ProjectDetail.jsx'), 'utf8');
+  assert.match(src, /import Sheet from '\.\.\/ui\/Sheet\.jsx';/);
+  const cb = src.slice(src.indexOf('function CrunchbaseLookupSlideOver('), src.indexOf('function ', src.indexOf('function CrunchbaseLookupSlideOver(') + 10));
+  assert.match(cb, /<Sheet label="Look up on Crunchbase" width=\{560\} onClose=\{onClose\} testId="crunchbase-lookup" initialFocus=\{searchRef\}/, 'max-w-xl → 560, focus in the search box');
+  assert.match(cb, /className="sticky top-0[^"]*"/, 'the search box stays put over the scrolling results');
+  const edit = src.slice(src.indexOf('function EditProjectModal('));
+  assert.match(edit, /<Sheet label="Edit startup" title="Edit Startup" width=\{640\} onClose=\{handleClose\} testId="edit-project"\s+footer=/, 'max-w-2xl (672px) → 640, Save in the fixed footer');
+  assert.doesNotMatch(`${cb}${edit.slice(0, 8000)}`, /fixed inset-0|useEscapeClose/, 'overlay, frame and Escape are the Sheet’s');
+});

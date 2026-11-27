@@ -1,0 +1,70 @@
+You are helping me build a small TypeScript utility inside this Repl that will power the “Brand Kit & Landing” flow in my main app (Axal Founder Portal).
+
+High-level product context
+Founders already fill out a rich “About Your Startup” profile elsewhere in the product (startup name, sector, problem, solution, why now, TAM/SAM, etc.). From that, they can use a Brand Kit & Landing tool to generate a public landing page + waitlist and a small brand kit (logo, colors, typography, copy) they can reuse in decks and outreach.
+
+I have a set of prebuilt templates (each as a .zip/folder) that represent different communication surfaces, e.g.:
+
+- Capital Ready Kit.zip
+- Pilot Partner Page.zip
+- Proof Builder.zip
+- Co-Founder Builder.zip
+- Partner Hub.zip
+- Partner Pipeline Pro.zip
+- Co-Founder Canvas.zip
+- Co-founder Connect.zip
+- Builder's Launchpad.zip
+- Capital Storyteller.zip
+- Advisor Connect.zip
+- Mentor Connect.zip
+- Mentor Connect Page.zip
+- Co-Founder Quest.zip
+- Distribution Deck.zip
+- Seed Stage Spark.zip
+- (and more I will add)
+
+Goal for this Repl
+Create a small, well-typed library that:
+1) Maps every template to an audience and goal.
+2) Drives a 4-step “Brand Kit & Landing” wizard:
+
+   Step 1 — Pick project & audience
+   Step 2 — Pick a recommended template
+   Step 3 — Tune your landing page (brand kit + copy)
+   Step 4 — Share your page (public + private URLs)
+
+The wizard UI itself is in my main app; this Repl provides the data + helper functions.
+
+---
+
+Part 1 — Data model for templates
+
+Create `src/templates.ts` with:
+
+```ts
+export type Audience =
+  | 'customer'
+  | 'investor'
+  | 'partner'
+  | 'advisor'
+  | 'mentor'
+  | 'cofounder';
+
+export type AssetType =
+  | 'landing'
+  | 'deck'
+  | 'memo'
+  | 'doc'
+  | 'email_plus_landing';
+
+export interface TemplateConfig {
+  id: string;              // machine id, e.g. "capital-ready-kit"
+  label: string;           // human label, e.g. "Capital Ready Kit"
+  audience: Audience;      // who this template is primarily for
+  assetType: AssetType;    // landing vs deck vs memo vs doc etc.
+  primaryGoal: string;     // normalized goal, e.g. "request_intro", "start_pilot", "join_waitlist"
+  defaultCtaLabel: string; // e.g. "Request intro", "Start pilot"
+  defaultSlug: string;     // e.g. "capital-story"
+  recommended?: boolean;   // whether we show this as a recommended template for that audience
+  notes?: string;          // free-form notes about usage
+}

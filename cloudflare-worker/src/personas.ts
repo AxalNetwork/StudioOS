@@ -1,0 +1,244 @@
+/**
+ * Epic 1 — canonical persona taxonomy (single source of truth).
+ *
+ * Imported by:
+ *   - ai-workers/persona-router.ts  (classify)
+ *   - routes/personas.ts            (taxonomy + finalize)
+ *   - routes/profiling.ts           (onboarding chat extension)
+ *
+ * Mirrored verbatim in `frontend/src/lib/personas.js` (and, without
+ * `nav_extras`, in `backend/app/api/routes/personas.py`) so the React side
+ * does not have to round-trip the worker just to render a label/icon.
+ * `frontend/test/persona_sources_agree.test.mjs` (D254) holds the three
+ * in agreement — it found and fixed a `nav_extras` drift on two personas
+ * where this file was NOT the source of truth: the frontend mirror is what
+ * the sidebar actually draws from, so its nav entries are canonical.
+ *
+ * Multi-persona is allowed up to 2 rows per user — the only currently-
+ * supported overlap is `founder_*` + `operator_advisor` (a founder who
+ * also wants to operate / advise other startups).
+ */
+export type PersonaId =
+  | 'lp_individual'
+  | 'lp_institutional'
+  | 'gp_external'
+  | 'angel_scout'
+  | 'corporate_vc'
+  | 'sovereign_family_office'
+  | 'academic'
+  | 'founder_new'
+  | 'founder_existing'
+  | 'operator_advisor'
+  | 'service_provider'
+  | 'press_analyst';
+
+export interface PersonaQuestion {
+  key: string;
+  prompt: string;
+  type: 'text' | 'choice' | 'number';
+  choices?: string[];
+}
+
+export interface Persona {
+  id: PersonaId;
+  label: string;
+  short_description: string;
+  /** D998: the segment's profile. Descriptive; never changes an account's role. */
+  profile: 'founder' | 'investor' | 'advisor' | 'partner' | 'exploring';
+  /** Lower-cased email-domain substrings that boost confidence. */
+  email_domain_hints: string[];
+  /** Persona-specific 3–5 question bank asked after detection. */
+  follow_up_questions: PersonaQuestion[];
+  /** Persona-specific nav links to surface in the sidebar. */
+  nav_extras?: Array<{ to: string; label: string }>;
+}
+
+export const PERSONAS: Persona[] = [
+  {
+    id: 'lp_individual',
+    label: 'LP — Individual',
+    short_description: 'Individual limited partner committing personal capital to the main fund.',
+    profile: 'investor',
+    email_domain_hints: ['gmail.com', 'yahoo.com', 'outlook.com', 'icloud.com', 'hotmail.com', 'me.com'],
+    follow_up_questions: [
+      { key: 'check_size_usd', prompt: 'Typical check size you write per fund (USD)?', type: 'number' },
+      { key: 'accreditation', prompt: 'Are you a US-accredited investor? (yes / no / non-US)', type: 'choice', choices: ['yes', 'no', 'non-US'] },
+      { key: 'sector_focus', prompt: 'Any sector/thesis focus you care about?', type: 'text' },
+      { key: 'liquidity_horizon', prompt: 'Comfortable lock-up horizon? (3-5y / 5-10y / 10y+)', type: 'choice', choices: ['3-5y', '5-10y', '10y+'] },
+    ],
+    nav_extras: [],
+  },
+  {
+    id: 'lp_institutional',
+    label: 'LP — Institutional',
+    short_description: 'Institutional LP (endowment, foundation, pension, fund-of-funds).',
+    profile: 'investor',
+    email_domain_hints: [],
+    follow_up_questions: [
+      { key: 'institution_name', prompt: 'Institution name?', type: 'text' },
+      { key: 'aum_usd', prompt: 'Approximate AUM (USD)?', type: 'number' },
+      { key: 'allocation_target_usd', prompt: 'Target allocation to venture this cycle (USD)?', type: 'number' },
+      { key: 'mandate_constraints', prompt: 'Any mandate constraints (geography, sector, ESG, ticket cap)?', type: 'text' },
+    ],
+    nav_extras: [{ to: '/funds', label: 'Funds' }],
+  },
+  {
+    id: 'gp_external',
+    label: 'GP — External Fund',
+    short_description: 'GP running an external fund interested in deal-by-deal collaboration.',
+    profile: 'investor',
+    email_domain_hints: ['vc', 'capital', 'ventures', 'partners'],
+    follow_up_questions: [
+      { key: 'fund_name', prompt: 'Fund name?', type: 'text' },
+      { key: 'fund_stage', prompt: 'Stage focus? (Pre-seed / Seed / Series A / Multi-stage)', type: 'choice', choices: ['Pre-seed', 'Seed', 'Series A', 'Multi-stage'] },
+      { key: 'avg_check_size_usd', prompt: 'Average check size (USD)?', type: 'number' },
+      { key: 'collab_intent', prompt: 'Looking for co-investment, deal sharing, or both?', type: 'choice', choices: ['co-investment', 'deal sharing', 'both'] },
+    ],
+    nav_extras: [{ to: '/deals', label: 'Deal Flow' }, { to: '/pipeline', label: 'Pipeline Board' }],
+  },
+  {
+    id: 'angel_scout',
+    label: 'Angel / Scout',
+    short_description: 'Individual angel or scout sourcing and writing small early checks.',
+    profile: 'investor',
+    email_domain_hints: [],
+    follow_up_questions: [
+      { key: 'check_size_usd', prompt: 'Typical angel check size (USD)?', type: 'number' },
+      { key: 'deals_per_year', prompt: 'How many deals per year do you write?', type: 'number' },
+      { key: 'sector_focus', prompt: 'Sectors you focus on?', type: 'text' },
+      { key: 'value_add', prompt: 'Primary value-add to founders (intros, GTM, hiring, technical)?', type: 'text' },
+    ],
+    nav_extras: [{ to: '/refer', label: 'Refer & Earn' }, { to: '/deals', label: 'Deal Flow' }],
+  },
+  {
+    id: 'corporate_vc',
+    label: 'Corporate VC',
+    short_description: 'Strategic / corporate VC arm of an operating company.',
+    profile: 'investor',
+    email_domain_hints: [],
+    follow_up_questions: [
+      { key: 'parent_company', prompt: 'Parent company?', type: 'text' },
+      { key: 'strategic_thesis', prompt: 'Strategic thesis (what unlocks value for the parent)?', type: 'text' },
+      { key: 'avg_check_size_usd', prompt: 'Average check size (USD)?', type: 'number' },
+      { key: 'commercial_attachment', prompt: 'Do you typically attach commercial agreements (POC, distribution, M&A right of first refusal)?', type: 'choice', choices: ['yes', 'no', 'sometimes'] },
+    ],
+    nav_extras: [{ to: '/deals', label: 'Deal Flow' }],
+  },
+  {
+    id: 'sovereign_family_office',
+    label: 'Sovereign / Family Office',
+    short_description: 'Sovereign wealth, family office, or multi-family office investor.',
+    profile: 'investor',
+    email_domain_hints: ['fo', 'family', 'office'],
+    follow_up_questions: [
+      { key: 'office_name', prompt: 'Office name?', type: 'text' },
+      { key: 'aum_usd', prompt: 'Approximate AUM (USD)?', type: 'number' },
+      { key: 'allocation_target_usd', prompt: 'Venture allocation target (USD)?', type: 'number' },
+      { key: 'co_invest_appetite', prompt: 'Appetite for direct co-investment alongside fund commitments?', type: 'choice', choices: ['yes', 'no', 'selective'] },
+    ],
+    nav_extras: [],
+  },
+  {
+    id: 'academic',
+    label: 'Academic / Lab',
+    short_description: 'Academic researcher, university tech-transfer office, or research lab.',
+    profile: 'exploring',
+    email_domain_hints: ['edu', 'ac.uk', 'edu.sg', 'edu.au', 'mit.edu', 'stanford.edu', 'ox.ac.uk', 'cam.ac.uk'],
+    follow_up_questions: [
+      { key: 'institution', prompt: 'Institution / lab name?', type: 'text' },
+      { key: 'research_area', prompt: 'Primary research area?', type: 'text' },
+      { key: 'commercial_intent', prompt: 'Spin-out, license, or just collaboration?', type: 'choice', choices: ['spin-out', 'license', 'collaboration'] },
+      { key: 'ip_status', prompt: 'IP status (filed / granted / disclosure-only / none)?', type: 'choice', choices: ['filed', 'granted', 'disclosure-only', 'none'] },
+    ],
+  },
+  {
+    id: 'founder_new',
+    label: 'Founder — New Venture',
+    short_description: 'Founder spinning out a brand-new venture through the 28-day engine.',
+    profile: 'founder',
+    email_domain_hints: [],
+    follow_up_questions: [
+      { key: 'venture_idea', prompt: 'One-line description of the venture?', type: 'text' },
+      { key: 'sector', prompt: 'Sector / industry?', type: 'text' },
+      { key: 'jurisdiction', prompt: 'Preferred incorporation jurisdiction? (Delaware / UK / Singapore)', type: 'choice', choices: ['Delaware', 'UK', 'Singapore'] },
+      { key: 'cofounders', prompt: 'Co-founders (names + roles), or solo?', type: 'text' },
+    ],
+    nav_extras: [],
+  },
+  {
+    id: 'founder_existing',
+    label: 'Founder — Existing Company',
+    short_description: 'Founder of an existing company on the Strategic Scale partnership track.',
+    profile: 'founder',
+    email_domain_hints: [],
+    follow_up_questions: [
+      { key: 'company_name', prompt: 'Company name?', type: 'text' },
+      { key: 'current_stage', prompt: 'Current stage? (Pre-seed / Seed / Series A / Series B+ / Bootstrapped/Profitable)', type: 'choice', choices: ['Pre-seed', 'Seed', 'Series A', 'Series B+', 'Bootstrapped/Profitable'] },
+      { key: 'partnership_goal', prompt: 'Primary goal? (Capital / AI integration / Distribution / M&A)', type: 'choice', choices: ['Capital', 'AI Integration (StudioOS)', 'Distribution / GTM', 'M&A / Liquidity'] },
+      { key: 'existing_investors', prompt: 'Existing investors / cap-table summary (one line)?', type: 'text' },
+    ],
+    // D254 — was `[{ to: '/founder', ... }, ...]`; no `/founder` route exists
+    // (only `/founder/post-need`), and the frontend mirror the sidebar
+    // actually draws from never had that entry. Taken from the frontend.
+    nav_extras: [{ to: '/raise/legal', label: 'Legal' }],
+  },
+  {
+    id: 'operator_advisor',
+    label: 'Operator / Advisor',
+    short_description: 'Operating partner or advisor offering sweat-equity expertise to spin-outs.',
+    profile: 'advisor',
+    email_domain_hints: [],
+    follow_up_questions: [
+      { key: 'expertise', prompt: 'Primary expertise area (e.g. GTM, eng, finance, product)?', type: 'text' },
+      { key: 'years_experience', prompt: 'Years of senior operating experience?', type: 'number' },
+      { key: 'time_per_week_hours', prompt: 'Hours per week you can commit?', type: 'number' },
+      { key: 'compensation_pref', prompt: 'Compensation preference (equity / cash / hybrid)?', type: 'choice', choices: ['equity', 'cash', 'hybrid'] },
+    ],
+    // D998: the Advisor workspace; /build is a Founder-only route.
+    nav_extras: [{ to: '/practice', label: 'Practice' }],
+  },
+  {
+    id: 'service_provider',
+    label: 'Service Provider',
+    short_description: 'Legal, technical, or other service provider to the studio.',
+    profile: 'partner',
+    email_domain_hints: ['law', 'legal', 'consulting', 'cpa'],
+    follow_up_questions: [
+      { key: 'service_type', prompt: 'Type of service (Legal / Technical / Accounting / Other)?', type: 'choice', choices: ['Legal', 'Technical', 'Accounting', 'Other'] },
+      { key: 'firm_name', prompt: 'Firm name?', type: 'text' },
+      { key: 'pricing_model', prompt: 'Pricing model (fixed-fee / hourly / equity / hybrid)?', type: 'choice', choices: ['fixed-fee', 'hourly', 'equity', 'hybrid'] },
+      { key: 'jurisdictions', prompt: 'Jurisdictions you cover?', type: 'text' },
+    ],
+  },
+  {
+    id: 'press_analyst',
+    label: 'Press / Analyst',
+    short_description: 'Journalist, industry analyst, or research publication.',
+    profile: 'exploring',
+    email_domain_hints: ['press', 'media', 'news', 'journal', 'gartner', 'forrester'],
+    follow_up_questions: [
+      { key: 'outlet', prompt: 'Outlet / publication?', type: 'text' },
+      { key: 'beat', prompt: 'Coverage beat?', type: 'text' },
+      { key: 'engagement_type', prompt: 'Looking for briefings, embargoed news, or both?', type: 'choice', choices: ['briefings', 'embargoed news', 'both'] },
+    ],
+  },
+];
+
+export const PERSONA_BY_ID: Record<PersonaId, Persona> = Object.fromEntries(
+  PERSONAS.map((p) => [p.id, p]),
+) as Record<PersonaId, Persona>;
+
+export function getPersona(id: string | null | undefined): Persona | null {
+  if (!id) return null;
+  return (PERSONA_BY_ID as Record<string, Persona | undefined>)[id] || null;
+}
+
+/** Multi-persona overlap allow-list (max 2 rows per user). */
+export function isAllowedPersonaOverlap(a: PersonaId, b: PersonaId): boolean {
+  if (a === b) return false;
+  const founderIds: PersonaId[] = ['founder_new', 'founder_existing'];
+  return (
+    (founderIds.includes(a) && b === 'operator_advisor') ||
+    (founderIds.includes(b) && a === 'operator_advisor')
+  );
+}

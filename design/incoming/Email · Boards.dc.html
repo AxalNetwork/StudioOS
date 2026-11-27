@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · /email · replaces /messages</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Email</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">EM1 to EM10. A member’s own mailbox. Eadwyn writes from the records the member chooses, shows the cost before it runs, and nothing is sent without the member’s press. There are no folders, labels or spam, and no way to email someone who hasn’t shared an address. Drawn for a founder, with one investor board of EM2.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><sc-for list="{{ b.notes }}" as="n" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;line-height:1.45;color:#3f3a47">{{ n }}</span></sc-for></div>
+<div style="{{ b.rowSt }}">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Email Page" v="{{ f.v }}" hint-size="1440px,960px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (v, cap, h) => ({ v, cap, wst: 'width:1440px;' + (h ? 'height:' + h + 'px;' : '') + 'border-radius:14px;overflow:hidden;border:1px solid ' + (v === 'em2d' ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const P = (v, cap) => ({ v, cap, wst: 'width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)' });
+    const B = (id, t, notes, frames, row) => ({ id, t, notes, frames, rowSt: row ? 'display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap' : 'display:flex;flex-direction:column;gap:32px' });
+    return { boards: [
+      B('EM1', 'Connect your mailbox', ['Four choices, each saying what Axal VC can and cannot do with it.', 'Mail goes from your address, and Axal VC never sends without your press.'], [D('em1a', 'First visit · nothing connected', 960), D('em1b', 'Consent step', 960), D('em1c', 'Connected', 640), D('em1d', 'Refused, and a wrong app password', 640)]),
+      B('EM2', 'Email home · three panes', ['People, grouped by where each relationship came from.', 'The conversation, with an honest line where the mailbox can’t show replies.', 'What Eadwyn knows: the records the next draft can use, each with its date.'], [D('em2', 'Founder · light', 960), D('em2i', 'Investor · deal flow, portfolio, co-investors and Network matches', 960), D('em2a', 'Advisor · clients from sessions, cohort founders and Network matches', 960), D('em2o', 'Operating Partner · clients from engagements, leads and Network matches', 960), D('em2x', 'Administrator · only the cases they hold', 960), D('em2e', 'Explorer · Network matches only', 960), D('em2d', 'Founder · dark', 960)]),
+      B('EM3', 'Compose with Eadwyn', ['Intent chips change with the relationship. The cost and balance show before anything runs.', 'Each draft lists the records it used. Send, schedule or save; nothing goes without your press.'], [D('em3a', 'Before drafting', 960), D('em3b', 'The draft, with its sources and versions', 960)]),
+      B('EM4', 'Email from a module', ['Every module uses the same small Email button.', 'Opened from a record, the composer comes with the person and context filled in.'], [D('em4a', 'An interview row, a pipeline card, an advisor profile and the button'), D('em4b', 'Opened from Interview 12 Oct', 960)]),
+      B('EM5', 'Network · after a mutual match', ['Email opens only once both people have shared an address.'], [D('em5', 'Accepted, sharing, waiting, ready'), D('em5b', 'The composer with “Introduce myself”', 960)]),
+      B('EM6', 'An update to several people', ['One draft per person, reviewed and sent one by one. Never a bulk or blind send.', 'The total token cost is shown up front.'], [D('em6', 'Monthly investor update · 3 of 8 sent', 960)]),
+      B('EM7', 'Settings', ['Mailboxes and the default address, signature, what Eadwyn may read by default, the sent log, and what disconnecting keeps.'], [D('em7', 'Email settings', 960)]),
+      B('EM8', 'States', ['No mailbox, expired connection, not enough tokens, send failed, no address on record, address not shared, no people yet.'], [D('em8', 'Every state')]),
+      B('EM9', 'Phone', ['Every target is at least 44px. The composer is a full-screen sheet.'], [P('em9a', 'People'), P('em9b', 'A conversation'), P('em9c', 'The composer'), P('em9d', 'Asking Eadwyn from the phone composer')], true),
+      B('EM10', 'Messages has moved', ['Shown once at the old /messages address.'], [D('em10', 'The notice', 640)])
+    ] };
+  }
+}
+</script>
+</body></html>

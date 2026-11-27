@@ -1,0 +1,96 @@
+{
+  "skill": "pricing-packaging-research-plan",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "record_id": "pricing-interviews-03",
+        "consented": true,
+        "selection": "Three existing enterprise customers who volunteered",
+        "interviews": [
+          {
+            "session_id": "price-session-01",
+            "segment": "Enterprise",
+            "statement_kind": "stated preference",
+            "amount_cents": 25000,
+            "currency": "USD",
+            "billing_period": "month",
+            "unit": "workspace",
+            "tax_basis": "Not specified"
+          },
+          {
+            "session_id": "price-session-02",
+            "segment": "Enterprise",
+            "statement_kind": "stated preference",
+            "amount_cents": 30000,
+            "currency": "USD",
+            "billing_period": "month",
+            "unit": "workspace",
+            "tax_basis": "Not specified"
+          },
+          {
+            "session_id": "price-session-03",
+            "segment": "Enterprise",
+            "statement_kind": "stated preference",
+            "amount_cents": 40000,
+            "currency": "USD",
+            "billing_period": "month",
+            "unit": "workspace",
+            "tax_basis": "Not specified"
+          }
+        ],
+        "small_team_interviews": []
+      },
+      "grow.records": {
+        "record_id": "current-packages-11",
+        "plans": [
+          {
+            "name": "Starter",
+            "amount_cents": 10000,
+            "currency": "USD",
+            "billing_period": "month",
+            "unit": "workspace",
+            "active_accounts": 50
+          },
+          {
+            "name": "Pro",
+            "amount_cents": 30000,
+            "currency": "USD",
+            "billing_period": "month",
+            "unit": "workspace",
+            "active_accounts": 10
+          }
+        ],
+        "gross_margin": null
+      },
+      "research.library": [
+        {
+          "record_id": "segment-hypothesis-04",
+          "recorded_at": "2026-10-25",
+          "target_segment": "small teams",
+          "hypothesis": "A workspace package may suit teams with fewer than five members",
+          "target_sample_size": null
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "selection bias",
+      "stated preference",
+      "USD",
+      "small teams"
+    ],
+    "must_say_not_recorded": [
+      "gross margin",
+      "target sample size"
+    ],
+    "must_not_include": [
+      "The optimal price has been established",
+      "Demand is validated",
+      "I changed the pricing"
+    ]
+  }
+}

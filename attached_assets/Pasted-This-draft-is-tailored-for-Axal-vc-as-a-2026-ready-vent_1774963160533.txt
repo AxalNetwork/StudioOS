@@ -1,0 +1,54 @@
+This draft is tailored for **Axal.vc** as a 2026-ready venture capital platform. It incorporates current SEC/FinCEN requirements (like the 2026 AML/KYC mandates) and the specific bifurcated structure (HoldCo vs. ManCo) we discussed.
+
+---
+
+# TERMS OF SERVICE
+**Effective Date:** March 31, 2026  
+**Provider:** Axal Management, LLC
+
+These Terms of Service (“**Terms**”) govern your access to and use of the Axal.vc platform (the “**Platform**”). By clicking “I Agree” or by accessing the Platform, you enter into a binding agreement with **Axal Management, LLC** (“**Axal**,” “**we**,” or “**us**”).
+
+### 1. SCOPE OF SERVICE & NO ADVICE
+* **Platform Purpose:** Axal.vc is a proprietary technology tool for venture capital operations, deal flow management, and investor relations.
+* **No Investment Advice:** The Platform is for informational and administrative purposes only. Axal is not a registered broker-dealer or investment adviser. No content on the Platform constitutes a recommendation, solicitation, or offer to buy or sell any securities or financial instruments.
+* **High Risk:** You acknowledge that venture capital investments are highly illiquid and carry a risk of 100% loss of principal.
+
+### 2. ELIGIBILITY & COMPLIANCE (2026 STANDARDS)
+* **Accredited Investor Status:** Access to specific deal rooms is strictly limited to "Accredited Investors" as defined in Rule 501 of Regulation D. You represent that all information provided regarding your financial status is accurate.
+* **KYC/AML Requirements:** In accordance with 2026 FinCEN regulations for Exempt Reporting Advisers (ERAs), you agree to provide all requested documentation for Identity Verification (KYC) and Anti-Money Laundering (AML) screening before participating in any transactions.
+* **Bad Actor Disqualification:** You certify that you are not subject to any "Bad Actor" disqualifications as defined under Rule 506(d).
+
+### 3. PROPRIETARY RIGHTS & LICENSING
+* **Ownership:** The Platform’s software, design, and trademarks (including "Axal") are the exclusive property of **Axal Holding Co.** and are protected by intellectual property laws.
+* **License:** We grant you a limited, revocable, non-transferable license to use the Platform for its intended professional purpose. You may not scrape, "deep-link," or reverse-engineer any portion of the Platform.
+
+### 4. CONFIDENTIALITY & DATA PRIVACY
+* **Non-Disclosure:** You will have access to "Confidential Information" (e.g., startup pitch decks, cap tables, and fund performance data). You agree to keep this information strictly confidential and use it solely for evaluating potential investments through the Axal network.
+* **Data Handling:** Our use of your data is governed by our **Privacy Policy**. You consent to the processing of your data in accordance with the **Amended Regulation S-P (2026)** regarding financial data protection.
+
+### 5. USER CONDUCT & RESTRICTIONS
+You agree not to:
+* Share your login credentials with any third party.
+* Use the Platform to solicit Axal’s users for competing funds or services (Non-Solicitation).
+* Upload any malicious code or attempt to bypass the Platform’s security layers.
+
+### 6. LIMITATION OF LIABILITY & INDEMNITY
+* **"As-Is" Basis:** The Platform is provided without warranties of any kind. Axal does not guarantee the accuracy of data provided by third-party founders or LPs.
+* **Liability Cap:** To the maximum extent permitted by law, Axal’s total liability for any claim shall not exceed the fees paid by you to Axal in the six (6) months preceding the claim.
+* **Indemnity:** You agree to indemnify Axal Management, LLC and Axal Holding Co. against any losses arising from your breach of these Terms or misrepresentation of your investor status.
+
+### 7. DISPUTE RESOLUTION
+* **Governing Law:** These Terms are governed by the laws of the **State of Delaware**.
+* **Arbitration:** Any dispute shall be settled by binding arbitration in [Your City, e.g., San Francisco, CA] under the rules of the American Arbitration Association (AAA).
+
+### 8. MODIFICATIONS
+We reserve the right to update these Terms at any time. Continued use of the Platform after an update constitutes acceptance of the revised Terms.
+
+---
+
+### Implementation Notes for the Footer:
+1.  **The "Check":** Ensure your sign-up flow requires a checkbox that says: *"I have read and agree to the Terms of Service and Privacy Policy."*
+2.  **The Disclaimer:** It is common practice to repeat the **"No Investment Advice"** clause in smaller text directly in the footer, separate from the link.
+3.  **Jurisdiction:** If you are based in Europe or dealing with significant EU data, we should add a specific **GDPR Addendum** to Section 4.
+
+**Would you like me to generate the "Privacy Policy" or the "Risk Disclosure" document next?**

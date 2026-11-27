@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Calendar</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Calendar · admin scopes</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">CA1 to CA5 extend the Calendar canvas. Mine is everyone’s own calendar. Studio shows every company and project in a studio, for its admins. Platform shows every studio and branch, for super admins. Admin views are read only.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Calendar Admin Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const H = { ca1: 619, ca2: 1000, ca3: 1000, ca3b: 1000, ca4: 1040, ca5a: 720, ca5b: 640, ca5c: 640, ca5d: 844 };
+    const F = (v, cap, w) => { const d = /-d$/.test(v); const h = H[v.replace(/-d$/, '')]; return { v, cap, wst: `width:${w}px;height:${h}px;border-radius:${w < 400 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h}px` }; };
+    return { groups: [
+      { id: 'CA1', t: 'Scope switcher', fr: [F('ca1', 'The Calendar header by role', 1440)] },
+      { id: 'CA2', t: 'Studio view', fr: [F('ca2', 'Agenda · every company and project in [Studio Lisbon]', 1440)] },
+      { id: 'CA3', t: 'Platform view', fr: [F('ca3', 'Month · counts per day', 1440), F('ca3b', 'Agenda · with the branch', 1440)] },
+      { id: 'CA4', t: 'Item detail', fr: [F('ca4', 'Read only · Open in its company', 1440)] },
+      { id: 'CA5', t: 'States', fr: [F('ca5a', 'Loading', 1440), F('ca5b', 'Could not be read', 1440), F('ca5c', 'A scope with no events', 1440), F('ca5d', 'Phone · agenda', 390), F('ca2-d', 'Dark · Studio agenda', 1440), F('ca3-d', 'Dark · Platform month', 1440)] }
+    ] };
+  }
+}
+</script>
+</body></html>

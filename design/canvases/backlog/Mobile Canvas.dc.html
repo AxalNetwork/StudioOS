@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .row{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+    .ph{width:390px;min-width:390px;height:844px;flex:none;background:#fff;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden;position:relative;display:flex;flex-direction:column}
+    .notch{height:44px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;color:#18181b}
+    .stat{display:flex;align-items:center;gap:5px}
+    .stat span{display:block;color:#18181b}
+    .hi{height:26px;flex:none;display:flex;align-items:center;justify-content:center}
+    .hib{width:126px;height:4px;border-radius:999px;background:rgba(24,24,27,.28)}
+    .body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:#f7f7f8}
+    .scroll{flex:1;min-height:0;overflow:hidden;padding:0 16px}
+    .cap{font-size:11.5px;color:rgba(24,24,27,.55);line-height:1.5;margin-top:11px;max-width:390px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:14px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:12px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -6px 30px rgba(24,24,27,.2);padding:9px 0 0}
+    .grab{width:38px;height:4px;border-radius:999px;background:#d4d2dc;margin:0 auto 12px}
+    .scrim{position:absolute;inset:0;background:rgba(24,24,27,.38)}
+    .fab{position:absolute;right:16px;bottom:82px;width:56px;height:56px;border-radius:18px;box-shadow:0 5px 18px rgba(24,24,27,.24);display:flex;align-items:center;justify-content:center}
+    .spec{background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px}
+    .hit{position:absolute;border:1px dashed rgba(79,70,229,.5);background:rgba(79,70,229,.07);border-radius:6px;pointer-events:none}
+  </style>
+</helmet>
+
+<!-- ══════════ M1 · NAV ALLOCATION ══════════ -->
+<section class="ab" id="m1">
+  <div class="ab-hd"><a class="ab-id" href="#m1">M1</a><span class="ab-nm">Navigation — sidebar → 4 tabs + More</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 18px">Eight or nine sidebar rows do not survive a thumb-reach tab bar, so each license keeps four by <strong>standing intention</strong>: rows opened by habit several times a session earn a tab, rows opened with intent but less often go one tap deeper. Nothing is renamed and nothing is dropped. The four allocations below are the same rule applied four times, in each product's own accent.</div>
+
+  <div class="row">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;flex:1;min-width:600px">
+      <sc-for list="{{ allocations }}" as="a" hint-placeholder-count="4">
+        <div style="{{ a.cardStyle }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font-size:13.5px;font-weight:800;letter-spacing:-.01em;color:{{ a.ink }}">{{ a.product }}</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e">{{ a.rows }} rows → 4 + More</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+            <sc-for list="{{ a.tabs }}" as="t" hint-placeholder-count="4"><span style="{{ t.style }}">{{ t.label }}</span></sc-for>
+            <span style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:#fff;color:#615c6e;border:1px solid #e2e1e8">More ⋯</span>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55"><strong>More:</strong> {{ a.more }}</div>
+          <div style="font-size:11px;color:#3f3a49;margin-top:8px;line-height:1.6">{{ a.why }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="ph">
+      <div class="notch"><span>9:41</span><span class="stat"><span style="width:17px;height:11px" dangerouslySetInnerHTML="{{ cellIcon }}"></span><span style="width:15px;height:11px" dangerouslySetInnerHTML="{{ wifiIcon }}"></span><span style="width:25px;height:12px" dangerouslySetInnerHTML="{{ battIcon }}"></span></span></div>
+      <div class="body">
+        <div style="background:#fff;border-bottom:1px solid #ececf1;padding:8px 16px 12px">
+          <div style="font-size:20px;font-weight:800;letter-spacing:-.025em">Pipeline</div>
+        </div>
+        <div class="scroll" style="padding-top:14px;filter:blur(1.5px);opacity:.5">
+          <div class="c" style="padding:14px 15px"><div class="lbl">Leads</div><div class="num" style="font-size:22px;font-weight:800;margin-top:6px">14 open</div></div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div style="padding:0 16px 6px"><div class="lbl">More</div></div>
+          <sc-for list="{{ moreRows }}" as="m" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:13px;padding:0 16px;height:52px;border-top:1px solid #f4f3f7">
+              <span style="width:19px;height:19px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ m.icon }}"></span>
+              <span style="font-size:16px;font-weight:600;flex:1">{{ m.label }}</span>
+              <span style="font-size:15px;color:#615c6e">›</span>
+            </div>
+          </sc-for>
+          <div style="height:34px"></div>
+        </div>
+      </div>
+      <div class="hi"><div class="hib"></div></div>
+    </div>
+  </div>
+  <div class="cap" style="max-width:1000px">More is a bottom sheet, never a screen — 52pt rows, dismissed by backdrop tap or swipe-down, with the page still visible behind it. A pushed screen would make Settings feel further away than it is.</div>
+</section>
+
+<!-- ══════════ M2 · HUB, TWO LENSES ══════════ -->
+<section class="ab" id="m2">
+  <div class="ab-hd"><a class="ab-id" href="#m2">M2</a><span class="ab-nm">Hub — lens chips replace vertical stacking</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 18px">Desktop shows every lens at once down one scroll. On a 390pt screen that buries lens four under three screens of scroll, which defeats the single-page intent as thoroughly as separate routes would. So the lenses become a pinned chip row: one lens renders at a time, the content area swipes left and right, and the chips track it. Everything is one swipe away rather than one scroll-hunt away.</div>
+
+  <div class="row">
+    <sc-for list="{{ hubs }}" as="h" hint-placeholder-count="2">
+      <div>
+        <div class="ph">
+          <div class="notch"><span>9:41</span><span class="stat"><span style="width:17px;height:11px" dangerouslySetInnerHTML="{{ cellIcon }}"></span><span style="width:15px;height:11px" dangerouslySetInnerHTML="{{ wifiIcon }}"></span><span style="width:25px;height:12px" dangerouslySetInnerHTML="{{ battIcon }}"></span></span></div>
+          <div class="body">
+            <div style="background:#fff;border-bottom:1px solid #ececf1;padding:8px 0 0">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px 10px">
+                <div style="font-size:20px;font-weight:800;letter-spacing:-.025em">Pipeline</div>
+                <span style="font-size:11px;font-weight:700;color:#b45309;background:#fffbf2;border:1px solid #fde68a;border-radius:999px;padding:4px 10px">{{ h.badge }}</span>
+              </div>
+              <div style="overflow:hidden;padding:0 0 10px">
+                <div style="{{ h.stripStyle }}">
+                  <sc-for list="{{ h.chips }}" as="c" hint-placeholder-count="5"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+                </div>
+              </div>
+            </div>
+            <div class="scroll" style="padding-top:13px">
+              <div style="display:grid;gap:11px">
+                <sc-for list="{{ h.cards }}" as="c" hint-placeholder-count="3">
+                  <div class="c" style="padding:14px 15px">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                      <div style="min-width:0">
+                        <div class="lbl" style="font-size:9.5px">{{ c.zone }}</div>
+                        <div class="num" style="font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ c.ink }}">{{ c.value }}</div>
+                      </div>
+                      <span style="font-size:19px;color:#615c6e;flex:none;margin-top:8px">›</span>
+                    </div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid #f4f3f7">
+                      <sc-for list="{{ c.facts }}" as="f" hint-placeholder-count="2">
+                        <div><div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#615c6e">{{ f.k }}</div><div class="num" style="font-size:13px;font-weight:700;margin-top:3px">{{ f.v }}</div></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div class="fab" style="background:#b45309">
+              <span style="width:22px;height:22px;display:block;color:#fff" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+              <span style="position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#10b981;border:2.5px solid #fff"></span>
+            </div>
+            <div style="background:#fff;border-top:1px solid #ececf1;padding:7px 0 0;flex:none">
+              <div style="display:flex">
+                <sc-for list="{{ tabBar }}" as="t" hint-placeholder-count="5">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:2px 0 4px">
+                    <span style="width:22px;height:22px;display:block;color:{{ t.ink }}" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+                    <span style="font-size:10px;font-weight:{{ t.weight }};color:{{ t.ink }}">{{ t.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div class="hi"><div class="hib"></div></div>
+        </div>
+        <div class="cap">{{ h.cap }}</div>
+      </div>
+    </sc-for>
+
+    <div class="spec" style="flex:1;min-width:290px">
+      <div class="lbl">Card rules</div>
+      <div style="display:grid;gap:10px;margin-top:11px">
+        <sc-for list="{{ cardRules }}" as="r" hint-placeholder-count="4">
+          <div style="border-left:2px solid #b45309;padding-left:11px">
+            <div style="font-size:12.5px;font-weight:700">{{ r.rule }}</div>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:4px;line-height:1.55">{{ r.why }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:14px;padding-top:12px;border-top:1px solid #f2f1f5;line-height:1.6">The whole card is the tap target — a 44pt-plus surface with a chevron as its only affordance. Desktop's small "View more" link would be a 14pt target here, which is a miss waiting to happen.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ M3 · ARCHETYPES 1–3 ══════════ -->
+<section class="ab" id="m3">
+  <div class="ab-hd"><a class="ab-id" href="#m3">M3</a><span class="ab-nm">Detail reflow — WORK BOARD · LEDGER · COLLECTION</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 18px">A zone keeps its desktop archetype on mobile; only the layout changes. Each screen is <em>pushed</em>, not modal, so the back gesture works — and each carries the same AI FAB, because a detail page is exactly where "summarise this ledger" belongs.</div>
+  <div class="row">
+    <sc-for list="{{ arch1 }}" as="a" hint-placeholder-count="3">
+      <div>
+        <div class="ph">
+          <div class="notch"><span>9:41</span><span class="stat"><span style="width:17px;height:11px" dangerouslySetInnerHTML="{{ cellIcon }}"></span><span style="width:15px;height:11px" dangerouslySetInnerHTML="{{ wifiIcon }}"></span><span style="width:25px;height:12px" dangerouslySetInnerHTML="{{ battIcon }}"></span></span></div>
+          <div class="body">
+            <div style="background:#fff;border-bottom:1px solid #ececf1;padding:6px 16px 11px">
+              <div style="display:flex;align-items:center;gap:11px">
+                <span style="font-size:22px;color:#b45309;font-weight:600">‹</span>
+                <div style="min-width:0;flex:1">
+                  <div class="lbl" style="font-size:9px">{{ a.arch }}</div>
+                  <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;margin-top:2px">{{ a.zone }}</div>
+                </div>
+                <span style="width:20px;height:20px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ a.toolIcon }}"></span>
+              </div>
+            </div>
+            <sc-if value="{{ a.segments }}">
+              <div style="background:#fff;padding:0 16px 11px;border-bottom:1px solid #ececf1">
+                <div style="display:flex;background:#f2f1f5;border-radius:9px;padding:2px">
+                  <sc-for list="{{ a.segments }}" as="s" hint-placeholder-count="4"><span style="{{ s.style }}">{{ s.label }}</span></sc-for>
+                </div>
+              </div>
+            </sc-if>
+            <div class="scroll" style="padding-top:12px">
+              <sc-if value="{{ a.isGrid }}">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+                  <sc-for list="{{ a.items }}" as="i" hint-placeholder-count="6">
+                    <div class="c" style="padding:0;overflow:hidden">
+                      <div style="{{ i.thumbStyle }}"><span style="font-size:10px;font-weight:800;color:#b45309">{{ i.kind }}</span></div>
+                      <div style="padding:9px 10px">
+                        <div style="font-size:11.5px;font-weight:700;line-height:1.35">{{ i.name }}</div>
+                        <div class="num" style="font-size:10px;color:#615c6e;margin-top:4px">{{ i.meta }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ a.isRows }}">
+                <div style="display:grid;gap:10px">
+                  <sc-for list="{{ a.items }}" as="i" hint-placeholder-count="4">
+                    <div style="{{ i.rowStyle }}">
+                      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                        <div style="min-width:0;flex:1">
+                          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                            <span style="font-size:14px;font-weight:700">{{ i.name }}</span>
+                            <sc-if value="{{ i.chip }}"><span class="tag">{{ i.chip }}</span></sc-if>
+                          </div>
+                          <div style="font-size:11.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ i.meta }}</div>
+                        </div>
+                        <div style="text-align:right;flex:none">
+                          <div class="num" style="font-size:14px;font-weight:800;color:{{ i.amountInk }}">{{ i.amount }}</div>
+                          <sc-if value="{{ i.sub }}"><div class="num" style="font-size:10px;color:#615c6e;margin-top:3px">{{ i.sub }}</div></sc-if>
+                        </div>
+                      </div>
+                      <sc-if value="{{ i.bar }}">
+                        <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:10px"><div style="height:100%;width:{{ i.barPct }}%;background:{{ i.amountInk }};border-radius:999px"></div></div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+            <div class="fab" style="background:#b45309;bottom:26px">
+              <span style="width:22px;height:22px;display:block;color:#fff" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+              <span style="position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#10b981;border:2.5px solid #fff"></span>
+            </div>
+          </div>
+          <div class="hi"><div class="hib"></div></div>
+        </div>
+        <div class="cap">{{ a.cap }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<!-- ══════════ M4 · ARCHETYPES 4–6 ══════════ -->
+<section class="ab" id="m4">
+  <div class="ab-hd"><a class="ab-id" href="#m4">M4</a><span class="ab-nm">Detail reflow — FEED · MATCH ENGINE · ANALYTICS</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 18px">These three lose the most on desktop-to-mobile, because each relies on adjacency: sidebar filters, side-by-side compare, several time ranges at once. Each keeps the capability and moves the adjacency into a gesture.</div>
+  <div class="row">
+    <sc-for list="{{ arch2 }}" as="a" hint-placeholder-count="3">
+      <div>
+        <div class="ph">
+          <div class="notch"><span>9:41</span><span class="stat"><span style="width:17px;height:11px" dangerouslySetInnerHTML="{{ cellIcon }}"></span><span style="width:15px;height:11px" dangerouslySetInnerHTML="{{ wifiIcon }}"></span><span style="width:25px;height:12px" dangerouslySetInnerHTML="{{ battIcon }}"></span></span></div>
+          <div class="body">
+            <div style="background:#fff;border-bottom:1px solid #ececf1;padding:6px 16px 11px">
+              <div style="display:flex;align-items:center;gap:11px">
+                <span style="font-size:22px;color:#b45309;font-weight:600">‹</span>
+                <div style="min-width:0;flex:1">
+                  <div class="lbl" style="font-size:9px">{{ a.arch }}</div>
+                  <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;margin-top:2px">{{ a.zone }}</div>
+                </div>
+                <span style="width:20px;height:20px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ a.toolIcon }}"></span>
+              </div>
+            </div>
+            <sc-if value="{{ a.chips }}">
+              <div style="background:#fff;padding:0 16px 11px;border-bottom:1px solid #ececf1;display:flex;gap:7px;overflow:hidden">
+                <sc-for list="{{ a.chips }}" as="c" hint-placeholder-count="4"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+              </div>
+            </sc-if>
+            <div class="scroll" style="padding-top:12px">
+              <sc-if value="{{ a.isFeed }}">
+                <div style="display:grid;gap:10px">
+                  <sc-for list="{{ a.items }}" as="i" hint-placeholder-count="4">
+                    <div style="{{ i.rowStyle }}">
+                      <div style="display:flex;align-items:flex-start;gap:11px">
+                        <div style="width:30px;height:30px;border-radius:9px;background:#fffbf2;color:#b45309;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none">{{ i.init }}</div>
+                        <div style="min-width:0;flex:1">
+                          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:700">{{ i.name }}</span><span class="tag">{{ i.chip }}</span></div>
+                          <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.5">{{ i.body }}</div>
+                          <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ i.meta }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ a.isMatch }}">
+                <div style="position:relative">
+                  <div style="position:absolute;top:9px;left:11px;right:11px;height:100%;background:#fff;border:1px solid #ececf1;border-radius:14px"></div>
+                  <div style="position:absolute;top:4.5px;left:5.5px;right:5.5px;height:100%;background:#fff;border:1px solid #ececf1;border-radius:14px"></div>
+                  <div class="c" style="padding:16px;position:relative">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                      <div style="min-width:0">
+                        <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">{{ a.top.who }}</div>
+                        <div style="font-size:11px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 7px;display:inline-block;margin-top:7px">{{ a.top.seam }}</div>
+                      </div>
+                      <div style="text-align:center;flex:none">
+                        <div class="num" style="font-size:26px;font-weight:800;letter-spacing:-.02em;color:#047857">{{ a.top.score }}</div>
+                        <div class="lbl" style="font-size:8.5px">match</div>
+                      </div>
+                    </div>
+                    <div style="font-size:12px;color:#3f3a49;margin-top:12px;line-height:1.6">{{ a.top.need }}</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+                      <sc-for list="{{ a.top.receipts }}" as="r" hint-placeholder-count="3"><span style="{{ r.style }}">{{ r.label }}</span></sc-for>
+                    </div>
+                    <div style="display:flex;gap:9px;margin-top:14px">
+                      <span style="flex:1;text-align:center;font-size:14px;font-weight:700;padding:12px 0;border-radius:11px;background:#b45309;color:#fff">Accept</span>
+                      <span style="flex:1;text-align:center;font-size:14px;font-weight:700;padding:12px 0;border-radius:11px;background:#fff;color:#3f3a49;border:1px solid #e2e1e8">Pass</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px">
+                    <sc-for list="{{ a.dots }}" as="d" hint-placeholder-count="4"><span style="{{ d.style }}"></span></sc-for>
+                  </div>
+                  <div style="text-align:center;font-size:11px;color:#615c6e;margin-top:9px;line-height:1.5">{{ a.stackNote }}</div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ a.isChart }}">
+                <div style="display:grid;gap:11px">
+                  <sc-for list="{{ a.charts }}" as="c" hint-placeholder-count="2">
+                    <div class="c" style="padding:14px 15px">
+                      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                        <div><div class="lbl" style="font-size:9.5px">{{ c.label }}</div><div class="num" style="font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:5px;line-height:1;color:{{ c.ink }}">{{ c.value }}</div></div>
+                        <span style="font-size:10.5px;font-weight:700;color:#615c6e;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:999px;padding:3px 9px;flex:none">{{ c.range }}</span>
+                      </div>
+                      <div style="display:flex;align-items:flex-end;gap:3px;height:52px;margin-top:13px">
+                        <sc-for list="{{ c.bars }}" as="b" hint-placeholder-count="8"><div style="{{ b.style }}"></div></sc-for>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:9px;border-top:1px solid #f4f3f7">
+                        <span style="font-size:10.5px;color:#615c6e">‹ swipe to change range ›</span>
+                        <span style="font-size:11px;font-weight:700;color:#b45309">Expand</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+            <div class="fab" style="background:#b45309;bottom:26px">
+              <span style="width:22px;height:22px;display:block;color:#fff" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+              <span style="position:absolute;top:-2px;right:-2px;width:14px;height:14px;border-radius:50%;background:#10b981;border:2.5px solid #fff"></span>
+            </div>
+          </div>
+          <div class="hi"><div class="hib"></div></div>
+        </div>
+        <div class="cap">{{ a.cap }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<!-- ══════════ M5 · AI RAIL SHEET ══════════ -->
+<section class="ab" id="m5">
+  <div class="ab-hd"><a class="ab-id" href="#m5">M5</a><span class="ab-nm">AI rail — persistent panel → FAB + bottom sheet</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 18px">There is no room for a 284pt rail beside a 390pt screen, so it becomes a FAB whose badge always states the mode — green for AI, hollow for manual. Tapping opens a sheet, not a full-screen modal, so the page stays visible above it. The token meter comes along unchanged: it is a trust surface, and a trust surface that disappears on the smaller screen was never one.</div>
+  <div class="row">
+    <sc-for list="{{ sheets }}" as="s" hint-placeholder-count="2">
+      <div>
+        <div class="ph">
+          <div class="notch"><span>9:41</span><span class="stat"><span style="width:17px;height:11px" dangerouslySetInnerHTML="{{ cellIcon }}"></span><span style="width:15px;height:11px" dangerouslySetInnerHTML="{{ wifiIcon }}"></span><span style="width:25px;height:12px" dangerouslySetInnerHTML="{{ battIcon }}"></span></span></div>
+          <div class="body">
+            <div style="background:#fff;border-bottom:1px solid #ececf1;padding:6px 16px 11px;filter:blur(1px);opacity:.45">
+              <div style="display:flex;align-items:center;gap:11px"><span style="font-size:22px;color:#b45309">‹</span><div><div class="lbl" style="font-size:9px">LEDGER</div><div style="font-size:18px;font-weight:800;margin-top:2px">Retainers</div></div></div>
+            </div>
+            <div class="scroll" style="padding-top:12px;filter:blur(1px);opacity:.45">
+              <div class="c" style="padding:14px 15px"><div class="lbl">MRR</div><div class="num" style="font-size:21px;font-weight:800;margin-top:5px">$21,000</div></div>
+            </div>
+            <div class="scrim" style="background:rgba(24,24,27,.3)"></div>
+            <div class="sheet" style="padding-bottom:0">
+              <div class="grab"></div>
+              <div style="padding:0 16px 13px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font-size:17px;font-weight:800;letter-spacing:-.02em">Worker AI</span>
+                <span class="num" style="font-size:11px;color:#615c6e">{{ s.page }}</span>
+              </div>
+              <div style="padding:0 16px 13px;display:grid;gap:8px">
+                <sc-for list="{{ s.modes }}" as="m" hint-placeholder-count="2">
+                  <div style="{{ m.style }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                      <span style="font-size:15px;font-weight:{{ m.weight }};color:{{ m.ink }}">{{ m.label }}</span>
+                      <span style="{{ m.toggle }}"><span style="{{ m.knob }}"></span></span>
+                    </div>
+                    <div style="font-size:12px;color:{{ m.subInk }};margin-top:5px;line-height:1.5">{{ m.note }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="padding:0 16px 8px"><div class="lbl">Model · this page</div></div>
+              <div style="padding:0 16px 13px;display:grid;gap:7px">
+                <sc-for list="{{ s.models }}" as="m" hint-placeholder-count="3">
+                  <div style="{{ m.rowStyle }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+                      <span style="font-size:14px;font-weight:{{ m.weight }}">{{ m.name }}</span>
+                      <sc-if value="{{ m.rec }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span></sc-if>
+                    </div>
+                    <sc-if value="{{ m.rec }}"><div class="num" style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ m.id }}</div></sc-if>
+                    <div class="num" style="font-size:11.5px;color:#615c6e;margin-top:5px">{{ m.price }}</div>
+                    <sc-if value="{{ m.est }}"><div class="num" style="font-size:12px;font-weight:700;color:#047857;margin-top:5px">{{ m.est }}</div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="padding:0 16px 13px">
+                <div style="border:1px solid #ececf1;border-radius:11px;padding:12px 13px">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:9px">
+                    <span class="num" style="font-size:19px;font-weight:800;letter-spacing:-.02em">$18.60</span>
+                    <span style="font-size:11.5px;color:#615c6e">of $40.00 this month</span>
+                  </div>
+                  <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:9px"><div style="height:100%;width:47%;background:#d97706;border-radius:999px"></div></div>
+                  <div class="num" style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.5">{{ s.receipt }}</div>
+                </div>
+              </div>
+              <div style="padding:0 16px 12px;border-top:1px solid #f2f1f5;padding-top:12px">
+                <div style="{{ s.ctaStyle }}">{{ s.cta }}</div>
+                <div style="height:26px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="hi"><div class="hib"></div></div>
+        </div>
+        <div class="cap">{{ s.cap }}</div>
+      </div>
+    </sc-for>
+
+    <div class="spec" style="flex:1;min-width:290px">
+      <div class="lbl">Gesture &amp; interaction conventions</div>
+      <div style="display:grid;gap:11px;margin-top:12px">
+        <sc-for list="{{ gestures }}" as="g" hint-placeholder-count="6">
+          <div style="border-left:2px solid #4f46e5;padding-left:11px">
+            <div style="font-size:12.5px;font-weight:700">{{ g.rule }}</div>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:4px;line-height:1.55">{{ g.why }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="lbl" style="margin-top:18px">Visual carryover</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px">
+        <sc-for list="{{ accents }}" as="a" hint-placeholder-count="4">
+          <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:10px 11px">
+            <div style="display:flex;align-items:center;gap:7px"><span style="width:11px;height:11px;border-radius:3px;background:{{ a.fill }};flex:none"></span><span style="font-size:11.5px;font-weight:700">{{ a.name }}</span></div>
+            <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px;font-family:ui-monospace,Menlo,monospace">{{ a.text }} · {{ a.fillHex }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">Unchanged from desktop: text token at the 700 step, fill at 600, Inter throughout, and dark-mode pairs exactly as each license already defines them. Body text floors at 16px so iOS does not zoom on input focus — which is why the sheet's mode labels and model names are 15–17px rather than the 12–13px their desktop equivalents use.</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      pipe:  this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      del:   this.ic('<path d="M3 8 12 3l9 5v8l-9 5-9-5Z"/><path d="M3 8l9 5 9-5"/>'),
+      off:   this.ic('<path d="M4 7h16v13H4Z"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      trust: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
+      more:  this.ic('<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>'),
+      spark: this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>'),
+      filt:  this.ic('<path d="M4 6h16M7 12h10M10 18h4"/>'),
+      sort:  this.ic('<path d="M7 4v16M7 20l-3-3M7 4l3 3M17 20V4M17 4l3 3M17 20l-3-3"/>')
+    };
+
+    const AM = '#b45309', AMF = '#d97706';
+    const usd = (n) => '$' + n.toLocaleString('en-US');
+
+    const tabPill = (on, ink) => 'font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;'
+      + (on ? 'background:' + ink + ';color:#fff;border:1px solid ' + ink : 'background:#fff;color:#4a4553;border:1px solid #e2e1e8');
+    const chip = (on) => 'font-size:13px;font-weight:' + (on ? '700' : '600')
+      + ';padding:7px 13px;border-radius:999px;white-space:nowrap;flex:none;'
+      + (on ? 'background:#fffbf2;color:' + AM + ';border:1px solid #fde68a' : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
+    const segItem = (on) => 'flex:1;text-align:center;font-size:12.5px;font-weight:' + (on ? '700' : '600')
+      + ';padding:8px 0;border-radius:7px;' + (on ? 'background:#fff;color:' + AM + ';box-shadow:0 1px 2px rgba(24,24,27,.1)' : 'color:#4a4553');
+    const RC = { hit:['#ecfdf5','#047857','#a7f3d0'], part:['#fffbeb','#92400e','#fde68a'], miss:['#fef2f2','#b91c1c','#fecaca'] };
+    const receipt = (label, kind) => {
+      const c = RC[kind];
+      return { label, style:'font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2] };
+    };
+
+    return {
+      sparkIcon: I.spark,
+      // Status chrome drawn as SVG. The previous glyphs were SF Symbols private-use codepoints,
+      // which only map in SF Pro — a font this page never loads, so they rendered as tofu.
+      cellIcon: { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17 11" width="100%" height="100%" fill="currentColor"><rect x="0" y="7.5" width="3" height="3.5" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>' },
+      wifiIcon: { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 11" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 3.4a9.4 9.4 0 0 1 13 0"/><path d="M3.5 6.2a5.8 5.8 0 0 1 8 0"/><circle cx="7.5" cy="9.3" r="1.1" fill="currentColor" stroke="none"/></svg>' },
+      battIcon: { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 12" width="100%" height="100%"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.2" y="2.2" width="15" height="7.6" rx="1.8" fill="currentColor"/><path d="M23.2 4.2v3.6a2 2 0 0 0 0-3.6Z" fill="currentColor" fill-opacity=".4"/></svg>' },
+
+      // ── M1 · allocations ──
+      allocations: [
+        { product:'Founder', ink:'#6d28d9', tint:'#faf7ff', edge:'#d8c9ff', rows:9,
+          tabs:['Home','Build','Raise','Grow'],
+          more:'Validate, Network, Research, Trust, Company Settings',
+          why:'Build, Raise and Grow are opened daily once a company exists. Validate front-loads hard in the first weeks and then tapers, so it earns depth rather than a permanent tab.' },
+        { product:'Investor / LP', ink:'#4338ca', tint:'#f5f5ff', edge:'#c7d2fe', rows:9,
+          tabs:['Home','Deals','Portfolio','Axal VC Fund'],
+          more:'Fund, Network, Research, Trust, Firm Settings',
+          why:'Deals and Portfolio are the deploy-and-watch pair; Axal VC Fund is the LP\u2019s own position. Fund — the GP back office — is high-intent monthly work, not habit, and it is an Institutional add-on besides.' },
+        { product:'Advisor', ink:'#047857', tint:'#f2fdf7', edge:'#a7f3d0', rows:8,
+          tabs:['Home','Practice','Cohorts','Network'],
+          more:'Expertise, Research, Trust, Practice Settings',
+          why:'Practice is where the money and calendar live; Cohorts is a daily obligation while a cohort runs. Expertise is a storefront you tend weekly, not hourly.' },
+        { product:'Service Partner', ink:'#b45309', tint:'#fffbf2', edge:'#fde68a', rows:8,
+          tabs:['Home','Pipeline','Delivery','Offers'],
+          more:'Network, Research, Trust, Firm Settings',
+          why:'Win the work, ship the work, package what you sell — the three verbs of a firm. Network matters here but is opened with intent, not by reflex.' }
+      ].map(a => ({
+        product:a.product, rows:String(a.rows), more:a.more, why:a.why, ink:a.ink,
+        cardStyle:'background:#fff;border:1px solid ' + a.edge + ';border-radius:12px;padding:16px 18px',
+        tabs:a.tabs.map((t, i) => ({ label:t, style:tabPill(i === 0, a.ink) }))
+      })),
+      moreRows: [
+        { label:'Network', icon:I.net }, { label:'Research', icon:I.res },
+        { label:'Trust', icon:I.trust }, { label:'Firm Settings', icon:I.cog }
+      ],
+
+      // ── M2 · hub, two lenses ──
+      tabBar: [
+        { label:'Home', icon:I.home, on:false }, { label:'Pipeline', icon:I.pipe, on:true },
+        { label:'Delivery', icon:I.del, on:false }, { label:'Offers', icon:I.off, on:false },
+        { label:'More', icon:I.more, on:false }
+      ].map(t => ({ label:t.label, icon:t.icon, ink: t.on ? AM : '#615c6e', weight: t.on ? '700' : '600' })),
+
+      hubs: [
+        { badge:'4 need you', active:0,
+          chips:['Leads','Proposals','Negotiations','Retainers','Analytics'],
+          cards:[
+            { zone:'Leads', value:'4 open', ink:'#18181b', facts:[{ k:'Strong fit', v:'1' }, { k:'Warm path', v:'2' }] },
+            { zone:'Proposals', value:usd(100500), ink:AM, facts:[{ k:'Live', v:'4' }, { k:'Never opened', v:'1' }] },
+            { zone:'Negotiations', value:'4 live', ink:'#18181b', facts:[{ k:'Awaiting you', v:'2' }, { k:'Stalled 7d+', v:'1' }] }
+          ],
+          cap:'Lens one. Chips pin under the header and scroll horizontally; only the active lens renders. Each card is one desktop zone compressed to its headline plus two facts.' },
+        { badge:'2 renew soon', active:3,
+          chips:['Leads','Proposals','Negotiations','Retainers','Analytics'],
+          cards:[
+            { zone:'Retainers · MRR', value:usd(21000), ink:'#18181b', facts:[{ k:'Retainers', v:'2' }, { k:'Embedded seat', v:'1' }] },
+            { zone:'Renewing in 30 d', value:'2', ink:AM, facts:[{ k:'Thornfield', v:'17d' }, { k:'Halverton', v:'9d' }] },
+            { zone:'Utilization', value:'1 at risk', ink:'#b91c1c', facts:[{ k:'Under 60%', v:'1' }, { k:'Over 100%', v:'1' }] }
+          ],
+          cap:'Lens four, reached by swiping the content area three times or tapping its chip. Same page, same zones, same order as desktop — no route change, no scroll hunt.' }
+      ].map(h => {
+        // Measured left edge of each chip inside the 390pt row. A real scrollable strip brings
+        // the active chip into comfortable view, so the offset derives from the active index —
+        // otherwise the row always renders from chip 1 and the last lens is never visible.
+        const CHIP_X = [16, 89, 187, 301, 397];
+        const off = h.active <= 1 ? 0 : CHIP_X[h.active] - 100;
+        return {
+          badge:h.badge, cards:h.cards, cap:h.cap,
+          stripStyle:'display:flex;gap:7px;padding:0 16px;width:max-content;transform:translateX(-' + off + 'px)',
+          chips:h.chips.map((c, i) => ({ label:c, style:chip(i === h.active) }))
+        };
+      }),
+
+      cardRules: [
+        { rule:'Two to four data points, never a grid', why:'A desktop zone showing a six-column table becomes a headline plus the two facts that decide whether you tap. The table itself lives one push deeper.' },
+        { rule:'The card is the tap target', why:'Whole-card, chevron-only. No 14pt "View more" link, which is the smallest thing a thumb can be asked to hit and the easiest to miss.' },
+        { rule:'Desktop priority order, unchanged', why:'The compressed layer already decided what matters first. Re-sorting for mobile would mean two products disagreeing about the same zone.' },
+        { rule:'One lens at a time', why:'Four lenses stacked is three screens of scroll before lens two. Swipe replaces scroll as the way across, which is what the desktop single page was for.' }
+      ],
+
+      // ── M3 · archetypes 1–3 ──
+      arch1: [
+        { arch:'WORK BOARD', zone:'Negotiations', toolIcon:I.filt, isRows:true,
+          segments:['Scoping','Terms','Legal','Ready'],
+          items:[
+            { name:'Kelp Bio', chip:'Retainer', meta:'Month-to-month vs your three-month minimum. Their move.', amount:usd(10500) + '/mo', amountInk:AM, sub:'2 d' },
+            { name:'Solano Health', chip:'Fixed scope', meta:'Compliance review before terms. Their counsel has it.', amount:usd(58000), amountInk:AM, sub:'5 d' }
+          ],
+          cap:'Columns become a segmented control; one column renders at a time. Status changes are a bottom-sheet action, because dragging a card across four columns cannot be done single-handed.' },
+        { arch:'LEDGER', zone:'Retainers', toolIcon:I.sort, isRows:true,
+          items:[
+            { name:'Thornfield', chip:'Retainer', meta:'11 of 32 h · renews in 17 d', amount:usd(7500), amountInk:'#b91c1c', sub:'34% used', bar:true, barPct:'34' },
+            { name:'Halverton', chip:'Retainer', meta:'19 of 20 h · renews in 9 d', amount:usd(4500), amountInk:'#047857', sub:'95% used', bar:true, barPct:'95' },
+            { name:'Novacraft Labs', chip:'Embedded seat', meta:'47 of 40 h · renews Nov 1', amount:usd(9000), amountInk:'#92400e', sub:'118% used', bar:true, barPct:'100' }
+          ],
+          cap:'Rows become cards: two lead fields, the amount right-aligned, the utilization bar kept because it is the argument. Column headers collapse into a sort-and-filter sheet behind the toolbar icon.' },
+        { arch:'COLLECTION', zone:'Deliverables', toolIcon:I.filt, isGrid:true,
+          items:[
+            { name:'Design system v2', kind:'FIG', meta:'Opened 3× · 1h ago' },
+            { name:'Q3 advisory review', kind:'PDF', meta:'Opened twice' },
+            { name:'Pricing tier model', kind:'XLSX', meta:'Not started' },
+            { name:'Board brief · Aug', kind:'PDF', meta:'Sent, unopened' },
+            { name:'Packaging teardown', kind:'PDF', meta:'Replied' },
+            { name:'Handover pack', kind:'ZIP', meta:'Draft' }
+          ],
+          cap:'The desktop grid halves to two columns, which is the point at which a thumbnail is still legible at this width. Tap opens a full-screen preview that swipes between items, so reading four documents does not mean four returns to the grid.' }
+      ].map(a => ({
+        arch:a.arch, zone:a.zone, toolIcon:a.toolIcon, cap:a.cap,
+        isRows:!!a.isRows, isGrid:!!a.isGrid,
+        segments: a.segments ? a.segments.map((s, i) => ({ label:s, style:segItem(i === 1) })) : null,
+        items:(a.items || []).map(i => Object.assign({}, i, {
+          rowStyle:'background:#fff;border:1px solid ' + (i.amountInk === '#b91c1c' ? '#fecaca' : '#ececf1') + ';border-radius:14px;padding:14px 15px',
+          thumbStyle:'height:74px;background:#fffbf2;border-bottom:1px solid #fde68a;display:flex;align-items:center;justify-content:center'
+        }))
+      })),
+
+      // ── M4 · archetypes 4–6 ──
+      arch2: [
+        { arch:'FEED', zone:'Reporting', toolIcon:I.filt, isFeed:true,
+          chips:['All','Overdue','Sent','Acknowledged'],
+          items:[
+            { init:'VW', name:'Verwood', chip:'Overdue', body:'Weekly status not sent. Scope drift of 26 unbilled hours is unreported for a third week.', meta:'Due Mon · 3 d late' },
+            { init:'NL', name:'Novacraft Labs', chip:'Acknowledged', body:'Week 8 status read and replied. They asked to extend the seat through Q4.', meta:'Sent Mon · read 2h ago' },
+            { init:'HV', name:'Halverton', chip:'Sent', body:'Monthly review delivered. No read receipt yet.', meta:'Sent Fri · unopened' }
+          ],
+          cap:'Spirit unchanged — a full-width chronological stream. Desktop\u2019s sidebar filters become a pinned chip row, and pull-to-refresh applies here and on LEDGER, the two archetypes where new rows actually arrive.' },
+        { arch:'MATCH ENGINE', zone:'Leads', toolIcon:I.filt, isMatch:true,
+          chips:['Open','Strong fit','Warm','Passed'],
+          top:{ who:'Tessellate', score:'91', seam:'Marketplace need · 2h ago',
+            need:'Design system and component library, pre-seed, 8 weeks. Budget stated at ' + usd(32000) + '.',
+            receipts:[receipt('Design system · exact','hit'), receipt('Retainer-shaped','hit'), receipt('Budget stated','hit')] },
+          dots:[true, false, false, false],
+          stackNote:'Swipe for the next lead · Compare pins two side by side',
+          cap:'Desktop compares side by side; 390pt cannot. So it becomes a swipeable stack, one candidate at a time, score as a badge — and Compare exists as an explicit action that pins two, never as the default.' },
+        { arch:'ANALYTICS', zone:'Analytics', toolIcon:I.filt, isChart:true,
+          charts:[
+            { label:'Win rate', value:'40%', ink:'#18181b', range:'Q3',
+              bars:[26, 33, 40, 22, 40, 50, 40, 40] },
+            { label:'Median cycle', value:'22 d', ink:AM, range:'Q3',
+              bars:[18, 20, 22, 24, 22, 14, 22, 22] }
+          ],
+          cap:'One metric per full-width card, stacked. Horizontal swipe inside a card changes the time range rather than showing three ranges at once, and the sparkline leads so the number is legible before anything is expanded.' }
+      ].map(a => ({
+        arch:a.arch, zone:a.zone, toolIcon:a.toolIcon, cap:a.cap,
+        isFeed:!!a.isFeed, isMatch:!!a.isMatch, isChart:!!a.isChart,
+        chips: a.chips ? a.chips.map((c, i) => ({ label:c, style:chip(i === 0) })) : null,
+        items:(a.items || []).map(i => Object.assign({}, i, {
+          rowStyle:'background:#fff;border:1px solid ' + (i.chip === 'Overdue' ? '#fecaca' : '#ececf1') + ';border-radius:14px;padding:14px 15px'
+        })),
+        top:a.top || null, stackNote:a.stackNote || null,
+        dots:(a.dots || []).map(on => ({ style:'width:' + (on ? '18px' : '6px') + ';height:6px;border-radius:999px;background:' + (on ? AM : '#d4d2dc') + ';flex:none' })),
+        charts:(a.charts || []).map(c => Object.assign({}, c, {
+          bars:c.bars.map((v, i) => ({ style:'flex:1;min-width:0;border-radius:2px 2px 0 0;height:' + v * 2 + '%;background:' + (i === c.bars.length - 1 ? AMF : '#fcd34d') }))
+        }))
+      })),
+
+      // ── M5 · sheets ──
+      sheets: [
+        { page:'Retainers', mode:'ai',
+          receipt:'Last run · renewal risk on 3 retainers · 6,800 in / 900 out · $0.0029',
+          cta:'Let Personal Advisor fill this in', ctaOn:true,
+          cap:'Personal Advisor active. The FAB badge is green, the sheet leads with the mode, and the meter stays — including what the run just cost. Page context is still readable above the sheet.' },
+        { page:'Retainers', mode:'manual',
+          receipt:'No run this session · manual mode consumes no tokens',
+          cta:'Run with this model', ctaOn:false,
+          cap:'Manual. The model list stays visible and selectable, because choosing your AI staff is part of the workflow even before you hand anything over — and the meter reads zero rather than vanishing.' }
+      ].map(s => {
+        const ai = s.mode === 'ai';
+        return {
+          page:s.page, receipt:s.receipt, cta:s.cta, cap:s.cap,
+          ctaStyle:'text-align:center;font-size:16px;font-weight:700;padding:15px 0;border-radius:13px;'
+            + (s.ctaOn ? 'background:' + AM + ';color:#fff' : 'background:#fff;color:' + AM + ';border:1.5px solid ' + AM),
+          modes:[
+            { label:'Manual', on:!ai, note:'The ledger, calendar and board work alone. No tokens.' },
+            { label:'Personal Advisor', on:ai, note:'Drafts into empty fields as accept / edit / discard proposals. Never auto-committed.' }
+          ].map(m => ({
+            label:m.label, note:m.note,
+            weight: m.on ? '800' : '600',
+            ink: m.on ? '#92400e' : '#18181b',
+            subInk: m.on ? '#92400e' : '#615c6e',
+            style:'border-radius:12px;padding:13px 14px;'
+              + (m.on ? 'background:#fffbf2;border:1.5px solid ' + AMF : 'background:#fff;border:1px solid #ececf1'),
+            toggle:'width:44px;height:26px;border-radius:999px;position:relative;flex:none;background:' + (m.on ? AMF : '#d4d2dc'),
+            knob:'position:absolute;top:3px;' + (m.on ? 'right:3px' : 'left:3px') + ';width:20px;height:20px;border-radius:50%;background:#fff'
+          })),
+          models:[
+            { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct', rec:true,
+              price:'$0.351 / M in · $0.555 / M out', est:'≈ $0.0029 per renewal read' },
+            { name:'GPT-OSS 20B', rec:false, price:'$0.200 / $0.300' },
+            { name:'Granite 4.0 H Micro', rec:false, price:'$0.017 / $0.112' }
+          ].map(m => ({
+            name:m.name, id:m.id || null, rec:m.rec, price:m.price, est:m.est || null,
+            weight: m.rec ? '800' : '600',
+            rowStyle:'border-radius:12px;padding:12px 13px;'
+              + (m.rec ? 'background:#fffbf2;border:1.5px solid ' + AMF : 'background:#fff;border:1px solid #ececf1')
+          }))
+        };
+      }),
+
+      gestures: [
+        { rule:'Swipe-back from the left edge', why:'Every detail screen is pushed, not modal, so the platform gesture and the hardware back button both work without a custom handler.' },
+        { rule:'Pull-to-refresh on FEED and LEDGER', why:'Only the two archetypes where rows genuinely arrive. Putting it on a static COLLECTION teaches the gesture to mean nothing.' },
+        { rule:'Long-press replaces hover', why:'Everything desktop revealed on hover — row actions, receipts, tooltips — moves to long-press or into the card. Nothing may be hover-only, because hover does not exist.' },
+        { rule:'Bottom sheets replace every panel and popover', why:'The AI rail, the More menu, filters, sort, status changes. One pattern, dismissed the same way each time.' },
+        { rule:'44×44pt minimum, no exceptions', why:'Which is why the whole zone card is tappable and why the chip row uses 13px type at 7px padding rather than desktop\u2019s 11px.' },
+        { rule:'Safe areas on every screen', why:'Tab bar sits above the gesture bar; the sheet\u2019s primary action clears the home indicator. The notch inset applies even on screens with no header.' }
+      ],
+
+      accents: [
+        { name:'Founder', text:'#6d28d9', fill:'#7c3aed', fillHex:'#7c3aed' },
+        { name:'Investor / LP', text:'#4338ca', fill:'#4f46e5', fillHex:'#4f46e5' },
+        { name:'Advisor', text:'#047857', fill:'#059669', fillHex:'#059669' },
+        { name:'Service Partner', text:'#b45309', fill:'#d97706', fillHex:'#d97706' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

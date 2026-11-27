@@ -1,0 +1,52 @@
+name: CHANGELOG gate
+
+# CHANGELOG.md is Session 1's (AGENTS.md; the owner, 2026-10-19). Every task PR
+# that added an entry at the top of the file conflicted with every other open
+# PR on the same lines. scripts/changelog-gate.mjs holds the check; this file
+# only decides WHEN it runs and WHAT it compares against.
+#
+# Every pull request is checked, whatever its base, so a PR stacked on another
+# PR's branch is held to the same rule. The `labeled` and `unlabeled` types
+# re-run the check when Session 1 adds or removes the `changelog` label, the
+# only way a PR may edit the file.
+#
+# Full history makes the PR event commits and their common history available
+# locally, so the gate normally needs no additional network access.
+#
+# Every value reaches the script through `env:`, never `${{ }}` inside `run:`,
+# so nothing a PR controls is ever parsed as shell.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: CHANGELOG.md untouched
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    # Full history (fetch-depth: 0 below) so the gate can find the merge base.
+    # That checkout has exceeded this job's old 5-minute limit before the gate
+    # ran (#3524, 2026-10-27), so the job allows 15.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: The PR leaves CHANGELOG.md alone unless it is labelled changelog
+        env:
+          CHANGELOG_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CHANGELOG_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHANGELOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'changelog') }}
+        run: node scripts/changelog-gate.mjs

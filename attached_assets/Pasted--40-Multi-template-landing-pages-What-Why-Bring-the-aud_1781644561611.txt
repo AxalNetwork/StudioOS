@@ -1,0 +1,38 @@
+#40 - Multi-template landing pages
+What & Why
+Bring the audience-specific landing page system from PR #87 (branch claude/fervent-bell-get7yn) into main. It adds five public marketing landing pages under /lp/*, a shared brand kit, and a reusable component library so each audience (founders, customer discovery, investors, partners, spin-out demo day) gets a tailored entry page that funnels into the right registration lane.
+The branch's source work is exactly 19 files. The branch also contains ~321 changed files under docs/, which are build artifacts from running the production build on the branch — these must be ignored, not brought into main.
+Done looks like
+* Visiting each route renders a complete, correct landing page:
+    * /lp/founder, /lp/customer-discovery, /lp/investor, /lp/partner, /lp/spinout-demo-day
+* Each page forces light theme (no dark-mode bleed), shares the same brand kit (buttons, section backgrounds, Space Grotesk display font), and is lazy-loaded as its own JS chunk.
+* CTAs route to the correct destinations: founder & customer-discovery → /register?lane=founder, investor → /register?lane=lp, partner → /register?lane=partner, spin-out demo day → its custom RSVP CTA.
+* Animated bits work (count-up metrics strip, animated timeline), the investor "data room" access block renders, and the partner page #models anchor scrolls correctly.
+* Pages are responsive on mobile (hero, grids, timeline).
+* npm run build and npm run typecheck pass. No docs/ build-artifact churn is committed.
+* The five /lp routes are wired into the apex routing config so they resolve publicly once deployed (see step 4).
+Out of scope
+* Deploying to production. Prod is a Cloudflare Worker via npm run deploy and is an operator action — do not run wrangler pages deploy. The new apex routes only take effect on the operator's next deploy.
+* Closing PR #87 / deleting the branch (handled by the dependent cleanup task).
+* Any of the ~321 docs/ files in the branch — those are generated build output and must not be committed.
+* New content/design changes beyond what the branch already implements.
+Steps
+1. Pull the 19 source files from the branch. Copy the exact contents of these files from branch claude/fervent-bell-get7yn into main (use the GitHub API raw contents endpoint with the available GITHUB_TOKEN; the branch is not fetched locally and local git mutations are blocked, so write the files directly):
+    * frontend/src/templates/brandKit.js
+    * frontend/src/templates/components/ — Hero, MetricsStrip, FeatureGrid, OutcomeCards, Timeline, TestimonialBlock, FAQ, CTABlock, ProofBar, AccessBlock, ValidationBlock, SectionHeader (12 files)
+    * frontend/src/pages/templates/ — FounderHomePage, CustomerDiscoveryHomePage, InvestorDealflowHomePage, PartnerPartnershipHomePage, SpinoutDemoDayPage (5 files) Do NOT copy anything under docs/.
+2. Wire the routes in App.jsx. Add the five lazy() imports and their /lp/* <Route> entries, matching the branch's App.jsx change and the existing lazy-import / Suspense pattern already in the file. These are public routes (no auth gate).
+3. Verify the build and pages. Run npm run build and npm run typecheck; confirm each /lp/* route renders, theme is forced light, CTAs point to the right lanes, animations run, and layout holds on mobile. Confirm the dependencies the templates import already exist on main (useForcedLightTheme, PublicNav, PublicFooter, lucide-react, Space Grotesk font). Do not commit the regenerated docs/ output.
+4. Make /lp reachable on the apex. These are public marketing pages, so follow the documented apex-routing invariant: add TWO route patterns each (exact axal.vc/lp + wildcard axal.vc/lp/*) to BOTH the top-level [[routes]] block and the [[env.production.routes]] block in wrangler.toml, mirroring how /deck, /articles, /contact etc. are handled. Without this, hard-loads of axal.vc/lp/* 404 on the Jekyll apex. (Config only — takes effect on the operator's next deploy.)
+5. Update both changelogs. Add a plain-English line to frontend/public/CHANGELOG-user.md and a technical line to CHANGELOG.md (per the repo's two-changelog rule), since this is a user-facing change.
+Relevant files
+* frontend/src/App.jsx:22-61
+* frontend/src/hooks/useForcedLightTheme.js
+* frontend/src/components/PublicNav.jsx
+* frontend/src/components/PublicFooter.jsx
+* frontend/src/pages/LandingPage.jsx
+* frontend/src/pages/SpinoutLabMarketingPage.jsx
+* wrangler.toml:54-80,435-461
+* frontend/package.json:22
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

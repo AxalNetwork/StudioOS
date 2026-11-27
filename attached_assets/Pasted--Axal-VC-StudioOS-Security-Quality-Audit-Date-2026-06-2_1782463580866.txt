@@ -1,0 +1,100 @@
+# Axal VC / StudioOS – Security & Quality Audit
+
+_Date: 2026-06-25 · Scope: read-only static review of the production Cloudflare
+Worker API (`cloudflare-worker/`), the React SPA (`frontend/`), and deployment
+config (`wrangler.toml`, CI). Mental checklist: OWASP Secure Coding Practices +
+ASVS L1/L2._
+
+---
+
+## Architecture & Threat Surface Overview
+
+Per `CLAUDE.md` (canonical), production is a single **Hono app on Cloudflare
+Workers** at `app.axal.vc`, entry `cloudflare-worker/src/index.ts`
+(~124k LOC of TypeScript across ~120 route modules). State lives in **D1**
+(`studioos-db`); the FastAPI in `backend/` is **Replit-dev-only and never
+deployed**, so it is out of the production threat model and was not deep-audited.
+
+Primary trust boundaries:
+
+- **Edge → API**: every `/api/*` request passes CORS → security headers →
+  rate-limit → observability → last-active → CSRF, then per-route auth.
+- **Auth**: dual-mode — `Authorization: Bearer <JWT>` (legacy / websockets /
+  signed download URLs) and an `HttpOnly studioos_auth` cookie (SPA). JWT is
+  **HS256**, secret strength asserted at boot.
+- **Authorization**: role-based (`admin`/`partner`/`founder`/`investor`/`guest`)
+  via `requireAuth`/`requireAdmin`/`requireRole`, plus founder-ownership IDOR
+  guards and TOTP step-up on high-risk surfaces.
+- **Data**: PII column encryption (`KEK_PII`), Stripe billing, R2 object
+  storage, multiple third-party OAuth/integrations (Google, LinkedIn, Slack,
+  Telegram, Stripe).
+
+**Overall posture: strong.** This is a mature, security-aware codebase. SQL is
+parameterized, cookies are hardened, the JWT algorithm is pinned (no
+alg-confusion), CSRF uses double-submit, the markdown renderer escapes and
+scheme-allowlists, and no hardcoded secrets were found. Findings below are
+mostly hardening and a few fail-open / broad-authz tradeoffs to revisit — not
+active criticals.
+
+---
+
+## Summary
+
+- No hardcoded secrets, no SQL injection, and no stored-XSS were found in the
+  production worker. The big-ticket OWASP categories are handled deliberately.
+- Biggest residual risks are **fail-open behaviors** (rate limiter on KV
+  outage; scoring-HMAC key reuse outside prod) and **intentionally broad
+  authorization** (`canAccessFounderResource` lets investor/partner bypass
+  founder ownership), all self-documented as "Phase 0.1 / tighten later."
+- A `sql.unsafe()` escape hatch exists and is used in ~15 modules; every current
+  use is parameterized or fed from hardcoded column allowlists, but it is a
+  footgun with no automated guard.
+- Quick wins: pin/upgrade the one dev-only `esbuild` advisory, add a lint guard
+  around `sql.unsafe`, and decide fail-open vs fail-closed for the rate limiter
+  explicitly.
+
+---
+
+## High-Severity Findings (must fix)
+
+_None identified in the production worker during this review._ The patterns that
+would normally land here (auth bypass, injection, secret leakage, stored XSS)
+were checked and found mitigated — see "Notes" for the verification trail and
+the manual-pentest follow-ups that could still surface a high.
+
+---
+
+## Medium-Severity Findings
+
+### M1 — Rate limiter fails **open** on KV failure
+- **Files:** `cloudflare-worker/src/middleware/rateLimit.ts` (~L208–211).
+- **Detail:** When `bumpCounter(env.RATE_LIMITS, …)` throws (KV unavailable),
+  the bucket is `continue`d and the request proceeds unthrottled.
+- **Impact:** During a KV outage, brute-force / enumeration / cost-abuse
+  protections on auth and AI endpoints silently vanish.
+- **Fix:** Make the decision explicit and per-bucket. For sensitive buckets
+  (login, register, password/OTP, AI spend) fail **closed** (return 429/503);
+  keep fail-open only for low-risk read buckets. At minimum, emit a metric/alert
+  on KV failure so an outage is visible rather than silent.
+
+### M2 — Broad founder-resource authorization bypass
+- **Files:** `cloudflare-worker/src/auth.ts` `canAccessFounderResource`
+  (and `canViewLpData` / `canViewPartnerDemand`).
+- **Detail:** `admin || partner || investor` short-circuit to `true` for *any*
+  founder-owned row, regardless of relationship. Marked "Phase 0.1 split —
+  tighten in Phase 4."
+- **Impact:** Any authenticated investor/partner can read every founder's
+  resources guarded only by this helper — a cross-tenant data-exposure (IDOR)
+  risk for sensitive founder data (data rooms, financials).
+- **Fix:** Replace the blanket role bypass with a relationship predicate
+  (e.g. partner assigned to the venture, investor with an active deal/seat).
+  Audit which routes rely solely on this helper for tenancy isolation.
+
+### M3 — `sql.unsafe()` escape hatch with no guardrail
+- **Files:** `cloudflare-worker/src/db.ts` (defines `.unsafe`); used in
+  `analyticsReports.ts`, `calendar.ts`, `routes/linkedin.ts`,
+  `routes/projects.ts`, `routes/matches.ts`, `routes/network.ts`,
+  `routes/admin_contracts.ts`, `routes/monitoring_analytics.ts`,
+  `routes/partners.ts`, `routes/dd.ts`.
+- **Detail:** All current call sites bind parameters and build dynamic
+...

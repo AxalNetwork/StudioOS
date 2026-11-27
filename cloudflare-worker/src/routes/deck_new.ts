@@ -1,0 +1,753 @@
+/**
+ * D897 (#2677, part 3 of #2434) — New deck: audience and round, an outline
+ * Eadwyn proposes, then a deck the founder keeps card by card.
+ *
+ *   GET  /api/decks/new/context?project_id=<id>
+ *        → { project_id, audiences, lengths, cards, round, averages, fast_path }
+ *   POST /api/decks/new/quote      { project_id, step: outline|build, audience, length, prompt?, outline?, exclude? }
+ *        → { step, ai: true, hold_microusd, model, quote_uid?, pricing_version? } | { step, ai: false, reason, message }
+ *        D1540 (#3791): an outline or build quote is pinned (`deck_run_quotes`);
+ *        `quote_uid` sent back with `/outline` or `/generate` settles that run
+ *        at no more than `hold_microusd`, whatever prices do meanwhile.
+ *   POST /api/decks/outline        { project_id, audience, round_ref?, length, prompt?, start? }
+ *        → { proposal, outline: { rows, proposed_by, reason? }, cost }
+ *   POST /api/decks/generate       { project_id, proposal_id?, audience?, round_ref?, length?, prompt?, outline?, exclude? }
+ *        → { proposal, progress, wording, element_models, cost }
+ *        D1503 (#3754): the words run on Body's element model (`resolveElementModel`),
+ *        named in `element_models`; with no pick above the row default the run
+ *        keeps its rail option's own resolution, as before.
+ *   POST /api/decks/proposals/:id/keep-slides   { indexes?: number[], all?: true, save?: true, base_hash? }
+ *        → { proposal, proposal_hash } | { deck }
+ *   POST /api/decks/proposals/:id/regenerate-card { index, base_hash? }   (D897 §9, #3659)
+ *        → { proposal, proposal_hash, card: { index, layout }, wording, cost }
+ *
+ * D897 §9 (#3659): the outline and the build answers carry `plan` (each card's
+ * message and the records it rests on) and `proposal_hash`. A request that
+ * sends `base_hash` is refused 409 `proposal_changed` when the proposal moved
+ * since that read (another tab built or kept), so nothing is overwritten
+ * unseen. A rebuild keeps every card the founder already kept.
+ *
+ * Mounted in index.ts BEFORE `decks`: `GET /api/decks/:id` would otherwise
+ * answer `/new/context` (Hono matches in registration order; #2434's worker
+ * map §0.1).
+ *
+ * NOTHING IS A VERSION UNTIL IT IS KEPT. The outline and the built cards are
+ * one `pitch_deck_proposals` row (migration 542), replacing the venture's
+ * earlier unkept proposal as every fill does (D767). Keep writes a version of
+ * the kept cards only, through `insertVersion`, for the outline's audience and
+ * round. Every write here logs one `raise.pitch-deck` cycle row, never a figure.
+ *
+ * WHAT A RUN WRITES. Words only (`services/decks/newDeck.ts`): the outline run
+ * (`deck:outline`) picks cards from the catalogue, and the build run
+ * (`deck:build`) writes a headline and a sentence per card. Code fills every
+ * figure from `readSources`. A prompt or outline row that names a number is
+ * refused 422 `figure_in_prompt` before any run, so it costs nothing.
+ *
+ * COST. `quote` answers what the run would hold now (`quoteRun`, the hold's own
+ * arithmetic), so Build deck and Regenerate show their price first; each
+ * answer then carries what its run charged, from its usage row. AI off on the
+ * page is not a stop: the outline is StudioOS's standard one and the cards are
+ * figures only, at no cost. A budget, a pause or the guard refuses as `run()`
+ * does everywhere (`refuseRun`); a model that could not answer leaves the
+ * figures-only path, and says so.
+ *
+ * FLAGS (D1509, #3760). `grid_generate` decides whether the one press can run
+ * at all: a quote or a build that says `one_click: true` is refused 404
+ * `not_switched_on` ("Not switched on yet.") while it is off, and
+ * `/new/context` carries `grid_generate` so the button says so first. The
+ * build's words are Body's element (`element:body`): switched off, they are
+ * cut from the plan before the quote (`ai: false`, `not_switched_on`) and the
+ * build runs on the records only, its cards carrying their titles, never an
+ * empty area. A switched-off model is out of every resolution (`MODELS_OFF`).
+ *
+ * WHO. The deck routes' `projectOwned`: the venture's founders write, an admin
+ * reads only (D895), and New deck is on the Raise + Grow plan as /generate was.
+ */
+import { blockGuarantees } from '../services/decks/compliance';
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
+import { quoteRun, railOptionKey, run, type RunOptions } from '../services/aiRouter';
+import { pricingVersion } from '../services/ai/pricing';
+import { QUOTE_REQUIRED, QUOTE_STALE, ceilingRefusal, dailyCeiling, pinQuote, returnQuote, takeQuote, type QuoteStep, type TakenQuote } from '../services/decks/runQuotes';
+import { funnelPoint } from '../services/decks/observability';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { parseJsonLoose } from '../services/decks/autofill';
+import { readSources, type SourceItem } from '../services/decks/sources';
+import { AUDIENCES } from '../services/decks/slideModel';
+import {
+  AUDIENCE_CARDS, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, PROMPT_MAX,
+  buildCards, buildMessage, cardOf, cardProgress, excludedOf, figureRefusal, keptIndexes, outlineFromBody, outlineFromModel, outlineMessage,
+  planOf, recordTexts, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
+} from '../services/decks/newDeck';
+import { readAllSeries } from '../services/decks/chartSeries';
+import { recordDiagrams } from '../services/decks/visuals';
+import { proposeRail } from '../services/railProposals';
+import { railFor, refuseRun } from '../util/railContext';
+import { refuse } from '../util/refusal';
+import {
+  auditDeckWrite, ensureSchema, getDeckRow, insertVersion, ownedProposal, projectOwned, proposalHash, rowToDeck, rowToProposal,
+  sanitizeSlides, themeOfRow,
+} from './decks';
+import { mercuryFor } from './deck_sources';
+import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
+import { freshnessFor, type Freshness } from '../services/decks/freshness';
+import { ElementOffError, elementModelFor, lockedOutRefusal, runPickOf } from './deck_element_models';
+import { lockedOut } from '../services/decks/elementModels';
+import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
+import type { Resolved } from '../services/decks/elementModels';
+import { promptFor } from '../services/decks/prompts';
+import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
+
+const deckNew = new Hono<{ Bindings: Env }>();
+
+export const NEW_DECK_RAIL = { page: 'Founder · Raise · Pitch deck', outline: 'deck:outline', build: 'deck:build' } as const;
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** The deck routes' `projectOwned`, with its refusals as they answer them. */
+async function venture(c: any, user: User, projectId: number, write: boolean) {
+  try {
+    return { project: await projectOwned(c, user, projectId, { write }) };
+  } catch (e: any) {
+    return { refused: e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403) };
+  }
+}
+
+/** The plan gate New deck shares with the old /generate; its 402 is the plan's own body. */
+function planRefusal(user: User): Response | null {
+  try { ensureTier(user, DECK_STUDIO_TIER); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
+}
+
+/** A figure stated where only records may state one: 422, with the module that records it. */
+function refuseFigure(c: any, r: FigureRefusal): Response {
+  return refuse(c, 422, { code: r.code, message: r.message, extra: { figure: r.figure, source_key: r.source_key, module: r.module, href: r.href } });
+}
+
+/** The venture's name, for the deck's title and its Title card; null when it has none. */
+async function ventureName(env: Env, projectId: number): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(projectId).first<any>().catch(() => null);
+  return typeof row?.name === 'string' && row.name.trim() ? row.name.trim() : null;
+}
+
+const projectIdOf = (v: unknown) => {
+  const n = Number(v);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+};
+
+type Inputs = { audience: Audience; length: Length; prompt: string; round_ref: string | null };
+
+/** The audience, length, prompt and round a request asks for, checked; a string says what is wrong. */
+async function inputsOf(env: Env, projectId: number, body: any, base: Partial<Inputs> = {}): Promise<Inputs | string> {
+  const has = (k: string) => body && Object.prototype.hasOwnProperty.call(body, k);
+  const audience = has('audience') ? body.audience : base.audience;
+  if (!(AUDIENCES as readonly string[]).includes(audience)) return `audience must be one of ${AUDIENCES.join(', ')}`;
+  const length = has('length') ? body.length : base.length ?? 'standard';
+  if (!LENGTH_IDS.includes(length)) return `length must be one of ${LENGTH_IDS.join(', ')}`;
+  const prompt = has('prompt') ? body.prompt ?? '' : base.prompt ?? '';
+  if (typeof prompt !== 'string') return 'prompt must be text';
+  if (prompt.length > PROMPT_MAX) return `the prompt is at most ${PROMPT_MAX} characters`;
+  const round_ref = has('round_ref') ? body.round_ref ?? null : base.round_ref ?? null;
+  if (round_ref != null) {
+    if (typeof round_ref !== 'string' || round_ref.length > 64) return 'round_ref must be a round of this venture';
+    const r = await env.DB.prepare('SELECT 1 AS ok FROM raise_rounds WHERE uid = ? AND project_id = ?').bind(round_ref, projectId).first<any>().catch(() => null);
+    if (!r) return 'round_ref must be a round of this venture';
+  }
+  return { audience, length, prompt: prompt.trim(), round_ref };
+}
+
+async function sourcesFor(c: any, user: User, project: any, projectId: number): Promise<SourceItem[]> {
+  const { items } = await readSources({ env: c.env, projectId, today: today(), mercury: await mercuryFor(c, user, project) });
+  return items;
+}
+
+/**
+ * D1503 (#3754, dk-auto amendment 10): the element the build's words run as.
+ * The build writes each card's headline and sentence in one run, so it runs
+ * on Body's model (`resolveElementModel`), and the answer names it.
+ */
+export const BUILD_ELEMENT = 'body';
+
+/**
+ * The build's element model, or the 503 that stops the press when the picks
+ * cannot be read. D1549 (#3796): HQ's lock wins, so a lock on a model the
+ * caller's plan cannot run stops the press with a 403 and runs nothing.
+ */
+async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response | 'off'> {
+  let r: Resolved;
+  try { r = await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch (e) {
+    if (e instanceof ElementOffError) return 'off';
+
+    console.warn('[deck_new] element model picks unreadable', { project_id: projectId });
+    return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
+  }
+  return lockedOut(r) ? lockedOutRefusal(c, r) : r;
+}
+
+const elementModelsView = (r: Resolved | 'off') => ({
+  [BUILD_ELEMENT]: r === 'off' ? { model: null, source: 'none', notice: NOT_SWITCHED_ON } : { model: r.model, source: r.source, notice: r.notice, ...(r.locked ? { locked: true } : {}) },
+});
+
+/** D1509: the words' sentence when Body is switched off, so the founder knows why the cards carry titles only. */
+export const WORDS_OFF = 'Eadwyn’s words are not switched on yet. Your records still fill the figures; the cards carry their titles. Nothing was charged.';
+
+/** D1509: a one-click press while `grid_generate` is off, refused before anything is read or run; null when it may go on. */
+async function oneClickRefusal(c: any, user: User, body: any): Promise<Response | null> {
+  if (body?.one_click !== true) return null;
+  const flags = await flagsFor(c.env, user);
+  return flags.gridGenerate ? null : refuse(c, 404, notSwitchedOn);
+}
+
+/** D1519 (#3771): the registry's prompt for a step, on the model the element resolved to (its family's file, else `default`). */
+const promptOf = (step: 'outline' | 'build', element?: Resolved | 'off') => promptFor(step, step === 'build' && element !== 'off' ? element?.model ?? null : null);
+
+/** The run each press makes, as one options object, so the quote and the run read the same input. */
+function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0, element?: Resolved): RunOptions {
+  // D1549: a model HQ locked runs pinned: that model or nothing, never a fallback.
+  const pick = step === 'build' && element ? runPickOf(element) : {};
+  return {
+    ...pick,
+    task: 'rail_write',
+    userId: Number(user.id) || 0,
+    surface: AI_SURFACE.raisePitch,
+    rail: railFor(c, { page: NEW_DECK_RAIL.page, option: step === 'outline' ? NEW_DECK_RAIL.outline : NEW_DECK_RAIL.build }, `project:${projectId}`),
+    // D1519 (#3771): the prompt for the model's family, with the house voice (`services/decks/prompts`).
+    systemPrompt: promptOf(step, element).system,
+    messages: [{ role: 'user', content: message }],
+    temperature: 0.4,
+    // D1560 (#3807): the build run also writes each card's speaker notes, so its room (and its quote) holds them.
+    maxTokens: step === 'outline' ? 900 : Math.min(4000, 200 + rows * 190),
+  };
+}
+
+/** What a run charged, from its usage row; null when it is not known (no row, or a hold waiting for review). */
+async function chargedOf(env: Env, usageLogId: number | null | undefined, userId: number): Promise<number | null> {
+  if (!usageLogId) return null;
+  const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
+  return row?.charged_microusd == null ? null : Number(row.charged_microusd);
+}
+
+/**
+ * D1540 (#3791): before a run, the price it is held to and the owner's daily
+ * ceiling. A `quote_uid` takes the founder's pinned quote for exactly this run
+ * (409 `quote_stale` when it cannot), a metered run without one is refused 409 `quote_required` (D4597), and a run that would pass the ceiling is
+ * refused 429 `deck_ceiling_reached` before any hold, its quote given back.
+ */
+async function priceGate(c: any, user: User, projectId: number, step: QuoteStep | null, body: any, ask: RunOptions):
+  Promise<{ quote: TakenQuote | null } | { refused: Response }> {
+  let quote: TakenQuote | null = null;
+  if (step && body?.quote_uid != null) {
+    const taken = await takeQuote(c.env, body.quote_uid, { userId: Number(user.id) || 0, projectId, step, opts: ask });
+    if ('stale' in taken) return { refused: refuse(c, 409, { code: 'quote_stale', message: QUOTE_STALE }) };
+    quote = taken.quote;
+  }
+  if (dailyCeiling(c.env) != null) {
+    let next = quote?.hold_microusd ?? 0;
+    if (!quote) { const q = await quoteRun(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail }); next = q.ok ? q.hold_microusd : 0; }
+    const stop = await ceilingRefusal(c.env, NEW_DECK_RAIL.page, next);
+    if (stop) {
+      if (quote) await returnQuote(c.env, quote.uid);
+      return { refused: refuse(c, 429, stop) };
+    }
+  }
+  if (!quote && step) {
+    // D4597 (#4597): a run that would be metered runs only at a price the member was shown and accepted.
+    // Whether it is metered is decided the way the quote decides it: a run that is refused (AI off for this
+    // page, the build model off, a price that cannot be worked out) is not charged, so it needs no quote.
+    const q = await quoteRun(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+    if (q.ok) return { refused: refuse(c, 409, { code: 'quote_required', message: QUOTE_REQUIRED }) };
+  }
+  return { quote };
+}
+
+/** The run's pinned quote, as options for the run, if it has one. */
+const pinOf = (quote: TakenQuote | null): Pick<RunOptions, 'pinMicrousd'> => (quote ? { pinMicrousd: quote.hold_microusd } : {});
+
+/** What the answer says about the quote a run settled under. */
+const quoteView = (env: Env, quote: TakenQuote | null) =>
+  (quote ? { quote: { uid: quote.uid, quoted_microusd: quote.hold_microusd, pricing_version: quote.pricing_version, pricing_version_now: pricingVersion(env) } } : {});
+
+/** The member's own average charge for one option over their charged runs, or null when they have none. */
+async function averageOf(env: Env, userId: number, option: string): Promise<{ runs: number; average_microusd: number } | null> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS runs, AVG(charged_microusd) AS avg FROM ai_usage_logs
+      WHERE user_id = ? AND rail_option = ? AND refusal IS NULL AND charged_microusd > 0`,
+  ).bind(userId, railOptionKey(option)).first<any>().catch(() => null);
+  const runs = Number(row?.runs || 0);
+  return runs > 0 ? { runs, average_microusd: Math.round(Number(row.avg)) } : null;
+}
+
+/** The venture's active round and its latest call, for PD3; null when none is active. */
+async function activeRound(env: Env, projectId: number) {
+  const r = await env.DB.prepare(
+    "SELECT uid, name, target_amount, close_date FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
+  ).bind(projectId).first<any>().catch(() => null);
+  if (!r) return null;
+  const call = await env.DB.prepare(
+    `SELECT instrument,
+            (counsel_approved_hash IS NOT NULL AND counsel_approved_hash = terms_hash AND counsel_approved_by IS NOT NULL
+             AND counsel_approved_at IS NOT NULL AND counsel_approval_reference IS NOT NULL) AS approved
+       FROM round_calls WHERE project_id = ? ORDER BY id DESC LIMIT 1`,
+  ).bind(projectId).first<any>().catch(() => null);
+  const target = r.target_amount == null || !Number.isFinite(Number(r.target_amount)) || Number(r.target_amount) <= 0 ? null : Number(r.target_amount);
+  return {
+    uid: String(r.uid), name: r.name ?? null, target_amount: target, close_date: r.close_date ?? null,
+    instrument: call?.instrument ?? null, reviewed: Number(call?.approved) === 1,
+  };
+}
+
+deckNew.get('/new/context', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = projectIdOf(c.req.query('project_id'));
+  if (!projectId) return c.json({ error: 'project_id required' }, 400);
+  const got = await venture(c, user, projectId, false);
+  if ('refused' in got) return got.refused;
+  const userId = Number(user.id) || 0;
+  const round = await activeRound(c.env, projectId);
+  const flags = await flagsFor(c.env, user);
+  let inferred: InferredBrief | null = null;
+  try {
+    const p = await c.env.DB.prepare('SELECT stage FROM projects WHERE id = ?').bind(projectId).first<{ stage: string | null }>();
+    inferred = inferBrief({ projectStage: p?.stage ?? null, round });
+  } catch { console.warn('[deck_new] inferred brief unreadable', { project_id: projectId }); }
+  let freshness: Freshness[] | null = null;
+  try {
+    const mercury = await mercuryFor(c, user, got.project);
+    const { items } = await readSources({ env: c.env, projectId, today: today(), mercury });
+    freshness = await freshnessFor(c.env, projectId, { mercury, items, today: today() });
+  } catch { console.warn('[deck_new] connector freshness unreadable', { project_id: projectId }); }
+  return c.json({
+    project_id: projectId,
+    audiences: AUDIENCES.map((id) => ({ id, ...AUDIENCE_CARDS[id] })),
+    lengths: LENGTHS,
+    cards: CARD_CATALOGUE.map(({ card, title, purpose, sources, appendix }) => ({ card, title, purpose, sources, appendix: Boolean(appendix) })),
+    standard: Object.fromEntries(LENGTH_IDS.map((l) => [l, standardOutline(l as Length)])),
+    round,
+    averages: { outline: await averageOf(c.env, userId, NEW_DECK_RAIL.outline), build: await averageOf(c.env, userId, NEW_DECK_RAIL.build) },
+    // D1599: the fast path is the inferred brief; FAST_PATH_AUDIENCE only when nothing could be inferred.
+    fast_path: inferred ? { audience: inferred.audience, length: inferred.length } : { audience: FAST_PATH_AUDIENCE, length: 'standard' },
+    prompt_max: PROMPT_MAX,
+    // D1509: whether the one press can run for this member (`grid_generate`).
+    grid_generate: flags.gridGenerate,
+    // A read that fails leaves its key out: never a guessed brief, never an empty list that reads as "all fresh".
+    ...(inferred ? { inferred } : {}),
+    ...(freshness ? { freshness } : {}),
+  });
+});
+
+/** The outline rows a build uses: the request's, else the proposal's, else the length's standard deck. */
+function rowsFor(body: any, outline: any, length: Length, projectId: number, audience?: Audience): { rows: OutlineRow[] } | { response: { error: string; refusal?: any } } {
+  if (body && Object.prototype.hasOwnProperty.call(body, 'outline')) {
+    const got = outlineFromBody(body.outline, projectId);
+    return 'rows' in got ? got : { response: got };
+  }
+  if (Array.isArray(outline?.rows) && outline.rows.length) {
+    const got = outlineFromBody(outline.rows, projectId);
+    if ('rows' in got) return got;
+  }
+  return { rows: standardOutline(length, audience) };
+}
+
+deckNew.post('/new/quote', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const projectId = projectIdOf(body?.project_id);
+  if (!projectId) return c.json({ error: 'project_id required' }, 400);
+  const step = body?.step === 'outline' ? 'outline' : body?.step === 'build' ? 'build' : body?.step === 'card' ? 'card' : null;
+  if (!step) return c.json({ error: 'step must be outline, build or card' }, 400);
+  const oneClick = await oneClickRefusal(c, user, body);
+  if (oneClick) return oneClick;
+  const got = await venture(c, user, projectId, true);
+  if ('refused' in got) return got.refused;
+  const inputs = await inputsOf(c.env, projectId, body);
+  if (typeof inputs === 'string') return c.json({ error: inputs }, 400);
+  const refused = figureRefusal(inputs.prompt, projectId);
+  if (refused) return refuseFigure(c, refused);
+  const items = await sourcesFor(c, user, got.project, projectId);
+  let opts: RunOptions;
+  let element: Resolved | null = null;
+  if (step === 'outline') {
+    opts = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
+  } else {
+    const picked = rowsFor(body, null, inputs.length, projectId, inputs.audience);
+    if ('response' in picked) return picked.response.refusal ? refuseFigure(c, picked.response.refusal) : c.json({ error: picked.response.error }, 400);
+    const excluded = excludedOf(body?.exclude ?? null);
+    if (typeof excluded === 'string') return c.json({ error: excluded }, 400);
+    // D897 §9: a card's regeneration is one row's build run, so its price is that run's.
+    const rows = step === 'card' ? picked.rows.slice(Number.isInteger(body?.index) ? body.index : 0, (Number.isInteger(body?.index) ? body.index : 0) + 1) : picked.rows;
+    if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
+    const resolved = await buildModelOf(c, user, projectId);
+    if (resolved instanceof Response) return resolved;
+    if (resolved === 'off') return c.json({ step, ai: false, reason: 'not_switched_on', message: NOT_SWITCHED_ON });
+    element = resolved;
+    // D1517: the quote reads the same message the run sends, budgets included.
+    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length, element);
+  }
+  const q = await quoteRun(c.env, opts);
+  if (q.ok) {
+    // D1540: the outline's and the whole deck's quotes are pinned; a card's is shown only.
+    const pin = step === 'card' ? null
+      : await pinQuote(c.env, { userId: Number(user.id) || 0, projectId, step, holdMicrousd: q.hold_microusd, model: q.model, opts });
+    return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model, ...(pin ? { quote_uid: pin.uid, pricing_version: pin.pricing_version } : {}), ...(element ? { element_models: elementModelsView(element) } : {}) });
+  }
+  return c.json({ step, ai: false, reason: q.refusal, message: q.error });
+});
+
+/** Replaces the venture's unkept proposal with this one (D767: one per venture); returns its id. */
+export async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
+  const res = await env.DB.batch([
+    env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),
+    env.DB.prepare(
+      `INSERT INTO pitch_deck_proposals (project_id, base_deck_id, slides, title, method_id, created_by, outline_json, kept_slides_json)
+       VALUES (?, ?, ?, ?, NULL, ?, ?, NULL)`,
+    ).bind(projectId, baseDeckId, JSON.stringify(slides), title, userId || null, JSON.stringify(outline)),
+  ]);
+  return Number((res[1] as any)?.meta?.last_row_id || 0);
+}
+
+export async function proposalRow(env: Env, id: number) {
+  return env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>();
+}
+
+/** D897 §9: the proposal's hash lives beside `rowToProposal` (decks.ts), which the versions read also answers with. */
+export { proposalHash };
+
+/** A 409 when the request read an older proposal than the one stored; null when it did not say, or read this one. */
+async function staleRefusal(c: any, row: any, body: any): Promise<Response | null> {
+  const base = body?.base_hash;
+  if (base == null) return null;
+  if (typeof base === 'string' && base === await proposalHash(row)) return null;
+  return refuse(c, 409, { code: 'proposal_changed', message: 'This deck changed in another tab or window. Reload it to see the latest cards; nothing was changed here.' });
+}
+
+/**
+ * What a card may draw besides its slots: the venture's chart series and the
+ * diagrams its records place (D903 §10). A failed read draws none, never a
+ * made-up line or diagram.
+ */
+async function visualsFor(env: Env, projectId: number): Promise<CardVisuals> {
+  let series: CardVisuals['series'] = [];
+  try { series = await readAllSeries(env, projectId); } catch { series = []; }
+  const { diagrams, rows } = await recordDiagrams(env, projectId);
+  return { series, diagrams, rows };
+}
+
+/** The version a New deck sits beside: the one it starts from, else the current one, else none (0). */
+async function baseDeckId(env: Env, projectId: number, start: any): Promise<number | string> {
+  if (start?.kind === 'version') {
+    const id = projectIdOf(start.deck_id);
+    const row = id ? await env.DB.prepare('SELECT id FROM pitch_decks WHERE id = ? AND project_id = ?').bind(id, projectId).first<any>() : null;
+    if (!row) return 'start.deck_id must be a version of this venture';
+    return Number(row.id);
+  }
+  if (start != null && start?.kind !== 'blank') return 'start.kind must be blank or version; a template starts from POST /api/decks/apply-method';
+  const cur = await env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY id DESC LIMIT 1').bind(projectId).first<any>();
+  return Number(cur?.id) || 0;
+}
+
+deckNew.post('/outline', async (c) => {
+  const user = await requireAuth(c);
+  const plan = planRefusal(user);
+  if (plan) return plan;
+  const body = await c.req.json().catch(() => ({} as any));
+  const projectId = projectIdOf(body?.project_id);
+  if (!projectId) return c.json({ error: 'project_id required' }, 400);
+  const got = await venture(c, user, projectId, true);
+  if ('refused' in got) return got.refused;
+  await ensureSchema(c.env);
+  const inputs = await inputsOf(c.env, projectId, body);
+  if (typeof inputs === 'string') return c.json({ error: inputs }, 400);
+  // A prompt that states a figure is refused before anything runs: it costs nothing.
+  const refused = figureRefusal(inputs.prompt, projectId);
+  if (refused) return refuseFigure(c, refused);
+  const base = await baseDeckId(c.env, projectId, body?.start ?? null);
+  if (typeof base === 'string') return c.json({ error: base }, 400);
+
+  const items = await sourcesFor(c, user, got.project, projectId);
+  const userId = Number(user.id) || 0;
+  const ask = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
+  const gate = await priceGate(c, user, projectId, 'outline', body, ask);
+  if ('refused' in gate) return gate.refused;
+  // D552 and D765: the page and the rail context are named at the call, as every run() names them.
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...pinOf(gate.quote) });
+  if (!res.ok && gate.quote) await returnQuote(c.env, gate.quote.uid);
+  let rows: OutlineRow[] | null = null;
+  let reason: string | null = null;
+  if (res.ok) {
+    rows = outlineFromModel(parseJsonLoose<any>(res.output), inputs.length);
+    // D1546: no proposed words may promise a return; a sentence that does is dropped before it is shown.
+    if (rows) rows = blockGuarantees(rows).value;
+    if (!rows) reason = 'Eadwyn’s outline could not be read, so this is the standard outline for the length you chose.';
+  } else if (res.refusal === 'assist_off') {
+    reason = 'AI assistance is off on this page, so this is the standard outline for the length you chose. Nothing was charged.';
+  } else {
+    const stop = refuseRun(c, res);
+    if (stop) return stop;
+    reason = 'Eadwyn could not answer, so this is the standard outline for the length you chose. Nothing was charged.';
+  }
+  const proposedBy = rows ? 'Eadwyn' : 'StudioOS';
+  rows = rows ?? standardOutline(inputs.length, inputs.audience);
+
+  let railUid: string | null = null;
+  if (proposedBy === 'Eadwyn') {
+    // D780: the run's draft, kept as Eadwyn wrote it; the founder's edits travel with Build deck.
+    try {
+      const p = await proposeRail(c.env, {
+        userId, page: NEW_DECK_RAIL.page, option: NEW_DECK_RAIL.outline, record: `project:${projectId}`, kind: 'draft',
+        payload: { rows, audience: inputs.audience, length: inputs.length }, model: res.usage?.model ?? null, usageLogId: res.usageLogId ?? null,
+      });
+      railUid = p.uid;
+    } catch { railUid = null; }
+  }
+  const outline = {
+    audience: inputs.audience, round_ref: inputs.round_ref, length: inputs.length, prompt: inputs.prompt,
+    start: body?.start?.kind === 'version' ? { kind: 'version', deck_id: base } : { kind: 'blank' },
+    rows, proposed_by: proposedBy, rail_proposal_uid: railUid,
+  };
+  const title = `${(await ventureName(c.env, projectId)) || 'Venture'} — Pitch deck`;
+  const id = await writeProposal(c.env, projectId, base, title, [], outline, userId);
+  await auditDeckWrite(c, user, projectId, 'deck_outline_proposed', 'Deck outline proposed');
+  const written = await proposalRow(c.env, id);
+  return c.json({
+    proposal: rowToProposal(written),
+    proposal_hash: await proposalHash(written),
+    outline: { rows, proposed_by: proposedBy, prompt_version: promptOf('outline').prompt_version, ...(reason ? { reason } : {}) },
+    plan: planOf(rows, items),
+    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null, ...quoteView(c.env, gate.quote) },
+  }, 201);
+});
+
+deckNew.post('/generate', async (c) => {
+  const user = await requireAuth(c);
+  const plan = planRefusal(user);
+  if (plan) return plan;
+  const body = await c.req.json().catch(() => ({} as any));
+  const projectId = projectIdOf(body?.project_id);
+  if (!projectId) return c.json({ error: 'project_id required' }, 400);
+  const oneClick = await oneClickRefusal(c, user, body);
+  if (oneClick) return oneClick;
+  const got = await venture(c, user, projectId, true);
+  if ('refused' in got) return got.refused;
+  await ensureSchema(c.env);
+
+  // From an outline proposal (PD5's Build deck), or straight from the records (PD2's fast path).
+  let proposal: any = null;
+  if (body?.proposal_id != null) {
+    const row = await ownedProposal(c, user, Number(body.proposal_id));
+    if (row instanceof Response) return row;
+    if (Number(row.project_id) !== projectId) return c.json({ error: 'not found' }, 404);
+    const stale = await staleRefusal(c, row, body);
+    if (stale) return stale;
+    proposal = rowToProposal(row);
+  }
+  const prior = proposal?.outline ?? {};
+  const inputs = await inputsOf(c.env, projectId, body, {
+    audience: prior.audience ?? FAST_PATH_AUDIENCE, length: prior.length, prompt: prior.prompt, round_ref: prior.round_ref,
+  });
+  if (typeof inputs === 'string') return c.json({ error: inputs }, 400);
+  const refused = figureRefusal(inputs.prompt, projectId);
+  if (refused) return refuseFigure(c, refused);
+  const picked = rowsFor(body, prior, inputs.length, projectId, inputs.audience);
+  if ('response' in picked) return picked.response.refusal ? refuseFigure(c, picked.response.refusal) : c.json({ error: picked.response.error }, 400);
+  const rows = picked.rows;
+  // PD4: the records the founder unticked are on no card; a build without the key keeps the outline's choice.
+  const excluded = excludedOf(body && Object.prototype.hasOwnProperty.call(body, 'exclude') ? body.exclude : prior.exclude ?? null);
+  if (typeof excluded === 'string') return c.json({ error: excluded }, 400);
+  const exclude = new Set(excluded);
+
+  const items = await sourcesFor(c, user, got.project, projectId);
+  const name = await ventureName(c.env, projectId);
+  const userId = Number(user.id) || 0;
+  const element = await buildModelOf(c, user, projectId);
+  if (element instanceof Response) return element;
+  const visuals = await visualsFor(c.env, projectId);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element === 'off' ? undefined : element);
+  const gate = element === 'off' ? { quote: null } : await priceGate(c, user, projectId, 'build', body, ask);
+  if ('refused' in gate) return gate.refused;
+  // D1509: no price gate, run or hold while Body is switched off.
+  const res = element === 'off' ? null : await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...pinOf(gate.quote) });
+  if (res && !res.ok && gate.quote) await returnQuote(c.env, gate.quote.uid);
+  let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
+  let dropped = 0;
+  let by: 'Eadwyn' | 'none' = 'none';
+  let reason: string | null = null;
+  if (res?.ok) {
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
+    // D1546: the guarantee-language block, before the words are proposed; each sentence dropped counts.
+    const g = blockGuarantees(w.byIndex);
+    wording = g.value;
+    dropped = w.dropped + g.dropped;
+    by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
+    if (by === 'none') reason = 'Eadwyn’s words could not be read. The figures are from your records; the cards carry their titles.';
+  } else if (!res) {
+    reason = WORDS_OFF;
+  } else if (res.refusal === 'assist_off') {
+    reason = 'AI assistance is off on this page. Your records still fill the figures; the cards carry their titles. Nothing was charged.';
+  } else {
+    const stop = refuseRun(c, res);
+    if (stop) return stop;
+    reason = 'Eadwyn could not answer. The figures are from your records; the cards carry their titles. Nothing was charged.';
+  }
+
+  const built = buildCards(rows, items, wording, name, exclude, visuals);
+  if (built.problems.length) return c.json({ error: 'cards_unsound', problems: built.problems }, 500);
+  // D897 §9: a card the founder already kept stays as kept when its row is the same card; the rest are rebuilt.
+  const kept = (proposal?.kept ?? []).filter((i: number) => proposal.slides[i]?.spec_id === built.slides[i]?.spec_id);
+  const slides = built.slides.map((s, i) => (kept.includes(i) ? proposal.slides[i] : s));
+  const stored = sanitizeSlides(slides);
+  const outline = { ...prior, audience: inputs.audience, round_ref: inputs.round_ref, length: inputs.length, prompt: inputs.prompt, rows, exclude: excluded,
+    proposed_by: prior.proposed_by ?? 'StudioOS', start: prior.start ?? { kind: 'blank' }, rail_proposal_uid: prior.rail_proposal_uid ?? null };
+  const title = `${name || 'Venture'} — Pitch deck`;
+  let id: number;
+  if (proposal) {
+    await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ?, title = ?, outline_json = ?, kept_slides_json = ? WHERE id = ?')
+      .bind(JSON.stringify(stored), title, JSON.stringify(outline), kept.length ? JSON.stringify(kept) : null, proposal.id).run();
+    id = Number(proposal.id);
+  } else {
+    const base = await baseDeckId(c.env, projectId, null);
+    id = await writeProposal(c.env, projectId, typeof base === 'number' ? base : 0, title, stored, outline, userId);
+  }
+  await auditDeckWrite(c, user, projectId, 'deck_built', 'Deck proposal built from records');
+  // D1510 (#3761): the one-click funnel's first step, by id.
+  funnelPoint(c.env, 'build', { projectId, proposalId: id, oneClick: body?.one_click === true });
+  const written = await proposalRow(c.env, id);
+  return c.json({
+    proposal: rowToProposal(written),
+    proposal_hash: await proposalHash(written),
+    plan: planOf(rows, items, exclude),
+    progress: cardProgress(rows, items, wording, exclude),
+    wording: { by, dropped, prompt_version: promptOf('build', element).prompt_version, ...(reason ? { reason } : {}) },
+    element_models: elementModelsView(element),
+    cost: { charged_microusd: res?.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res?.usageLogId ?? null, ...quoteView(c.env, gate.quote) },
+  }, 201);
+});
+
+/**
+ * D897 §9 (#3659): regenerate one card, not the deck. One `deck:build` run for
+ * that card's row; code places its figures again from the records. A kept
+ * card is refused (it is the founder's), every other card is untouched, and
+ * a request that read an older proposal is refused before anything runs.
+ */
+deckNew.post('/proposals/:id/regenerate-card', async (c) => {
+  const user = await requireAuth(c);
+  const plan = planRefusal(user);
+  if (plan) return plan;
+  await ensureSchema(c.env);
+  const row = await ownedProposal(c, user, Number(c.req.param('id')) || 0);
+  if (row instanceof Response) return row;
+  const body = await c.req.json().catch(() => ({} as any));
+  const stale = await staleRefusal(c, row, body);
+  if (stale) return stale;
+  const proposal = rowToProposal(row);
+  const projectId = Number(row.project_id);
+  const got = await venture(c, user, projectId, true);
+  if ('refused' in got) return got.refused;
+  const slides: any[] = proposal.slides;
+  const index = body?.index;
+  if (!Number.isInteger(index) || index < 0 || index >= slides.length) return c.json({ error: `index must be a card position from 0 to ${Math.max(0, slides.length - 1)}` }, 400);
+  if ((proposal.kept ?? []).includes(index)) return refuse(c, 409, { code: 'card_kept', message: 'You kept this card, so it stays as it is. Nothing was run.' });
+  const o = proposal.outline;
+  const picked = rowsFor({}, o, o?.length ?? 'standard', projectId, o?.audience);
+  if ('response' in picked) return c.json({ error: picked.response.error }, 400);
+  const rowOf = picked.rows[index];
+  if (!rowOf || `new:${rowOf.card}` !== slides[index]?.spec_id) return refuse(c, 409, { code: 'outline_changed', message: 'This card no longer matches the outline. Build the deck again first; nothing was run.' });
+  const excluded = excludedOf(o?.exclude ?? null);
+  const exclude = new Set(typeof excluded === 'string' ? [] : excluded);
+  const items = await sourcesFor(c, user, got.project, projectId);
+  const name = await ventureName(c.env, projectId);
+  const inputs = { audience: (o?.audience ?? FAST_PATH_AUDIENCE) as Audience, prompt: String(o?.prompt ?? '') };
+  const element = await buildModelOf(c, user, projectId);
+  if (element instanceof Response) return element;
+  const visuals = await visualsFor(c.env, projectId);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element === 'off' ? undefined : element);
+  // D1540: a card's run is under the daily ceiling; its quote is shown, not pinned.
+  const gate = element === 'off' ? { quote: null } : await priceGate(c, user, projectId, null, body, ask);
+  if ('refused' in gate) return gate.refused;
+  // D1509: no price gate, run or hold while Body is switched off.
+  const res = element === 'off' ? null : await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  let words: Wording = { headline: null, body: null };
+  let reason: string | null = null;
+  let dropped = 0;
+  if (res?.ok) {
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
+    const g = blockGuarantees(w.byIndex[0]);
+    words = g.value;
+    dropped = w.dropped + g.dropped;
+    if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
+  } else if (!res) {
+    reason = WORDS_OFF;
+  } else if (res.refusal === 'assist_off') {
+    reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';
+  } else {
+    const stop = refuseRun(c, res);
+    if (stop) return stop;
+    reason = 'Eadwyn could not answer. The card was rebuilt from your records with its title. Nothing was charged.';
+  }
+  const card = cardOf(rowOf, items, words, name, exclude, visuals);
+  const next = sanitizeSlides(slides.map((s, i) => (i === index ? card : s)));
+  await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ? WHERE id = ?').bind(JSON.stringify(next), row.id).run();
+  await auditDeckWrite(c, user, projectId, 'deck_card_regenerated', `Card ${index + 1} of the proposal regenerated`);
+  const userId = Number(user.id) || 0;
+  const written = await proposalRow(c.env, Number(row.id));
+  return c.json({
+    proposal: rowToProposal(written), proposal_hash: await proposalHash(written),
+    card: { index, layout: card.layout },
+    wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, prompt_version: promptOf('build', element).prompt_version, ...(reason ? { reason } : {}) },
+    cost: { charged_microusd: res?.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res?.usageLogId ?? null },
+  });
+});
+
+/**
+ * Keep chosen cards (PD6 B). `indexes` adds to what is kept, `all` keeps every
+ * card, and `save` writes the kept cards, in the proposal's order, as the new
+ * current version and removes the proposal. Each press logs one row.
+ */
+deckNew.post('/proposals/:id/keep-slides', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const row = await ownedProposal(c, user, Number(c.req.param('id')) || 0);
+  if (row instanceof Response) return row;
+  const body = await c.req.json().catch(() => ({} as any));
+  // D897 §9 (#3659): a keep that read an older proposal (another tab built, regenerated or kept) changes nothing.
+  const stale = await staleRefusal(c, row, body);
+  if (stale) return stale;
+  const proposal = rowToProposal(row);
+  const slides: any[] = proposal.slides;
+  if (!slides.length) return c.json({ error: 'this proposal has no cards yet; build the deck first' }, 409);
+  if (body?.indexes != null && !Array.isArray(body.indexes)) return c.json({ error: 'indexes must be a list of card positions' }, 400);
+  const asked = body?.all === true ? slides.map((_, i) => i) : keptIndexes(body?.indexes, slides.length);
+  if (Array.isArray(body?.indexes) && asked.length !== body.indexes.length) return c.json({ error: `indexes must be card positions from 0 to ${slides.length - 1}, each once` }, 400);
+  const kept = keptIndexes([...(proposal.kept ?? []), ...asked], slides.length);
+  const projectId = Number(row.project_id);
+
+  if (body?.save === true) {
+    if (!kept.length) return c.json({ error: 'keep at least one card before saving' }, 400);
+    // The outline's audience and round; else (a fill or a template) the version it was proposed over.
+    const baseRow = await c.env.DB.prepare('SELECT audience, round_ref, theme_json FROM pitch_decks WHERE id = ? AND project_id = ?')
+      .bind(row.base_deck_id, projectId).first<any>().catch(() => null);
+    const o = proposal.outline;
+    const meta = {
+      audience: o?.audience ?? baseRow?.audience ?? null,
+      round_ref: o ? o.round_ref ?? null : baseRow?.round_ref ?? null,
+      theme: baseRow ? themeOfRow(baseRow) : null,
+    };
+    const deckId = await insertVersion(c.env, projectId, kept.map((i) => slides[i]), row.title || 'Pitch deck', Number(user.id) || null, meta);
+    await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
+    await auditDeckWrite(c, user, projectId, 'deck_kept', `Kept ${kept.length} of ${slides.length} cards as a new version`);
+    // D1510 (#3761): every card kept is Accept all; `present: true` is Accept all and present.
+    if (kept.length === slides.length) {
+      funnelPoint(c.env, 'accept_all', { deckId, projectId, proposalId: Number(row.id) });
+      if (body?.present === true) funnelPoint(c.env, 'accept_all_present', { deckId, projectId, proposalId: Number(row.id) });
+    }
+    return c.json({ deck: rowToDeck(await getDeckRow(c.env, deckId)), kept });
+  }
+
+  if (!asked.length) return c.json({ error: 'name the cards to keep, or all' }, 400);
+  await c.env.DB.prepare('UPDATE pitch_deck_proposals SET kept_slides_json = ? WHERE id = ?').bind(JSON.stringify(kept), row.id).run();
+  await auditDeckWrite(c, user, projectId, 'deck_cards_kept', `Kept ${asked.length} card${asked.length === 1 ? '' : 's'} of the proposal`);
+  const written = await proposalRow(c.env, Number(row.id));
+  return c.json({ proposal: rowToProposal(written), proposal_hash: await proposalHash(written) });
+});
+
+export default deckNew;

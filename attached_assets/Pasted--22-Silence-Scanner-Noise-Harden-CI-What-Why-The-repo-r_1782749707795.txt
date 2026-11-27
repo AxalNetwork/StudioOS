@@ -1,0 +1,29 @@
+#22 - Silence Scanner Noise & Harden CI
+What & Why
+The repo runs CodeQL (security-extended,security-and-quality) and Semgrep OSS on every push/PR, uploading SARIF to the GitHub Security tab. The large majority of the 310 open code-scanning alerts are NOT real bugs — they come from two non-source areas that are scanned today but shouldn't be:
+* Generated build output committed under docs/ (e.g. docs/assets/*.js minified Vite/Rollup bundles). These produce ~150+ alerts: unknown-value-with-script-tag, prototype-pollution-loop, detect-non-literal-regexp, unsafe-formatstring, missing-integrity, plus "unused/minified" CodeQL noise. They are not hand-written and must not be analyzed.
+* Pasted attachments committed under attached_assets/ (Pasted-*.txt, decks, docs). These produce the "AWS access key / generic secret" findings (#3474–3479, #288) and "unused variable" findings (#3454, #3297) — all from meta/prompt text and example values, not live secrets or real code.
+This task stops scanning those paths so the noise alerts auto-close on the next scan, and fixes the one real High in the CI config: run-shell-injection in .github/workflows/ci.yml (#2556, #2557) where ${{ github.base_ref }} is interpolated directly into run: shell.
+This task is intentionally isolated to .github/** and ignore files so it can run independently of the source-code tasks.
+Done looks like
+* CodeQL no longer analyzes docs/** or attached_assets/**; the generated/pasted-file alerts move to a closed/fixed state after the next scan.
+* Semgrep no longer scans docs/** or attached_assets/**.
+* The CI shell-injection High (#2556/#2557) is resolved: branch refs flow through environment variables, never inline ${{ }} expansion in run: blocks.
+* Real source code (including frontend/**, cloudflare-worker/**, backend/**, and test files) is STILL fully scanned — coverage is not reduced for hand-written code.
+Out of scope
+* Any fix or suppression inside real source files (covered by "Fix real security findings in source").
+* Dependabot/dependency-CVE alerts (a separate effort).
+* Deleting the scanner workflows.
+Steps
+1. Add a CodeQL config file that sets paths-ignore for the generated docs/ tree and the attached_assets/ tree, and reference it from the CodeQL init step. Confirm test directories and real source remain in scope.
+2. Add Semgrep ignore configuration (a .semgrepignore and/or explicit --exclude flags) covering the same two trees, leaving real source and tests scanned.
+3. Fix the CI shell-injection by passing github.base_ref into the step via env: and referencing the quoted environment variable inside run:, for BOTH the fetch step and the LFS-gate step.
+4. Sanity-check the workflow YAML parses and the exclusions target only generated/pasted paths.
+Constraints / notes
+* Editing files under .github/workflows/** requires the GitHub workflow token scope. Replit's default GitHub OAuth lacks it; push via the repo's GITHUB_TOKEN fallback (see scripts/git-push.sh).
+* Do NOT exclude frontend/, cloudflare-worker/, backend/, or */test/ — those hold real findings handled elsewhere.
+Relevant files
+* .github/workflows/codeql.yml
+* .github/workflows/semgrep.yml
+* .github/workflows/ci.yml:90,97,100
+* .gitignore:22-24

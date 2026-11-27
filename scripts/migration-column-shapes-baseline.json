@@ -1,0 +1,5 @@
+{
+  "note": "Migrations that read a column only SOME definitions of a multiply-defined table have. D1 keeps one table per name and every definition is CREATE TABLE IF NOT EXISTS, so the first file to run won and the rest were no-ops; a migration naming a column from the losing shape cannot apply at all. Migration 196 is why this check exists \u2014 it named quotes.partner_id and service_offerings.owner_user_id, which come from opposite lineages, so no ordering of those files could satisfy both. It failed its first production run and D1 rolled it back. Empty is the correct state: an entry here is a migration that will fail against at least one possible database, so prefer fixing the migration to recording it.",
+  "resolve_with": "npx wrangler d1 execute studioos-db --remote --command=\"PRAGMA table_info('<table>')\"",
+  "references": {}
+}

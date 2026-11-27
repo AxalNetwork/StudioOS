@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <style>
+    body{margin:0}a{color:#334155;text-decoration:none}a:hover{color:#18181b}
+    .lc{container-type:inline-size}.lc-tabs::-webkit-scrollbar{display:none}
+    @container (max-width:640px){
+      .lc-shell{grid-template-columns:minmax(0,1fr)!important}.lc-side,.lc-hide{display:none!important}
+      .lc-main{padding:14px 14px 40px!important}.lc-g4,.lc-g2,.lc-g3{grid-template-columns:minmax(0,1fr)!important}
+      .lc-tabs{flex-wrap:nowrap!important;overflow-x:auto}.lc-tr{grid-template-columns:1fr 1fr!important;row-gap:4px!important}.lc-tr>:first-child{grid-column:1/-1}.lc-th{display:none!important}
+      .lc-h1{font-size:20px!important}.lc-sheet{width:auto!important;left:0!important;border-left:0!important}
+    }
+  </style>
+</helmet>
+<div class="lc" style="background:#f7f8f9;font-family:Inter,system-ui,sans-serif;color:#18181b;font-variant-numeric:tabular-nums;min-height:100%;position:relative">
+<div class="lc-shell" style="display:grid;grid-template-columns:184px minmax(0,1fr);min-height:100%">
+
+  <aside class="lc-side" style="background:#fff;border-right:1px solid #ececf1;padding:14px 0;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:9px;padding:0 16px 14px"><img src="./uploads/axal-logo-no-black.png" alt="" style="width:22px;height:22px;object-fit:contain"><span style="font:700 15px 'Space Grotesk',Inter,sans-serif;letter-spacing:-.02em">Axal VC</span></div>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="9"><div style="{{ s.row }}"><span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ s.icon }}"></span><span style="flex:1">{{ s.t }}</span><sc-if value="{{ s.count }}" hint-placeholder-val="{{ false }}"><span style="font:700 10.5px ui-monospace,Menlo,monospace;color:#fff;background:#334155;border-radius:99px;padding:1px 7px">{{ s.count }}</span></sc-if></div></sc-for>
+  </aside>
+
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <div style="background:{{ badgeBg }};color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px"><span style="display:flex;align-items:center;gap:9px;min-width:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg><span style="font:800 13px Inter;white-space:nowrap">{{ terrName }}</span><span style="font:500 10.5px Inter;opacity:.75;white-space:nowrap">{{ terrCodes }}</span></span><span style="font:700 10px Inter;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">{{ terrPill }}</span></div>
+    <div style="height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 22px;gap:12px">
+      <span style="font:500 11.5px ui-monospace,Menlo,monospace;color:#615c6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ route }}</span>
+      <div style="display:flex;align-items:center;gap:12px"><span style="position:relative;width:20px;height:20px;display:flex"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#18181b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg><span style="position:absolute;top:-1px;right:-1px;width:8px;height:8px;border-radius:50%;background:#b91c1c;border:2px solid #fff"></span></span><span style="width:30px;height:30px;border-radius:50%;background:#f1f5f9;border:1px solid #cbd5e1;display:grid;place-items:center;font:600 10.5px ui-monospace,Menlo,monospace;color:#334155">[AB]</span></div>
+    </div>
+
+    <main class="lc-main" style="padding:18px 22px 40px;display:flex;flex-direction:column;gap:16px;min-width:0">
+      <sc-if value="{{ isNone }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ card }};padding:40px;max-width:560px;display:flex;flex-direction:column;gap:12px;align-self:center;margin-top:40px;text-align:center;align-items:center"><span style="font:800 20px/1.2 Inter;letter-spacing:-.02em">Your account is not linked to a licence. Ask HQ.</span><span style="font-size:13.5px;line-height:1.55;color:#615c6e">Licences are issued and linked by Axal VC HQ. Once yours is linked, its terms, contract and statements appear here.</span><span style="{{ btnP }}">Contact HQ</span></div>
+      </sc-if>
+
+      <sc-if value="{{ showHead }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px"><h1 class="lc-h1" style="margin:0;font:800 24px/1.15 Inter;letter-spacing:-.02em">[Brand name]</h1><span style="font:500 12px ui-monospace,Menlo,monospace;color:#615c6e">[AXL-PT-0003]</span><span style="{{ kindPill }}">{{ kind }}</span><span style="{{ statusPill }}">{{ status }}</span></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#4a4553"><span>Exclusive in</span><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:11px;border-radius:2px;background:linear-gradient(90deg,#046a38 40%,#da291c 40%)"></span>[Portugal]</span><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:11px;border-radius:2px;background:linear-gradient(180deg,#aa151b 25%,#f1bf00 25%,#f1bf00 75%,#aa151b 75%)"></span>[Spain]</span></div>
+        </div>
+        <div class="lc-tabs" style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:2px"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6"><a href="{{ t.href }}" onClick="{{ t.go }}" style="{{ t.s }};text-decoration:none">{{ t.t }}</a></sc-for></div>
+        <sc-if value="{{ banner.show }}" hint-placeholder-val="{{ false }}"><div style="border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;{{ banner.s }}"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-weight:700;font-size:14px">{{ banner.t }}</span><span style="font-size:12px;line-height:1.5">{{ banner.d }}</span></div><sc-if value="{{ banner.b }}" hint-placeholder-val="{{ false }}"><span style="{{ btnP }}">{{ banner.b }}</span></sc-if></div></sc-if>
+      </sc-if>
+
+      <!-- L1 SUMMARY -->
+      <sc-if value="{{ is.summary }}" hint-placeholder-val="{{ true }}">
+        <div class="lc-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+          <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Term</span><span style="font:700 16px Inter">Year [2] of [3]</span><span style="font:400 12px ui-monospace,Menlo,monospace;color:#615c6e">[1 Mar 2025] to [28 Feb 2028]</span><div style="height:6px;border-radius:99px;background:#f1f5f9"><div style="width:52%;height:6px;border-radius:99px;background:#334155"></div></div></div>
+          <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Renewal</span><span style="font:700 15px/1.3 Inter">{{ renew.t }}</span><span style="font-size:12px;color:#615c6e">{{ renew.d }}</span></div>
+          <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Annual licence fee</span><span style="font:600 20px ui-monospace,Menlo,monospace">€[90,000]</span><span style="font-size:12px;color:#615c6e">next invoice [1 Mar 2026]</span></div>
+          <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Revenue share to HQ</span><span style="font:600 20px ui-monospace,Menlo,monospace">[20]%</span><span style="font-size:12px;color:#615c6e">AI token split [30]% · royalty on licences sold [n]%</span></div>
+        </div>
+        <div class="lc-g2" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Needs you</span><span style="font:500 11.5px ui-monospace,Menlo,monospace;color:#615c6e">{{ needsCount }}</span></div>
+              <sc-if value="{{ needsEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:22px 16px;font-size:12px;color:#615c6e">Nothing needs you</div></sc-if>
+              <sc-for list="{{ needs }}" as="n" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid #f4f3f7;font-size:12px"><span>{{ n.t }}</span><span style="{{ n.s }}">{{ n.b }}</span></div></sc-for>
+            </div>
+            <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>What you owe HQ</span><span style="{{ issued }}">Issued</span></div><div style="padding:6px 16px 12px"><sc-for list="{{ owe }}" as="r" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid #f8f8fa"><span style="color:#615c6e">{{ r.k }}</span><span style="font:500 13px ui-monospace,Menlo,monospace">{{ r.v }}</span></div></sc-for><a href="/admin/my-licence/statements" onClick="{{ goStatements }}" style="{{ btnG }};display:inline-block;margin-top:10px;text-decoration:none">Open statements</a></div></div>
+            <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Deal terms at a glance</span><a href="/admin/my-licence/terms" onClick="{{ goTerms }}" style="font-size:11.5px;font-weight:700;color:#334155;text-decoration:none">All terms →</a></div><div style="padding:6px 16px 12px"><sc-for list="{{ dealGlance }}" as="r" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:12px;border-bottom:1px solid #f8f8fa"><span style="color:#615c6e">{{ r.k }}</span><span style="font:500 13px ui-monospace,Menlo,monospace;text-align:right">{{ r.v }}</span></div></sc-for></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Seats</span><span style="font-size:11.5px;font-weight:700;color:#334155">Request seats</span></div><div style="padding:10px 16px 14px;display:flex;flex-direction:column;gap:10px"><sc-if value="{{ seatsNC }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#615c6e;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:8px;padding:7px 10px">Seats used is not counted on HQ yet</div></sc-if><sc-for list="{{ seats }}" as="s" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="font-weight:600">{{ s.t }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:#4a4553">{{ s.v }}</span></div><div style="height:6px;border-radius:99px;background:#f1f5f9"><div style="{{ s.bar }}"></div></div></div></sc-for></div></div>
+            <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Your contract</span><span style="font:800 14.5px Inter;letter-spacing:-.015em">Subsidiary licence agreement v[6.1]</span><span style="font-size:12.5px;color:#92400e">Sent [12 Oct] · waiting for your signature</span><span style="font-size:12.5px;color:#615c6e">In force: v[6.0], signed [2 Mar 2025]</span><a href="/admin/my-licence/contract" onClick="{{ goContract }}" style="{{ btnG }};align-self:flex-start;margin-top:4px;text-decoration:none">Open contract</a></div>
+            <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Administrators</span><span style="font-size:11.5px;font-weight:700;color:#334155">Request a delegate</span></div><sc-for list="{{ admins }}" as="a" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;align-items:center;gap:4px 10px;flex-wrap:wrap;padding:10px 16px;border-top:1px solid #f4f3f7;font-size:12px"><span style="display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:50%;background:#f1f5f9;border:1px solid #cbd5e1"></span><span style="font-weight:600">{{ a.n }}</span><span style="color:#615c6e">{{ a.r }}</span></span><span style="font:400 11.5px ui-monospace,Menlo,monospace;color:#615c6e">{{ a.s }}</span></div></sc-for></div>
+            <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="{{ lbl }}">AI allowance for this licence</span><div style="display:flex;gap:16px;font-size:12px"><span>Daily <b style="font-family:ui-monospace,Menlo,monospace;font-weight:500">[$5]</b></span><span>Monthly <b style="font-family:ui-monospace,Menlo,monospace;font-weight:500">[$50]</b></span></div><div style="height:6px;border-radius:99px;background:#f1f5f9"><div style="width:38%;height:6px;border-radius:99px;background:#334155"></div></div><span style="font:400 11.5px ui-monospace,Menlo,monospace;color:#615c6e">[$19] of [$50] used this month</span></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- L2 TERMS / L9 HQ EDITOR -->
+      <sc-if value="{{ showTerms }}" hint-placeholder-val="{{ false }}">
+        <div class="lc-g2" style="display:grid;grid-template-columns:{{ termsCols }};gap:14px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+            <sc-for list="{{ sections }}" as="g" hint-placeholder-count="8">
+              <div style="{{ card }};overflow:hidden">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer"><span style="font:800 14.5px Inter;letter-spacing:-.015em"><span style="font:500 12px ui-monospace,Menlo,monospace;color:#615c6e;margin-right:8px">{{ g.n }}</span>{{ g.t }}</span><span style="color:#615c6e">{{ g.chev }}</span></div>
+                <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                  <div class="lc-tr" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 120px 140px;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #f4f3f7;font-size:12px">
+                    <span style="color:#615c6e">{{ r.k }}</span>
+                    <sc-if value="{{ isHQ }}" hint-placeholder-val="{{ false }}"><span style="border:1px solid #e4e4ea;border-radius:7px;padding:6px 9px;background:#fff;font-weight:500">{{ r.v }}</span></sc-if>
+                    <sc-if value="{{ notHQ }}" hint-placeholder-val="{{ true }}"><span style="font-weight:500">{{ r.v }}</span></sc-if>
+                    <span><span style="{{ r.srcS }}">{{ r.src }}</span></span>
+                    <span style="display:flex;justify-content:flex-end"><sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;font-weight:700;color:#334155;white-space:nowrap">Request a change</span></sc-if></span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ g.ladder }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;padding:12px 16px;border-top:1px solid #f4f3f7;flex-wrap:wrap"><sc-for list="{{ ladder }}" as="l" hint-placeholder-count="4"><span style="{{ l.s }}">{{ l.t }}</span><sc-if value="{{ l.arrow }}" hint-placeholder-val="{{ true }}"><span style="color:#a1a1aa">→</span></sc-if></sc-for></div></sc-if>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ isHQ }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ card }};padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;border-color:#fbcfe8"><div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;font-weight:600;color:#615c6e">Reason for this change · kept in the licence's history</span><span style="border:1px solid #e4e4ea;border-radius:8px;padding:9px 11px;font-size:12px;color:#a1a1aa">[Why these terms are changing]</span></div><span style="font:600 13px Inter;color:#fff;background:#881337;border-radius:9px;padding:9px 16px">Save terms</span></div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ isHQ }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ card }};overflow:hidden;position:sticky;top:12px"><div style="{{ cardHd }}"><span>Open requests</span><span style="font:500 11.5px ui-monospace,Menlo,monospace;color:#615c6e">[3]</span></div><sc-for list="{{ hqReq }}" as="q" hint-placeholder-count="3"><div style="padding:11px 16px;border-top:1px solid #f4f3f7;display:flex;flex-direction:column;gap:5px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px"><span style="font-weight:600">{{ q.k }}</span><span style="font:400 11.5px ui-monospace,Menlo,monospace;color:#615c6e">{{ q.w }}</span></div><span style="font-size:12.5px;color:#4a4553;line-height:1.45">{{ q.d }}</span><span style="font-size:12px;font-weight:600;color:#881337">Answer</span></div></sc-for></div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- L3 CONTRACT -->
+      <sc-if value="{{ is.contract }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ cWaiting }}" hint-placeholder-val="{{ false }}"><div style="{{ card }};padding:28px;display:flex;flex-direction:column;gap:8px;max-width:620px"><span style="{{ waitPill }}">Waiting for HQ</span><span style="font:700 16px Inter">No contract has been sent yet</span><span style="font-size:12px;color:#615c6e;line-height:1.55">HQ drafts the licence agreement and sends it here for your signature. Nothing to do until then.</span></div></sc-if>
+        <sc-if value="{{ cReady }}" hint-placeholder-val="{{ true }}">
+          <div style="{{ card }};padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><sc-for list="{{ cSteps }}" as="c" hint-placeholder-count="3"><span style="display:flex;align-items:center;gap:6px;font-size:12.5px"><span style="{{ c.dot }}"></span><span style="font-weight:600">{{ c.t }}</span><span style="font:400 11.5px ui-monospace,Menlo,monospace;color:#615c6e">{{ c.d }}</span></span><sc-if value="{{ c.line }}" hint-placeholder-val="{{ true }}"><span style="width:26px;height:1px;background:#d4d1dc"></span></sc-if></sc-for></div><div style="display:flex;gap:6px"><span style="{{ btnG }}">Download PDF</span><span style="{{ btnP }}">Sign</span></div></div>
+          <div class="lc-g2" style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:start">
+            <div class="lc-hide" style="{{ card }};padding:10px;display:flex;flex-direction:column;gap:2px;position:sticky;top:12px"><sc-for list="{{ cIndex }}" as="x" hint-placeholder-count="8"><span style="{{ x.s }}">{{ x.t }}</span></sc-for></div>
+            <div style="{{ card }};padding:28px 32px;display:flex;flex-direction:column;gap:14px;max-width:760px"><span style="font:800 18px Inter;letter-spacing:-.015em">Subsidiary licence agreement · v[6.1]</span><sc-for list="{{ cText }}" as="p" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:5px"><span style="font:700 13px Inter">{{ p.h }}</span><span style="font-size:12px;line-height:1.65;color:#3f3a49">{{ p.a }}<sc-if value="{{ p.gap }}" hint-placeholder-val="{{ false }}"><span style="background:#fef9c3;border:1px dashed #eab308;border-radius:4px;padding:0 5px;font:500 12px ui-monospace,Menlo,monospace;color:#854d0e">[not filled]</span></sc-if>{{ p.b }}</span></div></sc-for></div>
+          </div>
+          <div style="{{ card }};overflow:hidden;max-width:760px"><div style="{{ cardHd }}"><span>Earlier versions</span></div><div style="display:flex;justify-content:space-between;padding:11px 16px;border-top:1px solid #f4f3f7;font-size:12px"><span>v[6.0], superseded [2 Jul 2025]</span><span style="font-size:12px;color:#615c6e">Read-only · Download PDF</span></div></div>
+        </sc-if>
+      </sc-if>
+
+      <!-- L4 STATEMENTS -->
+      <sc-if value="{{ is.statements }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ card }};overflow:hidden">
+          <div class="lc-th lc-tr" style="display:grid;grid-template-columns:110px repeat(5,minmax(0,1fr)) 100px 110px;gap:12px;padding:9px 16px;background:#fafafb;border-bottom:1px solid #ececf1;font:800 9.5px Inter;letter-spacing:.07em;text-transform:uppercase;color:#615c6e"><span>Period</span><span>Gross</span><span>Share</span><span>Owed</span><span>Paid</span><span>Disputed</span><span>Status</span><span></span></div>
+          <sc-for list="{{ stmts }}" as="r" hint-placeholder-count="4">
+            <div class="lc-tr" style="display:grid;grid-template-columns:110px repeat(5,minmax(0,1fr)) 100px 110px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #f4f3f7;font:500 13px ui-monospace,Menlo,monospace"><span style="font-family:Inter;font-weight:700">{{ r.p }}</span><span>{{ r.g }}</span><span>{{ r.s }}</span><span>{{ r.o }}</span><span>{{ r.pd }}</span><span>{{ r.d }}</span><span><span style="{{ r.ps }}">{{ r.st }}</span></span><span style="font:700 11.5px Inter;color:#334155;text-align:right">Dispute a line</span></div>
+            <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}"><div style="background:#fafafb;border-bottom:1px solid #ececf1;padding:6px 16px 10px 126px"><sc-for list="{{ streams }}" as="x" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;font-size:12px"><span>{{ x.t }}</span><span style="display:flex;gap:8px;align-items:center"><sc-if value="{{ x.chip }}" hint-placeholder-val="{{ false }}"><span style="{{ x.cs }}">{{ x.chip }}</span></sc-if><span style="font:500 13px ui-monospace,Menlo,monospace">{{ x.v }}</span></span></div></sc-for></div></sc-if>
+          </sc-for>
+        </div>
+        <div class="lc-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+          <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:7px"><span style="{{ lbl }}">How to pay HQ</span><sc-for list="{{ payRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px"><span style="color:#615c6e">{{ r.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;text-align:right">{{ r.v }}</span></div></sc-for><span style="font-size:12px;color:#615c6e;margin-top:4px">HQ records your payment within [2] business days.</span></div>
+          <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Annual licence fee invoices</span></div><sc-for list="{{ invoices }}" as="r" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid #f4f3f7;font-size:12.5px"><span style="display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">{{ r.t }}</span><span style="font:400 11.5px ui-monospace,Menlo,monospace;color:#615c6e">{{ r.d }} · {{ r.a }}</span></span><span style="display:flex;gap:8px;align-items:center"><span style="{{ r.ps }}">{{ r.st }}</span><span style="font-weight:600;color:#334155">PDF</span></span></div></sc-for></div>
+          <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Usage reports</span><span style="font-size:11.5px;color:#615c6e">due by day [5]</span></div><sc-for list="{{ usage }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid #f4f3f7;font-size:12.5px"><span style="font-weight:600">{{ r.m }}</span><span style="display:flex;gap:8px;align-items:center"><span style="{{ r.ps }}">{{ r.st }}</span><sc-if value="{{ r.late }}" hint-placeholder-val="{{ false }}"><span style="{{ btnP }};padding:5px 10px;font-size:12px">Send now</span></sc-if></span></div></sc-for></div>
+        </div>
+        <div style="{{ card }};padding:14px 16px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;max-width:760px"><div style="display:flex;flex-direction:column;gap:5px;width:150px"><span style="font-size:12px;font-weight:600;color:#615c6e">Dispute a line · amount</span><span style="border:1px solid #e4e4ea;border-radius:8px;padding:8px 10px;font:500 13px ui-monospace,Menlo,monospace">€[1,200]</span></div><div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;font-weight:600;color:#615c6e">Reason</span><span style="border:1px solid #e4e4ea;border-radius:8px;padding:8px 10px;font-size:12px;color:#a1a1aa">[Why this line is wrong]</span></div><span style="{{ btnP }}">Send dispute</span></div>
+      </sc-if>
+
+      <!-- L5 REQUESTS -->
+      <sc-if value="{{ is.requests }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><span style="{{ btnP }}">Request renewal</span><span style="{{ btnG }}">Request a change</span><span style="{{ btnG }}">Request seats</span><span style="{{ btnG }}">Request a delegate</span><span style="{{ btnG }};color:#b91c1c;border-color:#fecaca">Give notice of non-renewal</span></div>
+        <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:12px"><span style="{{ lbl }}">Renewal timeline</span><div style="display:flex;align-items:center"><sc-for list="{{ tline }}" as="p" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;align-items:center;gap:5px;min-width:96px"><span style="{{ p.dot }}"></span><span style="font-size:12.5px;font-weight:600">{{ p.t }}</span><span style="font:400 11.5px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.d }}</span></div><sc-if value="{{ p.line }}" hint-placeholder-val="{{ true }}"><span style="flex:1;height:2px;background:#e4e4ea;margin-bottom:34px"></span></sc-if></sc-for></div></div>
+        <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Your requests</span></div>
+          <div class="lc-th lc-tr" style="display:grid;grid-template-columns:minmax(0,1.2fr) 110px 130px 150px minmax(0,1.6fr);gap:12px;padding:9px 16px;background:#fafafb;border-bottom:1px solid #ececf1;font:800 9.5px Inter;letter-spacing:.07em;text-transform:uppercase;color:#615c6e"><span>Kind</span><span>Sent</span><span>HQ response time</span><span>Status</span><span>HQ's answer</span></div>
+          <sc-for list="{{ reqs }}" as="r" hint-placeholder-count="4"><div class="lc-tr" style="display:grid;grid-template-columns:minmax(0,1.2fr) 110px 130px 150px minmax(0,1.6fr);gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #f4f3f7;font-size:12px"><span style="font-weight:600">{{ r.k }}</span><span style="font:400 12px ui-monospace,Menlo,monospace;color:#615c6e">{{ r.w }}</span><span style="font:400 12px ui-monospace,Menlo,monospace;color:#615c6e">{{ r.rt }}</span><span><span style="{{ r.ps }}">{{ r.st }}</span></span><span style="color:#4a4553">{{ r.a }}</span></div></sc-for>
+        </div>
+      </sc-if>
+
+      <!-- L6 HISTORY -->
+      <sc-if value="{{ is.history }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Notices from HQ</span></div><sc-for list="{{ notices }}" as="n" hint-placeholder-count="3"><div class="lc-tr" style="display:grid;grid-template-columns:minmax(0,1.4fr) 110px 150px 90px;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid #f4f3f7;font-size:12px"><span style="font-weight:600">{{ n.k }}</span><span style="font:400 12px ui-monospace,Menlo,monospace;color:#615c6e">{{ n.d }}</span><span><span style="{{ n.ps }}">{{ n.step }}</span></span><span style="display:flex;justify-content:flex-end"><sc-if value="{{ n.ans }}" hint-placeholder-val="{{ false }}"><span style="{{ btnP }};padding:5px 11px;font-size:12px">Answer</span></sc-if></span></div></sc-for></div>
+        <div style="{{ card }};overflow:hidden"><div style="{{ cardHd }}"><span>Licence history</span></div><sc-for list="{{ events }}" as="e" hint-placeholder-count="6"><div class="lc-tr" style="display:grid;grid-template-columns:150px 110px 80px minmax(0,1fr);gap:12px;align-items:center;padding:10px 16px;border-top:1px solid #f4f3f7;font-size:12px"><span style="font-weight:600">{{ e.k }}</span><span style="font:400 12px ui-monospace,Menlo,monospace;color:#615c6e">{{ e.d }}</span><span style="font-size:12px;color:#615c6e">by HQ</span><span style="color:#4a4553">{{ e.t }}</span></div></sc-for></div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+
+<sc-if value="{{ sheet }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;background:rgba(24,24,27,.3)"></div>
+  <div class="lc-sheet" style="position:absolute;top:0;right:0;bottom:0;width:460px;background:#fff;border-left:1px solid #ececf1;box-shadow:-18px 0 40px rgba(24,24,27,.12);display:flex;flex-direction:column;overflow:auto">
+    <div style="padding:18px 20px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font:800 17px Inter;letter-spacing:-.015em">Request a change</span><span style="font-size:18px;color:#615c6e">×</span></div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;flex-direction:column;gap:7px"><span style="font-size:12px;font-weight:600;color:#615c6e">What to change</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ whatChips }}" as="w" hint-placeholder-count="5"><span style="{{ w.s }}">{{ w.t }}</span></sc-for></div></div>
+      <div style="display:flex;flex-direction:column;gap:7px"><span style="font-size:12px;font-weight:600;color:#615c6e">As it stands · read-only</span><div style="background:#f8f8fa;border:1px solid #ececf1;border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.55">Founder seats: [60] licensed, [57] used · Contract §[6.1]</div></div>
+      <div style="display:flex;flex-direction:column;gap:7px"><span style="font-size:12px;font-weight:600;color:#615c6e">What you are asking for</span><span style="border:1px solid #e4e4ea;border-radius:9px;padding:10px 12px;font-size:12px;color:#a1a1aa;min-height:56px">[e.g. [20] more founder seats from [1 Dec]]</span></div>
+      <div style="display:flex;flex-direction:column;gap:7px"><span style="font-size:12px;font-weight:600;color:#615c6e">Why</span><span style="border:1px solid #e4e4ea;border-radius:9px;padding:10px 12px;font-size:12px;color:#a1a1aa;min-height:56px">[The reason HQ should agree]</span></div>
+      <span style="font-size:12px;color:#615c6e">HQ answers seat requests within [72] hours. Nothing changes until HQ does.</span>
+      <div style="display:flex;gap:8px"><span style="{{ btnP }}">Send request</span><span style="{{ btnG }}">Cancel</span></div>
+    </div>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;summary&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;summary&quot;,&quot;terms&quot;,&quot;contract&quot;,&quot;statements&quot;,&quot;requests&quot;,&quot;history&quot;,&quot;hq&quot;]},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;ok&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;ok&quot;,&quot;pending&quot;,&quot;suspended&quot;,&quot;terminated&quot;,&quot;none&quot;]},&quot;kind&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Subsidiary&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;Subsidiary&quot;,&quot;White-label&quot;]},&quot;renewal&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;date&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;date&quot;,&quot;auto&quot;,&quot;requested&quot;,&quot;notice&quot;]},&quot;seats&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;counted&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;counted&quot;,&quot;notCounted&quot;]},&quot;contract&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;sent&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;sent&quot;,&quot;waiting&quot;]},&quot;needsEmpty&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;sheet&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  renderVals() {
+    const P = this.props, board = this.state.board || P.board || 'summary', st = P.state ?? 'ok', kind = P.kind ?? 'Subsidiary';
+    const isHQ = board === 'hq';
+    const pill = (fg, bg, bd, dash) => 'font:600 11px Inter;border-radius:99px;padding:3px 9px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px ' + (dash ? 'dashed ' : 'solid ') + bd;
+    const PL = { ok: pill('#047857', '#ecfdf5', '#a7f3d0'), slate: pill('#334155', '#f1f5f9', '#cbd5e1'), amber: pill('#92400e', '#fffbeb', '#fcd34d'), bad: pill('#b91c1c', '#fef2f2', '#fecaca'), grey: pill('#615c6e', '#f4f3f7', '#ececf1'), nr: 'display:inline-flex;align-items:center;font:700 9.5px Inter;letter-spacing:.03em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap' };
+    const card = 'background:#fff;border:1px solid #ececf1;border-radius:12px';
+    const btnP = "font:700 11.5px Inter;color:#fff;background:#334155;border:1px solid #334155;border-radius:7px;padding:6px 12px;white-space:nowrap;text-align:center;cursor:pointer", btnG = "font:700 11.5px Inter;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:6px 12px;white-space:nowrap;text-align:center;cursor:pointer";
+    const ic = (p) => ({ __html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + p + '</svg>' });
+    const ICO = { Studio: '<path d="M4 11 12 4l8 7v9H4Z"/>', Accounts: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>', Approvals: '<path d="M20 6 9 17l-5-5"/>', Programs: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>', Community: '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 8.5 11 16M16 8.5 13 16"/>', Contracts: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>', 'Fund admin': '<path d="M3 21h18M5 21V10M19 21V10M12 3l9 5H3z"/>', Insights: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', Licences: '<circle cx="12" cy="9" r="5"/><path d="M8.5 13 7 22l5-3 5 3-1.5-9"/>', Home: '<path d="M4 11 12 4l8 7v9H4Z"/>', Funds: '<path d="M3 21h18M5 21V10M19 21V10M12 3l9 5H3z"/>', Team: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/>', Revenue: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', Content: '<path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5"/>', Platform: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', Support: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 17h.01"/>', Security: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>', Settings: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/>' };
+    const rows = isHQ ? ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings'] : ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'];
+    const ac = isHQ ? ['#881337', '#fdf2f6'] : ['#334155', '#f1f5f9'];
+    const side = rows.map(t => ({ t, icon: ic(ICO[t] || ''), count: !isHQ && t === 'Licences' ? '[2]' : '', row: 'display:flex;align-items:center;gap:9px;margin:0 8px;padding:7px 10px;border-radius:7px;font-size:12.5px;' + (t === 'Licences' ? 'font-weight:700;color:' + ac[0] + ';background:' + ac[1] : 'font-weight:500;color:#4a4553') }));
+    const TABS = ['Summary', 'Terms', 'Contract', 'Statements', 'Requests', 'History'];
+    const tabOf = { summary: 'Summary', terms: 'Terms', contract: 'Contract', statements: 'Statements', requests: 'Requests', history: 'History' }[board];
+    const TK = { Summary: ['summary', ''], Terms: ['terms', '/terms'], Contract: ['contract', '/contract'], Statements: ['statements', '/statements'], Requests: ['requests', '/requests'], History: ['history', '/history'] };
+    const tabs = TABS.map(t => ({ t, href: '/admin/my-licence' + TK[t][1], go: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ board: TK[t][0], sheetOff: true }); }, s: 'font-size:11px;white-space:nowrap;border-radius:999px;padding:5px 11px;cursor:pointer;border:1px solid ' + (t === tabOf ? '#cbd5e1;background:#f1f5f9;color:#334155;font-weight:700' : '#ececf1;background:#fff;color:#615c6e;font-weight:600') }));
+    const STATUS = { ok: ['Active', PL.ok], pending: ['Pending activation', PL.amber], suspended: ['Suspended', PL.bad], terminated: ['Terminated', PL.grey] };
+    const [status, statusPill] = STATUS[st] || STATUS.ok;
+    const BAN = {
+      pending: { t: 'Sign your contract to activate', d: 'Your licence becomes Active once you sign Subsidiary licence agreement v[6.1]. Members cannot join the territory until then.', b: 'Sign', s: 'background:#fffbeb;border:1px solid #fcd34d;color:#92400e' },
+      suspended: { t: 'Suspended by HQ since [18 Jul 2026]', d: 'Still works: members sign in, read their records and export data. Frozen: new members, approvals, payouts and programme changes. To cure: answer notice [Late usage report] and pay statement [Q2 2026].', b: 'Answer the notice', s: 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c' },
+      terminated: { t: 'Terminated [28 Feb 2028] · read-only', d: 'This licence has ended. Member accounts have moved to HQ. You can read every term, statement and notice, and export your data until [28 May 2028].', b: 'Export your data', s: 'background:#f4f3f7;border:1px solid #ececf1;color:#3f3a49' },
+    };
+    const banner = Object.assign({ show: !!BAN[st] && board === 'summary' || (st === 'suspended' && board === 'history') }, BAN[st] || { t: '', d: '', b: '', s: '' });
+    const ren = P.renewal ?? 'date';
+    const renew = { date: { t: 'Renews [1 Mar 2028], in [497] days', d: 'On request · notice by [2 Dec 2027]' }, auto: { t: 'Auto-renews [1 Mar 2028]', d: 'Give notice by [2 Dec 2027] to stop it' }, requested: { t: 'Renewal requested [12 Oct]', d: 'HQ answers within [72] hours' }, notice: { t: 'Notice of non-renewal given', d: 'Ends [28 Feb 2028] · given [1 Oct 2027]' } }[ren];
+    const needsEmpty = !!(P.needsEmpty ?? false);
+    const needs = needsEmpty ? [] : [['Contract v[6.1] is waiting for your signature', 'Sign', 1], ['HQ notice: [Late usage report]. Answer by [24 Oct]', 'Answer', 1], ['Statement [Q3 2026] issued: €[24,080] due [30 Nov]', 'View', 0], ['Founder seats [57] of [60] used', 'Request seats', 0]].map(([t, b, p]) => ({ t, b, s: p ? btnP + ';padding:6px 12px;font-size:12px' : btnG + ';padding:6px 12px;font-size:12px' }));
+    const kv = (a) => a.map(([k, v]) => ({ k, v }));
+    const seatsNC = (P.seats ?? 'counted') === 'notCounted';
+    const seats = [['Founder', 57, 60], ['Investor / LP', 18, 40], ['Advisor', 9, 15], ['Service Partner', 4, 10]].map(([t, u, n]) => ({ t, v: seatsNC ? 'Not recorded / [' + n + ']' : '[' + u + '] / [' + n + ']', bar: 'height:6px;border-radius:99px;background:' + (u / n > .9 ? '#92400e' : '#334155') + ';width:' + (seatsNC ? 0 : Math.round(100 * u / n)) + '%' }));
+    const TAG = 'font:700 10px Inter;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px;white-space:nowrap';
+    const R = (k, v, src, act) => ({ k, v, src, act: !isHQ && act !== 0, srcS: TAG });
+    const SECT = [
+      ['Parties', [R('Licensor · platform IP', 'Axal VC Holdings LLC', '§1.1'), R('Licensor · trademark and brand', 'Axal VC Management LLC', '§1.1'), R('Licensee', '[Subsidiary legal name], [registered address]', '§1.2', 0), R('Signatory', '[Signatory name], [Title]', '§1.3', 0), R('Governing law', '[Delaware]', '§22')]],
+      ['Territory and exclusivity', [R('Countries', '[Portugal], [Spain]', 'Ledger'), R('Exclusive', 'Yes', '§2.1'), R('Non-compete after the term', '[12] months', '§2.4'), R('Referrals from outside the territory', 'Through HQ', '§2.5')]],
+      ['Term and renewal', [R('Start', '[1 Mar 2025]', 'Ledger'), R('Length', '[3] years', '§3.1'), R('Renewal date', '[1 Mar 2028]', 'Ledger'), R('Renewal', 'On request', '§3.2'), R('Notice for non-renewal', '[90] days', '§3.3'), R('Termination for cause', 'Cure period [30] days', '§19.2'), R('At termination', 'Member data handed over; accounts move to HQ', '§19.5')]],
+      ['Fees and money', [R('Annual licence fee', '€[90,000], invoiced each [1 Mar]', 'Ledger'), R('Revenue share · Subscriptions', '[20]%', '§4.2'), R('Revenue share · Licence fees', '[20]%', '§4.2'), R('Revenue share · Token margin', '[20]%', '§4.2'), R('AI token split', '[30]%', '§4.3'), R('Royalty on platform licences you sell', '[n]% of each licence fee, to HQ', '§4.7'), R('Minimum guarantee', '€[0]', '§4.4'), R('Promo credit ceiling', '€[5,000] a period', 'Ledger'), R('Payment terms', '[30] days · late interest [1]% a month', '§4.6')]],
+      ['Deal terms', [R('HQ first look', '[10] business days', '§5.1'), R('Co-investment with the Axal VC Fund', 'Up to [25]% of a round', '§5.2'), R('Your carry share', '[20]% on deals you source that HQ funds', '§5.3'), R('Referral fee', '[1.5]%', '§5.4'), R('HQ approval above', '€[2,000,000]', '§5.5'), R('Conflicts of interest', 'Declared to HQ', '§5.6', 0)]],
+      ['Seats', [R('Founder', '[60]', 'Ledger'), R('Investor / LP', '[40]', 'Ledger'), R('Advisor', '[15]', 'Ledger'), R('Service Partner', '[10]', 'Ledger'), R('What a seat includes', 'One member account with that role\u2019s workspace', '§6.2', 0)]],
+      ['Brand and platform', [R('Brand name', '[Brand name]', 'Ledger'), R('Kind', kind, 'Ledger'), R('Custom host', '[app.example.pt] · Active', 'Ledger', 0), R('Brand kit', kind === 'White-label' ? 'Yours: name, mark, colours' : 'Axal VC brand kit', '§7.2'), R('Platform IP', 'Owned by Axal VC Holdings LLC, licensed to you', '§7.3'), R('Trademark and brand', 'Owned by Axal VC Management LLC, licensed to you', '§7.3'), R('Members\u2019 data', 'Yours, as controller', '§7.4')]],
+      ['Compliance and reporting', [R('Usage report', 'Monthly, by day [5]', '§8.1', 0), R('Statement', 'Quarterly', '§8.2', 0), R('KYC and AML', 'On every investor', '§8.3', 0), R('Data protection', 'You are the controller; Axal VC is the processor', '§8.4', 0), R('Audit right', 'HQ, on [30] days\u2019 notice', '§8.5'), R('HQ response times', 'Moderation [24] h · content, seats, other [72] h', '§8.6', 0)]],
+    ];
+    const sections = SECT.map(([t, rr], i) => ({ n: String(i + 1).padStart(2, '0'), t, rows: rr.map(r => Object.assign({}, r, { src: r.src === 'Ledger' ? 'Ledger' : 'Contract ' + r.src })), open: true, chev: '−', ladder: i === 7 }));
+    const ladder = ['Notice', 'Your answer', 'Freeze', 'Suspension'].map((t, i, a) => ({ t, s: [PL.slate, PL.slate, PL.amber, PL.bad][i], arrow: i < a.length - 1 }));
+    const cst = P.contract ?? 'sent';
+    const dot = (c) => 'width:10px;height:10px;border-radius:50%;background:' + c;
+    const cSteps = [['Drafted', '[8 Oct]', '#334155'], ['Sent', '[12 Oct]', '#334155'], ['Signed', 'Not recorded', '#d4d1dc']].map(([t, d, c], i, a) => ({ t, d, dot: dot(c), line: i < a.length - 1 }));
+    const cIndex = ['1 Parties', '2 Territory', '3 Term and renewal', '4 Fees', '5 Deal terms', '6 Seats', '7 Brand', '8 Compliance', '19 Termination', '22 Governing law'].map((t, i) => ({ t, s: 'padding:7px 10px;border-radius:7px;font-size:12.5px;' + (i === 3 ? 'background:#f1f5f9;color:#334155;font-weight:700' : 'color:#4a4553;font-weight:500') }));
+    const cText = [
+      { h: '4.1 Annual licence fee', a: 'The Licensee pays the Licensor an annual licence fee of €[90,000], invoiced on each [1 March] and payable within [30] days.', gap: false, b: '' },
+      { h: '4.2 Revenue share', a: 'The Licensee pays the Licensor [20]% of gross revenue reported for each stream, per quarterly statement.', gap: false, b: '' },
+      { h: '4.3 AI token split', a: 'Margin on AI tokens sold in the Territory is shared [30]% to the Licensor.', gap: false, b: '' },
+      { h: '4.4 Minimum guarantee', a: 'The minimum annual guarantee is ', gap: true, b: '.' },
+      { h: '4.5 Promotions', a: 'Promotional credits issued in the Territory may not exceed €[5,000] in any period.', gap: false, b: '' },
+      { h: '4.7 Royalty on platform licences', a: 'For each platform licence the Licensee sells in the Territory, the Licensee pays the Licensor a royalty of [n]% of that licence fee, reported in the quarterly statement.', gap: false, b: '' },
+      { h: '4.6 Payment terms', a: 'Late amounts carry interest of [1]% a month from the due date until paid. Payment is made to account ', gap: true, b: '.' },
+    ];
+    const S = { Issued: PL.slate, Paid: PL.ok, Draft: PL.grey, Void: PL.nr, Disputed: PL.amber };
+    const stmts = [['[Q3 2026]', '€[120,400]', '[20]%', '€[24,080]', '€[0]', '€[0]', 'Issued'], ['[Q2 2026]', '€[98,150]', '[20]%', '€[19,630]', '€[19,630]', '€[0]', 'Paid'], ['[Q1 2026]', '€[87,900]', '[20]%', '€[17,580]', '€[16,380]', '€[1,200]', 'Disputed'], ['[Q4 2026]', 'Not recorded', '[20]%', 'Not recorded', '€[0]', '€[0]', 'Draft']].map((r, i) => ({ p: r[0], g: r[1], s: r[2], o: r[3], pd: r[4], d: r[5], st: r[6], ps: S[r[6]], open: i === 0 }));
+    const streams = [['Subscriptions', '€[80,200]', ''], ['Licence fees', '€[40,200]', 'Estimated'], ['Token margin', 'Not recorded', 'Not reported'], ['Platform licence royalties', '€[6,000]', '']].map(([t, v, chip]) => ({ t, v, chip, cs: chip === 'Estimated' ? PL.amber : PL.nr }));
+    const reqs = [['Seats · Founder +[20]', '[12 Oct]', '[72] h', 'Open', PL.slate, 'Not recorded · awaiting HQ'], ['Renewal', '[3 Sep]', '[72] h', 'Answered', PL.ok, 'Renewal agreed on the same terms from [1 Mar 2028].'], ['Delegate · [Name]', '[1 Aug]', '[72] h', 'Past response time', PL.amber, 'Not recorded · HQ is past its [72] h'], ['Change · Promo ceiling', '[2 Jun]', '[72] h', 'Answered', PL.ok, 'Declined: the ceiling is reviewed at renewal.']].map(([k, w, rt, st2, ps, a]) => ({ k, w, rt, st: st2, ps, a }));
+    const whatChips = ['Territory', 'Seats', 'Fee', 'Term', 'A deal term'].map((t, i) => ({ t, s: 'font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid ' + (i === 1 ? '#334155;background:#334155;color:#fff' : '#e4e4ea;background:#fff;color:#4a4553') }));
+    const tline = [['Today', '[20 Oct 2026]', '#334155'], ['Notice deadline', '[2 Dec 2027]', '#92400e'], ['Renewal', '[1 Mar 2028]', '#047857']].map(([t, d, c], i, a) => ({ t, d, dot: dot(c), line: i < a.length - 1 }));
+    const notices = [['[Late usage report] · [Sep 2026]', '[17 Oct]', 'Notice', PL.slate, 1], ['[Missing KYC] · [3 investors]', '[2 Jul]', 'Your answer', PL.ok, 0], ['[Unpaid statement] · [Q2 2026]', '[1 Jul]', st === 'suspended' ? 'Suspension' : 'Freeze', st === 'suspended' ? PL.bad : PL.amber, st === 'suspended' ? 1 : 0]].map(([k, d, step, ps, ans]) => ({ k, d, step, ps, ans: !!ans }));
+    const events = [['Created', '[12 Feb 2025]', 'Licence [AXL-PT-0003] issued to [Subsidiary legal name].'], ['Activated', '[2 Mar 2025]', 'Contract v[6.0] signed; the territory opened.'], ['Seats changed', '[14 Jun 2025]', 'Founder seats [40] → [60].'], ['Terms changed', '[2 Jul 2025]', 'Revenue share [18]% → [20]%; v[6.1] drafted.'], st === 'suspended' ? ['Suspended', '[18 Jul 2026]', 'Statement [Q2 2026] unpaid past the cure period.'] : ['Renewed', 'Not recorded', 'Renewal is due [1 Mar 2028].'], ['Reinstated', 'Not recorded', 'Only after a suspension is cured.']].map(([k, d, t]) => ({ k, d, t }));
+    const flags = { summary: false, contract: false, statements: false, requests: false, history: false }; flags[board] = true;
+    const routes = { summary: '/admin/my-licence', terms: '/admin/my-licence/terms', contract: '/admin/my-licence/contract', statements: '/admin/my-licence/statements', requests: '/admin/my-licence/requests', history: '/admin/my-licence/history', hq: '/admin/licences/[uid] · HQ › Licences › [AXL-PT-0003] › Terms' };
+    const nav = (b) => (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ board: b }); };
+    return {
+      goContract: nav('contract'), goStatements: nav('statements'), goTerms: nav('terms'),
+      side, badgeBg: isHQ ? '#881337' : '#334155', terrName: isHQ ? 'Axal VC HQ' : '[Brand name]', terrCodes: isHQ ? 'All territories' : 'PT · ES', terrPill: isHQ ? 'HQ' : 'BRANCH', route: routes[board],
+      card, cardHd: 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;font:800 14.5px Inter;letter-spacing:-.015em', lbl: 'font:800 10px Inter;letter-spacing:.09em;text-transform:uppercase;color:#615c6e',
+      btnP: isHQ ? btnP.split('#334155').join('#881337') : btnP, btnG, kind, kindPill: kind === 'White-label' ? PL.amber : PL.slate, status, statusPill,
+      isNone: st === 'none', showHead: st !== 'none' && !isHQ, tabs, banner,
+      is: Object.assign(flags, { summary: flags.summary && st !== 'none' }), renew, needs, needsEmpty, needsCount: needsEmpty ? '' : '[' + needs.length + ']', issued: PL.slate,
+      owe: kv([['Period', '[Q3 2026]'], ['Gross', '€[120,400]'], ['Share', '[20]%'], ['Owed', '€[24,080]'], ['Paid', '€[0]']]),
+      dealGlance: kv([['HQ first look', '[10] business days'], ['Co-investment with the Axal VC Fund', 'up to [25]%'], ['Your carry share', '[20]%'], ['Referral fee', '[1.5]%'], ['HQ approval above', '€[2,000,000]']]),
+      seats, seatsNC, admins: [{ n: '[Principal name]', r: 'Principal', s: 'since [1 Mar 2025]' }, { n: '[Delegate name]', r: 'Delegate', s: 'since [12 Jun 2025]' }],
+      showTerms: board === 'terms' || isHQ, isHQ, notHQ: !isHQ, termsCols: isHQ ? 'minmax(0,1fr) 320px' : 'minmax(0,1fr)', sections, ladder,
+      hqReq: [{ k: 'Seats · Founder +[20]', w: '[12 Oct]', d: 'From [Principal name]: [20] more founder seats from [1 Dec].' }, { k: 'Delegate · [Name]', w: '[1 Aug]', d: 'Add [Delegate name] as a delegate for approvals.' }, { k: 'Change · Promo ceiling', w: '[2 Jun]', d: 'Raise the ceiling to €[8,000] a period.' }],
+      cWaiting: cst === 'waiting', cReady: cst !== 'waiting', waitPill: PL.amber, cSteps, cIndex, cText,
+      stmts, streams, payRows: kv([['Method', 'Bank transfer'], ['Payee', 'Axal VC [entity]'], ['Account', '[IBAN] · [BIC]'], ['Reference', '[AXL-LIC-PT-2026Q3]']]),
+      invoices: [{ t: 'Annual licence fee [2026–27]', d: '[1 Mar 2026]', a: '€[90,000]', st: 'Issued', ps: PL.slate }, { t: 'Annual licence fee [2025–26]', d: '[1 Mar 2025]', a: '€[90,000]', st: 'Paid', ps: PL.ok }],
+      usage: [{ m: '[Sep 2026]', st: 'Late', ps: PL.amber, late: true }, { m: '[Aug 2026]', st: 'Sent [4 Sep]', ps: PL.ok, late: false }, { m: '[Jul 2026]', st: 'Sent [3 Aug]', ps: PL.ok, late: false }],
+      reqs, whatChips, tline, notices, events, sheet: !!(P.sheet ?? false) && !this.state.sheetOff,
+    };
+  }
+}
+</script>
+</body>
+</html>

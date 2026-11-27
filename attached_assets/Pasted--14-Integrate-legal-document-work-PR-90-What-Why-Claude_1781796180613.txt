@@ -1,0 +1,44 @@
+#14 - Integrate legal-document work (PR #90)
+What & Why
+Claude Code built a complete refactor of the legal-document generation system plus new/cleaned drafts on the branch claude/cool-volta-0mc9i5 (draft PR #90). None of it is in the Replit workspace main yet — legalDocFormat.ts/legalDocFormat.js don't exist here, and pdf.ts/PaperPreview.jsx are still the old versions. This task brings that branch's changes into main by reusing the existing work (no rebuilding) and reconciling it against the 9 newer commits already on main.
+The branch delivers the four-component legal layout (CONFIDENTIAL header + centered UPPERCASE title; standardized preamble; clause-only body; footer; execution block), fixes the Markdown-leakage bug (#, ##, **, >, ---, - [ ] showing in previews/PDFs), cleans 30 existing template bodies, drafts 15 previously-blank stubs, and adds a refresh migration that pushes all bodies to D1.
+Done looks like
+* The shared formatting layer (worker TS + frontend JS mirror) is present on main and both the exported PDF and the admin live preview use it, so they always match.
+* Generated previews and exported PDFs contain no raw Markdown (#, ##, **, >, ---, - [ ] are gone; checkbox blanks render clean).
+* Every document renders: "CONFIDENTIAL" top-right, centered/bold/UPPERCASE title, the standardized preamble with the registered Delaware address (16192 Coastal Highway, Lewes, DE 19958), a footer showing [Title] — v[N] / Page X of Y plus legal@axal.vc, and a proper execution block (By / Name / Title / Date).
+* The execution block is document-kind aware: agreements carry the dual Axal/Counterparty block with Joseph Gabriel Guillaume Lauzier (Managing Partner) as the Axal signatory; portfolio/corporate docs sign as the Company; filings (83(b), accreditation) sign as the filer; policies (ToS/Privacy/AML) carry no signature block.
+* The 15 previously-blank stub templates are populated and the 30 existing bodies are cleaned to the clause-only convention; the refresh migration applies on top of the current schema.
+* npm run test:drift passes (including the worker tsc --noEmit step and the legal/PDF-dependent tests), and the new legal-format unit tests pass.
+* Both changelogs are updated for this user-facing change: CHANGELOG.md (technical) and frontend/public/CHANGELOG-user.md (plain-English), with no duplicate entries.
+Out of scope
+* Reconnecting the GitHub provider / running Git Sync to push main to origin — that is an account-level action the user performs in Replit's Git pane (the task agent merges into the workspace main; the user syncs to GitHub afterward).
+* Closing PR #90 and deleting its branch — handled by the dependent cleanup task.
+* Any further legal redrafting or counsel review beyond what's on the branch (the drafted bodies stay marked as v1 drafts pending counsel review).
+* Deploying to production (npm run deploy).
+Steps
+1. Fetch the branch. Retrieve claude/cool-volta-0mc9i5 from origin. The interactive Git provider connection is down, so authenticate the fetch using the repo's GITHUB_TOKEN fallback (the documented method in scripts/git-push.sh). Do not rely on the user's interactive Git connection.
+2. Bring the branch changes onto main and reconcile. Merge/cherry-pick the branch's legal commits onto the current main. The 9 newer commits on main touch capital/events/auth/articles files, not the legal files, so conflicts should be minimal — resolve any that appear, keeping both the newer main work and the branch's legal work.
+3. Verify migration numbering. Confirm the branch's refresh migration does not collide with an existing number (current latest is 112). Renumber it to the next free slot if needed, and confirm it applies cleanly on top of the current schema.
+4. Keep the worker/frontend format layer in lockstep. Ensure the worker legalDocFormat module and its frontend mirror match (same normalizer, entity registry, preamble, and execution-block logic) — this is an architecture invariant.
+5. Preserve the e-sign / DocuSign integration. Make sure the signature-anchor path still works (the branch added flags to suppress the rendered execution block where an anchor is injected) so e-signing isn't broken.
+6. Run the gates and fix failures. Run npm run test:drift and the new legal-format unit tests. Note: the worker's node_modules is not pre-installed in the task container — install worker deps before running worker tests/tsc.
+7. Visually confirm output. Render representative PDFs (an agreement, a corporate/portfolio doc, a filing, and a policy) and confirm no Markdown leakage and the correct header/preamble/footer/execution-block per document kind.
+8. Update both changelogs. Add a user-facing line to frontend/public/CHANGELOG-user.md and a technical line to CHANGELOG.md; reconcile with any changelog entries the branch already added so nothing is duplicated.
+Critical constraints
+* Reuse the branch's work — do not rewrite the engine or re-draft the documents from scratch.
+* Do not regenerate or commit the docs/ Vite build output as part of this task.
+* Do not push to origin or attempt the user's Git Sync; finish by leaving the integrated work on the workspace main.
+* Preserve the confirmed content decisions: Delaware registered address in the preamble, legal@axal.vc in the footer, Joseph Gabriel Guillaume Lauzier as the Axal signatory, and the three-entity registry/routing (Axal VC Holdings LLC / Axal VC Management LLC / Axal VC GP LLC).
+Relevant files
+* cloudflare-worker/src/services/pdf.ts
+* cloudflare-worker/src/routes/legal.ts
+* cloudflare-worker/src/templates
+* cloudflare-worker/sql/migrations/105_fill_legal_template_bodies.sql
+* scripts/gen-legal-templates-seed.py
+* frontend/src/components/PaperPreview.jsx
+* frontend/src/components/DocumentBody.jsx
+* frontend/src/pages/ESignPage.jsx
+* LEGAL_ENTITIES.md
+* package.json
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

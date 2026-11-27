@@ -1,0 +1,91 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, D1 tables for users (with roles/kyc_status), referrals, commissions, payouts, deals/projects, user_preferences, match_scores, workflows, workflow_tasks, and shared_services_log from previous builds. We also have RBAC middleware and Replit AI integration.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add complete **Network Effects Features** — Compounding Referrals, Syndicate Formation, and Operator/Advisor Marketplace — with these exact requirements:
+
+1. **Database Models (new D1 tables)**  
+   Create these tables (with proper indexes, foreign keys, and timestamps):
+   - `referral_chains` (for compounding)
+     • id (PK)
+     • root_referrer_id (FK to users.id)
+     • level (integer: 1,2,3…)
+     • user_id (FK)
+     • commission_multiplier (decimal, default 1.0)
+   - `syndicates`
+     • id (PK)
+     • name (text)
+     • description (text)
+     • created_by (FK to users.id)
+     • deal_id (FK to deals.id, optional)
+     • min_commitment (decimal)
+     • status (text: 'open', 'closed', 'funded')
+     • created_at, closed_at
+   - `syndicate_members`
+     • id (PK)
+     • syndicate_id (FK)
+     • user_id (FK)
+     • commitment_amount (decimal)
+     • joined_at
+   - `marketplace_profiles`
+     • id (PK)
+     • user_id (FK, unique for operator/advisor roles)
+     • title (text)
+     • bio (text)
+     • skills (json array)
+     • hourly_rate (decimal, optional)
+     • availability (text: 'available', 'booked')
+     • rating (float)
+     • review_count (integer)
+
+2. **Compounding Referrals**  
+   - Extend existing referral system to support multi-level chains (up to 3 levels).  
+   - When a new user signs up via referral, automatically create referral_chain records and apply tiered multipliers (e.g. Level 1: 100%, Level 2: 50%, Level 3: 25%).  
+   - Auto-create bonus commissions on compounding events.  
+   - Backend endpoint: GET /api/referrals/compounding (shows full chain + earned bonuses).
+
+3. **Syndicate Formation**  
+   - Any KYC-approved investor can create a syndicate.  
+   - AI-assisted syndicate matching: use Replit AI to suggest investors for a deal based on match_scores and user_preferences.  
+   - Members can join with commitment amount.  
+   - When syndicate reaches target, auto-update deal status and trigger commission for referrer/syndicate lead.  
+   - Endpoints: POST /api/syndicates, POST /api/syndicates/{id}/join, GET /api/syndicates (with AI recommendations).
+
+4. **Operator/Advisor Marketplace**  
+   - Operators & Advisors can create/edit marketplace_profile (auto-populated from user role).  
+   - Searchable directory with filters (skills, role, rating, availability).  
+   - AI-powered matching: recommend operators/advisors to deals or syndicates using Replit AI.  
+   - Simple “Request Intro” or “Book Slot” button (creates a workflow_task in Studio Ops).  
+   - Endpoints: GET /api/marketplace/search, POST /api/marketplace/request-intro.
+
+5. **Backend Endpoints (add to main.py)**  
+   - All endpoints protected by existing RBAC (investors for syndicates, operators/advisors for marketplace listings).  
+   - GET /api/network/effects (dashboard summary: compounding earnings, active syndicates, marketplace matches).  
+   - Integrate with existing AI matching engine and Studio Ops workflows.
+
+6. **Frontend**  
+   - Enhanced partner dashboard: new “Network Effects” tab.  
+   - Compounding Referrals card (tree view + earnings breakdown).  
+   - Syndicate Hub page (/syndicates.html) — create, browse, join, AI recommendations.  
+   - Marketplace page (/marketplace.html) — searchable grid of operators/advisors, AI match button, request intro.  
+   - Reuse existing network graph style where possible and update dynamically with fetch().
+
+7. **Security & Best Practices**  
+   - Prevent duplicate syndicate memberships.  
+   - Rate limit AI matching calls.  
+   - Audit log all syndicate joins and marketplace requests via shared_services_log.  
+   - Use Replit Secrets for any future payment keys.
+
+Build this step-by-step:  
+1. First create the new D1 tables and run migration/seed script.  
+2. Then implement compounding referrals logic (extend existing referral tables).  
+3. Then build syndicate formation + membership.  
+4. Then build the operator/advisor marketplace + AI recommendations.  
+5. Finally add the frontend Network Effects dashboard pages.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

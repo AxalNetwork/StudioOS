@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Issue #3713</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Read with a reason</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The gate an admin meets before reading a founder’s private record, and everything around it. The Investor narrative opens for 8 hours per reason; the Cap table, the Data room and Capital relationships open once per reason. RR00 is the page canvas; RR01 to RR22 follow, three per row.</p>
+</header>
+<section id="RR00" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">RR00</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Page canvas: Admin on Raise › Investor narrative, before the reason</h2></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Read With A Reason Page" v="rr00" hint-size="1440px,1040px"></dc-import></div>
+</section>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+<section style="display:flex;flex-direction:column;gap:22px">
+<h2 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2>
+<div style="display:grid;grid-template-columns:repeat(3,max-content);gap:56px 48px;align-items:start">
+<sc-for list="{{ g.boards }}" as="b" hint-placeholder-count="3">
+<div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px;max-width:1440px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><span style="font-size:18px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</span></div>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:880px;font-size:13.5px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Read With A Reason Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 900}px` }; };
+    const Bd = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return { groups: [
+      { t: 'The gate', boards: [
+        Bd('RR01', 'The gate, grant mode (Investor narrative) · pending owner, Q2-A', [F('rr01', '', 800, 571)], '3–200 characters (Worker rule). The duration line comes from the record’s rule. Quick picks are pending owner, Q5-A.'),
+        Bd('RR02', 'The gate while typing', [F('rr02', '', 1440, 864)], 'Too short is a muted hint, because nothing is wrong yet. Over the limit and a refused save are red, and the field is kept.'),
+        Bd('RR03', 'The AIRail on a founder’s record · pending owner, Q1-A', [F('rr03', '', 1440, 948)], 'The rail keeps who and where, and drops the AI switch, spend, usage and suggestions. The admin’s own spend is not shown here; founder token usage was never shown.')
+      ] },
+      { t: 'While the access lasts', boards: [
+        Bd('RR04', 'After opening: the access banner', [F('rr04', 'Story tab, read only', 1440, 1040), F('rr04b', 'Studio admin variant · posting a note', 1440, 460)], 'Notes are the one write an admin keeps. The countdown updates each minute.'),
+        Bd('RR05', 'End access now', [F('rr05', '', 1440, 763)]),
+        Bd('RR06', 'Access expired', [F('rr06', '', 880, 686)], 'At zero the page re-reads and the gate returns. The last minute stays amber, never red.')
+      ] },
+      { t: 'What the founder sees', boards: [
+        Bd('RR07', 'Founder: “Who read this narrative”', [F('rr07', 'Home, with no saved version', 1440, 900), F('rr07b', 'On Story · empty · unreadable', 1440)], 'New location: the card is on Home as well as Story, so a founder with no version still sees who read it.'),
+        Bd('RR08', 'Founder: the notification · pending owner, Q3-B', [F('rr08', '', 640, 489)]),
+        Bd('RR09', 'Founder: the other three logs', [F('rr09', '', 1440, 529)])
+      ] },
+      { t: 'The same gate on the per-open records · pending owner, Q2-A', boards: [
+        Bd('RR10', 'Cap table (replaces the “Open for support” dialog)', [F('rr10a', 'Before · six characters typed', 1440, 1040), F('rr10b', 'After · the full table, read only', 1440, 860)], '10–500 characters. A reload asks again. A correction still goes through the record’s own correction, with its own reason.'),
+        Bd('RR11', 'Data room (new)', [F('rr11a', 'Before', 1440, 1040), F('rr11b', 'After · file detail in the right Sheet', 1440, 860)], '1–500 characters. No upload, no share and no NDA controls.'),
+        Bd('RR12', 'Capital relationships (new)', [F('rr12a', 'Before', 1440, 1040), F('rr12b', 'After · read only', 1440, 860)], '1–500 characters. Every private staff response needs a fresh reason.'),
+        Bd('RR13', 'Inline variant: the New version dialog (#3712)', [F('rr13', '', 1100, 820)], 'The compact gate, 520 wide, without the venture header or the preview.'),
+        Bd('RR14', 'Pitch deck: no gate · pending owner, Q4-A', [F('rr14', '', 1440, 860)], 'No reason gate on the Pitch deck today.')
+      ] },
+      { t: 'States', boards: [
+        Bd('RR15', 'Loading skeleton', [F('rr15', '', 1440, 900)]),
+        Bd('RR16', 'Could not be read', [F('rr16', '', 1440, 760)], 'Nothing of the narrative shows behind it, not even the skeleton.'),
+        Bd('RR17', 'Permission refused', [F('rr17', '', 1440, 402)], 'No Try again and no reason form when the Worker refuses the admin.'),
+        Bd('RR18', 'The founder can’t be recorded (Data room, Capital relationships)', [F('rr18', '', 1440, 760)], 'Muted, not red: nothing the admin did is wrong, and Try again would not succeed.'),
+        Bd('RR19', 'No narrative yet', [F('rr19', '', 1440, 760)], 'No New version button for the admin.'),
+        Bd('RR20', 'Phone, 390px', [F('rr20a', 'The gate', 390, 844), F('rr20b', 'After opening', 390, 844), F('rr20c', 'Founder: who read it', 390, 844)], 'No floating Eadwyn button and no Ask on the admin frames.'),
+        Bd('RR21', 'Tablet, 768px', [F('rr21', '', 768, 1024)], 'Sidebar as icons, the gate 640 wide, the rail as its spine with the RR03 tooltip.'),
+        Bd('RR22', 'Dark', [F('rr00-d', 'RR00 in dark', 1440, 1040), F('rr04-d', 'RR04 in dark', 1440, 1040)], 'The access banner keeps its amber surface, with dark amber text.')
+      ] }
+    ] };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,34 @@
+{
+  "skill": "marketing-funnel-cohort-analysis",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Marketing Funnel and Cohort Analysis",
+        "task_scope": "Analyzes acquisition cohorts through lead and purchase conversion, distinct from general customer-retention cohorts.",
+        "evidence": [
+          "acquisition cohort conversion"
+        ],
+        "omitted_field": "cohort acquisition period"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for acquisition cohort conversion."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "acquisition cohort conversion"
+    ],
+    "must_say_not_recorded": [
+      "cohort acquisition period"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

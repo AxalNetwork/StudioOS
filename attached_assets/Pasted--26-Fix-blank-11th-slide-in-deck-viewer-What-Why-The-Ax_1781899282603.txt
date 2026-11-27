@@ -1,0 +1,28 @@
+#26 - Fix blank 11th slide in deck viewer
+What & Why
+The Axal VC Spin-Out deck viewer — both the one-time investor share link and the authenticated deck view — shows a large blank region after the last real slide, which reads as an extra blank "11th" slide. The deck actually has only 10 slides; the blank space is a layout bug in the scroll-through viewer, not real slide data. Remove it so the deck ends cleanly at slide 10.
+Done looks like
+* Opening the Axal VC Spin-Out one-time share link shows exactly 10 slides with no blank slide/region after the last one; scrolling ends flush at the bottom of slide 10.
+* The authenticated deck view (/deck/:id/print) behaves the same.
+* "Save as PDF" still produces exactly 10 pages — no blank trailing page.
+* Other deck templates (which share the same viewer) also end flush, with no trailing blank region and no regressions.
+* Fullscreen presentation mode is unchanged and still pages through 10 slides.
+Out of scope
+* Changing slide content, the number of slides, or the deck template structure.
+* The PPTX export path (already emits 10 slides).
+* The editor's left-rail slide list and the template-picker preview (already correct).
+Root cause (for the implementer)
+In the scroll-through ("normal", non-fullscreen) deck viewer, the inner slide stack is shrunk with transform: scale(...). CSS transforms are visual only — the element keeps its full unscaled layout height (~10 × 1080px). The wrapper around it (.deck-print-scaler) has its width corrected to the scaled width but no height correction, so the scroll area extends roughly 2× below the visible slides, producing the blank region the user reads as an 11th slide. The fullscreen path uses a fixed, clipped viewport and is unaffected.
+The render path itself emits exactly 10 frames (the React template, the PDF rasterizer, and the PPTX builder all iterate the same fixed 10-slide structure) — there is no genuine extra frame to delete. The fix is purely the missing height compensation.
+The correct fix pattern already exists and works in the template-picker preview: it wraps the scaled stack in a layout-sized box whose height equals the scaled content height (and documents why). Apply the same height correction to the deck viewer's scaler.
+Steps
+1. In the deck viewer's normal (non-fullscreen) scaler, set the scaler wrapper's height to the scaled content height — measure the inner slide stack's natural (unscaled) height and multiply by the current scale (or equivalent) — so the scroll track matches the visible slides and ends flush at the last slide. Leave the fullscreen path unchanged. Mirror the height-correction approach already used by the template-picker preview.
+2. Verify the viewer renders exactly 10 frames for the Spin-Out deck (no genuine extra frame) and that the blank trailing region is gone on BOTH the one-time share link and the authenticated /deck/:id/print view.
+3. Confirm "Save as PDF" still outputs exactly 10 pages, and that at least one other multi-slide template (e.g. a Series A / Sequoia deck) also ends flush with no regression.
+Relevant files
+* frontend/src/pages/PitchDeckPrintPage.jsx:1055-1082
+* frontend/src/pages/PitchDeckPrintPage.jsx:959-999
+* frontend/src/decks/Thumbnail.tsx:240-269
+* frontend/src/decks/DeckBase.tsx:50-63
+* frontend/src/lib/deckRasterPdf.js:37-117
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:843-872

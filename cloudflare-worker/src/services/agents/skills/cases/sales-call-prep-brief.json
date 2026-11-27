@@ -1,0 +1,36 @@
+{
+  "skill": "sales-call-prep-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "deal": "Riverside Clinics",
+        "stage": "Demo",
+        "last_call": "Asked about SMS reminders"
+      },
+      "network.relationships": [
+        {
+          "name": "Tom Becker",
+          "at": "Riverside Clinics"
+        }
+      ],
+      "company.profile": {
+        "name": "Brightsmile Health"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Tom Becker",
+      "SMS reminders"
+    ],
+    "must_say_not_recorded": [
+      "budget"
+    ],
+    "must_not_include": [
+      "ready to sign"
+    ]
+  }
+}

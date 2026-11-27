@@ -1,0 +1,37 @@
+Calendly OAuth — full setup
+1. Create the OAuth app in Calendly
+Sign in at https://calendly.com/integrations/api_webhooks
+Developer dashboard → My Apps → Create New App (or open the existing one)
+Choose OAuth 2.0 as the auth type (not Personal Access Token)
+Fill in:
+App name: Axal StudioOS
+App description: Venture studio operating system — calendar sync for portfolio meetings
+Webhook signing key: leave blank (we generate per-subscription on connect)
+Redirect URI (this is the one that matters):
+https://app.axal.vc/api/integrations/oauth/calendly/callback
+
+⚠️ Note: it's …/oauth/calendly/callback, not …/calendly/oauth/callback as the original instructions had it. The worker builds the URI from this exact path; a one-character mismatch will fail with redirect_uri_mismatch.
+Save → Calendly shows you the Client ID and Client Secret. Copy both before leaving the page (the secret is shown once).
+2. Give me the values to add to Cloudflare
+Paste the two values into Replit as secrets:
+
+CALENDLY_CLIENT_ID
+CALENDLY_CLIENT_SECRET
+I'll use the environment-secrets flow to register them, then push them to the production worker with wrangler secret put. I won't see or echo the values back.
+
+Want to do that now? If yes, open the Secrets pane (left sidebar → 🔒 Secrets) and add both keys — when you confirm they're saved, I'll push them to Cloudflare production and verify the integration reports configured: true.
+
+3. What I'll do on the Cloudflare side (after you save the secrets)
+echo "$CALENDLY_CLIENT_ID"     | wrangler secret put CALENDLY_CLIENT_ID     --env production
+echo "$CALENDLY_CLIENT_SECRET" | wrangler secret put CALENDLY_CLIENT_SECRET --env production
+
+Then verify with:
+
+wrangler secret list --env production | grep CALENDLY
+
+And smoke-test by signing in to https://app.axal.vc → Integrations → Connect Calendly (OAuth path, not PAT) → Calendly should show consent → you should land back on /integrations?calendly=connected.
+
+4. No code or migration changes needed
+The route, the redirect-URI builder, the credential encryption, the webhook subscription, and the calendar_events sync are all already shipped (Task #3 IG). Once the two secrets are in place, the OAuth path goes live for everyone (PAT users keep working unchanged — they hit a different branch in connect()).
+
+Let me know when the secrets are in and I'll push to production.

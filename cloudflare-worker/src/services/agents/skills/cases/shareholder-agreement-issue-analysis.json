@@ -1,0 +1,34 @@
+{
+  "skill": "shareholder-agreement-issue-analysis",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "skill_name": "Shareholder Agreement Issue Analysis",
+        "task_scope": "Identifies material shareholder-agreement issues around rights, transfer restrictions, governance and exit mechanics for counsel review.",
+        "evidence": [
+          "reserved matters and transfer rights"
+        ],
+        "omitted_field": "consent threshold"
+      },
+      "cap_table.read": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for reserved matters and transfer rights."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "reserved matters and transfer rights"
+    ],
+    "must_say_not_recorded": [
+      "consent threshold"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

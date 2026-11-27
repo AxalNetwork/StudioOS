@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@700&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body{margin:0}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    .sp{container-type:inline-size}
+    .sp-tabs::-webkit-scrollbar{display:none}
+    @container (max-width:640px){
+      .sp-pad{padding-left:18px!important;padding-right:18px!important}
+      .sp-nav{display:none!important}.sp-burger{display:flex!important}
+      .sp-h1{font-size:42px!important}.sp-hero{padding-top:44px!important}
+      .sp-grid{grid-template-columns:minmax(0,1fr)!important}
+      .sp-tabwrap{justify-content:flex-start!important}
+      .sp-foot{grid-template-columns:1fr 1fr!important}.sp-legal{grid-template-columns:minmax(0,1fr)!important}.sp-disc{justify-self:start!important}
+      .sp-packs{grid-template-columns:1fr 1fr!important}
+      .sp-band{flex-direction:column;align-items:flex-start!important;padding:28px!important}
+    }
+  </style>
+</helmet>
+<div class="sp" style="background:#fff;color:#141118;font-family:'Public Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased">
+
+  <div style="position:sticky;top:0;z-index:50;background:rgba(255,255,255,.9);backdrop-filter:blur(16px);border-bottom:1px solid #f0eff3">
+    <div class="sp-pad" style="max-width:1280px;margin:0 auto;padding:0 34px;height:66px;display:flex;align-items:center;justify-content:space-between;gap:20px;box-sizing:border-box">
+      <a href="/" style="display:flex;align-items:center;gap:11px;min-width:0;flex:none;color:#141118">
+        <img src="./uploads/axal-logo-no-black.png" alt="Axal VC" style="width:28px;height:28px;object-fit:contain;flex:none;display:block">
+        <div style="font-size:15px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;font-family:'Space Grotesk',system-ui,sans-serif">Axal VC</div>
+      </a>
+      <div class="sp-nav" style="display:flex;align-items:center;gap:24px;flex:1;justify-content:center">
+        <a href="/for-founders" style="font-size:13.5px;font-weight:500;color:#4a4553;white-space:nowrap">Founders</a><a href="/for-investors" style="font-size:13.5px;font-weight:500;color:#4a4553;white-space:nowrap">Investors</a><a href="/for-service-partners" style="font-size:13.5px;font-weight:500;color:#4a4553;white-space:nowrap">Operating Partners</a><a href="/for-advisors" style="font-size:13.5px;font-weight:500;color:#4a4553;white-space:nowrap">Advisors</a><a href="/network" style="font-size:13.5px;font-weight:500;color:#4a4553;white-space:nowrap">Network</a>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;flex:none">
+        <a class="sp-nav" href="/login" style="padding:8px 15px;border-radius:9px;border:1px solid #dedce4;font-size:12.5px;font-weight:600;color:#3f3b47">Login</a>
+        <a href="/register" style="padding:9px 17px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12.5px;font-weight:700">Apply →</a>
+        <span class="sp-burger" aria-label="Menu" style="display:none;align-items:center;justify-content:center;width:38px;height:38px;box-sizing:border-box;border-radius:9px;border:1px solid #dedce4;background:#fff;flex:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#141118" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></span>
+      </div>
+    </div>
+  </div>
+
+  <section class="sp-pad sp-hero" style="padding:72px 34px 8px;text-align:center;background:linear-gradient(180deg,#faf8ff 0%,#fff 100%)">
+    <h1 class="sp-h1" style="margin:0;font:800 60px/1.02 'Bricolage Grotesque',sans-serif;letter-spacing:-.035em;color:#141118">Pricing</h1>
+    <p style="margin:16px auto 0;max-width:620px;font:400 17px/1.6 'Public Sans',sans-serif;color:#4a4553;text-wrap:pretty">Pay for the cycles you are in. AI is included with every plan, and you can top up as you go.</p>
+    <div class="sp-tabwrap" style="display:flex;justify-content:center;margin-top:30px">
+      <div class="sp-tabs" ref="{{ tabsRef }}" role="tablist" style="display:flex;gap:4px;padding:4px;border:1px solid #ececf1;border-radius:12px;background:#fff;max-width:100%;overflow-x:auto;scrollbar-width:none;box-sizing:border-box">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5"><button role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.t }}</button></sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ billToggle }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:16px">
+        <div style="display:flex;gap:2px;padding:3px;border-radius:99px;background:#f4f3f7"><sc-for list="{{ bills }}" as="b" hint-placeholder-count="2"><button onClick="{{ b.go }}" style="{{ b.style }}">{{ b.t }}</button></sc-for></div>
+        <span style="font:700 12px 'Public Sans',sans-serif;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:99px;padding:4px 10px">Save [n]%</span>
+      </div>
+    </sc-if>
+  </section>
+
+  <sc-if value="{{ showPlanArea }}" hint-placeholder-val="{{ true }}">
+  <section class="sp-pad" style="max-width:1180px;margin:0 auto;padding:30px 34px 0;box-sizing:border-box">
+    <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+      <div class="sp-grid" aria-busy="true" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px"><sc-for list="{{ skel }}" as="k" hint-placeholder-count="3"><div style="border:1px solid #ececf1;border-radius:15px;padding:26px;display:flex;flex-direction:column;gap:14px"><div style="height:18px;width:40%;border-radius:6px;background:#ececf1"></div><div style="height:12px;width:75%;border-radius:6px;background:#f4f3f7"></div><div style="height:38px;width:45%;border-radius:8px;background:#ececf1"></div><div style="height:44px;border-radius:10px;background:#f4f3f7"></div><div style="height:10px;width:85%;border-radius:6px;background:#f4f3f7"></div><div style="height:10px;width:70%;border-radius:6px;background:#f4f3f7"></div><div style="height:10px;width:80%;border-radius:6px;background:#f4f3f7"></div></div></sc-for></div>
+    </sc-if>
+    <sc-if value="{{ isUnavailable }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px solid #fecaca;background:#fef2f2;border-radius:15px;padding:28px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap"><div><div style="font:800 19px/1.2 'Bricolage Grotesque',sans-serif;letter-spacing:-.015em;color:#b91c1c">Prices unavailable. Try again.</div><div style="font:400 14px/1.55 'Public Sans',sans-serif;color:#b91c1c;margin-top:6px">The price list could not be read just now.</div></div><button style="font:700 14px 'Public Sans',sans-serif;color:#b91c1c;background:#fff;border:1px solid #fecaca;border-radius:10px;padding:11px 16px;cursor:pointer">Try again</button></div>
+    </sc-if>
+    <sc-if value="{{ hasLp }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px solid #ececf1;border-radius:15px;background:#faf8ff;padding:24px 26px;margin-bottom:20px">
+        <div class="sp-grid" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px 32px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">For investors in Axal VC funds</div>
+            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span style="font:800 24px/1.15 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em">LP Access</span><span style="font:800 24px/1 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em">$0</span><span style="font:500 13px 'Public Sans',sans-serif;color:#6b6577">/ month</span></div>
+            <div style="font:400 14px/1.55 'Public Sans',sans-serif;color:#4a4553">Not a subscription. Your fund investments, documents and updates, free with your investment.</div>
+            <div style="font:400 12.5px/1.5 'Public Sans',sans-serif;color:#3f3b47">Free access for eligible investors in Axal VC funds. Access is subject to investor verification and fund-specific permissions.</div>
+            <a href="/lp" data-route="/lp" style="align-self:flex-start;margin-top:6px;font:700 14px 'Public Sans',sans-serif;border-radius:10px;padding:11px 16px;background:#fff;color:#141118;border:1px solid #dedce4;text-decoration:none">Access Your Investments</a>
+          </div>
+          <div class="sp-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px"><sc-for list="{{ lpFeats }}" as="f" hint-placeholder-count="6"><div style="display:flex;gap:9px;font:400 13.5px/1.5 'Public Sans',sans-serif;color:#3f3b47"><span style="color:#6d28d9;font-weight:700">✓</span>{{ f }}</div></sc-for></div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ showCards }}" hint-placeholder-val="{{ true }}">
+      <div class="sp-grid" style="{{ gridStyle }}">
+        <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
+          <div style="{{ c.box }}">
+            <sc-if value="{{ c.kick }}" hint-placeholder-val="{{ false }}"><div style="font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9;margin-bottom:8px">{{ c.kick }}</div></sc-if>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font:800 21px/1.15 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em">{{ c.name }}</span><sc-if value="{{ c.cur }}" hint-placeholder-val="{{ false }}"><span style="font:700 11px 'Public Sans',sans-serif;color:#6d28d9;background:#f4f0fe;border:1px solid #ddd0fb;border-radius:99px;padding:3px 9px">Your plan</span></sc-if></div>
+            <div style="font:400 14px/1.5 'Public Sans',sans-serif;color:#4a4553;margin-top:6px">{{ c.tag }}</div>
+            <sc-if value="{{ c.elig }}" hint-placeholder-val="{{ false }}"><div style="font:400 12.5px/1.5 'Public Sans',sans-serif;color:#3f3b47;background:#faf9fc;border:1px solid #ececf1;border-radius:10px;padding:9px 11px;margin-top:12px">{{ c.elig }}</div></sc-if>
+            <sc-if value="{{ c.offered }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:baseline;gap:6px;margin-top:18px"><span style="font:800 40px/1 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em">{{ c.price }}</span><span style="font:500 14px 'Public Sans',sans-serif;color:#6b6577">{{ c.unit }}</span></div>
+              <div style="font:400 12.5px/18px 'Roboto Mono',monospace;color:#6b6577;min-height:18px;margin-top:6px">{{ c.note }}</div>
+            </sc-if>
+            <sc-if value="{{ c.notOffered }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px"><span style="align-self:flex-start;font:700 12px 'Public Sans',sans-serif;color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:99px;padding:4px 10px">Not offered yet</span><span style="font:400 13px/1.5 'Public Sans',sans-serif;color:#6b6577">This plan is not in the catalogue yet. Its price appears here when it is.</span></div>
+            </sc-if>
+            <button disabled="{{ c.dis }}" data-route="{{ c.route }}" style="{{ c.btnStyle }}">{{ c.btn }}</button>
+            <div style="border-top:1px solid #f0eff3;margin:20px 0 14px"></div>
+            <sc-if value="{{ c.lead }}" hint-placeholder-val="{{ false }}"><div style="font:700 13.5px 'Public Sans',sans-serif;margin-bottom:10px">{{ c.lead }}</div></sc-if>
+            <div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ c.feats }}" as="f" hint-placeholder-count="5"><div style="display:flex;gap:10px;align-items:flex-start;font:400 14px/1.45 'Public Sans',sans-serif;color:#3f3b47"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex:none;margin-top:2px"><path d="M3.5 8.5l3 3 6-7" stroke="#6d28d9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>{{ f }}</span></div></sc-for></div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ showNoPlan }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #ececf1;border-radius:15px;padding:30px;box-sizing:border-box">
+        <div style="font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">{{ np.role }}</div>
+        <div style="font:800 30px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em;margin-top:10px">No plan needed</div>
+        <p style="margin:12px 0 0;font:400 16px/1.6 'Public Sans',sans-serif;color:#4a4553;text-wrap:pretty">{{ np.text }}</p>
+        <button onClick="{{ goModels }}" style="margin-top:20px;font:700 14px 'Public Sans',sans-serif;color:#fff;background:#6d28d9;border:0;border-radius:10px;padding:12px 18px;cursor:pointer">Buy AI tokens</button>
+        <div style="border-top:1px solid #f0eff3;margin:24px 0 14px"></div>
+        <div style="font:700 13.5px 'Public Sans',sans-serif;margin-bottom:10px">Included, free</div>
+        <div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ np.feats }}" as="f" hint-placeholder-count="5"><div style="display:flex;gap:10px;align-items:flex-start;font:400 14px/1.45 'Public Sans',sans-serif;color:#3f3b47"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex:none;margin-top:2px"><path d="M3.5 8.5l3 3 6-7" stroke="#6d28d9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>{{ f }}</span></div></sc-for></div>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showBand }}" hint-placeholder-val="{{ true }}">
+  <section class="sp-pad" style="max-width:1180px;margin:22px auto 0;padding:0 34px;box-sizing:border-box">
+    <div class="sp-band" style="background:#f4f0fe;border:1px solid #e4dafc;border-radius:15px;padding:22px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px">
+      <div><div style="font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">AI on every plan</div><p style="margin:8px 0 0;max-width:700px;font:400 15px/1.6 'Public Sans',sans-serif;color:#3f3b47">Each plan includes 25% of its price as AI tokens every month. Past that, top up AI tokens as you go. You don't need a plan to top up.</p></div>
+      <button onClick="{{ goModels }}" style="flex:none;font:700 14px 'Public Sans',sans-serif;color:#6d28d9;background:#fff;border:1px solid #ddd0fb;border-radius:10px;padding:11px 16px;cursor:pointer">See model prices →</button>
+    </div>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showCompare }}" hint-placeholder-val="{{ true }}">
+  <section class="sp-pad" style="max-width:1180px;margin:56px auto 0;padding:0 34px;box-sizing:border-box">
+    <h2 style="margin:0 0 18px;font:800 32px/1.14 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em">Compare plans</h2>
+    <sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+      <div style="border:1px solid #ececf1;border-radius:15px;overflow:hidden">
+        <div style="{{ cmpHeadS }}"><span></span><sc-for list="{{ cmpHead }}" as="h" hint-placeholder-count="3"><span style="font:800 15px 'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;text-align:center">{{ h }}</span></sc-for></div>
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+          <div style="padding:12px 20px;background:#f4f0fe;border-bottom:1px solid #ececf1;font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">{{ g.t }}</div>
+          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4"><div style="{{ cmpRowS }}"><span style="color:#3f3b47">{{ r.label }}</span><sc-for list="{{ r.cells }}" as="x" hint-placeholder-count="3"><span style="display:flex;justify-content:center;font:500 13px 'Roboto Mono',monospace;color:#141118"><sc-if value="{{ x.tick }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-label="Included"><path d="M3.5 8.5l3 3 6-7" stroke="#6d28d9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if><sc-if value="{{ x.dash }}" hint-placeholder-val="{{ false }}"><span aria-label="Not included" style="color:#9a96a8">—</span></sc-if>{{ x.text }}</span></sc-for></div></sc-for>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+      <div class="sp-tabs" style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px"><sc-for list="{{ pickChips }}" as="p" hint-placeholder-count="3"><button onClick="{{ p.go }}" style="{{ p.style }}">{{ p.t }}</button></sc-for></div>
+      <div style="border:1px solid #ececf1;border-radius:15px;overflow:hidden">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+          <div style="padding:11px 16px;background:#f4f0fe;border-bottom:1px solid #ececf1;font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">{{ g.t }}</div>
+          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:46px;padding:10px 16px;border-bottom:1px solid #f4f3f7;box-sizing:border-box;font:400 14px/1.4 'Public Sans',sans-serif"><span style="color:#3f3b47">{{ r.label }}</span><span style="flex:none;font:500 13px 'Roboto Mono',monospace"><sc-if value="{{ r.pv.tick }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-label="Included"><path d="M3.5 8.5l3 3 6-7" stroke="#6d28d9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if><sc-if value="{{ r.pv.dash }}" hint-placeholder-val="{{ false }}"><span style="color:#9a96a8">—</span></sc-if>{{ r.pv.text }}</span></div></sc-for>
+        </sc-for>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showModels }}" hint-placeholder-val="{{ false }}">
+  <section class="sp-pad" style="max-width:1180px;margin:0 auto;padding:30px 34px 0;box-sizing:border-box">
+    <p style="margin:0;max-width:760px;font:400 15px/1.6 'Public Sans',sans-serif;color:#4a4553">Prices are Cloudflare's published Workers AI rates plus 25%. Runs are paid from your plan's monthly AI allowance first, then from your AI tokens.</p>
+    <sc-for list="{{ mgroups }}" as="g" hint-placeholder-count="4">
+      <div style="margin-top:26px">
+        <div style="font:800 18px 'Bricolage Grotesque',sans-serif;letter-spacing:-.015em;margin-bottom:10px">{{ g.t }}</div>
+        <sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px solid #ececf1;border-radius:15px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.7fr) 160px 160px;gap:14px;padding:11px 18px;background:#faf9fc;border-bottom:1px solid #ececf1;font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6b6577"><span>Model</span><span>Used for</span><span style="text-align:right">{{ g.u1 }}</span><span style="text-align:right">{{ g.u2 }}</span></div>
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.7fr) 160px 160px;gap:14px;align-items:center;padding:13px 18px;border-bottom:1px solid #f4f3f7;font:400 14px/1.4 'Public Sans',sans-serif"><span style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><span style="font-weight:700">{{ r.name }}</span><sc-for list="{{ r.pills }}" as="p" hint-placeholder-count="1"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></span><span style="color:#4a4553;font-size:13.5px">{{ r.used }}</span><span style="text-align:right;font:500 13px 'Roboto Mono',monospace">{{ r.p1 }}</span><span style="text-align:right;font:500 13px 'Roboto Mono',monospace">{{ r.p2 }}</span></div></sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3"><div style="border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><span style="font:700 15px 'Public Sans',sans-serif">{{ r.name }}</span><sc-for list="{{ r.pills }}" as="p" hint-placeholder-count="1"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></span><span style="font:400 13.5px/1.45 'Public Sans',sans-serif;color:#4a4553">{{ r.used }}</span><div style="display:flex;justify-content:space-between;gap:10px;font:400 13px 'Public Sans',sans-serif;color:#6b6577"><span>{{ g.u1 }}</span><span style="font:500 13px 'Roboto Mono',monospace;color:#141118">{{ r.p1 }}</span></div><sc-if value="{{ r.p2show }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:space-between;gap:10px;font:400 13px 'Public Sans',sans-serif;color:#6b6577"><span>{{ g.u2 }}</span><span style="font:500 13px 'Roboto Mono',monospace;color:#141118">{{ r.p2 }}</span></div></sc-if></div></sc-for></div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showPacks }}" hint-placeholder-val="{{ false }}">
+  <section class="sp-pad" style="max-width:1180px;margin:0 auto;padding:40px 34px 0;box-sizing:border-box">
+    <div style="font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9">AI token packs</div>
+    <h2 style="margin:8px 0 6px;font:800 28px/1.14 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em">Top up as you go</h2>
+    <p style="margin:0 0 18px;max-width:640px;font:400 15px/1.6 'Public Sans',sans-serif;color:#4a4553">Each [$1] buys [$1] of AI use at the rates above. Tokens you buy never expire.</p>
+    <div class="sp-packs" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+      <sc-for list="{{ packs }}" as="p" hint-placeholder-count="4"><div style="background:#fff;border:1px solid #ececf1;border-radius:15px;padding:20px;display:flex;flex-direction:column;gap:8px"><sc-if value="{{ p.hasOffer }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;font:700 11px 'Public Sans',sans-serif;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:99px;padding:3px 9px">{{ p.offer }}</span></sc-if><span style="font:800 30px/1 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em">{{ p.price }}</span><span style="font:400 13px 'Roboto Mono',monospace;color:#6b6577">{{ p.use }}</span><button style="margin-top:6px;font:700 14px 'Public Sans',sans-serif;color:#141118;background:#fff;border:1px solid #dedce4;border-radius:10px;padding:10px 14px;cursor:pointer">Buy</button></div></sc-for>
+    </div>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ showRest }}" hint-placeholder-val="{{ true }}">
+  <section class="sp-pad" style="max-width:860px;margin:64px auto 0;padding:0 34px;box-sizing:border-box">
+    <h2 style="margin:0 0 14px;font:800 32px/1.14 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em">Questions</h2>
+    <div style="border-top:1px solid #ececf1">
+      <sc-for list="{{ faq }}" as="q" hint-placeholder-count="6"><div style="border-bottom:1px solid #ececf1"><button onClick="{{ q.go }}" aria-expanded="{{ q.open }}" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:14px;background:none;border:0;padding:18px 0;cursor:pointer;text-align:left;font:700 16px/1.4 'Public Sans',sans-serif;color:#141118"><span>{{ q.q }}</span><span style="flex:none;font:500 20px 'Public Sans',sans-serif;color:#6d28d9">{{ q.chev }}</span></button><sc-if value="{{ q.open }}" hint-placeholder-val="{{ false }}"><p style="margin:-4px 0 18px;font:400 15px/1.65 'Public Sans',sans-serif;color:#4a4553">{{ q.a }}</p></sc-if></div></sc-for>
+    </div>
+  </section>
+
+  <section class="sp-pad" style="max-width:1180px;margin:60px auto 0;padding:0 34px;box-sizing:border-box">
+    <div class="sp-band" style="background:#141118;border-radius:22px;padding:44px;display:flex;justify-content:space-between;align-items:center;gap:20px;position:relative;overflow:hidden">
+      <div style="position:relative"><div style="font:800 32px/1.1 'Bricolage Grotesque',sans-serif;letter-spacing:-.03em;color:#fff">Start free. Pay for the cycles you are in.</div><div style="font:400 15px/1.55 'Public Sans',sans-serif;color:#c4b5fd;margin-top:10px">Every plan includes AI. Top up only when you need more.</div></div>
+      <div style="position:relative;display:flex;gap:10px;flex-wrap:wrap"><a href="/register" style="font:700 14px 'Public Sans',sans-serif;color:#141118;background:#fff;border-radius:10px;padding:12px 18px">Get started</a><a href="/contact" style="font:700 14px 'Public Sans',sans-serif;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:10px;padding:12px 18px">Talk to us</a></div>
+    </div>
+  </section>
+
+  <footer style="margin-top:64px;background:linear-gradient(160deg,#241636 0%,#1a1328 38%,#131022 100%);color:#fff;position:relative;overflow:hidden">
+    <div style="position:absolute;top:-220px;left:-120px;width:680px;height:680px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,.28),transparent 70%);pointer-events:none"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(196,181,253,.45),transparent)"></div>
+    <div class="sp-pad" style="max-width:1280px;margin:0 auto;padding:64px 34px 36px;position:relative;box-sizing:border-box">
+      <div class="sp-foot" style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:44px 32px">
+        <div>
+          <div style="display:flex;align-items:center;gap:11px"><img src="./uploads/axal-logo-no-black.png" alt="Axal VC" style="width:28px;height:28px;object-fit:contain;flex:none;display:block"><div style="font-size:16px;font-weight:700;letter-spacing:-.02em;font-family:'Space Grotesk',system-ui,sans-serif">Axal VC</div></div>
+          <div style="font-size:14.5px;color:rgba(255,255,255,.82);line-height:1.7;margin-top:16px;max-width:280px">We work with partners globally to build the rails for the next generation of ventures.</div>
+          <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap" role="list" aria-label="Axal VC on social media">
+            <sc-for list="{{ socials }}" as="s" hint-placeholder-count="7"><a href="{{ s.href }}" target="_blank" rel="noopener" aria-label="{{ s.label }}" title="{{ s.label }}" style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center;color:#3b1a63;flex:none"><span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ s.icon }}"></span></a></sc-for>
+          </div>
+        </div>
+        <nav aria-label="Navigate">
+          <h2 style="margin:0 0 18px;font-family:'Public Sans',system-ui,sans-serif;font-size:12px;line-height:1.2;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:#c4b5fd">For</h2>
+          <div style="display:flex;flex-direction:column;gap:8px"><a href="/for-founders" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Founders</a><a href="/for-investors" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Investors</a><a href="/for-service-partners" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Operating Partners</a><a href="/for-advisors" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Advisors</a></div>
+        </nav>
+        <nav aria-label="Network">
+          <h2 style="margin:0 0 18px;font-family:'Public Sans',system-ui,sans-serif;font-size:12px;line-height:1.2;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:#c4b5fd">Network</h2>
+          <div style="display:flex;flex-direction:column;gap:8px"><a href="/articles" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Articles</a><a href="/directory" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Directory</a><a href="/events" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Programs &amp; Events</a><a href="/circles" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Communities &amp; Circles</a><a href="/jobs" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Jobs</a></div>
+        </nav>
+        <nav aria-label="Build With Us">
+          <h2 style="margin:0 0 18px;font-family:'Public Sans',system-ui,sans-serif;font-size:12px;line-height:1.2;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:#c4b5fd">Build With Us</h2>
+          <div style="display:flex;flex-direction:column;gap:8px"><a href="/firm" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Firm</a><a href="/spinout-lab" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Spin-Out Lab</a><a href="/intelligence" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Intelligence</a><a href="/methodology" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Methodology</a><a href="/for-administrators" style="font-size:16px;line-height:1.35;padding:3px 0;color:rgba(255,255,255,.92);font-weight:500">Administrators</a></div>
+        </nav>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:48px">
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(196,181,253,.28),rgba(196,181,253,.05))"></div>
+        <div aria-hidden="true" style="width:6px;height:6px;transform:rotate(45deg);background:rgba(196,181,253,.55);flex:none"></div>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(196,181,253,.05),rgba(196,181,253,.28))"></div>
+      </div>
+      <div class="sp-legal" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px 64px;align-items:start;margin-top:26px">
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:8px 22px;flex-wrap:wrap"><a href="/terms" style="font-size:14px;line-height:1.65;color:rgba(255,255,255,.82);font-weight:500">Terms</a><a href="/privacy" style="font-size:14px;line-height:1.65;color:rgba(255,255,255,.82);font-weight:500">Privacy</a><a href="/cookies" style="font-size:14px;line-height:1.65;color:rgba(255,255,255,.82);font-weight:500">Cookie preferences</a><a href="/risk" style="font-size:14px;line-height:1.65;color:rgba(255,255,255,.82);font-weight:500">Risk Disclosures</a></div>
+          <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.65;max-width:520px">© 2026 Axal VC. Platform operated by Axal VC Management LLC. Brand and platform IP owned by Axal VC Holdings LLC. All rights reserved.</div>
+        </div>
+        <div class="sp-disc" style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.65;max-width:520px;justify-self:end"><strong style="color:rgba(255,255,255,.88);font-weight:700">Disclosure:</strong> Investment in startups involves a high degree of risk and may result in the loss of your entire investment. Nothing on this site is an offer to sell securities — see <a href="/risk" style="color:rgba(255,255,255,.88);font-weight:600;text-decoration:underline">Risk Disclosures</a>.</div>
+      </div>
+    </div>
+  </footer>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;founder&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;founder&quot;,&quot;investor&quot;,&quot;advisors&quot;,&quot;partners&quot;,&quot;models&quot;]},&quot;billing&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;monthly&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;monthly&quot;,&quot;yearly&quot;]},&quot;phone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;ok&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;ok&quot;,&quot;loading&quot;,&quot;unavailable&quot;,&quot;notOffered&quot;]},&quot;member&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:-1,&quot;tsType&quot;:&quot;number&quot;},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;plans&quot;]},&quot;offer&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;bonus&quot;,&quot;first&quot;]},&quot;only&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;all&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;all&quot;,&quot;plans&quot;,&quot;packs&quot;]}}">
+class Component extends DCLogic {
+  state = {};
+  tabsRef = React.createRef();
+  componentDidMount() { this.scrollTabs(); }
+  componentDidUpdate() { this.scrollTabs(); }
+  scrollTabs() { const el = this.tabsRef.current; if (!el || el.scrollWidth <= el.clientWidth) return; const b = el.querySelector('[aria-selected="true"]'); if (!b) return; const er = el.getBoundingClientRect(), br = b.getBoundingClientRect(); if (br.left < er.left || br.right > er.right) el.scrollLeft = Math.max(0, el.scrollLeft + (br.left - er.left) - 8); }
+  renderVals() {
+    const P = this.props, S = this.state;
+    const tab = S.tab ?? P.tab ?? 'founder';
+    const billing = S.billing ?? P.billing ?? 'monthly';
+    const isPhone = !!(P.phone ?? false);
+    const st = P.state ?? 'ok';
+    const member = Number(P.member ?? -1);
+    const variant = P.variant ?? 'none';
+    const offer = P.offer ?? 'none';
+    const only = P.only ?? 'all';
+    const yearly = billing === 'yearly';
+    const roleTab = tab !== 'models';
+
+    const PL = {
+      founder: [
+        { name: 'Free', tag: 'Start validating one idea.', m: 'Free', feats: ['[1] active startup', 'Validate: [5] customer interviews and [3] OKRs', 'Apply to the Spin-Out Lab', 'Public profile and referral link', 'Accept up to [3] introductions a month', 'AI runs from tokens you top up'] },
+        { name: 'Validate + Build', tag: 'Prove the idea, then build the company.', m: '[$20]', y: '[$16]', yb: '[$192] billed yearly', hi: true, feats: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Venture-readiness scoring', 'Company data for market research', 'Your full archetype card', 'Accept up to [10] introductions a month', '[$5] of AI tokens a month'] },
+        { name: 'Raise + Grow', tag: 'Raise the money, then grow the company.', m: '[$100]', y: '[$80]', yb: '[$960] billed yearly', feats: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to [25] introductions a month', '[$25] of AI tokens a month'] },
+      ],
+      investor: [
+        { name: 'Investor Basic', kick: 'Free plan', tag: 'Browse the network.', m: '$0', yb: '', cta: 'Start free', route: '/register?lane=investor', feats: ['Public deal index', 'Watch up to [10] companies', 'Read-only market pulses', 'AI runs from AI tokens you top up'] },
+        { name: 'Investor Plus', kick: 'Research subscription', tag: 'For angel investors, independent investors and investment professionals.', m: '$50', yb: '', cta: 'Get Investor Plus', route: '/checkout?plan=investor-plus', feats: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'] },
+        { name: 'Investor Pro', kick: 'Research subscription', tag: 'For professional angels, investment analysts and smaller firms.', m: '$150', yb: '', hi: true, cta: 'Get Investor Pro', route: '/checkout?plan=investor-pro', feats: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'] },
+        { name: 'Institutional', kick: 'Research subscription', tag: 'For institutional investors, family offices and investment teams.', m: 'Custom', custom: true, nb: 'Pricing agreed with our sales team', cta: 'Contact Sales', route: '/contact?topic=institutional', feats: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'] },
+      ],
+      advisors: [
+        { name: 'Advisor Basic', kick: 'Free plan', tag: 'Publish a profile.', m: '$0', yb: '', cta: 'Start free', route: '/register?lane=advisor', feats: ['Public advisor profile', 'Listed in the advisor directory', 'Office hours and session types', 'Booking links', 'AI runs from AI tokens you top up'] },
+        { name: 'Advisor Pro', kick: 'Practice subscription', tag: 'More reach, better matches.', m: '[$29]', yb: '', hi: true, cta: 'Get Advisor Pro', route: '/checkout?plan=advisor-pro', feats: ['More reach in matching', 'Paid sessions through your booking links', 'Deliverables and the client access log', 'Earnings and payouts', '[$7.25] of AI tokens a month'] },
+        { name: 'Advisory Firm', kick: 'Practice subscription', tag: 'For advisory firms.', m: 'Custom', custom: true, nb: 'Pricing agreed with our sales team', cta: 'Contact Sales', route: '/contact?topic=advisory-firm', feats: ['Several advisors under one practice', 'Team access controls and permissions', 'Shared clients and deliverables', 'Negotiated usage limits and support'] },
+      ],
+      partners: [
+        { name: 'Partner Basic', kick: 'Free plan', tag: 'Get listed.', m: '$0', yb: '', cta: 'Start free', route: '/register?lane=partner', feats: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', 'AI runs from AI tokens you top up'] },
+        { name: 'Partner Pro', kick: 'Delivery subscription', tag: 'Inbound demand on tap.', m: '[$99]', yb: '', hi: true, cta: 'Get Partner Pro', route: '/checkout?plan=partner-pro', feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect', '[$24.75] of AI tokens a month'] },
+        { name: 'Partner Firm', kick: 'Delivery subscription', tag: 'For firms and agencies.', m: 'Custom', custom: true, nb: 'Pricing agreed with our sales team', cta: 'Contact Sales', route: '/contact?topic=partner-firm', feats: ['One firm account for every delivery team', 'Team access controls and permissions', 'Featured placement, curated by Axal VC', 'Negotiated usage limits and support'] },
+      ],
+    };
+    const isRoleNoPlan = false;
+    const planTab = tab === 'founder' || tab === 'investor' || tab === 'advisors' || tab === 'partners';
+    const isLoading = planTab && st === 'loading';
+    const isUnavailable = planTab && st === 'unavailable';
+    const showCards = planTab && !isLoading && !isUnavailable;
+    const plans = PL[tab] || [];
+    const cards = plans.map((c, i) => {
+      const free = c.m === 'Free', notOff = st === 'notOffered' && i === plans.length - 1, cur = member === i, dis = cur || notOff, hi = !!c.hi;
+      const btn = notOff ? 'Not offered yet' : cur ? 'Current plan' : c.cta ? c.cta : member < 0 ? 'Get started' : 'Upgrade';
+      return {
+        name: c.name, tag: c.tag, feats: c.feats, cur, dis, btn, offered: !notOff, notOffered: notOff, kick: c.kick || '', elig: c.elig || '', route: c.route || '',
+        price: yearly && c.y ? c.y : c.m, unit: free || c.custom ? '' : '/ month', note: c.nb ? c.nb : yearly && !free && c.yb ? c.yb : '',
+        lead: i > 0 && !c.nolead ? 'Everything in ' + plans[i - 1].name + ', plus:' : '',
+        box: 'border-radius:15px;padding:26px;display:flex;flex-direction:column;box-sizing:border-box;background:' + (cur ? '#faf8ff' : '#fff') + ';border:' + (hi ? '1.5px solid #6d28d9;box-shadow:0 10px 30px rgba(109,40,217,.10)' : '1px solid #ececf1'),
+        btnStyle: "margin-top:20px;width:100%;font:700 14px 'Public Sans',sans-serif;border-radius:10px;padding:12px 16px;cursor:" + (dis ? 'default' : 'pointer') + ';' + (dis ? 'background:#f4f3f7;color:#6b6577;border:1px solid #ececf1' : hi ? 'background:#6d28d9;color:#fff;border:1px solid #6d28d9' : 'background:#fff;color:#141118;border:1px solid #dedce4'),
+      };
+    });
+
+    const CMP = {
+      founder: [
+        ['Validate', [['Customer interviews', '[5]', 'Unlimited', 'Unlimited'], ['Pain map and themes', 1, 1, 1], ['Hypotheses and the verdict', 1, 1, 1], ['Market intelligence', 0, 1, 1], ['Venture-readiness scoring', 0, 1, 1]]],
+        ['Build', [['OKRs', '[3]', 'Unlimited', 'Unlimited'], ['Roadmap and This week', 1, 1, 1], ['Founding team', 1, 1, 1], ['Company creation and filings', 0, 1, 1], ['Connected tools', '[1]', '[n]', '[n]']]],
+        ['Raise', [['Pitch deck: every template and share links', 0, 0, 1], ['Cap table scenarios and dilution', 0, 0, 1], ['Data room', 0, 0, 1], ['Legal, compliance and the 83(b)', 0, 0, 1], ['Introductions a month', '[3]', '[10]', '[25]']]],
+        ['Grow', [['Revenue and traction', 0, 0, 1], ['Distribution and co-marketing', 0, 0, 1], ['Team expansion', 0, 0, 1], ['Partner network', 0, 0, 1]]],
+      ],
+      investor: [
+        ['Browse', [['Public deal index', 1, 1, 1, 1], ['Market pulses', 'Read-only', 1, 1, 1]]],
+        ['Research', [['Research workspace', 0, 1, 1, 1], ['Watchlists and opportunity tracking', 'Up to [10]', 1, 1, 1], ['AI-assisted research', 0, 'Standard limits', 'Higher limits', 'Negotiated'], ['Personal notes and deal comparisons', 0, 1, 1, 1], ['Advanced research and screening', 0, 0, 1, 1], ['Portfolio tracking and analytics', 0, 0, 1, 1], ['Investment memo generation', 0, 0, 1, 1], ['Data exports and integrations', 0, 0, 1, 1]]],
+        ['Teams', [['Shared research workspaces', 0, 0, 0, 1], ['Team access controls and permissions', 0, 0, 0, 1], ['Advanced reporting and analytics', 0, 0, 0, 1], ['Custom integrations and workflows', 0, 0, 0, 1], ['Organization-wide administration', 0, 0, 0, 1]]],
+      ],
+      advisors: [
+        ['Profile and reach', [['Public advisor profile', 1, 1, 1], ['Advisor directory listing', 1, 1, 1], ['Reach in matching', 'Standard', 'More', 'More']]],
+        ['Practice', [['Office hours and session types', 1, 1, 1], ['Booking links', 1, 1, 1], ['Paid sessions', 0, 1, 1], ['Deliverables and the client access log', 0, 1, 1], ['Earnings and payouts', 0, 1, 1]]],
+        ['Firm', [['Several advisors under one practice', 0, 0, 1], ['Team access controls and permissions', 0, 0, 1], ['Negotiated usage limits and support', 0, 0, 1]]],
+      ],
+      partners: [
+        ['Listing', [['Provider profile and directory listing', 1, 1, 1], ['Verification badges', 1, 1, 1], ['Live founder requests', 1, 1, 1]]],
+        ['Delivery', [['Proposals, pipeline and delivery', 0, 1, 1], ['Partner insights', 0, 1, 1], ['Client status reports', 0, 1, 1], ['Payouts through Stripe Connect', 0, 1, 1]]],
+        ['Firm', [['One firm account for every delivery team', 0, 0, 1], ['Team access controls and permissions', 0, 0, 1], ['Featured placement, curated by Axal VC', 0, 0, 1]]],
+      ],
+    };
+    const pick = S.pick ?? (member >= 0 ? member : 1);
+    const cellOf = (v) => ({ tick: v === 1, dash: v === 0, text: typeof v === 'string' ? v : '' });
+    const groups = (CMP[tab] || []).map(([t, rows]) => ({ t, rows: rows.map(r => ({ label: r[0], cells: r.slice(1).map(cellOf), pv: cellOf(r[1 + pick]) })) }));
+    const chip = (on) => "flex:none;font:700 13px 'Public Sans',sans-serif;white-space:nowrap;border-radius:99px;padding:8px 14px;cursor:pointer;" + (on ? 'background:#6d28d9;color:#fff;border:1px solid #6d28d9' : 'background:#fff;color:#3f3b47;border:1px solid #dedce4');
+
+    const PX = '[$x.xxx]';
+    const pill = (t) => ({ t, s: "font:700 10.5px 'Public Sans',sans-serif;border-radius:99px;padding:2px 8px;white-space:nowrap;" + (t === 'New' ? 'color:#6d28d9;background:#f4f0fe;border:1px solid #ddd0fb' : 'color:#4a4553;background:#f4f3f7;border:1px solid #ececf1') });
+    const U = { text: ['Input / 1M tokens', 'Output / 1M tokens'], embed: ['Input / 1M tokens', 'Output'], audio: ['Per audio minute', ''], voice: ['Per 1k characters', ''], image: ['Per image', 'Per 512×512 tile'] };
+    const M = [
+      ['Conversation and writing', 'text', [['Llama 3.3 70B Fast', [], 'Studio › Eadwyn · Validate › Problem discovery'], ['GLM 4.7 Flash', ['New'], 'Eadwyn, the default assistant'], ['Mistral Small 3.1 24B', [], 'Network › Introductions'], ['gpt-oss-20b', [], 'Grow › Distribution']]],
+      ['Reasoning', 'text', [['Kimi K2.6', ['New', 'Paid plans'], 'Raise › Fundraising readiness'], ['QwQ 32B', [], 'Build › Product roadmap'], ['DeepSeek R1 Distill Qwen 32B', [], 'Raise › Cap table']]],
+      ['Code', 'text', [['Qwen2.5 Coder 32B', [], 'Build › Prototype / MVP'], ['gpt-oss-120b', [], 'Build › Operating systems']]],
+      ['Reading images and files', 'text', [['Gemma 4 26B', ['New'], 'Raise › Data room'], ['Llama 4 Scout 17B', ['Paid plans'], 'Research › Library'], ['Moondream 3.1', [], 'Raise › Pitch deck']]],
+      ['Search and ranking', 'embed', [['BGE M3', [], 'Research › Ask'], ['Qwen3 Embedding 0.6B', [], 'Research › Companies'], ['BGE Reranker Base', [], 'Research › Ask']]],
+      ['Languages', 'text', [['M2M100 1.2B', [], 'Validate › Customer research · translation']]],
+      ['Speech to text', 'audio', [['Whisper Large v3 Turbo', [], 'Validate › Customer research'], ['Deepgram Nova-3', [], 'Validate › Customer research · speaker labels'], ['Deepgram Flux', ['New'], 'Validate › Record a session · live transcript']]],
+      ['Voice', 'voice', [['Deepgram Aura-1', [], 'Studio › Eadwyn · spoken replies'], ['MeloTTS', [], 'Learning › Lessons']]],
+      ['Images', 'image', [['FLUX.1 schnell', [], 'Grow › Distribution · brand pages', '—', PX], ['FLUX.2 klein', ['New'], 'Raise › Pitch deck · slide images', PX, '—']]],
+      ['Safety', 'text', [['Llama Guard 3 8B', [], 'Every outbound draft']]],
+    ];
+    const mgroups = M.map(([t, k, rows]) => ({ t, u1: U[k][0], u2: U[k][1], rows: rows.map(r => {
+      const p1 = r[3] || PX, p2 = r[4] || (k === 'text' ? PX : k === 'embed' ? '—' : '');
+      return { name: r[0], pills: r[1].map(pill), used: r[2], p1, p2, p2show: !!p2 && !!U[k][1] };
+    }) }));
+
+    const offerT = offer === 'bonus' ? '+[20]% bonus until [12 Nov]' : offer === 'first' ? 'First purchase only' : '';
+    const packs = ['[$10]', '[$25]', '[$50]', '[$100]'].map(p => ({ price: p, use: p + ' of AI use', offer: offerT, hasOffer: !!offerT }));
+
+    const FAQ = [
+      ['What are AI tokens?', 'AI tokens pay for AI runs in StudioOS. Each run is priced on the model that ran it, at the rates on the Models tab. Your plan includes some every month, and you can top up at any time.'],
+      ['Are AI tokens the same as Perks credits?', 'No. Perks credits are claimed for perks from partners. AI tokens pay for AI runs. Neither can be spent as the other.'],
+      ['What happens when my allowance runs out?', 'Runs draw on the AI tokens you have bought. If you have none, AI runs wait until you top up or your allowance resets on the 1st. Everything else keeps working.'],
+      ['Can I set a spending limit?', 'Your top-ups are your limit: AI never spends more than your monthly allowance and the tokens you have bought. Account › Usage shows your allowance, your use and your balance, run by run.'],
+      ['Do unused tokens expire?', 'Tokens you buy never expire. Your plan’s monthly allowance resets on the 1st and does not carry over.'],
+      ['How do refunds work?', 'Unused AI tokens can be refunded within [n] days of purchase. Plan payments follow the terms shown at checkout.'],
+    ];
+    if (tab === 'investor') FAQ.unshift(['Who qualifies for free LP access?', 'Eligible investors in Axal VC funds receive access to their relevant fund information without a separate platform subscription.'], ['Do I need to subscribe to access my fund documents?', 'No. Eligible LPs can access their authorized fund information for free.'], ['Can I use Axal VC without investing in an Axal VC fund?', 'Yes. Independent investors can choose a paid research plan based on their needs. A research plan does not make you eligible to invest in a fund, and does not open restricted fund information.']);
+    const faqOpen = S.faq ?? 0;
+    const faq = FAQ.map((q, i) => ({ q: q[0], a: q[1], open: i === faqOpen, chev: i === faqOpen ? '−' : '+', go: () => this.setState({ faq: i === faqOpen ? -1 : i }) }));
+
+    const NP = {
+      advisors: { role: 'Advisors', text: 'Advisors use StudioOS free. AI runs are paid from AI tokens you top up.', feats: ['A public advisor profile', 'Office hours, session types and booking links', 'Deliverables and the client access log', 'Matching by sector, expertise and availability', 'Earnings and payouts'] },
+      partners: { role: 'Operating Partners', text: 'Operating Partners use StudioOS free. AI runs are paid from AI tokens you top up.', feats: ['A provider profile and a directory listing', 'Live founder requests', 'Proposals, pipeline and delivery', 'Client status reports', 'Payouts through Stripe Connect'] },
+    };
+
+    const TABS = [['founder', 'Founder'], ['investor', 'Investor'], ['advisors', 'Advisors'], ['partners', 'Operating Partners'], ['models', 'Models']];
+    const tabs = TABS.map(([k, t]) => ({ t, sel: k === tab, go: () => this.setState({ tab: k, pick: undefined }), style: "flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;font:" + (k === tab ? 700 : 600) + " 14px 'Public Sans',sans-serif;" + (k === tab ? 'background:#6d28d9;color:#fff' : 'background:transparent;color:#4a4553') }));
+    const bills = [['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([k, t]) => ({ t, go: () => this.setState({ billing: k }), style: "font:700 13px 'Public Sans',sans-serif;border:0;cursor:pointer;border-radius:99px;padding:7px 14px;" + (k === billing ? 'background:#fff;color:#141118;box-shadow:0 1px 2px rgba(20,17,24,.08)' : 'background:transparent;color:#6b6577') }));
+
+    const soc = (p) => ({ __html:'<svg viewBox="0 0 24 24" fill="currentColor" width="100%" height="100%">'+p+'</svg>' });
+    const socials = [
+      { label:'Facebook', href:'https://www.facebook.com/axalvc', icon: soc('<path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.75-1.6 1.5V12h2.7l-.43 2.9h-2.3v7A10 10 0 0 0 22 12z"/>') },
+      { label:'LinkedIn', href:'https://www.linkedin.com/company/axal-vc', icon: soc('<path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM2 21h6V9H2v12zM11 21h6v-6.5c0-1.6.6-2.6 2-2.6s2 1 2 2.6V21h6v-7.4c0-3.9-2.1-5.7-4.9-5.7-2.2 0-3.4 1.2-4.1 2.2V9h-7v12z"/>') },
+      { label:'X', href:'https://x.com/axalvc', icon: soc('<path d="M18.9 2H22l-6.8 7.8L22.8 22h-6.4l-4.4-6-5 6H2l7.2-8.2L1.6 2h6.5l4 5.6L18.9 2zm-1.1 18h1.8L7.4 3.8H5.5L17.8 20z"/>') },
+      { label:'Instagram', href:'https://www.instagram.com/axalvc', icon: soc('<path d="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.25 2.2.42.6.23 1 .5 1.5 1 .5.5.77.9 1 1.5.17.4.36 1 .42 2.2.07 1.3.07 1.7.07 4.9s0 3.6-.07 4.9c-.06 1.2-.25 1.8-.42 2.2a4 4 0 0 1-1 1.5c-.5.5-.9.77-1.5 1-.4.17-1 .36-2.2.42-1.3.07-1.7.07-4.9.07s-3.6 0-4.9-.07c-1.2-.06-1.8-.25-2.2-.42a4 4 0 0 1-1.5-1 4 4 0 0 1-1-1.5c-.17-.4-.36-1-.42-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.07-4.9c.06-1.2.25-1.8.42-2.2a4 4 0 0 1 1-1.5 4 4 0 0 1 1.5-1c.4-.17 1-.36 2.2-.42C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.8.07-1 .04-1.5.2-1.8.33-.4.16-.7.35-1 .65-.3.3-.5.6-.65 1-.13.3-.29.8-.33 1.8C3.3 8.5 3.3 8.9 3.3 12s0 3.5.07 4.8c.04 1 .2 1.5.33 1.8.16.4.35.7.65 1 .3.3.6.5 1 .65.3.13.8.29 1.8.33 1.3.07 1.7.07 4.8.07s3.5 0 4.8-.07c1-.04 1.5-.2 1.8-.33.4-.16.7-.35 1-.65.3-.3.5-.6.65-1 .13-.3.29-.8.33-1.8.07-1.3.07-1.7.07-4.8s0-3.5-.07-4.8c-.04-1-.2-1.5-.33-1.8a2.7 2.7 0 0 0-.65-1 2.7 2.7 0 0 0-1-.65c-.3-.13-.8-.29-1.8-.33C15.5 4 15.1 4 12 4zm0 3.2a4.8 4.8 0 1 1 0 9.6 4.8 4.8 0 0 1 0-9.6zm0 1.8a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm6.1-2.1a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0z"/>') },
+      { label:'YouTube', href:'https://www.youtube.com/@axalvc', icon: soc('<path d="M22.5 7.2a3 3 0 0 0-2.1-2.1C18.6 4.6 12 4.6 12 4.6s-6.6 0-8.4.5A3 3 0 0 0 1.5 7.2C1 9 1 12 1 12s0 3 .5 4.8a3 3 0 0 0 2.1 2.1c1.8.5 8.4.5 8.4.5s6.6 0 8.4-.5a3 3 0 0 0 2.1-2.1C23 15 23 12 23 12s0-3-.5-4.8zM9.8 15.4V8.6l6 3.4-6 3.4z"/>') },
+      { label:'Telegram', href:'https://t.me/axalvc', icon: soc('<path d="M21.9 4.3 18.8 19a1.1 1.1 0 0 1-1.7.7l-4.5-3.3-2.2 2.1a.9.9 0 0 1-.7.3l.3-4.3 8.2-7.4c.3-.3-.1-.5-.5-.2L7.3 13.4 3 12c-.9-.3-.9-.9.2-1.3l17.2-6.6c.8-.3 1.6.2 1.5 1.2z"/>') },
+      { label:'TikTok', href:'https://www.tiktok.com/@axalvc', icon: soc('<path d="M16.6 2h-3.2v13.5a2.6 2.6 0 1 1-2.6-2.6c.28 0 .55.05.8.13V9.7a6 6 0 0 0-.8-.06 6 6 0 1 0 6 6V8.8a6.9 6.9 0 0 0 4 1.3V6.8a3.9 3.9 0 0 1-2.9-1.3A3.9 3.9 0 0 1 16.6 2z"/>') },
+    ];
+    return {
+      socials, tabsRef: this.tabsRef, tabs, bills, roleTab, isPhone, desk: !isPhone,
+      showPlanArea: roleTab && only !== 'packs', isLoading, isUnavailable, showCards, showNoPlan: isRoleNoPlan && variant !== 'plans',
+      billToggle: tab === 'founder',
+      hasLp: tab === 'investor' && !isLoading && !isUnavailable,
+      lpFeats: ['Access to relevant fund documents and reports', 'Fund updates and announcements', 'Available capital account and investment information', 'Secure document access', 'Fund-related communications', 'Information for your authorized fund investments'],
+      cards, skel: [1, 2, 3], gridStyle: 'display:grid;grid-template-columns:repeat(' + Math.max(cards.length, 1) + ',minmax(0,1fr));gap:16px;align-items:stretch', cmpHeadS: 'display:grid;grid-template-columns:minmax(0,1.6fr) repeat(' + Math.max(plans.length, 1) + ',minmax(0,1fr));gap:14px;padding:14px 20px;background:#faf9fc;border-bottom:1px solid #ececf1;position:sticky;top:0', cmpRowS: 'display:grid;grid-template-columns:minmax(0,1.6fr) repeat(' + Math.max(plans.length, 1) + ",minmax(0,1fr));gap:14px;align-items:center;padding:12px 20px;border-bottom:1px solid #f4f3f7;font:400 14px/1.45 'Public Sans',sans-serif", np: NP[tab] || { role: '', text: '', feats: [] },
+      showBand: planTab && only === 'all' && !isLoading && !isUnavailable,
+      showCompare: planTab && only === 'all' && !isLoading && !isUnavailable,
+      cmpHead: plans.map(p => p.name), groups, pickChips: plans.map((p, i) => ({ t: p.name, go: () => this.setState({ pick: i }), style: chip(i === pick) })),
+      showModels: tab === 'models' && only === 'all', mgroups,
+      showPacks: tab === 'models' && only !== 'plans', packs,
+      showRest: only === 'all', faq,
+      goModels: () => this.setState({ tab: 'models' }),
+      footCols: [
+        { t: 'Navigate', links: [['Founders', '/for-founders'], ['Investors', '/for-investors'], ['Operating Partners', '/for-service-partners'], ['Advisors', '/for-advisors']].map(([t, h]) => ({ t, h })) },
+        { t: 'Network', links: [['Articles', '/articles'], ['Directory', '/directory'], ['Programs & Events', '/events'], ['Communities & Circles', '/circles'], ['Jobs', '/jobs']].map(([t, h]) => ({ t, h })) },
+        { t: 'Build With Us', links: [['Firm', '/firm'], ['Spin-Out Lab', '/spinout-lab'], ['Intelligence', '/intelligence'], ['Methodology', '/methodology'], ['Administrators', '/for-administrators']].map(([t, h]) => ({ t, h })) },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

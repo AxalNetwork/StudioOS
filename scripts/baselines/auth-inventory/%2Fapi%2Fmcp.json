@@ -1,0 +1,7 @@
+{
+  "POST /api/mcp/consent/:id/deny": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

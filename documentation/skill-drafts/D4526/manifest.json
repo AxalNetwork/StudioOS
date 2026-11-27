@@ -1,0 +1,1093 @@
+{
+  "issue": 4526,
+  "authored_on": "2026-11-05",
+  "provenance": "newly_authored_not_recovered",
+  "stage": "authored_not_imported",
+  "scope": "hq",
+  "status": "draft",
+  "current_version": 0,
+  "definition_version": 1,
+  "production_writes": false,
+  "existing_drafts_modified": false,
+  "d1_duplicate_check": "pending_before_import",
+  "skills": [
+    {
+      "slug": "ux-research-interview-synthesis",
+      "proposal_slug": "ux_research_interview_synthesis",
+      "name": "UX Research Interview Synthesis",
+      "category": "design",
+      "tag": "design_ux_research",
+      "roles": [
+        "cpo",
+        "research_analyst"
+      ],
+      "reads": [
+        "validate.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "usability-test-protocol-design",
+      "proposal_slug": "usability_test_protocol_design",
+      "name": "Usability Test Protocol Design",
+      "category": "design",
+      "tag": "design_ux_research",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "validate.records",
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "ux-flow-architecture",
+      "proposal_slug": "ux_flow_architecture",
+      "name": "UX Flow Architecture",
+      "category": "design",
+      "tag": "design_information_arch",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "design-system-token-architecture",
+      "proposal_slug": "design_system_token_architecture",
+      "name": "Design System Token Architecture",
+      "category": "design",
+      "tag": "design_design_systems",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "component-library-specification",
+      "proposal_slug": "component_library_specification",
+      "name": "Component Library Specification",
+      "category": "design",
+      "tag": "design_design_systems",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "interaction-state-specification",
+      "proposal_slug": "interaction_state_specification",
+      "name": "Interaction State Specification",
+      "category": "design",
+      "tag": "design_interaction",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "high-fidelity-prototype-validation",
+      "proposal_slug": "high_fidelity_prototype_validation",
+      "name": "High-Fidelity Prototype Validation",
+      "category": "design",
+      "tag": "design_prototyping",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "build.records",
+        "validate.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "wcag-interface-audit",
+      "proposal_slug": "wcag_interface_audit",
+      "name": "WCAG Interface Audit",
+      "category": "design",
+      "tag": "design_accessibility",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "responsive-breakpoint-specification",
+      "proposal_slug": "responsive_breakpoint_specification",
+      "name": "Responsive Breakpoint Specification",
+      "category": "design",
+      "tag": "design_ui",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "dashboard-information-hierarchy",
+      "proposal_slug": "dashboard_information_hierarchy",
+      "name": "Dashboard Information Hierarchy",
+      "category": "design",
+      "tag": "design_information_arch",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "build.records",
+        "project.summary"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "data-visualization-encoding-review",
+      "proposal_slug": "data_visualization_encoding_review",
+      "name": "Data Visualization Encoding Review",
+      "category": "design",
+      "tag": "design_visual",
+      "roles": [
+        "cpo",
+        "research_analyst"
+      ],
+      "reads": [
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "saas-onboarding-journey-design",
+      "proposal_slug": "saas_onboarding_journey_design",
+      "name": "SaaS Onboarding Journey Design",
+      "category": "design",
+      "tag": "design_service",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "build.records",
+        "validate.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "design-implementation-qa",
+      "proposal_slug": "design_implementation_qa",
+      "name": "Design Implementation QA",
+      "category": "design",
+      "tag": "design_ui",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "conversion-landing-page-wireframing",
+      "proposal_slug": "conversion_landing_page_wireframing",
+      "name": "Conversion Landing Page Wireframing",
+      "category": "design",
+      "tag": "design_product",
+      "roles": [
+        "cpo",
+        "cmo"
+      ],
+      "reads": [
+        "build.records",
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "brand-identity-system-spec",
+      "proposal_slug": "brand_identity_system_spec",
+      "name": "Brand Identity System Specification",
+      "category": "design",
+      "tag": "design_brand_identity",
+      "roles": [
+        "cmo",
+        "cpo"
+      ],
+      "reads": [
+        "build.records",
+        "company.profile"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "logo-identity-critique",
+      "proposal_slug": "logo_identity_critique",
+      "name": "Logo and Identity Critique",
+      "category": "design",
+      "tag": "design_brand_identity",
+      "roles": [
+        "cmo",
+        "cpo"
+      ],
+      "reads": [
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "typography-color-system-review",
+      "proposal_slug": "typography_color_system_review",
+      "name": "Typography and Color System Review",
+      "category": "design",
+      "tag": "design_visual",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "pitch-deck-visual-storytelling",
+      "proposal_slug": "pitch_deck_visual_storytelling",
+      "name": "Pitch Deck Visual Storytelling",
+      "category": "design",
+      "tag": "design_graphic",
+      "roles": [
+        "cpo",
+        "ceo"
+      ],
+      "reads": [
+        "raise.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "mobile-product-experience-review",
+      "proposal_slug": "mobile_product_experience_review",
+      "name": "Mobile Product Experience Review",
+      "category": "design",
+      "tag": "design_product",
+      "roles": [
+        "cpo"
+      ],
+      "reads": [
+        "build.records",
+        "validate.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "design-development-handoff",
+      "proposal_slug": "design_development_handoff",
+      "name": "Design-to-Development Handoff Specification",
+      "category": "design",
+      "tag": "design_design_systems",
+      "roles": [
+        "cpo",
+        "cto"
+      ],
+      "reads": [
+        "build.records",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "icp-buyer-persona-definition",
+      "proposal_slug": "icp_buyer_persona_definition",
+      "name": "ICP and Buyer Persona Definition",
+      "category": "gtm_sales",
+      "tag": "gtm_sales_strategy",
+      "roles": [
+        "sales",
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "validate.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "gtm-motion-architecture",
+      "proposal_slug": "gtm_motion_architecture",
+      "name": "GTM Motion Architecture",
+      "category": "gtm_sales",
+      "tag": "gtm_market_entry",
+      "roles": [
+        "sales",
+        "cmo",
+        "ceo"
+      ],
+      "reads": [
+        "grow.records",
+        "company.profile"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "sales-playbook-generation",
+      "proposal_slug": "sales_playbook_generation",
+      "name": "Sales Playbook Generation",
+      "category": "gtm_sales",
+      "tag": "gtm_sales_enablement",
+      "roles": [
+        "sales"
+      ],
+      "reads": [
+        "grow.records",
+        "validate.records"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "enterprise-account-plan",
+      "proposal_slug": "enterprise_account_plan",
+      "name": "Enterprise Account Planning",
+      "category": "gtm_sales",
+      "tag": "gtm_enterprise_sales",
+      "roles": [
+        "sales"
+      ],
+      "reads": [
+        "grow.records",
+        "network.relationships"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "lead-qualification-scoring",
+      "proposal_slug": "lead_qualification_scoring",
+      "name": "Lead Qualification and Scoring",
+      "category": "gtm_sales",
+      "tag": "gtm_inbound",
+      "roles": [
+        "sales"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "outbound-prospecting-design",
+      "proposal_slug": "outbound_prospecting_design",
+      "name": "Outbound Prospecting Strategy",
+      "category": "gtm_sales",
+      "tag": "gtm_outbound",
+      "roles": [
+        "sales",
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "network.relationships"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "sales-sequence-optimization",
+      "proposal_slug": "sales_sequence_optimization",
+      "name": "Sales Sequence Optimization",
+      "category": "gtm_sales",
+      "tag": "gtm_outbound",
+      "roles": [
+        "sales",
+        "cmo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "discovery-call-preparation",
+      "proposal_slug": "discovery_call_preparation",
+      "name": "Discovery Call Preparation",
+      "category": "gtm_sales",
+      "tag": "gtm_sales_enablement",
+      "roles": [
+        "sales"
+      ],
+      "reads": [
+        "grow.records",
+        "validate.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "sales-objection-response-design",
+      "proposal_slug": "sales_objection_response_design",
+      "name": "Sales Objection Response Design",
+      "category": "gtm_sales",
+      "tag": "gtm_sales_enablement",
+      "roles": [
+        "sales"
+      ],
+      "reads": [
+        "grow.records",
+        "company.profile"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "pipeline-health-diagnostics",
+      "proposal_slug": "pipeline_health_diagnostics",
+      "name": "Pipeline Health Diagnostics",
+      "category": "gtm_sales",
+      "tag": "gtm_pipeline_mgmt",
+      "roles": [
+        "sales",
+        "coo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "crm-pipeline-hygiene-audit",
+      "proposal_slug": "crm_pipeline_hygiene_audit",
+      "name": "CRM Pipeline Hygiene Audit",
+      "category": "gtm_sales",
+      "tag": "gtm_sales_ops",
+      "roles": [
+        "sales",
+        "coo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "revenue-operations-design",
+      "proposal_slug": "revenue_operations_design",
+      "name": "Revenue Operations Process Design",
+      "category": "gtm_sales",
+      "tag": "gtm_revenue_ops",
+      "roles": [
+        "coo",
+        "sales",
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "team.roster"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "channel-partner-strategy",
+      "proposal_slug": "channel_partner_strategy",
+      "name": "Channel and Partnership Strategy",
+      "category": "gtm_sales",
+      "tag": "gtm_partnerships",
+      "roles": [
+        "sales",
+        "ceo"
+      ],
+      "reads": [
+        "grow.records",
+        "network.relationships"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "sales-forecast-scenario-review",
+      "proposal_slug": "sales_forecast_scenario_review",
+      "name": "Sales Forecast Scenario Review",
+      "category": "gtm_sales",
+      "tag": "gtm_pipeline_mgmt",
+      "roles": [
+        "sales",
+        "cfo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "customer-expansion-opportunity",
+      "proposal_slug": "customer_expansion_opportunity",
+      "name": "Customer Expansion Opportunity Analysis",
+      "category": "gtm_sales",
+      "tag": "gtm_account_management",
+      "roles": [
+        "sales"
+      ],
+      "reads": [
+        "grow.records",
+        "validate.records"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "brand-positioning-messaging",
+      "proposal_slug": "brand_positioning_messaging",
+      "name": "Brand Positioning and Messaging Architecture",
+      "category": "marketing_brand",
+      "tag": "mkt_brand_strategy",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "company.profile",
+        "grow.records",
+        "validate.records"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "brand-voice-governance",
+      "proposal_slug": "brand_voice_governance",
+      "name": "Brand Voice Governance",
+      "category": "marketing_brand",
+      "tag": "mkt_brand_strategy",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "company.profile",
+        "grow.records"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "content-editorial-strategy",
+      "proposal_slug": "content_editorial_strategy",
+      "name": "Content Strategy and Editorial Planning",
+      "category": "marketing_brand",
+      "tag": "mkt_content",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "research.library"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "seo-search-intent-mapping",
+      "proposal_slug": "seo_search_intent_mapping",
+      "name": "SEO Search Intent Mapping",
+      "category": "marketing_brand",
+      "tag": "mkt_seo",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "research.library"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "technical-seo-crawl-audit",
+      "proposal_slug": "technical_seo_crawl_audit",
+      "name": "Technical SEO Crawl Audit",
+      "category": "marketing_brand",
+      "tag": "mkt_seo",
+      "roles": [
+        "cmo",
+        "cto"
+      ],
+      "reads": [
+        "grow.records",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "linkedin-company-growth",
+      "proposal_slug": "linkedin_company_growth",
+      "name": "LinkedIn Company Page Growth Strategy",
+      "category": "marketing_brand",
+      "tag": "mkt_social_media",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "company.profile"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "social-content-channel-adaptation",
+      "proposal_slug": "social_content_channel_adaptation",
+      "name": "Social Content Channel Adaptation",
+      "category": "marketing_brand",
+      "tag": "mkt_social_media",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "company.profile"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "newsletter-program-design",
+      "proposal_slug": "newsletter_program_design",
+      "name": "Newsletter Program Design",
+      "category": "marketing_brand",
+      "tag": "mkt_lifecycle",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "company.profile"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "email-lifecycle-automation",
+      "proposal_slug": "email_lifecycle_automation",
+      "name": "Email Lifecycle Automation Design",
+      "category": "marketing_brand",
+      "tag": "mkt_lifecycle",
+      "roles": [
+        "cmo",
+        "coo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "paid-acquisition-experiment",
+      "proposal_slug": "paid_acquisition_experiment",
+      "name": "Paid Acquisition Experiment Design",
+      "category": "marketing_brand",
+      "tag": "mkt_paid_social",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "campaign-attribution-diagnostics",
+      "proposal_slug": "campaign_attribution_diagnostics",
+      "name": "Campaign Attribution Diagnostics",
+      "category": "marketing_brand",
+      "tag": "mkt_analytics",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "conversion-rate-experiment-design",
+      "proposal_slug": "conversion_rate_experiment_design",
+      "name": "Conversion Rate Optimization Experiment Design",
+      "category": "marketing_brand",
+      "tag": "mkt_growth_marketing",
+      "roles": [
+        "cmo",
+        "cpo"
+      ],
+      "reads": [
+        "grow.records",
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "marketing-funnel-cohort-analysis",
+      "proposal_slug": "marketing_funnel_cohort_analysis",
+      "name": "Marketing Funnel and Cohort Analysis",
+      "category": "marketing_brand",
+      "tag": "mkt_analytics",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "community-growth-program",
+      "proposal_slug": "community_growth_program",
+      "name": "Community Growth Program Design",
+      "category": "marketing_brand",
+      "tag": "mkt_community",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "network.relationships"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "influencer-partner-evaluation",
+      "proposal_slug": "influencer_partner_evaluation",
+      "name": "Influencer Partnership Evaluation",
+      "category": "marketing_brand",
+      "tag": "mkt_influencer",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "network.relationships"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "pr-media-outreach-planning",
+      "proposal_slug": "pr_media_outreach_planning",
+      "name": "PR and Media Outreach Planning",
+      "category": "marketing_brand",
+      "tag": "mkt_pr_comms",
+      "roles": [
+        "cmo"
+      ],
+      "reads": [
+        "grow.records",
+        "company.profile"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "product-launch-campaign",
+      "proposal_slug": "product_launch_campaign",
+      "name": "Product Launch Campaign Design",
+      "category": "marketing_brand",
+      "tag": "mkt_product_marketing",
+      "roles": [
+        "cmo",
+        "cpo"
+      ],
+      "reads": [
+        "grow.records",
+        "build.records"
+      ],
+      "output_kind": "draft"
+    },
+    {
+      "slug": "marketing-competitive-intelligence",
+      "proposal_slug": "marketing_competitive_intelligence",
+      "name": "Marketing Competitive Intelligence",
+      "category": "marketing_brand",
+      "tag": "mkt_product_marketing",
+      "roles": [
+        "cmo",
+        "research_analyst"
+      ],
+      "reads": [
+        "research.library",
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "marketing-performance-reporting",
+      "proposal_slug": "marketing_performance_reporting",
+      "name": "Marketing Performance Reporting",
+      "category": "marketing_brand",
+      "tag": "mkt_analytics",
+      "roles": [
+        "cmo",
+        "cfo"
+      ],
+      "reads": [
+        "grow.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "entity-structure-governance-review",
+      "proposal_slug": "entity_structure_governance_review",
+      "name": "Corporate Structure and Entity Governance Review",
+      "category": "legal_compliance",
+      "tag": "legal_corporate",
+      "roles": [
+        "general_counsel",
+        "coo"
+      ],
+      "reads": [
+        "data_room.index",
+        "company.profile"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "shareholder-agreement-issue-analysis",
+      "proposal_slug": "shareholder_agreement_issue_analysis",
+      "name": "Shareholder Agreement Issue Analysis",
+      "category": "legal_compliance",
+      "tag": "legal_contracts",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index",
+        "cap_table.read"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "investment-agreement-clause-review",
+      "proposal_slug": "investment_agreement_clause_review",
+      "name": "Investment Agreement Clause Review",
+      "category": "legal_compliance",
+      "tag": "legal_securities",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index",
+        "raise.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "safe-convertible-instrument-review",
+      "proposal_slug": "safe_convertible_instrument_review",
+      "name": "SAFE and Convertible Instrument Review",
+      "category": "legal_compliance",
+      "tag": "legal_securities",
+      "roles": [
+        "general_counsel",
+        "cfo"
+      ],
+      "reads": [
+        "data_room.index",
+        "cap_table.read"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "fund-formation-document-checklist",
+      "proposal_slug": "fund_formation_document_checklist",
+      "name": "Fund Formation Documentation Checklist",
+      "category": "legal_compliance",
+      "tag": "legal_corporate",
+      "roles": [
+        "general_counsel",
+        "investor_relations"
+      ],
+      "reads": [
+        "data_room.index",
+        "compliance.calendar"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "gp-lp-agreement-provision-analysis",
+      "proposal_slug": "gp_lp_agreement_provision_analysis",
+      "name": "GP and LP Agreement Provision Analysis",
+      "category": "legal_compliance",
+      "tag": "legal_contracts",
+      "roles": [
+        "general_counsel",
+        "investor_relations"
+      ],
+      "reads": [
+        "data_room.index"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "contract-clause-extraction",
+      "proposal_slug": "contract_clause_extraction",
+      "name": "Contract Clause Extraction and Indexing",
+      "category": "legal_compliance",
+      "tag": "legal_contracts",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "contract-risk-issue-spotting",
+      "proposal_slug": "contract_risk_issue_spotting",
+      "name": "Contract Risk Issue Spotting",
+      "category": "legal_compliance",
+      "tag": "legal_contracts",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "nda-confidentiality-review",
+      "proposal_slug": "nda_confidentiality_review",
+      "name": "NDA Confidentiality Review",
+      "category": "legal_compliance",
+      "tag": "legal_contracts",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "ip-assignment-chain-of-title",
+      "proposal_slug": "ip_assignment_chain_of_title",
+      "name": "IP Ownership and Assignment Chain Review",
+      "category": "legal_compliance",
+      "tag": "legal_ip",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index",
+        "github.repos"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "software-license-obligation-audit",
+      "proposal_slug": "software_license_obligation_audit",
+      "name": "Software Licensing Obligation Audit",
+      "category": "legal_compliance",
+      "tag": "legal_open_source",
+      "roles": [
+        "general_counsel",
+        "cto"
+      ],
+      "reads": [
+        "github.repos",
+        "data_room.index"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "privacy-data-protection-assessment",
+      "proposal_slug": "privacy_data_protection_assessment",
+      "name": "Data Protection and Privacy Assessment",
+      "category": "legal_compliance",
+      "tag": "legal_privacy",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index",
+        "company.profile"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "ai-regulatory-risk-screen",
+      "proposal_slug": "ai_regulatory_risk_screen",
+      "name": "AI Regulatory Risk Screening",
+      "category": "legal_compliance",
+      "tag": "legal_regulatory",
+      "roles": [
+        "general_counsel"
+      ],
+      "reads": [
+        "data_room.index",
+        "build.records"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "kyc-aml-evidence-completeness",
+      "proposal_slug": "kyc_aml_evidence_completeness",
+      "name": "KYC and AML Evidence Completeness Check",
+      "category": "legal_compliance",
+      "tag": "legal_aml_kyc",
+      "roles": [
+        "general_counsel",
+        "coo"
+      ],
+      "reads": [
+        "data_room.index",
+        "compliance.calendar"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "regulatory-jurisdiction-research",
+      "proposal_slug": "regulatory_jurisdiction_research",
+      "name": "Regulatory Jurisdiction Research Brief",
+      "category": "legal_compliance",
+      "tag": "legal_regulatory",
+      "roles": [
+        "general_counsel",
+        "research_analyst"
+      ],
+      "reads": [
+        "research.library",
+        "company.profile"
+      ],
+      "output_kind": "brief"
+    },
+    {
+      "slug": "legal-due-diligence-coordination",
+      "proposal_slug": "legal_due_diligence_coordination",
+      "name": "Legal Due Diligence Coordination",
+      "category": "legal_compliance",
+      "tag": "legal_ma",
+      "roles": [
+        "general_counsel",
+        "coo"
+      ],
+      "reads": [
+        "data_room.index",
+        "team.roster"
+      ],
+      "output_kind": "brief"
+    }
+  ],
+  "gates": {
+    "authoring": "complete",
+    "importer_validation": "passed",
+    "repository_duplicate_check": "passed",
+    "d1_duplicate_check": "pending",
+    "active_d1_taxonomy_check": "pending",
+    "model_evaluations": "not_run",
+    "import": "not_started",
+    "publish": "not_authorized",
+    "assignment": "not_authorized"
+  }
+}

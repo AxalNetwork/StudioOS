@@ -1,0 +1,35 @@
+{
+  "skill": "cash-runway-snapshot",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "mercury.balances": {
+        "accounts": [
+          {
+            "name": "Operating",
+            "usd": 420000
+          },
+          {
+            "name": "Reserve",
+            "usd": 180000
+          }
+        ],
+        "as_of": "2026-11-01"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "600000",
+      "2026-11-01"
+    ],
+    "must_say_not_recorded": [
+      "runway"
+    ],
+    "must_not_include": [
+      "months of runway"
+    ]
+  }
+}

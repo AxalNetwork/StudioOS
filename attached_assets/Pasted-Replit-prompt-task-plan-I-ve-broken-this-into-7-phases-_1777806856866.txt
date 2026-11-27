@@ -1,0 +1,174 @@
+Replit prompt task plan
+I've broken this into 7 phases. Each task below is a self-contained prompt designed to paste into Replit Agent — scoped tight enough that one prompt ≈ one PR. Order matters; later tasks depend on earlier ones.
+Phase 0 — Role split & cross-cutting foundations
+Task 0.1 — Split partner role
+
+In backend/app/models/entities.py add investor to the role enum and add a new Investor model (extends User, with investor_type ∈ {LP, VC, Angel, Scout}, accreditation_status, check_size_min, check_size_max, sector_focus, stage_focus). Migrate existing partner rows that have an entry in limited_partners to investor; keep the rest as partner. Update services/access_policy.py predicates: can_view_lp_data → investor only, can_view_partner_demand → partner only. Update sidebar nav in App.jsx to render distinct sections per role. Update cloudflare-worker/src/routes/admin.ts portal switcher to add an "Investor" view. Add a one-time migration backend/migrations/split_partner_role.py and run on startup with idempotency guard.
+
+Task 0.2 — Notification center
+
+Create Notification model (user_id, type, payload JSON, read_at, channel ∈ {in_app, email, slack}). Add /api/notifications (list, mark-read, prefs). Build frontend/src/components/NotificationBell.jsx in the top bar with unread count and dropdown. Wire it to existing Durable Object WebSocket for real-time push. Add per-event preference matrix in /settings/notifications. Trigger notifications from: ticket update, score generated, deal stage change, capital call, vote threshold reached, partner engagement update.
+
+Task 0.3 — Global search
+
+Extend services/vectorize.ts to embed projects, deals, founders, partners, documents (already partial), and a new academy_lessons table. Add frontend/src/components/CommandPalette.jsx (cmd-K) that hits GET /api/search?q= and returns grouped results. Respect existing snippet-redaction policy for documents.
+
+Task 0.4 — Per-role onboarding wizards
+
+Create /onboarding/founder, /onboarding/investor, /onboarding/partner multi-step wizards. State persisted server-side in a new onboarding_progress table so users can resume. Founder wizard branches into the existing FounderPortal submission. Investor wizard collects accreditation, check size, sector focus, LP commitment intent. Partner wizard collects service catalog, KYB upload (route through existing Sumsub integration), specialties.
+
+Phase 1 — Founder builder kit
+Task 1.1 — Brand & landing page generator
+
+Add /build/brand page. Use OpenAI to generate 5 name + tagline + logo-prompt suggestions from project intake. Logo via DALL-E or a local SVG generator. Generate a one-page landing site stored in a new landing_pages D1 table; serve from *.axal.vc subdomain via Cloudflare Worker route landing/:slug. Include waitlist form that writes to project.waitlist_signups. Include analytics ping.
+
+Task 1.2 — Pitch deck builder
+
+Add /build/deck page. Auto-generate a 10-slide deck (problem, solution, market, traction, model, GTM, competition, team, ask, financials) from project + scoring data. Use react-pdf for export. Add slide-level edit. Persist as a versioned pitch_decks table. Add a "share with investor" link that creates a one-time tokenized URL gated by the existing signed-URL helper in services/file_storage.py.
+
+Task 1.3 — Financial model builder
+
+Add /build/financials. 3-statement model with editable drivers (price, units, CAC, churn, salaries, opex). Store assumptions JSON in financial_models table. Compute runway, burn, breakeven. Sensitivity table for ±20% on top 3 drivers. Export to XLSX. Hook into existing services/scoring.py so capital category auto-recalculates.
+
+Task 1.4 — Cap table simulator
+
+Add /build/captable. Input: founder splits, option pool, SAFE notes (cap, discount), priced rounds. Output: post-money cap table per round, founder dilution chart, exit waterfall at $X. Save scenarios. Generate a draft 409A-friendly cap table CSV.
+
+Task 1.5 — Customer discovery + roadmap + metrics
+
+Add three sub-pages under /build: /discovery (Mom-Test interview log with hypothesis tracking), /roadmap (Now/Next/Later kanban, links to OKRs in a new okrs table), /metrics (MRR/ARR/CAC/LTV/churn — pull from Stripe via existing integration, fall back to manual entry). All three feed signals back into the 100-pt scoring algo.
+
+Task 1.6 — Hiring kit
+
+Add /build/hiring. JD generator (AI-drafted from role + level + comp band). Index Ventures equity calculator. Offer letter template (pulls from existing legal templates). 83(b) reminder auto-created in notifications 7/14/28 days post offer accept. Persist to a new hires table linked to project.
+
+Phase 2 — Founder incorporation & education
+Task 2.1 — Jurisdiction wizard + incorporation flow
+
+Add /incorporate page. Decision tree: jurisdiction (Delaware C-Corp / Delaware LLC / UK Ltd / SG Pte Ltd / Estonia e-Residency), explainer per option (tax, fundraising friendliness, cost). On submit, route to existing Stripe Atlas integration for DE C-Corp; for others, generate jurisdiction-specific document set from existing legal templates and surface in LegalPage.
+
+Task 2.2 — Co-founder agreement + 83(b) tracker
+
+Add /incorporate/cofounder-agreement wizard: vesting cliffs, IP assignment, decision rights, exit/buyout. Generate document via existing legal generator. Add /incorporate/83b tracker with 30-day countdown, IRS mailing checklist, certified-mail receipt upload, calendar reminder.
+
+Task 2.3 — Compliance calendar
+
+Add compliance_events table (jurisdiction, event_type, due_date, completion_status). Auto-populate from incorporation: annual report, franchise tax, registered agent renewal, board meetings. Surface in /compliance and as notifications 30/14/7/1 days before due.
+
+Task 2.4 — Academy LMS
+
+Add academy_lessons table (title, sector, stage, level, content_md, video_url, duration_min, prereq_ids). Add lesson_completions table. Build /academy index, /academy/lesson/:id, progress tracking. Seed 30 lessons across stages (idea, MVP, traction, seed, series A) and topics (lean canvas, pricing, fundraising, term sheet, hiring, legal). Stage-locked progression. Quiz at end of each lesson.
+
+Task 2.5 — Glossary + AI tutor
+
+Add /academy/glossary with searchable term database (seed ~150 VC/startup terms). Inline tooltip component <TermTooltip term="liquidation preference" /> usable across the app. Extend existing /api/advisory/ask to accept context: { project_id, current_page } so tutor answers are stage-aware. Add a floating chat button on every page that opens the tutor.
+
+Task 2.6 — Mentor matching + office hours
+
+Add mentors table (separate from partners/investors), with specialties, capacity, hourly rate (free or paid). Add /mentors directory with filtering. Add office_hours_slots and bookings tables. Integrate Cal.com OAuth (or build a minimal scheduler). Mentor reviews two-sided.
+
+Phase 3 — Founder support ecosystem
+Task 3.1 — Service provider marketplace
+
+Build /marketplace (uses the new partner role from Task 0.1). List partners by category (legal, accounting, design, recruiting, fractional CFO, GTM). Show verified badge (KYB), reviews, response time, capacity. Filtering by sector + price range + availability. Direct-message thread per inquiry.
+
+Task 3.2 — Peer community
+
+Add community_posts, community_comments tables with sector + stage filters. Build /community forum with reactions, threading, anonymous posting option. Optional Discord bridge: webhook from forum to a Discord channel and back via Discord bot.
+
+Task 3.3 — Co-founder dating
+
+Add cofounder_profiles table (skills, sector, commitment level, location, equity expectations). Build /cofounder matching page with mutual-interest reveal pattern (only show identity once both have expressed interest). Auto-NDA on first connect using existing legal template.
+
+Task 3.4 — Crisis playbooks
+
+Add crisis_playbooks table seeded with: down-round, co-founder dispute, employee termination, customer concentration, security breach, IP claim. Each playbook = ordered checklist + recommended partner intros + relevant legal templates. Surface from /support/crisis.
+
+Task 3.5 — Founder wellbeing
+
+Add wellbeing_checkins table with optional weekly 5-question pulse (stress, sleep, support, decisions, energy). Anonymized aggregate visible to admins. Resource directory (therapists, founder support groups). Privacy: founder-only, never shared with investors, encrypted at rest.
+
+Phase 4 — Investor decision tools
+Task 4.1 — Founder risk profile
+
+Add founder_risk_profiles table. Auto-pull LinkedIn/Crunchbase via existing PitchBook integration: prior roles, exits, failures, domain expertise. Compute risk score. Surface on every deal page next to scoring.
+
+Task 4.2 — TAM/SAM/SOM auto-generator + sentiment
+
+Add /api/market/sizing endpoint: AI-drafts TAM/SAM/SOM with citations from market-intel data. Sensitivity slider on adoption rate, ACV, market growth. Add /api/market/sentiment that scrapes G2/Reddit/X for the project's category and returns sentiment timeline. Display both on deal page.
+
+Task 4.3 — Reference check workflow
+
+Add references table. Workflow: scheduled call → recording upload (consent enforced) → Whisper transcription → Llama summary → tags/red flags. Surface in deal record. Admin/investor only.
+
+Task 4.4 — Portfolio health score + predictive failure
+
+Cron job (extends existing queue worker) that recomputes per-portfolio-company health daily: runway, growth velocity, churn delta, sentiment delta. Output green/yellow/red badge plus "needs intervention" flag. Push intervention flags to investor notification center. Add /portfolio/health dashboard with sortable list.
+
+Task 4.5 — Cohort analysis + concentration dashboard
+
+Add /portfolio/cohorts: TVPI/DPI/IRR by vintage, sector, founder background, channel. Add /portfolio/exposure: sector × stage × geography × concentration heatmap. Recharts already installed.
+
+Task 4.6 — Reserve allocation + waterfall simulator
+
+Add /portfolio/reserves: drag follow-on $ across companies, see fund deployment vs reserve ratio, IRR projection. Add /portfolio/waterfall: model exit at $X across portfolio, output net to LPs after prefs and carry. Save scenarios.
+
+Task 4.7 — LP reporting auto-generator + tax docs
+
+Add /funds/:id/reports (extends existing FundsPage): quarterly auto-draft TVPI/DPI/IRR with AI commentary, distributable as PDF to LPs. Add K-1 / Schedule K generation from fund_distributions data. Email to LP via existing Gmail API integration.
+
+Task 4.8 — Co-invest / SPV module
+
+Add spvs table (parent_fund_id, target_company_id, lpa_doc_id, lp_commitments). Wizard to spin up an SPV: generate sidecar LPA via existing ai-workers/lpa.ts, generate subscription docs, create a separate cap table entry. Surface to investors as /coinvest opportunities feed.
+
+Task 4.9 — Watchlist + decision journal
+
+Add watchlist_items (deals not yet in pipeline) and decision_journal_entries (pre-vote rationale, post-exit comparison). Surface both on each investor dashboard and roll up into an anti-portfolio analysis page.
+
+Phase 5 — Partner (service provider) hub
+Task 5.1 — Needs board + RFP system
+
+Add founder_needs table (founder-posted requests with category, budget, timeline). Add rfps table (formal scopes). Add quotes table (partner submissions with price, timeline, deliverables). Build /partner/needs board for partners and /founder/post-need for founders. Quote-to-engagement transition.
+
+Task 5.2 — Service catalog + engagement lifecycle
+
+Add service_offerings table per partner (title, price, deliverables, SLA). Add engagements table (quote → accepted → in_progress → delivered → reviewed → invoiced). Stripe Connect for invoicing (extends existing Stripe integration). Two-sided rating only after engagement marked delivered.
+
+Task 5.3 — Demand heatmap + insight feed
+
+Add /partner/insights: heatmap of needs by sector × stage × category × geography, monthly trend. Aggregate insight feed: "62% of seed-stage founders requested hiring help this quarter." Auto-generated weekly newsletter opt-in.
+
+Task 5.4 — Partner directory + featured ranking
+
+Build public /partners directory with filtering. Algorithmic ranking by: completed engagements, ratings, response time, KYB status. Featured slots (paid + algorithmic). Public partner profile page at /partners/:slug.
+
+Task 5.5 — Office hours + co-marketing
+
+Partner-specific office hours integrated into the calendar layer from Task 2.6. Co-marketing module: partners can pitch a webinar or blog post to admin, get approved, run on the platform. Tracked attribution to demand generated.
+
+Phase 6 — Cross-cutting polish
+Task 6.1 — Public profile pages with privacy controls
+
+Build /u/:handle for all roles. Each role sees a different default profile (founder = projects + traction; investor = thesis + portfolio summary; partner = services + reviews). Per-field privacy controls.
+
+Task 6.2 — Calendar layer
+
+Cal.com OAuth integration (or self-hosted scheduler). Unified calendar across mentor hours, partner office hours, IC meetings, founder check-ins. Sync to Google Calendar via existing OAuth.
+
+Task 6.3 — Mobile PWA pass
+
+Add manifest.json, service worker, install prompt, push notification subscription. Offline read for Academy lessons + own project data. Test on iOS + Android.
+
+Task 6.4 — Trust layer hardening
+
+Extend Sumsub KYB to all partner sign-ups. Verified-investor badge tied to accreditation upload. Per-role NDAs auto-generated and tracked.
+
+
+How to use this plan in Replit
+
+Paste Task 0.1 first and verify the role split is clean before anything else.
+Run Phase 0 fully before starting Phase 1 — every later phase depends on the role split, notification center, and search.
+Inside a phase, tasks are mostly parallelizable (e.g., 1.1 through 1.6 can run as separate Replit Agent sessions).
+After each task, ask Replit to write integration tests against the new endpoints and run the existing observability middleware to confirm no 5xx regression on /api/monitoring/metrics.
+
+If you'd like, I can package this as a markdown file you can drop into docs/roadmap.md, or expand any individual task into a fuller Replit prompt with file paths, schema diffs, and acceptance criteria. Which would help most next?

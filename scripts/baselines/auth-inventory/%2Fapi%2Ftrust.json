@@ -1,0 +1,7 @@
+{
+  "POST /api/trust/obligation/:key/start": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

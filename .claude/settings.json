@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": ["mcp__github", "mcp__Cloudflare_Developer_Platform", "mcp__Claude_Code_Remote"],
+    "deny": [
+      "mcp__github__merge_pull_request", "mcp__github__enable_pr_auto_merge",
+      "mcp__github__pull_request_review_write", "mcp__github__push_files",
+      "mcp__github__create_or_update_file", "mcp__github__delete_file",
+      "mcp__github__create_repository", "mcp__github__fork_repository",
+      "mcp__Cloudflare_Developer_Platform__d1_database_create",
+      "mcp__Cloudflare_Developer_Platform__d1_database_delete",
+      "mcp__Cloudflare_Developer_Platform__kv_namespace_create",
+      "mcp__Cloudflare_Developer_Platform__kv_namespace_update",
+      "mcp__Cloudflare_Developer_Platform__kv_namespace_delete",
+      "mcp__Cloudflare_Developer_Platform__r2_bucket_create",
+      "mcp__Cloudflare_Developer_Platform__r2_bucket_delete",
+      "mcp__Cloudflare_Developer_Platform__hyperdrive_config_edit",
+      "mcp__Cloudflare_Developer_Platform__hyperdrive_config_delete",
+      "mcp__Claude_Code_Remote__create_session"
+    ],
+    "ask": [
+      "mcp__Cloudflare_Developer_Platform__d1_database_query",
+      "mcp__github__actions_run_trigger",
+      "mcp__github__update_pull_request"
+    ]
+  }
+}

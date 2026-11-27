@@ -1,0 +1,54 @@
+Redesign my Axal VC article pages so they are readable, editorial, and premium instead of dense and hard to scan.
+
+The current articles lack spacing, section titles, hierarchy, and visual rhythm. Rebuild the article experience as a long-form reading layout that feels like a high-end venture journal.
+
+Goals:
+- Make articles feel like polished editorial essays, not default CMS posts.
+- Improve readability with clear section breaks, generous spacing, strong heading hierarchy, and better paragraph rhythm.
+- Keep the tone premium, calm, modern, and credible.
+- Avoid generic startup templates, loud visuals, glowing gradients, and “AI-looking” design.
+
+Page structure:
+1. Hero section with category, title, short intro/deck, author, reading time, and date.
+2. Article body with clear H2 and H3 headings, readable paragraphs, blockquotes, lists, callouts, and dividers.
+3. Sticky table of contents on desktop, generated from headings.
+4. Reading progress indicator.
+5. Inline share actions.
+6. Related articles at the bottom.
+
+Typography and layout:
+- Use an editorial layout with a narrow reading column, around 65–75 characters per line.
+- Add generous vertical spacing between paragraphs, headings, lists, quotes, and sections.
+- Make H2s clearly distinct with strong spacing above and below.
+- Style H3s as meaningful subheads, not just slightly bolder body text.
+- Use large, readable body text with strong line-height.
+- Support long-form content properly: blockquotes, key takeaways, callout boxes, images with captions, tables, and code blocks.
+- Keep the article easy to scan from headings alone.
+
+Visual style:
+- Minimal, Swiss-inspired, premium, and institutional.
+- Neutral palette with one restrained accent color.
+- Excellent whitespace and subtle borders.
+- No heavy shadows, no gradient overload, no decorative blobs, no icon circles, no generic SaaS-card look.
+
+Responsive behavior:
+- Mobile-first.
+- On mobile, simplify the layout and keep only the essentials.
+- Collapse the table of contents into a compact top section or dropdown.
+- Preserve reading comfort on small screens.
+
+Technical requirements:
+- Use semantic HTML for article, section, aside, nav, header, and footer.
+- Make this reusable as a template for all article pages.
+- Add anchor links to headings.
+- Ensure accessibility, keyboard navigation, and strong contrast.
+- Make it fast and lightweight.
+
+Design reference:
+- Think Stripe Press meets a modern venture journal.
+
+Success criteria:
+- A long article should instantly feel easier to read.
+- The structure should be obvious at a glance.
+- Paragraphs should no longer look like one dense wall of text.
+- The result should feel like an experienced operator-investor wrote it with clarity and authority.

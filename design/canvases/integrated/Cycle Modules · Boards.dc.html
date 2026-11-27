@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeecf1;font-family:Inter,system-ui,sans-serif;color:#18181b;-webkit-font-smoothing:antialiased}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+    <section style="padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">{{ r.title }}</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">{{ r.note }}</span></div>
+      <div style="display:flex;gap:56px;align-items:flex-start">
+        <sc-for list="{{ r.boards }}" as="b" hint-placeholder-count="7">
+          <div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px;flex:none">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</span><span style="font:800 14px/1.2 Inter,system-ui,sans-serif">{{ b.title }}</span></div>
+            <div style="width:1440px;flex:none;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f8f8fa;box-shadow:0 2px 14px rgba(24,24,27,.08)"><dc-import name="Cycle Overview" cycle="{{ b.cycle }}" module="{{ b.module }}" hint-size="1440px,1200px"></dc-import></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#6d28d9;color:#fff;border-radius:5px">{{ b.id }}r</span><span style="font-weight:600;font-size:14px">{{ b.title }} · one record</span></div>
+            <div style="width:1440px;flex:none;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f8f8fa;box-shadow:0 2px 14px rgba(24,24,27,.08)"><dc-import name="Cycle Overview" cycle="{{ b.cycle }}" module="{{ b.module }}" record="{{ true }}" hint-size="1440px,900px"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;cycle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;&quot;,&quot;Validate&quot;,&quot;Build&quot;,&quot;Raise&quot;,&quot;Grow&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const M = { Validate: ['Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency signals', 'Experiments and evidence', 'Verdict'], Build: ['Solution design', 'Prototype / MVP', 'Product roadmap', 'Founding team', 'Company creation', 'Operating systems'], Raise: ['Fundraising readiness', 'Investor narrative', 'Pitch deck', 'Data room', 'Cap table', 'Use of funds', 'Capital relationships'], Grow: ['Product improvement', 'Distribution', 'Revenue and traction', 'Team expansion', 'Partner network', 'Market expansion', 'Durable company-building'] };
+    const P = { Validate: 'MV', Build: 'MB', Raise: 'MR', Grow: 'MG' };
+    const only = this.props.cycle ?? '';
+    const rows = [];
+    Object.keys(M).filter(c => !only || c === only).forEach(c => {
+      rows.push({ title: c + ' · module pages', note: 'Each module: its page (chart, then the records table), and beneath it one record opened from that table.', boards: M[c].map((t, i) => ({ id: P[c] + (i + 1), title: t, cycle: c, module: i })) });
+    });
+    return { rows };
+  }
+}
+</script>
+</body></html>

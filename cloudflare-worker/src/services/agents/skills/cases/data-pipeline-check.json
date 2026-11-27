@@ -1,0 +1,37 @@
+{
+  "skill": "data-pipeline-check",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "pipelines": [
+          {
+            "name": "nightly_bookings",
+            "last_success": "2026-10-29",
+            "schedule": "daily",
+            "status": "failed"
+          }
+        ],
+        "tables": [
+          {
+            "name": "recalls"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "nightly_bookings",
+      "2026-10-29"
+    ],
+    "must_say_not_recorded": [
+      "recalls"
+    ],
+    "must_not_include": [
+      "all pipelines healthy"
+    ]
+  }
+}

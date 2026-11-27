@@ -1,0 +1,204 @@
+import React, { useEffect, useState } from 'react';
+import { safeReadJSON } from '../lib/storage';
+import { Activity, Lock, Hash } from 'lucide-react';
+import { api } from '../lib/api';
+import VirtualList from '../components/VirtualList';
+import EmptyState from '../components/EmptyState';
+import ErrorState from '../components/ErrorState';
+import Skeleton from '../components/Skeleton';
+
+// T24 — measured from the existing px-4 py-3 row with action label + 1 line
+// of details. Slight overflow on rows with very long details is acceptable
+// (line-clamp not currently applied — preserved from the non-virtualized
+// branch).
+const ACTIVITY_ROW_HEIGHT = 64;
+
+function ActivityRow({ log }) {
+  return (
+    <div className="px-4 py-3 hover:bg-gray-50 transition-colors h-full">
+      <div className="flex items-center gap-3">
+        <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+              actionColors[log.action] || 'text-gray-700 bg-gray-100'
+            }`}>
+              {ACTION_LABELS[log.action] || log.action?.replace(/_/g, ' ')}
+            </span>
+          </div>
+          {log.details && <p className="text-xs text-gray-600 mt-0.5 truncate">{log.details}</p>}
+        </div>
+        <div className="text-[10px] text-gray-600 whitespace-nowrap">
+          {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ACTION_LABELS = {
+  user_registered: 'Account created',
+  email_verified: 'Email verified',
+  user_login: 'Signed in',
+  profile_captured: 'Onboarding profile captured',
+  profile_reviewed_by_admin: 'Profile reviewed by admin',
+  github_synced: 'Activity synced to GitHub',
+  account_status_changed: 'Account status changed',
+  your_role_changed: 'Role changed',
+  ai_advisory_query: 'AI advisory query',
+  financial_plan_generated: 'Financial plan generated',
+  diligence_check: 'Diligence check',
+  project_scored: 'Startup scored',
+  project_created: 'Startup created',
+  deal_created: 'Deal created',
+  admin_impersonate: 'Admin impersonation',
+  user_toggled: 'Admin toggled user',
+  role_changed: 'Admin changed a role',
+  email_verified_admin: 'Email verified',
+  profile_verified: 'Profile verified',
+};
+
+const actionColors = {
+  user_registered: 'text-emerald-700 bg-emerald-100',
+  email_verified: 'text-teal-700 bg-teal-100',
+  user_login: 'text-indigo-700 bg-indigo-100',
+  profile_captured: 'text-amber-700 bg-amber-100',
+  profile_reviewed_by_admin: 'text-violet-700 bg-violet-100',
+  github_synced: 'text-gray-700 bg-gray-100',
+  account_status_changed: 'text-orange-700 bg-orange-100',
+  your_role_changed: 'text-amber-700 bg-amber-100',
+};
+
+export default function ActivityPage() {
+  const [logs, setLogs] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const me = (() => {
+    try { return safeReadJSON('user', {}); }
+    catch { return {}; }
+  })();
+
+  const load = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const [l, s] = await Promise.all([api.activityLog(), api.activitySummary()]);
+      setLogs(l.logs || []);
+      setSummary(s);
+    } catch (e) {
+      setLoadError(e?.message || 'Could not load activity log.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div>
+      <h1 className="mb-1 text-2xl font-bold text-gray-900 dark:text-gray-100">Activity Log</h1>
+
+      <div className="flex flex-wrap items-center gap-3 mb-4 text-sm">
+        <span className="flex items-center gap-1.5 text-gray-600">
+          <Lock size={12} /> Private — only you can see this
+        </span>
+        {me?.id && (
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-xs font-medium">
+            <Hash size={11} /> Member ID #{me.id}
+          </span>
+        )}
+        {me?.email && (
+          <span className="text-xs text-gray-500">{me.email}</span>
+        )}
+      </div>
+
+      {loadError && (
+        <div className="mb-4">
+          <ErrorState
+            message={`Couldn't load activity — ${loadError}`}
+            onRetry={load}
+            supportTopic="activity"
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <Skeleton.Table rows={6} cols={4} />
+      ) : (
+        <>
+          {summary && (
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+                <div className="text-[10px] text-gray-500 uppercase">Total Events</div>
+                <div className="text-2xl font-bold text-gray-900 mt-1 dark:text-gray-100">{summary.total_events}</div>
+              </div>
+              {Object.entries(summary.action_breakdown || {}).slice(0, 3).map(([action, count]) => (
+                <div key={action} className="bg-white border border-gray-200 rounded-xl p-4 dark:bg-gray-900 dark:border-gray-800">
+                  <div className="text-[10px] text-gray-500 uppercase truncate">
+                    {ACTION_LABELS[action] || action.replace(/_/g, ' ')}
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 mt-1 dark:text-gray-100">{count}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 dark:border-gray-800">
+              <Activity size={16} className="text-violet-600" />
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Event Stream</span>
+              <span className="text-xs text-gray-500 ml-auto">{logs.length} events</span>
+            </div>
+
+            {logs.length === 0 ? (
+              <EmptyState
+                icon={Activity}
+                title="No activity recorded yet"
+                body="Account creation, email verification, profile capture, sign-in, and admin reviews are all logged here automatically. If you just registered, your events will appear after your next sign-in."
+              />
+            ) : (
+              <VirtualList
+                items={logs}
+                itemHeight={ACTIVITY_ROW_HEIGHT}
+                height={600}
+                ariaLabel={`Activity event stream, ${logs.length} events`}
+                virtualRow={(log, _index, style, ariaAttributes) => (
+                  <div style={style} {...ariaAttributes} className="border-b border-gray-100">
+                    <ActivityRow log={log} />
+                  </div>
+                )}
+              >
+                {(items) => (
+                  <div className="divide-y divide-gray-100">
+                    {items.map((log) => (
+                      <div key={log.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                actionColors[log.action] || 'text-gray-700 bg-gray-100'
+                              }`}>
+                                {ACTION_LABELS[log.action] || log.action?.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            {log.details && <p className="text-xs text-gray-600 mt-0.5">{log.details}</p>}
+                          </div>
+                          <div className="text-[10px] text-gray-600 whitespace-nowrap">
+                            {log.created_at ? new Date(log.created_at).toLocaleString() : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </VirtualList>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

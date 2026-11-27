@@ -1,0 +1,34 @@
+{
+  "skill": "customer-expansion-opportunity",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Customer Expansion Opportunity Analysis",
+        "task_scope": "Identifies account expansion opportunities from footprint, adoption gaps, renewal context and stakeholder signals.",
+        "evidence": [
+          "account whitespace and expansion hypothesis"
+        ],
+        "omitted_field": "renewal date"
+      },
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for account whitespace and expansion hypothesis."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "account whitespace and expansion hypothesis"
+    ],
+    "must_say_not_recorded": [
+      "renewal date"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

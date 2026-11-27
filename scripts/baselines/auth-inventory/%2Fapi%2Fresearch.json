@@ -1,0 +1,217 @@
+{
+  "DELETE /api/research/attachments/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/benchmarks/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/brief-notes/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/collections/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/collections/:uid/documents/:documentUid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/documents/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/drafts/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/funds/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/funds/:uid/reports/:reportUid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "DELETE /api/research/market-readings/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/company-directory/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/company-directory/:uid/completeness": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_company_facts_7828.test.ts",
+    "note": "A catalogue company record has no owner: the Companies rule (admitsCompanies, D7178) is checked before the record is read, the record is read through researchCompanyRead (D7819) so an absent, excluded or withdrawn record answers 404 with no facts, and no reviewer is projected."
+  },
+  "GET /api/research/company-directory/:uid/facts": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_company_facts_7828.test.ts",
+    "note": "A catalogue company record has no owner: the Companies rule (admitsCompanies, D7178) is checked before the record is read, the record is read through researchCompanyRead (D7819) so an absent, excluded or withdrawn record answers 404 with no facts, and no reviewer is projected."
+  },
+  "GET /api/research/documents/:uid/download": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_share_live_grant.test.ts",
+    "note": "The document's owner reads it. A share recipient reads it only while the advisor grant the share was made under is live (active and not past expires_at) over a project of the owner; a revoked or expired grant, no grant, or a grant over another founder's project get the same 404 a missing document gets."
+  },
+  "GET /api/research/fund-directory/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/fund-shortlist/requests/:requestId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_fund_shortlist_7845.test.ts",
+    "note": "Every request and dossier read binds the authenticated owner. Another member request id is indistinguishable from an unknown id; sharing a project does not enter this path."
+  },
+  "GET /api/research/funds/:uid/reports": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/funds/sheet/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
+    "state": "unreviewed"
+  },
+  "GET /api/research/geographies/:code": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/market-data/countries/:code": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/market-directory/:slug": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/market-readings/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/market-readings/:uid/summary": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_market_summary_7651.test.ts",
+    "note": "D7651: the reading is read only WHERE uid = ? AND owner_user_id = the caller, so another member's reading gets the same 404 a missing one does; an investor-only account is refused with 403 before anything is read (D6273 Q2)."
+  },
+  "GET /api/research/markets/:slug": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/research/observations/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_observations_7716.test.ts",
+    "note": "D7716: an observation is a sourced public statistic (provider, source URL, usage note), not a member's record; every signed-in user may read any one, and a request with no sign-in is refused with 401 (tested on all four routes)."
+  },
+  "GET /api/research/organizations/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_organizations_7826.test.ts",
+    "note": "Research catalogue organizations, not owned records: every signed-in user may read one, through one access decision. Anything derived from a company record is shown only to an account the Companies rule admits (D7178) and only while D7819's served rows serve it; fund links only while SERVED_FUNDS serves the row. An organization the caller may not see answers 404 exactly as a missing one."
+  },
+  "GET /api/research/organizations/record/:type/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_organizations_7826.test.ts",
+    "note": "The organization of a catalogue record: a company record is refused by the Companies rule (D7178) before anything is read, so an account outside it gets one 403 for an existing and a missing record; a fund record follows SERVED_FUNDS and one uid move. An organization the caller may not see answers { organization: null }, the same as none."
+  },
+  "GET /api/research/record-identity/:kind/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_record_identity_7825.test.ts",
+    "note": "Directory records, not owned ones: a company answers by the Companies rule (D7178) decided before the read, so an account outside it gets one 403 for an existing and a missing record, then D7819's served rows (withdrawn/excluded answer their state only); a fund answers by the fund catalogue's rule (signed in) and SERVED_FUNDS through getFund. A match key, a reviewer and a note are never returned."
+  },
+  "GET /api/research/sectors/:slug": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/ask/answers/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/brief-notes/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/collections/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/documents/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/drafts/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/funds/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/research/funds/:uid/reports/:reportUid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_fund_reports_7169.test.ts",
+    "note": "Signed in (requireAuth). The report is read and written only WHERE uid, fund_uid and owner_user_id = the caller match; another owner, another fund or an unknown report gets the same 404."
+  },
+  "POST /api/research/collections/:uid/documents": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/research/documents/:uid/reindex": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/research/funds/:uid/reports": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

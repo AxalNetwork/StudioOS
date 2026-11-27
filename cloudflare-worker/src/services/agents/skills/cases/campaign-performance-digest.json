@@ -1,0 +1,36 @@
+{
+  "skill": "campaign-performance-digest",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "campaign": "Fall clinics",
+        "channels": [
+          {
+            "name": "LinkedIn",
+            "spend_usd": 1200,
+            "leads": 24
+          },
+          {
+            "name": "Google",
+            "spend_usd": 900
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "LinkedIn",
+      "50"
+    ],
+    "must_say_not_recorded": [
+      "Google"
+    ],
+    "must_not_include": [
+      "ROI of"
+    ]
+  }
+}

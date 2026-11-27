@@ -1,0 +1,851 @@
+Here's the full task breakdown, ordered so each task is safe to ship without breaking the previous one. Each task is self-contained — paste the **prompt block** directly into Replit. The order matters: T0 and T1 must come first (they're the safety net for everything after).
+
+---
+
+# Task plan — 24 batches
+
+## FOUNDATION (do first, in order)
+
+### T0 — Architecture truth doc *(15 min, do this BEFORE anything else)*
+
+```
+Goal: Stop the codebase from misleading Replit and contributors about
+where production lives. Three docs currently disagree.
+
+Truth (per cloudflare-worker/src/index.ts:1–20 and wrangler.toml:6–14):
+  - The Cloudflare Worker is the production API at axal.vc.
+  - The FastAPI in /backend is dev-only on Replit and is NEVER deployed.
+  - D1 is the canonical user store.
+  - Frontend ships from /frontend to Cloudflare Pages.
+
+Tasks:
+
+1. Create /CLAUDE.md at the repo root with the four facts above plus:
+   - "New features must be implemented in cloudflare-worker/src/routes/
+     first. FastAPI ports are optional dev convenience only."
+   - "Do not add a /api/* method to frontend/src/lib/api.js without a
+     matching worker route in cloudflare-worker/src/index.ts."
+   - "Do not modify wrangler.toml's `main` field — it points to the
+     worker entry. FastAPI is not deployable here."
+   - One-line file map: frontend/ → Pages; cloudflare-worker/ → Worker;
+     backend/ → Replit dev only; cloudflare-worker/sql/ → D1 schema.
+
+2. Update /README.md: remove or correct line 12 ("FastAPI...is the
+   canonical API"). Replace with one paragraph that reflects T0 truth
+   and links to CLAUDE.md.
+
+3. Update /replit.md: rewrite lines 30 and 36. Specifically:
+   - Line 30 says FastAPI is canonical — wrong; remove.
+   - Line 36 says worker routes are "no longer mounted" — wrong; they
+     ARE mounted at index.ts:24–64. Remove that paragraph entirely.
+
+4. At the top of every file under backend/app/api/routes/*.py, add a
+   single comment line:
+       # DEV-ONLY: Replit local backend. Production lives in
+       # cloudflare-worker/src/routes/<name>.ts. Do not assume parity.
+
+Constraints:
+- Do not delete any FastAPI files in this task.
+- Do not touch any code outside the four targets listed.
+- Verify by grepping: `grep -rn "canonical" README.md replit.md` should
+  not return any FastAPI-canonical claim.
+
+Report: list the four files you modified.
+```
+
+### T1 — API ↔ Worker drift smoke test *(30 min — your safety net for everything that follows)*
+
+```
+Goal: Detect when frontend/src/lib/api.js calls an endpoint that the
+production Worker does not serve. Today 28+ endpoints silently 404.
+
+Create tests/api_drift.spec.ts (or .py if you prefer). It must:
+
+1. Parse frontend/src/lib/api.js and extract every literal path passed
+   to request() or used as a fetch URL (look for the patterns
+   `request('/foo')`, `request(\`/foo/\${x}\`)`, and `${BASE}/foo`).
+   Normalize template literals to a route pattern by replacing
+   ${anything} with :param.
+
+2. Parse cloudflare-worker/src/index.ts for every `app.route('/api/X', ...)`
+   call AND open each routes/*.ts to collect the .get/.post/.put/.delete
+   prefixes mounted under it.
+
+3. For each api.js path, assert a worker route prefix exists that
+   matches it. Report mismatches as a list of strings:
+       MISSING_IN_WORKER: /api/calendar/events  (called from api.js:782)
+       MISSING_IN_WORKER: /api/financials/:projectId  (called from api.js:190)
+
+4. Run as `npm run test:drift` (add to frontend/package.json scripts).
+
+5. Wire it into the GitHub Action that runs on PRs (.github/workflows/*.yml).
+   Make it fail the PR if any new MISSING_IN_WORKER appears, but allow
+   the existing 28 known-broken endpoints via an
+   `tests/known_drift_allowlist.txt` file. Pre-populate the allowlist
+   with the current 28; later tasks will remove entries one at a time.
+
+Constraints:
+- Pure static analysis — no live HTTP calls, no D1 access.
+- Must run in <10 seconds.
+- Do not modify api.js or any worker file in this task.
+- Do not auto-generate routes; this is detection only.
+
+Verify: run the test, confirm it lists at least these as MISSING:
+  /api/calendar/*, /api/financials/*, /api/wellbeing/*,
+  /api/compliance/events, /api/captable/*, /api/cofounder/*.
+
+Report: paste the full MISSING_IN_WORKER list — that's our backlog.
+```
+
+---
+
+## CRITICAL SECURITY (after T1 passes)
+
+### T2 — BrandBuilder SVG XSS fix *(20 min)*
+
+```
+Goal: Eliminate dangerouslySetInnerHTML for SVGs in BrandBuilderPage.
+
+File: frontend/src/pages/BrandBuilderPage.jsx, around line 230.
+
+Today: <div dangerouslySetInnerHTML={{ __html: draft.logo_svg }} />
+
+Replace with one of:
+  <img alt="logo preview"
+       src={`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(draft.logo_svg)))}`} />
+
+Or, if the SVG must be DOM-interactive:
+  Render inside a sandboxed iframe with srcDoc=draft.logo_svg and
+  sandbox="allow-same-origin" (no allow-scripts).
+
+Find every other dangerouslySetInnerHTML in /frontend/src and audit
+each. List them in your report — do not modify any others without
+my approval.
+
+Constraints:
+- Keep the visual size and aspect-ratio identical (the page layout
+  must not shift).
+- Do not change the brand.ts server-side sanitization; this is
+  defense-in-depth.
+
+Verify: open BrandBuilder as a founder, confirm logo previews render,
+confirm "view-source" shows an <img> not raw <svg>.
+```
+
+### T3 — Cloudflare Access JWT verification middleware *(2–3 hours)*
+
+```
+Goal: The Worker must validate Cf-Access-Jwt-Assertion on backoffice
+routes. Today it doesn't, so admin role is the only line of defense.
+
+Create cloudflare-worker/src/middleware/cfAccess.ts:
+
+  export async function requireCfAccess(c, next) {
+    const jwt = c.req.header('Cf-Access-Jwt-Assertion');
+    if (!jwt) return c.json({ error: 'Cloudflare Access required' }, 401);
+    // Verify against the team JWKS at:
+    //   https://${env.CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs
+    // Check: signature (RS256), aud === env.CF_ACCESS_AUD,
+    //        iss matches team, exp not passed.
+    // Cache JWKS in KV with 1h TTL.
+    ...
+  }
+
+Wire it in cloudflare-worker/src/index.ts BEFORE the existing
+admin/monitoring/infra route mounts:
+
+  app.use('/api/admin/*',      requireCfAccess);
+  app.use('/api/monitoring/*', requireCfAccess);
+  app.use('/api/infra/*',      requireCfAccess);
+
+Add to wrangler.toml [vars]:
+  CF_ACCESS_TEAM_DOMAIN = "axal.cloudflareaccess.com"  # ask me to confirm
+  CF_ACCESS_AUD         = "<application audience>"
+
+If CF_ACCESS_TEAM_DOMAIN or CF_ACCESS_AUD are unset, STOP and ask me.
+I will provision them via wrangler. Do not commit live values to
+wrangler.toml — use `wrangler secret put` for AUD if needed.
+
+Constraints:
+- Do not change role-checking logic in admin routes; CF Access is an
+  outer perimeter, role check stays as inner perimeter.
+- If the JWKS fetch fails, fail CLOSED (return 503), not open.
+
+Verify: from a non-Access-protected origin, GET /api/admin/users →
+401. From an Access-tunneled session → 200.
+```
+
+### T4 — Impersonation TTL + revoke endpoint *(1 hour)*
+
+```
+Goal: Impersonation tokens must expire. Today they live forever.
+
+Files:
+  cloudflare-worker/src/routes/admin.ts (lines 336–347)
+  cloudflare-worker/src/auth.ts        (createJWT path)
+  frontend/src/App.jsx                 (handleImpersonate, lines 754–781)
+
+Changes:
+
+1. When an admin calls POST /api/admin/impersonate/:userId, mint a
+   JWT with these EXTRA claims:
+     impersonation_expires_at: now + 60 * 60   (1 hour, in seconds)
+     impersonated_by: <admin user_id>
+     original_jti: <admin's current jti>
+
+2. In auth.ts, requireAuth or the JWT verify path: reject the token
+   if impersonation_expires_at is present AND now > that value.
+   Return 401 with { detail: "Impersonation expired; please re-impersonate." }.
+
+3. Add POST /api/admin/impersonate/:userId/revoke that records the
+   impersonation jti in the existing session-revocation table (or
+   creates a new revoked_jtis table) so it can be killed before TTL.
+
+4. Frontend App.jsx: when the impersonation API returns the token,
+   also schedule a setTimeout that auto-exits impersonation 60 min
+   after issue. On 401 with "Impersonation expired", call
+   handleExitImpersonate() automatically.
+
+Constraints:
+- Do not change any non-impersonation token flows.
+- Real (non-impersonation) tokens stay at their existing TTL.
+
+Verify: impersonate a user, advance Date.now() by 61 min in tests,
+confirm next API call returns 401 with the expected message.
+```
+
+### T5 — TOTP / verify rate limits + backup codes *(3–4 hours)*
+
+```
+Goal: Close TOTP brute-force window and prevent permanent lockout.
+
+Part A — rate limits (cloudflare-worker/src/middleware/rateLimit.ts:87–94)
+  Add buckets:
+    /api/auth/verify-totp        → 5 reqs / 5 min PER EMAIL (not IP)
+    /api/auth/resend-verification → 3 reqs / 1 hour PER EMAIL
+    /api/auth/verify-email       → 10 reqs / 15 min PER IP
+  Bucket key = `rl:${endpoint}:${normalizedEmail}` for email-keyed
+  buckets. Normalize email = .trim().toLowerCase().
+
+Part B — TOTP backup codes
+  D1 schema (new migration cloudflare-worker/sql/totp_backup_codes.sql):
+    CREATE TABLE totp_backup_codes (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      code_hash TEXT NOT NULL,    -- SHA-256, single-use
+      consumed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX uq_backup_codes_hash ON totp_backup_codes(code_hash);
+
+  At TOTP setup: generate 10 random 8-char codes, hash each, store all
+  10 rows. Show plaintext codes ONCE in the UI; never again.
+
+  At TOTP verify: if the 6-digit code fails, also try matching as a
+  hashed backup code. If matched, mark consumed_at and accept.
+
+  Add POST /api/auth/regenerate-backup-codes (requires fresh TOTP).
+
+Part C — Frontend
+  Add a "Recovery codes" section in SettingsPage → Security:
+    - Show count of unused codes ("8 of 10 remaining")
+    - Button: "Regenerate codes" (re-prompts for TOTP)
+  At setup time (RegisterPage), show codes once with a "I've saved
+  these" checkbox required before continuing.
+
+Constraints:
+- Do not change the TOTP secret storage in users.password_hash.
+- Backup codes must be one-time use (consumed_at NOT NULL after use).
+- Existing users without backup codes: keep working; the UI prompts
+  them to generate codes the next time they log in.
+
+Verify: log in with TOTP works; brute-forcing /verify-totp at >5/5min
+returns 429; using a backup code logs the user in once and the same
+code fails on second use.
+```
+
+### T6 — httpOnly cookie auth migration *(1–2 days, biggest task — do AFTER T1 smoke test is green)*
+
+```
+Goal: Move auth tokens out of localStorage into httpOnly Secure
+SameSite=Strict cookies. Today an XSS bug = full account takeover.
+
+This is a cross-cutting refactor. Do it in three commits.
+
+COMMIT 1 — Worker issues cookie alongside JSON token:
+  cloudflare-worker/src/routes/auth.ts (login + verify-totp success):
+    Set-Cookie: studioos_auth=<jwt>; HttpOnly; Secure; SameSite=Strict;
+                Path=/; Max-Age=86400
+    Keep returning the JWT in the response body for backwards compat
+    THIS COMMIT.
+  cloudflare-worker/src/auth.ts (requireAuth):
+    Accept Authorization: Bearer OR cookie. Prefer cookie.
+  Add CSRF protection: state-changing requests (POST/PUT/PATCH/DELETE)
+    must include header X-CSRF-Token matching a value mirrored in a
+    second non-httpOnly cookie studioos_csrf (double-submit cookie pattern).
+  Add /api/auth/logout: clears both cookies.
+
+COMMIT 2 — Frontend reads cookie:
+  frontend/src/lib/api.js:
+    Add `credentials: 'include'` to every fetch.
+    Remove `Authorization: Bearer ${token}` header construction.
+    Read studioos_csrf cookie, send as X-CSRF-Token on mutating verbs.
+  frontend/src/App.jsx:
+    Stop reading 'token' from localStorage.
+    On app boot, call GET /api/auth/me; if 200 → user is logged in.
+    On logout, call POST /api/auth/logout, then redirect to /login.
+  frontend/src/pages/LoginPage.jsx, RegisterPage.jsx, VerifyEmailPage.jsx:
+    Remove localStorage.setItem('token', ...) calls.
+
+COMMIT 3 — Cleanup:
+  Worker: stop returning the token in JSON bodies.
+  Frontend: remove all `localStorage.getItem('token')` (search and verify
+    no remaining hits — the only token reference left should be in the
+    impersonation flow, which still uses localStorage temporarily; flag
+    that for a follow-up).
+  Update DocsPage.jsx security section to reflect httpOnly cookies.
+
+Constraints:
+- CORS: cookie requires `credentials: 'include'` AND server must set
+  `Access-Control-Allow-Credentials: true` AND a specific origin
+  (not *). Confirm the Worker's cors() middleware handles this.
+- Do not migrate the impersonation token in this task — leave it on
+  localStorage temporarily; track in a follow-up issue.
+- Run T1 smoke test after each of the three commits.
+
+Verify: in browser devtools, after login, Application → Cookies shows
+studioos_auth (HttpOnly), studioos_csrf (not HttpOnly). Local Storage
+contains no `token` key. Refreshing the page keeps the user logged in.
+```
+
+---
+
+## WORKER CORRECTNESS (parallel-safe with feature ports)
+
+### T7 — Worker safety pass *(half day, single PR)*
+
+```
+Goal: Apply five low-risk hardening fixes across the worker codebase.
+
+1. JSON.parse hardening
+   Files: cloudflare-worker/src/routes/{brand.ts:149, billing.ts:172,
+          decks.ts:167+228+355, legalcap.ts:862, matches.ts:58,
+          onboarding.ts:53, profiling.ts:217, pipeline.ts:393}
+   Add to a new helper cloudflare-worker/src/util/safeJson.ts:
+     export function safeJson<T>(s: string|null|undefined, fallback: T): T {
+       if (!s) return fallback;
+       try { return JSON.parse(s); } catch { return fallback; }
+     }
+   Replace each unsafe parse site with safeJson(s, sensible_default).
+
+2. Date format standardization
+   Files: cloudflare-worker/src/routes/scoring.ts:154, auth.ts:65, and
+   any other site that builds an SQLite-format datetime via
+   .replace('T',' ').
+   Standardize on ISO 8601 (.toISOString()). Ensure every callsite
+   that PARSES the value uses Date.parse() or new Date() consistently.
+
+3. OpenAI fetch timeout
+   Files: cloudflare-worker/src/routes/brand.ts:137–171 and any other
+   fetch() to api.openai.com.
+   Wrap each in:
+     const controller = new AbortController();
+     const t = setTimeout(() => controller.abort(), 10_000);
+     try { ... fetch(url, { ..., signal: controller.signal }) ... }
+     finally { clearTimeout(t); }
+   On AbortError → return 504 with { detail: "AI provider timed out" }.
+
+4. SELECT * → explicit columns
+   Files: cloudflare-worker/src/routes/{deals.ts:17, projects.ts:18,
+          scoring.ts:103}
+   Replace SELECT * with explicit column lists matching the current
+   response shape (keep the same JSON keys; this is purely defensive
+   against future column additions leaking PII).
+
+5. Standardize error response shape
+   All worker routes must return errors as { error: "...", detail: "..." }
+   (both fields, same string). Add a helper in a new
+   cloudflare-worker/src/util/errors.ts:
+     export const errorBody = (msg: string) => ({ error: msg, detail: msg });
+   Audit api.ts client error handling — frontend already accepts both.
+
+Constraints:
+- Do not change any successful response shape.
+- Do not change any business logic — these are pure hardening fixes.
+- Run T1 smoke test after.
+
+Verify: every endpoint that previously worked still returns 200. New
+behavior visible only when an upstream call fails (clean 504 instead
+of 500 hang) or when a malformed JSON is encountered (clean default
+instead of 500).
+```
+
+### T8 — Scoring cooldown race + queue idempotency atomicity *(half day)*
+
+```
+Goal: Two concurrent scoring submits or queue jobs cannot both pass
+the dedup check.
+
+A) Scoring cooldown race
+   File: cloudflare-worker/src/routes/scoring.ts:125–146
+   Add to the score_snapshots schema a partial unique index:
+     CREATE UNIQUE INDEX uq_score_official_window
+       ON score_snapshots(project_id, official_week)
+       WHERE is_sandbox = 0;
+   Where official_week is a new TEXT column = strftime('%Y-%W', created_at).
+   Migration: cloudflare-worker/sql/score_official_week.sql — backfill
+   official_week for existing rows, then add the index.
+   In the route: insert with explicit official_week; on D1 unique
+   violation, return 409 { error: "Already scored this week." }.
+
+B) Queue idempotency
+   File: cloudflare-worker/src/queue-consumer.ts:66–72 and
+         cloudflare-worker/src/services/queueWorker.ts:46
+   Move the idempotency check from KV get-then-put to a D1 unique
+   constraint:
+     CREATE TABLE IF NOT EXISTS job_idempotency (
+       idempotency_key TEXT PRIMARY KEY,
+       first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       result_json TEXT
+     );
+   On job receive: INSERT OR IGNORE; if changes() == 0 → already
+   processed, ack and skip. If inserted → process, then update
+   result_json on completion.
+   Reject jobs without idempotency_key at enqueue time (return 400).
+
+Also fix queueWorker.ts:33: wrap JSON.parse(job.payload) in try/catch.
+On parse failure → log + ack (do not retry).
+
+Constraints:
+- Existing in-flight jobs must continue to work — write a one-time
+  backfill for job_idempotency from existing queue_jobs rows.
+- Don't change job retry behavior for legitimate failures.
+
+Verify: write a unit test that fires 10 parallel POSTs to /scoring/score
+for the same project — exactly 1 succeeds with 200, 9 get 409.
+```
+
+### T9 — SCORING_HMAC_SECRET enforcement *(15 min)*
+
+```
+File: cloudflare-worker/src/auth.ts (or wherever SCORING_HMAC_SECRET
+is read).
+
+Today: falls back to JWT_SECRET when unset.
+
+Change: in production (env.ENVIRONMENT === 'production'), throw at
+worker start if SCORING_HMAC_SECRET is missing. In dev/preview, allow
+the fallback but log a warning.
+
+Update .env.example to mark SCORING_HMAC_SECRET as REQUIRED in
+production with no fallback.
+
+Tell me to provision it via:
+  npx wrangler secret put SCORING_HMAC_SECRET --env production
+
+Generate using: openssl rand -hex 32
+
+Constraints: do not log the secret value, do not change how scores
+are signed.
+```
+
+---
+
+## RESTORE BROKEN FEATURES (port FastAPI specs to Worker)
+
+Port these in priority order. Each task = one PR. Each ports a slice of FastAPI to the worker, removes the corresponding entry from `tests/known_drift_allowlist.txt`, and the T1 smoke test is what guarantees no regression.
+
+### T10 — Calendar (Google + Outlook)
+
+Use the prompt I gave you earlier in this conversation (the one with the three-phase plan: D1 schema → worker route + services → secrets). Ports FastAPI calendar.py + calendar_unified.py to TypeScript and adds Outlook in parallel.
+
+Allowlist removals: `/api/calendar/events`, `/api/calendar/events.ics`, `/api/calendar/ic-meetings*`, `/api/calendar/founder-checkins*`, `/api/calendar/google/*`, `/api/calendar/microsoft/*`.
+
+### T11 — Financials + Wellbeing port *(1 day)*
+
+```
+Goal: Port two FastAPI routers to the worker so the FinancialsPage and
+WellbeingPage stop returning 404.
+
+Source specs (translate to TypeScript):
+  backend/app/api/routes/financials.py  → cloudflare-worker/src/routes/financials.ts
+  backend/app/api/routes/wellbeing.py   → cloudflare-worker/src/routes/wellbeing.ts
+
+Endpoints to implement:
+  GET    /api/financials/:projectId
+  PUT    /api/financials/:projectId
+  POST   /api/financials/:projectId/recompute
+  GET    /api/financials/:projectId/export.xlsx
+  GET    /api/wellbeing/checkins
+  POST   /api/wellbeing/checkins
+  GET    /api/wellbeing/aggregate
+  GET    /api/wellbeing/resources
+
+D1 schema additions in cloudflare-worker/sql/financials_wellbeing.sql:
+  Mirror the SQLModel tables from backend/app/models/entities.py for
+  ProjectFinancials, FinancialAssumption, WellbeingCheckin,
+  WellbeingResource. Use TEXT for ISO timestamps, INTEGER for IDs.
+
+Mount in cloudflare-worker/src/index.ts next to the existing route
+imports.
+
+Wrap every handler in safe(). Reuse requireAuth from ../auth.
+
+For the .xlsx export, use the SheetJS-equivalent the worker already
+has. If none exists, return CSV instead with the same column shape;
+update the frontend ExportButton accordingly.
+
+Constraints:
+- Match FastAPI's request/response JSON shape exactly so the existing
+  React pages need zero changes.
+- Don't add features that aren't in the FastAPI spec.
+- Reuse the safeJson() helper from T7.
+
+Verify: open FinancialsPage and WellbeingPage as a founder, confirm
+data loads and round-trips. Run T1 smoke test — these endpoints
+should disappear from the MISSING list. Remove them from
+tests/known_drift_allowlist.txt in the same PR.
+```
+
+### T12 — Compliance + Captable + Cofounder port *(1 day)*
+
+Same template as T11, sources:
+- `backend/app/api/routes/compliance.py` → `compliance.ts` (`/api/compliance/events`)
+- `backend/app/api/routes/captable.py` → `captable.ts` (`/api/captable/*`)
+- `backend/app/api/routes/cofounder.py` → `cofounder.ts` (`/api/cofounder/*`)
+
+### T13 — Mentors + Office Hours + Partner Office Hours port *(1 day)*
+
+- `mentors.py` → `mentors.ts` (`/api/mentors/*`)
+- `partner_office_hours.py` → `partner_office_hours.ts` (`/api/partner-office-hours/*`)
+
+Note: the worker already has some `/api/partners/office-hours` endpoints. Reconcile naming — either rename the worker's existing route to match `api.js`, or update `api.js` to call the existing path. Pick one in the PR.
+
+### T14 — Watchlist + References + Portfolio Health Recompute *(half day)*
+
+- `watchlist.py` → `watchlist.ts`
+- `references.py` → `references.ts`
+- Add `POST /api/portfolio/health/recompute` to existing worker `portfolio_health` route file.
+
+### T15 — Co-marketing + Company + Engagements + Needs + Insights + Journal port *(1 day)*
+
+- `comarketing.py` → `comarketing.ts`
+- `company.py` → `company.ts`
+- `needs.py` → `needs.ts` (or update existing — check first)
+- `insights.py` → add `/api/insights/newsletter`
+- New journal endpoints (no FastAPI spec — ask me first what `/api/journal` should do)
+- Engagements (under marketplace) — confirm spec with me
+
+---
+
+## PERFORMANCE
+
+### T16 — Kill activity backfill *(30 min)*
+
+```
+File: cloudflare-worker/src/routes/activity.ts:10–14, 23, 44, 87.
+
+The function backfillUserId() runs an UPDATE on activity_logs on every
+request — full table scan + write. Move to a one-time migration.
+
+1. Create cloudflare-worker/sql/backfill_activity_user_ids.sql:
+     UPDATE activity_logs
+        SET user_id = (SELECT id FROM users
+                        WHERE LOWER(users.email) = LOWER(activity_logs.actor))
+      WHERE user_id IS NULL
+        AND actor IS NOT NULL;
+
+2. Tell me to apply it:
+     npx wrangler d1 execute studioos-db
+       --file=cloudflare-worker/sql/backfill_activity_user_ids.sql
+       --remote
+
+3. After I confirm applied, delete the backfillUserId() function and
+   all three call sites (lines 23, 44, 87).
+
+Constraints: do not delete activity_logs rows; do not change the
+schema. The backfill is idempotent — safe to re-run.
+
+Verify: profile a /api/activity request before and after — you should
+see one D1 read, no writes.
+```
+
+### T17 — D1 indexes + pagination *(1–2 hours)*
+
+```
+Goal: Add three missing indexes and pagination to four endpoints.
+
+Indexes — new file cloudflare-worker/sql/perf_indexes.sql:
+  CREATE INDEX IF NOT EXISTS idx_scores_project_created
+    ON score_snapshots(project_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_activity_project_created
+    ON activity_logs(project_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_activity_action_created
+    ON activity_logs(action_type, created_at DESC);
+
+Apply via wrangler d1 execute (ask me to run after review).
+
+Pagination — accept ?limit=N (default 50, max 200) and ?offset=N
+on these endpoints:
+  GET /api/activity                    (cloudflare-worker/src/routes/activity.ts:88)
+  GET /api/activity/sync-github        (same file — also remove
+                                        unbounded fetch)
+  GET /api/admin/users                 (admin.ts — clamp the existing
+                                        hardcoded LIMIT 100)
+  GET /api/dashboard                   (dashboard.ts — add ?days=N
+                                        time window, default 30)
+  GET /api/marketplace/syndication     (funds.ts:90 — clamp LIMIT 20)
+
+Use a shared util cloudflare-worker/src/util/pagination.ts:
+  export function clampLimit(raw: string|null, def=50, max=200) { ... }
+
+Response envelope on paginated endpoints:
+  { items: [...], total: N, limit: L, offset: O }
+
+Constraints: existing callers without ?limit/?offset get the default
+behavior; do not break the frontend.
+
+Verify: GET /api/activity?limit=5 returns 5 items + total.
+```
+
+---
+
+## FRONTEND HYGIENE (parallel-safe)
+
+### T18 — localStorage + console.* + JSON.parse safety *(half day)*
+
+```
+Goal: Stop crashes on corrupted localStorage; remove production logs.
+
+1. Create frontend/src/lib/storage.js:
+     export function safeReadJSON(key, fallback = null) {
+       try {
+         const raw = localStorage.getItem(key);
+         return raw ? JSON.parse(raw) : fallback;
+       } catch { return fallback; }
+     }
+     export function safeWriteJSON(key, value) {
+       try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+     }
+
+2. Replace every JSON.parse(localStorage.getItem(...)) site with
+   safeReadJSON(...). Sites: ActivityPage.jsx:47, KYCPage.jsx,
+   TicketsPage.jsx, DealsPage.jsx, App.jsx:731+755, RegisterPage.jsx,
+   plus any I missed (grep first).
+
+3. Remove every console.error and console.warn from frontend/src/pages/
+   and frontend/src/components/. Replace with calls to a new lightweight
+   reporter:
+     frontend/src/lib/log.js:
+       export function reportError(scope, err) {
+         if (import.meta.env.DEV) console.error(`[${scope}]`, err);
+         // production: optionally POST to /api/csp_report or similar
+       }
+   Do NOT remove console.* in worker code or vite config.
+
+Constraints: do not change behavior on success paths; this is purely
+defensive.
+
+Verify: corrupt the 'user' key in localStorage manually, refresh —
+app should redirect to /login instead of crashing.
+```
+
+### T19 — useEffect cleanup audit + AbortController *(half day)*
+
+```
+Goal: Stop memory leaks from setInterval/setTimeout/fetch across the app.
+
+Targets (verified by audit):
+  ScoringPage.jsx              — setInterval(setNow, 1000)
+  LiquidityPage.jsx:16         — setInterval(load, POLL_MS)
+  MonitoringPage.jsx           — interval with stale closure
+  IntegrationsPage.jsx:50      — setTimeout for toast
+  AdminPage.jsx                — multiple setTimeout
+  CapTablePage.jsx             — setTimeout
+  NotificationBell.jsx         — refreshCount interval
+  RegisterPage.jsx:109–140     — Turnstile poll without bound
+
+For each: ensure useEffect returns a cleanup that calls
+clearInterval/clearTimeout. Ensure dependencies arrays include any
+referenced state.
+
+Add AbortController to frontend/src/lib/api.js request():
+  - Each request gets an AbortController.
+  - Export a hook useAbortableRequest() that returns (request, abort).
+  - Existing call sites do not change; new code SHOULD use the hook
+    and abort in the useEffect cleanup.
+  - Add Request.signal handling in the underlying fetch.
+
+Constraints:
+- Do not aggressively cancel the global token on navigation — only
+  cancel requests started by an unmounting component.
+
+Verify: add a cleanup test using @testing-library/react that mounts
+and unmounts ScoringPage rapidly; expect no setState-after-unmount
+warnings.
+```
+
+### T20 — Auth re-sync on navigation *(2 hours, blocked by T6)*
+
+```
+Prereq: T6 (httpOnly cookies) merged.
+
+Goal: When a user's role changes server-side, the frontend reflects it
+without a manual reload.
+
+Add frontend/src/hooks/useAuthSync.js:
+  - On mount, fetches /api/auth/me.
+  - On every <Route> location change (subscribe to react-router's
+    location), re-fetches if last fetch >5 min ago.
+  - Returns { user, role, loading }; updates a global context.
+
+Wire in frontend/src/App.jsx: replace the local user state with the
+context value. Update guard() to read from context.
+
+Constraints:
+- Do not poll faster than every 5 min on idle navigation.
+- Cache-bust on impersonation start/stop — force an immediate sync.
+
+Verify: as admin, change a user's role via /api/admin/users/:id/role,
+then have that user navigate to a new route; their guard() result
+should update.
+```
+
+### T21 — UX bundle (modals, forms, toasts, optimistic rollback) *(half day)*
+
+```
+Bundle four small frontend fixes:
+
+1. Modal Escape-to-close
+   Files: frontend/src/pages/{LiquidityPage.jsx, FundsPage.jsx,
+          MonitoringPage.jsx} and any other open modals.
+   Add to each modal's effect:
+     useEffect(() => {
+       const onKey = e => e.key === 'Escape' && onClose();
+       window.addEventListener('keydown', onKey);
+       return () => window.removeEventListener('keydown', onKey);
+     }, [onClose]);
+
+2. Form Enter-to-submit
+   Files: NeedsBoardPage.jsx:103, AdminPage.jsx (search), PartnersPage.jsx:79.
+   Wrap each form section in <form onSubmit={(e) => { e.preventDefault();
+   onApply(); }}> or add onKeyDown={Enter} to inputs.
+
+3. Toast lifecycle
+   Files: IntegrationsPage.jsx:50, AdminPage.jsx (toast).
+   Use a shared frontend/src/components/useToast.js hook with a
+   built-in 4s default and ALWAYS-clear-on-unmount cleanup. Replace
+   the inline setTimeout patterns.
+
+4. Optimistic update rollback
+   Files: LiquidityPage.jsx:40–45, IntegrationsPage.jsx:53–65.
+   Pattern: capture prev state, apply optimistic update, on api error
+   restore prev state and surface error toast.
+
+Constraints: visual styling of modals/toasts must not change.
+
+Verify: pressing Esc closes any modal; pressing Enter in a form input
+submits; a failed integrations connect rolls back the UI state.
+```
+
+---
+
+## HARDENING (do last — defense in depth)
+
+### T22 — Hardening bundle *(half day)*
+
+```
+Bundle of small server-side hardening items:
+
+1. Activity log PII redaction
+   File: cloudflare-worker/src/routes/auth.ts:120–122, 151–152, 268–269,
+         and any service writing to activity_logs.
+   Stop logging plain referral codes / emails in details. Replace with
+   hashed or truncated identifiers (first 4 chars + length).
+
+2. Verify-email response narrowing
+   File: cloudflare-worker/src/routes/auth.ts:243.
+   Return only { valid: true }. Do not include email or name. Update
+   the frontend VerifyEmailPage to fetch profile via /api/auth/me
+   AFTER successful TOTP setup, not from the verify response.
+
+3. Turnstile fail-closed in production
+   File: cloudflare-worker/src/services/turnstile.ts.
+   if (!env.TURNSTILE_SECRET_KEY && env.ENVIRONMENT === 'production')
+     return { success: false, error: 'turnstile-misconfigured' };
+   Dev/preview keep failing-open with warning.
+
+4. CORS allowlist env-driven
+   File: cloudflare-worker/src/index.ts:81–84.
+   Replace the hardcoded studioos.guillaumelauzier.workers.dev with
+   env.EXTRA_DEV_ORIGINS (comma-separated, parsed at startup). In
+   wrangler.toml [env.preview] [vars]:
+     EXTRA_DEV_ORIGINS = "https://studioos.guillaumelauzier.workers.dev"
+   Production [env.production] [vars]: leave EXTRA_DEV_ORIGINS unset
+   so the dev domain is NEVER in the prod allowlist.
+
+5. R2 upload size cap
+   File: cloudflare-worker/src/routes/settings.ts:298 (headshot upload)
+         and any other R2 upload route.
+   const MAX = 10 * 1024 * 1024;  // 10 MB
+   Read content-length header; if > MAX → 413. Defensive: also stream
+   into R2 with a size counter and abort if the body exceeds MAX.
+
+6. Coalesce last_seen_at writes
+   File: cloudflare-worker/src/auth.ts:100–102.
+   Only UPDATE last_seen_at if the row's existing value is >5 min old
+   (single SQL: UPDATE ... WHERE last_seen_at < datetime('now','-5 minutes')).
+
+Constraints: each fix is independent; if one breaks, revert just that
+hunk. Run T1 smoke test after each.
+
+Verify per item: see each item's "verify" criteria in the audit report.
+```
+
+### T23 — Standardize file naming *(30 min, optional cleanup)*
+
+```
+Goal: Eliminate kebab-case vs snake_case mismatch between worker and
+FastAPI. Pick kebab-case for TypeScript (idiomatic).
+
+Rename in cloudflare-worker/src/routes/:
+  admin-contracts.ts, market-intel.ts — already kebab. Good.
+Rename FastAPI counterparts:
+  backend/app/api/routes/admin_contracts.py → admin-contracts.py
+  backend/app/api/routes/market_intel.py    → market-intel.py
+(Note: Python won't import dashes — so ALTERNATE: rename worker files
+to underscores instead. Pick whichever requires less surgery.)
+
+Update all imports in index.ts and FastAPI's routers __init__.
+
+Constraints: this is a pure rename; no logic changes. Do it as a
+single atomic commit so git --follow tracks history.
+```
+
+### T24 — Frontend list virtualization *(only when needed, est. 1 day each)*
+
+Don't do this preemptively. Add to backlog. Trigger when one of these has >300 rows in production:
+- `PartnersPage`, `ActivityPage`, `TicketsPage`, `ProjectsPage`
+
+Use `react-window` (~6kb gzipped). Keep existing markup as fallback for <300 rows.
+
+---
+
+## Recommended order + parallelization
+
+| Wave | Tasks | Parallel? | Days |
+|---|---|---|---|
+| **1** | T0 → T1 | No (sequential) | 0.5 |
+| **2** | T2, T3, T4, T5 | Yes (all parallel) | 1–2 |
+| **3** | T6 (cookies) | No — biggest risk, run T1 + manual QA after each commit | 1–2 |
+| **4** | T7, T8, T9 | Yes | 1 |
+| **5** | T10, T11, T12 | Yes (separate routes) | 2 |
+| **6** | T13, T14, T15 | Yes | 1 |
+| **7** | T16, T17 | Yes | 0.5 |
+| **8** | T18, T19, T21 | Yes | 1 |
+| **9** | T20 (depends on T6) | — | 0.5 |
+| **10** | T22, T23 | Yes | 0.5 |
+
+**Total: ~9–11 working days of Replit time.** The drift smoke test (T1) is the safety harness — every PR must keep it green. The CLAUDE.md (T0) is your highest-leverage 15 minutes; do it first.
+
+**Want me to:** (a) collapse the list into one master "do-this-then-this" prompt for Replit (single message, sequential), (b) write the GitHub Actions YAML for the T1 smoke test now, or (c) start filling in the spec for one of the T11–T15 feature ports that needs more detail?

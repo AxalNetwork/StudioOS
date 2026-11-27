@@ -1,0 +1,225 @@
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Building2, Briefcase, TrendingUp, Users } from 'lucide-react';
+import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
+import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import useForcedLightTheme from '../hooks/useForcedLightTheme';
+import { track } from '../lib/funnel';
+import { ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from '../lib/onboarding';
+import { OWNERSHIP_NOTICE, LEGAL_LINKS } from '../lib/legalNotice';
+
+const LICENCES = [
+  {
+    key: 'founder',
+    name: 'Founder',
+    desc: 'I\u2019m building a company.',
+    meta: 'Incorporation, cap table, raise, customer discovery',
+    icon: Building2,
+    tint: authV2.purpleTint,
+    ink: authV2.purpleDark,
+  },
+  {
+    key: 'investor',
+    name: 'Investor / LP',
+    desc: 'I back companies and funds.',
+    meta: 'Deal flow, portfolio, fund reporting \u00b7 accreditation required',
+    icon: TrendingUp,
+    tint: '#eef0ff',
+    ink: '#4338ca',
+  },
+  {
+    key: 'advisor',
+    name: 'Advisor',
+    desc: 'I coach founders and run office hours.',
+    meta: 'Practice, cohorts, expertise profile',
+    icon: Users,
+    tint: '#eefbf5',
+    ink: '#047857',
+  },
+  {
+    key: 'partner',
+    name: 'Partner',
+    desc: 'My firm provides services to portfolio companies.',
+    meta: 'Pipeline, delivery, offers \u00b7 firm-level licence',
+    icon: Briefcase,
+    tint: '#fff6e9',
+    ink: '#92400e',
+  },
+];
+
+const WIZARD_FOR_LICENCE = {
+  founder: '/onboarding/founder',
+  investor: '/onboarding/investor',
+  partner: '/onboarding/partner',
+};
+
+export default function ChooseLicencePage() {
+  useForcedLightTheme();
+  const navigate = useNavigate();
+  const { user, refresh } = useAuth();
+  const [selected, setSelected] = useState(user?.suggested_role || 'founder');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  // Starts false, always. This is the affirmative act the whole consent record
+  // rests on — pre-ticking it would make the checkbox decoration and the record
+  // a fiction, which is the state this screen previously shipped in.
+  const [accepted, setAccepted] = useState(false);
+
+  const submit = async () => {
+    if (!selected || !accepted) return;
+    setBusy(true);
+    setError('');
+    track('onboarding_licence_submit', { licence: selected });
+    try {
+      await api.onboardingChooseLicence(selected, accepted);
+      // The shell read `flow === 'licence'` once, when this session started,
+      // and it will not read it again. Tell it the choice landed — including
+      // that this same request recorded the terms — before navigating, or the
+      // licence gate sends the next URL straight back here and the click
+      // looks dead until a full reload.
+      window.dispatchEvent(new CustomEvent(ONBOARDING_LICENCE_CHOSEN_EVENT, { detail: { licence: selected } }));
+      window.dispatchEvent(new CustomEvent(TERMS_ACCEPTED_EVENT));
+      try {
+        await refresh({ force: true });
+      } catch {
+        // The licence is already stored. A failed /me must not leave them on
+        // this screen after the shell has been told they moved on.
+      }
+      const wizard = WIZARD_FOR_LICENCE[selected];
+      navigate(wizard || '/exploring', { replace: true });
+    } catch (e) {
+      setError(e?.message || 'Could not save your licence choice.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectedMeta = LICENCES.find((l) => l.key === selected);
+
+  return (
+    <AuthShell
+      email={user?.email}
+      platformNote="First sign-in"
+      backgroundSrc="/auth/login-background.webp"
+      wide
+    >
+      <AuthCard>
+        <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38] sm:text-[29px]">
+          Choose your adventure
+        </h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577] sm:text-[14.5px]">
+          Pick your path and we&rsquo;ll open the right workspace and send the matching agreement. You can start working while your membership is reviewed.
+        </p>
+
+        {error && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+        )}
+
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {LICENCES.map((lic) => {
+            const on = selected === lic.key;
+            const Icon = lic.icon;
+            return (
+              <button
+                key={lic.key}
+                type="button"
+                onClick={() => setSelected(lic.key)}
+                className="rounded-2xl border p-5 text-left transition-shadow"
+                style={{
+                  borderColor: on ? authV2.purple : authV2.hair,
+                  borderWidth: on ? 1.5 : 1,
+                  boxShadow: on ? '0 0 0 3px rgba(124,58,237,.09)' : 'none',
+                  background: '#fff',
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-[11px]"
+                    style={{ background: lic.tint, color: lic.ink }}
+                  >
+                    <Icon size={18} />
+                  </span>
+                  <span
+                    className="flex h-5 w-5 items-center justify-center rounded-full border flex-none"
+                    style={{ borderColor: on ? authV2.purple : authV2.hair, borderWidth: on ? 1.5 : 1 }}
+                  >
+                    {on && <span className="block h-2 w-2 rounded-full" style={{ background: authV2.purple }} />}
+                  </span>
+                </div>
+                <div className="mt-3.5 text-[17px] font-extrabold tracking-tight text-[#241f38]">{lic.name}</div>
+                <div className="mt-1.5 text-[13.5px] leading-relaxed text-[#4a4459]">{lic.desc}</div>
+                <div className="mt-3 border-t pt-2.5 font-mono text-[10.5px] text-[#6b6577]" style={{ borderColor: '#f0eef5' }}>
+                  {lic.meta}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* The agreement, as an act rather than a notice. This screen used to
+            show the two documents only as footer links, while a comment here
+            claimed a member "accepts by continuing" — so nothing recorded an
+            acceptance and `tos_v1`/`privacy_v1` stayed pending on every account
+            for the life of the account. An explicit, unticked checkbox is what
+            makes that claim true and gives the record something to point at. */}
+        <label
+          className="mt-5 flex cursor-pointer items-start gap-2.5 text-left"
+          style={{ maxWidth: '62ch' }}
+        >
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#6d28d9]"
+          />
+          <span className="text-[12.5px] leading-relaxed text-[#4a4458]">
+            I have read and agree to the{' '}
+            <Link to="/terms" className="font-semibold text-[#5b21b6] underline underline-offset-2">
+              Terms of Service
+            </Link>{' '}
+            and the{' '}
+            <Link to="/privacy" className="font-semibold text-[#5b21b6] underline underline-offset-2">
+              Privacy Policy
+            </Link>
+            .
+          </span>
+        </label>
+
+        <button
+          type="button"
+          disabled={busy || !selected || !accepted}
+          onClick={submit}
+          className={authV2.btnPrimary}
+          style={{ background: authV2.purple, borderColor: authV2.purple, marginTop: 18, width: 'auto', paddingLeft: 28, paddingRight: 28 }}
+        >
+          {busy ? 'Saving…' : `Continue as ${selectedMeta?.name || 'member'}`}
+        </button>
+      </AuthCard>
+
+      {/* Who the member is contracting with, and the documents again for a reader
+          who has not scrolled to the checkbox. ACCEPTANCE IS THE CHECKBOX ABOVE,
+          not this footer — that distinction used to be the other way around and
+          was the reason nothing was ever recorded. This sits OUTSIDE the card and
+          on the background image, so its colours are the on-dark set rather than
+          the card's ink-on-white — the same treatment AuthShell's own header uses
+          for the logo and the email. */}
+      <footer className="mt-6 flex flex-col items-center gap-2 text-center">
+        <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          {LEGAL_LINKS.map((l) => (
+            <Link
+              key={l.to}
+              to={l.to}
+              className="text-[12px] font-medium text-white/85 underline-offset-2 hover:text-white hover:underline"
+            >
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+        <p className="m-0 max-w-[56ch] font-mono text-[10.5px] leading-relaxed text-white/70">
+          {OWNERSHIP_NOTICE}
+        </p>
+      </footer>
+    </AuthShell>
+  );
+}

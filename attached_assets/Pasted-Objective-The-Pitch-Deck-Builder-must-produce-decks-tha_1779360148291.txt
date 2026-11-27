@@ -1,0 +1,170 @@
+Objective
+  The Pitch Deck Builder must produce decks that look professional
+  enough to send to investors. Twelve named templates, each a
+  series of slide components, auto-fillable from project data,
+  editable inline, exportable to PDF/PNG, and shareable via one-time
+  link.
+
+Are templates code?
+  Yes. React/TSX components per slide give:
+    - tight visual control + design-system reuse
+    - data binding to project / financials / cap-table fields
+    - inline editing with the same React render path
+    - server-side PDF render via Cloudflare Browser Rendering
+    - PPTX export via pptxgenjs by re-walking the same slide JSON
+
+The 12 templates
+  1. yc_seed                10 slides — YC investor seed style
+  2. sequoia_classic        12 slides — narrative-driven
+  3. kawasaki_10_20_30      10 slides — Kawasaki's exact set
+  4. minimal_seed            6 slides — problem/solution/traction/team/ask
+  5. series_a_growth        15 slides — metrics + GTM heavy
+  6. series_b_diligence     22 slides + appendix
+  7. demo_day                12 slides — product-screenshot heavy
+  8. sales_commercial       18 slides — customer-facing, not fundraising
+  9. partnership_bd          12 slides — partner / enterprise
+  10. one_pager_teaser        1 slide — irresistible hook + ask
+  11. investor_appendix       short deck + 30-page appendix
+  12. narrative_brand         15 slides — story-led, consumer/brand
+
+Architecture
+
+  frontend/src/decks/
+    DeckTemplate.ts            // shared types
+    slides/                     // shared slide primitives
+      Cover.tsx
+      Problem.tsx
+      Solution.tsx
+      Market.tsx
+      Competition.tsx
+      Product.tsx
+      Traction.tsx
+      BusinessModel.tsx
+      GTM.tsx
+      UnitEconomics.tsx
+      CohortRetention.tsx
+      Team.tsx
+      WhyNow.tsx
+      Roadmap.tsx
+      Financials.tsx
+      Ask.tsx
+      Contact.tsx
+      AppendixDivider.tsx
+      AppendixPage.tsx
+    templates/
+      yc_seed.tsx              // const TEMPLATE: DeckSpec
+      sequoia_classic.tsx
+      kawasaki_10_20_30.tsx
+      minimal_seed.tsx
+      series_a_growth.tsx
+      series_b_diligence.tsx
+      demo_day.tsx
+      sales_commercial.tsx
+      partnership_bd.tsx
+      one_pager_teaser.tsx
+      investor_appendix.tsx
+      narrative_brand.tsx
+      index.ts                   // registry
+
+  DeckSpec shape:
+    { key, label, recommended_for: {sectors[], stages[], audience[]},
+      slides: [{key, component, autofill: {from:'projects', field,
+                                              fallback}, optional?,
+                                              importance}],
+      branding: { palette_source: 'project' | 'fixed',
+                   logo_position, footer } }
+
+Visual design
+  - Use the existing Axal design tokens (typography, palette, spacing).
+  - Each slide laid out in a fixed 16:9 frame (1920×1080) so PDF +
+    PPTX export pixel-match.
+  - Per-template hero typography variant (e.g. yc_seed uses Inter,
+    narrative_brand uses Fraunces).
+  - A neutral footer with project name + page number + Axal mark
+    on free tier; removed on Growth tier (paywall, see Prompt DE).
+
+Editor (frontend/src/pages/PitchDeckPage.jsx)
+  Three-pane:
+    Left   — slide thumbnails (drag-reorder, insert, delete)
+    Centre — full slide editor (inline contentEditable text)
+    Right  — template settings, brand palette overrides, slide-spec
+             field map
+  Save state in `decks` D1 table:
+    CREATE TABLE decks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      template_key TEXT NOT NULL,
+      spec_json TEXT NOT NULL,           -- the editable deck JSON
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      version INTEGER DEFAULT 1
+    );
+  Each save bumps version + writes spec_json. Last 10 versions retained.
+
+Auto-fill (cloudflare-worker/src/services/decks/autofill.ts)
+  For each slide spec field with `autofill`:
+    1. Pull from platform data (projects.*, financial_models.*,
+       captable_*, metrics_snapshots.*, roadmap_okrs.*,
+       discovery_interviews.*).
+    2. If empty and persona advisor has answered a related question,
+       fill from advisor_answers (Workers AI single call to render
+       a one-line bullet).
+    3. If still empty, leave placeholder "[Founder, fill in]" so the
+       editor highlights it.
+
+Export (Cloudflare Browser Rendering)
+  POST /api/decks/:id/export { format: 'pdf' | 'png' | 'pptx' }
+    Renders the editor route in a headless Chromium via the BROWSER
+    binding, captures each slide as a page in a single PDF, OR
+    each slide as a separate PNG.
+    PPTX: walks the same spec_json server-side and emits a .pptx via
+    pptxgenjs.
+    Output stored encrypted in R2 (per Prompt B / HF) with a 24h
+    gated download URL minted by the Worker.
+
+One-time share link
+  POST /api/decks/:id/share { expires_in_hours?: 72, view_limit?: 1 }
+    → returns { url: 'https://app.axal.vc/share/deck/<token>',
+                token, expires_at }
+    Token = 32-byte random hex; row in deck_shares stores:
+      deck_id, token_sha256, expires_at, view_limit, viewed_count,
+      revoked_at, created_by.
+  GET /share/deck/:token
+    → loads the deck JSON via /api/decks/share/:token (server
+      verifies + decrements view_limit + tombstones if used up);
+      renders read-only.
+    Token is single-use by default; admin can configure higher
+    view_limit (e.g. 25 for a fundraise blast).
+  Each view writes deck_share_views row (ip-hash, ua-fingerprint, ts,
+  read_minutes) — useful as "investor engagement" signal back to
+  the founder.
+
+Tier gating
+  - Free tier: 1 active deck, 3 export PDFs / month, 1 share link
+    at a time.
+  - Growth tier: 5 decks, 30 exports/mo, 10 share links.
+  - Studio tier: unlimited; removes Axal footer; unlocks the
+    investor_appendix + series_b_diligence + narrative_brand
+    templates.
+
+Files Replit creates this PR
+  - 12 template files under frontend/src/decks/templates/
+  - 20+ slide-primitive files
+  - 1 editor page rewrite
+  - Worker routes for export + share
+  - Migration for `decks`, `deck_shares`, `deck_share_views`
+  - Autofill service
+  - Browser Rendering wiring in wrangler.toml ([browser] binding)
+
+Acceptance
+  - All 12 templates render with placeholder data (no project
+    selected) and look professional.
+  - Selecting a project + clicking Auto-fill populates ≥ 80% of
+    fields.
+  - PDF export round-trips with same look as the browser editor.
+  - PPTX export opens in PowerPoint and Keynote without breakage.
+  - One-time share link works exactly once (or up to view_limit),
+    then 410 Gone.
+  - Founder can see share-link views in the deck's "Engagement"
+    panel.

@@ -1,0 +1,36 @@
+{
+  "skill": "roadmap-review-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "roadmap": [
+          {
+            "item": "Insurance claims export",
+            "target": "2026-10-15",
+            "status": "slipped",
+            "promised_to": "Acme Dental"
+          },
+          {
+            "item": "Multi-clinic view",
+            "status": "planned"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Insurance claims export",
+      "Acme Dental"
+    ],
+    "must_say_not_recorded": [
+      "Multi-clinic view"
+    ],
+    "must_not_include": [
+      "on track"
+    ]
+  }
+}

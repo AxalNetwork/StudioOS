@@ -1,0 +1,35 @@
+#20 - Phase B · Prompt 6 — Settings expansion (tabbed)
+What & Why
+Expand the settings surface into a tabbed page (Profile, Account, Security, Notifications, Privacy, Integrations, Billing, Appearance, Developer) backed by the worker's /api/settings/* routes and a new user_settings D1 table. Adds a global SettingsContext so theme / density / sidebar default are applied app-wide. Billing tab shows a placeholder until Phase C / Prompt 4 lands; Integrations tab hides API-key UI behind a feature flag (per user instruction).
+
+Done looks like
+Each tab saves and the saved value survives reload.
+Theme switch is instant; system theme follows OS.
+Public profile slug uniqueness validated server-side; clear error on collision.
+Privacy show_in_directory actually filters the user out of the Public Directory listing.
+Notifications respect quiet hours (worker side: skip sending push during the window).
+Developer tab visible only to admins.
+npm run build + worker tsc --noEmit clean.
+Out of scope
+Real billing UI (Prompt 4).
+API-key issuance UI (kept behind a feature flag per user instruction).
+Spin-Out Lab UI changes.
+Sidebar restructuring (Prompt 5 owns that).
+Steps
+Schema — Add user_settings table per the prompt brief as a new migration under cloudflare-worker/sql/migrations/, mirrored into the schema file. Note pending wrangler d1 execute step in the gotcha list.
+Worker routes — Extend /api/settings/* with GET/PUT subroutes (/profile, /security, /notifications, /privacy, /appearance, /integrations, /developer). Developer routes admin-only. JWT gating + concrete row types (no any).
+Frontend layout — Refactor the settings page into a side-tab layout with one component per tab.
+SettingsContext — Load settings on auth and apply theme / density / sidebar default globally; expose a useSettings() hook.
+Quiet hours — Plumb quiet-hours into the push-send path so notifications are skipped during the window.
+Public Directory filter — Honor show_in_directory = 0 in the directory listing endpoint.
+Verify — Tab-by-tab manual save → reload, theme toggle, slug collision, quiet-hours skip.
+Relevant files
+frontend/src/pages/SettingsPage.jsx
+cloudflare-worker/src/routes/settings.ts
+cloudflare-worker/src/schema.sql
+cloudflare-worker/sql/migrations/
+attached_assets/Pasted-Expand-frontend-src-pages-SettingsPage-jsx-into-a-tabbe_1778244103672.txt
+Dependencies
+
+Phase B · Prompt 5 — Sidebar reorganization
+Open task

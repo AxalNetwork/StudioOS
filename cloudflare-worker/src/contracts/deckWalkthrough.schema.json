@@ -1,0 +1,44 @@
+{
+  "$id": "deckWalkthrough",
+  "title": "GET /api/decks/:id/recordings (D1590 F11, #3837)",
+  "description": "What the deck v2 adapter's `walkthrough` method passes through (D4599 part 2, #4599): the maker's walkthrough of one deck version, one entry per card in order, each card's newest take or null when it is not recorded, how many cards are recorded, and the investor links it is attached to (`routes/deck_recordings.ts`, `services/decks/recordings.ts` walkthroughOf/takeView). Captions that were not recorded are null, never an empty list. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "cards", "recorded", "links"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["uid", "card", "take", "duration_ms", "media_mime", "media_bytes", "captions", "caption_model", "charged_microusd", "created_at"],
+        "properties": {
+          "uid": { "type": "string" },
+          "card": { "type": "integer", "minimum": 1 },
+          "take": { "type": "integer", "minimum": 1 },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "media_mime": { "type": "string" },
+          "media_bytes": { "type": "integer", "minimum": 0 },
+          "captions": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["start_ms", "end_ms", "text"],
+              "properties": {
+                "start_ms": { "type": "number", "minimum": 0 },
+                "end_ms": { "type": "number", "minimum": 0 },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "caption_model": { "type": ["string", "null"] },
+          "charged_microusd": { "type": ["number", "null"] },
+          "created_at": { "type": "string" }
+        }
+      }
+    },
+    "recorded": { "type": "integer", "minimum": 0 },
+    "links": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+  }
+}

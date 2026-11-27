@@ -1,0 +1,5 @@
+{
+  "FEED_PREDICATE @ routes/events_public.ts": 1,
+  "order @ routes/events_public.ts": 1,
+  "where.join(' AND ') @ routes/events_public.ts": 1
+}

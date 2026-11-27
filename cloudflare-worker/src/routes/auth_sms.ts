@@ -1,0 +1,361 @@
+/**
+ * Task #6 — SMS 2FA endpoints (Google Cloud Identity Platform / Firebase Phone).
+ *
+ *   GET  /api/auth/factors?email=…             discovery (rate-limited; only
+ *                                              "totp"/"sms" booleans, never PII)
+ *   POST /api/auth/sms/start-enrollment        body: { phone, country, recaptcha_token? }
+ *                                              must be authenticated; sends SMS
+ *   POST /api/auth/sms/confirm-enrollment      body: { session_info, code }
+ *                                              persists encrypted phone + sets tfa_methods
+ *   POST /api/auth/sms/disable                 deletes auth_sms row, drops "sms" from
+ *                                              tfa_methods (TOTP must remain enrolled
+ *                                              — server refuses to leave the user with
+ *                                              zero factors)
+ *   POST /api/auth/sms/start-challenge         body: { email, recaptcha_token? }
+ *                                              login flow — sends SMS to the stored
+ *                                              phone (the phone itself is NEVER
+ *                                              echoed to the caller)
+ *   POST /api/auth/sms/verify-challenge        body: { email, session_info, code }
+ *                                              issues JWT + cookie, mirrors /login
+ *
+ * Phone numbers stored at rest are AES-GCM ciphertext via the column cipher
+ * (services/columnCipher.ts). Only the country + last-4 are stored / surfaced
+ * in the clear. Country is checked against `SMS_COUNTRY_ALLOWLIST` at
+ * enrollment time (no allow-list, no SMS).
+ *
+ * High-risk routes (impersonation, billing, contract void, DD report mint)
+ * are deliberately TOTP-only — see `requireFactor()` in `src/auth.ts`.
+ */
+import { Hono } from 'hono';
+import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { recordSecurityEvent } from '../services/securityEvents';
+import {
+  createJWT, requireAuth, setAuthCookies, generateCsrfToken,
+} from '../auth';
+import { hashEmail } from '../util/hashEmail';
+import { clientIp } from '../util/clientIp';
+import { hasTotpConfigured } from '../services/authTotp';
+import {
+  hasSmsConfigured, loadSms, persistSmsEnrollment, clearSms, markSmsUsed,
+  getUserFactors, setUserFactor, clearUserFactor, isCountryAllowed, smsCountryAllowlist,
+} from '../services/authSms';
+import { isGcipConfigured, getRecaptchaSiteKey, sendVerificationCode, signInWithPhoneNumber, deleteGcipPhone } from '../services/gcip';
+import { withDeadline } from '../util/deadline';
+import { refuse } from '../util/refusal';
+import { gcipSentence } from '../services/gcip';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
+
+// A stall is an outage, and this limiter fails closed on an outage. Both KV
+// calls carry a deadline because KV takes no AbortSignal: without one the catch
+// below — correct, deliberate, and the whole point of the audit-M1 posture —
+// simply never runs, and the request hangs instead of being denied. Denying in
+// two seconds is the declared policy arriving on time; hanging for thirty is the
+// policy not arriving at all.
+const RATE_KV_DEADLINE_MS = 2_000;
+
+
+const sms = new Hono<{ Bindings: Env }>();
+
+// Per-IP + per-user rate limit primitives — same KV bucket model as
+// auth.ts:checkRateLimit, duplicated here so this file can be lifted
+// out without dragging the parent module along.
+async function rate(env: Env, key: string, max: number, windowSec: number): Promise<boolean> {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const slot = Math.floor(now / windowSec);
+    const k = `rl:${key}:${slot}`;
+    const cur = parseInt((await withDeadline(env.RATE_LIMITS.get(k), RATE_KV_DEADLINE_MS, 'rate-get')) || '0', 10);
+    if (cur >= max) return false;
+    await withDeadline(
+      env.RATE_LIMITS.put(k, String(cur + 1), { expirationTtl: windowSec + 5 }),
+      RATE_KV_DEADLINE_MS, 'rate-put',
+    );
+    return true;
+  } catch (e) {
+    // Fail-CLOSED on KV outage (audit M1): SMS OTP enroll/challenge/verify are
+    // sensitive, so deny rather than disable the throttle. Log only the bucket
+    // prefix — the key tail carries email/phone (PII, L5).
+    console.error('auth_sms rate KV error (failing closed) bucket=%s', key.split(':')[0], e);
+    return false;
+  }
+}
+
+// E.164 must start with '+' followed by 7-15 digits.
+function isE164(p: string): boolean {
+  return /^\+[1-9]\d{6,14}$/.test(p || '');
+}
+
+function gcip503(c: any) {
+  return c.json({ error: 'sms_unavailable', message: 'SMS 2FA is not configured on this server.' }, 503);
+}
+
+function enrollmentUnavailable(c: any) {
+  return refuse(c, 503, { code: 'sms_unavailable', message: "SMS backup isn't available yet on this server." });
+}
+
+// -------- factor discovery --------------------------------------------------
+
+sms.get('/factors', async (c) => {
+  const email = (c.req.query('email') || '').toLowerCase().trim().slice(0, 320);
+  if (!email) return c.json({ error: 'Email required' }, 400);
+  // Rate-limit per IP so this can't be used as an enumeration oracle.
+  const ip = clientIp(c.req.raw);
+  const ok = await rate(c.env, `factors-ip:${ip}`, 30, 60);
+  if (!ok) return c.json({ error: 'Too many requests' }, 429);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
+  await sql.end();
+  // Always return the same shape regardless of whether the user exists, to
+  // avoid a leak via response-shape diff. Booleans are false on miss.
+  if (!rows.length) return c.json({ totp: false, sms: false, sms_available: await isGcipConfigured(c.env) });
+  const uid = Number(rows[0].id);
+  const [totp, sms_] = await Promise.all([
+    hasTotpConfigured(c.env, uid),
+    hasSmsConfigured(c.env, uid),
+  ]);
+  return c.json({ totp: !!totp, sms: !!sms_, sms_available: await isGcipConfigured(c.env) });
+});
+
+// -------- enrollment (authenticated) ----------------------------------------
+
+sms.post('/sms/start-enrollment', async (c) => {
+  if (!(await isGcipConfigured(c.env))) return enrollmentUnavailable(c);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const phone = String(body?.phone || '').trim();
+  const requestedCountry = String(body?.country || '').trim().toUpperCase();
+  const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
+  if (!isE164(phone)) return refuse(c, 400, { code: 'invalid_phone', message: gcipSentence('invalid_phone') });
+  if (!/^[A-Z]{2}$/.test(requestedCountry)) return refuse(c, 400, { code: 'invalid_country', message: 'Choose a country for this phone number.' });
+  const destination = parsePhoneNumberFromString(phone, { extract: false });
+  if (!destination?.isPossible() || !destination.country) return refuse(c, 400, { code: 'invalid_phone', message: gcipSentence('invalid_phone') });
+  const country = destination.country;
+  if (country !== requestedCountry) return refuse(c, 400, { code: 'invalid_country', message: 'Choose the country that matches this phone number.' });
+  if (!isCountryAllowed(c.env, country)) {
+    return refuse(c, 400, { code: 'country_not_allowed', message: `Texts to ${country} aren't offered yet.` });
+  }
+  // 10/min/IP, 5/min/user — matches the brief.
+  if (!(await rate(c.env, `sms-enroll-ip:${clientIp(c.req.raw)}`, 10, 60))) return refuse(c, 429, { code: 'rate_limited', message: gcipSentence('rate_limited') });
+  if (!(await rate(c.env, `sms-enroll-user:${user.id}`, 5, 60))) return refuse(c, 429, { code: 'rate_limited', message: gcipSentence('rate_limited') });
+  const r = await sendVerificationCode(c.env, phone, recaptcha).catch(() => ({ ok: false as const, code: 'upstream_error' as const, message: 'SMS provider unavailable' }));
+  if (!r.ok) {
+    const status = r.code === 'recaptcha_required' ? 412 : r.code === 'quota_exceeded' ? 429 : r.code === 'region_blocked' || r.code === 'invalid_phone' ? 400 : r.code === 'phone_auth_disabled' ? 503 : 502;
+    return refuse(c, status, { code: r.code, message: gcipSentence(r.code), raw: r.message });
+  }
+  // Stash the candidate {phone, country} in KV against the sessionInfo so
+  // the confirm step doesn't have to trust the client to round-trip these.
+  await withDeadline(c.env.RATE_LIMITS.put(
+    `sms-enroll:${user.id}:${r.sessionInfo}`,
+    JSON.stringify({ phone, country, ts: Date.now() }),
+    { expirationTtl: 600 },
+  ), RATE_KV_DEADLINE_MS, 'stash-put');
+  return c.json({ session_info: r.sessionInfo, last4: phone.slice(-4), resend_after_s: 60, expires_in_s: 600 });
+});
+
+sms.post('/sms/confirm-enrollment', async (c) => {
+  if (!(await isGcipConfigured(c.env))) return enrollmentUnavailable(c);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const sessionInfo = String(body?.session_info || '');
+  const code = String(body?.code || '').trim();
+  if (!sessionInfo || !/^\d{6}$/.test(code)) return refuse(c, 400, { code: 'code_required', message: 'Enter the six-digit code from the text message.' });
+  const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-enroll:${user.id}:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
+  if (!stashed) return refuse(c, 410, { code: 'session_expired', message: gcipSentence('session_expired') });
+  let country: string;
+  try {
+    const obj = JSON.parse(stashed);
+    country = String(obj.country);
+  } catch {
+    return c.json({ error: 'session_corrupted' }, 500);
+  }
+  const v = await signInWithPhoneNumber(c.env, sessionInfo, code).catch(() => ({ ok: false as const, code: 'upstream_error' as const, message: 'SMS provider unavailable' }));
+  if (!v.ok) return refuse(c, v.code === 'invalid_code' ? 401 : v.code === 'session_expired' ? 410 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
+  // GCIP echoes back the verified phoneNumber; trust THAT, not the stash.
+  // The stash is only authoritative for the country/jurisdiction binding.
+  await persistSmsEnrollment(c.env, user.id, v.phoneNumber, country, v.localId);
+  await setUserFactor(c.env, user.id, 'sms');
+  await withDeadline(c.env.RATE_LIMITS.delete(`sms-enroll:${user.id}:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
+  try {
+    const eh = await hashEmail(user.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind(
+      'sms_2fa_enrolled',
+      `User enrolled SMS 2FA (country=${country}, last4=${v.phoneNumber.slice(-4)})`,
+      eh, user.id,
+    ).run();
+  } catch {}
+  return c.json({ ok: true, last4: v.phoneNumber.slice(-4), country });
+});
+
+sms.post('/sms/disable', async (c) => {
+  const user = await requireAuth(c);
+  // Refuse to remove the user's only factor.
+  if (!(await hasTotpConfigured(c.env, user.id))) {
+    return c.json({
+      error: 'totp_required_first',
+      message: 'Configure TOTP before disabling SMS — every account must keep at least one 2FA method.',
+    }, 412);
+  }
+  // Task #6 — call the GCIP Admin API FIRST so an upstream failure surfaces
+  // before we wipe local state (admins can retry). We only ignore the
+  // upstream call when admin creds aren't configured at all — in that case
+  // the local DB is the only source of truth anyway, so wiping it is safe.
+  const existing = await loadSms(c.env, user.id);
+  if (existing?.firebaseUid) {
+    const r = await deleteGcipPhone(c.env, existing.firebaseUid);
+    if (!r.ok && r.code !== 'admin_unconfigured' && r.code !== 'no_local_id') {
+      return c.json({
+        error: 'upstream_delete_failed',
+        message: 'Could not remove phone factor from the auth provider. Try again or contact support.',
+        detail: r.message,
+      }, 502);
+    }
+    if (!r.ok) {
+      console.warn(`[sms.disable] upstream delete skipped (${r.code}) for user=${user.id}`);
+    }
+  }
+  await clearSms(c.env, user.id);
+  await clearUserFactor(c.env, user.id, 'sms');
+  try {
+    const eh = await hashEmail(user.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind('sms_2fa_disabled', 'User removed SMS 2FA', eh, user.id).run();
+  } catch {}
+  return c.json({ ok: true });
+});
+
+// -------- login challenge (unauthenticated; mirrors /login) -----------------
+
+sms.post('/sms/start-challenge', async (c) => {
+  if (!(await isGcipConfigured(c.env))) return gcip503(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const email = String(body?.email || '').toLowerCase().trim();
+  const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
+  if (!email) return c.json({ error: 'Email required' }, 400);
+  if (!(await rate(c.env, `sms-chal-ip:${clientIp(c.req.raw)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
+  if (!(await rate(c.env, `sms-chal-email:${email}`, 5, 60))) return c.json({ error: 'Too many requests' }, 429);
+
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT id, email_verified, is_active FROM users WHERE email = ${email}`;
+  await sql.end();
+  // Don't leak account existence — return a generic 200 with no session_info
+  // when the user / SMS factor / verified email is missing. The frontend
+  // surfaces the same "If we can text you, we just did" copy either way.
+  if (!users.length || !users[0].email_verified || !users[0].is_active) {
+    return c.json({ session_info: null });
+  }
+  const userId = Number(users[0].id);
+  const sms_ = await loadSms(c.env, userId);
+  if (!sms_) return c.json({ session_info: null });
+  const r = await sendVerificationCode(c.env, sms_.phone, recaptcha);
+  if (!r.ok) return refuse(c, r.code === 'recaptcha_required' ? 412 : 502, { code: r.code, message: gcipSentence(r.code), raw: r.message });
+  // Bind the sessionInfo to (email, userId) so verify can't be replayed
+  // against a different account.
+  await withDeadline(c.env.RATE_LIMITS.put(
+    `sms-login:${r.sessionInfo}`,
+    JSON.stringify({ user_id: userId, email, ts: Date.now() }),
+    { expirationTtl: 600 },
+  ), RATE_KV_DEADLINE_MS, 'stash-put');
+  return c.json({ session_info: r.sessionInfo, last4: sms_.last4 });
+});
+
+sms.post('/sms/verify-challenge', async (c) => {
+  if (!(await isGcipConfigured(c.env))) return gcip503(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const email = String(body?.email || '').toLowerCase().trim();
+  const sessionInfo = String(body?.session_info || '');
+  const code = String(body?.code || '').trim();
+  if (!email || !sessionInfo || !code) return c.json({ error: 'Missing parameters' }, 400);
+  if (!(await rate(c.env, `sms-verify-email:${email}`, 5, 300))) return c.json({ error: 'Too many attempts. Try again later.' }, 429);
+  // D200 — a refused SMS challenge is recorded in security_events, subject
+  // hashed and network bucketed; the answer it already gave is unchanged. A
+  // 502 from the provider is not a refusal and is not written.
+  const smsRefuse = (detail: string, userId?: number) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'sms', outcome: 'refused', detail, userId, email, ip: clientIp(c.req.raw) });
+
+  const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
+  if (!stashed) { await smsRefuse('session_expired'); return c.json({ error: 'session_expired' }, 410); }
+  let bound: { user_id: number; email: string };
+  try { bound = JSON.parse(stashed); }
+  catch { return c.json({ error: 'session_corrupted' }, 500); }
+  if (bound.email !== email) { await smsRefuse('session_email_mismatch'); return c.json({ error: 'session_email_mismatch' }, 401); }
+
+  const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
+  if (!v.ok) {
+    if (v.code === 'invalid_code') await smsRefuse('invalid_code', bound.user_id);
+    return refuse(c, v.code === 'invalid_code' ? 401 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
+  }
+
+  // Cross-check the verified phone against the stored row. Defense-in-depth
+  // in case GCIP ever returns a phoneNumber that's been re-bound to another
+  // localId since enrollment.
+  const stored = await loadSms(c.env, bound.user_id);
+  if (!stored || stored.phone !== v.phoneNumber) {
+    await smsRefuse('phone_mismatch', bound.user_id);
+    return c.json({ error: 'phone_mismatch' }, 401);
+  }
+  await withDeadline(c.env.RATE_LIMITS.delete(`sms-login:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-delete');
+
+  // Mint the session JWT — same code path as the TOTP login flow but with
+  // factor='sms' so requireFactor('totp') will refuse high-risk routes.
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT * FROM users WHERE id = ${bound.user_id}`;
+  if (!users.length) { await sql.end(); await smsRefuse('account_not_found', bound.user_id); return c.json({ error: 'Account not found' }, 401); }
+  const user = users[0];
+  const jti = crypto.randomUUID();
+  const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const ip = clientIp(c.req.raw);
+  try {
+    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, 'sms')`;
+  } catch {}
+  const eh = await hashEmail(user.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_login_sms', ${`login via SMS (email_hash=${eh})`}, ${eh}, ${user.id})`;
+  await sql.end();
+  await markSmsUsed(c.env, user.id);
+
+  // Task #4 — defence-in-depth: revoke any lingering cross-identity session
+  // before the SMS-minted cookie/Bearer overwrites it.
+  try {
+    const { revokeStaleCrossIdentitySession } = await import('../auth');
+    await revokeStaleCrossIdentitySession(c, user.id);
+  } catch (e) { console.warn('[auth_sms] cross-session revoke failed', e); }
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
+
+  const csrfToken = generateCsrfToken();
+  setAuthCookies(c, jwtToken, csrfToken);
+  return c.json({
+    token: jwtToken,
+    csrf_token: csrfToken,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    expires_in: 24 * 3600,
+    factor: 'sms',
+  });
+});
+
+// -------- read-only summary for SettingsPage --------------------------------
+
+sms.get('/sms/status', async (c) => {
+  const user = await requireAuth(c);
+  const row = await loadSms(c.env, user.id);
+  const available = await isGcipConfigured(c.env);
+  const siteKey = available ? await getRecaptchaSiteKey(c.env) : null;
+  return c.json({
+    configured: !!row,
+    last4: row?.last4 || null,
+    country: row?.country || null,
+    enrolled_at: row?.enrolledAt || null,
+    factors: await getUserFactors(c.env, user.id),
+    sms_available: available,
+    allowed_countries: smsCountryAllowlist(c.env),
+    recaptcha_site_key: siteKey,
+    sms_ready: available && (siteKey !== null || !!c.env.GCIP_RECAPTCHA_TOKEN_FALLBACK),
+  });
+});
+
+export default sms;

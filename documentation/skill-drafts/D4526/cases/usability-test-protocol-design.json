@@ -1,0 +1,40 @@
+{
+  "skill": "usability-test-protocol-design",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "question": "Can a first-time buyer find delivery cost?",
+        "prototype": "Checkout-B",
+        "task_goal": "Compare total price before payment",
+        "recruitment_target": null
+      },
+      "build.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Checkout-B",
+      "delivery cost",
+      "before payment"
+    ],
+    "must_say_not_recorded": [
+      "recruitment target"
+    ],
+    "must_not_include": [
+      "click the shipping button"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why recruitment target is missing rather than inventing it.",
+    "Do not assert: click the shipping button.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Checkout-B; delivery cost; before payment. recruitment target: Not recorded. Human review required."
+}

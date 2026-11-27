@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Operating Partner · Pipeline · UX V2 · #4838</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Pipeline — what moved, what is stuck, what is risky, what to do next</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">First run is an activation path instead of five empty reports: set up services and fit rules, with no $0 won and no 0% win rate. Populated, the root is a command centre that puts Needs attention first, then four metrics that each give their basis, the lifecycle strip, recent movement and risks. Leads show fit reasons before the score, with receipts. Proposals report replies rather than reads, because opens aren’t recorded. Negotiations is a board of the recorded stages, where each card says who, how much, what is open, who has the ball and how long it has waited. Retainers lead with exceptions and normalise to a monthly equivalent. Analytics always shows its denominator and counts losses with no reason. One opportunity sheet spans the lifecycle. Eadwyn proposes; nothing is sent. Amber is the Operating Partner accent.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · P0A mirrors the live first-run state; firms, clients and figures on populated boards are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Pipeline v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PP-0A', 'First-run pipeline', 'The live state, redesigned: “Set up your pipeline” with setup progress, Add services and Set fit rules as the actions, a lifecycle preview explaining each stage, and Explore demand. Eadwyn is open with first-run prompts; model and usage sit behind AI settings.', [F('PP01', 'Desktop', 900), P('PP01m', 'Phone')]],
+      ['PP-0', 'Populated command centre', 'Needs attention comes first: six cards, each with client, issue, age and one action. Then four metrics with their basis and How calculated, the lifecycle strip linking into zones, recent movement (lifecycle feed is backend required) and risks. B shows the Eadwyn rail open with populated prompts.', [F('PP02', 'A · Desktop', 1350), F('PP02r', 'B · With Eadwyn open', 1350), P('PP02m', 'Phone')]],
+      ['PP-1', 'Leads', 'Reasons before score, with full receipts under Why this score? An unscored lead says why; an excluded lead carries no score. The primary action is Draft proposal, not Accept. B · Pass needs a structured reason and an optional note. C · Drafting opens in a sheet: shape, price, scope and an Eadwyn draft marked “not sent”, with its cost.', [F('PP03', 'A · Desktop', 1250), C('PP03b', 'B · Pass', 560, 520), F('PP03c', 'C · Draft proposal sheet', 1000), P('PP03m', 'Phone')]],
+      ['PP-2', 'Proposals', 'Client · value · state · last activity · next action. Opened shows Not recorded, because nothing records a client open; read receipts are backend required. Bulk nudge and export sit under More.', [F('PP04', 'Desktop', 860), P('PP04m', 'Phone')]],
+      ['PP-3', 'Negotiations', 'A board of the recorded stages (scoping, terms, legal, ready to sign). Each card answers who, how much, what is open, who has the ball and how long it has waited. WIP limits aren’t stored (backend required). B · The terms sheet compares we / they / current with ≠ markers, plus an Eadwyn counter that is “not sent”, and Accept only records our terms.', [F('PP05', 'A · Board', 860), F('PP05b', 'B · Terms sheet', 860), P('PP05m', 'Phone · stage selector')]],
+      ['PP-4', 'Retainers', 'Attention chips filter the ledger. Monthly equivalent normalises quarterly ÷ 3. Utilization uses words and shapes for over scope, low use and healthy; unlogged usage reads Not recorded.', [F('PP06', 'Desktop', 860), P('PP06m', 'Phone')]],
+      ['PP-5', 'Analytics', 'Period selector; each metric has a denominator; win rate over time with a table alternative; Why we lose counts the 3 losses with no reason separately from Other; small samples are flagged.', [F('PP07', 'Desktop', 1100), P('PP07m', 'Phone')]],
+      ['PP-6', 'Shared opportunity sheet', 'One identity across Lead → Proposal → Negotiation → Retainer, with a stage tracker and one activity timeline. The cross-lifecycle feed is backend required.', [F('PP08', 'Desktop', 860), P('PP08m', 'Phone · full screen')]],
+      ['PP-8', 'Required states and dark mode', 'A · Loading, empty, no leads, no services, no fit rules, unscored, excluded, unreadable, refresh while editing, failed save, reconnecting, Eadwyn unavailable, out of tokens, read-only, no decided quotes, and a real zero. B · Dark mode. C–D · The Eadwyn rail unavailable and out of tokens.', [C('PP09', 'A · States', 1400, 760), F('PP09b', 'B · Dark', 1350), F('PP09c', 'C · Eadwyn unavailable', 900), F('PP09d', 'D · Out of tokens', 900)]],
+      ['PP-9', 'What exists, what needs the backend', 'Checked against partner_pipeline.ts and bdAnalytics.ts; accessibility notes.', [W('PP10')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

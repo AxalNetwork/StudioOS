@@ -1,0 +1,62 @@
+You are the senior full-stack engineer for Axal StudioOS. The "Refer & Earn" page already exists in the frontend (with referral link, QR code, stats, and wallet), and we have the full backend referral system (referrals table, referral_chains, commissions, referral_code per user, etc.).
+
+The current referral link https://axal.vc/register?ref=AXAL-55PVAE does NOT work — new users are not being attributed to the referrer.
+
+Fix the referral system completely and make it production-reliable, then enhance the Refer & Earn page with powerful growth features.
+
+Exact requirements:
+
+1. **Fix the Referral Link (core bug fix)**
+   - On the public marketing site (axal.vc) and any /register or signup flow, capture the ?ref=CODE query parameter.
+   - In Replit Auth callback / signup endpoint (POST /api/auth/callback or wherever signup happens):
+     • If ?ref=CODE is present, validate the code exists and is active.
+     • Store the referrer_id on the new user record (add column referrer_id FK to users.id if missing).
+     • Create a record in the referrals table immediately (status = 'pending').
+     • Prevent self-referrals.
+   - After KYC approval or role assignment, automatically update status to 'converted' and trigger commission creation (use existing commission rules for KYC, LP onboarding, deal funding, etc.).
+   - Make the link work even if the user is already logged in (show "You were referred by X" toast).
+
+2. **Make the System Reliable & Robust**
+   - Add referral_code generation on user creation if missing (format: AXAL-XXXXXX uppercase).
+   - Add expiration / deactivation logic (optional, 90 days default).
+   - Full audit logging for every referral event.
+   - Handle edge cases: invalid/expired code → ignore gracefully, multiple refs → use first valid one.
+   - Integrate with existing job queue so commission triggers are async and non-blocking.
+   - Update all referral-related endpoints to return correct status and counts.
+
+3. **Enhance Refer & Earn Page (frontend improvements)**
+   - Keep the existing layout (Total Referred, Converted, Lifetime Earned, Referral Link, QR Code, Wallet).
+   - Add these new sections:
+     • **Import Contacts** – CSV upload button (parse emails/names, auto-generate personalized invite links).
+     • **Quick Share Buttons** – 
+       - Twitter/X (pre-filled tweet with link + code)
+       - LinkedIn (pre-filled post)
+       - WhatsApp
+       - Email (opens mailto with subject/body template)
+       - Copy Link + Copy Code (already there — make sure they work)
+     • **Invite Message Templates** – editable templates for email/LinkedIn/WhatsApp ("Join Axal StudioOS as a Partner and earn commissions...").
+     • **Referral Leaderboard / Network Preview** – small embedded view of top referrers or your chain (link to full Referral Network page).
+   - Make everything dynamic with fetch() to the backend.
+   - Add a "Share via Link" modal with social icons.
+
+4. **Backend Endpoints Needed**
+   - GET /api/referral/me (return code, link, stats, QR data)
+   - POST /api/referral/import-contacts (handle CSV, return invited count)
+   - POST /api/referral/track (for public register flow)
+   - Ensure existing commission and payout logic is triggered correctly.
+
+5. **Security & Best Practices**
+   - Rate-limit referral link generation and contact import.
+   - Sanitize all imported CSV data.
+   - Use existing RBAC (all KYC-approved users can access Refer & Earn).
+   - Store referral data in D1 with proper indexes.
+
+Build this step-by-step:
+1. First fix the registration flow and ?ref= parameter handling (backend).
+2. Then update the Refer & Earn page frontend with import contacts + social sharing.
+3. Then make the whole system reliable (edge cases, audit, commissions).
+4. Finally test end-to-end (create a test referral, register a new user via the link, verify attribution and commission).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

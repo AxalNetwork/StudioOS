@@ -1,0 +1,300 @@
+name: PR preview deploy
+
+# D7146 (#7146): the trusted half of the pull-request preview. `pr-preview.yml`
+# runs the pull request's code and holds no credential: it builds `docs/` and
+# uploads the `pr-preview-docs` artifact. This workflow starts when that run
+# completes. GitHub reads a `workflow_run` workflow's file from the default
+# branch, so what runs here is main's code, never the branch's, and only a job
+# on main can enter the `preview` environment (restricted to main) that
+# holds PR_PREVIEW_CLOUDFLARE_API_TOKEN.
+#
+# The artifact is untrusted data. Nothing here runs a script from it, installs
+# a lockfile from it or reads a config from it: the zip is fetched through the
+# REST API into the runner's temp directory and checked by main's
+# scripts/check-preview-artifact.mjs (static file types only, a file-count and
+# size cap, no symlink, no path traversal, no `_headers`/`_redirects`/
+# `_worker.js`/`.assetsignore`) before one byte lands in `docs/`. `_headers`
+# comes from main's frontend/public/. The Worker is deployed from main's
+# wrangler.pr-preview.toml and scripts/pr-preview-worker.mjs, with no bindings.
+#
+# The pull request number and head commit come from the workflow_run event
+# payload, checked against the pull request the API returns: same repository,
+# same branch, not Dependabot, open, not a draft (D4130), and the head commit
+# is still the PR's head. A run for an older commit deploys nothing; the run
+# for the newer one does. A closed pull request has its Worker deleted. Fork
+# pull requests get no preview: their runs are refused before any API call.
+#
+# The token: Workers edit on the account, nothing else (no D1, KV, R2, queue
+# or route). It must be account-wide because each preview is a new Worker.
+# Cloudflare generates no preview URL for a Worker that implements a Durable
+# Object (documentation/architecture/DECISIONS.md D36), hence one Worker per PR.
+
+on:
+  workflow_run:
+    workflows: [PR preview]
+    types: [completed]
+
+permissions: {}
+
+# One deploy or delete at a time per branch; a newer run waits rather than
+# cancelling one that is uploading, and then finds the head it should deploy.
+concurrency:
+  group: pr-preview-deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: resolve the pull request
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      action: ${{ steps.pr.outputs.action }}
+      number: ${{ steps.pr.outputs.number }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      artifact_id: ${{ steps.pr.outputs.artifact_id }}
+    steps:
+      # Reads only the event payload and the API. No checkout: nothing from the
+      # pull request's branch is on this runner.
+      - id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const ARTIFACT = 'pr-preview-docs';
+            const ZIP_CAP = 200 * 1024 * 1024;
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+            const full = owner + '/' + repo;
+            const done = (action, why, extra = {}) => {
+              core.setOutput('action', action);
+              for (const [k, v] of Object.entries(extra)) core.setOutput(k, String(v));
+              core.info(action + ': ' + why);
+            };
+
+            if (run.event !== 'pull_request' || run.head_repository?.full_name !== full) {
+              return done('none', 'not a same-repository pull_request run');
+            }
+            if (String(run.path || '').split('@')[0] !== '.github/workflows/pr-preview.yml') {
+              return done('none', 'not the PR preview workflow file: ' + run.path);
+            }
+            if (!/^[0-9a-f]{40}$/.test(run.head_sha || '')) throw new Error('the run has no head commit');
+            if ([run.actor?.login, run.triggering_actor?.login].includes('dependabot[bot]')) {
+              return done('none', 'Dependabot gets no preview');
+            }
+
+            // The number from the payload. A closed pull request's run carries
+            // none, so then it is the pull request whose head is this run's
+            // branch and commit. Either way the API's pull request decides.
+            let numbers = (run.pull_requests || [])
+              .filter((p) => p.head?.sha === run.head_sha && p.head?.ref === run.head_branch)
+              .map((p) => p.number);
+            if (!numbers.length) {
+              const { data } = await github.rest.pulls.list({ owner, repo, state: 'all', head: owner + ':' + run.head_branch, per_page: 100 });
+              numbers = data
+                .filter((p) => p.head?.sha === run.head_sha && p.head?.ref === run.head_branch && p.head?.repo?.full_name === full)
+                .map((p) => p.number);
+            }
+            numbers = [...new Set(numbers)];
+            if (numbers.length !== 1) return done('none', numbers.length + ' pull requests match this run');
+            const number = numbers[0];
+            if (!Number.isSafeInteger(number) || number < 1) throw new Error('not a pull request number');
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (pr.number !== number || pr.head.repo?.full_name !== full || pr.head.ref !== run.head_branch) {
+              return done('none', '#' + number + ' is not this run\'s same-repository branch');
+            }
+            if (pr.user?.login === 'dependabot[bot]') return done('none', 'Dependabot gets no preview');
+
+            // Deploy and delete both enter the environment: it must exist and
+            // admit main only, or the token would not be where D7146 says.
+            const requireEnvironment = async () => {
+              const { data: env } = await github.request('GET /repos/{owner}/{repo}/environments/{name}', { owner, repo, name: 'preview' });
+              const policy = env.deployment_branch_policy;
+              if (!policy || policy.custom_branch_policies !== true) throw new Error('the preview environment must allow selected branches only (main)');
+              const { data } = await github.request('GET /repos/{owner}/{repo}/environments/{name}/deployment-branch-policies', { owner, repo, name: 'preview', per_page: 100 });
+              const rules = (data.branch_policies || []).map((b) => (b.type || 'branch') + ':' + b.name);
+              if (rules.length !== 1 || rules[0] !== 'branch:main') throw new Error('the preview environment must admit exactly the main branch; found ' + (rules.join(', ') || 'none'));
+            };
+
+            if (pr.state === 'closed') {
+              await requireEnvironment();
+              return done('delete', '#' + number + ' is closed', { number });
+            }
+            if (pr.draft) return done('none', '#' + number + ' is a draft (D4130)');
+            if (pr.head.sha !== run.head_sha) return done('none', '#' + number + ' has moved on from ' + run.head_sha.slice(0, 9));
+            if (run.conclusion !== 'success') return done('none', 'the build concluded ' + run.conclusion);
+
+            const { data: list } = await github.rest.actions.listWorkflowRunArtifacts({ owner, repo, run_id: run.id, name: ARTIFACT, per_page: 100 });
+            const found = list.artifacts.filter((a) => a.name === ARTIFACT && !a.expired && a.workflow_run?.id === run.id);
+            if (found.length === 0) return done('none', 'the run uploaded no ' + ARTIFACT);
+            if (found.length !== 1) throw new Error(found.length + ' ' + ARTIFACT + ' artifacts on run ' + run.id);
+            const artifact = found[0];
+            if (artifact.workflow_run?.head_sha && artifact.workflow_run.head_sha !== run.head_sha) throw new Error('the artifact was built from another commit');
+            if (!(artifact.size_in_bytes > 0 && artifact.size_in_bytes <= ZIP_CAP)) throw new Error('the artifact is ' + artifact.size_in_bytes + ' bytes; the cap is ' + ZIP_CAP);
+
+            await requireEnvironment();
+            return done('deploy', '#' + number + ' at ' + run.head_sha.slice(0, 9), { number, head_sha: run.head_sha, artifact_id: artifact.id });
+
+  deploy:
+    name: deploy the preview Worker
+    needs: resolve
+    if: needs.resolve.outputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    env:
+      PREVIEW_NAME: studioos-pr-${{ needs.resolve.outputs.number }}
+      PR_NUMBER: ${{ needs.resolve.outputs.number }}
+      HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+      ARTIFACT_ID: ${{ needs.resolve.outputs.artifact_id }}
+    steps:
+      # main's own commit: the config, the preview script and the checker.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # No dependency cache and no install: nothing from the artifact or a
+      # lockfile runs here, and nothing here writes main's cache.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+
+      - name: Download the build artifact as data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,6}$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$PREVIEW_NAME" == "studioos-pr-$PR_NUMBER" ]]
+          mkdir -p "$RUNNER_TEMP/preview-artifact"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/preview-artifact/docs.zip"
+
+      - name: Check and unpack the artifact (static files only)
+        run: |
+          test ! -e docs
+          node scripts/check-preview-artifact.mjs --zip "$RUNNER_TEMP/preview-artifact/docs.zip" --out docs
+          cp frontend/public/_headers docs/_headers
+
+      # A brand-new Worker's first `wrangler deploy` can fail AFTER the script
+      # and assets are uploaded, when the call that switches on its workers.dev
+      # subdomain races ahead of propagation: "This Worker does not exist on
+      # your account" (code 10007). It happened on the preview's own first run
+      # (#423). A second attempt sees the script and succeeds, and the
+      # re-upload is a no-op ("already uploaded"), so the step tries three
+      # times, 15 seconds apart, before it is a failure.
+      - name: Deploy the preview Worker
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PR_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          set -o pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::PR_PREVIEW_CLOUDFLARE_API_TOKEN is not set in the preview environment (D7146)"
+            exit 1
+          fi
+          deployed=0
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" 2>&1 | tee deploy.log; then
+              deployed=1
+              break
+            fi
+            echo "::warning::wrangler deploy attempt ${attempt} of 3 failed; retrying in 15s"
+            sleep 15
+          done
+          if [ "$deployed" != 1 ]; then
+            echo "::error::wrangler deploy failed three times — see the attempts above"
+            exit 1
+          fi
+          url=$(grep -o 'https://[a-z0-9.-]*\.workers\.dev' deploy.log | head -n 1)
+          if [ -z "$url" ]; then
+            echo "::error::wrangler printed no workers.dev URL — the Worker deployed, but the preview link is unknown"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # A brand-new workers.dev URL can answer a few seconds after the deploy
+      # reports success; the link is posted once it does.
+      - name: Wait for the preview to answer
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        run: curl -fsS -o /dev/null --retry 12 --retry-delay 5 --retry-all-errors "$PREVIEW_URL/login"
+
+      # One comment per PR, edited in place on every push so the thread does
+      # not fill up with links. The marker is how the comment is found again.
+      - name: Post or update the preview comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          marker='<!-- pr-preview -->'
+          body="$(printf '%s\n**Preview:** %s (built from %s)\n\nThe pull request'"'"'s SPA build on a Worker with no bindings: pages and deep links work, `/api/*` is a 404, and nothing here can reach production data. Built without credentials and deployed from `main` (D7146); redeployed on every push; deleted when the PR closes.' "$marker" "$PREVIEW_URL" "${HEAD_SHA:0:9}")"
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" > /dev/null
+          fi
+          echo "preview: $PREVIEW_URL"
+
+  delete:
+    name: delete the preview Worker
+    needs: resolve
+    if: needs.resolve.outputs.action == 'delete'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: preview
+    permissions: {}
+    env:
+      PREVIEW_NAME: studioos-pr-${{ needs.resolve.outputs.number }}
+    steps:
+      # A missing Worker is also the expected response when an earlier DELETE
+      # took effect but its response was lost. Other permanent failures stay red.
+      - name: Delete the preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PR_PREVIEW_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          if [[ ! "$PREVIEW_NAME" =~ ^studioos-pr-[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid PR preview Worker name"
+            exit 1
+          fi
+
+          for attempt in 1 2 3; do
+            echo "Deleting $PREVIEW_NAME (attempt $attempt/3)"
+            if out="$(NO_COLOR=1 timeout --kill-after=5s 70s npx --yes wrangler@4.125.0 delete "$PREVIEW_NAME" --force 2>&1)"; then
+              printf '%s\n' "$out"
+              exit 0
+            else
+              status=$?
+            fi
+            printf '%s\n' "$out"
+
+            if grep -qiE '\[code: 10007\]|This Worker does not exist' <<< "$out"; then
+              echo "Confirmed $PREVIEW_NAME is absent"
+              exit 0
+            fi
+            if [[ "$status" != 124 && "$status" != 137 ]] &&
+               ! grep -qE "DELETE /accounts/[^[:space:]]+/workers/(services|scripts)/$PREVIEW_NAME -> (429|500|502|503|504)([[:space:]]|$)" <<< "$out"; then
+              echo "::error::$PREVIEW_NAME cleanup failed on attempt $attempt/3. Check the Wrangler error above and the preview delete credentials or configuration."
+              exit 1
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "::error::$PREVIEW_NAME cleanup failed after $attempt/3 attempts. Retry this job after Cloudflare recovers."
+              exit 1
+            fi
+            sleep "$((5 * attempt))"
+          done

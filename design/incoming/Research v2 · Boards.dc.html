@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Workspace V2 · #3701 canonical prompt</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Research — evidence first, AI second, decisions stay with you</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Research becomes one workflow around a Research Project: Question → Evidence → Ask → Findings → Comparisons → Brief. Navigation is Overview · My Research · Markets · Companies · Funds · Library · Ask, with Geographies inside Markets. Each page has one breadcrumb, one title, one purpose line and one violet primary action. Findings are labelled Source fact, Eadwyn interpretation or Your conclusion, and every citation opens its exact passage. Missing values read Not recorded, never zero. The right rail shows the research context, with AI settings collapsed. Parts the product doesn’t do yet carry a ◇ Proposed tag; board RS-A lists what exists today.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · founder licence · companies, funds, documents and findings are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-01', 'Research Overview', 'The eyebrow, heading and subtitle from the prompt, with New research as the primary action and Ask Eadwyn as the secondary one. A compact question field whose examples fill the field and never run. Continue where you left off, Recent research projects, Saved briefs, Recently added evidence and Tracking. Operational detail sits in a collapsed Source coverage panel.', [F('RS01', false, 1500)]],
+      ['RS-02', 'Research Project Workspace', 'A · Overview: objective, scope, exclusions, key questions with progress as fractions, and the latest findings. B · Evidence: per-source publisher, date, type, owner, index state, answerability and passages used, with failures giving a reason and Retry. C · Findings: Source fact, Eadwyn interpretation (dashed, Accept / Edit / Discard) and Your conclusion, with conflicts flagged; the citation panel shows the exact passage, date and freshness. D · Comparisons: same attributes, values with source and date, Not recorded rather than zero, no composite score.', [F('RS02', 'A · Overview', 1150), F('RS02b', 'B · Evidence', 900), F('RS02c', 'C · Findings + citation', 1150), F('RS02d', 'D · Comparisons', 900)]],
+      ['RS-03', 'Markets & Geographies', 'Search plus sector, country/region, period, source availability and freshness filters, kept in the URL. Table / Cards / Analysis views. The market detail shows recorded facts with Not recorded for size and growth, and no placeholder chart when no time series exists.', [F('RS03', false, 1050)]],
+      ['RS-04', 'Companies', 'A · The directory, with filter chips, research status, source counts and a two-row selection that leads to Add to research or Compare. B · A company profile with value · source · date facts, the competitor landscape, saved findings and evidence; Back keeps the filters.', [F('RS04', 'A · Directory'), F('RS04B', 'B · Company profile', 1000)]],
+      ['RS-05', 'Funds', 'A · The fund directory, where cheque range and fund size are filters but most values are Not recorded. B · A fund profile with Add to my research as the primary action.', [F('RS05', 'A · Directory'), F('RS05B', 'B · Fund profile', 1000)]],
+      ['RS-06', 'Evidence Library', 'Upload with drag-and-drop. Index state and Answerable in Ask are separate columns. Failed and Unsupported rows give the reason and the next action. A · Desktop 1440. B · Laptop 1280. The states the product doesn’t record yet are labelled Proposed.', [F('RS06', 'A · 1440', 1000), D('RS06L', 'B · 1280', 1280, 1000)]],
+      ['RS-07', 'Ask Eadwyn', 'A · Active: one heading, a labelled composer, suggestions that never auto-run, and the answer first; then Sources used with the exact passage, follow-ups, Save finding / Add to brief, and the cost recorded with the answer. History is All / Saved answers / Archived, and Evidence scope is collapsed. B · Zero-source: the prompt’s empty state with history still visible and no irrelevant controls. C · Seven distinct response states, never collapsed into “no source”.', [F('RS07', 'A · Active', 1350), F('RS07B', 'B · Zero-source', 1000), C('RS07C', 'C · Response states', 1240, 360)]],
+      ['RS-08', 'Structured research run', 'Twelve steps from question to brief. At the cost step, “Cost quote unavailable” says the run is not free, and nothing runs until Confirm. Proposals come back unsaved, with Accept / Edit / Discard.', [F('RS08', false, 1100)]],
+      ['RS-09', 'Reviewed brief and Send to a module', 'A · The brief’s eight sections, each with a review state; unsourced findings stay labelled as yours. B · The send picker offers only destinations the role supports, lists exactly what will be sent, and is marked as a proposed integration.', [F('RS09', 'A · Reviewed brief', 1050), C('RS09B', 'B · Send to an Axal module', 920, 500)]],
+      ['RS-10', 'Mobile 390', 'A · Overview with a full-width primary action. B · Ask, where a citation opens as a bottom sheet with its passage. C · Library rows become cards with both states and Retry. D · The Research context rail as a bottom sheet.', [P('RS10', 'A · Overview'), P('RS10B', 'B · Ask + citation sheet'), P('RS10C', 'C · Library'), P('RS10D', 'D · Context sheet')]],
+      ['RS-11', 'Empty, loading, indexing and error states', 'All nineteen states from the prompt, each answering what happened and what you can do next.', [C('RS11', false, 1400, 800)]],
+      ['RS-12', 'Dark mode', 'The Findings workspace on #0B1220 / #111827 with violet #A78BFA. Finding kinds and states keep their words and shapes.', [F('RS12', false, 1150)]],
+      ['RS-A', 'Existing vs proposed', 'What the Worker and D1 do today, checked against the code, and which parts of these boards are proposed.', [W('RSA')]],
+      ['RS-B', 'Navigation, interaction, components, tokens, responsive rules', 'The maps and rules for building from these boards.', [W('RSB')]],
+      ['RS-C', 'Accessibility and React handoff', 'Labels, focus, live regions, tables and touch targets; the mapping from today’s shellConfig zones and Ask page.', [W('RSC')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

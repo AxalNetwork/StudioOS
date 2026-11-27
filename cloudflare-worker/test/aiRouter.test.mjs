@@ -1,0 +1,498 @@
+/**
+ * Task #1 (AX) — Multi-model AI router tests.
+ *
+ * Three acceptance scenarios per spec:
+ *   1. primary 5xx triggers smaller-model fallback
+ *   2. budget exhaustion returns refusal (the month's allowance, D783)
+ *   3. embedding cache hit on second identical input
+ *
+ * Imports `cloudflare-worker/src/services/aiRouter.ts` through `_ts-loader`, so
+ * we exercise the exact source shipped to Cloudflare. Provides in-memory mocks
+ * for `env.AI` (Workers AI), `env.AI_SPEND` (KV), and `env.DB` (D1).
+ */
+import test, { mock } from 'node:test';
+import assert from 'node:assert/strict';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+
+/**
+ * D760 (#2017) — the router is imported as itself, through `_ts-loader` (the
+ * runner `npm run test:worker` uses), not rebuilt with `new Function` and an
+ * import stripper. Every runtime import it gains (`./ai/catalogue` here, the
+ * rest of `services/ai/*` after) then needs no edit to this file. Each case
+ * still calls `__resetForTest()` first, which is what kept them apart before.
+ */
+async function loadRouter() {
+  const { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest } =
+    await import('../src/services/aiRouter.ts');
+  return { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };
+}
+
+// --------------------------------------------------------------------------
+// In-memory KV stub
+// --------------------------------------------------------------------------
+function makeKV() {
+  const store = new Map();
+  return {
+    store,
+    async get(key, type) {
+      const v = store.get(key);
+      if (v == null) return null;
+      if (type === 'json') {
+        try { return JSON.parse(v); } catch { return null; }
+      }
+      return v;
+    },
+    async put(key, value /* opts */) {
+      store.set(key, String(value));
+    },
+  };
+}
+
+// --------------------------------------------------------------------------
+// In-memory D1 stub — only handles the statements aiRouter.ts emits.
+// --------------------------------------------------------------------------
+function makeDB() { return aiBudgetFixture().DB; }
+// D763: the run's own rows, without the guard's (`task = 'safety'`, written after them).
+const runRows = (db) => db._rows.filter((r) => r.task !== 'safety');
+
+// --------------------------------------------------------------------------
+// Workers AI stub. `responses` is an array of { fn(model, payload) → result }.
+// Each call shifts the next response off the front; if more calls are made
+// than responses queued the last response repeats.
+// --------------------------------------------------------------------------
+function makeAI(responses) {
+  const calls = [];
+  return {
+    calls,
+    async run(model, payload) {
+      calls.push({ model, payload });
+      const handler = responses[Math.min(calls.length - 1, responses.length - 1)];
+      if (typeof handler === 'function') return handler(model, payload);
+      if (handler && handler.throw) throw new Error(handler.throw);
+      return handler;
+    },
+  };
+}
+
+// D763: the guard checks every member run and fails closed, so the stub
+// answers it (free) unless a test says `guard: false` to see every call itself.
+function baseEnv({ ai, kv, db, budgets = {}, guard = true }) {
+  return {
+    AI: guard && ai ? withGuard(ai) : ai,
+    AI_SPEND: kv,
+    DB: db,
+    WORKERS_AI_BUDGET_USD_DAY: budgets.day,
+    WORKERS_AI_BUDGET_USD_MONTH: budgets.month,
+    WORKERS_AI_BUDGET_USD_ORG_MONTH: budgets.orgMonth,
+  };
+}
+
+// --------------------------------------------------------------------------
+// Scenario 1 — primary 5xx triggers smaller-model fallback.
+// `tool_call` primary = glm-4.7-flash (D1478 §3937 fix 1); fallback = llama-3.3-70b.
+// We make the qwen call throw and assert llama-3.3-70b is invoked next.
+// --------------------------------------------------------------------------
+test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
+  const { run, ROUTE, __resetForTest } = await loadRouter();
+  __resetForTest();
+  // The route row itself is unchanged: glm-4.7-flash, then the 70B and the 8B `-fp8`
+  // (not the bare 8b: Cloudflare marked `@cf/meta/llama-3.1-8b-instruct` Deprecated
+  // 5/30/2026; `ai_router_prices.test.mjs` bans the deprecated id outright).
+  assert.equal(ROUTE.tool_call.model, '@cf/zai-org/glm-4.7-flash');
+  assert.deepEqual(ROUTE.tool_call.fallbackChain, [
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/meta/llama-3.1-8b-instruct-fp8',
+  ]);
+  // #3937 part 3: `tool_call` now runs ST3's ladder, so the fallback mechanics are
+  // pinned on `rail_plan`, a route chain no text job replaces: glm-4.7-flash,
+  // then gpt-oss-20b, then gpt-oss-120b.
+  assert.deepEqual([ROUTE.rail_plan.model, ...ROUTE.rail_plan.fallbackChain],
+    ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b']);
+
+  const ai = makeAI([
+    () => { throw new Error('500 internal error'); },              // primary fails
+    () => ({ response: 'fallback answer', usage: { prompt_tokens: 12, completion_tokens: 7 } }),
+  ]);
+  const kv = makeKV();
+  const db = makeDB();
+  const env = baseEnv({ ai, kv, db });
+
+  const result = await run(env, {
+    task: 'rail_plan',
+    userId: 42,
+    text: 'plan my week',
+  });
+
+  assert.equal(result.ok, true, `expected ok, got ${JSON.stringify(result)}`);
+  assert.equal(result.usage.fallback_used, true);
+  assert.equal(result.usage.model, '@cf/openai/gpt-oss-20b');
+  assert.equal(ai.calls.length, 2);
+  assert.equal(ai.calls[0].model, '@cf/zai-org/glm-4.7-flash');
+  assert.equal(ai.calls[1].model, '@cf/openai/gpt-oss-20b');
+  assert.equal(result.output, 'fallback answer');
+  assert.equal(runRows(db).length, 1);
+  assert.equal(runRows(db)[0].fallback_used, 1);
+  assert.equal(runRows(db)[0].refusal, null);
+});
+
+// Multi-hop: the primary and the first sibling both fail, and the second sibling answers.
+test('multi-hop fallback chain reaches second sibling on cascading failure', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([
+    () => { throw new Error('glm 502'); },
+    () => { throw new Error('gpt-oss-20b 503'); },
+    () => ({ response: 'the third model saved the day', usage: { prompt_tokens: 5, completion_tokens: 4 } }),
+  ]);
+  const kv = makeKV();
+  const db = makeDB();
+  const env = baseEnv({ ai, kv, db });
+
+  const r = await run(env, { task: 'rail_plan', userId: 11, text: 'do thing' });
+  assert.equal(r.ok, true);
+  assert.equal(r.usage.fallback_used, true);
+  assert.equal(r.usage.model, '@cf/openai/gpt-oss-120b');
+  assert.equal(ai.calls.length, 3);
+  assert.equal(ai.calls[2].model, '@cf/openai/gpt-oss-120b');
+  assert.equal(r.output, 'the third model saved the day');
+});
+
+// --------------------------------------------------------------------------
+// Task #50 — gateway-resilient advisor calls.
+// When the advisor AI Gateway is configured but failing, a gateway-routed
+// task (`advisor_turn`) must retry the SAME model un-gatewayed before
+// declaring the model dead, so a single shared-gateway outage can no longer
+// dead-end the onboarding chat.
+// --------------------------------------------------------------------------
+// Workers AI stub that distinguishes gatewayed vs un-gatewayed calls via the
+// third `options.gateway` arg that callWorkersAI passes through.
+function makeGatewayAwareAI({ gatewayedFails }) {
+  const calls = [];
+  return {
+    calls,
+    async run(model, payload, options) {
+      const gatewayed = !!(options && options.gateway && options.gateway.id);
+      calls.push({ model, payload, gatewayed });
+      if (gatewayed && gatewayedFails) throw new Error('1015 authenticated gateway token required');
+      return { response: gatewayed ? 'via gateway' : 'via direct workers-ai', usage: { prompt_tokens: 8, completion_tokens: 6 } };
+    },
+  };
+}
+
+test('advisor_turn retries un-gatewayed when the advisor gateway is broken', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeGatewayAwareAI({ gatewayedFails: true });
+  const kv = makeKV();
+  const db = makeDB();
+  const env = { ...baseEnv({ ai, kv, db }), CF_AI_GATEWAY_SLUG_ADVISOR: 'advisor-ongoing' };
+
+  const result = await run(env, { task: 'advisor_turn', userId: 5, messages: [{ role: 'user', content: 'hi' }] });
+
+  assert.equal(result.ok, true, `expected ok, got ${JSON.stringify(result)}`);
+  assert.equal(result.output, 'via direct workers-ai');
+  // Same primary model, no chain fallback — just the gateway bypass.
+  assert.equal(result.usage.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  assert.equal(result.usage.fallback_used, false);
+  // Two calls on the SAME model: first gatewayed (fails), then un-gatewayed.
+  assert.equal(ai.calls.length, 2);
+  assert.equal(ai.calls[0].gatewayed, true);
+  assert.equal(ai.calls[1].gatewayed, false);
+  assert.equal(ai.calls[0].model, ai.calls[1].model);
+  assert.equal(runRows(db).length, 1);
+  assert.equal(runRows(db)[0].refusal, null);
+});
+
+test('advisor_turn uses the gateway and does NOT double-call when it is healthy', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeGatewayAwareAI({ gatewayedFails: false });
+  const kv = makeKV();
+  const db = makeDB();
+  const env = { ...baseEnv({ ai, kv, db }), CF_AI_GATEWAY_SLUG_ADVISOR: 'advisor-ongoing' };
+
+  const result = await run(env, { task: 'advisor_turn', userId: 6, messages: [{ role: 'user', content: 'hi' }] });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.output, 'via gateway');
+  // Healthy gateway → exactly one call, gatewayed, no un-gatewayed retry.
+  assert.equal(ai.calls.length, 1);
+  assert.equal(ai.calls[0].gatewayed, true);
+});
+
+// --------------------------------------------------------------------------
+// Scenario 2 — budget exhaustion returns refusal.
+// D783: a member has no daily cap, only the month's allowance (25% of their
+// plan, $50 in the fixture). Pre-seed the user's monthly KV bucket above it and
+// assert run() refuses without invoking the model.
+// --------------------------------------------------------------------------
+test('budget exhaustion returns refusal without calling model', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'should not be called', usage: { prompt_tokens: 1, completion_tokens: 1 } })]);
+  const kv = makeKV();
+  const db = makeDB();
+
+  const env = baseEnv({ ai, kv, db, budgets: { day: '0.01' } });
+  const now = new Date().toISOString();
+  // A day bucket over the old env day cap no longer refuses a member.
+  kv.store.set(`ai_spend:user:7:${now.slice(0, 10)}`, '999');
+  kv.store.set(`ai_spend:user:7:${now.slice(0, 7)}`, '999');
+
+  const result = await run(env, { task: 'advisor_turn', userId: 7, text: 'hi' });
+  assert.equal(result.ok, false);
+  assert.equal(result.refusal, 'budget_user_month');
+  assert.equal(ai.calls.length, 0, 'model must not be invoked when over budget');
+  // refusal is logged
+  assert.equal(runRows(db).length, 1);
+  assert.equal(runRows(db)[0].refusal, 'budget_user_month');
+});
+
+// --------------------------------------------------------------------------
+// Scenario 3 — embedding cache hit on second identical input.
+// First call invokes the model and writes the cache; second identical call
+// returns a cached result without invoking the model.
+// --------------------------------------------------------------------------
+test('embedding cache hit on second identical input', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const fakeVec = new Array(8).fill(0).map((_, i) => i / 10);
+  const ai = makeAI([() => ({ data: [fakeVec], shape: [1, 8] })]);
+  const kv = makeKV();
+  const db = makeDB();
+  const env = baseEnv({ ai, kv, db });
+
+  const first = await run(env, { task: 'embed', userId: 9, text: 'hello world' });
+  assert.equal(first.ok, true);
+  assert.equal(first.usage.cached, false);
+  assert.deepEqual(first.embedding, fakeVec);
+  assert.equal(ai.calls.length, 1);
+
+  const second = await run(env, { task: 'embed', userId: 9, text: 'hello world' });
+  assert.equal(second.ok, true);
+  assert.equal(second.usage.cached, true);
+  assert.deepEqual(second.embedding, fakeVec);
+  // Critically: no second call to the model.
+  assert.equal(ai.calls.length, 1, 'embed must not re-call the model on cache hit');
+
+  // Two log rows: one fresh, one cached.
+  assert.equal(runRows(db).length, 2);
+  assert.equal(runRows(db)[0].cached, 0);
+  assert.equal(runRows(db)[1].cached, 1);
+});
+
+// --------------------------------------------------------------------------
+// The caller-chosen model. Everything below is about ONE property: a model the
+// task does not offer never becomes an argument to `env.AI.run`.
+//
+// The source-level guard (`ai_router_prices.test.mjs`) holds the LISTS shut —
+// `safety` and `embed` declare none, every alternate is priced. These hold the
+// BEHAVIOUR shut, which is the half a source test cannot see: it can prove the
+// list is empty and still not prove that an empty list refuses.
+// --------------------------------------------------------------------------
+
+test('a model on the task\'s list is the one that runs', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'ok', usage: { prompt_tokens: 9, completion_tokens: 3 } })]);
+  const db = makeDB();
+  const env = baseEnv({ ai, kv: makeKV(), db });
+
+  const r = await run(env, {
+    task: 'workspace_explain',
+    userId: 5,
+    model: '@cf/meta/llama-3.2-3b-instruct',
+    messages: [{ role: 'user', content: 'read this page back' }],
+  });
+
+  assert.equal(r.ok, true, `expected ok, got ${JSON.stringify(r)}`);
+  assert.equal(ai.calls.length, 1);
+  assert.equal(ai.calls[0].model, '@cf/meta/llama-3.2-3b-instruct');
+  assert.equal(r.usage.model, '@cf/meta/llama-3.2-3b-instruct');
+  assert.equal(r.usage.fallback_used, false, 'a chosen model is not a fallback');
+  // And it is BILLED at its own rate, not the primary's. 9 in + 3 out at
+  // 0.050875 / 0.335225 per M (D760: 4,625 / 30,475 neurons × $0.000011) is a
+  // different number from the 70b's 0.293348 / 2.252855;
+  // an implementation that ran the 3b and priced it as the primary would pass
+  // every assertion above and this one catches it.
+  const expected = (9 / 1e6) * 0.050875 + (3 / 1e6) * 0.335225;
+  assert.ok(Math.abs(r.usage.est_cost_usd - expected) < 1e-12,
+    `cost ${r.usage.est_cost_usd} is not the 3b's rate (${expected})`);
+  assert.equal(runRows(db)[0].model, '@cf/meta/llama-3.2-3b-instruct');
+});
+
+test('a model NOT on the list never reaches env.AI.run', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'should never happen', usage: {} })]);
+  const db = makeDB();
+  const env = baseEnv({ ai, kv: makeKV(), db });
+
+  const r = await run(env, {
+    task: 'workspace_explain',
+    userId: 5,
+    model: '@cf/deepseek-ai/deepseek-v4-pro-0813',   // real model, not offered here
+    messages: [{ role: 'user', content: 'hello' }],
+  });
+
+  assert.equal(r.ok, false);
+  assert.equal(r.refusal, 'model_not_offered');
+  assert.equal(ai.calls.length, 0, 'the model was called anyway — this is the whole property');
+  // Refused, NOT silently run on the primary. A router that quietly substituted
+  // would return ok:true here, and a founder would read the 3b's rate beside a
+  // 70b's answer.
+  assert.ok(!r.output, 'a refusal must carry no output');
+  assert.equal(runRows(db).length, 1, 'a refusal is still a recorded event');
+  assert.equal(runRows(db)[0].refusal, 'model_not_offered');
+  assert.equal(runRows(db)[0].est_cost_usd, 0);
+});
+
+test('safety cannot be routed off the guard model, by any request', async () => {
+  const { run, ROUTE, __resetForTest } = await loadRouter();
+  __resetForTest();
+  assert.equal(ROUTE.safety.model, '@cf/meta/llama-guard-3-8b');
+  assert.deepEqual(ROUTE.safety.alternates ?? [], []);
+
+  for (const attempt of [
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',   // a model the router does route to
+    '@cf/meta/llama-guard-3-8b',                  // even the guard model itself
+  ]) {
+    __resetForTest();
+    const ai = makeAI([() => ({ response: 'safe', usage: {} })]);
+    const env = baseEnv({ ai, kv: makeKV(), db: makeDB(), guard: false });
+    const r = await run(env, { task: 'safety', userId: 1, model: attempt, text: 'check me' });
+    assert.equal(r.refusal, 'model_not_offered', `${attempt} was accepted for task=safety`);
+    assert.equal(ai.calls.length, 0);
+  }
+
+  // …and with no `model` at all it still runs, on the guard model. The rule is
+  // "no override", not "no safety calls".
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'safe', usage: { prompt_tokens: 4, completion_tokens: 1 } })]);
+  const env = baseEnv({ ai, kv: makeKV(), db: makeDB(), guard: false });
+  const ok = await run(env, { task: 'safety', userId: 1, text: 'check me' });
+  assert.equal(ok.ok, true);
+  assert.equal(ai.calls[0].model, '@cf/meta/llama-guard-3-8b');
+});
+
+test('a fallback\'s answer is not cached under the primary\'s name', async () => {
+  // `explain` is the cached task (7 days). When the 70b fails and the 8b
+  // answers, the text in hand is the 8b's. Caching it under the 70b's key
+  // would hand the next caller a smaller model's answer labelled with the
+  // 70b's name and rate — for a week.
+  //
+  // This is also the only reachable half of the cache-key change: no task
+  // today has BOTH a cacheTtlSec and alternates, so a chosen model cannot yet
+  // collide with a cached one. `ai_router_prices.test.mjs` holds that half at
+  // the source, because the day a task grows both, the bug would be silent.
+  const { run, ROUTE, __resetForTest } = await loadRouter();
+  __resetForTest();
+  assert.ok(ROUTE.explain.cacheTtlSec > 0, 'explain is no longer a cached task');
+  assert.deepEqual(ROUTE.explain.fallbackChain, ['@cf/meta/llama-3.1-8b-instruct-fp8']);
+
+  const kv = makeKV();
+  const ai = makeAI([
+    () => { throw new Error('70b 503'); },
+    () => ({ response: 'from the 8b', usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+    () => ({ response: 'from the 70b', usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+  ]);
+  const env = baseEnv({ ai, kv, db: makeDB() });
+  const ask = () => run(env, { task: 'explain', userId: 3, topic: 'runway', text: 'what is runway' });
+
+  const first = await ask();
+  assert.equal(first.ok, true, `expected ok, got ${JSON.stringify(first)}`);
+  assert.equal(first.output, 'from the 8b');
+  assert.equal(first.usage.fallback_used, true);
+  assert.equal(ai.calls.length, 2);
+
+  // The primary has recovered. The next ask must MISS — the stored row belongs
+  // to the 8b — and reach the 70b.
+  const second = await ask();
+  assert.equal(second.usage.cached, false,
+    'the 8b\'s answer was served back as the 70b\'s');
+  assert.equal(second.output, 'from the 70b');
+  assert.equal(second.usage.fallback_used, false);
+  assert.equal(ai.calls.length, 3);
+  assert.equal(ai.calls[2].model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+
+  // …and a third, with the primary still healthy, is a hit. The cache still
+  // works; it just stopped lying about whose answer it holds.
+  const third = await ask();
+  assert.equal(third.usage.cached, true, 'the primary never cached its own answer');
+  assert.equal(third.output, 'from the 70b');
+  assert.equal(ai.calls.length, 3);
+});
+
+// --------------------------------------------------------------------------
+// D242 — the org budget trip ends with the month it measured.
+//
+// The spend it guards is counted per month (`ai_spend:org:YYYY-MM`); the trip
+// was one un-monthed key written for 35 days, so a trip on the 29th refused
+// every AI call for about five weeks. The clock is FIXED here (node:test's
+// Date mock, which the router's own `new Date()` reads) — a boundary asserted
+// against the wall clock is a test that passes on most days of the month.
+// --------------------------------------------------------------------------
+const at = (iso) => Date.parse(iso);
+function answering() {
+  return makeAI([() => ({ response: 'ok', usage: { prompt_tokens: 1, completion_tokens: 1 } })]);
+}
+const ask = (run, env) => run(env, {
+  task: 'workspace_explain', userId: 7, model: '@cf/meta/llama-3.2-3b-instruct',
+  messages: [{ role: 'user', content: 'read this page back' }],
+});
+
+test('D242: a trip on the 29th holds for the rest of that month and lifts on the 1st', async () => {
+  const { run, aiOrgKillSwitchState, __resetForTest } = await loadRouter();
+  __resetForTest();
+  mock.timers.enable({ apis: ['Date'], now: at('2026-09-29T12:00:00Z') });
+  try {
+    const kv = makeKV();
+    const ai = answering();
+    const env = baseEnv({ ai, kv, db: makeDB(), budgets: { orgMonth: '10' } });
+    kv.store.set('ai_spend:org:2026-09', '999'); // September's budget is spent
+
+    const tripped = await ask(run, env);
+    assert.equal(tripped.refusal, 'budget_org_month', `the org cap did not refuse: ${JSON.stringify(tripped)}`);
+    assert.equal(kv.store.get('ai_killswitch:org:2026-09'), '1', 'the trip is not keyed by the month it measured');
+    assert.ok(!kv.store.has('ai_killswitch:org'), 'the trip was still written under the un-monthed key');
+    assert.equal(await aiOrgKillSwitchState(env), 'on');
+
+    // The rest of September: still off for everyone.
+    mock.timers.setTime(at('2026-09-30T23:59:59Z'));
+    assert.equal(await aiOrgKillSwitchState(env), 'on', 'the trip lifted before its month ended');
+    const late = await ask(run, env);
+    assert.equal(late.refusal, 'kill_switch', 'the router served during the month the trip measured');
+
+    // The 1st: a month whose budget nobody has touched. The trip reads off and
+    // the router answers — with no clear, no delete and no operator act.
+    mock.timers.setTime(at('2026-10-01T00:00:01Z'));
+    assert.equal(await aiOrgKillSwitchState(env), 'off', 'the trip outlived the month it measured');
+    const callsBefore = ai.calls.length;
+    const october = await ask(run, env);
+    assert.equal(october.ok, true, `the router still refused on the 1st: ${JSON.stringify(october)}`);
+    assert.equal(ai.calls.length, callsBefore + 1);
+    assert.equal(kv.store.get('ai_killswitch:org:2026-09'), '1', 'September\'s trip was deleted at runtime rather than left to lapse');
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('D242: an un-monthed trip left in KV by the old router is ignored', async () => {
+  // What production holds on the day this ships: `ai_killswitch:org` from a
+  // trip written before D242. Nothing may read it — not as the key, and not as
+  // a fallback when the month's key is absent.
+  const { run, aiOrgKillSwitchState, __resetForTest } = await loadRouter();
+  __resetForTest();
+  mock.timers.enable({ apis: ['Date'], now: at('2026-10-05T09:00:00Z') });
+  try {
+    const kv = makeKV();
+    kv.store.set('ai_killswitch:org', '1');
+    const env = baseEnv({ ai: answering(), kv, db: makeDB(), budgets: { orgMonth: '10' } });
+    assert.equal(await aiOrgKillSwitchState(env), 'off', 'the old un-monthed key is still read');
+    const r = await ask(run, env);
+    assert.equal(r.ok, true, `the old key still refused AI calls: ${JSON.stringify(r)}`);
+  } finally {
+    mock.timers.reset();
+  }
+});

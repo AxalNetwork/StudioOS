@@ -1,0 +1,33 @@
+{
+  "skill": "problem-statement-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "problems": [
+          {
+            "text": "Month-end reconciliation takes three days",
+            "interviews": 7
+          }
+        ],
+        "segments": [
+          "Finance teams of 5 to 20"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Month-end reconciliation takes three days",
+      "7"
+    ],
+    "must_say_not_recorded": [
+      "willingness to pay"
+    ],
+    "must_not_include": [
+      "10x faster"
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+Build a complete fix for Anthropic Claude Code access in this repo and wire it into our GitHub workflow.
+Problem to solve:
+	•	Current error: “Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access.”
+	•	We want Claude Code to work in Replit and in GitHub Actions using an Anthropic API key, not subscription auth.
+Requirements:
+	1.	Detect the current Claude Code setup in this repo and environment.
+	2.	Switch authentication to  ANTHROPIC_API_KEY  everywhere Claude Code is invoked, because Claude Code supports using an Anthropic API key from an environment variable.
+	3.	Add a safe fallback so the workflow fails with a clear message if  ANTHROPIC_API_KEY  is missing.
+	4.	Integrate Claude Code into the GitHub workflow using Anthropic’s GitHub Action setup approach and repository secrets.
+	5.	Keep all secrets out of source control.
+	6.	Update the project docs with exact setup steps for Replit Secrets and GitHub Actions secrets.
+	7.	Verify the repo can run Claude Code commands from Replit Shell using the API key path.
+Implementation details:
+	•	Search the repo for any Claude / Anthropic / GitHub Actions setup.
+	•	Check for existing workflow files under  .github/workflows/ .
+	•	If missing, create a workflow for Claude Code tasks.
+	•	Use a GitHub Actions secret named  ANTHROPIC_API_KEY , because Anthropic’s setup docs say to add the API key as a repository secret under Settings → Secrets and variables → Actions.
+	•	In Replit, assume the key will be stored as a Replit Secret also named  ANTHROPIC_API_KEY .
+	•	Add a bootstrap script that:
+	•	checks whether  ANTHROPIC_API_KEY  exists,
+	•	prints a human-readable error if missing,
+	•	exits non-zero in CI.
+	•	Make the workflow and scripts use environment-variable auth instead of Claude subscription login, since Claude Code can use  ANTHROPIC_API_KEY  directly.
+	•	If the repo already uses subscription auth assumptions, refactor them.
+	•	Add a  docs/claude-code-setup.md  file explaining:
+	•	how to add  ANTHROPIC_API_KEY  in Replit Secrets,
+	•	how to add  ANTHROPIC_API_KEY  in GitHub Actions secrets,
+	•	how to run Claude Code from Replit Shell,
+	•	how to diagnose auth issues,
+	•	that API-key usage is billed via the Anthropic API, not subscription access.
+	•	Add or update README instructions with a short “Claude Code setup” section linking to the new doc.
+Deliverables:
+	•	updated workflow files,
+	•	any helper scripts,
+	•	updated README,
+	•	 docs/claude-code-setup.md ,
+	•	a short summary of what changed and where.
+Important constraints:
+	•	Do not hardcode any secrets.
+	•	Do not commit  .env  files with real values.
+	•	Prefer minimal, maintainable changes.
+	•	If multiple approaches are possible, choose the simplest one that works in Replit + GitHub Actions.
+	•	After changes, show me exactly which files were created or modified.
+Also give me the exact GitHub secret I must add:
+	•	 ANTHROPIC_API_KEY 
+And the exact Replit Secret I must add:
+	•	 ANTHROPIC_API_KEY 
+A couple of notes for you:
+	•	Anthropic’s GitHub docs say the easiest setup path is through Claude Code and  /install-github-app , but using the GitHub Action with repository secrets is also documented.
+	•	The error you pasted specifically indicates subscription access is disabled at the organization level, so API-key auth is the correct workaround unless your admin re-enables subscription access.

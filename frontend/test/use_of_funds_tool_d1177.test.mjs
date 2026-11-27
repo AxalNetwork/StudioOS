@@ -1,0 +1,808 @@
+// D1177 (#3104) — the Use of funds tool complete: Home (UF1), Allocation and
+// Edit split (UF2, UF3), Milestones and hires (UF5, UF6), Runway (UF7), Plan vs
+// actual (UF12), where the plan is used (UF13), History (UF15), the admin's
+// banner (UF16), the empty, loading, error and partial states (UF17–UF19) and
+// the phone (UF21). Runway today and the forecast are never the same figure; a
+// missing input is Not recorded; an admin's writes carry the banner. Mercury
+// is stubbed: every figure here is invented.
+//
+// Run with:
+//   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_tool_d1177.test.mjs
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { installDocument } from './_contracts_dom.mjs';
+import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
+import { useOfFundsApi } from '../src/lib/api/useOfFunds.js';
+import {
+  afterRaiseView, centsFromTyped, historyRows, homeTiles, money, monthsText, needsRows, planEmpty, planVsActual,
+  committedView, raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
+  hireBody, sectionSheet, sectionSheetSearch, sheetSectionFrom, tabSearch, // D6083
+} from '../src/pages/raise/useoffunds/useOfFundsModel.js';
+import { capsForViewer } from './_uof_capabilities.mjs';
+
+const h = React.createElement;
+const read = (p) => readFileSync(p, 'utf8');
+const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
+
+const KEYS = ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve'];
+const SHARES = [45, 25, 10, 10, 10];
+const months = (n, from = 2026 * 12 + 9) => Array.from({ length: n }, (_, i) => `${Math.floor((from + i) / 12)}-${String(((from + i) % 12) + 1).padStart(2, '0')}`);
+const M = months(18);
+const modelled = (value, reason = null) => ({ source: 'Modelled', modelVersion: 1, state: value == null ? 'not_recorded' : 'recorded', value, reason });
+
+/** A plan read in D1176's shape (`services/useOfFunds/read.ts` planRead). */
+function planFixture({ viewer = { kind: 'founder', can_write: true, mercury: true }, runway = 'mercury', empty = false, partial = false } = {}) {
+  const raise = 150000000;
+  const alloc = SHARES.map((s) => (raise * s) / 100);
+  const spend = KEYS.map((k, i) => M.map(() => Math.round(alloc[i] / 18)));
+  const burn = M.map((m, i) => ({ month: m, spendCents: spend.reduce((a, s) => a + s[i], 0) }));
+  let cash = 45120000;
+  const path = M.map((m, i) => { const raised = i === 0 ? raise : 0; const open = cash; cash = cash + raised - burn[i].spendCents; return { month: m, openingCents: open, raisedCents: raised, spendCents: burn[i].spendCents, closingCents: cash }; });
+  const base = empty ? {
+    id: 9, uid: 'b9', name: 'Base', is_base: 1, currency: 'usd', amount_to_raise_cents: null, target_runway_months: null, lines: [], milestones: [],
+    hires: { state: 'ok', items: [] }, model: { runway: modelled(null, 'Raise amount or a complete split totalling 100% is Not recorded.'), sections: [], cashPath: modelled(null, 'Opening cash is Not recorded.'), cashOut: modelled(null), burn: modelled(null, 'Planned burn is Not recorded.'), milestones: modelled([]) },
+  } : {
+    id: 9, uid: 'b9', revision: 4, name: 'Seed · base', is_base: 1, currency: 'usd', amount_to_raise_cents: raise, target_runway_months: 18, source: 'Typed',
+    lines: KEYS.map((k, i) => ({ category_key: k, share_pct: SHARES[i], source: 'Typed' })),
+    milestones: [
+      { id: 1, category_key: 'infrastructure', label: 'SOC 2 Type I', due_on: '2027-01', cost_cents: 6000000, source: 'Typed', cost_state: 'recorded' },
+      { id: 2, category_key: 'operations', label: 'EU entity', due_on: '2027-04', cost_cents: null, source: 'Typed', cost_state: 'not_costed' },
+    ],
+    hires: { state: 'ok', items: [
+      { id: 11, category_key: 'product', role: 'Senior engineer', start_month: '2026-12', annual_cents: 15000000, currency: 'usd', revision: 3 },
+      { id: 12, category_key: 'go-to-market', role: 'Account executive', start_month: '2027-02', annual_cents: 42000000, currency: 'usd', revision: 0 },
+    ] },
+    model: {
+      sections: KEYS.map((k, i) => ({ key: k, allocation: modelled(alloc[i]), payroll: modelled(M.map(() => (k === 'product' ? 1250000 : 0))), spend: modelled(spend[i]) })),
+      burn: modelled(burn), cashPath: modelled(path), cashOut: modelled({ months: 30, withinHorizon: false }),
+      runway: modelled({ months: 18, relation: 'at_least' }),
+      milestones: modelled([{ id: '1', state: 'Funded' }, { id: '2', state: 'Not costed' }]),
+    },
+  };
+  const mercuryCand = { value: 9.4, source: 'Connector', ref: 'mercury_raise_facts:1', as_of: '2026-10-01', state: 'recorded', kind: 'mercury', cash_cents: 45120000, burn_cents: 4800000 };
+  const metricsCand = { value: 11, source: 'Typed', ref: 'project_metrics:4', as_of: '2026-08-12', state: 'recorded', kind: 'metrics', cash_cents: 52800000, burn_cents: 4800000 };
+  const runway_today = runway === 'mercury'
+    ? { state: 'recorded', chosen: mercuryCand, candidates: [mercuryCand, metricsCand], partial, sources: { mercury: { state: 'ok' }, metrics: { state: 'ok' } }, reason: null }
+    : runway === 'metrics'
+      ? { state: 'recorded', chosen: metricsCand, candidates: [metricsCand], partial, sources: { mercury: { state: partial ? 'unreadable' : 'founder_only' }, metrics: { state: 'ok' } }, reason: null }
+      : { state: 'not_recorded', chosen: null, candidates: [], partial: false, sources: { mercury: { state: 'founder_only' }, metrics: { state: 'ok' } }, reason: 'No measured cash and positive burn are recorded. A forecast never supplies runway today.' };
+  const chosenRound = { value: raise, source: 'Document', ref: 'round_calls:3', as_of: '2026-10-14', kind: 'round_call', name: 'Seed', currency: 'usd', eligible: true };
+  return {
+    // D5074 slice 5: the page reads only the capability map the Worker sends this viewer.
+    project_id: 3, viewer, capabilities: capsForViewer(viewer),
+    base: empty ? { state: 'ok', value: base, reason: null } : { state: 'ok', value: base, reason: null },
+    round: empty ? { chosen: null, candidates: [], disagreements: [], reason: 'No approved round call, active round target or plan raise is recorded.', sources: {} } : {
+      chosen: chosenRound, precedence: ['round_call', 'round_record', 'plan'],
+      candidates: [chosenRound, { value: 200000000, source: 'Modelled', ref: 'cap_table_scenarios:5:round:0', as_of: '2026-10-10', kind: 'cap_table', currency: 'usd', eligible: false }],
+      disagreements: [{ chosen: chosenRound, other: {} }], reason: null, sources: {},
+    },
+    runway_today,
+    // The forecast is a model the founder set. It carries no runway-today figure.
+    forecast: { state: 'ok', value: { source: 'Modelled', as_of: '2026-10-20', assumptions: { months: 16 }, computed: { runway_months: 16 }, reason: 'A forecast is never runway today.' } },
+    ties: { deck: { state: 'ok', value: { id: 1, version: 4, synced_at: null, state: 'out_of_sync', href: '/raise/pitch?project=3' } }, cap_table: { state: 'ok', value: { id: 5, name: 'Seed · base case', rounds: [{ value: 200000000 }] } } },
+    needs_you: empty ? [{ code: 'model_inputs_missing', reason: 'Raise amount or a complete split totalling 100% is Not recorded.' }]
+      : [{ code: 'round_disagreement', reason: 'Recorded round sizes differ. Choose the size for this plan.' }, { code: 'deck_out_of_sync', reason: 'The deck Ask slide has not been marked in sync with this plan.' }, { code: 'milestones_not_costed', reason: 'Some milestones are Not costed. Their affordability is unknown.' }],
+  };
+}
+
+const MERCURY = {
+  as_of: '2026-10-01', source: 'Mercury',
+  categories: [{ fact_id: 1, category: 'Payroll', months: 3, spent_cents: 6240000, section: 'product' }, { fact_id: 2, category: 'Uncategorized', months: 3, spent_cents: 320000, section: null }],
+  sections: KEYS.map((k, i) => ({ key: k, actual_cents: { 3: [7488000, 3024000, 2016000, 1872000, 0][i], 6: 0, 12: 0 } })),
+  proposals: [],
+};
+
+/* ------------------------------------------------------------------ *
+ * The model
+ * ------------------------------------------------------------------ */
+
+test('runway today and the forecast are never the same figure', () => {
+  const plan = planFixture();
+  const today = runwayTodayView(plan.runway_today, plan.viewer);
+  assert.equal(today.value, '9.4 months');
+  assert.ok(today.sub.startsWith('⇄ Connector · Mercury, as of 1 Oct 2026'));
+  const cands = runwayCandidates(plan.runway_today, plan.forecast);
+  const forecast = cands.find((c) => c.forecast);
+  assert.equal(forecast.value, null, 'the forecast is listed apart, with no runway-today figure');
+  assert.equal(forecast.reason, 'A model you set. Never runway today.');
+  assert.equal(cands.find((c) => c.used).key, 'mercury_raise_facts:1');
+  // With no measured source, a saved forecast still never becomes runway today.
+  const none = runwayTodayView(planFixture({ runway: 'none' }).runway_today, { kind: 'founder' });
+  assert.equal(none.value, null);
+  assert.equal(none.state, 'not_recorded');
+  // A candidate the Worker did not choose (its cash or burn missing) is never runway today either.
+  const unchosen = runwayTodayView({ state: 'not_recorded', chosen: null, candidates: [{ value: null, kind: 'metrics', source: 'Typed', ref: 'project_metrics:9', reason: 'Cash or positive net burn is Not recorded.' }], sources: {} }, { kind: 'founder' });
+  assert.equal(unchosen.state, 'not_recorded');
+  // And runway after the raise is the plan's model, labelled Modelled, never the measured figure.
+  const after = afterRaiseView(plan.base.value);
+  assert.equal(after.value, 'at least 18 months');
+  assert.ok(after.sub.startsWith('ƒ Modelled · your target 18'));
+});
+
+test('a missing input is Not recorded, never a zero', () => {
+  assert.equal(money(null), null);
+  assert.equal(money(undefined), null);
+  assert.equal(money(0), '$0', 'a measured zero is a zero');
+  assert.equal(monthsText(null), null);
+  const rows = sectionRows({ lines: [{ category_key: 'product', share_pct: 100 }], model: null, target_runway_months: null });
+  assert.equal(rows[1].share, null);
+  assert.equal(rows[0].amountCents, null);
+  assert.equal(rows[0].monthlyCents, null);
+  assert.equal(rows[0].hires, null, 'hires not read are not none');
+  const tiles = homeTiles(planFixture({ empty: true }));
+  assert.equal(tiles.find((t) => t.key === 'raise').value, null);
+  // D6081: a plan read without its committed block reads Unavailable, never a figure.
+  assert.equal(tiles.find((t) => t.key === 'committed').value, 'Unavailable');
+  assert.equal(planEmpty(planFixture({ empty: true })), true);
+  assert.equal(planEmpty(planFixture()), false);
+  assert.equal(centsFromTyped(''), null);
+  assert.equal(centsFromTyped('1,500,000'), 150000000);
+  assert.equal(centsFromTyped('-1'), null);
+});
+
+test('the split check, the sections, the ties, the round sources, Needs you and History', () => {
+  assert.deepEqual(splitCheck({ product: '45', 'go-to-market': '25', infrastructure: '10', operations: '10', reserve: '10' }), { whole: true, total: 100, ok: true });
+  assert.equal(splitCheck({ product: '45', 'go-to-market': '21', infrastructure: '10', operations: '10', reserve: '10' }).ok, false);
+  assert.equal(splitCheck({ product: '45.5', 'go-to-market': '24.5', infrastructure: '10', operations: '10', reserve: '10' }).ok, false, 'shares are whole');
+  assert.equal(splitCheck({ product: '', 'go-to-market': '100', infrastructure: '0', operations: '0', reserve: '0' }).ok, false, 'an empty share is not zero');
+  const plan = planFixture();
+  const rows = sectionRows(plan.base.value, plan.base.value.hires.items);
+  assert.equal(rows[0].amountCents, 67500000);
+  assert.equal(rows[0].monthlyCents, 3750000);
+  assert.equal(rows[1].overBudget, true, 'hires costing more than the section are flagged');
+  assert.equal(rows[0].overBudget, false);
+  assert.equal(raiseView(plan).value, '$1,500,000');
+  assert.ok(raiseView(plan).sub.startsWith('▤ Document · round call Seed'));
+  const ties = tiesRows(plan);
+  assert.equal(ties.find((t) => t.key === 'cap').pill, '! Different raise');
+  assert.equal(ties.find((t) => t.key === 'deck').pill, '! Out of sync');
+  assert.equal(ties.find((t) => t.key === 'deck').href, '/raise/pitch?project_id=3');
+  const sources = roundSourceRows(plan);
+  assert.equal(sources.find((s) => s.chosen).label, 'Round call Seed');
+  assert.deepEqual(needsRows(plan).map((n) => n.button?.act), ['round', 'deck', 'milestones']);
+  const hist = historyRows([{ id: 1, action: 'uof_hire_updated', summary: 'Studio admin: uof hire updated.', at: '2026-10-09 09:00:00', who: 'Sam Admin', admin: true }]);
+  assert.deepEqual(hist[0], { id: 1, text: 'Hire updated.', who: 'Sam Admin', at: '9 Oct 2026', kind: 'Hire', admin: true });
+});
+
+test('plan vs actual: planned share against Mercury\'s measured share, and a measured zero stays zero', () => {
+  const pva = planVsActual(planFixture().base.value, MERCURY, 3);
+  assert.deepEqual(pva.rows.map((r) => [r.planned, r.actual]), [[45, 52], [25, 21], [10, 14], [10, 13], [10, 0]]);
+  assert.equal(pva.unmappedCents, 320000);
+  const unmapped = planVsActual(planFixture().base.value, { ...MERCURY, sections: null }, 3);
+  assert.ok(unmapped.rows.every((r) => r.actual === null), 'no mapping is not a zero share');
+});
+
+test('the client: the history read pages, and the routes it calls exist', async () => {
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (u) => { sent.push(String(u).replace(/^.*\/api/, '')); return response({ items: [] }); };
+  try {
+    await useOfFundsApi.history(3, 2);
+    assert.ok(sent[0].startsWith('/cycles/raise/use-of-funds/history?'));
+    const q = new URLSearchParams(sent[0].split('?')[1]);
+    assert.equal(q.get('project'), '3'); assert.equal(q.get('page'), '2');
+  } finally { globalThis.fetch = previous; restore(); }
+  assert.match(read('cloudflare-worker/src/routes/cycle_use_of_funds.ts'), /r\.get\('\/history'/);
+});
+
+/* ------------------------------------------------------------------ *
+ * Mounted
+ * ------------------------------------------------------------------ */
+
+const PROJECTS = [{ id: 3, uid: 'p3uid', name: 'Harbor Ledger' }];
+const MODULE = (mercury) => ({
+  module: { slug: 'use-of-funds', name: 'Use of funds', records_title: 'Categories' },
+  card: { state: 'empty', reason: 'No split yet.' },
+  records: { linkable: true, total: 0, page: 1, page_size: 25, cols: [{ key: 'category', label: 'Category' }], rows: [] },
+  ...(mercury ? { parts: { mercury } } : {}),
+});
+
+async function mounted(url, { phone = false, plan = planFixture(), mercury = MERCURY, over = {} } = {}) {
+  const restore = installDocument();
+  const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
+  const sent = [];
+  globalThis.fetch = async (u, o = {}) => {
+    const path = String(u).replace(/^.*\/api/, '');
+    const line = `${o.method || 'GET'} ${path}`;
+    sent.push({ line, body: o.body ? JSON.parse(o.body) : null });
+    for (const [k, v] of Object.entries(over)) if (line.startsWith(k)) return v(o);
+    if (/^GET \/projects(\?|$)/.test(line)) return response(PROJECTS);
+    if (path.startsWith('/cycles/raise/use-of-funds/plan')) return plan ? response(plan) : response({ detail: 'down' }, 503);
+    if (path.startsWith('/cycles/raise/use-of-funds/history')) return response({ page: 1, page_size: 20, total: 2, items: [
+      { id: 2, action: 'uof_hire_updated', summary: 'Studio admin: uof hire updated.', at: '2026-10-09 09:00:00', who: 'Sam Admin', admin: true },
+      { id: 1, action: 'split_saved', summary: 'Split saved', at: '2026-10-01 09:00:00', who: 'Ada Founder', admin: false },
+    ] });
+    if (path.startsWith('/cycles/raise/modules/')) return response(MODULE(mercury));
+    return response({});
+  };
+  globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
+  const create = document.createElement.bind(document);
+  document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
+  document.body.style = { overflow: 'auto', paddingRight: '' };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null,
+    h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
+    h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
+  ))));
+  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await flush();
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const txt = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(txt).join(' ') : n?.textContent || '');
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  return {
+    sent, by, pr, flush,
+    all: (id) => walk(container).filter((n) => pr(n)['data-testid'] === id),
+    text: (id) => { if (id) assert.ok(by(id), `no ${id}`); return txt(id ? by(id) : container).replace(/\s+/g, ' ').trim(); },
+    async click(id) { const n = by(id); assert.ok(n, `no ${id}`); await act(async () => pr(n).onClick?.({ preventDefault() {}, stopPropagation() {} })); await flush(); },
+    async type(id, value) { const n = by(id); assert.ok(n, `no ${id}`); await act(async () => pr(n).onChange?.({ target: { value } })); await flush(); },
+    async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
+  };
+}
+
+test('UF1 Home: the four tiles, where the money goes, cash over time, where the plan is used and Needs you', async () => {
+  const v = await mounted('/raise/use-of-funds?project_id=3');
+  try {
+    assert.ok(v.by('uof-home'));
+    assert.equal(v.text('uof-tile-raise-value'), '$1,500,000');
+    assert.equal(v.text('uof-tile-today-value'), '9.4 months');
+    assert.equal(v.text('uof-tile-after-value'), 'at least 18 months');
+    assert.notEqual(v.text('uof-tile-today-value'), v.text('uof-tile-after-value'));
+    assert.equal(v.text('uof-tile-committed-value'), 'Unavailable', 'D6081: this fixture carries no committed block');
+    assert.equal(v.all('uof-section-row').length, 5);
+    assert.ok(v.text('uof-cash').includes('Modelled'));
+    // D5081 (RA-21): where the plan is used is its Dependencies card, each row marked; a different raise is Stale.
+    assert.equal(v.text('uof-dep-cap'), 'Stale');
+    assert.ok(v.text('uof-tie-cap').includes('This plan raises $1,500,000'));
+    assert.ok(v.by('uof-need-round_disagreement'));
+    assert.ok(v.sent.some((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3'));
+    assert.equal(v.by('uof-admin-banner'), undefined, 'the founder has no banner');
+  } finally { await v.close(); }
+});
+
+test('UF3 Edit split: a total other than 100 waits; a good split saves the raise, the shares and the target', async () => {
+  const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': () => response({ ok: true }) } });
+  try {
+    // D5081 (RA-14): on a desktop Home, Edit split opens from the header's Set raise & allocation, drawn once.
+    assert.equal(v.text('cycle-action'), 'Set raise & allocation');
+    assert.equal(v.by('uof-edit-split-open'), undefined, 'the action is not drawn twice');
+    await v.click('cycle-action');
+    assert.equal(v.pr(v.by('uof-edit-split')).role, 'dialog', 'D1317: Edit split opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-edit-split'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-edit-split'))['data-width'], 640);
+    assert.equal(v.text('uof-split-total'), '100%');
+    await v.type('uof-split-go-to-market', '21');
+    assert.equal(v.text('uof-split-total'), '96%');
+    assert.ok(v.by('uof-split-wait'));
+    assert.equal(v.pr(v.by('uof-split-save')).disabled, true, 'save waits');
+    await v.type('uof-split-go-to-market', '25');
+    await v.type('uof-split-amount', '2000000');
+    await v.click('uof-split-save');
+    const put = v.sent.find((s) => s.line.startsWith('PUT /cycles/raise/use-of-funds?'));
+    assert.ok(put, 'the split is saved');
+    assert.equal(put.body.amount_to_raise_cents, 200000000);
+    assert.equal(put.body.runway_months, 18);
+    assert.equal(put.body.expected_revision, 4, 'D5069: the save names the revision it read');
+    assert.deepEqual(put.body.sections.map((s) => s.pct), [45, 25, 10, 10, 10]);
+    assert.ok(v.text('uof-notice').includes('out of sync'));
+  } finally { await v.close(); }
+});
+
+test('D5069 a split refused because the plan changed keeps the dialog, says so, and offers Review latest', async () => {
+  const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
+  const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': conflict } });
+  try {
+    await v.click('cycle-action');
+    await v.type('uof-split-amount', '2000000');
+    await v.click('uof-split-save');
+    assert.match(v.text('uof-split-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
+    assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+    assert.ok(v.by('uof-edit-split'), 'the dialog stays open');
+    const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    const before = reads();
+    await v.click('uof-review-latest');
+    assert.ok(reads() > before, 'Review latest reads the plan again');
+    assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+  } finally { await v.close(); }
+});
+
+test('D5375 a hire edit and a hire removal carry the hire\'s own revision', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/hires/11': () => response({ id: 11 }), 'DELETE /cycles/raise/use-of-funds/hires/12': () => response({ ok: true }) } });
+  try {
+    await v.click('uof-hire-edit-open');
+    await v.type('uof-hire-role', 'Staff engineer');
+    await v.click('uof-hire-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/hires/11'));
+    assert.deepEqual(patch.body, { role: 'Staff engineer', category_key: 'product', start_month: '2026-12', expected_revision: 3 });
+    assert.ok(!('annual_cents' in patch.body) && !('currency' in patch.body), 'the cost and its currency are not rewritten');
+    await v.click('uof-hire-edit-open');
+    await v.click('uof-hire-remove');
+    assert.ok(v.sent.some((s) => s.line.startsWith('DELETE /cycles/raise/use-of-funds/hires/11') && s.line.includes('expected_revision=3')), 'a removal names the revision in its query');
+  } finally { await v.close(); }
+});
+
+test('D5375 a hire refused because it changed keeps the dialog, says so, and offers Review latest', async () => {
+  const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This hire was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 4 }, 409);
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/hires/11': conflict, 'DELETE /cycles/raise/use-of-funds/hires/11': conflict } });
+  try {
+    for (const press of ['uof-hire-save', 'uof-hire-remove']) {
+      await v.click('uof-hire-edit-open');
+      await v.click(press);
+      assert.match(v.text('uof-hire-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
+      assert.ok(v.by('uof-edit-hire'), 'the dialog stays open');
+      assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+      const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+      const before = reads();
+      await v.click('uof-review-latest');
+      assert.ok(reads() > before, 'Review latest reads the plan again');
+      assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+    }
+  } finally { await v.close(); }
+});
+
+test('UF16: an admin works under the banner, their writes say so, and Mercury figures stay the founder\'s', async () => {
+  const v = await mounted('/raise/use-of-funds?project_id=3', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false }, runway: 'none' }) });
+  try {
+    assert.ok(v.text('uof-admin-banner').includes('as an Admin. Changes are logged under your name.'));
+    assert.equal(v.text('uof-tile-today-value'), 'Founder only');
+    assert.ok(v.by('uof-cash-founder-only'));
+    await v.click('cycle-action');
+    assert.ok(v.text('uof-split-admin').includes('logged under your name'));
+  } finally { await v.close(); }
+  const a = await mounted('/raise/use-of-funds/actuals?project_id=3', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }) });
+  try {
+    assert.ok(a.by('uof-actuals-founder-only'));
+    assert.ok(a.by('uof-admin-banner'));
+  } finally { await a.close(); }
+});
+
+test('UF17–UF19: empty, error and Mercury partial each say what they are', async () => {
+  let v = await mounted('/raise/use-of-funds?project_id=3', { plan: planFixture({ empty: true }) });
+  try {
+    assert.ok(v.text('uof-empty').includes('Set your raise and split to see what it buys.'));
+    // D5081 (RA-14): first use collapses the analytics to its set-up actions; no tile draws Not recorded four times.
+    assert.equal(v.by('uof-tile-raise-value'), undefined);
+  } finally { await v.close(); }
+  v = await mounted('/raise/use-of-funds?project_id=3', { plan: null });
+  try {
+    assert.ok(v.text('uof-home-unreadable').includes('Use of funds could not be read. Nothing here is a zero.'));
+    assert.equal(v.by('uof-tile-raise-value'), undefined, 'no tile draws a figure over an unread plan');
+  } finally { await v.close(); }
+  v = await mounted('/raise/use-of-funds?project_id=3', { plan: planFixture({ runway: 'metrics', partial: true }) });
+  try {
+    assert.ok(v.text('uof-mercury-partial').includes('falls back to your metrics snapshot'));
+    assert.equal(v.text('uof-tile-today-value'), '11 months');
+  } finally { await v.close(); }
+});
+
+test('UF2 Allocation: hires against each section, the actual share from Mercury, and the over-budget warning', async () => {
+  const v = await mounted('/raise/use-of-funds/allocation?project_id=3');
+  try {
+    assert.equal(v.all('uof-allocation-row').length, 5);
+    assert.ok(v.text('uof-actual-product').startsWith('52%'));
+    assert.ok(v.text('uof-actual-reserve').startsWith('0%'), 'a measured zero');
+    assert.ok(v.text('uof-over-go-to-market').includes('hires cost $420,000 a year; this section has $375,000'));
+  } finally { await v.close(); }
+});
+
+test('UF5–UF6 Milestones and hires: the tables, Not costed, and Add milestone keeps an empty cost Not costed', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'POST /cycles/raise/use-of-funds/milestones': () => response({ id: 3 }, 201) } });
+  try {
+    assert.equal(v.all('uof-ms-row').length, 2);
+    assert.ok(v.text('uof-ms-table').includes('○ Not costed'));
+    assert.equal(v.all('uof-hire-row').length, 2);
+    assert.ok(v.text('uof-payroll').includes('$12,500 a month'));
+    await v.click('uof-add-milestone-open');
+    await v.type('uof-milestone-label', 'Self-serve onboarding live');
+    await v.type('uof-milestone-by', '2027-03');
+    await v.click('uof-milestone-save');
+    const post = v.sent.find((s) => s.line.startsWith('POST /cycles/raise/use-of-funds/milestones'));
+    assert.deepEqual(post.body, { label: 'Self-serve onboarding live', category_key: 'product', due_on: '2027-03', cost_cents: null, expected_revision: 4 }); // D5069
+    assert.ok(v.text('uof-notice').includes('Not costed'));
+  } finally { await v.close(); }
+});
+
+test('UF7 Runway: runway today from its source, the other runways with the forecast apart, and runway after the raise', async () => {
+  const v = await mounted('/raise/use-of-funds/runway?project_id=3');
+  try {
+    assert.equal(v.text('uof-runway-today-value'), '9.4 months');
+    assert.ok(v.text('uof-runway-other-forecast').includes('Never runway today'));
+    assert.ok(!v.text('uof-runway-other-forecast').includes('16'), 'the forecast draws no runway figure');
+    assert.equal(v.text('uof-after-value'), 'at least 18 months');
+    assert.equal(v.pr(v.by('uof-forecast-link')).href, '/raise/use-of-funds/runway/forecast?project_id=3', 'D1178: the forecast is under Runway');
+  } finally { await v.close(); }
+});
+
+test('UF12 Plan vs actual, and without Mercury', async () => {
+  let v = await mounted('/raise/use-of-funds/actuals?project_id=3');
+  try {
+    assert.ok(v.text('uof-pva-product').includes('45% 52%'));
+    assert.ok(v.text('uof-pva').includes('Unmapped $3,200'));
+  } finally { await v.close(); }
+  v = await mounted('/raise/use-of-funds/actuals?project_id=3', { mercury: null });
+  try {
+    assert.ok(v.text('uof-actuals-none').includes('Connect Mercury to see actual spend.'));
+  } finally { await v.close(); }
+});
+
+test('UF13: where the plan is used, and Choose the round size changes only the plan\'s raise', async () => {
+  const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/scenarios/9': () => response({ ok: true }) } });
+  try {
+    await v.click('uof-ties-open');
+    assert.equal(v.pr(v.by('uof-where-used')).role, 'dialog', 'D1317: Where this plan is used opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-where-used'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-where-used'))['data-width'], 720);
+    assert.ok(v.text('uof-round-table').includes('Round call Seed'));
+    await v.click('uof-need-round_disagreement-act');
+    assert.ok(v.by('uof-round-size'));
+    assert.equal(v.pr(v.by('uof-round-size')).role, 'dialog', 'D1317: the round size opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-round-size'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-round-size'))['data-width'], 640);
+  } finally { await v.close(); }
+});
+
+test('UF15 History: who, when, and the Admin tag', async () => {
+  const v = await mounted('/raise/use-of-funds/history?project_id=3');
+  try {
+    assert.equal(v.all('uof-history-row').length, 2);
+    assert.equal(v.all('uof-history-admin').length, 1);
+    assert.ok(v.text('uof-history').includes('Sam Admin · studio admin · 9 Oct 2026'));
+  } finally { await v.close(); }
+});
+
+test('UF21 the phone: tiles two across, the sections as a list with a 44px opener', async () => {
+  const v = await mounted('/raise/use-of-funds/allocation?project_id=3', { phone: true });
+  try {
+    assert.ok(v.by('uof-section-list'));
+    assert.equal(v.by('uof-allocation-table'), undefined);
+  } finally { await v.close(); }
+  const src = read('frontend/src/pages/raise/useoffunds/UseOfFundsTool.jsx') + read('frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx');
+  assert.match(src, /max-md:grid-cols-2 md:grid-cols-4/, 'tiles go two across on a phone');
+  assert.match(src, /max-md:min-h-\[44px\]/);
+  assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, 'no browser pop-up');
+  assert.doesNotMatch(src, /EadwynPanel|aiRouter|railProposals|useRailOption|FillProposals/, 'Eadwyn fills nothing here');
+});
+
+// D5074 slice 5 (#5074): every control reads the plan's capability map, never its old `viewer` field.
+test('D5074: the edit controls, the admin banner and the Mercury states follow the capability map, and the map wins over the viewer field', async () => {
+  // Mutation checked: `planViewer` reading `plan.viewer` → the disagreeing case below draws Edit split and loses the banner.
+  const cases = [
+    ['founder', { edit: true, mercury: true, admin_logged: false }, { edit: true, banner: false }],
+    ['admin', { edit: true, mercury: false, admin_logged: true }, { edit: true, banner: true }],
+    ['support session', { edit: false, mercury: false, admin_logged: false }, { edit: false, banner: false }],
+    ['no map', undefined, { edit: false, banner: false }],
+  ];
+  for (const [label, capabilities, want] of cases) {
+    // The old field says founder-who-writes every time; only the map changes.
+    const plan = { ...planFixture({ viewer: { kind: 'founder', can_write: true, mercury: true } }), capabilities };
+    if (capabilities === undefined) delete plan.capabilities;
+    const v = await mounted('/raise/use-of-funds/allocation?project_id=3', { plan });
+    try {
+      assert.equal(Boolean(v.by('uof-edit-split-open')), want.edit, `${label}: Edit split`);
+      assert.equal(Boolean(v.by('uof-admin-banner')), want.banner, `${label}: the admin banner`);
+      assert.ok(v.sent.every((s) => s.line.startsWith('GET ')), `${label}: mounting writes nothing`);
+    } finally { await v.close(); }
+  }
+});
+
+// D6082 (#6082): a milestone can be changed or removed. The scenario's revision goes with both; an emptied
+// cost is sent as null and stays Not costed; a reader or a support session (can_write false) sees no Edit.
+test('D6082 Edit milestone saves name, section, by and cost with the scenario revision, and reloads the plan', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': () => response({ id: 1 }) } });
+  try {
+    assert.equal(v.all('uof-ms-edit-open').length, 2, 'one Edit per milestone row');
+    const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    const before = reads();
+    await v.click('uof-ms-edit-open');
+    assert.ok(v.by('uof-edit-milestone'));
+    assert.equal(v.pr(v.by('uof-ms-label')).value, 'SOC 2 Type I');
+    assert.equal(v.pr(v.by('uof-ms-cost')).value, '60000.00', 'the recorded cost is shown in major units');
+    await v.type('uof-ms-label', 'SOC 2 Type II');
+    await v.type('uof-ms-edit-section', 'operations');
+    await v.type('uof-ms-by', '2027-06');
+    await v.type('uof-ms-cost', '75000');
+    await v.click('uof-ms-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/milestones/1'));
+    assert.deepEqual(patch.body, { label: 'SOC 2 Type II', category_key: 'operations', due_on: '2027-06', cost_cents: 7500000, expected_revision: 4 });
+    assert.equal(v.by('uof-edit-milestone'), undefined, 'the dialog closes on save');
+    assert.equal(v.text('uof-notice'), 'The milestone is saved.');
+    assert.ok(reads() > before, 'the plan is read again');
+  } finally { await v.close(); }
+});
+
+test('D6082 an emptied cost is sent as null and stays Not costed', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': () => response({ id: 1 }) } });
+  try {
+    await v.click('uof-ms-edit-open');
+    await v.type('uof-ms-cost', '');
+    await v.click('uof-ms-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/milestones/1'));
+    assert.equal(patch.body.cost_cents, null, 'never 0');
+    assert.ok(v.text('uof-notice').includes('stays Not costed'));
+  } finally { await v.close(); }
+  const w = await mounted('/raise/use-of-funds/milestones?project_id=3');
+  try {
+    const rows = w.all('uof-ms-edit-open');
+    await act(async () => w.pr(rows[1]).onClick()); await w.flush();
+    assert.equal(w.pr(w.by('uof-ms-cost')).value, '', 'a Not costed milestone opens with an empty cost');
+    await w.type('uof-ms-cost', 'abc');
+    assert.equal(w.pr(w.by('uof-ms-save')).disabled, true, 'an unreadable cost cannot be saved');
+  } finally { await w.close(); }
+});
+
+test('D6082 Remove milestone sends the scenario revision in the query and reloads', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'DELETE /cycles/raise/use-of-funds/milestones/1': () => response({ ok: true, scenario_revision: 5 }) } });
+  try {
+    await v.click('uof-ms-edit-open');
+    await v.click('uof-ms-remove');
+    assert.ok(v.sent.some((s) => s.line.startsWith('DELETE /cycles/raise/use-of-funds/milestones/1') && s.line.includes('expected_revision=4')));
+    assert.equal(v.text('uof-notice'), 'The milestone is removed.');
+    assert.equal(v.by('uof-edit-milestone'), undefined);
+  } finally { await v.close(); }
+});
+
+test('D6082 a milestone refused because the plan changed keeps the dialog and offers Review latest', async () => {
+  const stale = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This plan was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
+  const raced = () => response({ code: 'scenario_changed', error: 'scenario_changed', detail: 'The scenario changed. Read it again.' }, 409);
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': stale, 'DELETE /cycles/raise/use-of-funds/milestones/1': raced } });
+  try {
+    for (const press of ['uof-ms-save', 'uof-ms-remove']) {
+      await v.click('uof-ms-edit-open');
+      await v.click(press);
+      assert.ok(v.by('uof-ms-error'), 'the refusal is said');
+      assert.ok(v.by('uof-edit-milestone'), 'the dialog stays open');
+      assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+      await v.click('uof-review-latest');
+      assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+    }
+  } finally { await v.close(); }
+});
+
+test('D6082 a reader or a support session sees no milestone Edit', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { plan: planFixture({ viewer: { kind: 'founder', can_write: false, mercury: true } }) });
+  try {
+    assert.equal(v.all('uof-ms-row').length, 2);
+    assert.equal(v.all('uof-ms-edit-open').length, 0);
+  } finally { await v.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D6083 (#6083) — Add a hire (UF6) and the section sheet (UF4, UF21c)
+ * inside the tool, at `?section=<key>` on the tab that opened it.
+ * ------------------------------------------------------------------ */
+
+test('D6083 the sheet\'s address: ?section=<key> beside the venture; a tab link drops it; an unknown key opens nothing', () => {
+  assert.equal(sheetSectionFrom('?project_id=3&section=product'), 'product');
+  assert.equal(sheetSectionFrom('?project_id=3&section=marketing'), null);
+  assert.equal(sheetSectionFrom(''), null);
+  assert.equal(sectionSheetSearch('?project_id=3', 'go-to-market'), '?project_id=3&section=go-to-market');
+  assert.equal(sectionSheetSearch('?project_id=3&section=product', null), '?project_id=3');
+  assert.equal(sectionSheetSearch('?section=product', null), '');
+  assert.equal(tabSearch('?project_id=3&section=product'), '?project_id=3', 'tabs keep the venture only');
+});
+
+test('D6083 hireBody: role and section required, a month like 2027-03, the cost in the chosen currency, an empty cost missing', () => {
+  assert.deepEqual(hireBody({ role: ' Data engineer ', section: 'infrastructure', starts: '2027-04', cost: '140,000', currency: 'USD' }).body,
+    { role: 'Data engineer', category_key: 'infrastructure', start_month: '2027-04', annual_cents: 14000000, currency: 'usd' });
+  assert.equal(hireBody({ role: 'Ops', section: 'operations', starts: '', cost: '' }).body.annual_cents, null, 'never 0');
+  assert.equal(hireBody({ role: 'Ops', section: 'operations', starts: '', cost: '' }).body.start_month, null);
+  assert.equal(hireBody({ role: 'x', section: 'product', cost: '1000', currency: 'jpy' }).body.annual_cents, 1000, 'JPY has no minor unit');
+  assert.match(hireBody({ role: '', section: 'product' }).error, /Name the role/);
+  assert.match(hireBody({ role: 'x', section: 'marketing' }).error, /section/);
+  assert.match(hireBody({ role: 'x', section: 'product', starts: '2027-13' }).error, /2027-03/);
+  assert.match(hireBody({ role: 'x', section: 'product', cost: 'lots' }).error, /cost a year/);
+  assert.match(hireBody({ role: 'x', section: 'product', cost: '-5' }).error, /cost a year/);
+});
+
+test('D6083 sectionSheet: the section\'s milestones, hires, cost against the amount and its actual share', () => {
+  const base = planFixture().base.value;
+  const gtm = sectionSheet(base, 'go-to-market', MERCURY);
+  assert.equal(gtm.label, 'GTM: sales and marketing');
+  assert.equal(gtm.hireItems.length, 1); assert.equal(gtm.hireCostCents, 42000000); assert.equal(gtm.overBudget, true);
+  assert.equal(gtm.actual, 21, 'Mercury\'s measured share of the last 3 months');
+  assert.equal(sectionSheet(base, 'infrastructure', null).actual, null, 'no Mercury, no actual share');
+  assert.equal(sectionSheet(base, 'infrastructure', null).milestoneItems[0].label, 'SOC 2 Type I');
+  assert.equal(sectionSheet(base, 'nope'), null);
+  assert.equal(sectionSheet({ ...base, hires: { state: 'unreadable', items: null } }, 'product').hireItems, null);
+});
+
+test('D6083 the client: Add a hire posts to the mounted route with the venture and no revision', async () => {
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (u, o = {}) => { sent.push({ url: String(u).replace(/^.*\/api/, ''), o }); return response({ id: 1 }, 201); };
+  try {
+    await useOfFundsApi.createHire(3, { role: 'x', category_key: 'product' });
+    assert.equal(sent[0].url, '/cycles/raise/use-of-funds/hires?project=3');
+    assert.equal(sent[0].o.method, 'POST');
+    assert.deepEqual(JSON.parse(sent[0].o.body), { role: 'x', category_key: 'product' });
+  } finally { globalThis.fetch = previous; restore(); }
+  assert.match(read('cloudflare-worker/src/routes/cycle_use_of_funds.ts'), /r\.post\('\/hires'/);
+});
+
+test('D6083 section names open the sheet from Home, Allocation and Milestones, never the record page', async () => {
+  for (const [url, id, want] of [
+    ['/raise/use-of-funds?project_id=3', 'uof-open-section-product', '/raise/use-of-funds?project_id=3&section=product'],
+    ['/raise/use-of-funds/allocation?project_id=3', 'uof-open-section-go-to-market', '/raise/use-of-funds/allocation?project_id=3&section=go-to-market'],
+  ]) {
+    const v = await mounted(url);
+    try { assert.equal(v.pr(v.by(id)).href, want); } finally { await v.close(); }
+  }
+  const p = await mounted('/raise/use-of-funds/allocation?project_id=3', { phone: true });
+  try { assert.equal(p.pr(p.by('uof-open-section-reserve')).href, '/raise/use-of-funds/allocation?project_id=3&section=reserve', 'the phone list opens the bottom sheet'); } finally { await p.close(); }
+  const m = await mounted('/raise/use-of-funds/milestones?project_id=3');
+  try {
+    const hrefs = m.all('uof-hire-row').map((row) => (row.childNodes || []).flatMap((c) => c.childNodes || []).map((n) => m.pr(n).href).find(Boolean));
+    assert.deepEqual(hrefs, ['/raise/use-of-funds/milestones?project_id=3&section=product', '/raise/use-of-funds/milestones?project_id=3&section=go-to-market']);
+  } finally { await m.close(); }
+  const src = read('frontend/src/pages/raise/useoffunds/UseOfFundsTool.jsx');
+  assert.doesNotMatch(src, /recordHref/, 'the generic section record page is no longer linked from the tool');
+  assert.doesNotMatch(src, /added on its section’s page/);
+});
+
+test('D6083 UF4 the sheet at its own address: share, amount, milestones, hires, the over-budget warning, the actual share and Close', async () => {
+  const v = await mounted('/raise/use-of-funds/allocation?project_id=3&section=go-to-market');
+  try {
+    assert.ok(v.by('uof-section-sheet'));
+    assert.ok(v.text('uof-section-sheet').includes('25% of the raise'));
+    assert.ok(v.text('uof-section-facts').includes('$375,000'));
+    assert.ok(v.text('uof-section-facts').includes('A month over 18 months'));
+    assert.equal(v.all('uof-section-hire').length, 1);
+    assert.ok(v.text('uof-section-hire-cost').includes('Hires cost $420,000 a year of this section’s $375,000.'));
+    assert.ok(v.text('uof-section-over').includes('hires cost $420,000 a year; this section has $375,000'));
+    assert.ok(v.by('uof-over-go-to-market'), 'and the tab\'s own warning still shows');
+    assert.equal(v.text('uof-section-actual-value'), '21%');
+    assert.ok(v.text('uof-section-feeds').includes('Out of sync'));
+    await v.click('uof-section-sheet-close');
+    assert.equal(v.by('uof-section-sheet'), undefined, 'Close drops ?section from the address');
+  } finally { await v.close(); }
+  const home = await mounted('/raise/use-of-funds?project_id=3&section=infrastructure');
+  try { assert.ok(home.text('uof-section-milestones').includes('SOC 2 Type I')); } finally { await home.close(); }
+  const ms = await mounted('/raise/use-of-funds/milestones?project_id=3&section=product');
+  try { assert.ok(ms.text('uof-section-hires').includes('Senior engineer')); } finally { await ms.close(); }
+  const bad = await mounted('/raise/use-of-funds/allocation?project_id=3&section=marketing');
+  try { assert.equal(bad.by('uof-section-sheet'), undefined, 'an unknown section opens nothing'); } finally { await bad.close(); }
+});
+
+test('D6083 D1174: an admin\'s sheet shows no bank figure; the actual share is the founder\'s alone', async () => {
+  const v = await mounted('/raise/use-of-funds/allocation?project_id=3&section=product', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }) });
+  try {
+    assert.equal(v.text('uof-section-actual-value'), 'Founder only');
+    assert.ok(v.text('uof-section-actual').includes('visible to the founder only'));
+    assert.doesNotMatch(v.text('uof-section-actual'), /52%/);
+  } finally { await v.close(); }
+});
+
+test('D6083 UF6 Add a hire beside Add milestone, and from the sheet with its section chosen', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'POST /cycles/raise/use-of-funds/hires': () => response({ id: 13, revision: 0 }, 201) } });
+  try {
+    await v.click('uof-add-hire-open');
+    assert.ok(v.by('uof-add-hire'));
+    assert.equal(v.pr(v.by('uof-add-hire-save')).disabled, true, 'nothing to save without a role');
+    await v.type('uof-add-hire-role', 'Data engineer');
+    await v.type('uof-add-hire-section', 'infrastructure');
+    await v.type('uof-add-hire-starts', '2027-13');
+    assert.match(v.text('uof-add-hire-hint'), /2027-03/);
+    assert.equal(v.pr(v.by('uof-add-hire-save')).disabled, true);
+    await v.type('uof-add-hire-starts', '2027-04');
+    await v.type('uof-add-hire-cost', '140,000');
+    const reads = v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    await v.click('uof-add-hire-save');
+    const post = v.sent.find((s) => s.line.startsWith('POST /cycles/raise/use-of-funds/hires'));
+    assert.deepEqual(post.body, { role: 'Data engineer', category_key: 'infrastructure', start_month: '2027-04', annual_cents: 14000000, currency: 'usd' });
+    assert.equal(v.by('uof-add-hire'), undefined, 'the dialog closes');
+    assert.equal(v.text('uof-notice'), 'The hire is added.');
+    assert.ok(v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length > reads, 'the plan is read again, so Hires, the section cost and payroll show it');
+  } finally { await v.close(); }
+  const s = await mounted('/raise/use-of-funds/allocation?project_id=3&section=operations', { over: { 'POST /cycles/raise/use-of-funds/hires': () => response({ id: 14 }, 201) } });
+  try {
+    await s.click('uof-section-add-hire');
+    await s.type('uof-add-hire-role', 'Counsel');
+    await s.click('uof-add-hire-save');
+    const post = s.sent.find((x) => x.line.startsWith('POST /cycles/raise/use-of-funds/hires'));
+    assert.deepEqual(post.body, { role: 'Counsel', category_key: 'operations', start_month: null, annual_cents: null, currency: 'usd' }, 'the sheet\'s section; an empty cost stays missing');
+    assert.match(s.text('uof-notice'), /Not recorded until you add one/);
+  } finally { await s.close(); }
+  const refused = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'POST /cycles/raise/use-of-funds/hires': () => response({ code: 'invalid_plan', detail: 'Check the plan fields. Nothing was saved.' }, 400) } });
+  try {
+    await refused.click('uof-add-hire-open');
+    await refused.type('uof-add-hire-role', 'X');
+    await refused.click('uof-add-hire-save');
+    assert.ok(refused.by('uof-add-hire'), 'a refusal keeps the dialog open');
+    assert.ok(refused.text('uof-add-hire-error').length > 0);
+  } finally { await refused.close(); }
+  const reader = await mounted('/raise/use-of-funds/milestones?project_id=3&section=product', { plan: planFixture({ viewer: { kind: 'founder', can_write: false, mercury: true } }) });
+  try {
+    assert.equal(reader.by('uof-add-hire-open'), undefined);
+    assert.equal(reader.by('uof-section-add-hire'), undefined, 'a read-only viewer adds nothing');
+  } finally { await reader.close(); }
+});
+
+test('D6083 UF21c: on a phone the sheet is a bottom sheet and Add a hire a bottom sheet too', () => {
+  const src = read('frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx');
+  assert.match(src, /testId="uof-section-sheet"/);
+  assert.match(src, /<Sheet label=\{v\.label\}[^>]*phone="sheet"/);
+  assert.match(src, /<Lightbox label="Add a hire"[^>]*phone="sheet"/);
+});
+
+/* ------------------------------------------------------------------ *
+ * D6081 (#6081): Committed, from the round
+ * ------------------------------------------------------------------ */
+
+const COMMITTED = {
+  state: 'ok', source: 'Capital relationships', href: '/raise/capital-relationships/commitments?project_id=3', reason: null,
+  value: { round_name: 'Seed', currency: 'USD', counted_cents: 145000000, target_cents: 150000000, amount_not_recorded: 0, remaining_cents: 5000000,
+    received_cents: null, statuses: [{ status: 'signed', label: 'Signed', investors: 2 }] },
+};
+
+test('D6081 committedView: a read is "$X of $Y · Signed · from the round" with Remaining; nothing unread is a figure', () => {
+  const read = committedView(COMMITTED);
+  assert.equal(read.value, '$1,450,000');
+  assert.equal(read.sub, 'of $1,500,000 · Signed · from the round');
+  assert.equal(read.foot, 'Target $1,500,000 · committed $1,450,000 · remaining $50,000');
+  assert.equal(read.tie, 'Committed $1,450,000 · Signed');
+  const two = committedView({ ...COMMITTED, value: { ...COMMITTED.value, received_cents: 25000000, statuses: [{ label: 'Received' }, { label: 'Signed' }, { label: 'Wired' }] } });
+  assert.equal(two.sub, 'of $1,500,000 · Received, Signed, Wired · from the round');
+  assert.equal(two.tie, 'Committed $1,450,000 · received $250,000 · Received, Signed, Wired');
+  const over = committedView({ ...COMMITTED, value: { ...COMMITTED.value, counted_cents: 160000000, remaining_cents: -10000000 } });
+  assert.match(over.foot, /over the target by \$100,000$/);
+  const noAmount = committedView({ ...COMMITTED, value: { ...COMMITTED.value, amount_not_recorded: 1, remaining_cents: null } });
+  assert.equal(noAmount.foot, null, 'a sum missing an amount gives no Remaining');
+  assert.match(noAmount.sub, /1 with no amount/);
+  assert.match(noAmount.footReason, /has no amount recorded/);
+  const noTarget = committedView({ ...COMMITTED, value: { ...COMMITTED.value, target_cents: null, remaining_cents: null } });
+  assert.equal(noTarget.foot, null);
+  assert.match(noTarget.sub, /^no target recorded/);
+  // A real zero, read, is a zero.
+  assert.equal(committedView({ ...COMMITTED, value: { ...COMMITTED.value, counted_cents: 0, remaining_cents: 150000000, statuses: [] } }).value, '$0');
+
+  const unavailable = committedView({ state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' });
+  assert.equal(unavailable.value, 'Unavailable'); assert.equal(unavailable.foot, undefined);
+  assert.equal(committedView(undefined).value, 'Unavailable', 'no block is never a figure');
+  const none = committedView({ state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.', href: COMMITTED.href });
+  assert.equal(none.value, null); assert.equal(none.href, COMMITTED.href); assert.equal(none.link, 'Capital relationships › Commitments');
+  const refused = committedView({ state: 'refused', reason: 'Commitments are read in Capital relationships by the venture’s founders.' });
+  assert.equal(refused.value, 'Refused'); assert.equal(refused.muted, true);
+  for (const b of [unavailable, none, refused]) assert.ok(!/\$/.test(String(b.value ?? '')), `${b.state} draws no amount`);
+
+  // The tile and the round tie use the same read.
+  const plan = { ...planFixture(), committed: COMMITTED };
+  const tile = homeTiles(plan).find((t) => t.key === 'committed');
+  assert.equal(tile.value, '$1,450,000'); assert.equal(tile.sub, 'of $1,500,000 · Signed · from the round');
+  assert.equal(tiesRows(plan).find((r) => r.key === 'round').sub, 'Committed $1,450,000 · Signed');
+});
+
+test('D6081 UF1 Home: Committed from the round with Remaining; Unavailable hides Remaining; no round links Commitments', async () => {
+  const ok = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: COMMITTED } });
+  try {
+    assert.equal(ok.text('uof-tile-committed-value'), '$1,450,000');
+    assert.ok(ok.text('uof-tile-committed').includes('of $1,500,000 · Signed · from the round'));
+    assert.equal(ok.text('uof-remaining'), 'Target $1,500,000 · committed $1,450,000 · remaining $50,000');
+    assert.equal(ok.by('uof-committed-unavailable'), undefined);
+  } finally { await ok.close(); }
+  const down = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: { state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' } } });
+  try {
+    assert.equal(down.text('uof-tile-committed-value'), 'Unavailable');
+    assert.equal(down.by('uof-remaining'), undefined, 'Remaining is not shown');
+    assert.match(down.text('uof-committed-unavailable'), /Remaining is not shown\. It is not \$0\./);
+    assert.ok(!/\$[1-9]/.test(down.text('uof-tile-committed')), 'no amount is drawn');
+  } finally { await down.close(); }
+  const none = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: { state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.', href: '/raise/capital-relationships/commitments?project_id=3' } } });
+  try {
+    assert.equal(none.text('uof-tile-committed-value'), 'Not recorded');
+    assert.equal(none.pr(none.by('uof-tile-committed-link')).href, '/raise/capital-relationships/commitments?project_id=3');
+    assert.equal(none.by('uof-remaining'), undefined);
+  } finally { await none.close(); }
+  const admin = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }), committed: { state: 'refused', reason: 'Commitments are read in Capital relationships by the venture’s founders. Staff give a reason for a support read there.' } } });
+  try {
+    assert.equal(admin.text('uof-tile-committed-value'), 'Refused');
+    assert.equal(admin.by('uof-remaining'), undefined);
+  } finally { await admin.close(); }
+});

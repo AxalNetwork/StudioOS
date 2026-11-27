@@ -1,0 +1,112 @@
+Build the Spin-Out Lab as a 4-week guided sprint. It's the default experience for new
+founders who don't yet have a company incorporated. Detection happens at onboarding
+("Tell me about yourself") — if the user picks "I have an idea / pre-incorporation",
+their account is flagged as `spinout_lab_active` and the sidebar collapses to the
+sprint view.
+
+Schema (add to cloudflare-worker/sql/schema.sql + a migration):
+  ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;
+  ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER DEFAULT 1;     -- 1..4
+  ALTER TABLE users ADD COLUMN spinout_lab_started_at DATETIME;
+  CREATE TABLE spinout_lab_milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    week INTEGER NOT NULL,
+    milestone_key TEXT NOT NULL,
+    completed_at DATETIME,
+    UNIQUE(user_id, milestone_key)
+  );
+
+Week structure (each week unlocks features in the sidebar; previous weeks remain
+unlocked):
+
+  WEEK 1 — Idea & Problem Validation
+    Unlocked features: Projects (create the venture record), Customer Discovery,
+                       Market Intelligence
+    Milestone to advance: project created + ≥3 customer discovery interviews logged
+    Explainer copy:
+      Projects: "Your venture's home base. Capture the problem, target customer, and
+                 hypothesis you're testing this week."
+      Customer Discovery: "Talk to 5+ potential customers. Log every conversation —
+                           pain points, quotes, and whether your solution resonates."
+      Market Intelligence: "Size your market and study competitors before you build.
+                            TAM/SAM/SOM and a landscape map."
+
+  WEEK 2 — Solution Design & Roadmap
+    Unlocked features: Roadmap (OKRs + Kanban), Brand Builder, Pitch Deck
+    Milestone: ≥3 OKRs created, brand basics filled (name, tagline, colors), and a
+               first deck draft saved
+    Explainer copy:
+      Roadmap: "Turn your idea into 90-day objectives and weekly deliverables.
+                Drag tasks across To-Do → In Progress → Done."
+      Brand Builder: "Pick a name, generate a logo, and lock in your brand voice."
+      Pitch Deck: "A 10-slide investor deck builder, pre-filled from your project
+                   data. Export to PDF when ready."
+
+  WEEK 3 — Validation & Co-founder
+    Unlocked features: Co-founder Match, Mentors, Office Hours, Scoring
+    Milestone: scoring run completed (≥40), at least one mentor meeting booked OR
+               co-founder request sent
+    Explainer copy:
+      Co-founder Match: "Find a technical or business co-founder with complementary
+                         skills, vetted by us."
+      Mentors: "Browse mentors by sector and book 30-min sessions to pressure-test
+               your plan."
+      Office Hours: "Drop into open partner office hours for live feedback —
+                     no booking needed."
+      Scoring: "Get an objective venture readiness score across team, market, problem
+                fit, and traction. Use it to find your weakest area."
+
+  WEEK 4 — Incorporation & Capital
+    Unlocked features: Incorporate, Cap Table, Section 83(b), Cofounder Agreement,
+                       Capital, Compliance, KYC
+    Milestone: company incorporated (Incorporate flow finished)
+    Explainer copy:
+      Incorporate: "Form your Delaware C-Corp in one click. We handle filings,
+                    EIN, and your founders' stock issuance."
+      Cap Table: "Issue founder stock and track equity. Built-in vesting schedules
+                  and option-pool modelling."
+      Section 83(b): "File your 83(b) election within 30 days of stock issuance to
+                      avoid a tax disaster. We auto-generate the form."
+      Cofounder Agreement: "Lock down equity splits, vesting, IP assignment, and
+                            decision rights before money complicates things."
+      Capital: "Open a fundraise with the right investors for your stage and
+               sector."
+      Compliance + KYC: "Verify your identity, satisfy AML, and stay audit-ready
+                         for future investors."
+
+After Week 4 completes (incorporation done) → set users.spinout_lab_active = 0,
+set users.is_incorporated = 1, and reveal the full sidebar (the existing
+"existing founder" view).
+
+Implementation:
+1. Worker route cloudflare-worker/src/routes/spinout_lab.ts:
+     GET  /api/spinout-lab/state         → { active, week, days_remaining,
+                                             milestones, unlocked_features }
+     POST /api/spinout-lab/start         → activates lab, sets week=1, started_at
+     POST /api/spinout-lab/milestone     → { milestone_key } marks done; auto-advances
+                                            week when that week's milestones are met
+     POST /api/spinout-lab/exit          → marks incorporated, deactivates lab
+2. Frontend lib/api.js: add `spinoutLab.state()`, `.start()`, `.complete(key)`,
+   `.exit()`.
+3. Frontend onboarding: if user picks "I have an idea / pre-incorporation" on the
+   "Tell me about yourself" / OnboardingFounderPage step, call spinoutLab.start().
+4. App.jsx sidebar: when `user.spinout_lab_active === 1`, render a NEW
+   <SpinoutLabSidebar /> component that:
+   - Shows the 4-week progress bar at the top.
+   - Lists ONLY the features unlocked for this user's current week (and any earlier
+     weeks).
+   - Each item shows a small (i) tooltip with the explainer copy above.
+   - Hides every other sidebar section.
+5. SpinoutLabPage.jsx becomes the dashboard for active sprints (today's milestones,
+   day counter, "I finished this milestone" buttons).
+6. Each milestone-eligible action elsewhere (e.g. project created, OKR created,
+   incorporation completed) calls spinoutLab.complete(milestone_key) on success.
+
+Acceptance:
+- A brand-new founder picks "I have an idea" in onboarding → lands on SpinoutLab
+  dashboard with Week 1 features only in the sidebar.
+- Creating a project + 3 interviews unlocks Week 2 sidebar items.
+- Completing all 4 weeks (incorporating) → sidebar switches to the standard founder
+  layout, spinout_lab_active becomes 0.
+- Explainer tooltips render for new founders on every unlocked sidebar item.

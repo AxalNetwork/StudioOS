@@ -1,0 +1,31 @@
+{
+  "skill": "blog-post-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "research.library": [
+        {
+          "title": "ADA practice survey 2025",
+          "finding": "Clinics lose 12% of slots to no-shows"
+        }
+      ],
+      "validate.records": {
+        "quotes": [
+          "We spend Mondays calling no-shows"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "12%",
+      "ADA practice survey 2025"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "100% of clinics"
+    ]
+  }
+}

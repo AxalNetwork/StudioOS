@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Team › AI agents and skills</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">AI agents and skills</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Prompt A (AG1 to AG7): agents as named characters with fixed values. Prompt B (SK0 to SK6): skills, added to agents separately. Agents propose; a named person accepts. Desktop boards are 1440 wide, phone frames 390.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+<section style="display:flex;flex-direction:column;gap:48px">
+<h2 style="margin:0;font-size:30px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2>
+<sc-for list="{{ g.boards }}" as="b" hint-placeholder-count="4">
+<div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><span style="font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</span></div>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1000px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Agents Skills Page v2" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;min-height:${h}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h}px` }; };
+    const B = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return { groups: [
+      { t: 'Prompt A · AI agents', boards: [
+        B('AG1', 'Agent card, at three sizes', [F('ag1', '', 1440, 718)], 'The 16 agents of the Hall of the Trefoil. Agents have square pixel portraits and the agent mark; people keep photos or initials. Values and risk are fixed, and gender sets neither.'),
+        B('AG2', 'Add an AI agent: choose who', [F('ag2', 'Gallery · 4 columns at 1440, 3 at 1280, 2 at 768, 1 on a phone', 1440, 2205), F('ag2c', 'Compare · up to 3 pinned cards', 1440, 861)], 'Agents already on this team show “On your team” and cannot be chosen twice.'),
+        B('AG3', 'Add an AI agent: skills step', [F('ag3', '', 1440, 1469)], 'Natural-fit skills come first. Vesta’s starting skills are dashed on the radar. The hint appears when a skill outside her natural fit is added.'),
+        B('AG4', 'Add an AI agent: model and cap', [F('ag4', '', 1440, 900)]),
+        B('AG5', 'Agent profile (TM5, rebuilt)', [F('ag5', 'In context, over Team › AI agents', 1440, 1100), F('ag5f', 'The full sheet', 640, 1809)], 'Values and risk are fixed. Only skills, the model and the cap change.'),
+        B('AG6', 'Team › AI agents', [F('ag6', '', 1440, 900)]),
+        B('AG7', 'States', [F('ag7a', 'AI agents not switched on', 1440, 1240), F('ag7b', 'Read-only member', 1440, 760), F('ag7c', 'Paused for its cap', 1440, 513), F('ag7d', 'Agents could not be read', 1440, 620), F('ag7e', 'Phone · gallery, one column', 390, 844), F('ag7f', 'Phone · profile, full height', 390, 844), F('ag7g', 'An agent with no skills', 1440, 760), F('ag2-d', 'Dark · gallery', 1440, 2205), F('ag5f-d', 'Dark · profile', 640, 1809)])
+      ] },
+      { t: 'Prompt B · Skills', boards: [
+        B('SK0', 'Areas', [F('sk0', '', 1440, 900)], 'The eight areas of the /studio radar. Each energy visual is drawn from its area’s hue and radar angle; denser lines mean a higher level. They hold no text.'),
+        B('SK1', 'Skill directory', [F('sk1', 'All skills', 1440, 1593)], '“Used by” counts agents across Axal VC; the avatars are your own agents that use it.'),
+        B('SK2', 'Skill page', [F('sk2', '', 1440, 1143)]),
+        B('SK3', 'Assign to agents', [F('sk3', '', 1440, 1240)], 'Each agent shows its run-cost change before you assign. Values belong to agents, never to skills.'),
+        B('SK4', 'New or edit skill', [F('sk4', 'Write · Paste a SKILL.md', 1440, 1328)]),
+        B('SK5', 'Cost explainer', [F('sk5', '', 1100, 290)], 'Shown inline on SK3 and AG3.'),
+        B('SK6', 'States', [F('sk6a', 'Empty area', 1440, 720), F('sk6b', 'Loading', 1440, 900), F('sk6c', 'Skills could not be read', 1440, 560), F('sk6d', 'Read-only member', 1440, 940), F('sk6e', 'A retired Axal skill still pinned', 800, 415), F('sk6f', 'Imported SKILL.md with an unapproved tool', 640, 1122), F('sk6g', 'Phone', 390, 844), F('sk1-d', 'Dark', 1440, 1593)])
+      ] }
+    ] };
+  }
+}
+</script>
+</body></html>

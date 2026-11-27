@@ -1,0 +1,53 @@
+import { request } from '../api.js';
+
+// D962 (#2795) — the program pages' reads and writes on part 1's Worker
+// (D954, #2787: routes/admin_programs.ts and routes/learning_programs.ts),
+// which added no client. Part 9 draws them; part 10 (#2796) reuses them.
+//   program        GET  /admin/programs/:key                  (requireAdmin)
+//                  → { program, playbook: { published, version, published_at, sections }, draft? }
+//                  `draft` ({ sections, edited_at, differs }) is a Super Admin's only.
+//   editSection    PUT  /admin/programs/:key/playbook/sections/:section  { title?, body? }  (requireSuperAdmin)
+//                  → the same body as `program`, draft included. 400 `computed_section` on a body for a
+//                  computed section, 404 `unknown_section`.
+//   publish        POST /admin/programs/:key/playbook/publish  (requireSuperAdmin)
+//                  → the detail; 409 `nothing_to_publish` when the draft is what is published,
+//                  409 `publish_conflict` when another publish landed first.
+//   update         PATCH /admin/programs/:key { member_access }  (requireSuperAdmin, D4873) → { program }
+//   activity       GET  /admin/programs/:key/activity?before=&limit=  (requireAdmin)
+//                  → { program, rows: [{ at, kind, by: 'hq'|'admin', concerns }], next_before,
+//                      not_audited: { recorded: false, reason } | null, scope? }
+//   mentorSessions GET  /admin/programs/mentor-cohorts/sessions  (requireAdmin)
+//                  → { cycles: [{ cycle_id, year, month, start_at, end_at, status, mentors, sessions }], rule }
+//   learningWeekly GET  /learning/programs/mine/enrolments?weeks=4|12|52  (/programs/mine's gate and scope)
+//                  → { weeks, week_axis, current_week, total, by_week, programs: [{ uid, name, weeks, total }], rule }
+//   learner        GET  /learning/programs/:uid/learners/:userUid  (assigned admin or Super Admin)
+//                  → { program, contents, learner }; 403 `not_assigned`, 404 `not_enrolled`.
+//   exportCsv      POST /admin/programs/:key/export { weeks }  (requireAdmin, D1124)
+//                  → { download_url, expires_in_seconds, format: 'csv', program, weeks, rows }; 409 `nothing_to_export`,
+//                  503 `export_not_logged` (nothing is made when the audit row cannot be written).
+function query(params = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === '') continue;
+    q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+const at = (key) => `/admin/programs/${encodeURIComponent(key)}`;
+
+export const programsApi = {
+  program: (key) => request(at(key)),
+  // D4873 (#4873, part 4): PATCH /admin/programs/:key (requireSuperAdmin) — the registry row's member access (or null).
+  update: (key, fields) => request(at(key), { method: 'PATCH', body: JSON.stringify(fields || {}) }),
+  editSection: (key, section, body) => request(`${at(key)}/playbook/sections/${encodeURIComponent(section)}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  // D4806: the revision of the draft that was reviewed (`draft.hash`); a draft that changed since is refused.
+  publish: (key, expectedHash) => request(`${at(key)}/playbook/publish`, { method: 'POST', body: JSON.stringify({ expected_hash: expectedHash }) }),
+  activity: (key, params = {}) => request(`${at(key)}/activity${query(params)}`),
+  mentorSessions: () => request('/admin/programs/mentor-cohorts/sessions'),
+  learningWeekly: (weeks = 12) => request(`/learning/programs/mine/enrolments${query({ weeks })}`),
+  learner: (programUid, userUid) => request(`/learning/programs/${encodeURIComponent(programUid)}/learners/${encodeURIComponent(userUid)}`),
+  // D1124 (#3004): the page's Download (CSV), counts only and logged → { download_url, expires_in_seconds, rows }.
+  exportCsv: (key, weeks = 12) => request(`${at(key)}/export`, { method: 'POST', body: JSON.stringify({ weeks }) }),
+};

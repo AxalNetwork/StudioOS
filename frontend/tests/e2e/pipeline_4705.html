@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- #4705: local Vite-only fixture for the real studio board with synthetic API answers. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pipeline accessibility fixture</title></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import PipelinePage from '/src/pages/PipelinePage.jsx';
+import { api } from '/src/lib/api.js';
+import '/src/index.css';
+const deal = { id: 1, name: 'Synthetic startup', sector: 'saas', pipeline_stage: 'idea', task_counts: { todo: 0, in_progress: 0, done: 0 } };
+api.getCurrentUser = async () => ({ id: 'synthetic-operator', role: 'admin' });
+api.pipelineActive = async () => [deal];
+api.getVotes = async () => ({ total_voters: 0, total_weight: 0, by_type: {}, strong_buy_pct: 0 });
+api.pipelineCreateProject = async () => { throw new Error('synthetic-raw-detail'); };
+api.pipelineDealDetail = async () => ({ id: 1, current_stage: 'idea', project: { name: deal.name }, tasks: [], metrics: [], gates: [], stages: [] });
+api.pipelineAdvance = async (_id, stage) => { deal.pipeline_stage = stage; return {}; };
+createRoot(document.getElementById('root')).render(React.createElement(MemoryRouter, null, React.createElement(PipelinePage, { embedded: true })));
+</script></body></html>

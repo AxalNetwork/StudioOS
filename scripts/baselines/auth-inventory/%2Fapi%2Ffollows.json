@@ -1,0 +1,7 @@
+{
+  "GET /api/follows/status": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

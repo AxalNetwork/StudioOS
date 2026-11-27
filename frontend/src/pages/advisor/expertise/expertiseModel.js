@@ -1,0 +1,278 @@
+/**
+ * D4681 (#4681, Expertise P2) — what Services, Proof and Thinking say about
+ * themselves, pure: no React and no fetch. `ServicesZone.jsx`,
+ * `ProofZone.jsx` and `ThinkingZone.jsx` draw it.
+ *
+ * THREE RULES THIS FILE HOLDS:
+ *   · a service cannot be booked: founders book session types and booking
+ *     links. It is on the public profile only once its owner publishes it
+ *     (D5315 part 3, D4824); a Draft or Hidden service is the advisor's alone;
+ *   · proof is private until the advisor publishes a confirmed claim (#5315
+ *     part 2); what one proof card says is `proofModel.js` (D4825);
+ *   · an article's state says who can read it and what the writer does next,
+ *     from the statuses `routes/articles.ts` actually writes.
+ */
+
+// ─────────────────────────────────────────────────────────── Services
+
+export const SERVICE_STATES = Object.freeze([
+  { id: true, label: 'Active', hint: 'In your records as something you offer now.' },
+  { id: false, label: 'Inactive', hint: 'Kept in your records as no longer offered.' },
+]);
+export const serviceStateLabel = (row) => (row?.is_active ? 'Active' : 'Inactive');
+// D4824 (EX-06): only a Published service is on the public profile (D5315 part 3);
+// nobody books a service, a founder books a session type (D4681, #4832).
+export const SERVICE_NOT_PUBLIC = 'Only a Published service is on your public profile. A Draft or Hidden service is yours alone, and nobody can book a service.';
+export const SERVICE_BOOKABLE = 'What a founder can book is a session type, and a public booking link to it. Those are set in Practice › Sessions.';
+import { centsToInput } from '../../../lib/moneyInput';
+import { formatMinorOrCount, plainAmount } from '../../../lib/money';
+
+export const SESSIONS_PATH = '/practice/sessions';
+export const CURRENCY_RE = /^[A-Za-z]{3}$/;
+
+/**
+ * The PATCH body for an edit: only what changed, so an unchanged field is not
+ * re-sent. `cents` is the parsed price (null for blank). Returns `{ error }`
+ * when a field cannot be saved, and `{ body: {} }` when nothing changed.
+ */
+export function serviceEditBody(row, draft, cents) {
+  const title = String(draft?.title ?? '').trim();
+  if (!title) return { error: 'A service needs a title.' };
+  const currency = String(draft?.currency ?? '').trim().toUpperCase() || row?.currency || 'USD';
+  if (!CURRENCY_RE.test(currency)) return { error: 'A currency is three letters, such as USD.' };
+  const next = {
+    title,
+    kind: draft?.kind || 'fixed',
+    price_cents: cents ?? null,
+    currency,
+    duration_note: String(draft?.duration_note ?? '').trim() || null,
+    scope: String(draft?.scope ?? '').trim() || null,
+    is_active: draft?.is_active !== false,
+  };
+  const body = {};
+  for (const [k, v] of Object.entries(next)) {
+    const was = k === 'is_active' ? !!row?.[k] : (row?.[k] ?? null);
+    if (was !== v) body[k] = v;
+  }
+  // A price means nothing without its currency: moving a priced service to
+  // another currency sends the price in the same edit (the Worker requires it).
+  if ('currency' in body && row?.price_cents != null && !('price_cents' in body)) body.price_cents = next.price_cents;
+  return { body };
+}
+
+/**
+ * D4824 (#4824, EX-06) — a service's publication state, as `advisor_services.publication_state`
+ * stores it (D5315 part 3). It is not derived from Active / Inactive: a row the Worker sent
+ * without the column (an older read) is a Draft, the column's own default.
+ */
+export const SERVICE_PUBLICATION = Object.freeze({
+  draft: { label: 'Draft', tone: 'neutral', hint: 'Only you see it. It is not on your public profile.' },
+  published: { label: 'Published', tone: 'ok', hint: 'On your public profile. Founders book through a session type, not the service.' },
+  hidden: { label: 'Hidden', tone: 'warn', hint: 'Taken off your public profile. Publish it again at any time.' },
+});
+export const publicationOf = (row) => (Object.hasOwn(SERVICE_PUBLICATION, row?.publication_state) ? row.publication_state : 'draft');
+
+/** The one publication action a card offers, from the state it is in now. */
+export function servicePublicationAction(row) {
+  const now = publicationOf(row);
+  if (now === 'published') return { to: 'hidden', label: 'Hide', done: 'hidden from your public profile' };
+  return { to: 'published', label: now === 'hidden' ? 'Publish again' : 'Publish', done: 'published on your public profile' };
+}
+
+/**
+ * The price with its currency written out, never a bare symbol: "CHF 12,000.00", "USD 450.50".
+ * The amount keeps the currency's own decimals; null (no price) is the caller's "No price set".
+ */
+export function servicePrice(cents, currency) {
+  if (cents == null) return null;
+  const code = String(currency || '').trim().toUpperCase();
+  const amount = plainAmount(cents, code);
+  return amount == null ? formatMinorOrCount(cents, code) : `${code} ${amount}`;
+}
+
+/** Whole-list counts per publication state, from `publication_counts`, else the rows on screen. */
+export function publicationCounts(res, rows) {
+  const c = res?.publication_counts;
+  if (c && ['draft', 'published', 'hidden'].every((k) => Number.isFinite(Number(c[k])))) {
+    return { draft: Number(c.draft), published: Number(c.published), hidden: Number(c.hidden) };
+  }
+  const out = { draft: 0, published: 0, hidden: 0 };
+  for (const r of rows || []) out[publicationOf(r)] += 1;
+  return out;
+}
+
+/** D4711: what a failed service write says. Fixed sentences; never the error's own text. */
+export const SERVICE_FAILED = Object.freeze({
+  add: 'The service could not be saved. Nothing was added.',
+  edit: 'The change could not be saved. The service is as it was.',
+  state: 'That could not be changed. The service is as it was.',
+  publish: 'That could not be changed. The service is as it was on your public profile.',
+  remove: 'Nothing was removed. The service is as it was.',
+});
+
+/** D4711: what removing a service takes with it, said before it happens. */
+export function serviceRemoveLines(row) {
+  return [
+    'It is your own record: no session type, booking link or booking points to it, so nothing else changes.',
+    ...(publicationOf(row) === 'published' ? ['It comes off your public profile.'] : []),
+    row?.price_cents == null ? 'It has no price recorded.' : 'Its price goes with it. Only the current price is stored, so none is kept.',
+    'It cannot be undone. Add it again to bring it back.',
+  ];
+}
+
+/** The edit form's starting values, from a saved row. */
+export function serviceDraftOf(row) {
+  return {
+    title: row?.title || '',
+    kind: row?.kind || 'fixed',
+    price: centsToInput(row?.price_cents),
+    currency: row?.currency || 'USD',
+    duration_note: row?.duration_note || '',
+    scope: row?.scope || '',
+    is_active: !!row?.is_active,
+  };
+}
+
+// ─────────────────────────────────────────────────────────── Proof
+
+/** What deleting a proof item takes with it, said before it happens. */
+export function proofDeleteLines(item) {
+  const consents = item?.consents || [];
+  const names = consents.map((c) => c.attester_name).filter(Boolean);
+  // D4670: a row carries its `state`; an earlier confirmation that needs reconfirming has no link out.
+  const pending = consents.filter((c) => (c.state ? c.state === 'pending' : !c.consent_given && !c.withdrawn_at)).length;
+  const lines = [
+    consents.length
+      ? `It also deletes ${consents.length === 1 ? 'the consent record' : `all ${consents.length} consent records`} behind it (${names.join(', ')}): names, emails and statements.`
+      : 'No one has been asked to confirm it, so nothing else goes with it.',
+  ];
+  if (pending) lines.push(`${pending === 1 ? 'The link you sent stops' : `The ${pending} links you sent stop`} working.`);
+  lines.push('It cannot be undone. Axal keeps no copy to restore it from.');
+  return lines;
+}
+export const proofDeleteTitle = (item) => `Delete “${item?.title || 'this claim'}”?`;
+export const proofDeletedLine = (n) => (n ? `Deleted, with ${n === 1 ? 'its consent record' : `its ${n} consent records`}.` : 'Deleted.');
+export const PROOF_DELETE_FAILED = 'Nothing was deleted. The claim and its consents are as they were.';
+
+// ─────────────────────────────────────────────────────────── Thinking
+
+/**
+ * D4826 (#4826) — EVERY STATUS THE WORKER WRITES TO `articles.status`, and
+ * nothing else. Read off the two routers that write it:
+ *
+ *   · `routes/articles.ts` — `draft` (a new piece, and Withdraw), `submitted`
+ *     (Submit for review), `published` (nothing here, only the counter);
+ *   · `routes/admin_articles.ts` — `in_review`, `changes_requested`,
+ *     `rejected`, `approved` (also what unfeaturing a published piece returns
+ *     it to), `published`.
+ *
+ * `scheduled` is NOT in this list, and that is the one departure between the
+ * canvas's eight editorial states and the store: it is `approved` with a
+ * `publish_at` the per-minute cron publishes at (D484, migration 346), which
+ * is how `articleQueue.ts` derives it on the admin side too. So the shelf
+ * derives it the same way rather than inventing a status
+ * (`stageKey`), and every other canvas state is a column value.
+ *
+ * `expertise_states_4826.test.mjs` reads both routers and fails if a status
+ * appears there with no stage here — which is what would quietly send a piece
+ * to the `unknown` fallback.
+ */
+export const ARTICLE_STATUSES = Object.freeze([
+  'draft', 'submitted', 'in_review', 'changes_requested', 'rejected', 'approved', 'published',
+]);
+
+/**
+ * Each article state, as the writer reads it: the label, who can read the
+ * piece, and the one next step. `next.to` is a real route (App.jsx):
+ * `/articles/edit/:id` is the editor, `/articles/:slug` the public reader.
+ */
+const STAGES = {
+  draft: { label: 'Draft', tone: 'neutral', audience: 'Only you can read it.', next: 'Keep writing' },
+  submitted: { label: 'Submitted', tone: 'info', audience: 'Only you and Axal’s editors can read it. It waits for an editor.', next: 'Open in the editor' },
+  in_review: { label: 'In review', tone: 'info', audience: 'Only you and Axal’s editors can read it. An editor is reading it, so it is locked.', next: 'See its status' },
+  changes_requested: { label: 'Changes requested', tone: 'warn', audience: 'Only you and Axal’s editors can read it. The editor’s notes are in the editor.', next: 'Make the changes' },
+  rejected: { label: 'Not accepted', tone: 'warn', audience: 'Only you can read it. You can revise it and send it again.', next: 'Revise and resend' },
+  approved: { label: 'Approved', tone: 'ok', audience: 'Accepted, not public yet. An editor publishes it.', next: 'Open in the editor' },
+  scheduled: { label: 'Scheduled', tone: 'ok', audience: null, next: 'Open in the editor' },
+  published: { label: 'Published', tone: 'ok', audience: 'Public: anyone with the link can read it.', next: 'Read it' },
+};
+export const ARTICLE_STAGE_KEYS = Object.freeze(Object.keys(STAGES));
+
+const day = (iso) => String(iso || '').slice(0, 10);
+
+/** An approved piece with a time set is Scheduled (D484); everything else is its own status. */
+export function stageKey(a) {
+  if (a?.status === 'approved' && a?.publish_at) return 'scheduled';
+  return STAGES[a?.status] ? a.status : null;
+}
+
+export function articleStage(a) {
+  const key = stageKey(a);
+  if (!key) {
+    // D4826 (#4826): the label was the raw column value, so a status this page
+    // does not know showed a founder `changes_requested` where every other row
+    // showed a sentence. The state is Not recorded, and the stored value is
+    // named in the audience line, where it reads as the record it is.
+    const stored = String(a?.status ?? '').trim();
+    return {
+      key: 'unknown',
+      label: 'Not recorded',
+      tone: 'neutral',
+      audience: stored
+        ? `Its state is recorded as “${stored}”, which this page has no words for yet. Who can read it is not recorded.`
+        : 'No state is recorded for it. Who can read it is not recorded.',
+      next: { label: 'Open in the editor', to: `/articles/edit/${a?.id}` },
+    };
+  }
+  const s = STAGES[key];
+  const audience = key === 'scheduled' ? `Accepted, not public yet. It goes public on ${day(a.publish_at)}.` : s.audience;
+  const to = key === 'published' && a?.slug ? `/articles/${a.slug}` : `/articles/edit/${a?.id}`;
+  return { key, label: s.label, tone: s.tone, audience, next: { label: key === 'published' && !a?.slug ? 'Open in the editor' : s.next, to } };
+}
+
+/**
+ * D4826 part 2 (#4826): THE SHELF'S FILTER CHIPS, as EX-11 draws them —
+ * `All · Needs you · With editors · Published`. Each chip is a set of the
+ * states above, so a chip only collects pieces whose own pill says why they
+ * are there:
+ *
+ *   · Needs you     — the writer's move: Draft, Changes requested;
+ *   · With editors  — an editor's move: Submitted, In review, and Approved with
+ *                     no time set (an editor publishes it);
+ *   · Published     — Published.
+ *
+ * Scheduled (it goes public by itself), Not accepted (closed until the writer
+ * chooses to revise) and a state this page has no words for are under All
+ * only. The Worker counts the same sets over the whole shelf
+ * (`GET /api/advisors/me/thinking`, `counts`), so a chip's figure is never
+ * the loaded page's.
+ */
+export const THINKING_VIEWS = Object.freeze({
+  needs_you: Object.freeze(['draft', 'changes_requested']),
+  with_editors: Object.freeze(['submitted', 'in_review', 'approved']),
+  published: Object.freeze(['published']),
+});
+
+/** Whether one piece belongs under a chip. `all` keeps every piece. */
+export function inThinkingView(a, view) {
+  const keys = THINKING_VIEWS[view];
+  return keys ? keys.includes(stageKey(a)) : true;
+}
+
+/**
+ * D4826 (#4826): the state an EXPORT row carries — the same words the shelf's
+ * pill shows. The export used to send the column value (`changes_requested`,
+ * `in_review`), so the one artefact a writer takes away named states in the
+ * store's language and called six of them nothing a reader would recognise.
+ */
+export const articleStateLabel = (a) => articleStage(a).label;
+
+/** One revision row, as the History list reads it (D1406's author read). */
+export function revisionLine(r) {
+  const at = STAGES[r?.status_at_save]?.label || r?.status_at_save || null;
+  return {
+    key: r?.rev,
+    title: `Revision ${r?.rev}`,
+    line: [day(r?.created_at), r?.saved_by_name ? `saved by ${r.saved_by_name}` : null, at ? `while ${at.toLowerCase()}` : null, r?.reason || null].filter(Boolean).join(' · '),
+  };
+}

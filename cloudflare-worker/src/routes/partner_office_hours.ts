@@ -1,0 +1,539 @@
+/**
+ * T13 — Partner office hours.
+ * Mounted at /api/partner-office-hours. Mirrors advisors.ts but keyed on
+ * `partner_id` instead of `advisor_id`. Booking semantics are identical.
+ */
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { Env } from '../types';
+import { requireAuth } from '../auth';
+import {
+  isAdmin, isFounder, mapError, nowIso, newUid, requirePartnerProfile,
+} from './_t13t14t15_helpers';
+import { refuse } from '../util/refusal';
+import {
+  listItems, addItem, updateItem, deleteItem, myItems, rateBooking, ratingSummary,
+} from '../services/partnerBookingFollowups';
+
+const r = new Hono<{ Bindings: Env }>();
+
+type SlotRow = {
+  id: number; uid: string; partner_id: number;
+  starts_at: string; ends_at: string; capacity: number;
+  meeting_url: string | null; notes: string | null;
+  is_cancelled: number; created_at: string;
+};
+type BookingRow = {
+  id: number; uid: string; slot_id: number; partner_id: number;
+  founder_user_id: number; topic: string | null; notes: string | null;
+  status: string; cancel_reason: string | null;
+  created_at: string; updated_at: string;
+};
+
+function slotDto(s: SlotRow, taken = 0): any {
+  return {
+    id: s.id, uid: s.uid, partner_id: s.partner_id,
+    starts_at: s.starts_at, ends_at: s.ends_at,
+    capacity: s.capacity, taken, available: Math.max(0, s.capacity - taken),
+    meeting_url: s.meeting_url, notes: s.notes,
+    is_cancelled: !!s.is_cancelled, created_at: s.created_at,
+  };
+}
+/**
+ * #4715 — a slot as anyone but its partner sees it. The meeting link and the
+ * partner's slot notes are for the partner and for a founder whose booking on
+ * the slot was confirmed; to everyone else a slot says only whether it has a
+ * link (`has_meeting_link`). The booking page reads neither field.
+ */
+function publicSlotDto(s: SlotRow, taken = 0): any {
+  const { meeting_url: _url, notes: _notes, ...shown } = slotDto(s, taken);
+  return { ...shown, has_meeting_link: !!s.meeting_url };
+}
+// The booking row itself carries no times: `starts_at` / `ends_at` /
+// `meeting_url` live on `partner_office_hour_slots`. List endpoints LEFT JOIN
+// the slot and pass those three through so the founder-facing page can render
+// the session time, the countdown and the Join link. Detail/transition paths
+// still pass a bare BookingRow — the fields are optional and simply absent.
+//
+// D355: the two list endpoints also LEFT JOIN the founder's rating
+// (partner_booking_ratings, migration 361), so each party sees it on the
+// session it belongs to — the partner on their own sessions, comment included.
+// No rating is `null`, never 0.
+type BookingWithSlotRow = BookingRow & {
+  starts_at?: string | null; ends_at?: string | null; meeting_url?: string | null;
+  rating?: number | null; rating_comment?: string | null;
+};
+function bookingDto(b: BookingWithSlotRow): any {
+  return { ...b, is_cancelled: undefined };
+}
+/**
+ * #4715 — a booking as its founder reads it. The meeting link is the
+ * partner's slot URL; the founder holds it once the partner has confirmed
+ * (or the session is done), the same rule as the slot read. Before that, and
+ * after a cancel or a no-show, the row says only whether a link exists.
+ */
+const LINK_HELD = new Set(['confirmed', 'completed']);
+function founderBookingDto(b: BookingWithSlotRow): any {
+  const dto = bookingDto(b);
+  const has = !!b.meeting_url;
+  if (LINK_HELD.has(String(b.status))) return { ...dto, has_meeting_link: has };
+  const { meeting_url: _url, ...rest } = dto;
+  return { ...rest, has_meeting_link: has };
+}
+
+async function takenForSlot(env: Env, slotId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) c FROM partner_bookings
+     WHERE slot_id = ? AND status IN ('pending','confirmed','completed')`
+  ).bind(slotId).first<{ c: number }>();
+  return Number(row?.c || 0);
+}
+
+async function partnerByUid(env: Env, uid: string) {
+  return env.DB.prepare('SELECT * FROM partners WHERE uid = ?').bind(uid).first<any>();
+}
+
+// Slot management for the calling partner --------------------------------
+r.post('/me/slots', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const body = await c.req.json().catch(() => ({} as any));
+    const starts = String(body.starts_at || '').trim();
+    const ends = String(body.ends_at || '').trim();
+    if (!starts || !ends) return c.json({ detail: 'starts_at and ends_at required' }, 400);
+    if (new Date(ends).getTime() <= new Date(starts).getTime()) {
+      return c.json({ detail: 'ends_at must be after starts_at' }, 400);
+    }
+    const capacity = Math.max(1, Math.min(20, Number(body.capacity || 1)));
+    const uid = newUid();
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO partner_office_hour_slots
+        (uid, partner_id, starts_at, ends_at, capacity, meeting_url, notes, is_cancelled, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
+    ).bind(uid, partner.id, starts, ends, capacity,
+           body.meeting_url ? String(body.meeting_url).slice(0, 500) : null,
+           body.notes ? String(body.notes).slice(0, 1000) : null,
+           nowIso()).run();
+    const slot = await c.env.DB.prepare('SELECT * FROM partner_office_hour_slots WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<SlotRow>();
+    return c.json(slotDto(slot!));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/me/slots', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
+    const sql = upcoming
+      ? 'SELECT * FROM partner_office_hour_slots WHERE partner_id = ? AND is_cancelled = 0 AND ends_at >= ? ORDER BY starts_at ASC'
+      : 'SELECT * FROM partner_office_hour_slots WHERE partner_id = ? ORDER BY starts_at DESC LIMIT 200';
+    const rows = upcoming
+      ? await c.env.DB.prepare(sql).bind(partner.id, nowIso()).all<SlotRow>()
+      : await c.env.DB.prepare(sql).bind(partner.id).all<SlotRow>();
+    const items: any[] = [];
+    for (const s of (rows.results || []) as SlotRow[]) {
+      items.push(slotDto(s, await takenForSlot(c.env, s.id)));
+    }
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/partners/:uid/slots', async (c) => {
+  try {
+    const viewer = await requireAuth(c);
+    const partner = await partnerByUid(c.env, c.req.param('uid'));
+    if (!partner) return c.json({ detail: 'Partner not found' }, 404);
+    const upcoming = (c.req.query('upcoming_only') || 'true').toLowerCase() === 'true';
+    const sql = upcoming
+      ? 'SELECT * FROM partner_office_hour_slots WHERE partner_id = ? AND is_cancelled = 0 AND ends_at >= ? ORDER BY starts_at ASC'
+      : 'SELECT * FROM partner_office_hour_slots WHERE partner_id = ? ORDER BY starts_at DESC LIMIT 200';
+    const rows = upcoming
+      ? await c.env.DB.prepare(sql).bind(partner.id, nowIso()).all<SlotRow>()
+      : await c.env.DB.prepare(sql).bind(partner.id).all<SlotRow>();
+    // #4715: the partner (and an admin) see their own slots whole; a founder
+    // sees the link and notes only on a slot they hold a confirmed booking on.
+    const whole = Number(viewer.partner_id) === Number(partner.id) || isAdmin(viewer);
+    const held = new Set<number>();
+    if (!whole) {
+      const mine = await c.env.DB.prepare(
+        `SELECT slot_id FROM partner_bookings
+          WHERE partner_id = ? AND founder_user_id = ? AND status IN ('confirmed', 'completed')`,
+      ).bind(partner.id, viewer.id).all<{ slot_id: number }>();
+      for (const b of mine.results || []) held.add(Number(b.slot_id));
+    }
+    const items: any[] = [];
+    for (const s of (rows.results || []) as SlotRow[]) {
+      const taken = await takenForSlot(c.env, s.id);
+      items.push(whole || held.has(Number(s.id)) ? slotDto(s, taken) : publicSlotDto(s, taken));
+    }
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.delete('/me/slots/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const id = Number(c.req.param('id'));
+    const slot = await c.env.DB.prepare('SELECT * FROM partner_office_hour_slots WHERE id = ?').bind(id).first<SlotRow>();
+    if (!slot || slot.partner_id !== partner.id) return c.json({ detail: 'Slot not found' }, 404);
+    await c.env.DB.prepare('UPDATE partner_office_hour_slots SET is_cancelled = 1 WHERE id = ?').bind(id).run();
+    // D4703 (#4703): the same cleanup a single cancel does, for every booking
+    // this statement cancelled (as the advisor slot delete, part 1).
+    const cancelled = await c.env.DB.prepare(
+      `UPDATE partner_bookings SET status='cancelled', cancel_reason=COALESCE(cancel_reason,'slot_cancelled'), updated_at=?
+       WHERE slot_id = ? AND status IN ('pending','confirmed') RETURNING id`
+    ).bind(nowIso(), id).all<{ id: number }>();
+    const ids = (cancelled.results || []).map((r) => Number(r.id));
+    if (ids.length) deferCalendarCancel(c, ids);
+    return c.json({ ok: true, bookings_cancelled: ids.length });
+  } catch (e) { return mapError(c, e); }
+});
+
+// Booking ------------------------------------------------------------------
+r.post('/slots/:id/book', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isFounder(user) && !isAdmin(user)) return c.json({ detail: 'Founder role required' }, 403);
+    const slotId = Number(c.req.param('id'));
+    const body = await c.req.json().catch(() => ({} as any));
+    const slot = await c.env.DB.prepare('SELECT * FROM partner_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
+    if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+    if (new Date(slot.starts_at).getTime() < Date.now()) {
+      return c.json({ detail: 'Slot is in the past' }, 400);
+    }
+    const taken = await takenForSlot(c.env, slotId);
+    if (taken >= slot.capacity) return c.json({ detail: 'Slot full' }, 409);
+    const uid = newUid();
+    try {
+      const ins = await c.env.DB.prepare(
+        `INSERT INTO partner_bookings
+          (uid, slot_id, partner_id, founder_user_id, topic, notes, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+      ).bind(uid, slotId, slot.partner_id, user.id,
+             (body.topic || '').toString().slice(0, 200),
+             (body.notes || '').toString().slice(0, 2000),
+             nowIso(), nowIso()).run();
+      const after = await takenForSlot(c.env, slotId);
+      if (after > slot.capacity) {
+        await c.env.DB.prepare(
+          `UPDATE partner_bookings SET status='cancelled', cancel_reason='capacity_race', updated_at=? WHERE id = ?`
+        ).bind(nowIso(), (ins as any).meta?.last_row_id).run();
+        return c.json({ detail: 'Slot full (race)' }, 409);
+      }
+      const b = await c.env.DB.prepare('SELECT * FROM partner_bookings WHERE id = ?')
+        .bind((ins as any).meta?.last_row_id).first<BookingRow>();
+      // Task #52 — push partner office-hour booking to attendees' external
+      // calendars. All prep happens inside the waitUntil closure so the
+      // HTTP response returns immediately.
+      const rowId = Number((ins as any).meta?.last_row_id);
+      const slotStart = slot.starts_at;
+      const slotEnd = slot.ends_at;
+      const topic = (body.topic || '').toString().slice(0, 200);
+      const notes = (body.notes || '').toString().slice(0, 2000);
+      const syncP = (async () => {
+        try {
+          const founderRow = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?')
+            .bind(user.id).first<{ email: string; name: string | null }>();
+          // `partners` has `email` and `company`; there is no contact_email,
+          // no organization, and no user_id — the link to an account runs the
+          // other way, through `users.partner_id`. All three wrong names threw
+          // together, so neither the partner's own address nor the owner
+          // lookup below ever resolved.
+          const partnerRow = await c.env.DB.prepare(
+            'SELECT email, company FROM partners WHERE id = ?'
+          ).bind(slot.partner_id).first<{ email: string | null; company: string | null }>();
+          const partnerOwnerEmail = (await c.env.DB.prepare(
+            'SELECT email FROM users WHERE partner_id = ? LIMIT 1'
+          ).bind(slot.partner_id).first<{ email: string }>())?.email || null;
+          const ev = {
+            id: `partner_office_hour:${rowId}`,
+            kind: 'partner_office_hour' as const,
+            source_id: rowId,
+            source_uid: uid,
+            title: `Partner office hours${partnerRow?.company ? ' — ' + partnerRow.company : ''}`,
+            start_at: slotStart,
+            end_at: slotEnd,
+            // D4703: still pending, so tentative until the partner confirms.
+            status: 'pending',
+            ics_status: 'TENTATIVE' as const,
+            location_kind: 'video',
+            // #4715: the link goes out with the confirmation
+            // (deferCalendarConfirm), not with the request.
+            location_uri: null,
+            organizer_email: partnerRow?.email || partnerOwnerEmail,
+            attendees: [
+              { email: partnerRow?.email || partnerOwnerEmail, name: partnerRow?.company || null, role: 'partner' },
+              { email: founderRow?.email || null, name: founderRow?.name || null, role: 'founder' },
+            ],
+            notes: topic + (notes ? `\n\n${notes}` : ''),
+          };
+          const { onAxalSessionCreated } = await import('../services/calendar/sync');
+          await onAxalSessionCreated(c.env, ev);
+        } catch (e) { console.warn('[partner_oh] calendar sync hook failed', e); }
+      })();
+      if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(syncP);
+      return c.json(bookingDto(b!));
+    } catch (e: any) {
+      if (String(e?.message || e).includes('UNIQUE')) {
+        return c.json({ detail: 'Already booked this slot' }, 409);
+      }
+      throw e;
+    }
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/me/bookings', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const status = c.req.query('status');
+    const sql = status
+      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
+          WHERE b.partner_id = ? AND b.status = ?
+          ORDER BY b.created_at DESC LIMIT 200`
+      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
+          WHERE b.partner_id = ?
+          ORDER BY b.created_at DESC LIMIT 200`;
+    const rows = status
+      ? await c.env.DB.prepare(sql).bind(partner.id, status).all<BookingWithSlotRow>()
+      : await c.env.DB.prepare(sql).bind(partner.id).all<BookingWithSlotRow>();
+    return c.json({ items: (rows.results || []).map(bookingDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/bookings/me', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const status = c.req.query('status');
+    const sql = status
+      ? `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
+          WHERE b.founder_user_id = ? AND b.status = ?
+          ORDER BY b.created_at DESC LIMIT 200`
+      : `SELECT b.*, s.starts_at, s.ends_at, s.meeting_url, rt.rating, rt.comment AS rating_comment
+           FROM partner_bookings b
+           LEFT JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           LEFT JOIN partner_booking_ratings rt ON rt.booking_id = b.id
+          WHERE b.founder_user_id = ?
+          ORDER BY b.created_at DESC LIMIT 200`;
+    const rows = status
+      ? await c.env.DB.prepare(sql).bind(user.id, status).all<BookingWithSlotRow>()
+      : await c.env.DB.prepare(sql).bind(user.id).all<BookingWithSlotRow>();
+    return c.json({ items: (rows.results || []).map(founderBookingDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** D4703: one cancel's calendar cleanup, for one booking or a slot's worth, deferred. */
+function deferCalendarCancel(c: Context<{ Bindings: Env }>, ids: number[]) {
+  const p = (async () => {
+    const { onAxalSessionCancelled } = await import('../services/calendar/sync');
+    for (const bookingId of ids) {
+      try { await onAxalSessionCancelled(c.env, 'partner_office_hour', bookingId); }
+      catch (e) { console.warn('[partner_oh] calendar cancel hook failed', e); }
+    }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
+/** D4703: a confirmed booking's copy is pushed again, now firm. */
+function deferCalendarConfirm(c: Context<{ Bindings: Env }>, id: number) {
+  const p = (async () => {
+    try {
+      const row = await c.env.DB.prepare(
+        `SELECT b.id, b.uid, b.topic, b.notes, s.starts_at, s.ends_at, s.meeting_url, p.email AS partner_email, p.company,
+                (SELECT email FROM users WHERE partner_id = b.partner_id LIMIT 1) AS owner_email,
+                u.email AS founder_email, u.name AS founder_name
+           FROM partner_bookings b
+           JOIN partner_office_hour_slots s ON s.id = b.slot_id
+           JOIN partners p ON p.id = b.partner_id
+           LEFT JOIN users u ON u.id = b.founder_user_id
+          WHERE b.id = ? AND b.status = 'confirmed'`
+      ).bind(id).first<any>();
+      if (!row) return;
+      const host = row.partner_email || row.owner_email || null;
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      await onAxalSessionUpdated(c.env, {
+        id: `partner_office_hour:${row.id}`, kind: 'partner_office_hour', source_id: row.id, source_uid: row.uid,
+        title: `Partner office hours${row.company ? ' — ' + row.company : ''}`,
+        start_at: row.starts_at, end_at: row.ends_at, status: 'confirmed', ics_status: 'CONFIRMED',
+        location_kind: 'video', location_uri: row.meeting_url || null, organizer_email: host,
+        attendees: [
+          { email: host, name: row.company || null, role: 'partner' },
+          { email: row.founder_email || null, name: row.founder_name || null, role: 'founder' },
+        ],
+        notes: (row.topic || '') + (row.notes ? `\n\n${row.notes}` : ''),
+      } as any);
+    } catch (e) { console.warn('[partner_oh] calendar confirm hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(p);
+}
+
+async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
+  allowed: string[]; nextStatus: string; whoCan: 'partner' | 'founder' | 'either';
+  reason?: string | null;
+}) {
+  const user = await requireAuth(c);
+  const b = await c.env.DB.prepare('SELECT * FROM partner_bookings WHERE id = ?').bind(id).first<BookingRow>();
+  if (!b) return c.json({ detail: 'Booking not found' }, 404);
+  let isMatchingPartner = false;
+  if (user.partner_id) isMatchingPartner = user.partner_id === b.partner_id;
+  const isOwner = b.founder_user_id === user.id;
+  let allowed = isAdmin(user);
+  if (opts.whoCan === 'partner') allowed = allowed || isMatchingPartner;
+  if (opts.whoCan === 'founder') allowed = allowed || isOwner;
+  if (opts.whoCan === 'either') allowed = allowed || isMatchingPartner || isOwner;
+  if (!allowed) return c.json({ detail: 'Forbidden' }, 403);
+  if (!opts.allowed.includes(b.status)) {
+    return c.json({ detail: `Cannot transition from ${b.status}` }, 409);
+  }
+  // D4703 (#4703): written only from the status read above; a racing press changes nothing.
+  const wrote = await c.env.DB.prepare(
+    'UPDATE partner_bookings SET status=?, cancel_reason=COALESCE(?, cancel_reason), updated_at=? WHERE id = ? AND status = ?'
+  ).bind(opts.nextStatus, opts.reason ?? null, nowIso(), id, b.status).run();
+  if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
+    return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
+  }
+  // Task #52 — remove from external calendars on cancel/no-show (deferred).
+  if (opts.nextStatus === 'cancelled' || opts.nextStatus === 'no_show') deferCalendarCancel(c, [id]);
+  if (opts.nextStatus === 'confirmed') deferCalendarConfirm(c, id);
+  const fresh = await c.env.DB.prepare('SELECT * FROM partner_bookings WHERE id = ?').bind(id).first<BookingRow>();
+  return c.json(bookingDto(fresh!));
+}
+
+r.post('/bookings/:id/confirm', (c) => transition(c, Number(c.req.param('id')),
+  { allowed: ['pending'], nextStatus: 'confirmed', whoCan: 'partner' }));
+r.post('/bookings/:id/cancel', async (c) => {
+  const body = await c.req.json().catch(() => ({} as any));
+  return transition(c, Number(c.req.param('id')),
+    { allowed: ['pending', 'confirmed'], nextStatus: 'cancelled', whoCan: 'either', reason: body.reason || null });
+});
+r.post('/bookings/:id/complete', (c) => transition(c, Number(c.req.param('id')),
+  { allowed: ['pending', 'confirmed'], nextStatus: 'completed', whoCan: 'partner' }));
+r.post('/bookings/:id/no-show', async (c) => {
+  const body = await c.req.json().catch(() => ({} as any));
+  return transition(c, Number(c.req.param('id')),
+    { allowed: ['pending', 'confirmed'], nextStatus: 'no_show', whoCan: 'partner', reason: body.reason || null });
+});
+
+// D355 — what a session left behind: action items and the founder's rating.
+// The rules live in services/partnerBookingFollowups.ts; these routes pass
+// the SESSION user and relay the service's refusals. A caller who is not a
+// party to the booking gets the same 404 as a booking that does not exist.
+type Out = { refused: { status: number; code: string; message: string } } | Record<string, unknown>;
+function relay(c: Context<{ Bindings: Env }>, out: Out) {
+  if ('refused' in out && out.refused) {
+    const f = out.refused as { status: number; code: string; message: string };
+    return refuse(c, f.status, { code: f.code, message: f.message });
+  }
+  return c.json(out);
+}
+
+r.get('/bookings/:id{[0-9]+}/action-items', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return relay(c, await listItems(c.env, Number(c.req.param('id')), user));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_items_unreadable', message: 'The action items could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+r.post('/bookings/:id{[0-9]+}/action-items', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    return relay(c, await addItem(c.env, {
+      bookingId: Number(c.req.param('id')),
+      user,
+      title: body?.title,
+      linkedTool: body?.linked_tool,
+      dueDate: body?.due_date,
+    }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_item_not_saved', message: 'The action item was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+r.get('/action-items/me', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return c.json(await myItems(c.env, user));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_items_unreadable', message: 'Your action items could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+r.patch('/action-items/:itemId{[0-9]+}', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    const patch: Record<string, unknown> = {};
+    for (const k of ['title', 'linked_tool', 'due_date', 'done']) {
+      if (body && Object.prototype.hasOwnProperty.call(body, k)) patch[k] = (body as Record<string, unknown>)[k];
+    }
+    return relay(c, await updateItem(c.env, { itemId: Number(c.req.param('itemId')), user, patch }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_item_not_saved', message: 'The action item was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+r.delete('/action-items/:itemId{[0-9]+}', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    return relay(c, await deleteItem(c.env, Number(c.req.param('itemId')), user));
+  } catch (e) {
+    return refuse(c, 503, { code: 'action_item_not_deleted', message: 'The action item was not deleted. Try again in a moment.', raw: e });
+  }
+});
+
+r.put('/bookings/:id{[0-9]+}/rating', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    return relay(c, await rateBooking(c.env, {
+      bookingId: Number(c.req.param('id')),
+      user,
+      rating: body?.rating,
+      comment: body?.comment,
+    }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'rating_not_saved', message: 'Your rating was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+// Every rated partner's average and count. Averages are about partners, not
+// about any one founder, so any signed-in account may read them; a partner
+// with no ratings is absent from `items`, never 0.
+r.get('/ratings/summary', async (c) => {
+  await requireAuth(c);
+  try {
+    return c.json(await ratingSummary(c.env));
+  } catch (e) {
+    return refuse(c, 503, { code: 'ratings_unreadable', message: 'The ratings could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+// Task #1 (AG) — spec-contract alias. POST /:uid/book maps the partner uid +
+// slot_id (body) to the existing /slots/:id/book handler.
+r.post('/:uid/book', async (c) => {
+  const body = await c.req.text();
+  let parsed: Record<string, unknown> = {};
+  try { parsed = JSON.parse(body || '{}'); } catch { /* noop */ }
+  const slotId = Number(parsed?.slot_id);
+  if (!Number.isFinite(slotId)) return c.json({ detail: 'slot_id required in body' }, 400);
+  const url = new URL(c.req.url);
+  url.pathname = `/api/partner-office-hours/slots/${slotId}/book`;
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
+export default r;

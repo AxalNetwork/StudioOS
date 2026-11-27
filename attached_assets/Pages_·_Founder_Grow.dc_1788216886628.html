@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8fa;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#6d28d9;background:#faf7ff;border-color:#d8c9ff;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#faf7ff;border-color:#d8c9ff;color:#6d28d9;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#faf7ff;border:1px solid #d8c9ff;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #6d28d9;background:#6d28d9;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="7">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /grow</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#6d28d9;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Grow</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="7">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="violet" page="Grow" hint-size="100%,560px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const V = { ink:'#7c3aed', deep:'#6d28d9', tint:'#faf7ff' };
+    // CANONICAL Founder shell — 9 rows, matching Detail Layer Canvas F_ROWS.
+    const ROWS = ['Home','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Grow' ? 'nav on' : 'nav',
+      style: label === 'Grow' ? 'color:'+V.deep+';background:'+V.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+V.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+
+    const ZONES = ['Focus','Talent','Customers','Partnerships','Capital match','Brand','Launch'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Focus' || label === 'Capital match' }));
+
+    const pill = (t) => {
+      const M = { 'Won':['#ecfdf5','#047857','#a7f3d0'], 'Live':['#ecfdf5','#047857','#a7f3d0'],
+        'Signed':['#ecfdf5','#047857','#a7f3d0'], 'Published':['#ecfdf5','#047857','#a7f3d0'],
+        'Interview':['#faf7ff','#6d28d9','#d8c9ff'], 'Negotiating':['#faf7ff','#6d28d9','#d8c9ff'],
+        'Warm path':['#faf7ff','#6d28d9','#d8c9ff'], 'Scheduled':['#faf7ff','#6d28d9','#d8c9ff'],
+        'Screen':['#fffbeb','#92400e','#fde68a'], 'Stalled':['#fffbeb','#92400e','#fde68a'],
+        'Draft':['#fffbeb','#92400e','#fde68a'], 'No path':['#fffbeb','#92400e','#fde68a'],
+        'Too early':['#fffbeb','#92400e','#fde68a'],
+        'Reverted':['#fef2f2','#b91c1c','#fecaca'], 'Wrong fit':['#fef2f2','#b91c1c','#fecaca'],
+        'Applied':['#f4f4f6','#615c6e','#e4e4e8'], 'Idea':['#f4f4f6','#615c6e','#e4e4e8'],
+        'Archived':['#f4f4f6','#615c6e','#e4e4e8'], 'Dead':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Applied'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+
+    // ══ ONE customer book. Every funnel figure on FG1 and FG3 derives from it. ══
+    const SEG = [
+      { name:'Distributed SaaS, 50–200', n:11, c12:7, trials:11, paid:2, read:'The ICP. Everything works here.' },
+      { name:'Agencies',                 n:6,  c12:5, trials:4,  paid:0, read:'Great first calls, never buy. Wrong fit.' },
+      { name:'Enterprise, 500+',         n:4,  c12:1, trials:0,  paid:0, read:'Procurement kills it before call two.' },
+      { name:'Solo / small teams',       n:2,  c12:1, trials:2,  paid:1, read:'Converts, but at $19/mo. Not the business.' }
+    ];
+    const sum = (k) => SEG.reduce((a, s) => a + s[k], 0);
+    const ACC = sum('n'), C12 = sum('c12'), TRIALS = sum('trials'), PAID = sum('paid');
+    const pctOf = (a, b) => b ? (a / b * 100).toFixed(0) + '%' : '—';
+    const CONV = (PAID / TRIALS * 100).toFixed(1) + '%';
+    const TARGET = 20;
+    const segRows = SEG.map(s => ({ cells:[ cell(s.name), cell(String(s.n)), cell(pctOf(s.c12, s.n)),
+      cell(s.trials ? pctOf(s.paid, s.trials) : '—'), cell(s.read) ]}))
+      .concat([{ cells:[ cell('All accounts'), cell(String(ACC)), cell(pctOf(C12, ACC)), cell(CONV),
+        cell('The average hides four different problems.') ]}]);
+
+    // ══ ONE page book. Brand counts derive from it. ══
+    const PG = [
+      { path:'/careers', aud:'Talent', v:149, l:14, read:'Best converting page you have. Feeds Team.' },
+      { path:'/', aud:'Customers', v:412, l:9, read:'Volume, weak intent. The hero promises too much.' },
+      { path:'/cofounder', aud:'Co-founder', v:38, l:5, read:'Closed the search, page still live.' },
+      { path:'/pricing', aud:'Customers', v:196, l:3, read:'Leads here are the qualified ones.' },
+      { path:'/integrations', aud:'Customers', v:74, l:0, read:'40 days, nothing. Unpublish it.' }
+    ];
+    const PV = PG.reduce((a,p) => a + p.v, 0), PL = PG.reduce((a,p) => a + p.l, 0);
+    const best = PG.reduce((b,p) => (p.l / p.v > b.l / b.v ? p : b), PG[0]);
+    const pgRows = PG.map(p => ({ cells:[ cell(p.path), cell(p.aud), cell(String(p.v)), cell(String(p.l)),
+      cell((p.l / p.v * 100).toFixed(1) + '% · ' + p.read) ]}));
+
+    const PAGES = [
+      { id:'fg1', badge:'FG1', route:'/grow/focus', zone:'Focus', arch:'ANALYTICS',
+        title:'Grow · Focus', h1:'This month\u2019s focus',
+        blurb:'Compressed names the metric and where it stands. The full page adds the experiment log — including the honest read on whether the experiments moved the metric or merely ran.',
+        sub:'The month\u2019s metric, targets and the experiment log.',
+        cmpTitle:'Trial-to-paid conversion', cmpBody:CONV + ' against a ' + TARGET + '% target. 6 days left in August.',
+        viewMore:'View more · 6 experiments →',
+        filters: fil(['August','Last 6 mo','Experiments','Targets'], 0), ops:['New experiment','Change metric','Export'],
+        adds:[ { label:'Current', value:CONV, note:PAID + ' paid of ' + TRIALS + ' trials' },
+          { label:'Target', value:TARGET + '%', note:'set Aug 1' },
+          { label:'Experiments', value:'6', note:'2 concluded' },
+          { label:'Moved the metric', value:'1 of 6', note:'the rest were flat' } ],
+        instTitle:'Experiment log', instMeta:'Effect stated, or not claimed',
+        cols:'1.5fr .9fr .9fr 1.4fr', head:['Experiment','Ran','Result','Effect on the metric'],
+        rows:[
+          { cells:[cell('Onboarding checklist in-app'), cell('Aug 4–18'), cell('', { pill:'Won' }), cell('+3.1pt. The only one that moved it.')] },
+          { cells:[cell('Pricing page social proof'), cell('Aug 6–20'), cell('', { pill:'Reverted' }), cell('−0.4pt, inside noise.')] },
+          { cells:[cell('Day-3 nudge email'), cell('Aug 11 →'), cell('', { pill:'Too early' }), cell('9 days of data. No claim yet.')] },
+          { cells:[cell('Shorter trial, 7 not 14 days'), cell('Aug 18 →'), cell('', { pill:'Too early' }), cell('Confounded with the checklist ramp.')] },
+          { cells:[cell('Founder-led onboarding call'), cell('—'), cell('', { pill:'Idea' }), cell('Does not scale. Worth running once.')] },
+          { cells:[cell('Remove card from trial'), cell('—'), cell('', { pill:'Idea' }), cell('Would change what the metric means.')] }
+        ],
+        instNote:'One of six moved the metric, and two of the live ones are confounded with each other — the shorter trial began while the checklist was still ramping, so neither result will be clean. Saying so is more useful than a dashboard reporting both as wins.',
+        aiLabel:'Proposal · read the month', aiCost:'≈ $0.0013',
+        aiBody:'At ' + CONV + ' with six days left, the ' + TARGET + '% target does not close — the checklist won 3.1 points and nothing else moved. The honest framing is that you found one lever, not that you missed a target.',
+        aiAccept:'Accept read', aiFoot:'Flows to the Metrics composer.' },
+
+      { id:'fg2', badge:'FG2', route:'/grow/talent', zone:'Talent', arch:'MATCH ENGINE',
+        title:'Grow · Talent', h1:'Talent',
+        blurb:'Compressed shows open roles and applicant counts. The full engine adds the ranked pipeline with match receipts and every application in one place.',
+        sub:'Roles, ranked candidates, job posts and applications.',
+        cmpTitle:'2 open roles · 36 applicants', cmpBody:'Backend engineer published, GTM lead has an offer out.',
+        viewMore:'View more · 36 candidates ranked →',
+        filters: fil(['All roles','Backend','GTM','Shortlisted'], 0), ops:['Post a role','Bulk reject','Export'],
+        adds:[ { label:'Applicants', value:'36', note:'across 2 roles' },
+          { label:'Shortlisted', value:'7', note:'19% of applicants' },
+          { label:'Time to screen', value:'4 d', note:'median · target 2' },
+          { label:'Reserved', value:'70,000', note:'shares, backend role' } ],
+        instTitle:'Ranked candidates · Backend engineer', instMeta:'The score always says why',
+        cols:'1.2fr .7fr .9fr 1.9fr', head:['Candidate','Fit','Stage','Why this rank'],
+        rows:[
+          { cells:[cell('Nadia Okonkwo'), cell('94'), cell('', { pill:'Interview' }), cell('Built the exact handoff primitive your roadmap is blocked on. Applied via /careers.')] },
+          { cells:[cell('Dev Ramachandran'), cell('88'), cell('', { pill:'Screen' }), cell('Systems depth, no product exposure. Would need Amara\u2019s time.')] },
+          { cells:[cell('Aisha Farouk'), cell('81'), cell('', { pill:'Screen' }), cell('Strong generalist. Rin\u2019s referral is why she sits above the next three.')] },
+          { cells:[cell('Tomasz Biel'), cell('64'), cell('', { pill:'Applied' }), cell('Senior, wants a staff title you cannot offer at four people.')] },
+          { cells:[cell('Priya Nandi'), cell('58'), cell('', { pill:'Applied' }), cell('Junior for the role as scoped. Reconsider if you split it.')] },
+          { cells:[cell('12 others'), cell('< 50'), cell('', { pill:'Applied' }), cell('No systems experience. Reject with a real reason attached.')] }
+        ],
+        instNote:'The top candidate matches the specific thing your roadmap is blocked on, which is a better reason to rank her first than years of experience. A number without a sentence is a guess, not a match.',
+        aiLabel:'Proposal · 12 rejections, written properly', aiCost:'12 × per-email rate',
+        aiBody:'One email each, naming the actual gap rather than "we went with another candidate". At four people, twelve applicants who felt respected are twelve who might refer someone.',
+        aiAccept:'Review the 12', aiFoot:'Batch cost estimated before it runs.' },
+
+      { id:'fg3', badge:'FG3', route:'/grow/customers', zone:'Customers', arch:'WORK BOARD',
+        title:'Grow · Customers', h1:'Customer pipeline',
+        blurb:'Compressed shows the pipeline count. The full board adds segments and per-step conversion — which is how you learn the leak is a step, not a stage.',
+        sub:'Pipeline, segments, sequences and step conversion.',
+        cmpTitle:'Pipeline · ' + ACC + ' accounts', cmpBody:TRIALS + ' trials run, ' + PAID + ' converted. $38k weighted.',
+        viewMore:'View more · ' + ACC + ' accounts, ' + SEG.length + ' segments →',
+        filters: fil(['All','Distributed SaaS','Agencies','Enterprise','Stalled'], 0), ops:['Bulk sequence','New segment','Export'],
+        adds:[ { label:'Accounts', value:String(ACC), note:SEG.length + ' segments' },
+          { label:'Weighted', value:'$38k', note:'ARR, probability-adjusted' },
+          { label:'Worst step', value:'Call 1 → 2', note:pctOf(C12, ACC) + ' blended' },
+          { label:'Stalled > 14d', value:'6', note:'all in one segment' } ],
+        instTitle:'Step conversion, by segment', instMeta:'Blended row last, and least useful',
+        cols:'1.3fr .9fr .9fr .9fr 1.2fr', head:['Segment','Accounts','Call 1 → 2','Trial → paid','Read'],
+        rows: segRows,
+        instNote:'The blended ' + pctOf(C12, ACC) + ' is the least useful number here. Agencies take almost every first call and have never bought; enterprise dies at procurement. Cutting both would raise the average without selling anything.',
+        aiLabel:'Proposal · one sequence per segment', aiCost:'≈ $0.0013',
+        aiBody:'Three sequences instead of one: the ICP gets the handoff-pain opener that already works, agencies get a qualifying question in the first email rather than the third call, and enterprise gets nothing until you have a procurement answer.',
+        aiAccept:'Review the three', aiFoot:'Sequences send only after you accept.' },
+
+      { id:'fg4', badge:'FG4', route:'/grow/partnerships', zone:'Partnerships', arch:'WORK BOARD',
+        title:'Grow · Partnerships', h1:'Partnerships',
+        blurb:'Compressed shows two in motion. The full board adds the pipeline, proposals and retainer terms — plus what each partnership has actually delivered, which is usually less than the announcement suggested.',
+        sub:'Partner pipeline, proposals and retainers.',
+        cmpTitle:'2 in motion · 1 signed', cmpBody:'Novacraft referral deal live since June.',
+        viewMore:'View more · 7 partners, 3 proposals →',
+        filters: fil(['All','In motion','Signed','Dormant'], 0), ops:['New proposal','Export terms'],
+        adds:[ { label:'Partners tracked', value:'7', note:'1 signed, 2 in motion' },
+          { label:'Signed value', value:'$0', note:'referral-only, no fee' },
+          { label:'Referrals received', value:'3', note:'all from one partner' },
+          { label:'Dormant > 60d', value:'3', note:'never followed up' } ],
+        instTitle:'Partner pipeline', instMeta:'What each delivered, not announced',
+        cols:'1.3fr 1fr .9fr 1.5fr', head:['Partner','Type','State','Delivered so far'],
+        rows:[
+          { cells:[cell('Novacraft Labs'), cell('Referral'), cell('', { pill:'Signed' }), cell('3 referrals, 1 became a trial. The only one working.')] },
+          { cells:[cell('Verwood'), cell('Design partner'), cell('', { pill:'Negotiating' }), cell('Nothing yet. Terms sent Aug 14, no reply.')] },
+          { cells:[cell('Kelp Bio'), cell('Co-marketing'), cell('', { pill:'Draft' }), cell('Proposal unsent. Their audience is wrong for you.')] },
+          { cells:[cell('Thornbury portfolio'), cell('Intro channel'), cell('', { pill:'Stalled' }), cell('Two intros promised in May, none made.')] },
+          { cells:[cell('Aperture'), cell('Integration'), cell('', { pill:'Stalled' }), cell('Waiting on our API. Blocked on us, not them.')] },
+          { cells:[cell('3 dormant'), cell('Various'), cell('', { pill:'Archived' }), cell('No contact in 60+ days. Close them or work them.')] }
+        ],
+        instNote:'One partnership of seven has delivered anything, and one of the stalls is blocked on you rather than them. The delivered column exists because a partner pipeline measured in signatures flatters itself.',
+        aiLabel:'Proposal · partnership proposal, Verwood', aiCost:'≈ $0.0021',
+        aiBody:'Routed to the polished model rather than the volume one, because a partnership document is read by someone senior. Uses the design-partner terms from your May call and names the one thing you want — a named reference, not logo placement.',
+        aiAccept:'Open the draft', aiFoot:'Mistral Small, for tone.' },
+
+      { id:'fg5', badge:'FG5', route:'/grow/capital-match', zone:'Capital match', arch:'MATCH ENGINE',
+        title:'Grow · Capital match', h1:'Capital match',
+        blurb:'Compressed shows the top three by fit. The full engine adds every fund scored, the warm path through Network, and outreach state — ranking reachability above thesis fit.',
+        sub:'Investor fit, warm paths and outreach state.',
+        cmpTitle:'Capital match · 3 ranked', cmpBody:'Latitude 91, Thornbury 78, Verwood 54.',
+        viewMore:'View more · 14 funds scored, 6 warm paths →',
+        filters: fil(['Best fit','Warm path only','Right stage','Passed'], 0), ops:['Draft outreach','Export shortlist'],
+        adds:[ { label:'Funds scored', value:'14', note:'stage-filtered' },
+          { label:'With a warm path', value:'6', note:'via Network' },
+          { label:'Contacted', value:'4', note:'2 replied' },
+          { label:'Passed', value:'2', note:'reasons recorded' } ],
+        instTitle:'Ranked funds', instMeta:'Reachability weighted above thesis fit',
+        cols:'1.2fr .6fr 1.1fr 1.9fr', head:['Fund','Fit','Path','Why this rank'],
+        rows:[
+          { cells:[cell('Latitude Seed'), cell('91'), cell('', { pill:'Warm path' }), cell('Dev-tooling thesis written this year, and Dev Raman is four days warm in your book.')] },
+          { cells:[cell('Thornbury Capital'), cell('78'), cell('', { pill:'Warm path' }), cell('Right stage, adjacent thesis. Ranks above Verwood only because Priyanka can reach them.')] },
+          { cells:[cell('Kestrel Ventures'), cell('74'), cell('', { pill:'Negotiating' }), cell('Already in the round. Scored for completeness, not outreach.')] },
+          { cells:[cell('Verwood Ventures'), cell('54'), cell('', { pill:'No path' }), cell('Strong thesis fit, no route in. Request an intro before an email.')] },
+          { cells:[cell('Marchmont'), cell('41'), cell('', { pill:'No path' }), cell('Writes at Series A. Kept visible so you stop rediscovering them.')] },
+          { cells:[cell('2 passed'), cell('—'), cell('', { pill:'Archived' }), cell('One thesis mismatch, one "too early — come back at $30k MRR".')] }
+        ],
+        instNote:'Thornbury outranks Verwood on a worse thesis fit because someone in your book can make the introduction. Acting on any row hands off to Raise; this page ranks and drafts, it never records a commitment.',
+        aiLabel:'Proposal · 6 first-touch emails', aiCost:'6 × per-email rate',
+        aiBody:'One per fund with a warm path, written from that fund\u2019s own published thesis language rather than a template — each naming the connector, because an email that says who suggested it gets read.',
+        aiAccept:'Review the six', aiFoot:'Screened before any send.' },
+
+      { id:'fg6', badge:'FG6', route:'/grow/brand', zone:'Brand', arch:'COLLECTION',
+        title:'Grow · Brand', h1:'Brand & landing',
+        blurb:'Compressed shows live pages and lead count. The full collection adds every page, per-page conversion, and captured leads with their source — the record that says which page is actually working.',
+        sub:'Landing pages, templates and captured leads.',
+        cmpTitle:PG.length + ' pages · ' + PL + ' leads', cmpBody:best.path + ' converting best. 3 new this week.',
+        viewMore:'View more · ' + PG.length + ' pages, ' + PL + ' leads →',
+        filters: fil(['All pages','Live','Draft','Leads'], 0), ops:['New page','Export leads','Edit templates'],
+        adds:[ { label:'Pages', value:String(PG.length), note:'all live' },
+          { label:'Leads captured', value:String(PL), note:'across ' + PV + ' visits' },
+          { label:'Best converting', value:best.path, note:(best.l / best.v * 100).toFixed(1) + '% of visits' },
+          { label:'Dead page', value:'/integrations', note:'0 leads in 40 days' } ],
+        instTitle:'Pages and what they produced', instMeta:'Conversion per page · leads routed by audience',
+        cols:'1fr .9fr .7fr .7fr 1.9fr', head:['Page','Audience','Visits','Leads','Rate and read'],
+        rows: pgRows,
+        instNote:'The homepage has the most visits and a worse rate than every page except the dead one — volume without intent. /careers converts best and feeds Team directly, which is why the audience column matters as much as the rate.',
+        aiLabel:'Proposal · rewrite the homepage hero', aiCost:'≈ $0.0013',
+        aiBody:'The hero promises a category; the pricing page promises a job. Leads from /pricing convert and homepage leads do not, so the rewrite borrows the pricing page\u2019s specificity and drops the category claim.',
+        aiAccept:'Open the rewrite', aiFoot:'Creates a draft, does not publish.' },
+
+      { id:'fg7', badge:'FG7', route:'/grow/launch', zone:'Launch', arch:'FEED',
+        title:'Grow · Launch', h1:'Launch calendar',
+        blurb:'Compressed shows the next item. The full feed adds the whole calendar, co-marketing commitments and the article pipeline — plus what each past item actually produced.',
+        sub:'Events, co-marketing and the article calendar.',
+        cmpTitle:'Next · Sep 4 webinar', cmpBody:'With Novacraft. 41 registered.',
+        viewMore:'View more · 9 items, 4 published →',
+        filters: fil(['Upcoming','Published','Events','Articles'], 0), ops:['New item','Export calendar'],
+        adds:[ { label:'Items', value:'9', note:'4 published, 5 ahead' },
+          { label:'Registered', value:'41', note:'Sep 4 webinar' },
+          { label:'Best performer', value:'1 article', note:'6,200 reads' },
+          { label:'Leads attributed', value:'7', note:'of ' + PL + ' total' } ],
+        instTitle:'Calendar', instMeta:'Past items show what they produced',
+        cols:'1fr 1.2fr .9fr 1.6fr', head:['Date','Item','State','Outcome'],
+        rows:[
+          { cells:[cell('Sep 4'), cell('Webinar · async workflows'), cell('', { pill:'Scheduled' }), cell('41 registered, 12 from Novacraft\u2019s list.')] },
+          { cells:[cell('Sep 11'), cell('Article · the mid-tier trap'), cell('', { pill:'Draft' }), cell('Written, unpublished. Waiting on the pricing change.')] },
+          { cells:[cell('Sep 18'), cell('Co-marketing · Verwood'), cell('', { pill:'Stalled' }), cell('Depends on a partnership that has not replied.')] },
+          { cells:[cell('Aug 12'), cell('Article · pricing before PMF'), cell('', { pill:'Published' }), cell('6,200 reads, 4 leads. Best thing you have published.')] },
+          { cells:[cell('Jul 30'), cell('Event · SaaS ops meetup'), cell('', { pill:'Published' }), cell('2 conversations, 0 leads. Not worth repeating.')] },
+          { cells:[cell('Jul 8'), cell('Article · handoff costs'), cell('', { pill:'Published' }), cell('1,100 reads, 3 leads. Small audience, right one.')] }
+        ],
+        instNote:'The July article got a sixth of the reads and nearly as many leads as the August one — reach and fit are different things, and the outcome column is the only place that distinction survives.',
+        aiLabel:'Proposal · article from a recurring theme', aiCost:'≈ $0.0013',
+        aiBody:'"Why the second call is where deals die" — drawn from your own segment data, where call 1 → 2 is the worst step in three of four segments. The evidence is already yours; the article just states it.',
+        aiAccept:'Open the draft', aiFoot:'Cites the Customers page as its source.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

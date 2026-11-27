@@ -1,0 +1,34 @@
+{
+  "skill": "crm-pipeline-hygiene-audit",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "CRM Pipeline Hygiene Audit",
+        "task_scope": "Audits opportunity records for missing fields, inconsistent stages, stale next steps, duplicates and ownership defects.",
+        "evidence": [
+          "CRM field completeness and stale next step"
+        ],
+        "omitted_field": "last verified date"
+      },
+      "company.profile": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for CRM field completeness and stale next step."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "CRM field completeness and stale next step"
+    ],
+    "must_say_not_recorded": [
+      "last verified date"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

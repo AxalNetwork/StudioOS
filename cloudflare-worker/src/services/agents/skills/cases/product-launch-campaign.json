@@ -1,0 +1,34 @@
+{
+  "skill": "product-launch-campaign",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Product Launch Campaign Design",
+        "task_scope": "Coordinates launch positioning, audience, channel sequence, readiness dependencies and success measures.",
+        "evidence": [
+          "launch readiness and channel dependency"
+        ],
+        "omitted_field": "launch date"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for launch readiness and channel dependency."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "launch readiness and channel dependency"
+    ],
+    "must_say_not_recorded": [
+      "launch date"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

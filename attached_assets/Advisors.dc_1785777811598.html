@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#0d9488;text-decoration:none}a:hover{color:#0f766e}
+    .ad-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .ad-root.ad-embedded .ad-topbar{display:none!important}
+    .ad-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .ad-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .ad-qa:hover{border-color:#ececf1;background:#fff}
+    .ad-match{transition:border-color .12s,box-shadow .12s}
+    .ad-match:hover{border-color:#99f6e4;box-shadow:0 4px 14px rgba(13,148,136,.1)}
+    .ad-chip{border:1px solid #ececf1;background:#fff;border-radius:999px;cursor:pointer}
+    @media (max-width:1080px){.ad-split{grid-template-columns:1fr!important}.ad-drawer{width:100%!important}.ad-cmp{grid-template-columns:1fr!important}}
+  
+    .ad-root.ad-embedded .ad-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="ad-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="ad-topline" style="height:3px;background:#0d9488;border-radius:0 0 3px 3px"></div>
+
+  <!-- TOP BAR -->
+  <div class="ad-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#ecfdf5;color:#0d9488;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icUsers }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Advisors</h1>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Advisor matching engine — ranked by how well each candidate closes your founding-team gaps.</div>
+      </div>
+    </div>
+    <span style="font-size:11px;font-weight:600;color:#0f766e;background:#ecfdf5;border:1px solid #99f6e4;padding:5px 11px;border-radius:999px">Unlocked · Wk 3</span>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div style="display:flex;gap:4px;padding:10px 0 18px;flex-wrap:wrap;align-items:center">
+    <button class="ad-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <button class="ad-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export</button>
+    <button class="ad-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button onClick="{{ openReq }}" class="ad-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#0d9488;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icPlus }}"></span>Request another match</button>
+  </div>
+
+  <!-- GAP MAP -->
+  <div class="ad-card" style="padding:22px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:16px;font-weight:800;letter-spacing:-.01em">Best advisors to complement your founding team</div>
+        <div style="font-size:12.5px;color:#71717a;margin-top:3px">Diagnosed from Startups, Scoring Engine, and Co-founder Match · {{ matchCount }} matches · +{{ coverageGain }} projected Team score</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="text-align:right"><div class="ad-mono" style="font-size:24px;font-weight:600;color:#0d9488">{{ teamScoreNow }}→{{ teamScoreProj }}</div><div style="font-size:11px;color:#a1a1aa">Team score with top 2</div></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" class="ad-cmp">
+      <sc-for list="{{ gaps }}" as="g" hint-placeholder-count="4">
+        <div style="border:1px solid {{ g.border }};background:{{ g.bg }};border-radius:12px;padding:14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="width:15px;height:15px;color:{{ g.iconColor }};display:flex" dangerouslySetInnerHTML="{{ g.icon }}"></span><span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:{{ g.iconColor }}">{{ g.kind }}</span></div>
+          <div style="font-size:13px;font-weight:600;color:#1A202C;line-height:1.35">{{ g.title }}</div>
+          <div style="font-size:11.5px;color:#71717a;margin-top:6px;line-height:1.4">{{ g.closedBy }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- SPLIT -->
+  <div class="ad-split" style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start">
+
+    <!-- LEFT: ranked matches -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Ranked matches · best complement first</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+            <button onClick="{{ f.onClick }}" class="ad-chip" style="font-size:11px;font-weight:600;padding:5px 11px;color:{{ f.color }};{{ f.extra }}">{{ f.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-for list="{{ matches }}" as="m" hint-placeholder-count="4">
+        <div class="ad-match ad-card" onClick="{{ m.open }}" style="padding:18px 20px;cursor:pointer">
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:start">
+            <span style="width:48px;height:48px;flex:none;border-radius:12px;background:{{ m.avatarBg }};color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ m.initials }}</span>
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="font-size:15px;font-weight:700;letter-spacing:-.01em">{{ m.name }}</span>
+                <span style="font-size:11px;color:#71717a">· {{ m.expertise }}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                <sc-for list="{{ m.tags }}" as="t" hint-placeholder-count="3">
+                  <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;{{ t.style }}">{{ t.label }}</span>
+                </sc-for>
+              </div>
+              <div style="font-size:12.5px;color:#52525b;margin-top:11px;line-height:1.5">{{ m.rationale }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:11px">
+                <div><div style="font-size:10px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em">Likely contribution</div><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-top:2px">{{ m.contribution }}</div></div>
+              </div>
+              <sc-if value="{{ m.risk }}">
+                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:11px;font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 11px;line-height:1.4"><span style="width:13px;height:13px;flex:none;margin-top:1px;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span>{{ m.risk }}</div>
+              </sc-if>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex:none">
+              <div style="text-align:center"><div class="ad-mono" style="font-size:30px;font-weight:600;line-height:1;color:{{ m.scoreColor }}">{{ m.score }}</div><div style="font-size:9.5px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Match</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#0f766e;background:#ecfdf5;padding:3px 9px;border-radius:999px">{{ m.valuesFit }} values fit</span>
+              <div style="display:flex;flex-direction:column;gap:6px;width:120px">
+                <button onClick="{{ m.openStop }}" style="font-size:11px;font-weight:600;color:#0d9488;background:#ecfdf5;border:1px solid #99f6e4;border-radius:7px;padding:6px 0;cursor:pointer">View profile</button>
+                <button onClick="{{ m.introStop }}" style="font-size:11px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:7px;padding:6px 0;cursor:pointer">Generate intro</button>
+                <button onClick="{{ m.addStop }}" style="font-size:11px;font-weight:600;color:#fff;background:{{ m.addBg }};border:none;border-radius:7px;padding:6px 0;cursor:pointer">{{ m.addLabel }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- RIGHT: team profile + selected -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="ad-card" style="padding:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Your team profile</div>
+        <div style="font-size:11px;font-weight:700;color:#71717a;margin-bottom:8px">Skill coverage</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          <sc-for list="{{ teamSkills }}" as="s" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:11.5px;color:#52525b;width:96px;flex:none">{{ s.name }}</span>
+              <div style="flex:1;height:6px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ s.pct }};background:{{ s.color }};border-radius:999px"></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:#71717a;margin-bottom:8px">Archetypes present</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          <sc-for list="{{ teamArchetypes }}" as="a" hint-placeholder-count="6">
+            <span style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;{{ a.style }}">{{ a.name }}</span>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:#71717a;margin-bottom:8px">Values profile</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ teamValues }}" as="v" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11.5px;color:#52525b">{{ v.label }}</span><span style="font-size:11px;font-weight:600;color:#3f3f46">{{ v.value }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="ad-card" style="padding:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:12px">Advisor bench</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ bench }}" as="b" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:11px">
+              <span style="width:32px;height:32px;flex:none;border-radius:8px;background:{{ b.avatarBg }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ b.initials }}</span>
+              <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:600">{{ b.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ b.role }}</div></div>
+              <span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;{{ b.statusStyle }}">{{ b.status }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ benchEmpty }}"><div style="font-size:12px;color:#a1a1aa;text-align:center;padding:8px 0">No advisors added yet. Add a match to build your bench.</div></sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADVISOR DETAIL DRAWER -->
+<sc-if value="{{ drawerOpen }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(24,24,27,.34);z-index:60;backdrop-filter:blur(2px)"></div>
+  <div class="ad-drawer" style="position:fixed;top:0;right:0;bottom:0;width:540px;background:#fff;z-index:61;box-shadow:-8px 0 40px rgba(24,24,27,.14);overflow-y:auto">
+    <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #f0f0f3;padding:20px 24px;z-index:2">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="display:flex;align-items:center;gap:13px">
+          <span style="width:50px;height:50px;flex:none;border-radius:12px;background:{{ sel.avatarBg }};color:#fff;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ sel.initials }}</span>
+          <div>
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.01em">{{ sel.name }}</div>
+            <div style="font-size:12.5px;color:#71717a">{{ sel.expertise }} · {{ sel.location }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="text-align:center"><div class="ad-mono" style="font-size:26px;font-weight:600;color:{{ sel.scoreColor }};line-height:1">{{ sel.score }}</div><div style="font-size:9px;color:#a1a1aa;text-transform:uppercase">Match</div></div>
+          <button onClick="{{ closeDrawer }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:22px 24px">
+      <!-- score breakdown -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Why this match · score breakdown</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:22px">
+        <sc-for list="{{ sel.breakdown }}" as="b" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:12px;color:#52525b;width:150px;flex:none">{{ b.label }}</span>
+            <div style="flex:1;height:7px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ b.pct }};background:{{ b.color }};border-radius:999px"></div></div>
+            <span class="ad-mono" style="font-size:11.5px;font-weight:600;color:{{ b.color }};width:30px;text-align:right">{{ b.score }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- bio -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:9px">Background</div>
+      <div style="font-size:13px;color:#3f3f46;line-height:1.55;margin-bottom:14px">{{ sel.bio }}</div>
+      <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:22px">
+        <sc-for list="{{ sel.roles }}" as="r" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:#52525b"><span style="width:5px;height:5px;border-radius:999px;background:#0d9488;flex:none"></span>{{ r }}</div>
+        </sc-for>
+      </div>
+
+      <!-- complementarity comparison -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Founder team ↔ advisor complementarity</div>
+      <div style="border:1px solid #f0f0f3;border-radius:12px;overflow:hidden;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;background:#faf9fc;border-bottom:1px solid #f0f0f3">
+          <div style="font-size:10.5px;font-weight:700;color:#71717a;padding:9px 12px">Skill</div>
+          <div style="font-size:10.5px;font-weight:700;color:#71717a;padding:9px 8px;text-align:center">Team</div>
+          <div style="font-size:10.5px;font-weight:700;color:#71717a;padding:9px 8px;text-align:center">Advisor</div>
+        </div>
+        <sc-for list="{{ sel.heatmap }}" as="h" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;border-top:1px solid #f4f4f5;align-items:center">
+            <div style="font-size:12px;color:#3f3f46;padding:9px 12px">{{ h.skill }}</div>
+            <div style="padding:9px 8px;text-align:center"><span style="display:inline-block;width:22px;height:22px;border-radius:5px;background:{{ h.teamColor }}" title="{{ h.teamLevel }}"></span></div>
+            <div style="padding:9px 8px;text-align:center"><span style="display:inline-block;width:22px;height:22px;border-radius:5px;background:{{ h.advColor }}" title="{{ h.advLevel }}"></span></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#0f766e;background:#ecfdf5;border:1px solid #99f6e4;border-radius:9px;padding:10px 12px;line-height:1.45;margin-bottom:22px">{{ sel.complementNote }}</div>
+
+      <!-- weak-point coverage -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Weak-point coverage</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:22px">
+        <sc-for list="{{ sel.coverage }}" as="c" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:#3f3f46"><span style="width:16px;height:16px;flex:none;color:{{ c.color }};display:flex" dangerouslySetInnerHTML="{{ c.icon }}"></span>{{ c.text }}</div>
+        </sc-for>
+      </div>
+
+      <!-- 90-day + engagement + equity -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px" class="ad-cmp">
+        <div style="background:#faf9fc;border:1px solid #f0eefb;border-radius:12px;padding:14px">
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:8px">Engagement</div>
+          <div style="font-size:12.5px;font-weight:600;color:#1A202C">{{ sel.engagement }}</div>
+          <div style="font-size:11.5px;color:#71717a;margin-top:4px">{{ sel.engagementNote }}</div>
+        </div>
+        <div style="background:#faf9fc;border:1px solid #f0eefb;border-radius:12px;padding:14px">
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:8px">Suggested equity</div>
+          <div class="ad-mono" style="font-size:15px;font-weight:600;color:#0d9488">{{ sel.equity }}</div>
+          <div style="font-size:11.5px;color:#71717a;margin-top:4px">{{ sel.equityNote }}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:9px">Expected value-add · next 90 days</div>
+      <div style="font-size:12.5px;color:#3f3f46;line-height:1.55;margin-bottom:20px">{{ sel.value90 }}</div>
+
+      <div style="display:flex;gap:10px;position:sticky;bottom:0;background:linear-gradient(transparent,#fff 30%);padding-top:12px">
+        <button onClick="{{ sel.intro }}" style="flex:1;font-size:13px;font-weight:600;color:#0d9488;background:#ecfdf5;border:1px solid #99f6e4;border-radius:9px;padding:12px;cursor:pointer">Generate intro</button>
+        <button onClick="{{ sel.add }}" style="flex:1;font-size:13px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:12px;cursor:pointer">{{ sel.addLabel }}</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- INTRO EMAIL MODAL -->
+<sc-if value="{{ introOpen }}">
+  <div onClick="{{ closeIntro }}" style="position:fixed;inset:0;background:rgba(24,24,27,.42);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:600px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.28);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f0f0f3">
+        <div><div style="font-size:15px;font-weight:800">Intro email · {{ introName }}</div><div style="font-size:12px;color:#a1a1aa">Personalized from your one-liner and the match rationale</div></div>
+        <button onClick="{{ closeIntro }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <div style="padding:20px 22px">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:14px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#71717a;margin-right:2px">Tone</span>
+          <sc-for list="{{ tones }}" as="t" hint-placeholder-count="4">
+            <button onClick="{{ t.onClick }}" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:999px;cursor:pointer;{{ t.style }}">{{ t.label }}</button>
+          </sc-for>
+        </div>
+        <div style="background:#faf9fc;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;font-size:13px;color:#3f3f46;line-height:1.65;white-space:pre-wrap">{{ introBody }}</div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button onClick="{{ closeIntro }}" style="flex:1;font-size:13px;font-weight:600;color:#52525b;background:#f4f4f5;border:none;border-radius:9px;padding:11px;cursor:pointer">Close</button>
+          <button onClick="{{ closeIntro }}" style="flex:2;font-size:13px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:11px;cursor:pointer">Copy to clipboard</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- REQUEST ADDITIONAL MATCH MODAL -->
+<sc-if value="{{ reqOpen }}">
+  <div onClick="{{ closeReq }}" style="position:fixed;inset:0;background:rgba(24,24,27,.42);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:560px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.28);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f0f0f3">
+        <div><div style="font-size:15px;font-weight:800">Request another match</div><div style="font-size:12px;color:#a1a1aa">Refine the criteria — we regenerate a ranked shortlist</div></div>
+        <button onClick="{{ closeReq }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <div style="padding:20px 22px;display:flex;flex-direction:column;gap:18px">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:8px">What gap is still unresolved?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <sc-for list="{{ reqGaps }}" as="g" hint-placeholder-count="4"><button onClick="{{ g.onClick }}" style="font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:999px;cursor:pointer;{{ g.style }}">{{ g.label }}</button></sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:8px">Specialist or generalist?</div>
+          <div style="display:flex;gap:7px">
+            <sc-for list="{{ reqType }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.onClick }}" style="flex:1;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:9px;cursor:pointer;{{ t.style }}">{{ t.label }}</button></sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:8px">Matching for</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <sc-for list="{{ reqFor }}" as="r" hint-placeholder-count="4"><button onClick="{{ r.onClick }}" style="font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:999px;cursor:pointer;{{ r.style }}">{{ r.label }}</button></sc-for>
+          </div>
+        </div>
+        <button onClick="{{ closeReq }}" style="font-size:13px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:12px;cursor:pointer">Generate new shortlist →</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { drawerOpen:false, selKey:null, introOpen:false, introKey:null, introTone:'warm',
+    reqOpen:false, filter:'all', added:{}, reqGap:'gtm', reqType:'specialist', reqFor:'skills' };
+
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+  scoreColor(s){ return s>=80?'#0d9488':s>=65?'#d97706':'#dc2626'; }
+
+  advisors(){
+    const ic=(p,sw)=>this.ic(p,sw);
+    return [
+      { key:'sofia', name:'Sofia Menendez', initials:'SM', avatarBg:'#0d9488', expertise:'Enterprise GTM & Sales', location:'San Francisco', score:94, valuesFit:'High',
+        tags:[['GTM complement','skill'],['Operator','arch'],['SaaS · Seed–A','sector']], func:'gtm', archetype:'operator',
+        rationale:'Strong commercial complement to a technical founding team. Built and led enterprise sales at two seed-to-Series-B SaaS companies. High mission alignment and a long-term operating style that matches your values profile.',
+        contribution:'Enterprise GTM, first sales hires, pricing',
+        risk:'',
+        bio:'Former VP Sales at Rippling-era startups; scaled two teams from first revenue to $10M ARR. Now advises technical founders on go-to-market motion, pricing, and the first commercial hires.',
+        roles:['VP Sales · Vanta (Seed → Series B)','Head of Enterprise · Lattice','2 exits · both acquired'],
+        engagement:'Biweekly check-in', engagementNote:'45-min working sessions tied to GTM milestones',
+        equity:'0.50%', equityNote:'4-yr vest, 1-yr cliff. Upper end — hands-on GTM at a critical gap.',
+        value90:'Stand up your outbound motion, define ICP-based pricing tiers, and interview your first two AE candidates. Directly lifts the Traction and Team dimensions.',
+        breakdown:[['Skill complementarity',96],['Weak-point coverage',95],['Values alignment',90],['Archetype fit',92],['Sector relevance',89],['Stage relevance',94]],
+        complementNote:'Closes your single biggest gap: commercial. Your team indexes 5/5 technical, 1/5 commercial — Sofia inverts that exactly.',
+        coverage:[['GTM readiness — currently low confidence',true],['Enterprise sales motion — unproven',true],['Pricing strategy — undefined',true]],
+        heat:[['Technical',1,2],['Commercial',1,5],['GTM / Sales',1,5],['Fundraising',2,3],['Operations',2,4],['Domain',5,3]] },
+
+      { key:'raj', name:'Raj Patel', initials:'RP', avatarBg:'#4f46e5', expertise:'Fundraising & Investor Relations', location:'New York', score:88, valuesFit:'High',
+        tags:[['Fundraising archetype','skill'],['Dealmaker','arch'],['Pre-seed–A','sector']], func:'fundraising', archetype:'dealmaker',
+        rationale:'Adds the missing Dealmaker archetype. Ran pre-seed and seed rounds as an operator and now angel-invests. Fills your fundraising gap and adds investor signaling into the Axal network.',
+        contribution:'Fundraise strategy, investor intros, narrative',
+        risk:'',
+        bio:'Angel investor and former founder (fintech, acquired). Has closed 3 of his own rounds and advises on narrative, round construction, and investor targeting.',
+        roles:['Founder · Ledgerly (acq. by Brex)','Angel · 40+ pre-seed checks','Scout · Sequoia'],
+        engagement:'Fundraising sprint', engagementNote:'Intensive during raise, strategic intros between',
+        equity:'0.40%', equityNote:'4-yr vest, 1-yr cliff. Mid-range — episodic but high-leverage.',
+        value90:'Pressure-test your deck narrative, build a target investor list, and open 3–5 warm intros. Improves the Financials dimension and investor readiness.',
+        breakdown:[['Skill complementarity',88],['Weak-point coverage',86],['Values alignment',87],['Archetype fit',96],['Sector relevance',82],['Stage relevance',90]],
+        complementNote:'No Dealmaker archetype exists on your team today. Raj adds it and brings direct investor signaling.',
+        coverage:[['Fundraising strategy — no archetype present',true],['Investor network access — limited',true],['Financial model credibility — improving',false]],
+        heat:[['Technical',1,2],['Commercial',1,3],['GTM / Sales',1,2],['Fundraising',2,5],['Operations',2,3],['Domain',5,2]] },
+
+      { key:'lena', name:'Dr. Lena Fischer', initials:'LF', avatarBg:'#7c3aed', expertise:'Regulatory & Deep-tech Domain', location:'Berlin', score:79, valuesFit:'Medium',
+        tags:[['Domain credibility','skill'],['Scientist','arch'],['Deep-tech','sector']], func:'regulatory', archetype:'scientist',
+        rationale:'Adds domain credibility and regulatory navigation for enterprise buyers. Deep research background aligns with your technical strength — more reinforcing than complementary, so ranked below the commercial gaps.',
+        contribution:'Regulatory strategy, technical credibility, R&D',
+        risk:'Reinforces existing technical strength rather than filling the commercial gap — lower priority than Sofia or Raj.',
+        bio:'Professor of applied ML and former CTO of a regulated health-data startup. Advises on compliance posture and technical due-diligence readiness.',
+        roles:['CTO · MediSecure (Series A)','Professor · TU Berlin','Reviewer · EU AI Act working group'],
+        engagement:'Strategic intros only', engagementNote:'Monthly call, on-demand for regulatory questions',
+        equity:'0.25%', equityNote:'4-yr vest, 1-yr cliff. Lower — advisory-only, lighter touch.',
+        value90:'Define your compliance posture for enterprise procurement and prep the technical section of your data room. Modest Team and IP dimension lift.',
+        breakdown:[['Skill complementarity',68],['Weak-point coverage',70],['Values alignment',74],['Archetype fit',80],['Sector relevance',88],['Stage relevance',76]],
+        complementNote:'Overlaps your technical/domain strength — valuable for credibility, but not your top gap. Consider after a commercial advisor.',
+        coverage:[['Regulatory navigation — partially covered',true],['Enterprise procurement readiness',true],['Commercial gap — not addressed',false]],
+        heat:[['Technical',1,5],['Commercial',1,1],['GTM / Sales',1,1],['Fundraising',2,2],['Operations',2,3],['Domain',5,5]] },
+
+      { key:'marcus', name:'Marcus Webb', initials:'MW', avatarBg:'#0891b2', expertise:'Operations & Hiring', location:'Austin', score:72, valuesFit:'Medium',
+        tags:[['Ops complement','skill'],['Operator','arch'],['Seed–A','sector']], func:'ops', archetype:'operator',
+        rationale:'Generalist operator strong on hiring and process. Useful once headcount grows, but overlaps somewhat with your co-founder\u2019s operational coverage, so ranked mid-pack.',
+        contribution:'Hiring, org design, operating cadence',
+        risk:'Strong operator, but lower alignment on mission-driven values — optimizes for speed over long-term mission framing.',
+        bio:'Former COO of two venture-backed startups. Specializes in the 5-to-30 person scaling phase, hiring systems, and operating rhythm.',
+        roles:['COO · Frame (Series A)','Ops lead · Airtable (early)','Advisor · 6 seed startups'],
+        engagement:'Monthly call', engagementNote:'Best engaged once you begin hiring',
+        equity:'0.25%', equityNote:'4-yr vest, 1-yr cliff. Lower — value arrives later.',
+        value90:'Set up your hiring pipeline and first operating cadence. Limited near-term impact — higher value post-raise.',
+        breakdown:[['Skill complementarity',70],['Weak-point coverage',64],['Values alignment',62],['Archetype fit',78],['Sector relevance',74],['Stage relevance',80]],
+        complementNote:'Partial overlap with Maya\u2019s operational coverage. Adds hiring depth but is not your critical gap this week.',
+        coverage:[['Hiring readiness — future need',true],['Operating cadence — partially covered',false],['Commercial gap — not addressed',false]],
+        heat:[['Technical',1,2],['Commercial',1,3],['GTM / Sales',1,2],['Fundraising',2,2],['Operations',2,5],['Domain',5,2]] },
+    ];
+  }
+
+  introText(a, tone){
+    const openers={ warm:`Hi ${a.name.split(' ')[0]},\n\nI came across your work and it genuinely resonated — `, direct:`Hi ${a.name.split(' ')[0]},\n\nKeeping this short. `, investor:`${a.name.split(' ')[0]},\n\nBuilding something in your wheelhouse and moving fast. `, mission:`Hi ${a.name.split(' ')[0]},\n\nWe\u2019re building toward something we care deeply about, and ` };
+    const body=`we\u2019re NovaCraft AI — the intelligent async layer for distributed teams. Two technical founders, strong on product, deliberately light on commercial. That\u2019s exactly where you come in: ${a.contribution.toLowerCase()}.\n\nSpecifically, ${a.value90.charAt(0).toLowerCase()+a.value90.slice(1)}\n\nWould you be open to a 30-minute call to explore an advisory role? Happy to work around your schedule.\n\nBest,\nGuillaume`;
+    return (openers[tone]||openers.warm)+body;
+  }
+
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state;
+    const all=this.advisors(); const byKey={}; all.forEach(a=>byKey[a.key]=a);
+
+    const tagStyle={ skill:'color:#0f766e;background:#ecfdf5', arch:'color:#5b21b6;background:#f5f3ff', sector:'color:#155e75;background:#ecfeff' };
+    const funcFilters=[['all','All'],['gtm','GTM'],['fundraising','Fundraising'],['ops','Operations'],['regulatory','Regulatory']];
+
+    let list=all.slice();
+    if(st.filter!=='all') list=list.filter(a=>a.func===st.filter);
+    list.sort((a,b)=>b.score-a.score);
+
+    const matches=list.map(a=>({
+      key:a.key, name:a.name, initials:a.initials, avatarBg:a.avatarBg, expertise:a.expertise,
+      score:a.score, scoreColor:this.scoreColor(a.score), valuesFit:a.valuesFit,
+      tags:a.tags.map(([label,k])=>({label,style:tagStyle[k]})),
+      rationale:a.rationale, contribution:a.contribution, risk:a.risk,
+      addLabel: st.added[a.key]?'On bench':'Add advisor', addBg: st.added[a.key]?'#a1a1aa':'#0d9488',
+      open:()=>this.setState({drawerOpen:true,selKey:a.key}),
+      openStop:(e)=>{e.stopPropagation();this.setState({drawerOpen:true,selKey:a.key});},
+      introStop:(e)=>{e.stopPropagation();this.setState({introOpen:true,introKey:a.key});},
+      addStop:(e)=>{e.stopPropagation();this.setState({added:{...st.added,[a.key]:!st.added[a.key]}});},
+    }));
+
+    const filters=funcFilters.map(([k,l])=>({ label:l, onClick:()=>this.setState({filter:k}),
+      color: st.filter===k?'#fff':'#71717a', extra: st.filter===k?'background:#0d9488;border-color:#0d9488':'' }));
+
+    // gap map
+    const gaps=[
+      { kind:'Missing skill', title:'Commercial operator', closedBy:'Sofia M. closes GTM · +6 Team', icon:ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',2), iconColor:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+      { kind:'Missing archetype', title:'No Dealmaker present', closedBy:'Raj P. adds fundraising signal', icon:ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/>',2), iconColor:'#b45309', bg:'#fffbeb', border:'#fde68a' },
+      { kind:'Scoring weak point', title:'Enterprise sales readiness low', closedBy:'Sofia M. lifts Traction confidence', icon:ic('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',2.2), iconColor:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+      { kind:'Values risk', title:'Mission-heavy · long horizon', closedBy:'De-prioritized short-term optimizers', icon:ic('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',2), iconColor:'#0f766e', bg:'#ecfdf5', border:'#99f6e4' },
+    ];
+
+    // team profile
+    const skillColor=(v)=> v>=4?'#0d9488':v>=2?'#d97706':'#e4e4e7';
+    const teamSkills=[['Technical',5],['Domain',5],['Operations',2],['Fundraising',2],['Commercial',1],['GTM / Sales',1]].map(([name,v])=>({name,pct:(v/5*100)+'%',color:skillColor(v)}));
+    const teamArchetypes=[['Visionary',1],['Builder',1],['Scientist',1],['Operator',1],['Dealmaker',0],['Domain Expert',1]].map(([name,on])=>({name:on?name:name+' · missing', style:on?'color:#4f46e5;background:#eef2ff':'color:#a1a1aa;background:#f4f4f5;border:1px dashed #d4d4d8'}));
+    const teamValues=[['Risk tolerance','Moderate'],['Time horizon','Long-term'],['Exit intent','Build durable'],['Work style','Deep / async']].map(([label,value])=>({label,value}));
+
+    // bench
+    const benchList=all.filter(a=>st.added[a.key]);
+    const bench=benchList.map(a=>({ name:a.name, initials:a.initials, avatarBg:a.avatarBg, role:a.expertise,
+      status:'Active', statusStyle:'color:#166534;background:#dcfce7' }));
+
+    // selected drawer
+    const sel0=byKey[st.selKey]||all[0];
+    const bdColor=(s)=> s>=85?'#0d9488':s>=70?'#d97706':'#a1a1aa';
+    const heatColor=(v)=> v>=4?'#0d9488':v>=3?'#5eead4':v>=2?'#fde68a':'#f0f0f3';
+    const heatLabel=(v)=> v>=4?'Strong':v>=2?'Some':'None';
+    const chk=ic('<polyline points="20 6 9 17 4 12"/>',2.4); const dash=ic('<line x1="5" y1="12" x2="19" y2="12"/>',2.4);
+    const sel={ ...sel0, scoreColor:this.scoreColor(sel0.score),
+      breakdown:sel0.breakdown.map(([label,score])=>({label,score,pct:score+'%',color:bdColor(score)})),
+      heatmap:sel0.heat.map(([skill,t,a])=>({skill,teamColor:heatColor(t),advColor:heatColor(a),teamLevel:heatLabel(t),advLevel:heatLabel(a)})),
+      coverage:sel0.coverage.map(([text,ok])=>({text,icon:ok?chk:dash,color:ok?'#0d9488':'#a1a1aa'})),
+      addLabel: st.added[sel0.key]?'On bench':'Add advisor',
+      intro:()=>this.setState({introOpen:true,introKey:sel0.key}),
+      add:()=>this.setState({added:{...st.added,[sel0.key]:!st.added[sel0.key]}}),
+    };
+
+    // intro
+    const introA=byKey[st.introKey]||all[0];
+    const tones=[['warm','Warm'],['direct','Direct'],['investor','Investor'],['mission','Mission-driven']].map(([k,l])=>({label:l,onClick:()=>this.setState({introTone:k}),
+      style: st.introTone===k?'color:#fff;background:#0d9488':'color:#71717a;background:#f4f4f5'}));
+
+    // request modal
+    const rgOpts=[['gtm','GTM / commercial'],['fundraising','Fundraising'],['product','Product strategy'],['regulatory','Regulatory']];
+    const reqGaps=rgOpts.map(([k,l])=>({label:l,onClick:()=>this.setState({reqGap:k}),style:st.reqGap===k?'color:#fff;background:#0d9488':'color:#71717a;background:#f4f4f5'}));
+    const reqType=[['specialist','Specialist'],['generalist','Generalist']].map(([k,l])=>({label:l,onClick:()=>this.setState({reqType:k}),style:st.reqType===k?'color:#fff;background:#0d9488':'color:#71717a;background:#f4f4f5'}));
+    const reqFor=[['skills','Skills'],['values','Values fit'],['sector','Sector access'],['archetype','Archetype balance']].map(([k,l])=>({label:l,onClick:()=>this.setState({reqFor:k}),style:st.reqFor===k?'color:#fff;background:#0d9488':'color:#71717a;background:#f4f4f5'}));
+
+    return {
+      embeddedClass: this.props.embedded ? 'ad-embedded' : '',
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icUsers:ic('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+      icCheck:chk, icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icPlus:ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',2.2),
+      icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
+      matchCount:matches.length, coverageGain:'8', teamScoreNow:72, teamScoreProj:84,
+      gaps, matches, filters,
+      teamSkills, teamArchetypes, teamValues,
+      bench, benchEmpty: bench.length===0,
+      drawerOpen:st.drawerOpen, sel, closeDrawer:()=>this.setState({drawerOpen:false}),
+      introOpen:st.introOpen, introName:introA.name, introBody:this.introText(introA,st.introTone), tones,
+      closeIntro:()=>this.setState({introOpen:false}),
+      reqOpen:st.reqOpen, openReq:()=>this.setState({reqOpen:true}), closeReq:()=>this.setState({reqOpen:false}),
+      reqGaps, reqType, reqFor,
+      stop:(e)=>e.stopPropagation(),
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'ad-back'},'*');}catch(x){}},
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+/**
+ * D1154 (#3059, part 6 of #2421) — the pure model of the reading tabs Team
+ * (DL4), Market (DL5) and Traction (DL6), over D1151's reads
+ * (`GET /api/deals/:id/team`, `/market`, `/traction`, `dealInsightsApi`).
+ *
+ * Each read answers one of three ways, and each is drawn as itself:
+ *   · masked: the viewer has no NDA on file with the founder. Only the
+ *     company's name, sector, stage and headline come back, and the tab says
+ *     the NDA opens the rest;
+ *   · unreadable: the read failed. "Unreadable" with Try again, never empty;
+ *   · open: every block carries `state` (recorded, not_recorded,
+ *     unreadable), and each block is drawn from its own state alone.
+ *
+ * NEVER A ZERO FOR A MISSING VALUE. A figure the read holds as null is "Not
+ * recorded" with the read's reason; a month the founder did not report is a
+ * gap in the series, never a 0. A recorded 0 stays 0.
+ *
+ * NO TOTAL SCORE. Coverage is the read's coarse band per skill axis (covered,
+ * partial, gap), never a number. D6168 (#6168): each tab draws its scopes'
+ * rows from the venture scorecard's read (`SCORECARD_ROWS`, `ScopeRows`), and
+ * points to the Evidence tab for what the founder shared (`EVIDENCE_LINK`).
+ */
+
+import { NOT_RECORDED } from '../../lib/absence';
+
+export { NOT_RECORDED };
+export const NOT_REPORTED = 'Not reported';
+
+/** How a whole read is drawn: masked, unreadable or open. */
+export function insightState(read) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status === 'unreadable') return { state: 'unreadable' };
+  const d = read.data;
+  if (d?.masked === true) {
+    const p = d.project && typeof d.project === 'object' ? d.project : {};
+    return { state: 'masked', project: { name: p.name || null, sector: p.sector || null, stage: p.stage || null, headline: p.headline || null } };
+  }
+  if (d?.masked === false) return { state: 'open', data: d };
+  return { state: 'unreadable' };
+}
+
+/** What the masked tab says. The NDA is signed from Documents (D1153). */
+export const MASKED = {
+  title: 'This opens once you sign the NDA',
+  line: 'The founder shares the team, the market and the figures with investors who have an NDA on file with them. Until then you see the company’s name, sector, stage and headline.',
+  act: 'Sign the NDA on Documents',
+};
+
+/** One block of an open read: its rows, or why there are none. */
+export function blockOf(block) {
+  if (!block || typeof block !== 'object') return { state: 'unreadable' };
+  if (block.state === 'recorded') return { state: 'recorded', data: block.data };
+  if (block.state === 'not_recorded') return { state: 'not_recorded', reason: block.reason || NOT_RECORDED };
+  return { state: 'unreadable' };
+}
+
+// ---------------------------------------------------------------- figures
+
+const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const num = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+
+/** A figure in its unit; a missing one is null, never "0". */
+export function figureText(value, unit) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (unit === 'usd') return usd0.format(value);
+  if (unit === 'pct') return `${num.format(value)}%`;
+  if (unit === 'months') return `${num.format(value)} ${value === 1 ? 'month' : 'months'}`;
+  return num.format(value);
+}
+
+/** A source as the canvas's chip says it: a typed figure says so. */
+export function sourceText(source) {
+  if (typeof source !== 'string' || !source.trim()) return null;
+  const s = source.trim();
+  return /^(typed|manual)$/i.test(s) ? 'Typed · the founder’s own figure' : `From ${s}`;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** `2026-10` → `Oct 2026`; `2026-10-09` → `9 Oct 2026`. */
+export function dateText(s) {
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(s ?? ''));
+  if (!m) return null;
+  const mon = MONTHS[Number(m[2]) - 1];
+  if (!mon) return null;
+  return m[3] ? `${Number(m[3])} ${mon} ${m[1]}` : `${mon} ${m[1]}`;
+}
+
+// ---------------------------------------------------------------- DL4 Team
+
+const ROLE_WORDS = { founder: 'Founder', cofounder: 'Co-founder', co_founder: 'Co-founder', owner: 'Founder', member: 'Team member', editor: 'Team member', viewer: 'Team member', advisor: 'Advisor' };
+const roleWord = (r) => ROLE_WORDS[String(r ?? '').toLowerCase()] || (r ? String(r).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : 'Team member');
+
+/** One person as they published themselves. Nothing they did not publish is drawn. */
+export function personView(p) {
+  const roles = p.prior_roles_state === 'unreadable'
+    ? { state: 'unreadable' }
+    : Array.isArray(p.prior_roles) && p.prior_roles.length
+      ? { state: 'recorded', rows: p.prior_roles.map((r) => {
+        const head = [r.title, r.company].filter(Boolean).join(' at ') || NOT_RECORDED;
+        const span = [r.start, r.end].filter(Boolean).join('–');
+        return span ? `${head}, ${span}` : head;
+      }) }
+      : { state: 'not_published' };
+  const initials = String(p.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '·';
+  return {
+    key: p.uid || p.name,
+    name: p.name || NOT_RECORDED,
+    initials,
+    role: roleWord(p.role),
+    archetype: p.archetype?.label || null,
+    roles,
+  };
+}
+
+/** The band words, in the canvas's tone. Coverage is a band, never a number. */
+export const BANDS = {
+  covered: { word: 'Covered', tone: 'done' },
+  partial: { word: 'Partial', tone: 'wait' },
+  gap: { word: 'Gap', tone: 'gap' },
+};
+
+/** The eight axes with their band, or why there is none; and the gaps by name. */
+export function coverageView(block) {
+  const b = blockOf(block);
+  if (b.state !== 'recorded') return b;
+  const axes = (Array.isArray(b.data) ? b.data : []).map((a) => (BANDS[a.coverage_band]
+    ? { slug: a.slug, label: a.label, band: a.coverage_band, ...BANDS[a.coverage_band] }
+    : { slug: a.slug, label: a.label, band: null, word: NOT_RECORDED, reason: a.reason || NOT_RECORDED }));
+  const gaps = axes.filter((a) => a.band === 'gap').map((a) => a.label);
+  return {
+    state: 'recorded',
+    axes,
+    gaps,
+    summary: gaps.length ? `Gaps: ${gaps.join(', ')}.` : axes.some((a) => a.band) ? 'No axis is a gap.' : 'No axis has two published team members yet.',
+  };
+}
+
+export const COVERAGE_NOTE = 'The team’s band on each of the eight skill axes, from at least two members who published their background. Individual skills and values are never shown.';
+
+// ---------------------------------------------------------------- DL5 Market
+
+const SIZING = [['tam', 'TAM'], ['sam', 'SAM'], ['som', 'SOM']];
+
+/** TAM, SAM and SOM: the figure, or Not recorded; and the source, or why there is none. */
+export function sizingView(block) {
+  const b = blockOf(block);
+  if (b.state !== 'recorded') return b;
+  return {
+    state: 'recorded',
+    tiles: SIZING.map(([key, label]) => {
+      const f = b.data?.[key] || {};
+      const value = typeof f.value === 'number' && Number.isFinite(f.value) ? f.value : null;
+      return {
+        key, label,
+        value: value == null ? null : usd0.format(value),
+        source: sourceText(f.source),
+        reason: value == null ? (f.reason || NOT_RECORDED) : (f.source ? null : f.reason || 'No source recorded for this figure'),
+        // D6171 (#6171): the day the figure was set, when `market_figures` holds one.
+        asOf: value != null && dateText(f.as_of) ? `As of ${dateText(f.as_of)}` : null,
+      };
+    }),
+  };
+}
+
+/** A link HQ can open: http or https only, never a script address. */
+export function safeUrl(u) {
+  try { const x = new URL(String(u ?? '')); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; }
+}
+
+const DECISIONS = { go: 'Entering', enter: 'Entering', entering: 'Entering', served: 'Served', serve: 'Served', hold: 'On hold', no_go: 'Not entering', exit: 'Leaving' };
+
+/** D6171 (#6171): the four readiness parts the read returns for each market (Grow MG6), in the canvas's order. */
+export const READINESS = [['demand', 'Demand'], ['regulation', 'Regulation'], ['partners', 'Partners'], ['cost', 'Cost']];
+
+/** One readiness part: its score out of 10 with its source, or Not recorded. A recorded 0 stays 0. */
+export function readinessPart(m, key, label) {
+  const n = m?.[`${key}_score`];
+  const score = typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 10 ? n : null;
+  if (score == null) return { key, label, score: null, source: null, text: `${label} ${NOT_RECORDED}` };
+  const source = sourceText(m?.[`${key}_source`]);
+  return { key, label, score, source, text: `${label} ${score}/10${source ? ` · ${source}` : ''}` };
+}
+
+/** A company market: its name, where it stands, when it was decided, and its readiness. */
+export function marketRow(m) {
+  const where = DECISIONS[String(m.decision ?? '').toLowerCase()] || (m.state ? String(m.state).replace(/_/g, ' ') : null);
+  const readiness = READINESS.map(([key, label]) => readinessPart(m, key, label));
+  return {
+    name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null,
+    readiness, readinessText: readiness.map((p) => p.text).join(' · '),
+  };
+}
+
+// ---------------------------------------------------------------- DL6 Traction
+
+/** The sourced founder-shared tiles, including recorded ARR and net_retention (#6178). */
+export const TRACTION_TILES = [
+  { key: 'mrr', label: 'MRR' },
+  { key: 'growth', label: 'Growth', suffix: ' a month' },
+  { key: 'burn', label: 'Net burn', suffix: ' a month' },
+  { key: 'runway', label: 'Runway' },
+  { key: 'customers', label: 'Paying accounts' },
+  { key: 'arr', label: 'ARR' },
+  { key: 'net_retention', label: 'Net revenue retention' },
+];
+
+/** The charts, each one figure across the twelve months. */
+export const TRACTION_CHARTS = [
+  { key: 'mrr', title: 'MRR by month', kind: 'line' },
+  { key: 'burn', title: 'Net burn by month', kind: 'bar' },
+  { key: 'customers', title: 'Paying accounts by month', kind: 'line' },
+];
+
+/**
+ * The twelve months as the read gives them, one series per figure. A month
+ * the founder did not report, or reported without this figure, is a gap
+ * (`value: null`), never 0.
+ */
+export function tractionView(read) {
+  const b = blockOf(read?.history);
+  const history = b.state === 'recorded' && Array.isArray(b.data) ? b.data : null;
+  const months = history ? history.map((m) => m.month) : [];
+  const series = Object.fromEntries(TRACTION_TILES.map(({ key }) => {
+    const points = (history || []).map((m) => {
+      const f = m.state === 'reported' ? (m.figures || []).find((x) => x.key === key && typeof x.value === 'number' && Number.isFinite(x.value)) : null;
+      return f ? { month: m.month, value: f.value, unit: f.unit, source: f.source, as_of: f.as_of } : { month: m.month, value: null };
+    });
+    return [key, points];
+  }));
+  const tiles = TRACTION_TILES.map((t) => {
+    const latest = [...series[t.key]].reverse().find((p) => p.value != null);
+    if (!latest) return { ...t, value: null, reason: t.key === 'arr'
+      ? read?.arr?.reason || 'No founder-shared ARR recorded; MRR is not annualised'
+      : t.key === 'net_retention' ? read?.net_retention?.reason || read?.nrr?.reason || 'No founder-shared NRR recorded'
+        : history ? 'Not shared in the last twelve months' : NOT_RECORDED };
+    const asOf = dateText(latest.as_of) || dateText(latest.month);
+    return { ...t, value: `${figureText(latest.value, latest.unit)}${t.suffix || ''}`, source: sourceText(latest.source), asOf: asOf ? `As of ${asOf}` : null };
+  });
+  return {
+    state: history ? 'recorded' : b.state,
+    months,
+    // D6164 part 2 (DE25): which months the founder reported, for the month table.
+    reportedMonths: history ? history.filter((m) => m.state === 'reported').map((m) => m.month) : [],
+    reported: history ? history.filter((m) => m.state === 'reported').length : 0,
+    lastShared: history ? history.filter((m) => m.state === 'reported').map((m) => m.month).sort().at(-1) || null : null,
+    series,
+    tiles,
+  };
+}
+
+/**
+ * D6187 (#6187): the request an investor may send the founder about the gaps
+ * in the shared figures. The owner chose A: it is a diligence request on the
+ * deal's case (`POST /api/dd/cases/:uid/requests`), pre-filled with each
+ * figure and the months it was not reported, and editable before it is sent.
+ * Null when nothing is missing: there is nothing to ask for.
+ */
+export function askDraft(view) {
+  if (!view || view.state !== 'recorded') return null;
+  const lines = TRACTION_CHARTS.map((c) => {
+    const gaps = (view.series?.[c.key] || []).filter((p) => p.value == null).map((p) => dateText(p.month)).filter(Boolean);
+    return gaps.length ? { figure: c.title.replace(' by month', ''), gaps } : null;
+  }).filter(Boolean);
+  if (!lines.length) return null;
+  const figures = lines.map((l) => l.figure);
+  const named = figures.length === 1 ? figures[0] : `${figures.slice(0, -1).join(', ')} and ${figures[figures.length - 1]}`;
+  return {
+    title: `An update on ${named}`.slice(0, 200),
+    details: ['Could you share the figures for the months not reported yet?', ...lines.map((l) => `${l.figure}: ${l.gaps.join(', ')}.`)].join('\n'),
+    lines,
+  };
+}
+
+/** One chart's sentence for a screen reader, and which months are gaps. */
+export function chartSummary(title, points) {
+  const shown = points.filter((p) => p.value != null);
+  const gaps = points.filter((p) => p.value == null).map((p) => dateText(p.month));
+  if (!shown.length) return { text: `${title}: nothing reported in the last twelve months.`, gaps };
+  const first = shown[0], last = shown[shown.length - 1];
+  const fmt = (p) => figureText(p.value, p.unit);
+  const gapText = gaps.length ? ` ${gaps.length === 1 ? `${gaps[0]} was` : `${gaps.length} months were`} not reported.` : '';
+  return { text: `${title}: ${fmt(first)} in ${dateText(first.month)}, ${fmt(last)} in ${dateText(last.month)}.${gapText}`, gaps };
+}
+
+// ---------------------------------------------------------------- DL24: the scorecard rows and the evidence
+
+/**
+ * D6168 (#6168): the scorecard scopes each tab draws as rows, in SCORING's
+ * order (v1 canvas DL4, DL5, DL6). Each row is the Scorecard tab's own, read
+ * from `GET /api/venture-scores/deal/:dealId`.
+ */
+export const SCORECARD_ROWS = Object.freeze({
+  team: Object.freeze(['team']),
+  market: Object.freeze(['market', 'pmf', 'geographic', 'political']),
+  traction: Object.freeze(['traction', 'financial']),
+});
+
+/**
+ * D6168: the founder's shared evidence is one link away, on the Evidence tab.
+ * No count is drawn here: the evidence read (`GET /api/deals/:id/evidence`)
+ * logs each read as an open of the evidence (`open_evidence`), and visiting
+ * Market or Traction is not one.
+ */
+export const EVIDENCE_LINK = Object.freeze({
+  title: 'Evidence the founder shared',
+  line: 'What the founder shared with you, with each item’s source and date, is on the Evidence tab.',
+  act: 'Open the Evidence tab',
+});
+
+
+/** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */
+export function tractionSources(points) {
+  const sources = new Map();
+  for (const point of points) {
+    if (point.value == null) continue;
+    const source = sourceText(point.source) || NOT_RECORDED;
+    const asOf = dateText(point.as_of) ? point.as_of : null;
+    if (!sources.has(source) || (asOf && (!sources.get(source) || asOf > sources.get(source)))) sources.set(source, asOf);
+  }
+  return [...sources].map(([source, asOf]) => `${source} · As of ${dateText(asOf) || NOT_RECORDED}`);
+}
+
+/** D6177: RFC 4180 cells; source text cannot become a spreadsheet formula. Numeric values stay numeric. */
+function tractionCsvCell(value) {
+  let text = String(value ?? '');
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+}
+
+/** Export only the axis and figures already read, including every successful gap as Not reported. */
+export function tractionCsv(view) {
+  const rows = [['month', 'figure', 'value', 'unit', 'source']];
+  for (const figure of TRACTION_TILES) {
+    const points = view.series[figure.key] || [];
+    const unit = points.find(p => p.unit)?.unit || '';
+    for (const point of points) rows.push([point.month, figure.label, point.value == null ? NOT_REPORTED : point.value,
+      point.unit || unit, point.value == null ? '' : point.source || NOT_RECORDED]);
+  }
+  return rows.map(row => row.map(tractionCsvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+
+// ---------------------------------------------------------------- D6164 part 2: Team, Market and Traction to the Evidence addendum
+
+/**
+ * D6164 part 2 (#6164, DE23 to DE25 of D6163's canvas). The three tabs keep
+ * their places in the tab row: moving them under the Scorecard's scopes is a
+ * placement the canvas draws pending the owner, and the tab set is #5903's.
+ * What changes is what each tab draws, in the canvas's words.
+ */
+export const TEAM_WORDS = Object.freeze({
+  people: 'People, as they published themselves',
+  noArchetype: 'No archetype published',
+  noRoles: 'No prior roles published',
+  coverageTitle: 'Team coverage by skill area',
+  coverageLine: 'A band for the team as a whole, never a person’s number. Shown where at least two published members contribute.',
+  values: 'Team values band',
+  advisors: 'Advisors',
+  advisorsLine: 'How many, and their roles.',
+  next: 'Next: Diligence, the next step on this deal.',
+});
+
+/** DE23: how many people are listed, and who is not. */
+export function peopleLine(n) {
+  const count = Number.isInteger(n) && n >= 0 ? n : 0;
+  return `${count} published · anyone with a private profile is not listed`;
+}
+
+/** DE24: the competitors' sorts. Search and sort are the browser's; the read is unchanged. */
+export const COMPETITOR_SORTS = Object.freeze([['name', 'Name A–Z'], ['name_desc', 'Name Z–A']]);
+
+/**
+ * DE24: the competitors a search and a sort leave. The search reads the name
+ * and why it matters; a row with no name sorts first under A–Z, as the empty
+ * string does.
+ */
+export function competitorsView(rows, { query = '', sort = 'name' } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const q = String(query ?? '').trim();
+  const needle = q.toLocaleLowerCase('en');
+  const shown = (needle
+    ? list.filter((r) => [r?.name, r?.why_it_matters].some((x) => String(x ?? '').toLocaleLowerCase('en').includes(needle)))
+    : list.slice());
+  const key = (r) => String(r?.name ?? '').toLocaleLowerCase('en');
+  shown.sort((a, b) => key(a).localeCompare(key(b), 'en'));
+  if (sort === 'name_desc') shown.reverse();
+  return {
+    total: list.length,
+    shown,
+    line: needle ? `${shown.length} of ${list.length} match “${q}”` : null,
+    none: needle && !shown.length ? `No competitor matches “${q}”.` : null,
+  };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** DE25: how many of the months were reported, in the canvas's words. */
+export function monthsLine(view) {
+  if (!view || view.state !== 'recorded') return null;
+  const reported = view.reportedMonths?.length || 0;
+  const gaps = (view.months?.length || 0) - reported;
+  return `${plural(reported, 'month', 'months')} reported, ${gaps} not reported. A month not reported is a gap, never 0.`;
+}
+
+export const NOT_IN_UPDATE = 'Not in this update';
+export const NO_UPDATE = 'No update shared for this month';
+
+/**
+ * DE25: one row a month, newest first. A month the founder did not report is
+ * Not reported, with no figure; a reported month without a figure says it was
+ * not in that update. A recorded 0 stays 0.
+ */
+export function monthRows(view) {
+  if (!view || view.state !== 'recorded') return [];
+  const reported = new Set(view.reportedMonths || []);
+  const at = (key, month) => (view.series?.[key] || []).find((p) => p.month === month) || { value: null };
+  const cell = (p, suffix = '') => (p.value == null ? null : `${figureText(p.value, p.unit)}${suffix}`);
+  return [...(view.months || [])].reverse().map((month) => {
+    const mrr = at('mrr', month), customers = at('customers', month), growth = at('growth', month);
+    if (!reported.has(month)) return { month, label: dateText(month) || month, reported: false };
+    return {
+      month,
+      label: dateText(month) || month,
+      reported: true,
+      mrr: cell(mrr),
+      customers: cell(customers),
+      growth: cell(growth),
+      source: sourceText(mrr.source) || sourceText(customers.source) || sourceText(growth.source) || null,
+    };
+  });
+}
+

@@ -1,0 +1,78 @@
+{
+  "skill": "roadmap-dependency-sequencing",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "record_id": "platform-milestone-03",
+        "milestone": "Developer portal v2",
+        "committed_release_date": null
+      },
+      "build.records": {
+        "record_id": "roadmap-dependencies-14",
+        "tasks": [
+          {
+            "id": "schema-v2",
+            "depends_on": [],
+            "duration_working_days": 5
+          },
+          {
+            "id": "gateway-v2",
+            "depends_on": [
+              "schema-v2"
+            ],
+            "duration_working_days": 3
+          },
+          {
+            "id": "portal-v2",
+            "depends_on": [
+              "gateway-v2"
+            ],
+            "duration_working_days": 2
+          },
+          {
+            "id": "analytics-event",
+            "depends_on": [
+              "identity-bridge"
+            ],
+            "duration_working_days": 2
+          },
+          {
+            "id": "identity-bridge",
+            "depends_on": [
+              "analytics-event"
+            ],
+            "duration_working_days": 2
+          }
+        ]
+      },
+      "team.roster": {
+        "record_id": "capacity-record-02",
+        "team": "Platform engineering",
+        "team_capacity": null,
+        "working_calendar": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "schema-v2",
+      "gateway-v2",
+      "portal-v2",
+      "analytics-event",
+      "identity-bridge",
+      "cycle"
+    ],
+    "must_say_not_recorded": [
+      "team capacity",
+      "committed release date"
+    ],
+    "must_not_include": [
+      "This roadmap has no dependency cycles",
+      "The release date is confirmed",
+      "The roadmap can run entirely in parallel"
+    ]
+  }
+}

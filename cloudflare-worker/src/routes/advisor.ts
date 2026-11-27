@@ -1,0 +1,2938 @@
+/**
+ * Task #10 (AC-1) — Personal Advisor backend.
+ *
+ * Persistent dashboard chatbot that profiles every persona via Q&A
+ * and writes the answers back into the right pages via the
+ * `services/advisor/writeRouter.ts` mapping. Replaces the standalone
+ * "Tell us about yourself" panel.
+ *
+ * Endpoints (mounted at /api/advisor):
+ *   POST   /start                       — get-or-create the user's
+ *                                         active conversation + first
+ *                                         unanswered question.
+ *   POST   /answer                      — { conversation_uid, question_id, value }
+ *                                         Routes the answer to its
+ *                                         persistence target, returns
+ *                                         { saved_to, hint, next, paywall }.
+ *   POST   /skip                        — same shape; records a 'skipped'
+ *                                         row and advances.
+ *   POST   /explain                     — SSE stream; LLM-generated
+ *                                         explanation of the current /
+ *                                         requested topic. Routed via
+ *                                         aiRouter task='advisor_explain'
+ *                                         (Workers AI only, Task #31).
+ *   GET    /progress                    — { persona, total, answered, skipped, percent }
+ *   GET    /conversations/:uid          — full Q&A history (most recent first).
+ *
+ * Persona detector:
+ *   When `users.role` is null we walk the `ROLE_DETECTOR` triplet first.
+ *   The primary answer is mapped via questionBank.mapRoleAnswer() into
+ *   the canonical role enum and persisted to users.role through the
+ *   write-router.
+ *
+ * Auth:
+ *   Every endpoint requires a logged-in user (requireAuth). The
+ *   write-router enforces per-resource auth on top of that — founders
+ *   can only update their own project, investors their own profile
+ *   etc. — so a user with the wrong role can't write to another
+ *   persona's bank even by guessing question_ids.
+ *
+ * Out of scope (handled by AC-2 / AC-3):
+ *   - Production-grade question banks (this file ships seed banks
+ *     sufficient for the round-trip; questionBank.ts will be expanded
+ *     in AC-2).
+ *   - Frontend chat UI (AC-3).
+ */
+import { inGrace } from '../middleware/planSubscription';
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { Env, User } from '../types';
+import { requireAdmin, requireAuth } from '../auth';
+import { ADMIN_BANK } from '../services/advisor/banks/admin';
+import {
+  ROLE_DETECTOR,
+  bankFor,
+  questionById,
+  DYNAMIC_ID_RE,
+  FIT_ID_RE,
+  filterByContext,
+  groupByPage,
+  groupBySection,
+  profilingBankFor,
+  sortByImportance,
+  type BankName,
+  type Persona,
+  type Question,
+} from '../services/advisor/questionBank';
+// Task: Explorer Problem/Challenge Discovery. While the user remains in the
+// 'exploring' holding role, they get ONE of 4 track-specific needs-discovery
+// banks — founder/investor/advisor/partner — chosen by their
+// `role_detect.primary` answer (persisted as user_role_review.suggested_role,
+// overlaid onto `role` by applyExploringOverlay() below). Read `actual_role`
+// (not `role`) to detect the exploring state, since `role` may already be
+// overlaid to the suggested persona for bank-selection purposes.
+import { explorerBankForTrack } from '../services/advisor/banks/explorer';
+// Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
+// answer lands (the raw score is persisted to field_sources below).
+import { recomputeUserFit } from '../services/axalFit';
+import { recomputeUserArchetype } from '../services/archetypeScoring';
+import { evaluateUser, reaskOverlay } from '../services/profileEvolution';
+import { normalizeFitAnswer } from '../services/advisor/banks/fitShared';
+import { computeProfilingCompletion, applyAdaptiveProfiling } from '../services/advisor/profilingModules';
+import { routeAnswer, recordFieldSource, type WriteResult } from '../services/advisor/writeRouter';
+import { hashEmail } from '../util/hashEmail';
+// Task #4 (AW) — 7-layer advisor guardrails.
+import {
+  ADVISOR_SYSTEM_PROMPT,
+  REFUSAL,
+  promptHash,
+  stripVerbatimLeak,
+  classifyInput,
+  gateToolCall,
+  checkKillSwitch,
+  ensureGuardrailColumns,
+  bumpAnomalyAndCheck,
+  bumpExplainsWithoutCommit,
+  writeTurnAudit,
+} from '../services/advisor/guardrails';
+// Task #5 (AV) — Find & deep-link tool registry.
+import {
+  isToolName,
+  executeTool,
+  TOOL_SCHEMAS,
+  type ToolEnvelope,
+} from '../services/advisor/tools';
+import { run as aiRouterRun, audioMinutesFromBytes, budgetRefusalMessage } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { GUARD_COPY } from '../services/ai/guard';
+// Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
+// ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
+import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
+import { pickNextQuestion } from '../services/advisor/rerank';
+import {
+  nextTurn as smNextTurn,
+  onAnswered as smOnAnswered,
+  publicCandidate as smPublicCandidate,
+  loadAnsweredForUser as smLoadAnsweredForUser,
+  paywallCtas as smPaywallCtas,
+} from '../services/advisor/stateMachine';
+import { enqueueJob } from '../services/queue';
+import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
+import { bindingKey } from '../util/schemaBootstrap';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { studioOption } from '../services/advisor/studioRail';
+
+const advisor = new Hono<{ Bindings: Env }>();
+
+// ---------------------------------------------------------------------------
+// Task #9 — 'exploring' persona overlay.
+//
+// Exploring users (chat-onboarded, awaiting admin role review) map to
+// persona 'unknown' in personaFor(), which pins selectBank() to the 3-question
+// ROLE_DETECTOR forever. So they could never complete Skills/Values/
+// Archetype/Fit profiling while in the holding state. advisorUser() wraps
+// requireAuth: when the REAL role is 'exploring' and user_role_review holds a
+// suggested_role, we overlay that suggestion onto `role` for BANK SELECTION
+// ONLY (the users table is never written). `actual_role` preserves the real
+// role so writeRouter's role_detect guard still routes the detector answer
+// into user_role_review.suggested_role instead of users.role.
+// ---------------------------------------------------------------------------
+type AdvisorUser = User & { actual_role?: string; eadwyn_coach?: boolean };
+const OVERLAYABLE_SUGGESTIONS = new Set(['founder', 'investor', 'advisor', 'partner']);
+
+async function applyExploringOverlay(env: Env, user: User): Promise<AdvisorUser> {
+  if (String(user.role || '').toLowerCase() !== 'exploring') return user;
+  let suggested: string | null = null;
+  try {
+    const { getSuggestedRole } = await import('../services/exploringSchema');
+    suggested = await getSuggestedRole(env, user.id);
+  } catch { /* best-effort — fall through to detector-only */ }
+  const overlay = suggested && OVERLAYABLE_SUGGESTIONS.has(String(suggested).toLowerCase())
+    ? String(suggested).toLowerCase()
+    : user.role;
+  // Cast: 'exploring'/'advisor' live outside the declared User.role union
+  // (the DB CHECK is wider than the TS type); bank selection only reads it.
+  return { ...user, role: overlay as User['role'], actual_role: 'exploring' };
+}
+
+async function advisorUser(c: Context<{ Bindings: Env }>): Promise<AdvisorUser> {
+  const user = await requireAuth(c);
+  return applyExploringOverlay(c.env, user);
+}
+
+// Per-call output cap for /explain. AC-1 caps replies to ≤120 words so
+// the buffered stripVerbatimLeak post-processing stays cheap; 512 tokens
+// is a generous ceiling that fits that bound for the Workers AI llama
+// models (Task #31: WAI is the only production provider).
+const EXPLAIN_MAX_TOKENS = 512;
+
+// ---------------------------------------------------------------------------
+// Schema. Mirrors sql/migrations/029_advisor.sql; idempotent so an
+// uninitialised dev D1 still works.
+// ---------------------------------------------------------------------------
+const SCHEMA_READY = new WeakMap<object, boolean>();
+async function ensureSchema(env: Env): Promise<void> {
+  if (SCHEMA_READY.get(bindingKey(env))) return;
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS advisor_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, user_id INTEGER NOT NULL, persona TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'active', current_question_id TEXT, total_questions INTEGER NOT NULL DEFAULT 0, answered_count INTEGER NOT NULL DEFAULT 0, skipped_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_conv_user ON advisor_conversations(user_id, updated_at DESC)");
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS advisor_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, role TEXT NOT NULL, question_id TEXT, content TEXT NOT NULL, meta_json TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_msg_conv ON advisor_messages(conversation_id, id)");
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS advisor_answers (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES advisor_conversations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, raw_value TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, saved_status TEXT NOT NULL, saved_error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), answered_at TEXT, UNIQUE(conversation_id, question_id))"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_advisor_answers_user_q ON advisor_answers(user_id, question_id)");
+    // D357 — migration 363's answered_at, for a table that predates it. The
+    // column is declared by the migration; this is the safety net only.
+    const answerCols = await env.DB.prepare(`PRAGMA table_info(advisor_answers)`).all<{ name: string }>();
+    if (!(answerCols.results || []).some((r) => r.name === 'answered_at')) {
+      try { await env.DB.exec(`ALTER TABLE advisor_answers ADD COLUMN answered_at TEXT`); }
+      catch (e) { /* duplicate-column race; ignore */ void e; }
+    }
+    // Task #3 (AS) — field_sources audit table for the per-page
+    // <AdvisorFilledBanner> + sparkle attribution icons. Mirrors
+    // sql/migrations/042_advisor_field_sources.sql so a dev D1
+    // without that migration applied still serves /sources.
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS field_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, question_id TEXT NOT NULL, page_target TEXT, saved_to_table TEXT, saved_to_column TEXT, saved_to_id TEXT, source TEXT NOT NULL DEFAULT 'advisor', evidence_text TEXT, filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, question_id))"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_field_sources_user_page ON field_sources(user_id, page_target)");
+    // THE `advisor_messages` CREATE ABOVE IS SEVEN COLUMNS AND THIS FILE
+    // WRITES NINE (D192). `safety_score` and `sanitisation_actions_json` are
+    // declared by `services/advisor/guardrails.ts`, and on a database where
+    // THIS bootstrap ran first they do not exist — at which point the turn
+    // INSERT below does not fail loudly, it RETRIES in a legacy five-column
+    // form and succeeds. So every turn's safety score and sanitisation record
+    // is dropped and the write still reports success: the worst of the three
+    // pairs this decision repairs, because nothing anywhere says it happened.
+    // The owner is awaited rather than the CREATE widened, for the reason the
+    // guard exists — a second declaration of those two columns is the defect.
+    await ensureGuardrailColumns(env);
+    SCHEMA_READY.set(bindingKey(env), true);
+  } catch (e) {
+    console.error('[advisor] schema:', (e as Error).message);
+  }
+}
+
+function newUid(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function personaFor(user: User): Persona {
+  const role = (user.role || '').toLowerCase();
+  if (role === 'advisor' && (user as AdvisorUser).eadwyn_coach) return 'coach';
+  if (role === 'founder' || role === 'investor' || role === 'advisor' || role === 'partner' || role === 'admin') {
+    return role as Persona;
+  }
+  return 'unknown';
+}
+
+// ---------------------------------------------------------------------------
+// Task #2 (AR) — lazy column ensure for users.spinout_lab_week.
+// Mirrors the migration 041 pattern so dev/SQLite works without
+// running the migration. Idempotent: PRAGMA table_info short-circuits
+// when the column is already present (production case).
+// ---------------------------------------------------------------------------
+const USER_COLS_READY = new WeakMap<object, boolean>();
+async function ensureAdvisorWeekColumn(env: Env): Promise<void> {
+  if (USER_COLS_READY.get(bindingKey(env))) return;
+  try {
+    const cols = await env.DB.prepare(`PRAGMA table_info(users)`).all<{ name: string }>();
+    const have = new Set((cols.results || []).map((r) => r.name));
+    if (!have.has('spinout_lab_week')) {
+      try { await env.DB.exec(`ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER`); }
+      catch (e) { /* duplicate-column race; ignore */ void e; }
+    }
+    USER_COLS_READY.set(bindingKey(env), true);
+  } catch (e) {
+    console.error('[advisor] ensureAdvisorWeekColumn:', (e as Error).message);
+  }
+}
+
+// Pull the spin-out lab gating context for a founder. Returns
+// `{ active:false }` for any non-founder or any user that hasn't
+// opted into the lab. Also computes the active billing-tier set
+// used by `tier_required` filtering.
+interface AdvisorGate {
+  spinoutLabActive: boolean;
+  week: number;                       // 1..4 (defaults to 1)
+  completedMilestones: Set<string>;
+  tiers: Set<string>;
+}
+export async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
+  // D577 — resolve after the rollout/kill gate, without changing auth role.
+  // A failed identity read must fail the request, not silently route an advisor.
+  if (String(user.role).toLowerCase() === 'advisor' && !isExploringUser(user)) {
+    const listing = await env.DB.prepare(
+      `SELECT id FROM advisors WHERE user_id = ? AND is_active = 1 AND hourly_rate_usd > 0 LIMIT 1`,
+    ).bind(user.id).first<{ id: number }>();
+    (user as AdvisorUser).eadwyn_coach = !!listing;
+  }
+  const tiers = new Set<string>();
+  const persona = personaFor(user);
+
+  // Tier — investor_pro / generic active subscription.
+  try {
+    const sub = await env.DB.prepare(
+      `SELECT investor_subscription_status, investor_subscription_renews_at, subscription_status, subscription_renews_at FROM users WHERE id = ?`,
+    ).bind(user.id).first<{ investor_subscription_status: string | null; subscription_status: string | null; investor_subscription_renews_at: string | null; subscription_renews_at: string | null }>();
+    if (inGrace(sub?.investor_subscription_status, sub?.investor_subscription_renews_at)) tiers.add('investor_pro');
+    if (inGrace(sub?.subscription_status, sub?.subscription_renews_at)) tiers.add('subscriber');
+  } catch { /* columns may be missing on older dev DBs */ }
+
+  if (persona !== 'founder') {
+    return { spinoutLabActive: false, week: 1, completedMilestones: new Set(), tiers };
+  }
+
+  let active = false;
+  let week = 1;
+  try {
+    const row = await env.DB.prepare(
+      `SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ?`,
+    ).bind(user.id).first<{ spinout_lab_active: number | null; spinout_lab_week: number | null }>();
+    active = Number(row?.spinout_lab_active ?? 0) === 1;
+    week = Math.max(1, Math.min(4, Number(row?.spinout_lab_week ?? 1)));
+  } catch { /* schema not migrated yet — treat as inactive */ }
+
+  const completed = new Set<string>();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ?`,
+    ).bind(user.id).all<{ milestone_key: string }>();
+    for (const r of (rows.results || [])) completed.add(r.milestone_key);
+  } catch { /* spinout_lab_milestones absent in dev */ }
+
+  return { spinoutLabActive: active, week, completedMilestones: completed, tiers };
+}
+
+// Task: Explorer Problem/Challenge Discovery. True while the user's REAL
+// role is 'exploring', regardless of whether applyExploringOverlay() has
+// already swapped `role` to a suggested persona for bank-selection. Check
+// `actual_role` (never `role`) — `role` is not trustworthy here.
+function isExploringUser(user: User): boolean {
+  return String((user as User & { actual_role?: string }).actual_role || '').toLowerCase() === 'exploring';
+}
+
+// Build the working bank.
+//
+// AC-1 contract: "persona detection runs first if `users.role` is
+// null". So:
+//   - role unknown → bank = ROLE_DETECTOR (3 questions; the
+//     writeRouter saves primary→users.role, organization→
+//     user_profile_ext.organization, headline→users.headline as they land).
+//   - role known   → bank = persona bank (organization/headline are
+//     optional profile niceties handled by /settings; the advisor
+//     does not gate the persona pivot on them).
+//
+// Once `role_detect.primary` is saved during onboarding, the next
+// /answer call re-reads the user, sees the flipped role, and pivots
+// straight into the persona bank for the next question. Existing
+// role-known users start directly in the persona bank from /start.
+//
+// Task: Explorer Problem/Challenge Discovery — once role_detect.primary
+// picks a track (persona overlaid to founder/investor/advisor/partner),
+// a still-exploring user gets ONLY that track's Explorer needs-discovery
+// bank (12 questions) — not the deep persona bank, which is reserved for
+// users an admin has actually confirmed into that role. `unknown` persona
+// (no track picked yet) still falls through to ROLE_DETECTOR either way,
+// matching "choose one of the four first".
+function workingBankFor(user: User, gate?: AdvisorGate): Question[] {
+  const persona = personaFor(user);
+  if (persona === 'unknown') return ROLE_DETECTOR;
+  if (isExploringUser(user)) return explorerBankForTrack(persona);
+  return bankFor(persona, { spinoutLabActive: !!gate?.spinoutLabActive });
+}
+
+// IDs of the three detector questions. Used to keep the detector
+// active mid-onboarding even after writeRouter flips users.role.
+const DETECTOR_IDS: string[] = ROLE_DETECTOR.map((q) => q.id);
+
+// Shared bank-selection logic used by /start, /answer, and /skip
+// so detector-pending behaviour is consistent everywhere.
+//
+// Task #2 (AR) extends AC-1 selectBank with persona-aware splitting
+// (founder → newFounderSpinout vs existingFounder via the gate)
+// and unlock/week/tier filtering applied via filterByContext. The
+// detector-pending behaviour is preserved so a partial role detection
+// never lets the user jump into a persona bank prematurely.
+function selectBank(
+  user: User,
+  answered: Set<string>,
+  gate: AdvisorGate,
+  focus?: string,
+): { visible: Question[]; deferred: ReturnType<typeof filterByContext>['deferred'] } {
+  const persona = personaFor(user);
+  const detectorAnswered = DETECTOR_IDS.filter((id) => answered.has(id)).length;
+  const detectorPending = detectorAnswered > 0 && detectorAnswered < DETECTOR_IDS.length;
+  if (persona === 'unknown') return { visible: ROLE_DETECTOR, deferred: [] };
+
+  // Task: Explorer Problem/Challenge Discovery — a still-exploring user
+  // gets ONLY their track's Explorer bank, not the deep persona bank (see
+  // workingBankFor above for the full rationale).
+  const personaBank = isExploringUser(user)
+    ? explorerBankForTrack(persona)
+    : bankFor(persona, { spinoutLabActive: gate.spinoutLabActive });
+  // `focus` accepts either a section label (BUILD/CAPITAL/LEGAL/…)
+  // or a page_target path (e.g. `/build/discovery`). Section labels
+  // are uppercase ASCII; anything else is treated as a page.
+  const isPageFocus = !!focus && (focus.startsWith('/') || focus.includes('/'));
+  const filtered = filterByContext(personaBank, {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+    focusSection: focus && !isPageFocus ? focus : undefined,
+    focusPage: focus && isPageFocus ? focus : undefined,
+  });
+  // Authored bank order is the canonical sequencing for each
+  // persona (investor: identity → sectors/stages → ticket → thesis →
+  // pipeline; operating partner: demand → supply; advisor onboarding;
+  // new-founder weekly flow). We only re-rank critical-first INSIDE
+  // a single focused section — when the user pins one section we
+  // want their critical questions for that section to surface first.
+  // Without a focus we preserve authored order verbatim.
+  const ranked = focus && !isPageFocus
+    ? sortByImportance(filtered.visible)
+    : filtered.visible;
+  if (detectorPending) {
+    return { visible: [...ROLE_DETECTOR, ...ranked], deferred: filtered.deferred };
+  }
+  return { visible: ranked, deferred: filtered.deferred };
+}
+
+// ---------------------------------------------------------------------------
+// Conversation helpers.
+// ---------------------------------------------------------------------------
+interface ConversationRow {
+  id: number; uid: string; user_id: number; persona: string; state: string;
+  current_question_id: string | null;
+  total_questions: number; answered_count: number; skipped_count: number;
+  created_at: string; updated_at: string;
+}
+
+async function getActiveConversation(env: Env, user: User): Promise<ConversationRow | null> {
+  // Active = currently in-progress conversation. /start re-uses an
+  // active row; if all are complete it kicks off a new one.
+  return await env.DB.prepare(
+    "SELECT * FROM advisor_conversations WHERE user_id = ? AND state = 'active' ORDER BY id DESC LIMIT 1",
+  ).bind(user.id).first<ConversationRow>();
+}
+
+async function getLatestConversation(env: Env, user: User): Promise<ConversationRow | null> {
+  // Latest of any state — used by /progress so completed users still
+  // see 100% on the dashboard ring instead of falling back to zero.
+  return await env.DB.prepare(
+    "SELECT * FROM advisor_conversations WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+  ).bind(user.id).first<ConversationRow>();
+}
+
+async function createConversation(env: Env, user: User, totalQs: number, firstQid: string | null): Promise<ConversationRow> {
+  const uid = newUid();
+  const persona = personaFor(user);
+  await env.DB.prepare(
+    `INSERT INTO advisor_conversations (uid, user_id, persona, state, current_question_id, total_questions)
+       VALUES (?, ?, ?, 'active', ?, ?)`,
+  ).bind(uid, user.id, persona, firstQid, totalQs).run();
+  const row = await env.DB.prepare(`SELECT * FROM advisor_conversations WHERE uid = ?`).bind(uid).first<ConversationRow>();
+  if (!row) throw new Error('failed to create advisor conversation');
+  return row;
+}
+
+async function answeredQuestionIds(env: Env, conversationId: number): Promise<Set<string>> {
+  const rows = await env.DB.prepare(
+    `SELECT question_id FROM advisor_answers WHERE conversation_id = ?`,
+  ).bind(conversationId).all<{ question_id: string }>();
+  return new Set((rows.results || []).map(r => r.question_id));
+}
+
+/**
+ * Set of question_ids the user has already answered (or skipped) in
+ * the given conversation. Task #7 removed the legacy
+ * `hydrateAlreadyAnswered` shim that synthesised "answered" rows from
+ * domain tables — the advisor now relies exclusively on the answers
+ * recorded through its own /answer endpoint, so the question bank
+ * always sees the canonical conversation state.
+ */
+async function effectiveAnsweredSet(
+  env: Env, user: User, conversationId: number,
+): Promise<Set<string>> {
+  if (personaFor(user) === 'advisor' || personaFor(user) === 'coach') {
+    // Keep detector and dynamic IDs too: they drive onboarding and reflection
+    // sequencing, even though progress/Completed remain scoped to the bank.
+    const rows = await env.DB.prepare(
+      `SELECT DISTINCT question_id FROM advisor_answers
+        WHERE user_id = ? AND saved_status IN ('saved', 'noop', 'skipped')`,
+    ).bind(user.id).all<{ question_id: string }>();
+    return new Set((rows.results || []).map(r => r.question_id));
+  }
+  return answeredQuestionIds(env, conversationId);
+}
+
+function publicQuestion(q: Question | null): Record<string, unknown> | null {
+  if (!q) return null;
+  return {
+    id: q.id,
+    persona: q.persona,
+    section: q.section || null,
+    prompt: q.prompt,
+    hint: q.hint,
+    input_kind: q.input_kind,
+    options: q.options,
+    skip_allowed: q.skip_allowed !== false,
+    importance: q.importance || 'normal',
+    page_target: q.page_target || null,
+    doc_anchor: q.doc_anchor || null,
+    tier_required: q.tier_required || null,
+    persona_filter: q.persona_filter || null,
+    unlock_required: q.unlock_required || null,
+    followups: Array.isArray(q.followups) ? q.followups : null,
+    validate: q.validate || null,
+    // Task #3 (AS) — surface evidence requirement to the chat UI
+    // so it can prompt for a citation before submitting.
+    requires_evidence: q.requires_evidence === true,
+  };
+}
+
+async function recordMessage(
+  env: Env, conversationId: number, role: 'user' | 'assistant' | 'tool' | 'system',
+  content: string, questionId?: string | null, meta?: unknown,
+  extras?: { safety_score?: number | null; sanitisation_actions?: string[] | null },
+): Promise<void> {
+  try {
+    // Task #4 (AW) — extended row includes safety_score (L0) +
+    // sanitisation_actions_json (L3). Falls back to the legacy 5-column
+    // INSERT if the new columns aren't yet present (un-migrated dev DB).
+    try {
+      await env.DB.prepare(
+        `INSERT INTO advisor_messages (conversation_id, role, question_id, content, meta_json, safety_score, sanitisation_actions_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        conversationId, role, questionId || null, content,
+        meta ? JSON.stringify(meta) : null,
+        extras?.safety_score ?? null,
+        extras?.sanitisation_actions ? JSON.stringify(extras.sanitisation_actions) : null,
+      ).run();
+    } catch (e) {
+      // Likely "no such column: safety_score" on a stale dev DB — retry
+      // with the legacy schema so the conversation history still lands.
+      void e;
+      await env.DB.prepare(
+        `INSERT INTO advisor_messages (conversation_id, role, question_id, content, meta_json)
+           VALUES (?, ?, ?, ?, ?)`,
+      ).bind(conversationId, role, questionId || null, content, meta ? JSON.stringify(meta) : null).run();
+    }
+  } catch (e) {
+    console.error('[advisor] recordMessage:', (e as Error).message);
+  }
+}
+
+async function recordAnswer(
+  env: Env, conversation: ConversationRow, user: User, questionId: string,
+  rawValue: string, result: WriteResult,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO advisor_answers
+         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(conversation_id, question_id) DO UPDATE SET
+         raw_value = excluded.raw_value,
+         saved_to_table = excluded.saved_to_table,
+         saved_to_column = excluded.saved_to_column,
+         saved_to_id = excluded.saved_to_id,
+         saved_status = excluded.saved_status,
+         saved_error = excluded.saved_error`,
+    ).bind(
+      conversation.id, user.id, questionId, rawValue,
+      result.saved_to?.table || null,
+      result.saved_to?.column || null,
+      result.saved_to?.id != null ? String(result.saved_to.id) : null,
+      result.status,
+      result.error || null,
+    ).run();
+  } catch (e) {
+    console.error('[advisor] recordAnswer:', (e as Error).message);
+  }
+}
+
+// Update total_questions on the conversation row when the working
+// bank size changes. Called from /answer and /skip after the
+// detector → persona pivot, otherwise total_questions stays at the
+// initial value (3, for null-role onboarding) and /progress reports
+// percentages > 100 once the user enters the persona bank.
+async function syncBankTotal(env: Env, conv: ConversationRow, bankLen: number, persona: string): Promise<void> {
+  if (conv.total_questions === bankLen) return;
+  await env.DB.prepare(
+    `UPDATE advisor_conversations SET total_questions = ?, persona = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(bankLen, persona, conv.id).run();
+  conv.total_questions = bankLen;
+  conv.persona = persona;
+}
+
+/**
+ * THE LEDGER'S "ANSWERED" PREDICATE, written once. A question counts as
+ * answered when its reply was captured: 'saved' (mapped to a field) or 'noop'
+ * (a free-form reply with no structured column). 'skipped' is not an answer.
+ * refreshCounts, /answered, /progress and /admin-posture all read this string,
+ * so none of them can drift into a second definition of the same word.
+ */
+const CAPTURED_SQL = "saved_status IN ('saved', 'noop')";
+
+// D577 — latest committed reply per permanent ID, across conversation restarts.
+// Filtering is in memory against the registered bank: no request SQL interpolation.
+async function conversationBankAnswers(env: Env, userId: number, persona: Persona) {
+  const bankIds = new Set(bankFor(persona).map(q => q.id));
+  const rows = await env.DB.prepare(
+    `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
+            saved_status, created_at
+       FROM advisor_answers WHERE user_id = ? AND (saved_status IN ('saved', 'noop', 'skipped'))
+       ORDER BY created_at DESC, id DESC`,
+  ).bind(userId).all<{ question_id: string; saved_to_table: string | null; saved_to_column: string | null; saved_to_id: string | null; saved_status: string; created_at: string }>();
+  const seen = new Set<string>();
+  return (rows.results || []).filter(r => {
+    if (!bankIds.has(r.question_id) || seen.has(r.question_id)) return false;
+    seen.add(r.question_id);
+    return true;
+  });
+}
+
+async function refreshCounts(env: Env, conversationId: number, currentQid: string | null, user: User): Promise<void> {
+  try {
+    // Task #57 — "answered" means the user actually provided a reply that was
+    // captured, regardless of whether it mapped to a structured DB column.
+    // Both 'saved' (mapped to a field) and 'noop' (reflection / free-form, no
+    // structured mapping) are captured replies.  Statuses that are NOT
+    // counted: 'skipped' (separate counter), 'paywalled' / 'failed' /
+    // 'needs_evidence' / 'invalid' (no committed answer yet).
+    const persona = personaFor(user);
+    const bankAnswers = ['advisor', 'coach'].includes(persona)
+      ? await conversationBankAnswers(env, user.id, persona) : null;
+    const counts = bankAnswers ? {
+      answered: bankAnswers.filter(r => r.saved_status !== 'skipped').length,
+      skipped: bankAnswers.filter(r => r.saved_status === 'skipped').length,
+    } : await env.DB.prepare(
+      `SELECT
+         SUM(CASE WHEN ${CAPTURED_SQL} THEN 1 ELSE 0 END) AS answered,
+         SUM(CASE WHEN saved_status = 'skipped'          THEN 1 ELSE 0 END) AS skipped
+       FROM advisor_answers WHERE conversation_id = ?`,
+    ).bind(conversationId).first<{ answered: number | null; skipped: number | null }>();
+    await env.DB.prepare(
+      `UPDATE advisor_conversations
+          SET answered_count = ?, skipped_count = ?, current_question_id = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(
+      Number(counts?.answered || 0),
+      Number(counts?.skipped || 0),
+      currentQid,
+      conversationId,
+    ).run();
+  } catch (e) {
+    console.error('[advisor] refreshCounts:', (e as Error).message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// D203 — THE KILL CHECK EVERY DOOR MAKES, written once. It asks
+// `advisorKillState`, the predicate HQ Platform reports the switch through, so
+// the console and the refusal cannot disagree. The deploy variables are read
+// first and, when they switch Eadwyn off, nothing touches D1; otherwise the
+// operator store is asked through its thirty-second reading and fails open.
+// Four copies of this 503 used to sit in this file, each asking only the deploy
+// half — which is why an operator's switch needs them to be one.
+// ---------------------------------------------------------------------------
+async function refuseWhenKilled(c: Context<{ Bindings: Env }>): Promise<Response | null> {
+  if (!(await advisorKillState(c.env)).off) return null;
+  return c.json({ error: ADVISOR_DISABLED_MESSAGE, status: 'unavailable', reason: 'disabled' }, 503);
+}
+
+// ---------------------------------------------------------------------------
+// Shared advisor gate — runs the Task #5 staged-rollout decision FIRST
+// (before any D1 schema probe) and the Task #4 (AW) kill-switch /
+// per-user lock SECOND. Returns null when the request may proceed,
+// or a Response (503 / 423) the caller must return as-is.
+//
+// Used by every user-facing advisor endpoint (/start, /answer,
+// /explain handle audit-on-block themselves; /skip, /sources,
+// /next-question, /progress, /manifest, /conversations/:id, /tools,
+// /tool, /tool/auto, /turn, /queue use this helper). Keeps the
+// kill-switch contract uniform across the surface so an emergency
+// `ADVISOR_V2_DISABLED=1` actually shuts every door, not just three.
+// ---------------------------------------------------------------------------
+async function applyAdvisorGate(c: Context<{ Bindings: Env }>, user: User): Promise<Response | null> {
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
+  await ensureGuardrailColumns(c.env);
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// POST /start  —  open or resume the user's active conversation.
+// ---------------------------------------------------------------------------
+advisor.post('/start', async (c) => {
+  const user = await advisorUser(c);
+  // Kill switch runs FIRST, before any D1 schema probe / column-ensure
+  // call. A deploy kill short-circuits without touching the DB at all; an
+  // operator's kill costs one cached read of platform_switches (D203).
+  const killedStart = await refuseWhenKilled(c);
+  if (killedStart) return killedStart;
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  // Task #4 (AW) L7 — kill switch (env + per-user advisor_locked).
+  await ensureGuardrailColumns(c.env);
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
+  // Task #4 (AW) L5 — shadow-flag degradation. Surface the templated
+  // refusal across the WHOLE advisor surface, not just /explain, so a
+  // flagged user can't sneak in answer writes.
+  if (ks.shadow) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: 'shadow_flag', shadowFlagged: true,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
+  }
+  const gate = await loadAdvisorGate(c.env, user);
+
+  let conv = await getActiveConversation(c.env, user);
+  if (!conv) {
+    // D577: a restarted advisor/coach chat keeps its bank answers.
+    // Never record an already-captured first question into the new transcript.
+    const initialBank = workingBankFor(user, gate);
+    const previous = ['advisor', 'coach'].includes(personaFor(user))
+      ? await effectiveAnsweredSet(c.env, user, 0) : new Set<string>();
+    const firstQ = ['advisor', 'coach'].includes(personaFor(user))
+      ? applyAdaptiveProfiling(initialBank, previous).find(q => !previous.has(q.id)) || null
+      : initialBank[0] || null;
+    conv = await createConversation(c.env, user, initialBank.length, firstQ?.id || null);
+    if (firstQ) await recordMessage(c.env, conv.id, 'assistant', firstQ.prompt, firstQ.id);
+  }
+
+  // Resume path: derive the answered set from the conversation
+  // first, then pick the bank — this guarantees that if the user
+  // answered `role_detect.primary`, closed the tab, and came back,
+  // the detector triplet is still served before the persona bank.
+  const answered = await effectiveAnsweredSet(c.env, user, conv.id);
+  const { visible: bank } = selectBank(user, answered, gate);
+  // Workers AI re-ranker (advisor/rerank.ts) on top of the deterministic
+  // bank — picks the most contextually relevant unanswered question and
+  // suppresses re-asking ids surfaced in the last few turns. Falls back
+  // to the legacy first-in-bank order on any failure.
+  // pinnedId honours conv.current_question_id so the re-open/refresh
+  // path returns the SAME pending question. Without this the rerank
+  // recency filter would suppress the just-recorded firstQ assistant
+  // message and return a different question (architect-flagged regression).
+  // Task #46 — adaptive candidate pool: drop fit questions from already-
+  // confident modules and gap-fill-order the rest before ranking. Keep the
+  // pinned question so the poll/refresh idempotence above still holds.
+  // D358 — once no unanswered profiling question is left, answers six
+  // months old come back with their re-ask wording (reaskOverlay).
+  const reask = await reaskOverlay(c.env, user.id, bank, answered, { keepId: conv.current_question_id });
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
+    keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
+  });
+  // D765 (#2090): /start runs on mount, so it never ranks with the model.
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
+    pinnedId: conv.current_question_id, rerank: false,
+  });
+
+  // Refresh counts now that hydration may have inserted new rows.
+  await syncBankTotal(c.env, conv, bank.length, personaFor(user));
+  await refreshCounts(c.env, conv.id, next?.id || null, user);
+  // If hydration left no remaining questions on the very first
+  // open, mark the conversation complete so /progress reflects it.
+  if (!next && conv.state !== 'complete') {
+    await c.env.DB.prepare(
+      `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
+    ).bind(conv.id).run();
+    conv.state = 'complete';
+  }
+  const refreshed = await c.env.DB.prepare(
+    `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+  ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+  const ans = Number(refreshed?.answered_count || 0);
+  const skp = Number(refreshed?.skipped_count || 0);
+
+  // Explorer completion incentive — tell exploring users EARLY (on open,
+  // before they've sunk time into questions) that finishing the needs
+  // bank earns a one-time 30-day license code. If the code was already
+  // issued but not redeemed (user closed the tab before copying it),
+  // re-surface it instead so it's never lost.
+  let promoNotice: { state: 'offer' | 'issued'; message: string; code?: string; route?: string } | null = null;
+  if (isExploringUser(user)) {
+    try {
+      const { getExplorerPromo, explorerPromoLink } = await import('../services/explorerPromo');
+      const issued = await getExplorerPromo(c.env, user.id);
+      if (issued && !issued.redeemed_at) {
+        promoNotice = {
+          state: 'issued',
+          message: `Reminder — your one-time code ${issued.code} is ready: it redeems a free ${issued.license_label.toLowerCase()}. Claim it on the Pricing products page before it expires.`,
+          code: issued.code,
+          route: explorerPromoLink(issued.code),
+        };
+      } else if (!issued) {
+        promoNotice = {
+          state: 'offer',
+          message: 'Quick heads-up before we dive in: finish this short profile (about 12 questions) and you\'ll get a one-time promo code for a free 30-day license matched to your profile, plus a personalised summary of the tools here that fit what you\'re working on.',
+        };
+      }
+    } catch { /* best-effort — never block /start */ }
+  }
+
+  const nextPub = publicQuestion(next);
+  return c.json({
+    // `conversation_id` is the AC-1 spec field; `conversation_uid`
+    // remains as an alias for clients that already shipped against
+    // the earlier draft. `next_question` likewise aliases `next`.
+    conversation_id: conv.uid,
+    conversation_uid: conv.uid,
+    persona: personaFor(user),
+    progress: {
+      total: bank.length, answered: ans, skipped: skp,
+      percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
+    },
+    next_question: nextPub,
+    next: nextPub,
+    hint: (nextPub?.hint as string | null | undefined) || null,
+    complete: !next,
+    promo_notice: promoNotice,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Body parsers.
+// ---------------------------------------------------------------------------
+async function readJson<T>(c: Context<{ Bindings: Env }>): Promise<T | null> {
+  try { return await c.req.json() as T; } catch { return null; }
+}
+
+interface AnswerBody {
+  // AC-1 spec uses `conversation_id`. We also accept `conversation_uid`
+  // as a backward-compatible alias for clients that already shipped
+  // against the earlier draft. Both fields carry the public uid.
+  conversation_id?: string;
+  conversation_uid?: string;
+  question_id?: string;
+  value?: unknown;
+  // Task #3 (AS) — optional citation/justification supplied by the
+  // LLM `writeAnswer` tool when auto-filling high-risk fields
+  // (anything with `requires_evidence: true` on the bank). Direct
+  // UI submissions can omit this — the writeRouter falls back to
+  // the user-typed value when no question requires evidence.
+  evidence?: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// POST /answer  —  persist an answer and return either:
+//   1. JSON (default) — the AC-1 contract envelope
+//   2. SSE stream — when the request carries `Accept: text/event-stream`
+//      the same payload is emitted as a tool_call → tool_result →
+//      next → done sequence (mirrors assistant.ts wire format) so
+//      LLM-driven clients can consume it incrementally.
+//
+// JSON envelope:
+//   {
+//     conversation_id, conversation_uid, persona,
+//     saved_to: { table, column, id, page_url } | null,
+//     next_question: { id, prompt, input_kind, options?, hint? } | null,
+//     hint: string | null,
+//     complete: boolean,
+//     progress: { total, answered, skipped, percent },
+//     status: 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop',
+//     upgrade_link?: string,
+//     error?: string
+//   }
+//
+// Routing is deterministic — the LLM surface is /explain, where
+// Anthropic tool-use orchestration belongs (read-only assistant.ts
+// pattern; the writeAnswer/explainTopic/openPage tool-use loop
+// itself lives in AC-3's chat client which calls these JSON/SSE
+// endpoints directly). /answer never burns tokens.
+// ---------------------------------------------------------------------------
+interface AnswerEnvelope {
+  conversation_id: string;
+  conversation_uid: string;
+  persona: Persona;
+  status: WriteResult['status'];
+  saved_to: WriteResult['saved_to'] | null;
+  next_question: ReturnType<typeof publicQuestion>;
+  next: ReturnType<typeof publicQuestion>;
+  hint: string | null;
+  upgrade_link: string | null;
+  error: string | null;
+  complete: boolean;
+  progress: { total: number; answered: number; skipped: number; percent: number };
+  // Explorer completion incentive — present only on the turn where the
+  // exploring user's needs bank completes: the one-time 30-day-license
+  // promo code + a recommendations summary built from their answers.
+  completion_payload?: {
+    promo_code: string;
+    license_label: string;
+    code_expires_at: string | null;
+    unlock_days: number;
+    summary: string | null;
+    cta: { primary: { label: string; route: string } };
+  } | null;
+}
+advisor.post('/answer', async (c) => {
+  const user = await advisorUser(c);
+  // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
+  // work: the deploy half with no database, then the operator store.
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
+  await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+  // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
+  // Task #4 (AW) L5 — shadow-flag degradation. /answer writes user data,
+  // so a flagged user must NOT be able to commit answers until an admin
+  // clears the flag via /api/admin/advisor-audit/clear-shadow.
+  if (ks.shadow) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: 'shadow_flag', shadowFlagged: true,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: 'shadow_flag' }, 423);
+  }
+  const body = await readJson<AnswerBody>(c);
+  const convUid = body?.conversation_id || body?.conversation_uid;
+  if (!convUid || !body.question_id) {
+    return c.json({ error: 'conversation_id and question_id are required' }, 400);
+  }
+  const conv = await c.env.DB.prepare(
+    `SELECT * FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
+  ).bind(convUid, user.id).first<ConversationRow>();
+  if (!conv) return c.json({ error: 'conversation not found' }, 404);
+
+  // Refuse to write a destructive-sounding answer. The frontend chat
+  // also rejects these but we defend in depth — the model never sees
+  // user-typed strings until we route them.
+  const valueStr = String(body.value ?? '').trim();
+  // Destructive intent gate. We match imperative phrases ("delete
+  // my project", "wipe everything", "cancel the deal") rather than
+  // bare verbs so benign mentions like "I want to reset my pricing
+  // strategy" or "we cancelled an event last week" pass through.
+  // Server-side defence-in-depth — mirrors the system-prompt refusal
+  // rules; the dedicated page on the side nav owns these actions.
+  const destructiveIntent =
+    /\b(delete|remove|drop|truncate|wipe|destroy|void|disband|deactivate|revoke|terminate|purge|erase)\s+(?:the\s+|my\s+|our\s+|this\s+|that\s+|all\s+|every\s+|everything|account|project|deal|company|entity|user|row|record|data|profile|portfolio|fund)\b/i;
+  const cancelIntent =
+    /\b(cancel|reset)\s+(?:the\s+|my\s+|our\s+|this\s+|that\s+|all\s+|every\s+)?(account|subscription|membership|deal|contract|incorporation|filing|payment|invoice|payout|transfer|password|profile|project|entity|fund|allocation|portfolio)\b/i;
+  if (destructiveIntent.test(valueStr) || cancelIntent.test(valueStr)) {
+    // Task #4 (AW) L6 — audit destructive refusal so /admin/advisor-audit
+    // surfaces the attempt alongside the safety_block / shadow_flag rows.
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: 'destructive', shadowFlagged: false,
+    });
+    return c.json({
+      error: REFUSAL.destructive,
+      saved_to: null,
+      next_question: null,
+      hint: 'Open the page from the side nav and use its dedicated controls for delete / cancel / void.',
+    }, 400);
+  }
+
+  const q = questionById(body.question_id);
+  if (!q) return c.json({ error: 'unknown question_id' }, 400);
+
+  // Task #4 (AW) L0 — input safety classifier (llama-guard-3-8b via
+  // aiRouter). Runs on every user-typed value before it touches the
+  // write-router or the LLM. A block returns 422 with the canonical
+  // jailbreak refusal; the routed write does NOT happen.
+  //
+  // D763: this is the one route that still calls `classifyInput`, because no
+  // model run follows it, so `run()`'s own input check never sees the value.
+  // It fails closed: a guard that cannot answer stops the write too, and
+  // says so rather than calling the value unsafe.
+  const safety = await classifyInput(c.env, user.id, valueStr, AI_SURFACE.studio);
+  if (safety.unavailable) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [], refusalReason: safety.category.startsWith('budget_') ? safety.category : 'guard_unavailable',
+      shadowFlagged: false,
+    });
+    if (safety.category.startsWith('budget_')) {
+      return c.json({ error: budgetRefusalMessage(safety.category), status: 'refused', reason: safety.category }, 429);
+    }
+    return c.json({ error: GUARD_COPY.unavailable, status: 'refused', reason: 'guard_unavailable' }, 503);
+  }
+  if (safety.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [], refusalReason: 'safety_block',
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: REFUSAL.jailbreak,
+      status: 'refused',
+      reason: 'safety_block',
+      category: safety.category,
+    }, 422);
+  }
+
+  // Task #2 (AR) — server-side eligibility check. The client must
+  // only submit questions that are currently in the VISIBLE bank
+  // (post week/tier/unlock filtering). Detector questions and
+  // already-answered IDs are always allowed (re-answer is permitted
+  // as an idempotent overwrite). This closes the access-control
+  // gap that let a curl client answer a Week-3 question while
+  // still on Week-1.
+  {
+    await ensureAdvisorWeekColumn(c.env);
+    const gateNow = await loadAdvisorGate(c.env, user);
+    const answeredNow = await effectiveAnsweredSet(c.env, user, conv.id);
+    const { visible: visibleNow } = selectBank(user, answeredNow, gateNow);
+    const isVisible = visibleNow.some((vq) => vq.id === q.id);
+    const isDetector = DETECTOR_IDS.includes(q.id);
+    const isReAnswer = answeredNow.has(q.id);
+    // Task #12 (BLOCK-ADV-07) — dynamic reflection ids are synthesised
+    // on the fly (never in the visible bank), so bypass the in-bank
+    // eligibility gate for them. The strict `dyn.reflect.N` regex is
+    // the access-control boundary here.
+    const isDynamic = DYNAMIC_ID_RE.test(q.id);
+    if (!isVisible && !isDetector && !isReAnswer && !isDynamic) {
+      return c.json({
+        error: 'question_not_available',
+        message: 'This question isn\'t available yet — finish earlier milestones first.',
+      }, 409);
+    }
+  }
+
+  // Persist the user turn first so the audit log is consistent even
+  // if a downstream step throws. Carries the L0 safety_score so the
+  // /admin/advisor-audit page can correlate per-message risk back to
+  // the user's chat history.
+  await recordMessage(c.env, conv.id, 'user', valueStr, q.id, undefined, {
+    safety_score: safety.score,
+  });
+
+  // Task #4 (AW) L2 — gate the writeAnswer "tool" call. Persona/tier/
+  // rate/cost/arg-shape checks fire before the deterministic write so
+  // the same envelope governs scripted (curl) callers as the future
+  // LLM-driven AC-3 chat client. L3 sanitiseToolOutput is intentionally
+  // NOT wired here — the deterministic /answer flow has no tool output
+  // that loops back into a model context; that wrap is exercised by
+  // the AV chat client when tool results are fed to Anthropic.
+  const gateCtx = {
+    user,
+    persona: personaFor(user),
+    tiers: (await loadAdvisorGate(c.env, user)).tiers,
+    conversationId: conv.id,
+  };
+  const toolGate = await gateToolCall(c.env, gateCtx, 'writeAnswer', {
+    question_id: q.id, value: valueStr,
+  });
+  if (!toolGate.ok) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id, model: null,
+      promptHash: await promptHash(),
+      toolCalls: [{ name: 'writeAnswer', gate_result: toolGate.reason }],
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [], refusalReason: `gate_${toolGate.reason}`,
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: toolGate.detail || 'tool call rejected',
+      status: 'refused',
+      reason: toolGate.reason,
+    }, toolGate.reason === 'rate_limited' || toolGate.reason === 'cost_exceeded' ? 429 : 403);
+  }
+
+  // Task #3 (AS) — pass evidence through verbatim. We deliberately
+  // do NOT auto-derive evidence from the answer value, otherwise the
+  // gate becomes a no-op for direct UI submissions. When the client
+  // omits evidence on a `requires_evidence` question the router
+  // returns `status:'needs_evidence'` and we surface a 422 below so
+  // the chat UI can render a follow-up prompt.
+  const evidenceStr = body.evidence != null ? String(body.evidence).trim() : null;
+  const result: WriteResult = valueStr
+    ? await routeAnswer(c.env, user, q.id, valueStr, evidenceStr)
+    : { status: 'skipped' };
+
+  // Task #19 — Best-Fit. axalFit.loadAnsweredScores() reconstructs rubric +
+  // red-flag scores from field_sources.evidence_text, so for fit.* questions we
+  // persist the RAW 0..5 score there (not the free-text citation). Non-fit
+  // questions keep the verbatim evidence-gate citation.
+  // D357 — a pick-one stores its option KEY, whether the chat sent the key or
+  // the label it showed; routeAnswer has already refused anything else. Every
+  // other fit answer (reverse-keyed scales included) is stored as given.
+  const ledgerValue = FIT_ID_RE.test(q.id) ? (normalizeFitAnswer(q, valueStr) ?? valueStr) : valueStr;
+  const fieldEvidence = FIT_ID_RE.test(q.id) ? ledgerValue : evidenceStr;
+
+  // Surface evidence-gate / schema-invalid as 4xx so the frontend
+  // can run optimistic-rollback + inline retry instead of treating
+  // it as a successful turn. We still record the user message above
+  // for the audit trail; we do NOT call recordAnswer/advance here.
+  if (result.status === 'needs_evidence' || result.status === 'invalid') {
+    return c.json({
+      conversation_id: conv.uid,
+      conversation_uid: conv.uid,
+      status: result.status,
+      error: result.error,
+      hint: result.hint,
+      evidence_kind: result.evidence_kind,
+      field: result.field || q.id,
+      open_url: result.open_url || q.page_target || null,
+      saved_to: null,
+      next_question: publicQuestion(q),
+      next: publicQuestion(q),
+    }, 422);
+  }
+
+  // Task #3 (AS) — atomic post-write batch. D1 doesn't expose
+  // BEGIN/COMMIT for raw SQL but `env.DB.batch([...])` runs the
+  // statements in a single implicit transaction (all-or-nothing
+  // commit). We batch advisor_answers + (on saved) field_sources
+  // + activity_logs so a partial-write can't leave the audit
+  // tables out of sync with the routed write above. The routed
+  // write itself already happened inside routeAnswer; if any of
+  // these fail we log but don't roll the routed write back, since
+  // re-trying the user's chat turn would otherwise duplicate it.
+  try {
+    const stmts: D1PreparedStatement[] = [];
+    stmts.push(c.env.DB.prepare(
+      `INSERT INTO advisor_answers
+         (conversation_id, user_id, question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error, answered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(conversation_id, question_id) DO UPDATE SET
+         raw_value = excluded.raw_value,
+         saved_to_table = excluded.saved_to_table,
+         saved_to_column = excluded.saved_to_column,
+         saved_to_id = excluded.saved_to_id,
+         saved_status = excluded.saved_status,
+         saved_error = excluded.saved_error,
+         answered_at = excluded.answered_at`,
+    ).bind(
+      conv.id, user.id, q.id, ledgerValue,
+      result.saved_to?.table || null,
+      result.saved_to?.column || null,
+      result.saved_to?.id != null ? String(result.saved_to.id) : null,
+      result.status,
+      result.error || null,
+    ));
+    if (result.status === 'saved') {
+      stmts.push(c.env.DB.prepare(
+        `INSERT INTO field_sources
+           (user_id, question_id, page_target, saved_to_table, saved_to_column, saved_to_id, source, evidence_text, filled_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'advisor', ?, datetime('now'))
+         ON CONFLICT(user_id, question_id) DO UPDATE SET
+           page_target = excluded.page_target,
+           saved_to_table = excluded.saved_to_table,
+           saved_to_column = excluded.saved_to_column,
+           saved_to_id = excluded.saved_to_id,
+           source = excluded.source,
+           evidence_text = excluded.evidence_text,
+           filled_at = excluded.filled_at`,
+      ).bind(
+        user.id, q.id, q.page_target || null,
+        result.saved_to?.table || null,
+        result.saved_to?.column || null,
+        result.saved_to?.id != null ? String(result.saved_to.id) : null,
+        fieldEvidence,
+      ));
+      const actorHash = await hashEmail(user.email || '');
+      stmts.push(c.env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+      ).bind(
+        'advisor_field_filled',
+        JSON.stringify({
+          question_id: q.id,
+          page: q.page_target || null,
+          saved_to: result.saved_to || null,
+          conversation_uid: conv.uid,
+        }),
+        actorHash,
+        user.id,
+      ));
+    }
+    await c.env.DB.batch(stmts);
+  } catch (e) {
+    // Best-effort fallback: if the batch failed (e.g. legacy DB
+    // without field_sources before ensureSchema ran), retry the
+    // bare advisor_answers write so the conversation history is
+    // still persisted.
+    console.warn('[advisor] post-answer batch failed', (e as Error).message);
+    await recordAnswer(c.env, conv, user, q.id, ledgerValue, result);
+    if (result.status === 'saved') {
+      await recordFieldSource(
+        c.env, user.id, q.id, q.page_target || null,
+        result.saved_to || null, 'advisor', fieldEvidence,
+      );
+    }
+  }
+
+  // Task #19 — Best-Fit. Recompute the user's persona fit scores after a fit
+  // answer lands. The raw score is now in field_sources (above), so
+  // recomputeUserFit → loadAnsweredScores picks it up. Best-effort: a recompute
+  // failure must not break the user's chat turn.
+  if (result.status === 'saved' && FIT_ID_RE.test(q.id)) {
+    try {
+      await recomputeUserFit(c.env, user.id);
+    } catch (e) {
+      console.warn('[advisor] recomputeUserFit failed', (e as Error).message);
+    }
+    // Task #45 — recompute the archetype from the same fit answers. The
+    // archetype_trait raw scores are in field_sources (above), so
+    // recomputeUserArchetype reads them and appends a profile_archetypes row.
+    try {
+      await recomputeUserArchetype(c.env, user.id);
+    } catch (e) {
+      console.warn('[advisor] recomputeUserArchetype failed', (e as Error).message);
+    }
+    // D357 — Profiling v2: recompute the person's profile from the answer
+    // ledger and append a snapshot if it changed materially. v1 above keeps
+    // feeding the card until Session 15 moves it. D358 — through
+    // evaluateUser, which also records a displayed-archetype change once
+    // (with its in-app notification) and stamps the evaluation for the
+    // nightly run.
+    try {
+      await evaluateUser(c.env, user.id, 'answer');
+    } catch (e) {
+      console.warn('[advisor] profile evaluation failed', (e as Error).message);
+    }
+  }
+
+  // Task #6 (CB) — state-machine side effects (counter bump,
+  // advisor.answered activity_log emit, optional week advancement).
+  // Best-effort: failures here MUST NOT break the user's chat turn.
+  if (result.status === 'saved') {
+    try {
+      const gateForSE = await loadAdvisorGate(c.env, user);
+      // Pass completedMilestones so the catalog-based week-advance
+      // path (architect review item #2) can fire when this answer
+      // satisfies the last milestone of the user's current week.
+      await smOnAnswered(c.env, user.id, q, valueStr, gateForSE.week, gateForSE.completedMilestones);
+    } catch (e) {
+      console.warn('[advisor] smOnAnswered failed', (e as Error).message);
+    }
+  }
+
+  // Task #6 (AT-1) — fan-out the MI extractors over this answer.
+  // Best-effort: opt-out is honored inside the worker, queue failures
+  // never block the user's chat turn. Only enqueue on `saved` writes
+  // so we don't aggregate paywalled / failed entries.
+  if (result.status === 'saved' && valueStr) {
+    try {
+      let answerId: number | null = null;
+      try {
+        const r = await c.env.DB.prepare(
+          `SELECT id FROM advisor_answers WHERE conversation_id = ? AND question_id = ?`,
+        ).bind(conv.id, q.id).first<{ id: number }>();
+        answerId = r?.id ?? null;
+      } catch { /* best-effort */ }
+      await enqueueJob(c.env, 'mi_extract', {
+        user_id: user.id,
+        persona: conv.persona || (user.role || 'unknown'),
+        question_id: q.id,
+        raw_value: valueStr,
+        advisor_answer_id: answerId,
+      });
+    } catch (e) {
+      console.warn('[advisor] mi_extract enqueue failed', (e as Error).message);
+    }
+  }
+
+  // Re-fetch the user if the role-detector just changed persona so
+  // the next bank reflects the new role. Task #9: for exploring users the
+  // detector writes user_role_review.suggested_role (users.role untouched),
+  // so re-apply the overlay to pick up the fresh suggestion.
+  let liveUser = user;
+  if (q.id === 'role_detect.primary' && result.status === 'saved') {
+    const fresh = await c.env.DB.prepare(
+      `SELECT id, email, name, role, founder_id FROM users WHERE id = ?`,
+    ).bind(user.id).first<User>();
+    if (fresh) liveUser = await applyExploringOverlay(c.env, { ...user, ...fresh });
+  }
+
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, liveUser);
+  const answered = await effectiveAnsweredSet(c.env, liveUser, conv.id);
+  const { visible: bank } = selectBank(liveUser, answered, gate);
+  // Task #6 (CB) — deterministic next-question selection via the
+  // state machine. Replaces the legacy AI re-rank (pickNextQuestion)
+  // so /answer obeys the same composite ranking + anti-repeat rules
+  // as /turn. We pass `extraAnswered: answered` so the just-saved
+  // (and any hydrated) ids are honoured even before the cross-conv
+  // read inside nextTurn sees them.
+  // Task #46 — trim confident-module fit questions from the ranker's pool.
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, liveUser.id, bank, answered);
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered);
+  const turn = await smNextTurn(c.env, liveUser.id, rankBank, {
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
+  });
+  const next = turn.next_question;
+  await syncBankTotal(c.env, conv, bank.length, personaFor(liveUser));
+  await refreshCounts(c.env, conv.id, next?.id || null, liveUser);
+
+  if (!next) {
+    await c.env.DB.prepare(
+      `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
+    ).bind(conv.id).run();
+  } else {
+    await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
+  }
+
+  // Task #4 (AW) L5 — a successful commit resets the per-day
+  // "explains without commit" counter so heavy legitimate explain
+  // usage doesn't trip the shadow flag.
+  if (result.status === 'saved') {
+    try {
+      const store = (c.env as unknown as { TOKENS?: KVNamespace }).TOKENS;
+      if (store) {
+        const k = `advisor:ewc:${user.id}:${new Date().toISOString().slice(0, 10)}`;
+        await store.delete(k);
+      }
+    } catch { /* best-effort */ }
+  }
+
+  // Task #4 (AW) L6 — every successful turn writes one audit row so
+  // /admin/advisor-audit can show the full conversation timeline (not
+  // just refusals).
+  await writeTurnAudit(c.env, {
+    userId: user.id, conversationId: conv.id, model: null,
+    promptHash: await promptHash(),
+    toolCalls: [{ name: 'writeAnswer', status: result.status }],
+    aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+    sanitisationActions: [], refusalReason: null,
+    shadowFlagged: false,
+  });
+
+  const counts = await c.env.DB.prepare(
+    `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+  ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+  const ans = Number(counts?.answered_count || 0);
+  const skp = Number(counts?.skipped_count || 0);
+  const nextPub = publicQuestion(next);
+
+  // Task #1 (CD) — fan out page-fill + advisor-progress events to the
+  // OnboardingChat DO (per-user room) so any page subscribed via
+  // /api/onboarding/ws/:user_id can re-hydrate its sparkle indicators
+  // and the dashboard progress ring updates without polling. Best-effort
+  // — failures are swallowed inside notify*.
+  // Task #57 — broadcast for any captured reply ('saved' OR 'noop'), not
+  // only 'saved', so reflection answers advance the dashboard ring live.
+  // notifyAdvisorPageFill still only fires for 'saved' since field-source
+  // sparkle indicators are intentionally tied to structured saves only.
+  const isCaptured = result.status === 'saved' || result.status === 'noop';
+  if (isCaptured) {
+    const total = conv.total_questions || bank.length || 0;
+    const percent = total > 0 ? Math.round(((ans + skp) / total) * 100) : 0;
+    // Both notify* swallow their own errors and Promise.allSettled
+    // never rejects, so no outer try/catch is needed here.
+    const tasks: Promise<unknown>[] = [
+      notifyAdvisorProgress(c.env, user.id, {
+        total, answered: ans, skipped: skp, percent,
+      }),
+    ];
+    if (result.status === 'saved') {
+      tasks.push(
+        notifyAdvisorPageFill(c.env, user.id, q.page_target || null, {
+          question_id: q.id,
+          saved_to: result.saved_to || null,
+        }),
+      );
+    }
+    await Promise.allSettled(tasks);
+  }
+
+  // Explorer completion incentive — when this answer completed the
+  // exploring user's needs bank (writeRouter flipped
+  // user_role_review.needs_assessment_completed on the track's last
+  // question), issue the one-time 30-day-license promo code and build the
+  // recommendations summary. Issuance is idempotent (UNIQUE(user_id)), and
+  // we only attach the payload on the turn that minted the code so the
+  // chat announces it exactly once; /start re-surfaces unredeemed codes.
+  let completionPayload: AnswerEnvelope['completion_payload'] = null;
+  if (result.status === 'saved' && q.id.startsWith('explorer.') && isExploringUser(liveUser)) {
+    try {
+      const review = await c.env.DB.prepare(
+        `SELECT needs_assessment_completed FROM user_role_review WHERE user_id = ?`,
+      ).bind(user.id).first<{ needs_assessment_completed: number | null }>();
+      if (Number(review?.needs_assessment_completed || 0) === 1) {
+        const { getExplorerPromo, issueExplorerPromo, buildExplorerRecommendations, explorerPromoLink } =
+          await import('../services/explorerPromo');
+        const already = await getExplorerPromo(c.env, user.id);
+        if (!already) {
+          const promo = await issueExplorerPromo(c.env, user.id);
+          if (promo) {
+            const summary = await buildExplorerRecommendations(c.env, user.id);
+            completionPayload = {
+              promo_code: promo.code,
+              license_label: promo.license_label,
+              code_expires_at: promo.expires_at,
+              unlock_days: promo.unlock_days,
+              summary,
+              cta: {
+                primary: {
+                  label: 'Redeem in Pricing products',
+                  route: explorerPromoLink(promo.code),
+                },
+              },
+            };
+            // Persist the announcement so a reload's transcript rehydration
+            // (which replays advisor_messages) still shows the code + summary.
+            const announcement = [
+              `🎉 That's your profile complete — thank you! As promised, here's your one-time promo code for a free ${promo.license_label.toLowerCase()}:`,
+              '',
+              promo.code,
+              '',
+              summary || '',
+              '',
+              'Redeem it on the Pricing products page — the confirmation will show a $0.00 total.',
+            ].join('\n').replace(/\n{3,}/g, '\n\n');
+            await recordMessage(c.env, conv.id, 'assistant', announcement, null);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[advisor] explorer promo issuance failed', (e as Error).message);
+    }
+  }
+
+  const envelope: AnswerEnvelope = {
+    conversation_id: conv.uid,
+    conversation_uid: conv.uid,
+    persona: personaFor(liveUser),
+    status: result.status,
+    saved_to: result.saved_to || null,
+    next_question: nextPub,
+    next: nextPub,
+    hint: result.hint || (nextPub?.hint as string | null | undefined) || null,
+    upgrade_link: result.upgrade_link || null,
+    error: result.error || null,
+    complete: !next,
+    progress: {
+      total: bank.length, answered: ans, skipped: skp,
+      percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
+    },
+    completion_payload: completionPayload,
+  };
+
+  // SSE branch — clients that prefer streaming get the same payload
+  // as a tool_call → tool_result → next → done sequence so the
+  // AC-3 chat client can reuse the assistant.ts SSE parser. The
+  // deterministic write has already happened above; SSE is purely
+  // a wire-format choice.
+  const accept = (c.req.header('accept') || '').toLowerCase();
+  if (accept.includes('text/event-stream')) {
+    const enc = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(enc.encode(sseEvent('tool_call', {
+          name: 'writeAnswer', input: { question_id: q.id, value: valueStr },
+        })));
+        controller.enqueue(enc.encode(sseEvent('tool_result', {
+          name: 'writeAnswer',
+          status: envelope.status,
+          saved_to: envelope.saved_to,
+          hint: envelope.hint,
+          upgrade_link: envelope.upgrade_link,
+          error: envelope.error,
+        })));
+        controller.enqueue(enc.encode(sseEvent('next', { question: nextPub })));
+        controller.enqueue(enc.encode(sseEvent('done', envelope)));
+        controller.close();
+      },
+    });
+    return new Response(stream, {
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache, no-transform',
+        'x-accel-buffering': 'no',
+      },
+    });
+  }
+  return c.json(envelope);
+});
+
+// ---------------------------------------------------------------------------
+// POST /skip  —  record a skip and advance.
+// ---------------------------------------------------------------------------
+advisor.post('/skip', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  const body = await readJson<{ conversation_id?: string; conversation_uid?: string; question_id?: string }>(c);
+  const convUidS = body?.conversation_id || body?.conversation_uid;
+  if (!convUidS || !body?.question_id) {
+    return c.json({ error: 'conversation_id and question_id are required' }, 400);
+  }
+  const conv = await c.env.DB.prepare(
+    `SELECT * FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
+  ).bind(convUidS, user.id).first<ConversationRow>();
+  if (!conv) return c.json({ error: 'conversation not found' }, 404);
+
+  const q = questionById(body.question_id);
+  if (!q) return c.json({ error: 'unknown question_id' }, 400);
+  if (q.skip_allowed === false) return c.json({ error: 'this question cannot be skipped' }, 400);
+
+  // Task #2 (AR) — same eligibility gate as /answer.
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  {
+    const answeredNow = await effectiveAnsweredSet(c.env, user, conv.id);
+    const { visible: visibleNow } = selectBank(user, answeredNow, gate);
+    const isVisible = visibleNow.some((vq) => vq.id === q.id);
+    const isDetector = DETECTOR_IDS.includes(q.id);
+    // Task #12 (BLOCK-ADV-07) — see /answer: dynamic reflection ids are
+    // synthesised, not in the visible bank, so allow them through.
+    const isDynamic = DYNAMIC_ID_RE.test(q.id);
+    if (!isVisible && !isDetector && !isDynamic) {
+      return c.json({
+        error: 'question_not_available',
+        message: 'This question isn\'t available yet — finish earlier milestones first.',
+      }, 409);
+    }
+  }
+
+  await recordAnswer(c.env, conv, user, q.id, '', { status: 'skipped' });
+  await recordMessage(c.env, conv.id, 'user', '(skipped)', q.id);
+
+  // Use the shared selectBank helper so skipping detector question
+  // 2 does not let the user jump into the persona bank before
+  // detector question 3 is served.
+  const answered = await effectiveAnsweredSet(c.env, user, conv.id);
+  const { visible: bank } = selectBank(user, answered, gate);
+  // Task #6 (CB) — deterministic next-question selection via the
+  // state machine. /skip writes a `saved_status='skipped'` row, so
+  // by the time nextTurn loads cross-conversation answered ids the
+  // skipped question is already in `answered` — extraAnswered is a
+  // belt-and-braces guard against same-isolate read lag.
+  // Task #46 — trim confident-module fit questions from the ranker's pool.
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, bank, answered);
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered);
+  const turn = await smNextTurn(c.env, user.id, rankBank, {
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
+  });
+  const next = turn.next_question;
+  await syncBankTotal(c.env, conv, bank.length, personaFor(user));
+  await refreshCounts(c.env, conv.id, next?.id || null, user);
+  if (!next) {
+    await c.env.DB.prepare(
+      `UPDATE advisor_conversations SET state = 'complete', updated_at = datetime('now') WHERE id = ?`,
+    ).bind(conv.id).run();
+  } else {
+    await recordMessage(c.env, conv.id, 'assistant', next.prompt, next.id);
+  }
+  // /progress envelope inline so the AC-3 client can refresh
+  // per-page rings without a second round-trip after a skip.
+  const counts = await c.env.DB.prepare(
+    `SELECT answered_count, skipped_count FROM advisor_conversations WHERE id = ?`,
+  ).bind(conv.id).first<{ answered_count: number; skipped_count: number }>();
+  const ans = Number(counts?.answered_count || 0);
+  const skp = Number(counts?.skipped_count || 0);
+  return c.json({
+    conversation_uid: conv.uid,
+    next: publicQuestion(next),
+    next_question: publicQuestion(next),
+    complete: !next,
+    progress: {
+      total: bank.length, answered: ans, skipped: skp,
+      percent: bank.length > 0 ? Math.round(((ans + skp) / bank.length) * 100) : 100,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sources  —  Task #3 (AS) field-source attribution for the
+// per-page <AdvisorFilledBanner> + sparkle icons. Optional ?page=
+// query filters to a single page_target so the dashboard can fan
+// out one-call-per-page without overpulling.
+// ---------------------------------------------------------------------------
+advisor.get('/sources', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  const page = (c.req.query('page') || '').trim() || null;
+  try {
+    const stmt = page
+      ? c.env.DB.prepare(
+          `SELECT question_id, page_target, saved_to_table, saved_to_column, saved_to_id,
+                  source, evidence_text, filled_at
+             FROM field_sources WHERE user_id = ? AND page_target = ?
+             ORDER BY filled_at DESC LIMIT 200`,
+        ).bind(user.id, page)
+      : c.env.DB.prepare(
+          `SELECT question_id, page_target, saved_to_table, saved_to_column, saved_to_id,
+                  source, evidence_text, filled_at
+             FROM field_sources WHERE user_id = ?
+             ORDER BY filled_at DESC LIMIT 500`,
+        ).bind(user.id);
+    const rows = await stmt.all<{
+      question_id: string; page_target: string | null;
+      saved_to_table: string | null; saved_to_column: string | null;
+      saved_to_id: string | null; source: string; evidence_text: string | null;
+      filled_at: string;
+    }>();
+    // Decorate with the bank's human-readable prompt so the
+    // banner can list field labels without a second round-trip.
+    const sources = (rows.results || []).map((r) => {
+      const q = questionById(r.question_id);
+      return {
+        ...r,
+        label: q?.prompt || r.question_id,
+        section: q?.section || null,
+      };
+    });
+    return c.json({ page, sources });
+  } catch (e) {
+    console.error('[advisor] /sources:', (e as Error).message);
+    return c.json({ page, sources: [] });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /answered  —  Task #13 captured-answer list for the right-rail
+// "Completed" bucket. Returns every reply the user actually committed in
+// their LATEST conversation where `saved_status IN ('saved','noop')` — the
+// exact same scope + predicate that drives `answered_count` (refreshCounts)
+// and the /progress captured set, so the Completed list can never disagree
+// with the "N / total answered" figure shown in the header.
+//
+// This differs from /sources (which reads field_sources, populated only on
+// structured `saved` writes): /answered also includes `noop` captures —
+// reflections, partner answers made before the partner profile is bound,
+// and dynamic reflection ids — which never produce a field_sources row and
+// were therefore invisible in the old Completed bucket. Rows are decorated
+// with the question-bank label / section / page_target so the widget needs
+// no second round-trip.
+// ---------------------------------------------------------------------------
+advisor.get('/answered', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  await loadAdvisorGate(c.env, user);
+  try {
+    const conv = await getLatestConversation(c.env, user);
+    if (!conv) return c.json({ conversation_uid: null, answered: [] });
+    const rows = await c.env.DB.prepare(
+      `SELECT question_id, saved_to_table, saved_to_column, saved_to_id,
+              saved_status, created_at
+         FROM advisor_answers
+        WHERE conversation_id = ? AND ${CAPTURED_SQL}
+        ORDER BY created_at DESC, id DESC
+        -- advisor_answers has UNIQUE(conversation_id, question_id), so a single
+        -- conversation can hold at most one row per bank question (~210 total);
+        -- the 500 cap is a safety bound that can never truncate the list, so the
+        -- "count == list" invariant with answered_count/refreshCounts holds.
+        LIMIT 500`,
+    ).bind(conv.id).all<{
+      question_id: string;
+      saved_to_table: string | null; saved_to_column: string | null;
+      saved_to_id: string | null; saved_status: string; created_at: string;
+    }>();
+    const persona = personaFor(user);
+    const capturedRows = ['advisor', 'coach'].includes(persona)
+      ? (await conversationBankAnswers(c.env, user.id, persona)).filter(r => r.saved_status !== 'skipped')
+      : (rows.results || []);
+    const answered = capturedRows.map((r) => {
+      const q = questionById(r.question_id);
+      return {
+        question_id: r.question_id,
+        label: q?.prompt || r.question_id,
+        section: q?.section || null,
+        page_target: q?.page_target || null,
+        saved_status: r.saved_status,
+        saved_to_table: r.saved_to_table,
+        saved_to_column: r.saved_to_column,
+        saved_to_id: r.saved_to_id,
+        completed_at: r.created_at,
+      };
+    });
+    return c.json({ conversation_uid: conv.uid, answered });
+  } catch (e) {
+    console.error('[advisor] /answered:', (e as Error).message);
+    if (['advisor', 'coach'].includes(personaFor(user))) {
+      return c.json({ error: 'answers_unreadable', message: 'Recorded answers are unreadable right now.' }, 503);
+    }
+    return c.json({ conversation_uid: null, answered: [] });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin-posture  —  D246, Studio's "Operating posture" strip.
+//
+// For each ADMIN_BANK question: its section, a short label, and a state read
+// from the ledger — `recorded` (the CAPTURED_SQL predicate /answered and
+// /progress use), `skipped`, or `not_recorded`. A recorded answer carries its
+// value, read from the store the write router put it in:
+//   - admin.preferences.digest_freq  → user_settings.digest_frequency
+//   - every other admin.* id         → user_advisor_extras.extras_json[id]
+//
+// A COLUMN DEFAULT IS NEVER AN ANSWER. user_settings.digest_frequency defaults
+// to 'weekly' and user_settings.timezone to 'UTC'; neither is read unless the
+// ledger says the question was answered, and the timezone answer lands in
+// extras, so user_settings.timezone is never read here at all.
+//
+// `bank_size` is ADMIN_BANK.length and `recorded` is counted from the ledger —
+// never from how many values happen to be on screen. Only the caller's own
+// rows are read: no user id is taken from the request.
+// ---------------------------------------------------------------------------
+const POSTURE_LABELS: Record<string, string> = {
+  'admin.preferences.digest_freq': 'Digest',
+  'admin.preferences.alert_channel': 'Alert channel',
+  'admin.preferences.timezone': 'Timezone',
+  'admin.oversight.review_cadence': 'Review cadence',
+  'admin.oversight.portfolio_focus': 'Metrics named',
+  'admin.oversight.risk_tolerance': 'Risk tolerance',
+  'admin.oversight.escalation_threshold': 'Escalation condition',
+  'admin.operations.intake_priority': 'Intake priority',
+  'admin.operations.onboarding_sla': 'Onboarding turnaround',
+  'admin.governance.data_retention_pref': 'Inactive record retention',
+  'admin.governance.access_review_cadence': 'Access-review cadence',
+};
+
+export type PostureField = {
+  id: string;
+  section: string;
+  label: string;
+  state: 'recorded' | 'skipped' | 'not_recorded';
+  value: string | null;
+  value_reason?: string;
+};
+
+export async function readAdminPosture(env: Env, userId: number): Promise<Record<string, unknown>> {
+  const bank = ADMIN_BANK;
+  const bank_size = bank.length;
+  try {
+    const conv = await env.DB.prepare(
+      'SELECT id FROM advisor_conversations WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    ).bind(userId).first<{ id: number }>();
+    const ids = new Set(bank.map((q) => q.id));
+    const status = new Map<string, 'recorded' | 'skipped'>();
+    if (conv) {
+      // UNIQUE(conversation_id, question_id) holds one row per question, so
+      // this is at most one row per bank question the caller was asked.
+      const rows = await env.DB.prepare(
+        `SELECT question_id,
+                CASE WHEN ${CAPTURED_SQL} THEN 'recorded'
+                     WHEN saved_status = 'skipped' THEN 'skipped' END AS state
+           FROM advisor_answers
+          WHERE conversation_id = ?`,
+      ).bind(conv.id).all<{ question_id: string; state: 'recorded' | 'skipped' | null }>();
+      for (const r of rows.results || []) {
+        if (ids.has(r.question_id) && r.state) status.set(r.question_id, r.state);
+      }
+    }
+    // Read even when nothing is answered: a missing store is reported as
+    // unreadable, not as eleven empty rows.
+    const extrasRow = await env.DB.prepare(
+      'SELECT extras_json FROM user_advisor_extras WHERE user_id = ?',
+    ).bind(userId).first<{ extras_json: string | null }>();
+    let extras: Record<string, unknown> = {};
+    if (extrasRow?.extras_json) {
+      try {
+        const parsed = JSON.parse(extrasRow.extras_json);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) extras = parsed;
+      } catch { /* malformed sidecar: values read as absent below */ }
+    }
+    let digest: string | null = null;
+    if (status.get('admin.preferences.digest_freq') === 'recorded') {
+      const row = await env.DB.prepare(
+        'SELECT digest_frequency FROM user_settings WHERE user_id = ?',
+      ).bind(userId).first<{ digest_frequency: string | null }>();
+      digest = row?.digest_frequency ?? null;
+    }
+    const fields: PostureField[] = bank.map((q) => {
+      const state = status.get(q.id) || 'not_recorded';
+      const field: PostureField = {
+        id: q.id,
+        section: q.section || '',
+        label: POSTURE_LABELS[q.id] || q.prompt,
+        state,
+        value: null,
+      };
+      if (state === 'recorded') {
+        const raw = q.id === 'admin.preferences.digest_freq' ? digest : extras[q.id];
+        const text = typeof raw === 'string' ? raw.trim() : raw == null ? '' : String(raw);
+        if (text) field.value = text;
+        else field.value_reason = 'The chat recorded a reply, but its store holds no value for it.';
+      }
+      return field;
+    });
+    return {
+      available: true,
+      bank_size,
+      recorded: fields.filter((f) => f.state === 'recorded').length,
+      fields,
+    };
+  } catch (e) {
+    console.error('[advisor] /admin-posture:', (e as Error).message);
+    return {
+      available: false,
+      bank_size,
+      reason: 'The posture answers could not be read, so this is not a claim that none are recorded.',
+    };
+  }
+}
+
+advisor.get('/admin-posture', async (c) => {
+  const user = await requireAdmin(c);
+  await ensureSchema(c.env);
+  return c.json(await readAdminPosture(c.env, user.id));
+});
+
+// ---------------------------------------------------------------------------
+// GET /next-question?focus=SECTION  —  return the next visible
+// question pinned to a section (BUILD/CAPITAL/LEGAL/NETWORK or any
+// persona-defined section). Used by the per-page progress rail's
+// "drill in" affordance.
+//
+// D765 (#2090), D720 §6: a GET never calls a model, so it answers in the
+// deterministic order. POST /next-question is the member's press ("drill
+// in"), and only it lets the reranker run.
+// ---------------------------------------------------------------------------
+advisor.get('/next-question', (c) => nextQuestion(c, false));
+advisor.post('/next-question', (c) => nextQuestion(c, true));
+
+async function nextQuestion(c: any, rerank: boolean) {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const focus = (c.req.query('focus') || '').trim() || undefined;
+  const gate = await loadAdvisorGate(c.env, user);
+  const conv = await getActiveConversation(c.env, user);
+  if (!conv) {
+    return c.json({ next: null, next_question: null, complete: true });
+  }
+  const answered = await effectiveAnsweredSet(c.env, user, conv.id);
+  const { visible: bank } = selectBank(user, answered, gate, focus);
+  // Re-rank via Workers AI (see rerank.ts) — focused /next-question path.
+  // pinnedId honours conv.current_question_id so a poll/refresh before
+  // /answer or /skip returns the SAME pending question (idempotence).
+  // When focus is set, only honour the pin if the pinned question is
+  // in-focus (selectBank already applied the focus filter to `bank`,
+  // so the helper's "pinnedId must be in bank" check handles this).
+  // Task #46 — adaptive candidate pool (skip confident modules, gap-fill
+  // first). Preserve the pinned question so a poll/refresh stays idempotent.
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, bank, answered, { keepId: conv.current_question_id });
+  const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
+    keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
+  });
+  const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
+    pinnedId: conv.current_question_id, rerank,
+  });
+  return c.json({
+    persona: personaFor(user),
+    focus: focus || null,
+    next: publicQuestion(next),
+    next_question: publicQuestion(next),
+    complete: !next,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GET /progress  —  per-page + per-section + overall completion.
+// Task #2 (AR) replaces the earlier flat envelope with a structured
+// shape consumed by the right-rail progress bars. Backward-compatible
+// flat fields remain on the top level so existing clients keep
+// working through one rollout cycle.
+// ---------------------------------------------------------------------------
+advisor.get('/progress', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+  const personaBank = workingBankFor(user, gate);
+  // Match the served advisor flow: rings count against the
+  // currently-VISIBLE bank, not locked/deferred questions, so the
+  // /progress envelope stays consistent with /next-question and
+  // doesn't strand users at <100% behind unmet unlock_required gates.
+  const filtered = filterByContext(personaBank, {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+  });
+  const visibleBank = filtered.visible;
+
+  // Use the LATEST conversation regardless of state so the dashboard
+  // ring keeps showing 100% / complete after the user finishes.
+  const conv = await getLatestConversation(c.env, user);
+  // Task #57 — use the same "captured reply" definition as refreshCounts():
+  // a question counts as answered when its saved_status is 'saved' OR 'noop'.
+  // The old 'saved'-only savedSet caused per-section rings to stay frozen at
+  // 0% for partner/advisor personas whose questions are mostly free-form
+  // reflection prompts that return 'noop' from the write-router.
+  const capturedSet: Set<string> = new Set();
+  if (conv) {
+    const rows = await c.env.DB.prepare(
+      `SELECT question_id FROM advisor_answers WHERE conversation_id = ? AND ${CAPTURED_SQL}`,
+    ).bind(conv.id).all<{ question_id: string }>();
+    for (const r of (rows.results || [])) capturedSet.add(r.question_id);
+  }
+
+  const scopedReplies = persona === 'advisor' || persona === 'coach'
+    ? await conversationBankAnswers(c.env, user.id, persona) : null;
+  if (scopedReplies) {
+    capturedSet.clear();
+    for (const r of scopedReplies) {
+      if (r.saved_status !== 'skipped') capturedSet.add(r.question_id);
+    }
+  }
+
+  // Per-page progress.
+  const byPage = groupByPage(visibleBank).map((g) => ({
+    page: g.page,
+    doc_anchor: g.doc_anchor || null,
+    total: g.ids.length,
+    answered: g.ids.filter((id) => capturedSet.has(id)).length,
+  })).map((g) => ({
+    ...g,
+    percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
+  }));
+
+  // Per-section progress.
+  const bySection = groupBySection(visibleBank).map((g) => ({
+    section: g.section,
+    total: g.ids.length,
+    answered: g.ids.filter((id) => capturedSet.has(id)).length,
+  })).map((g) => ({
+    ...g,
+    percent: g.total > 0 ? Math.round((g.answered / g.total) * 100) : 0,
+  }));
+
+  // Task #40 / #45 — Profiling completion. Scoped to the conversational fit.*
+  // bank ONLY (Skills / Work values / Archetype / Axal Fit), NOT the full working
+  // bank. Task #45 replaces the old "raw answered / bank size" count with a
+  // confidence-based model (services/advisor/profilingModules.ts): each module
+  // has a `required` = min(floor, questions available) so the card shows a real,
+  // reachable target per module (e.g. Skills 3/5, Archetype 0/3) instead of one
+  // shallow "0 / 17". `complete` means every module has reached confidence.
+  // Admin / unknown personas have no fit bank → applicable:false.
+  const profilingVisible = filterByContext(profilingBankFor(persona), {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+  }).visible;
+  const profCompletion = computeProfilingCompletion(profilingVisible, capturedSet);
+  const profiling = {
+    applicable: profCompletion.applicable,
+    // `total` / `answered` now track the confidence-weighted required counts
+    // (Σ required across modules), NOT the raw bank size, so the headline
+    // "N / M answered" reflects "answered toward confidence", not a fake total.
+    total: profCompletion.required,
+    answered: profCompletion.answered,
+    percent: profCompletion.percent,
+    complete: profCompletion.complete,
+    sections: profCompletion.modules.map((m) => ({
+      key: m.key,
+      label: m.label,
+      // `total` on a section = its required (confidence) count; `available`
+      // exposes the adaptive headroom for clients that want it.
+      total: m.required,
+      available: m.available,
+      answered: m.answered,
+      coverage: m.coverage,
+      target_coverage: m.target_coverage,
+      percent: m.percent,
+      confident: m.confident,
+    })),
+  };
+
+  // Overall — counts include skipped to preserve the AC-1 contract
+  // (skipped questions count toward "done" for the dashboard ring).
+  // Total tracks the VISIBLE bank so locked questions don't pull
+  // the percentage down.
+  const total = visibleBank.length;
+  const deferredCount = filtered.deferred.length;
+  const ans = scopedReplies ? scopedReplies.filter(r => r.saved_status !== 'skipped').length : Number(conv?.answered_count || 0);
+  const skp = scopedReplies ? scopedReplies.filter(r => r.saved_status === 'skipped').length : Number(conv?.skipped_count || 0);
+  const overallPct = total > 0 ? Math.round(((ans + skp) / total) * 100) : 100;
+
+  return c.json({
+    persona: personaFor(user),
+    conversation_id: conv?.uid || null,
+    conversation_uid: conv?.uid || null,
+    by_page: byPage,
+    by_section: bySection,
+    profiling,
+    overall: {
+      total, answered: ans, skipped: skp, percent: overallPct,
+      deferred: deferredCount,
+      complete: ((!scopedReplies || conv?.persona === persona) && conv?.state === 'complete') || (!!conv && total > 0 && ans + skp >= total),
+    },
+    spinout_lab: gate.spinoutLabActive
+      ? { active: true, week: gate.week }
+      : { active: false, week: null },
+    // Legacy flat fields — kept for one rollout cycle.
+    total, answered: ans, skipped: skp, percent: overallPct,
+    complete: (!scopedReplies || conv?.persona === persona) && conv?.state === 'complete',
+    current_question_id: !scopedReplies || visibleBank.some(q => q.id === conv?.current_question_id)
+      ? conv?.current_question_id || null : null,
+    // Surface answered count even for users with no /start yet.
+    _answered_in_conversation: capturedSet.size,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /manifest  —  question manifest for the current persona.
+//
+// The frontend right-rail and section picker derive their structure
+// from this manifest so the server stays the source of truth.
+// Returns the visible bank (post-filter) plus the deferred metadata
+// so the UI can show "Unlocks in Week 3" hints without guessing.
+// ---------------------------------------------------------------------------
+advisor.get('/manifest', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+
+  const personaBank = workingBankFor(user, gate);
+  const filtered = filterByContext(personaBank, {
+    persona,
+    week: gate.week,
+    tiers: gate.tiers,
+    completedMilestones: gate.completedMilestones,
+  });
+
+  // Include both `visible` and `deferred` so the UI can render
+  // greyed-out preview rows for not-yet-unlocked questions.
+  const publicQs = filtered.visible.map((q) => publicQuestion(q));
+  const deferred = filtered.deferred.map((d) => ({
+    question: publicQuestion(d.question),
+    reason: d.reason,
+    detail: d.detail || null,
+  }));
+
+  // Section + page indices.
+  const sections = groupBySection(filtered.visible).map((g) => ({
+    section: g.section, ids: g.ids,
+  }));
+  const pages = groupByPage(filtered.visible).map((g) => ({
+    page: g.page, doc_anchor: g.doc_anchor || null, ids: g.ids,
+  }));
+
+  return c.json({
+    persona,
+    bank: gate.spinoutLabActive ? 'newFounderSpinout' : (
+      persona === 'founder' ? 'existingFounder' :
+      persona === 'partner' ? 'operatingPartner' :
+      persona
+    ) as BankName | string,
+    spinout_lab: { active: gate.spinoutLabActive, week: gate.week },
+    questions: publicQs,
+    deferred,
+    sections,
+    pages,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /conversations/:uid  —  full Q&A trail for a conversation.
+// ---------------------------------------------------------------------------
+// AC-1 spec uses `/conversations/:id`; older clients hit
+// `/conversations/:uid`. Both routes share a single handler that
+// looks the conversation up by its public uid (the only ID we expose
+// outside the worker).
+async function conversationDetailHandler(c: Context<{ Bindings: Env }>): Promise<Response> {
+  const user = await advisorUser(c);
+  // Gate runs BEFORE the schema probe so non-phase / kill-switch users
+  // never touch D1 from this read endpoint either.
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  const uid = c.req.param('id') || c.req.param('uid');
+  if (!uid) return c.json({ error: 'conversation id required' }, 400);
+  const conv = await c.env.DB.prepare(
+    `SELECT * FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
+  ).bind(uid, user.id).first<ConversationRow>();
+  if (!conv) return c.json({ error: 'conversation not found' }, 404);
+  const messages = await c.env.DB.prepare(
+    `SELECT role, question_id, content, meta_json, created_at FROM advisor_messages WHERE conversation_id = ? ORDER BY id ASC`,
+  ).bind(conv.id).all<{ role: string; question_id: string | null; content: string; meta_json: string | null; created_at: string }>();
+  const answers = await c.env.DB.prepare(
+    `SELECT question_id, raw_value, saved_to_table, saved_to_column, saved_to_id, saved_status, saved_error, created_at
+       FROM advisor_answers WHERE conversation_id = ? ORDER BY id ASC`,
+  ).bind(conv.id).all<{ question_id: string; raw_value: string | null; saved_to_table: string | null; saved_to_column: string | null; saved_to_id: string | null; saved_status: string; saved_error: string | null; created_at: string }>();
+  return c.json({
+    conversation_id: conv.uid,
+    conversation_uid: conv.uid,
+    persona: conv.persona,
+    state: conv.state,
+    progress: {
+      total: conv.total_questions,
+      answered: conv.answered_count,
+      skipped: conv.skipped_count,
+    },
+    messages: messages.results || [],
+    answers: answers.results || [],
+  });
+}
+advisor.get('/conversations/:id', conversationDetailHandler);
+
+// ---------------------------------------------------------------------------
+// POST /explain  —  SSE stream of a free-form LLM explanation.
+//
+// Body: { topic: string, conversation_uid?: string }
+// Stream events:
+//   provider { model, provider, fallback_used, cached }   (Task #16)
+//   delta    { text }
+//   done     { leaked }
+//   error    { message }
+// Routed via aiRouter task='advisor_explain'. Task #31: Workers AI is
+// the only provider in production. The unsafe-completion Anthropic
+// retry was removed; leaks now fall back to the templated refusal.
+// /explain is still the ONLY free-form LLM surface in AC-1; /answer is
+// deterministic so we don't burn tokens routing structured data.
+// ---------------------------------------------------------------------------
+function sseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+advisor.post('/explain', async (c) => {
+  const user = await advisorUser(c);
+  // Kill switch (Task #5 → Task #7 → D203) runs FIRST, before any schema
+  // work: the deploy half with no database, then the operator store.
+  const killed = await refuseWhenKilled(c);
+  if (killed) return killed;
+  await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+  // Task #4 (AW) L7 — per-user kill switch (advisor_locked).
+  const ks = await checkKillSwitch(c.env, user);
+  if (ks.blocked) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: null, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: ks.reason || 'kill_switch', shadowFlagged: false,
+    });
+    return c.json({ error: ks.message, status: 'refused', reason: ks.reason }, 423);
+  }
+  // Workers AI only (Task #31). The aiRouter gracefully refuses (with
+  // budget/refusal usage rows) if every model in the chain fails.
+  const body = await readJson<{ topic?: string; question_id?: string; conversation_id?: string; conversation_uid?: string }>(c);
+  const topic = String(body?.topic || '').trim().slice(0, 500);
+  if (!topic) return c.json({ error: 'topic is required' }, 400);
+
+  // Task #4 (AW) L0 — input safety on the topic. D763: checked by the guard
+  // inside `aiRouter.run` below, once, in full; a block there answers as this
+  // route always has (422, `safety_block`).
+  // Task #4 (AW) L5 — bump the explains-without-commit counter now;
+  // the full anomaly check (which needs conversationId for the
+  // distinct-tools-this-session signal) runs once we've resolved the
+  // conversation row below.
+  await bumpExplainsWithoutCommit(c.env, user.id);
+  // Task #2 (AR) — when an explicit `question_id` is supplied, the
+  // explanation must be constrained to a question the user can
+  // currently see (persona/week/tier/unlock filtered). Topic-only
+  // requests remain free-form for backward compatibility (e.g.
+  // explaining a doc anchor or page concept), but if a caller
+  // names a specific question we refuse to explain hidden ones —
+  // otherwise the LLM would leak the existence of upgrade-gated
+  // or future-week content.
+  const requestedQid = body?.question_id ? String(body.question_id).trim() : '';
+  if (requestedQid) {
+    const answeredRows = await c.env.DB.prepare(
+      `SELECT question_id FROM advisor_answers WHERE user_id = ?`,
+    ).bind(user.id).all<{ question_id: string }>();
+    const answered = new Set<string>((answeredRows.results || []).map((r) => r.question_id));
+    const gate = await loadAdvisorGate(c.env, user);
+    const { visible } = selectBank(user, answered, gate, undefined);
+    if (!visible.some((q) => q.id === requestedQid)) {
+      return c.json({ error: 'question_not_available' }, 409);
+    }
+  }
+  // Per AC-1 the LLM is shown only the topic + persona context — never
+  // free-form user-typed answer text. Strip prompt-injection markers
+  // (system tags, role overrides) defensively before they reach the
+  // model.
+  const safeTopic = topic
+    .replace(/<\/?(system|assistant|user|tool[^>]*)>/gi, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\b(ignore (all|previous) instructions|disregard the system prompt)\b/gi, '[filtered]')
+    .slice(0, 500);
+
+  // Build the prompt. We deliberately do NOT pass any sensitive answer
+  // content from advisor_answers (PII, financial data) — the LLM only
+  // sees the topic + persona context.
+  // Task #4 (AW) L1 — single source of truth for the system prompt
+  // lives in services/advisor/guardrails.ts (ADVISOR_SYSTEM_PROMPT).
+  // Hashed via promptHash() into advisor_turn_audit so prompt revisions
+  // can be correlated across the audit log.
+  const persona = personaFor(user);
+  const systemPromptText = `${ADVISOR_SYSTEM_PROMPT}\n\nUser context: role=${persona}, name=${user.name || 'unknown'}.`;
+
+  const conversationUid = (body?.conversation_id || body?.conversation_uid) ? String(body?.conversation_id || body?.conversation_uid) : null;
+  let conversationId: number | null = null;
+  if (conversationUid) {
+    const conv = await c.env.DB.prepare(
+      `SELECT id FROM advisor_conversations WHERE uid = ? AND user_id = ?`,
+    ).bind(conversationUid, user.id).first<{ id: number }>();
+    if (conv) conversationId = Number(conv.id);
+  }
+  if (conversationId) {
+    // D763: the topic's verdict arrives with the run, below; none is known yet.
+    await recordMessage(c.env, conversationId, 'user', `[explain] ${safeTopic}`, null, undefined, {
+      safety_score: null,
+    });
+  }
+
+  // Task #4 (AW) L5 — full anomaly check now that conversationId is known.
+  const anomaly = await bumpAnomalyAndCheck(c.env, user.id, topic, conversationId);
+
+  // Task #4 (AW) L5 — when the per-user shadow flag is set we degrade
+  // to a templated SSE reply instead of calling Anthropic. The audit
+  // row records the soft-block so admins can see the activity in
+  // /admin/advisor-audit?flagged=1.
+  if (ks.shadow || anomaly.shadow) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId, model: null,
+      promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
+      refusalReason: 'shadow_flag', shadowFlagged: true,
+    });
+    if (conversationId) {
+      await recordMessage(c.env, conversationId, 'assistant', REFUSAL.shadow, null, { kind: 'explain', topic: safeTopic, shadow: true });
+    }
+    const enc = new TextEncoder();
+    const body = enc.encode(sseEvent('delta', { text: REFUSAL.shadow }) + sseEvent('done', { reason: 'shadow_flag' }));
+    return new Response(body, {
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache, no-transform',
+        'x-accel-buffering': 'no',
+      },
+    });
+  }
+
+  // Route through aiRouter. Workers AI only (Task #31). We intentionally
+  // do NOT request a streaming response: Task #4 (AW) L1 requires the
+  // full text be buffered before stripVerbatimLeak runs, and
+  // explanations are capped at ~120 words so the wall-clock cost of
+  // buffering is negligible (sub-second on llama-3.3-70b-fp8-fast). The
+  // output below is then re-emitted as a single SSE delta event so the
+  // React consumer's wire format is unchanged.
+  const ai = await aiRouterRun(c.env, {
+    task: 'advisor_explain',
+    userId: user.id,
+    surface: AI_SURFACE.studio,
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: studioOption('explain', user.role) }),
+    systemPrompt: systemPromptText,
+    messages: [{ role: 'user', content: safeTopic }],
+    maxTokens: EXPLAIN_MAX_TOKENS,
+    // D763: the member's own words, checked in full before the model runs.
+    guardText: topic,
+    role: user.role,
+  });
+  // D763: the guard's verdict on the topic, as the audit rows have always carried it.
+  const safety = {
+    score: !ai.guard || ai.guard.input === 'none' || ai.guard.input === 'fail' ? null : ai.guard.input === 'pass' ? 1 : 0,
+    category: ai.guard?.codes[0]?.toLowerCase() ?? (ai.guard?.input === 'pass' ? 'safe' : null),
+  };
+  // D765: AI assistance is off on this page; nothing ran.
+  if (ai.refusal === 'assist_off') return refuseAssistOff(c);
+  if (ai.refusal === 'guard_blocked') {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [], refusalReason: 'safety_block',
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: REFUSAL.jailbreak,
+      status: 'refused',
+      reason: 'safety_block',
+      category: safety.category,
+    }, 422);
+  }
+
+  if (!ai.ok) {
+    // Task #4 (AW) L6 — even upstream failures get one audit row so
+    // admins can correlate model outages / budget refusals with
+    // user-visible 502s.
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId,
+      model: ai.usage?.model || null,
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: ai.usage?.est_cost_usd || 0,
+      safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [],
+      refusalReason: ai.refusal || 'upstream_error',
+      shadowFlagged: false,
+    });
+    const status = ai.refusal && ai.refusal.startsWith('budget_') ? 429
+      : ai.refusal === 'kill_switch' ? 423
+      // D763: the guard withheld the answer, or could not check it.
+      : ai.refusal === 'guard_blocked_output' ? 422
+      : ai.refusal === 'guard_unavailable' ? 503
+      : 502;
+    return c.json({
+      error: ai.refusal === 'kill_switch'
+        ? 'AI budget exhausted — try again later.'
+        : (ai.error || 'upstream LLM error'),
+      reason: ai.refusal || 'upstream_error',
+      ...(ai.guard?.refusal?.link ? { link: ai.guard.refusal.link } : {}),
+    }, status);
+  }
+
+  const collected = String(ai.output || '');
+  const { text: safeOut, leaked } = stripVerbatimLeak(collected);
+  const usage = ai.usage;
+  // Task #31 — Anthropic unsafe-completion retry removed. If the
+  // Workers AI primary + sibling fallback both leak, we surface the
+  // templated refusal rather than reaching for an external provider.
+
+  // Single delta + done — the client sees a "typing finished"
+  // beat instead of incremental tokens, in exchange for a hard
+  // guarantee that no leaked text ever crossed the wire.
+  const finalText = leaked
+    ? 'I can only discuss your StudioOS data and your current advisor questions. Want me to help with one of those?'
+    : safeOut;
+  const modelUsed = usage?.model || 'unknown';
+  // Surface which model actually answered so the React UI can render
+  // a "(fallback)" badge when the Workers AI primary hop missed and a
+  // smaller llama sibling was used. Provider is always 'workers-ai'
+  // in production (Task #31).
+  const providerEvent = {
+    model: modelUsed,
+    provider: 'workers-ai' as const,
+    fallback_used: !!usage?.fallback_used,
+    cached: !!usage?.cached,
+  };
+
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        controller.enqueue(enc.encode(sseEvent('provider', providerEvent)));
+        if (finalText) {
+          controller.enqueue(enc.encode(sseEvent('delta', { text: finalText })));
+        }
+        controller.enqueue(enc.encode(sseEvent('done', { leaked })));
+        if (conversationId && finalText) {
+          await recordMessage(
+            c.env, conversationId, 'assistant', finalText, null,
+            { kind: 'explain', topic: safeTopic, leaked, model: modelUsed, provider: providerEvent.provider },
+          );
+        }
+        await writeTurnAudit(c.env, {
+          userId: user.id, conversationId,
+          model: modelUsed,
+          promptHash: await promptHash(), toolCalls: [],
+          aiSpendUsd: usage?.est_cost_usd || 0,
+          safetyScore: safety.score, guardrailCategory: safety.category,
+          sanitisationActions: [
+            ...(leaked ? ['verbatim_leak_stripped'] : []),
+          ],
+          refusalReason: leaked ? 'verbatim_leak' : null,
+          shadowFlagged: false,
+        });
+      } catch (e) {
+        controller.enqueue(enc.encode(sseEvent('error', { message: (e as Error).message })));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      'x-accel-buffering': 'no',
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 (AV) — Find & deep-link tool registry.
+// ---------------------------------------------------------------------------
+//
+// POST /api/advisor/tool — { name, args } body. Runs gateToolCall (persona
+// /tier/rate/cost/arg shape), executes the tool from the registry, audit-logs
+// to advisor_messages (role='tool') + activity_logs, and returns the tool's
+// {result, cta} envelope. Tier-failures redirect to surfacePaywall so the
+// chatbot always returns a routable CTA instead of a hard refusal.
+//
+// GET /api/advisor/tools — returns the JSON-schema list the LLM uses.
+// ---------------------------------------------------------------------------
+
+advisor.get('/tools', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  return c.json({ tools: TOOL_SCHEMAS });
+});
+
+advisor.post('/tool', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const name = String(body?.name || '').trim();
+  const rawArgs = body?.args;
+  const args: Record<string, unknown> = (rawArgs && typeof rawArgs === 'object') ? rawArgs as Record<string, unknown> : {};
+
+  if (!isToolName(name)) {
+    return c.json({ error: 'unknown tool', status: 'refused', reason: 'unknown_tool' }, 400);
+  }
+
+  // Re-use the active conversation so distinct-tools-per-session counters
+  // (L5 anomaly detector) are conversation-scoped. /tool can be called
+  // before /start so we lazily mint a conversation if none exists.
+  let conv = await getActiveConversation(c.env, user);
+  if (!conv) {
+    conv = await createConversation(c.env, user, 0, null);
+  }
+
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+  const gateCtx = {
+    user,
+    persona,
+    tiers: gate.tiers,
+    conversationId: conv.id,
+  };
+  const toolCtx = { ...gateCtx, env: c.env };
+
+  // Persist the request as a user-role message so the audit trail captures
+  // intent even when the gate refuses below.
+  const reqContent = `tool:${name} ${JSON.stringify(args).slice(0, 400)}`;
+  await recordMessage(c.env, conv.id, 'user', reqContent, undefined, { tool_name: name });
+
+  const gateResult = await gateToolCall(c.env, gateCtx, name, args);
+
+  let envelope: ToolEnvelope;
+  let effectiveTool: string = name;
+  let degradedToPaywall = false;
+
+  if (!gateResult.ok) {
+    // Tier-failure → surface upgrade CTA instead of a raw refusal so the
+    // chatbot can always render a routable action.
+    if (gateResult.reason === 'tier_required' && persona !== 'admin') {
+      effectiveTool = 'surfacePaywall';
+      degradedToPaywall = true;
+      // Map the internal tier label (`subscriber`) back to the
+      // user-facing upgrade flow name (`studio`) so the CTA route
+      // points at /billing/upgrade?feature=…&tier=studio.
+      const internalTier = gateResult.detail || 'subscriber';
+      const userFacingTier = internalTier === 'subscriber' ? 'studio' : internalTier;
+      envelope = await executeTool(toolCtx, 'surfacePaywall', {
+        feature: name,
+        required_tier: userFacingTier,
+      });
+    } else {
+      const status = gateResult.reason === 'rate_limited' || gateResult.reason === 'cost_exceeded' ? 429
+        : gateResult.reason === 'no_conversation' ? 409
+        : 403;
+      await writeTurnAudit(c.env, {
+        userId: user.id, conversationId: conv.id, model: null,
+        promptHash: await promptHash(),
+        toolCalls: [{ name, gate_result: gateResult.reason }],
+        aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
+        sanitisationActions: [], refusalReason: `gate_${gateResult.reason}`,
+        shadowFlagged: false,
+      });
+      await recordMessage(c.env, conv.id, 'tool', `refused:${gateResult.reason}`, undefined, {
+        tool_name: name, gate_reason: gateResult.reason,
+      });
+      return c.json({
+        error: gateResult.detail || 'tool call rejected',
+        status: 'refused',
+        reason: gateResult.reason,
+      }, status);
+    }
+  } else {
+    try {
+      envelope = await executeTool(toolCtx, name, args);
+    } catch (e) {
+      console.error('[advisor.tool] execute failed', name, (e as Error).message);
+      await writeTurnAudit(c.env, {
+        userId: user.id, conversationId: conv.id, model: null,
+        promptHash: await promptHash(),
+        toolCalls: [{ name, error: (e as Error).message }],
+        aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
+        sanitisationActions: [], refusalReason: 'tool_error',
+        shadowFlagged: false,
+      });
+      return c.json({ error: 'tool execution failed', status: 'error' }, 500);
+    }
+  }
+
+  // Append a role='tool' message with the JSON envelope so /conversations/:id
+  // can render the CTA again after a reload.
+  await recordMessage(
+    c.env, conv.id, 'tool',
+    JSON.stringify(envelope).slice(0, 4000),
+    undefined,
+    { tool_name: effectiveTool, degraded: degradedToPaywall ? 1 : 0 },
+  );
+
+  // activity_logs row — actor is the email_hash per Task T22.1 (never plaintext).
+  try {
+    const actorHash = await hashEmail((user as User).email || '');
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'advisor.tool',
+      JSON.stringify({ tool: effectiveTool, requested: name, route: envelope.cta?.route }).slice(0, 500),
+      actorHash, user.id,
+    ).run();
+  } catch { /* activity_logs may not exist on dev DB */ }
+
+  await writeTurnAudit(c.env, {
+    userId: user.id, conversationId: conv.id, model: null,
+    promptHash: await promptHash(),
+    toolCalls: [{ name: effectiveTool, requested: name, route: envelope.cta?.route, degraded: degradedToPaywall }],
+    aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
+    sanitisationActions: [], refusalReason: null,
+    shadowFlagged: false,
+  });
+
+  return c.json({
+    status: 'ok',
+    tool: effectiveTool,
+    requested_tool: name,
+    degraded_to_paywall: degradedToPaywall,
+    conversation_uid: conv.uid,
+    result: envelope.result,
+    cta: envelope.cta,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/advisor/tool/auto — LLM tool-binding entry point.
+//
+// Body: { message: string }
+// The router calls aiRouter.run({ task: 'tool_call', … }) with TOOL_SCHEMAS
+// in the system prompt; the model returns a strict JSON {name, args}
+// envelope which we validate, then dispatch through the same gated
+// pipeline as POST /tool. On parse / validation failure we degrade to
+// `openPage` with the user's text as the search topic so the chatbot still
+// produces a routable CTA. This is the wired entry point that satisfies
+// the Task #5 (AV) requirement for aiRouter.run('tool_call') tool-binding.
+// ---------------------------------------------------------------------------
+const TOOL_CALL_SYSTEM_PROMPT = [
+  'You are the Axal StudioOS routing layer. The user types a free-form request;',
+  'you choose ONE tool from the registry that best satisfies it. Reply with',
+  'STRICT JSON only — no prose, no code fences — of the form',
+  '{"name":"<toolName>","args":{...}}. The args object MUST conform to the',
+  'tool\'s JSON schema. If nothing fits, return',
+  '{"name":"openPage","args":{"route":"/dashboard"}}.',
+  '',
+  'Available tools:',
+  TOOL_SCHEMAS.map((t) => `- ${t.name}: ${t.description}\n  args schema: ${JSON.stringify(t.parameters)}`).join('\n'),
+].join('\n');
+
+advisor.post('/tool/auto', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  await ensureSchema(c.env);
+  await ensureGuardrailColumns(c.env);
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const message = String(body?.message || '').trim();
+  if (!message || message.length > 2000) {
+    return c.json({ error: 'message required (1..2000 chars)' }, 400);
+  }
+
+  // Step 1 — let the LLM pick the tool.
+  let pickedName: import('../services/advisor/tools').ToolName = 'openPage';
+  let pickedArgs: Record<string, unknown> = { route: '/dashboard' };
+  let llmRefusal: string | null = null;
+  try {
+    const r = await aiRouterRun(c.env, {
+      task: 'tool_call',
+      userId: user.id,
+      surface: AI_SURFACE.studio,
+      rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: studioOption('send', user.role) }),
+      systemPrompt: TOOL_CALL_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: message }],
+      maxTokens: 256,
+      temperature: 0,
+    });
+    // D765: off on this page, so no tool is picked or run.
+    if (r.refusal === 'assist_off') return refuseAssistOff(c);
+    if (!r.ok) {
+      llmRefusal = r.refusal || 'router_failed';
+    } else {
+      const raw = (r.output || '').trim();
+      // Strip ``` fences if the model added them despite the system prompt.
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string' && isToolName(parsed.name)) {
+        pickedName = parsed.name;
+        pickedArgs = (parsed.args && typeof parsed.args === 'object') ? parsed.args : {};
+      } else {
+        llmRefusal = 'invalid_tool_envelope';
+      }
+    }
+  } catch (e) {
+    llmRefusal = `parse_failed:${(e as Error).message.slice(0, 80)}`;
+  }
+
+  // Step 2 — dispatch through the same gated pipeline as POST /tool.
+  let conv = await getActiveConversation(c.env, user);
+  if (!conv) conv = await createConversation(c.env, user, 0, null);
+
+  const gate = await loadAdvisorGate(c.env, user);
+  const persona = personaFor(user);
+  const gateCtx = { user, persona, tiers: gate.tiers, conversationId: conv.id };
+  const toolCtx = { ...gateCtx, env: c.env };
+
+  await recordMessage(c.env, conv.id, 'user', message, undefined, {
+    via: 'tool_auto',
+    llm_picked: pickedName,
+    llm_refusal: llmRefusal,
+  });
+
+  const gateResult = await gateToolCall(c.env, gateCtx, pickedName, pickedArgs);
+  let envelope: ToolEnvelope;
+  let effectiveTool = pickedName;
+  let degradedToPaywall = false;
+
+  if (!gateResult.ok) {
+    if (gateResult.reason === 'tier_required' && persona !== 'admin') {
+      effectiveTool = 'surfacePaywall';
+      degradedToPaywall = true;
+      const internalTier = gateResult.detail || 'subscriber';
+      const userFacingTier = internalTier === 'subscriber' ? 'studio' : internalTier;
+      envelope = await executeTool(toolCtx, 'surfacePaywall', {
+        feature: pickedName,
+        required_tier: userFacingTier,
+      });
+    } else {
+      const status = gateResult.reason === 'rate_limited' || gateResult.reason === 'cost_exceeded' ? 429
+        : gateResult.reason === 'no_conversation' ? 409 : 403;
+      await recordMessage(c.env, conv.id, 'tool', `refused:${gateResult.reason}`, undefined, {
+        tool_name: pickedName, gate_reason: gateResult.reason, via: 'tool_auto',
+      });
+      return c.json({
+        error: gateResult.detail || 'tool call rejected',
+        status: 'refused', reason: gateResult.reason,
+        requested_tool: pickedName, llm_refusal: llmRefusal,
+      }, status);
+    }
+  } else {
+    try {
+      envelope = await executeTool(toolCtx, pickedName, pickedArgs);
+    } catch (e) {
+      console.error('[advisor.tool/auto] execute failed', pickedName, (e as Error).message);
+      return c.json({ error: 'tool execution failed', status: 'error', requested_tool: pickedName }, 500);
+    }
+  }
+
+  await recordMessage(
+    c.env, conv.id, 'tool',
+    JSON.stringify(envelope).slice(0, 4000),
+    undefined,
+    { tool_name: effectiveTool, degraded: degradedToPaywall ? 1 : 0, via: 'tool_auto' },
+  );
+
+  // Mirror /tool's observability: activity_logs (email_hash per T22.1)
+  // + writeTurnAudit so the LLM-bound entry point shows up in the same
+  // dashboards / audit trails as the deterministic /tool path.
+  try {
+    const actorHash = await hashEmail((user as User).email || '');
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'advisor.tool.auto',
+      JSON.stringify({
+        tool: effectiveTool, requested: pickedName,
+        route: envelope.cta?.route, llm_refusal: llmRefusal,
+      }).slice(0, 500),
+      actorHash, user.id,
+    ).run();
+  } catch { /* activity_logs may not exist on dev DB */ }
+
+  await writeTurnAudit(c.env, {
+    userId: user.id, conversationId: conv.id, model: '@cf/qwen/qwen2.5-coder-32b-instruct',
+    promptHash: await promptHash(),
+    toolCalls: [{
+      name: effectiveTool, requested: pickedName,
+      route: envelope.cta?.route, degraded: degradedToPaywall,
+      via: 'tool_auto',
+    }],
+    aiSpendUsd: 0, safetyScore: null, guardrailCategory: null,
+    sanitisationActions: [], refusalReason: llmRefusal,
+    shadowFlagged: false,
+  });
+
+  return c.json({
+    status: 'ok',
+    tool: effectiveTool,
+    requested_tool: pickedName,
+    degraded_to_paywall: degradedToPaywall,
+    llm_refusal: llmRefusal,
+    conversation_uid: conv.uid,
+    result: envelope.result,
+    cta: envelope.cta,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #6 (CB) — Personal Advisor conversation state machine endpoints.
+//
+// These two routes wrap the deterministic selector in
+// `services/advisor/stateMachine.ts`. They co-exist with the legacy
+// `/start`, `/next-question`, `/progress` endpoints (which the AC-3
+// chat client still polls) so the rollout is additive — no client
+// breakage. New clients call /turn for the next question + a queue
+// preview; /queue returns the same ranking without registering an
+// "asked" timestamp (purely a peek).
+// ---------------------------------------------------------------------------
+async function buildVisibleBank(c: Context<{ Bindings: Env }>, focus: string | null) {
+  const user = await advisorUser(c);
+  await ensureSchema(c.env);
+  await ensureAdvisorWeekColumn(c.env);
+  const gate = await loadAdvisorGate(c.env, user);
+  // Active-conversation answers when one exists; otherwise fall back
+  // to the cross-conversation set loaded from advisor_answers (so a
+  // user who already answered some questions in a now-archived
+  // conversation isn't re-asked them on a fresh /turn).
+  const conv = await getActiveConversation(c.env, user);
+  const answered = ['advisor', 'coach'].includes(personaFor(user))
+    ? await effectiveAnsweredSet(c.env, user, conv?.id || 0)
+    : conv
+    ? await effectiveAnsweredSet(c.env, user, conv.id).catch(() => new Set<string>())
+    : await smLoadAnsweredForUser(c.env, user.id);
+  const { visible, deferred } = selectBank(user, answered, gate, focus || undefined);
+  // Treat focus as a page only when it looks page-shaped (starts with
+  // `/`) — otherwise the state machine's focus_boost would never fire
+  // (it compares against page_target). Section-pinned flows already
+  // got their critical-first ordering inside selectBank().
+  const focusPage = focus && (focus.startsWith('/') || focus.includes('/')) ? focus : null;
+  return { user, visible, deferred, answered, gate, focusPage };
+}
+
+advisor.post('/turn', async (c) => {
+  // Gate evaluates rollout + kill-switch BEFORE any D1 schema probe or
+  // bank hydration (`buildVisibleBank` runs ensureSchema +
+  // ensureAdvisorWeekColumn + several reads). Per Task #5 spec, blocked
+  // users must short-circuit without touching the DB.
+  const earlyUser = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, earlyUser);
+  if (blocked) return blocked;
+  const focus = (c.req.query('focus') || '').trim() || null;
+  const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
+  // Task #46 — adaptive candidate pool: skip already-confident modules.
+  // D358 — plus re-askable profiling questions, after every unanswered one.
+  const reask = await reaskOverlay(c.env, user.id, visible, answered);
+  const rankVisible = applyAdaptiveProfiling(reask.bank, answered);
+  const result = await smNextTurn(c.env, user.id, rankVisible, {
+    focusPage,
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    extraAnswered: reask.answered,
+    reaskable: reask.reask,
+    // Task #12 (BLOCK-ADV-07) — when the persona bank is exhausted,
+    // /turn surfaces a dynamic `dyn.reflect.N` reflection instead of
+    // an empty turn. /answer + /skip deliberately omit persona so they
+    // keep their conversation-`complete` semantics.
+    persona: personaFor(user),
+  });
+  return c.json({
+    persona: personaFor(user),
+    focus: focus || null,
+    next_question: publicQuestion(result.next_question),
+    queue: result.queue.map(smPublicCandidate),
+    // Tier-blocked questions surface as paywall CTAs, not as
+    // questions — spec "Done looks like" condition.
+    paywall_ctas: smPaywallCtas(deferred),
+    complete: !result.next_question,
+  });
+});
+
+advisor.get('/queue', async (c) => {
+  // Gate BEFORE buildVisibleBank — see /turn for the same rationale.
+  const earlyUser = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, earlyUser);
+  if (blocked) return blocked;
+  const focus = (c.req.query('focus') || '').trim() || null;
+  const { user, visible, deferred, answered, gate, focusPage } = await buildVisibleBank(c, focus);
+  // /queue is a read-only peek — we want the ranking but NOT to
+  // register an asked-at timestamp (that would spuriously suppress
+  // the same questions on the next /turn). So we replicate nextTurn's
+  // pure path without calling markAsked.
+  const {
+    pickNext, loadAnsweredForUser, loadRecentlyAsked, loadRecentActivityPages,
+    ANTI_REPEAT_WINDOW_MS, RECENT_ACTIVITY_WINDOW_MS,
+  } = await import('../services/advisor/stateMachine');
+  const now = Date.now();
+  const fromAnswers = await loadAnsweredForUser(c.env, user.id);
+  const mergedAnswered = new Set<string>([...fromAnswers, ...answered]);
+  const recentlyAsked = await loadRecentlyAsked(c.env, user.id, now - ANTI_REPEAT_WINDOW_MS);
+  const recentActivityPages = await loadRecentActivityPages(c.env, user.id, now - RECENT_ACTIVITY_WINDOW_MS);
+  // Task #46 — trim confident-module fit questions so this read-only preview
+  // matches what /turn will actually ask (must use mergedAnswered, not the
+  // request-scoped `answered`, so already-answered ids across conversations
+  // count toward module confidence here too).
+  // D358 — the same re-ask overlay /turn applies, so the peek matches.
+  const reask = await reaskOverlay(c.env, user.id, visible, mergedAnswered);
+  const rankVisible = applyAdaptiveProfiling(reask.bank, mergedAnswered);
+  const result = pickNext(rankVisible, reask.answered, {
+    focusPage,
+    week: gate.week,
+    completedMilestones: gate.completedMilestones,
+    recentlyAsked,
+    recentActivityPages,
+    now,
+  });
+  return c.json({
+    persona: personaFor(user),
+    focus: focus || null,
+    next_question: publicQuestion(result.next),
+    queue: result.queue.map(smPublicCandidate),
+    paywall_ctas: smPaywallCtas(deferred),
+    complete: !result.next,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /transcribe  —  voice-to-text for the advisor composer mic.
+//
+// Accepts a base64-encoded audio clip plus its mime type, decodes it to raw
+// bytes and runs Cloudflare Workers AI Whisper, returning the transcribed
+// text. A missing clip is a 400; non-speech audio transcribes to an empty
+// string and is returned as-is (HTTP 200), never an error. This is the
+// server half of the mic feature — the UI button is a separate task. Reuses
+// the standard advisor auth + kill-switch guard (requireAuth + applyAdvisorGate).
+// ---------------------------------------------------------------------------
+// The model now comes from the router's `transcribe` route entry, not from
+// here. Kept as a comment rather than a constant so the next reader knows what
+// this used to pin: `@cf/openai/whisper`, chosen before there was a task class
+// for audio at all. The router's primary is `whisper-large-v3-turbo`, which is
+// faster and more accurate at the same $0.0005 per audio minute.
+// Cap the base64 payload tightly. Composer mic clips are only seconds long,
+// and `Array.from(bytes)` below expands the decoded audio into a plain JS
+// number[] (~8 bytes/element in V8), so an oversized clip — atob string +
+// Uint8Array + number[] together — can approach the 128 MB Workers isolate
+// limit and self-OOM. ~6 MB base64 ≈ 4.5 MB audio = minutes of compressed
+// (opus/webm) speech, with ample headroom.
+const TRANSCRIBE_MAX_B64 = 6 * 1024 * 1024;
+
+advisor.post('/transcribe', async (c) => {
+  const user = await advisorUser(c);
+  const blocked = await applyAdvisorGate(c, user);
+  if (blocked) return blocked;
+  // Workers AI is bound in production (wrangler.toml [ai]); guard anyway so a
+  // dev/preview env without the binding fails loudly instead of throwing.
+  if (!c.env.AI) return c.json({ error: 'ai_unavailable' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  // `mime` is accepted for forward-compat / client symmetry; the
+  // `@cf/openai/whisper` model sniffs the container itself and doesn't need it.
+  let b64 = String(body?.audio || '').trim();
+  // Tolerate a `data:audio/...;base64,<payload>` URL by stripping the prefix.
+  if (b64.startsWith('data:')) {
+    const comma = b64.indexOf(',');
+    if (comma !== -1) b64 = b64.slice(comma + 1);
+  }
+  if (!b64) return c.json({ error: 'no_audio' }, 400);
+  if (b64.length > TRANSCRIBE_MAX_B64) return c.json({ error: 'audio_too_large' }, 413);
+
+  let bytes: Uint8Array;
+  try {
+    const bin = atob(b64);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } catch {
+    return c.json({ error: 'invalid_audio' }, 400);
+  }
+  if (bytes.byteLength === 0) return c.json({ error: 'no_audio' }, 400);
+
+  // THROUGH THE ROUTER, which this call bypassed for as long as it has existed.
+  // `env.AI.run` directly meant no per-user day/month cap, no org kill switch,
+  // no fallback, and — the one that mattered most — no row in `ai_usage_logs`,
+  // so every transcription a user ran was invisible to the spend meter that
+  // claims to show what they have spent. It is metered now, at the same rate,
+  // billed on the byte length rather than on anything the client says.
+  const r = await aiRouterRun(c.env, {
+    task: 'transcribe',
+    userId: user.id,
+    surface: AI_SURFACE.studio,
+    // D765: recorded with its page; a transcription is saving, so the switch never refuses it.
+    // D778 part 6: the option D771's inventories name (founder, advisor and partner alike); the page stays the shared workspace.
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'transcribe:voice-answer' }),
+    audio: bytes,
+    audioMinutes: audioMinutesFromBytes(bytes.byteLength),
+  });
+  if (!r.ok) {
+    // `run` never throws; a spent budget and an unreachable model both arrive
+    // here as reasons. The mic's caller has always read `error`, so the shape
+    // it reads is preserved and the reason is added beside it.
+    return c.json({
+      error: 'transcribe_failed',
+      refusal: r.refusal ?? null,
+      message: r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+        ? 'This month’s AI budget is spent. Nothing was transcribed.'
+        : 'The clip could not be transcribed.',
+    }, 502);
+  }
+  // Whisper returns { text, word_count, words, vtt }. Silence and non-speech
+  // yield an empty string — surface it as empty text, not as an error.
+  return c.json({ text: r.output ?? '' });
+});
+
+// Re-export for tests / debug.
+export { smNextTurn, smOnAnswered };
+
+export default advisor;

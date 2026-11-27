@@ -1,0 +1,34 @@
+{
+  "_about": "D4556 (#4556): the price, ZDR and logging facts the AI Gateway slice relies on, each as Cloudflare's page states it, with the page and the date it was read. Read through the Cloudflare docs connector on 2026-11-06 (developers.cloudflare.com was not reachable directly from the session).",
+  "model": {
+    "id": "openai/gpt-5-mini",
+    "rates_usd_per_1m": { "tokens_in": "0.25", "tokens_cached": "0.025", "tokens_out": "2.00" },
+    "context_tokens": 128000,
+    "zero_data_retention": "yes",
+    "request_formats": ["Responses", "Chat Completions"],
+    "example_served_model": "gpt-5-mini-2025-08-07",
+    "example_key_source": "Unified",
+    "source": "https://developers.cloudflare.com/ai/models/openai/gpt-5-mini/",
+    "read": "2026-11-06"
+  },
+  "unified_billing": {
+    "credit_fee": "5% on every credit purchase; provider inference passed through at the provider's per-token rates",
+    "zdr_scope": "Unified Billing requests with Cloudflare-managed credentials only; not BYOK or other AI Gateway requests",
+    "zdr_not_logging": "ZDR does not control AI Gateway logging",
+    "source": "https://developers.cloudflare.com/ai-gateway/features/unified-billing/",
+    "read": "2026-11-06"
+  },
+  "logging": {
+    "default": "Logs are enabled by default for each gateway",
+    "collect_log_false": "the request and response bodies are not stored and the rest of the entry is skipped; Unified Billing requests always log the billing details",
+    "collect_log_payload_false": "payload storage is skipped; metadata-only entries are still saved",
+    "source": "https://developers.cloudflare.com/ai-gateway/observability/logging/",
+    "read": "2026-11-06"
+  },
+  "limits": {
+    "unified_billing_rate": "200 requests per 60 seconds per gateway; 429 with error code 2018",
+    "custom_metadata": "5 entries per request",
+    "source": "https://developers.cloudflare.com/ai-gateway/reference/limits/",
+    "read": "2026-11-06"
+  }
+}

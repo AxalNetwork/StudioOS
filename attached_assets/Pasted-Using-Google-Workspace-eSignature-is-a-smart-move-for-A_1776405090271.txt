@@ -1,0 +1,55 @@
+Using **Google Workspace eSignature** is a smart move for Axal VC. It keeps your legal documents within your existing Google ecosystem (Drive/Docs), simplifies your "Closing Binder" management, and avoids the high monthly costs of dedicated e-signature platforms while you're in the "30-Day Spin-Out" phase.
+
+To integrate this into your **Replit/Cloudflare/D1** stack, you’ll be moving from a "Conversational Intake" directly into a "Document Generation" flow.
+
+### 1. The Agreement Mapping Logic
+Once the admin verifies a profile in your dashboard, the system needs to know which Google Doc template to pull. Here is how you should structure the mapping in your Worker logic:
+
+| Profile Type | Google Doc Template (ID) | Signers Required |
+| :--- | :--- | :--- |
+| **Investor (LP)** | `[LP_LPA_TEMPLATE_ID]` | Axal GP + Investor Signatory |
+| **Founder** | `[SAFE_OR_SPINOUT_TEMPLATE_ID]` | Axal Manager + Founder |
+| **Advisor** | `[FAST_ADVISORY_TEMPLATE_ID]` | Axal Manager + Advisor |
+| **Legal/Service** | `[MSA_TEMPLATE_ID]` | Axal Ops + Service Lead |
+
+---
+
+### 2. The Integration Flow: From D1 to Google Docs
+Google Workspace eSignature works best when you have **Google Docs Templates** with "Merge Fields" (e.g., `{{Legal_Name}}`, `{{EIN}}`).
+
+
+
+**The Technical Steps:**
+1.  **Approval:** Admin clicks "Approve & Send Agreement" in your Replit-built dashboard.
+2.  **Doc Generation:** The Cloudflare Worker calls the **Google Drive API** to make a copy of your "Master Template."
+3.  **Data Injection:** The Worker uses the **Google Docs API** to find and replace the placeholders (from your D1 database) with the partner's actual data.
+4.  **eSignature Trigger:** The Admin (you) opens the newly created doc in Google Docs and clicks **Tools > eSignature** to send the final request.
+
+> **Note on Automation:** Currently, Google Workspace eSignature is a "UI-first" feature. While you can automate the *creation* of the document via your Worker, the final "Request Signature" step is usually done manually by the admin within the Google Doc. This acts as a final "Human-in-the-loop" quality check for Axal VC.
+
+---
+
+### 3. Updating your Replit Prompt
+To get Replit to build the "Send to Google" functionality, use this updated instruction:
+
+> "Add a 'Legal Engine' module to my Cloudflare Worker. When an admin approves a profile in the dashboard:
+> 1. Use the **Google Service Account** credentials to connect to the Google Drive API.
+> 2. Copy a specific **Google Doc Template** based on the 'Persona' (e.g., if Persona is 'LP', use Doc ID '123...').
+> 3. Replace text placeholders like `{{PARTNER_NAME}}` and `{{PARTNER_EIN}}` with data from the D1 `partner_profiles` table.
+> 4. Move the new document into a Google Drive folder named 'Axal Pending Signatures'.
+> 5. Return the link to the generated Google Doc to the Admin Dashboard so the admin can initiate the **Google Workspace eSignature** flow."
+
+---
+
+### 4. Admin Checklist for "Officializing"
+When you receive the notification that a doc is ready, your workflow inside Google Docs will be:
+1.  **Open the Doc:** Ensure the AI correctly extracted the info into the fields.
+2.  **Insert eSignature Fields:** Drag and drop the "Signature," "Date," and "Initials" boxes from the right-hand sidebar.
+3.  **Send:** Google will email the partner. Once they sign, a PDF "Audit Trail" is automatically saved in your Axal Drive.
+
+### Why this is perfect for Axal VC (StudioOS):
+* **Auditability:** Delaware LLCs require strict record-keeping. Google Drive’s version history and the eSignature audit trail satisfy this perfectly.
+* **Cost:** If you already have Google Workspace Business Standard or Plus, this feature is included—meaning your "Partner Onboarding" costs stay at $0 per signature.
+* **Security:** You can restrict the "Axal Pending Signatures" folder so only your Management Company (Studio Ops) has access.
+
+**Would you like me to help you set up the Google Service Account credentials so your Cloudflare Worker has permission to create these docs?**

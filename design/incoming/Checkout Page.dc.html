@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><button type="button" aria-label="{{ v.ptopL }}" style="{{ v.ptopBS }}">{{ v.ptopL }}</button><b style="font-size:15px;font-weight:800">{{ v.ptopT }}</b><button type="button" aria-label="Close" style="{{ v.ptopBS }}">{{ v.ptopR }}</button></div></sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><div style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <div role="tablist" aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a role="tab" aria-selected="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if><sc-if value="{{ r.ic }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ics }}" dangerouslySetInnerHTML="{{ r.ic }}"></span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  </main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;1020px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;PAYX2&quot;,&quot;options&quot;:[&quot;PAYX1&quot;,&quot;PAYX2&quot;,&quot;PAYX3&quot;,&quot;PAYX4&quot;,&quot;PAYX5&quot;,&quot;PAYX6a&quot;,&quot;PAYX6b&quot;,&quot;PAYX7&quot;,&quot;PAYX7b&quot;,&quot;PAYX8&quot;,&quot;PAYX9&quot;,&quot;PAYX10a&quot;,&quot;PAYX10b&quot;,&quot;PAYX10c&quot;,&quot;PAYX11&quot;,&quot;PAYX12&quot;,&quot;PAYX13&quot;,&quot;PAYX14&quot;,&quot;PAYX15&quot;,&quot;PAYX16&quot;,&quot;PAYX17&quot;,&quot;PAYX18&quot;,&quot;PAYX19a&quot;,&quot;PAYX19b&quot;,&quot;PAYX20a&quot;,&quot;PAYX20b&quot;,&quot;PAYX20c&quot;,&quot;PAYX20d&quot;,&quot;PAYX20e&quot;,&quot;PAYX21&quot;,&quot;PAYX21b&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'PAYX2';
+    const dark = B === 'PAYX21' || B === 'PAYX21b', phone = B.indexOf('PAYX20') === 0;
+    const crop = ['PAYX3', 'PAYX4', 'PAYX5', 'PAYX6a', 'PAYX6b', 'PAYX7b', 'PAYX8', 'PAYX9', 'PAYX11', 'PAYX12', 'PAYX13', 'PAYX14', 'PAYX15', 'PAYX16', 'PAYX18', 'PAYX19a', 'PAYX19b', 'PAYX21b'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, ic: false, ics: '', db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    const H22 = 'margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.25';
+    const BTNR = 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap';
+    const btnX = BTN + 'border:1px solid ' + c.hair + ';background:' + c.raised + ';color:' + c.fa + ';cursor:not-allowed';
+    const LKS = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+    const LOCKI = { __html: LKS }, LOCKB = { __html: LKS.split('width="12" height="12"').join('width="18" height="18"') };
+    const PT = { Founder: 'v', Investor: 's', Advisor: 'a', 'Operating Partner': 'g', Explorer: 'n' };
+    const PP = (p) => pl('', '', PT[p]).s + ';align-self:flex-start;margin-bottom:4px';
+    const LCS = 'display:flex;flex-direction:column;gap:9px;padding:24px;background:' + c.raised + ';border-right:1px solid ' + c.hair + ';min-width:0;box-sizing:border-box';
+    const RCS = 'display:flex;flex-direction:column;gap:9px;padding:24px;min-width:0;box-sizing:border-box;background:' + c.card;
+    const LCARD = LCS + ';border:1px solid ' + c.hair + ';border-radius:16px', RCARD = RCS + ';border:1px solid ' + c.hair + ';border-radius:16px';
+    const TICK = (t) => R({ rs: 'display:flex;gap:8px;padding:3px 0', lead: '✓', ls: 'flex:none;font-weight:800;color:' + c.pos, t, ts: 'font-size:13px;font-weight:500;line-height:1.45' });
+    const EYEROW = (t) => R({ rs: 'display:flex;padding:12px 0 3px;margin-top:4px;border-top:1px solid ' + c.hair, eye: t });
+    const TOTRS = 'display:flex;gap:11px;align-items:baseline;padding:4px 0';
+    const TOTV = 'font:600 13px ' + MO + ';white-space:nowrap;color:' + c.ink, POSV = 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.pos;
+    const TOT = (t, val, o) => R(Object.assign({ rs: TOTRS, t, ts: 'font-size:13px;font-weight:500', v: val, vs: TOTV }, o || {}));
+    const DUE = (val) => TOT('Due today', val, { rs: TOTRS + ';padding-top:10px;margin-top:6px;border-top:1px solid ' + c.hair, ts: 'font-size:14px;font-weight:800', vs: 'font:800 19px ' + MO + ';white-space:nowrap;color:' + c.ink });
+    const TOTS = (list, due) => list.map((x, i) => TOT(x[0], x[1], { sub: x[2] || false, vs: x[3] ? POSV : TOTV, rs: i ? TOTRS : TOTRS + ';margin-top:8px;padding-top:12px;border-top:1px solid ' + c.hair })).concat([DUE(due)]);
+    const BASE = [['Subtotal', '[$20.00]'], ['VAT', '[$1.00]', 'where it applies']];
+    const PROMOT = [['Subtotal', '[$20.00]'], ['Discount · [LAUNCH20]', '−[$4.00]', false, 1], ['VAT', '[$0.80]', 'where it applies']];
+    const PV = { prof: 'Founder', name: 'Validate + Build', tag: 'Prove the idea, then build the company.', m: '[$20]', ai: '[$5.00]', gb: '10 GB', lines: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Venture-readiness scoring', 'Accept up to 10 introductions a month'], tot: BASE, due: '[$21.00]' };
+    const PR = { prof: 'Founder', name: 'Raise + Grow', tag: '[Raise the round, then grow the company.]', m: '[$100]', ai: '[$25.00]', gb: '100 GB', lines: ['Everything in Validate + Build', 'Cap table scenarios', '[Data room with access control]', '[Unlimited introductions]'], tot: [['Subtotal', '[$100.00]'], ['VAT', '[$5.00]', 'where it applies']], due: '[$105.00]' };
+    const PI = { prof: 'Investor', name: 'Investor Pro', tag: '[Run deal flow, diligence and your portfolio in one place.]', m: '[$150]', ai: '[$37.50]', gb: '250 GB', lines: ['[Unlimited deal flow]', '[Due diligence rooms]', '[Portfolio reporting]'], tot: [['Subtotal', '[$150.00]'], ['VAT', '[$7.50]', 'where it applies']], due: '[$157.50]' };
+    const PA = { prof: 'Advisor', name: 'Advisor Pro', tag: '[Run a paid advisory practice.]', m: '[$20]', ai: '[$5.00]', gb: '10 GB', lines: ['[Paid office hours]', '[Engagements and invoicing]'], tot: BASE, due: '[$21.00]' };
+    const PO = { prof: 'Operating Partner', name: 'Operating Partner Pro', tag: '[Win and deliver work for founders.]', m: '[$20]', ai: '[$5.00]', gb: '10 GB', lines: ['[Pipeline and proposals]', '[Delivery workspace]'], tot: BASE, due: '[$21.00]' };
+    const BIG = 'font:800 30px ' + MO + ';letter-spacing:-.02em;color:' + c.ink;
+    const LEFT = (p, o) => { o = o || {}; const yr = o.yr;
+      return K({ cs: o.cs || LCS, eye: '● ' + p.prof, es: PP(p.prof), title: p.name, hs: 'margin:0;font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.25', ths: 'display:flex;flex-direction:column;align-items:flex-start;gap:9px', meta: p.tag, ms: 'font-size:13px;color:' + c.mu + ';line-height:1.5', tog: seg(['Monthly', 'Yearly · Save [15]%'], yr ? 'Yearly · Save [15]%' : 'Monthly'),
+        rows: [R({ rs: 'display:flex;padding:6px 0 0', pill: { t: yr ? '[$17]' : p.m, s: BIG }, t: yr ? '/ month, [$204] billed yearly' : '/ month', ts: 'font-size:13px;color:' + c.mu, sub: (yr ? 'Renews on [21 Oct 2027].' : 'Renews on [21 Nov].') + ' Cancel any time from Billing.', tags: yr ? [pl('', 'Save [15]%', 'g')] : false })].concat(o.extra || []).concat([EYEROW('INCLUDED'), TICK(p.ai + ' of AI a month'), TICK(p.gb + ' storage')]).concat(p.lines.map(TICK)).concat(TOTS(o.tot || p.tot, o.due || p.due)) }); };
+    const APS = 'display:flex;align-items:center;justify-content:center;flex:1;min-height:44px;border-radius:9px;background:#000000;color:#ffffff;font:600 15px ' + SG + ';box-sizing:border-box;cursor:pointer' + (dark ? ';border:1px solid #ffffff' : '');
+    const APPLE = R({ rs: 'display:flex;padding:0', t: 'Apple Pay', ts: APS });
+    const LN1 = 'flex:1;height:1px;background:' + c.hair;
+    const ORLINE = R({ rs: 'display:flex;align-items:center;gap:10px;padding:8px 0 4px', lead: ' ', ls: LN1, t: 'or pay by card', ts: 'flex:1;text-align:center;font-size:12px;color:' + c.mu + ';white-space:nowrap', v: ' ', vs: LN1 });
+    const VW = ';width:140px;flex:none;margin-top:17px';
+    const IN2 = (eye, a, b, o) => R(Object.assign({ rs: 'display:flex;gap:10px;align-items:flex-start;padding:4px 0', eye, t: a, ts: FIE, v: b, vs: FIE + VW }, o || {}));
+    const FORM = (o) => { o = o || {}; const f = o.filled, lk = o.locked ? ';background:' + c.raised + ';color:' + c.mu : '', FI = FIN + ';font-family:' + MO + lk;
+      return [field('CARD NUMBER', f ? 'Visa · •••• •••• •••• 4242' : '1234 1234 1234 1234', { ts: f ? FI : FIE }), IN2('EXPIRY · CVC', f ? (o.expired ? '08 / 24' : '08 / 28') : 'MM / YY', f ? '•••' : 'CVC', f ? { ts: FI + (o.expired ? ';border:1.5px solid ' + c.neg : ''), vs: FI + VW, sub: o.expired ? 'This card has expired.' : false, ss: 'font-size:12px;font-weight:700;color:' + c.neg } : {}), IN2('COUNTRY · POSTCODE', 'Portugal ▾', f ? '[1000-001]' : 'Postcode', { ts: FIN + lk, vs: (f ? FI : FIE) + VW })]; };
+    const PROMO = R({ rs: 'display:flex;padding:4px 0 0', t: 'Have a promo code?', ts: 'font-size:13px;font-weight:700;color:' + c.vt + ';cursor:pointer' });
+    const PAYS = btnP + ';width:100%;min-height:44px;font-size:14px';
+    const PAYROW = (t, s, btns) => R({ rs: 'display:flex;padding:8px 0 0', btns: btns || [{ t, s: s || PAYS }] });
+    const SECURE = [R({ rs: 'display:flex;gap:7px;align-items:flex-start;padding:6px 0 0', ic: LOCKI, ics: 'display:inline-flex;flex:none;margin-top:3px;color:' + c.mu, t: 'Paid securely through Stripe. Axal VC never stores your card details.', ts: 'font-size:12px;color:' + c.mu + ';line-height:1.5', sub: 'Sold by Axal VC Management LLC.', ss: 'font-size:12px;color:' + c.mu })];
+    const RIGHT = (o) => { o = o || {}; const mid = o.mid || [APPLE, ORLINE].concat(FORM(o));
+      return K({ cs: o.cs || RCS, eye: o.eye || false, title: 'Payment', hs: H18, meta: '×', ms: 'font-size:22px;line-height:1;color:' + c.mu + ';cursor:pointer', rows: (o.pre || []).concat(mid).concat(o.nopromo ? [] : [PROMO]).concat([PAYROW(o.pay || 'Pay [$21.00]', o.payS, o.btns)]).concat(o.post || []).concat(SECURE) }); };
+    const SHS = (w, two, abs, top) => (abs ? 'position:absolute;top:' + (top || 56) + 'px;left:50%;transform:translateX(-50%);z-index:4;' : '') + 'width:' + (w ? w + 'px' : '100%') + ';max-width:100%;background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(24,24,27,.28);box-sizing:border-box;' + (two ? 'display:grid;grid-template-columns:360px minmax(0,1fr)' : 'display:flex;flex-direction:column;gap:14px;padding:26px');
+    const SHEET2 = (l, r, abs, top) => ({ s: SHS(880, 1, abs, top), blocks: [l, r] });
+    const SHEET1 = (blocks, abs, w) => ({ s: SHS(w == null ? 560 : w, 0, abs), blocks });
+    const PCARD = (o) => K({ cs: CARD + (o.cur ? ';border-color:' + c.lavE + ';box-shadow:0 0 0 3px ' + c.lav : ''), eye: o.eye, title: o.name, hs: 'margin:0;font-size:17px;font-weight:800;letter-spacing:-.01em', note: o.tag || false, tags: o.tags || false, rows: [R({ rs: 'display:flex;padding:2px 0 6px', pill: { t: o.price, s: 'font:800 26px ' + MO + ';letter-spacing:-.02em;color:' + c.ink }, t: o.per || '', ts: 'font-size:12.5px;color:' + c.mu })].concat(o.lines.map(TICK)), btns: o.btn ? [o.btn] : false, bs: 'display:flex', foot: o.foot || false });
+    const CUR = { t: 'Current plan', s: btnX + ';flex:1' }, UPG = { t: 'Upgrade', s: btnS + ';flex:1' };
+    const FREE = { eye: 'FREE', name: 'Free', tag: 'Start a venture and see how StudioOS works.', price: 'Free', lines: ['1 GB storage', 'AI runs from AI tokens you top up', '[1] startup'], btn: CUR };
+    const VB = { eye: 'VALIDATE + BUILD', name: 'Validate + Build', tag: 'Prove the idea, then build the company.', price: '[$20]', per: '/ month', lines: ['[$5.00] of AI a month', '10 GB storage', 'Unlimited startups', 'Venture-readiness scoring'], btn: UPG };
+    const RG = { eye: 'RAISE + GROW', name: 'Raise + Grow', tag: '[Raise the round, then grow the company.]', price: '[$100]', per: '/ month', lines: ['[$25.00] of AI a month', '100 GB storage', 'Everything in Validate + Build', 'Cap table scenarios'], btn: UPG };
+    const HERO = K({ cs: 'display:flex;flex-direction:column;align-items:center;gap:12px;padding:6px 0 2px;min-width:0', title: 'Pricing', ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:32px;font-weight:800;letter-spacing:-.02em', note: 'One plan per profile. Every paid plan includes AI and storage.', ns: 'margin:0;font-size:14px;color:' + c.mu + ';text-align:center', tbar: { search: false, chips: ['Founder', 'Investor', 'Advisors', 'Operating Partners', 'Models'].map((t, i) => tag(t, !i)) }, tags: seg(['Monthly', 'Yearly · Save [15]%'], 'Monthly') });
+    const CR = [['AI allowance', 'AI tokens you top up', '[$5.00] of AI a month', '[$25.00] of AI a month'], ['Startups', '[1]', 'Unlimited', 'Unlimited'], ['Interviews and OKRs', '[5] a month', 'Unlimited', 'Unlimited'], ['Venture-readiness scoring', 'Not included', 'Included', 'Included'], ['Introductions', '[2] a month', 'Up to 10 a month', 'Unlimited'], ['Cap table scenarios', 'Not included', 'Not included', 'Included'], ['STORAGE'], ['Storage', '1 GB', '10 GB', '100 GB']];
+    const CMP = TB({ title: 'Compare plans', pager: false, gc: '1.6fr 1fr 1fr 1fr', cols: ['', 'Free', 'Validate + Build', 'Raise + Grow'], rows: CR.map(r => r.length === 1 ? [CL('Storage', { ts: eyeS + ';color:' + c.ink }), '', '', ''] : [CL(r[0], BD)].concat(r.slice(1).map(x => x === 'Not included' ? CL(x, MU) : CL(x)))), foot: 'The Storage group closes the comparison; it is drawn on the Storage canvas.' });
+    const NOTEK = K({ cs: PLAIN, rows: [INFOROW('Upgrade opens Checkout over this page. The address does not change.')] });
+    const PAGE = (n) => [col([HERO])].concat([FREE, VB, RG].map(o => col([PCARD(o)], 2))).concat(n ? [col([NOTEK])] : []).concat([col([CMP])]);
+    const ERR = (t) => R({ rs: NOTE('r') + ';margin-bottom:6px', lead: '!', ls: 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;background:' + c.neg + ';color:#ffffff;font:800 11px ' + SG, t, ts: 'font-size:13px;font-weight:600;line-height:1.5;color:' + c.ink });
+    const INFOR = (t) => R({ rs: NOTE('v') + ';margin-bottom:6px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5' });
+    const PH = (t, h) => K({ cs: 'display:flex;align-items:center;justify-content:center;min-height:' + h + 'px;border-radius:12px;background:' + c.raised + ';border:1px dashed ' + c.mu, note: t, ns: 'margin:0;font:600 11px ' + MO + ';color:' + c.mu });
+    const BANNER = (tone, msg, btns, dis) => K({ cs: 'display:flex;flex-direction:column;padding:12px 16px;border-radius:10px;background:' + (tone === 'r' ? c.negBg : c.amBg) + ';border:1px solid ' + (tone === 'r' ? c.negE : c.amE), rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap', lead: '!', ls: 'display:grid;place-items:center;width:22px;height:22px;border-radius:999px;flex:none;font:800 12px ' + SG + ';' + (tone === 'r' ? 'background:' + c.neg + ';color:#ffffff' : 'background:#fcd34d;color:#18181b'), t: msg, ts: 'font-size:13.5px;font-weight:600;line-height:1.5;color:' + c.ink, btns, act: dis ? 'Dismiss for today' : false, as: btnG })] });
+    const ACC = (ph) => [K({ cs: PLAIN + ';align-items:center;text-align:center;gap:10px', glyph: '✓', title: 'You’re on Validate + Build', ths: 'display:flex;justify-content:center', hs: H22 + ';text-align:center', note: 'Payment accepted. Your receipt is on its way.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center' }), K({ cs: SEC, title: 'Receipt', hs: eyeS, rows: [TOT('Paid', '[$21.00]'), TOT('Card', 'Visa ending [4242]'), TOT('Date', '[21 Oct 2026]'), TOT('Invoice', '[INV-0042]'), R({ rs: 'display:flex;padding:4px 0', t: 'Receipt sent to [n••••@example.com]', ts: 'font-size:12.5px;color:' + c.mu })] }), K({ cs: SEC, title: 'What you get now', hs: eyeS, rows: ['[$5.00] of AI a month, starting today', '10 GB storage (you use [640 MB])', 'Unlimited startups', 'Venture-readiness scoring'].map(TICK) }), K({ cs: SEC, btns: ph ? [{ t: 'Go to Build', s: btnP + ';width:100%' }, { t: 'Open Billing', s: btnS + ';width:100%' }, { t: 'Close', s: btnS + ';width:100%' }] : [{ t: 'Close', s: btnS }, { t: 'Open Billing', s: btnS }, { t: 'Go to Build', s: btnP }], bs: ph ? 'display:flex;flex-direction:column;gap:8px' : BTNR })];
+    const OPT = (t, on, d) => R({ rs: 'display:flex;gap:10px;align-items:center;padding:11px 12px;margin-bottom:7px;border-radius:10px;box-sizing:border-box;border:1px solid ' + (on ? c.lavE : c.hair) + ';background:' + (on ? c.lav : c.card), lead: on ? '◉' : '○', ls: 'font-size:15px;flex:none;color:' + (on ? c.vt : c.mu), t, ts: 'font-size:13px;font-weight:' + (on ? 700 : 600), v: d || false, vs: pl('', '', 'v').s });
+    const SAVED = [R({ rs: 'display:flex;padding:0 0 4px', eye: 'PAY WITH' }), OPT('Visa ending [4242] · expires [08/28]', 1, 'Default'), OPT('Apple Pay', 0), OPT('A new card', 0), R({ rs: 'display:flex;padding:0', t: 'Choosing A new card shows the card form here.', ts: 'font-size:12px;color:' + c.mu })];
+    const NEGB = ';border:1.5px solid ' + c.neg, NEGS = 'font-size:12.5px;font-weight:700;line-height:1.45;color:' + c.neg;
+    const PF = (code, o) => R(Object.assign({ rs: 'display:flex;gap:8px;align-items:flex-start;padding:4px 0', eye: 'PROMO CODE', t: code, ts: FIN + ';font-family:' + MO, v: 'Apply', vs: btnSm + ';flex:none;margin-top:17px;min-height:38px' }, o || {}));
+    const CHIPR = (t) => R({ rs: 'display:flex;gap:8px;align-items:center;padding:4px 0', pill: pl('✓', t, 'g'), act: 'Remove', as: btnG });
+    const PCK = (eye, rows) => K({ cs: CARD + ';padding:18px', eye, title: 'Promo code', hs: 'margin:0;font-size:14px;font-weight:800', rows });
+    const CHA = K({ cs: CARD + ';padding:20px', eye: 'A · UPGRADE', title: 'From Validate + Build to Raise + Grow', hs: H18, rows: [TOT('Raise + Grow, [21 Oct]–[21 Nov]', '[$100.00]'), TOT('Unused time on Validate + Build', '−[$12.90]', { vs: POSV }), DUE('[$87.10]'), R({ rs: NOTE('v') + ';margin-top:8px', lead: 'i', ls: INFO, t: 'Your plan changes now. From [21 Nov], [$100]/month.', ts: 'font-size:13px;font-weight:600;line-height:1.5' }), EYEROW('WHAT CHANGES'), TOT('Storage', '10 GB → 100 GB'), TOT('AI allowance', '[$5.00] → [$25.00] a month'), R({ rs: 'display:flex;padding:6px 0 0', t: 'Pays with Visa ending [4242].', ts: 'font-size:12.5px;color:' + c.mu })], btns: [{ t: 'Confirm change', s: PAYS }], bs: 'display:flex' });
+    const CHB = K({ cs: CARD + ';padding:20px', eye: 'B · DOWNGRADE', title: 'From Raise + Grow to Validate + Build', hs: H18, rows: [R({ rs: NOTE('v'), lead: 'i', ls: INFO, t: 'Changes on [21 Nov], at the end of what you’ve paid for. Nothing is charged today.', ts: 'font-size:13px;font-weight:600;line-height:1.5' }), EYEROW('WHAT CHANGES'), TOT('Storage', '100 GB → 10 GB'), TOT('AI allowance', '[$25.00] → [$5.00] a month'), R({ rs: NOTE('a') + ';margin-top:8px', lead: '!', ls: 'font-weight:800;flex:none;color:' + c.amT, t: 'You use [62 GB]. After the change, new uploads pause until you are under 10 GB. Nothing is deleted.', ts: 'font-size:13px;font-weight:600;line-height:1.5;color:' + c.ink, btns: [{ t: 'See storage', s: btnG }] })], btns: [{ t: 'Confirm change', s: PAYS }], bs: 'display:flex' });
+    const BOXES = ['4', '8', '1', '', '', ''].map((d, i) => ({ t: d || '\u00a0', s: 'display:inline-grid;place-items:center;width:42px;height:50px;border-radius:7px;box-sizing:border-box;font:700 18px ' + MO + ';color:' + c.ink + ';background:' + c.card + ';border:' + (i === 3 ? '2px solid ' + c.vi : '1px solid ' + c.hair) }));
+    const STEP = { s: DLGS, blocks: dlg('Confirm it’s you', 'Plan changes need a fresh code from your authenticator app.', [K({ cs: SEC, rows: [R({ rs: 'display:flex;flex-direction:column;gap:7px', eye: 'C · AUTHENTICATOR CODE', tags: BOXES })] })], [{ t: 'Cancel', s: btnS }, { t: 'Confirm', s: btnP }]) };
+    const SKB = (w, h) => R({ rs: 'display:block;height:' + h + 'px;border-radius:7px;margin:7px 0;background:' + c.skel + ';width:' + w });
+    const LSK = K({ cs: LCS, rows: [SKB('34%', 22), SKB('72%', 26), SKB('92%', 14), SKB('58%', 32), SKB('40%', 34), SKB('100%', 1), SKB('84%', 14), SKB('76%', 14), SKB('80%', 14), SKB('70%', 14), SKB('100%', 1), SKB('100%', 16), SKB('100%', 22)] });
+    const RSK = K({ cs: RCS, title: 'Payment', hs: H18, meta: '×', ms: 'font-size:22px;line-height:1;color:' + c.mu, rows: [SKB('100%', 44), SKB('100%', 44), SKB('100%', 44), SKB('100%', 44), R({ rs: 'display:flex;padding:4px 0', t: 'Loading payment form…', ts: 'font-size:12.5px;color:' + c.mu }), PAYROW('Pay', btnX + ';width:100%;min-height:44px')].concat(SECURE) });
+    let lit = '', grid = G6, cols = [], pbar = false, minH = 900, ptopA = ['‹ Back', 'Checkout', ''], cropBg = dark ? '#060a14' : '#e6e4eb';
+    const GRIDN = (t) => 'display:grid;grid-template-columns:' + t + ';gap:14px;align-items:start';
+    const C1 = (b) => ({ s: 'display:flex;flex-direction:column;gap:10px;min-width:0', blocks: b });
+    const LAB = (t) => K({ cs: PLAIN, note: t, ns: eyeS });
+    const SUMR = (open) => K({ cs: CARD + ';padding:12px 14px', rows: [R({ rs: 'display:flex;gap:10px;align-items:center', t: 'Validate + Build · [$20]/month', ts: 'font-size:14px;font-weight:800', sub: 'Founder · renews [21 Nov] · due today [$21.00]', act: open ? 'Details ⌃' : 'Details ⌄', as: btnG })].concat(open ? [EYEROW('INCLUDED'), TICK('[$5.00] of AI a month'), TICK('10 GB storage')].concat(PV.lines.map(TICK)).concat(TOTS(BASE, '[$21.00]')) : []) });
+    const SH1 = (k) => SHEET1([k], 0, 0);
+    if (B === 'PAYX1') cols = PAGE(1);
+    else if (B === 'PAYX2' || B === 'PAYX21') { cols = PAGE().concat([DIMC, SHEET2(LEFT(PV), RIGHT(), 1)]); minH = 1020; }
+    else if (B === 'PAYX7') { cols = PAGE().concat([DIMC, SHEET1(ACC(), 1, 560)]); minH = 1020; }
+    else if (B === 'PAYX17') { cols = PAGE().concat([DIMC, SHEET2(LSK, RSK, 1)]); minH = 1020; }
+    else if (B.indexOf('PAYX10') === 0) { lit = 'Build'; const pg = PH('Build · page content, drawn on its own canvas', 220);
+      if (B === 'PAYX10a') cols = [col([BANNER('a', 'Your payment for Validate + Build on [21 Nov] didn’t go through. We’ll try again on [24 Nov]. Your plan stays on until [28 Nov].', [{ t: 'Update card', s: btnS }, { t: 'Pay now', s: btnP }], 1), pg])];
+      else if (B === 'PAYX10b') cols = [col([BANNER('a', 'Your bank needs you to confirm the payment for Validate + Build.', [{ t: 'Confirm payment', s: btnP }], 1), pg])];
+      else cols = [col([BANNER('r', 'Your plan ended on [28 Nov] because the payment didn’t go through. You’re on Free. Nothing was deleted.', [{ t: 'Restart Validate + Build', s: btnP }])]), col([K({ eye: 'BILLING', title: 'Your plan', rows: [R({ t: 'Validate + Build', sub: '[21 Nov] to [28 Nov] · the renewal didn’t go through', tags: [pl('!', 'Payment failed', 'r')] }), R({ t: 'Validate + Build', sub: 'From [28 Nov] · you’re on Free', tags: [pl('–', 'Ended', 'n')] })] })], 3), col([pg], 3)]; }
+    else if (crop) { grid = STACK;
+      if (B === 'PAYX3') { grid = GRIDN('360px minmax(0,1fr)'); cols = [C1([LAB('A · Yearly selected'), LEFT(PV, { cs: LCARD, yr: 1, tot: [['Subtotal', '[$204.00]'], ['VAT', 'None', 'VAT doesn’t apply to [United States]']], due: '[$204.00]' })]), C1([LAB('B · Returning member, saved card'), RIGHT({ cs: RCARD, mid: SAVED, pay: 'Pay [$204.00]' })])]; }
+      else if (B === 'PAYX4') { grid = GRIDN('repeat(3,minmax(0,1fr))'); cols = [C1([CHA]), C1([CHB]), STEP]; }
+      else if (B === 'PAYX5') { grid = GRIDN('repeat(3,minmax(0,1fr))'); cols = [
+        C1([PCK('APPLYING', [PF('[LAUNCH20]', { v: '◌ Applying…' })].concat(TOTS(BASE, '[$21.00]')))]),
+        C1([PCK('VALID', [CHIPR('[LAUNCH20] · 20% off for 3 months')].concat(TOTS(PROMOT, '[$16.80]')).concat([PAYROW('Pay [$16.80]')]))]),
+        C1([PCK('EXPIRED', [PF('[OLDCODE]', { ts: FIN + ';font-family:' + MO + NEGB, sub: 'This code has expired.', ss: NEGS })].concat(TOTS(BASE, '[$21.00]')))]),
+        C1([PCK('NOT FOR THIS PLAN', [PF('[INVESTOR10]', { ts: FIN + ';font-family:' + MO + NEGB, sub: 'This code doesn’t apply to Validate + Build.', ss: NEGS }), R({ rs: 'display:flex;padding:0 0 4px', t: 'It applies to: Raise + Grow', ts: 'font-size:12.5px;color:' + c.mu })].concat(TOTS(BASE, '[$21.00]')))]),
+        C1([PCK('COVERS THE FIRST PAYMENT', [CHIPR('[FIRSTMONTH] · first payment free')].concat(TOTS([['Subtotal', '[$20.00]'], ['Discount · [FIRSTMONTH]', '−[$20.00]', false, 1]], '[$0.00]')).concat([PAYROW('Start plan · [$0.00] today'), R({ rs: 'display:flex;padding:4px 0 0', t: 'Your code covers the first payment. Your card is saved for renewals.', ts: 'font-size:12.5px;color:' + c.mu + ';line-height:1.5' })]))])]; }
+      else if (B === 'PAYX6a') cols = [C1([RIGHT({ cs: RCARD, filled: 1, locked: 1, nopromo: 1, pay: '◌ Processing…', payS: PAYS + ';opacity:.75;cursor:progress', post: [R({ rs: 'display:flex;padding:2px 0', t: 'Don’t close this window.', ts: 'font-size:12.5px;font-weight:700;color:' + c.ink })] })])];
+      else if (B === 'PAYX6b') cols = [SHEET2(LEFT(PV), RIGHT({ pre: [INFOR('Your bank is asking you to confirm this payment.')], filled: 1, locked: 1, nopromo: 1, pay: '◌ Waiting for your bank…', payS: PAYS + ';opacity:.75;cursor:progress' }), 0), DIMC, { s: DLGS + 'position:absolute;top:120px;left:50%;transform:translateX(-50%);width:400px;z-index:4', blocks: [K({ cs: PLAIN, eye: '[BANK NAME] · SECURE CHECK', title: 'Confirm this payment', hs: H18, note: '[$21.00] to Axal VC Management LLC · [21 Oct 2026]' }), K({ cs: SEC, rows: [field('CODE SENT TO YOUR PHONE ENDING [12]', '[• • • • • •]', { ts: FIN + ';font-family:' + MO })] }), K({ cs: SEC, btns: [{ t: 'Cancel', s: btnS }, { t: 'Confirm', s: btnP }], bs: BTNR, foot: 'This window is your bank’s, opened by Stripe.' })] }];
+      else if (B === 'PAYX7b') cols = [SHEET1([K({ cs: PLAIN + ';align-items:center;text-align:center;gap:10px', glyph: '✓', title: 'You’re on Raise + Grow', ths: 'display:flex;justify-content:center', hs: H22 + ';text-align:center', note: 'Cap table scenarios are unlocked.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center' }), K({ cs: SEC, btns: [{ t: 'Close', s: btnS }, { t: 'Open Billing', s: btnS }, { t: 'Back to [Cap table]', s: btnP }], bs: BTNR })], 0, 0)];
+      else if (B === 'PAYX8') { grid = GRIDN('repeat(2,minmax(0,1fr))'); cols = [SH1(K({ cs: PLAIN + ';align-items:center;text-align:center;gap:10px', glyph: '◌', title: 'Payment received. Activating your plan…', ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:17px;font-weight:800;text-align:center', note: 'This usually takes a few seconds.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center', rows: [R({ rs: 'display:flex;padding:8px 0 0', bar: { trs: 'display:block;width:320px;height:8px;border-radius:999px;background:' + c.raised + ';border:1px solid ' + c.hair + ';overflow:hidden', fs: FILL('62%'), t: '', w: false } })] })), SH1(K({ cs: PLAIN + ';gap:10px', glyph: '◷', title: 'Your payment went through, and your plan is still being switched on.', hs: 'margin:0;font-size:17px;font-weight:800;line-height:1.35', note: 'You can close this; we’ll tell you when it’s ready.', ns: 'margin:0;font-size:13px;color:' + c.mu, btns: [{ t: 'Open Billing', s: btnG }, { t: 'Close', s: btnS }], bs: BTNR }))]; }
+      else if (B === 'PAYX9' || B === 'PAYX21b') { const REF = [['CARD DECLINED', 'Your card was declined. Your bank didn’t say why. Try another card, or contact your bank. You were not charged.'], ['INSUFFICIENT FUNDS', 'Your card doesn’t have enough funds for this payment. You were not charged.'], ['EXPIRED CARD', 'This card has expired. Use another card. You were not charged.', 1], ['AUTHENTICATION FAILED', 'Your bank couldn’t confirm it was you. Try again, or use another card. You were not charged.'], ['GENERIC', 'Something went wrong and the payment didn’t go through. You were not charged. Try again in a moment.']];
+        const RB = [{ t: 'Try again', s: btnP + ';flex:1;min-height:44px' }, { t: 'Use another method', s: btnS + ';flex:1;min-height:44px' }];
+        const card = (x) => C1([RIGHT({ cs: RCARD, eye: x[0], pre: [ERR(x[1])], filled: 1, expired: x[2], nopromo: 1, btns: RB })]);
+        if (B === 'PAYX21b') cols = [card(REF[0])]; else { grid = GRIDN('repeat(3,minmax(0,1fr))'); cols = REF.map(card).concat([C1([K({ cs: CARD + ';background:' + c.raised, title: 'Words, never codes', note: 'A fraud-related decline uses the Card declined words. No refusal shows a Stripe code or the bank’s own message. Each refusal is announced once and takes focus.', ns: 'margin:0;font-size:13px;line-height:1.55;color:' + c.mu })])]); } }
+      else if (B === 'PAYX11') { grid = GRIDN('repeat(2,minmax(0,1fr))'); const PAID = CL('', { pill: pl('✓', 'Paid', 'g') }); cols = [C1([K({ eye: 'BILLING · YOUR PLAN', title: 'Validate + Build', tags: [pl('●', 'Founder', 'v'), pl('✓', 'Active', 'g')], rows: [R({ t: 'Renews [21 Nov] · [$20] a month', sub: 'Visa ending [4242]' })], btns: [{ t: 'Change plan', s: btnS }, { t: 'Cancel plan', s: btnG }] })]), { s: DLGS, blocks: dlg('Cancel Validate + Build?', 'It stays on until [21 Nov]. After that you’re on Free: [$5.00] of AI a month and 10 GB storage end; files stay.', [], [{ t: 'Cancel at period end', s: btnS }, { t: 'Keep plan', s: btnP }]) }, C1([K({ eye: 'BILLING · CANCELLED', title: 'Validate + Build', tags: [pl('●', 'Founder', 'v'), pl('◷', 'Ends [21 Nov]', 'a')], rows: [R({ t: 'Cancelled on [21 Oct]. You’re on Free from [21 Nov].', sub: 'Files stay.' })], btns: [{ t: 'Resume plan', s: btnS }] })]), C1([TB({ title: 'Invoices', pager: false, gc: '1fr 1.3fr .8fr .8fr 1fr .5fr', cols: ['Invoice', 'Plan', 'Amount', 'Status', 'Date', ''], rows: [[CL('[INV-0057]', MN), 'Validate + Build', CL('[$21.00]', MN), PAID, CL('[21 Nov 2026]', MN), CL('PDF ↓', LK)], [CL('[INV-0042]', MN), 'Validate + Build', CL('[$21.00]', MN), PAID, CL('[21 Oct 2026]', MN), CL('PDF ↓', LK)]], foot: 'Two rows of the existing invoice list, not redesigned.' })])]; }
+      else if (B === 'PAYX12') { grid = GRIDN('minmax(0,1fr) 360px'); cols = [C1([LAB('From a paywall'), K({ rows: [R({ rs: 'display:flex;gap:12px;align-items:center', ic: LOCKB, ics: 'display:grid;place-items:center;width:40px;height:40px;border-radius:10px;flex:none;background:' + c.lav + ';color:' + c.vt, t: 'Cap table scenarios are on Raise + Grow.', ts: 'font-size:15px;font-weight:800', sub: 'Compare rounds and exits side by side.' })], btns: [{ t: 'Upgrade to Raise + Grow', s: btnP }] }), LAB('From Account › Usage › Limits'), K({ eye: 'ACCOUNT › USAGE › LIMITS', title: 'Included with your plan', rows: [R({ t: 'Free plan: no AI allowance.', sub: 'AI runs from AI tokens you top up.' })], btns: [{ t: 'Compare plans', s: btnG }, { t: 'Upgrade', s: btnS }] })]), C1([LAB('The sheet opens on Raise + Grow'), LEFT(PR, { cs: LCARD, extra: [R({ rs: NOTE('v') + ';margin-top:8px', lead: '↑', ls: 'flex:none;font-weight:800;color:' + c.vt, t: 'Unlocks: Cap table scenarios', ts: 'font-size:13px;font-weight:700' })] })])]; }
+      else if (B === 'PAYX13') { grid = GRIDN('360px minmax(0,1fr)'); cols = [C1([LAB('Investor Basic → Investor Pro'), LEFT(PI, { cs: LCARD })]), { s: GRIDN('repeat(2,minmax(0,1fr))') + ';min-width:0', blocks: [K({ cs: PLAIN + ';grid-column:1/-1', note: 'The Investor tab, for context', ns: eyeS }), PCARD({ eye: 'INVESTOR BASIC', name: 'Investor Basic', tag: '[See the deals the studio shares.]', price: 'Free', lines: ['1 GB storage', 'AI runs from AI tokens you top up'], btn: CUR }), PCARD({ eye: 'INVESTOR PLUS', name: 'Investor Plus', tag: '[More deal flow and saved searches.]', tags: [pl('○', 'Not offered yet', 'n')], price: '[$50]', per: '/ month', lines: ['[$12.50] of AI a month', '50 GB storage'] }), PCARD({ eye: 'INVESTOR PRO', name: 'Investor Pro', tag: '[Run deal flow, diligence and your portfolio in one place.]', price: '[$150]', per: '/ month', lines: ['[$37.50] of AI a month', '250 GB storage'], btn: UPG }), PCARD({ eye: 'INSTITUTIONAL', name: 'Institutional', tag: '[For funds and family offices.]', price: 'Custom', lines: ['[Storage and seats to suit]'], btn: { t: 'Contact sales', s: btnS + ';flex:1' }, foot: 'Opens the contact page.' }), K({ cs: CARD + ';grid-column:1/-1', eye: 'LP ACCESS', title: 'Free with an Axal VC fund investment', note: '10 GB personal storage. Not bought here.' })] }]; }
+      else if (B === 'PAYX14') { grid = GRIDN('360px 360px minmax(0,1fr)'); cols = [C1([LAB('Advisor Basic → Advisor Pro'), LEFT(PA, { cs: LCARD })]), C1([LAB('Partner Basic → Operating Partner Pro'), LEFT(PO, { cs: LCARD })]), C1([LAB('A paying Operating Partner’s tab'), PCARD({ eye: 'PARTNER BASIC', name: 'Partner Basic', price: 'Free', lines: ['1 GB storage', 'AI runs from AI tokens you top up'], btn: { t: 'Switch to Basic', s: btnS + ';flex:1' } }), PCARD({ eye: 'OPERATING PARTNER PRO', name: 'Operating Partner Pro', price: '[$20]', per: '/ month', lines: ['[$5.00] of AI a month', '10 GB storage'], btn: CUR, cur: 1 }), PCARD({ eye: 'PARTNER FIRM', name: 'Partner Firm', price: 'Custom', lines: ['[Seats for your whole firm]'], btn: { t: 'Contact sales', s: btnS + ';flex:1' } })])]; }
+      else if (B === 'PAYX15') cols = [SH1(K({ cs: PLAIN + ';gap:10px', eye: '● Explorer', es: PP('Explorer'), title: 'Choose your profile first', hs: H22, meta: '×', ms: 'font-size:22px;line-height:1;color:' + c.mu, note: 'Plans belong to a profile: Founder, Investor, Advisor or Operating Partner.', ns: 'margin:0;font-size:13.5px;line-height:1.55;color:' + c.mu, btns: [{ t: 'Choose a profile', s: btnP }], foot: 'You can still buy AI tokens without a plan.' }))];
+      else if (B === 'PAYX16') { grid = GRIDN('repeat(2,minmax(0,1fr))'); const STAFF = Object.assign({}, VB, { btn: { t: 'Staff account · no plan needed', s: btnX + ';flex:1' } }); cols = [C1([LAB('Admin'), PCARD(STAFF)]), C1([LAB('Super Admin'), PCARD(STAFF), K({ eye: 'CHECKOUT · VALIDATE + BUILD', title: 'Payment', tags: [pl('!', 'Test mode', 'a'), { t: 'No real money moves.', s: 'font-size:12.5px;font-weight:600;color:' + c.ink }], btns: [{ t: 'Payments ›', s: btnG }, { t: 'Promo codes ›', s: btnG }], foot: 'Shown in the sheet’s header while Stripe is in test mode.' })])]; }
+      else if (B === 'PAYX18') { grid = GRIDN('repeat(3,minmax(0,1fr))'); cols = [SH1(K({ cs: PLAIN + ';gap:10px', glyph: '!', title: 'Checkout couldn’t start.', hs: 'margin:0;font-size:17px;font-weight:800', note: 'You were not charged. Try again in a moment.', ns: 'margin:0;font-size:13px;color:' + c.mu, btns: [{ t: 'Try again', s: btnP }] })), SH1(K({ cs: PLAIN + ';gap:10px', eye: '● Founder', es: PP('Founder'), title: 'Validate + Build', hs: 'margin:0;font-size:17px;font-weight:800', note: 'This plan’s price couldn’t be read just now. That doesn’t mean it’s free.', ns: 'margin:0;font-size:13px;line-height:1.55;color:' + c.ink, rows: [R({ rs: 'display:flex;padding:4px 0', pill: { t: 'Price couldn’t be read', s: 'font:700 15px ' + SG + ';color:' + c.mu }, t: '' })], btns: [{ t: 'Try again', s: btnS }] })), SH1(K({ cs: PLAIN + ';gap:10px', glyph: '○', title: 'Payments aren’t set up here.', hs: 'margin:0;font-size:17px;font-weight:800', note: 'Nothing can be bought here yet. You were not charged.', ns: 'margin:0;font-size:13px;color:' + c.mu, btns: [{ t: 'Close', s: btnS }] }))]; }
+      else if (B === 'PAYX19a') { cropBg = c.lav; cols = [C1([K({ cs: CARD + ';max-width:420px;width:100%;margin:36px auto;padding:28px;gap:14px', eye: 'AXAL VC', title: 'Sign in', hs: H22, note: 'Sign in to choose Validate + Build.', ns: 'margin:0;font-size:13.5px;color:' + c.ink, rows: [field('EMAIL', 'name@example.com', { ts: FIE }), PAYROW('Email me a sign-in link')], btns: [{ t: 'Continue with Google', s: btnS + ';flex:1' }, { t: 'Continue with LinkedIn', s: btnS + ';flex:1' }], foot: 'After you sign in, Checkout opens on Validate + Build.' })])]; }
+      else if (B === 'PAYX19b') cols = [SH1(K({ cs: PLAIN + ';gap:10px', eye: '● Investor', es: PP('Investor'), title: 'Investor plans are for investor accounts.', hs: H22, meta: '×', ms: 'font-size:22px;line-height:1;color:' + c.mu, note: 'You are signed in with a Founder profile.', ns: 'margin:0;font-size:13.5px;color:' + c.mu, btns: [{ t: 'See Founder plans', s: btnG }] }))]; }
+    else if (phone) { grid = STACK; const PG = (b) => [C1(b)];
+      const PAYP = [{ t: 'Pay [$21.00]', s: btnP + ';flex:1;min-height:48px;font-size:15px' }];
+      if (B === 'PAYX20a') { cols = PG([SUMR(0), K({ cs: PLAIN, rows: [APPLE, ORLINE].concat(FORM()).concat([PROMO]).concat(SECURE) })]); pbar = PAYP; }
+      else if (B === 'PAYX20b') { cols = PG([SUMR(1), K({ cs: PLAIN, rows: [APPLE, ORLINE].concat(FORM()) })]); pbar = PAYP; }
+      else if (B === 'PAYX20c') { ptopA = ['', 'Checkout', '×']; cols = PG(ACC(1)); }
+      else if (B === 'PAYX20d') { cols = PG([SUMR(0), K({ cs: PLAIN, rows: [ERR('Your card doesn’t have enough funds for this payment. You were not charged.')].concat(FORM({ filled: 1 })).concat(SECURE) })]); pbar = [{ t: 'Use another method', s: btnS + ';flex:1' }, { t: 'Try again', s: btnP + ';flex:1' }]; }
+      else { ptopA = ['☰', 'Billing', '']; cols = PG([BANNER('a', 'Your payment for Validate + Build on [21 Nov] didn’t go through. We’ll try again on [24 Nov]. Your plan stays on until [28 Nov].', [{ t: 'Update card', s: btnS }, { t: 'Pay now', s: btnP }], 1), K({ eye: 'BILLING · YOUR PLAN', title: 'Validate + Build', tags: [pl('●', 'Founder', 'v'), pl('!', 'Payment failed', 'r')], rows: [R({ t: 'Retrying [24 Nov] · stays on until [28 Nov]', sub: 'Visa ending [4242]' })], btns: [{ t: 'Change plan', s: btnS }] })]); } }
+    const rows = ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'].map(t => ({ t, href: '/' + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === lit ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const POSG = B === 'PAYX7' || B === 'PAYX7b' || B === 'PAYX20c';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr);min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + cropBg,
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed', group: '[Acme Robotics] ▾', groupS: 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: '', badgeS: 'display:none', iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, ptopL: ptopA[0], ptopT: ptopA[1], ptopR: ptopA[2], ptopBS: 'display:grid;place-items:center;min-width:64px;height:44px;padding:0 8px;border:0;background:transparent;color:' + c.vt + ';font:700 15px ' + SG + ';cursor:pointer',
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: false, crumb: false, crumbHref: '#', crumbS: '', title: '', h1S: '', hpills: false, hbtns: [], hlines: [],
+      scope: false, scopeTip: '', scopeS: '', gate: false, gateS: '', tabsL: 'Checkout', tabs: false, tabRowS: '', period: false,
+      segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols, pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      spine: false, spineTip: '', spineS: '', eadS: '', spineT: '',
+      glyphS: POSG ? 'display:grid;place-items:center;width:48px;height:48px;border-radius:999px;background:' + c.posBg + ';color:' + c.pos + ';font:800 22px ' + SG + ';border:1px solid ' + c.posE : 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:1fr 1fr;gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '', dbS: '', dbM: '', dbD: '',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

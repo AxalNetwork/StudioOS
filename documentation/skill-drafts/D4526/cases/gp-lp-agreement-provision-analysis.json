@@ -1,0 +1,36 @@
+{
+  "skill": "gp-lp-agreement-provision-analysis",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "document": "LPA-2",
+        "clause_8": "Quarterly reporting within 45 days",
+        "side_letter": "Reporting within 30 days",
+        "precedence_rule": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "LPA-2",
+      "45",
+      "30"
+    ],
+    "must_say_not_recorded": [
+      "precedence rule"
+    ],
+    "must_not_include": [
+      "45 days definitely controls"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why precedence rule is missing rather than inventing it.",
+    "Do not assert: 45 days definitely controls.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "LPA-2; 45; 30. precedence rule: Not recorded. Human review required."
+}

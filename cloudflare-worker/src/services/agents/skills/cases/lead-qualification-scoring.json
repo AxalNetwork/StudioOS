@@ -1,0 +1,34 @@
+{
+  "skill": "lead-qualification-scoring",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Lead Qualification and Scoring",
+        "task_scope": "Scores individual leads on fit, need, authority, urgency and access with explicit evidence and unknowns.",
+        "evidence": [
+          "lead qualification evidence and disposition"
+        ],
+        "omitted_field": "decision timeline"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for lead qualification evidence and disposition."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "lead qualification evidence and disposition"
+    ],
+    "must_say_not_recorded": [
+      "decision timeline"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

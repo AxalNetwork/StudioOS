@@ -1,0 +1,622 @@
+Let me ground these in the current code before drafting prompts.
+
+I dug into each area. Two key findings to bake into the prompts:
+
+- **Admin contracts bug:** `cloudflare-worker/src/routes/admin-contracts.ts:69` reads from the `documents` table, but actual sent/signed contracts go into `esign_envelopes` + `esign_recipients` (`cloudflare-worker/src/routes/esign.ts`). Two disconnected systems → admin sees nothing.
+- **TOTP secret** is stored in the `users.password_hash` column (`auth.ts:298`) — overwriting the password. SMS 2FA prompt has to reckon with this.
+
+Here are the prompts. Each starts with a bird's-eye objective, then the breakdown.
+
+---
+
+## Replit Prompt A — Bird's-eye view & sequencing
+
+```
+We're shipping six related workstreams. Read this first to understand how they fit
+together. Each downstream prompt is a separate PR.
+
+  1. SECURITY HARDENING (Prompt B)
+     Audit + fix vulnerabilities. Move contracts and PII to the safest Cloudflare
+     solution (R2 with object-level encryption + access-gated download URLs, D1
+     with column-level encryption for PII fields, KV only for ephemeral tokens).
+     Foundation — ship first.
+
+  2. CONTRACTS BUG (Prompt C)
+     Admin Console "All Contracts" shows nothing because /api/admin/contracts reads
+     `documents` while real contracts live in `esign_envelopes`. Wire admin views
+     to read both tables (union view) and migrate going forward to esign_envelopes
+     as the single source.
+
+  3. DUE DILIGENCE (Prompt D)
+     New /admin/due-diligence module. End-to-end DD: technical, profiling,
+     financial, legal, behavioural. Internal + external data ingestion, expert
+     routing, Axal-VC-branded PDF report, email + in-app notifications via
+     noreply@axal.vc. Risk scoring + investment-decision support.
+
+  4. INVESTOR INPUT FOR MARKET INTEL (Prompt E)
+     Add "Axal Investor Signals" section on Market Intelligence. Investor profile
+     chatbot ("Tell us who you are") captures sectors, ticket sizes, stages,
+     thesis, geography. Aggregate + anonymise → live investor sentiment data
+     surfaced to founders.
+
+  5. PERSONAL ASSISTANT CHATBOT (Prompt F)
+     Post-onboarding "Tell us who you are" chatbot becomes a persistent personal
+     assistant on the dashboard. Personalised follow-ups suggest features based
+     on role and current sprint stage.
+
+  6. SMS 2FA (Prompt G)
+     Add SMS as a second 2FA method using Google Cloud Identity Platform / Firebase
+     Auth Phone. Coexists with TOTP. Includes the related fix to stop overwriting
+     password_hash with TOTP secrets.
+
+Order:
+  Phase 1 (foundations): B → C
+  Phase 2 (features):    D, E, F, G can run in parallel after B+C merge.
+
+CI must stay green at every merge. No combined PRs.
+```
+
+---
+
+## Replit Prompt B — Security hardening + safest Cloudflare storage
+
+```
+Objective (bird's eye)
+  Treat StudioOS like a regulated venture-capital platform. Audit the codebase for
+  injection / authz / crypto / storage flaws, then move every piece of sensitive
+  data (contracts, signed docs, KYC, identity, financial figures, cap-table rows,
+  health data) to the most secure Cloudflare primitive available, with encryption
+  in transit, at rest, and in audit logs.
+
+Scope of the audit (deliver one written report + the fixes)
+  1. Injection: SQL (D1 templated queries), HTML/SVG, command, prototype pollution
+  2. AuthN/AuthZ: JWT signing, impersonation token TTL, role escalation, IDOR on
+     every mutating route, Cloudflare Access on /api/admin/*, /api/monitoring/*,
+     /api/infra/*, /api/billing/stripe/webhook signature verification
+  3. Crypto: TOTP secret storage (currently in users.password_hash — broken),
+     bcrypt/argon2 cost, JWT alg pin (must be HS256 only, reject 'none' + 'RS*')
+  4. Rate limiting: every public POST and every auth endpoint
+  5. Secrets: scan repo with gitleaks, verify Wrangler secrets are used (not env
+     vars committed), STRIPE_WEBHOOK_SECRET / GOOGLE_CLIENT_SECRET / SCORING_HMAC
+     present in production
+  6. CSP / headers: Content-Security-Policy with nonce, HSTS, Permissions-Policy,
+     X-Frame-Options DENY, Cross-Origin-Resource-Policy same-origin, Referrer-
+     Policy strict-origin-when-cross-origin
+  7. Web rendering: SVG sanitisation, dangerouslySetInnerHTML usage, markdown
+     renderer XSS, file upload MIME sniffing (server-side magic byte check)
+  8. Logs: PII redaction (emails, phones, Stripe ids), structured JSON only
+
+Storage redesign (the "safest Cloudflare solution" the user asked about)
+  Sensitive class                     | Where it lives now            | Move to
+  ----------------------------------- | ----------------------------- | -----------------------------
+  Signed contracts, KYC docs, decks   | Sometimes D1 BLOB, mostly R2  | R2 with SSE-C (customer-supplied
+                                                                        keys per envelope), no public
+                                                                        access, presigned URLs only
+                                                                        through gated /api/* endpoints,
+                                                                        max TTL 5 minutes
+  PII (email, phone, address, DOB,    | Plain D1 columns              | D1 with column-level AES-256-GCM
+   SSN, tax ID, gov-id numbers)                                         using a per-tenant DEK; DEK
+                                                                        wrapped by an env-stored KEK
+                                                                        (rotated quarterly). Only the
+                                                                        last-4 stored unencrypted for UX
+  Financials (revenue, MRR, runway)   | Plain D1                      | Same column-level AES-GCM
+  Cap-table holders + share counts    | Plain D1                      | Same; ciphertext indexed via
+                                                                        deterministic HMAC for lookup
+  TOTP secrets                        | users.password_hash (BUG)     | Dedicated `auth_totp` table,
+                                                                        encrypted at column level,
+                                                                        NEVER touch password_hash
+  Refresh / signing tokens            | KV                            | Stay in KV, but with TTL ≤ 7d
+                                                                        and value = HMAC(token, KEK)
+  Session cookies                     | localStorage                  | httpOnly, Secure, SameSite=Lax
+                                                                        cookie set by Worker
+  Audit logs (admin actions)          | activity_logs (D1)            | activity_logs + tail-worker
+                                                                        forward to R2 with object-lock
+                                                                        (compliance mode, 7y)
+  PII export ZIPs (GDPR)              | n/a                           | R2 with 24h object expiry +
+                                                                        per-export encryption key
+                                                                        delivered out-of-band by email
+
+Implementation tasks
+  1. Worker: src/crypto/columnCipher.ts — encrypt(plain, ctx) / decrypt(cipher, ctx)
+     using crypto.subtle (AES-GCM, 12-byte nonce, 16-byte tag, AAD = "table:column:rowId")
+  2. Worker: src/crypto/r2Sse.ts — wrapper around R2 put/get that derives a
+     per-object key from a master KEK + envelope_id and stores the customer key
+     metadata in the object's metadata
+  3. Migrations: cloudflare-worker/sql/migrations/0xx_encrypt_pii.sql — adds
+     ciphertext columns next to plaintext; lazy-migrate on read; backfill job
+     drains plaintext within 7 days
+  4. New table auth_totp(user_id, secret_ciphertext, backup_codes_ciphertext,
+     created_at). Migrate existing TOTP users; re-issue the password by sending a
+     password-reset email to anyone whose password_hash got overwritten
+  5. Add Cloudflare Access JWT verification middleware (src/middleware/
+     requireCfAccess.ts) and apply to /api/admin/*, /api/monitoring/*, /api/infra/*
+  6. CSP + security headers middleware applied globally with nonce per request
+  7. requestSignedDownloadUrl(envelopeId, userId): returns a one-time URL backed by
+     a signed JWT served by Worker — replaces direct R2 presigned URLs
+  8. PII redaction utility for logs; wire into all activity_logs INSERTs
+  9. Stripe webhook signature verification (constant-time compare)
+  10. Run `wrangler secret put` documentation for all required secrets:
+      JWT_SECRET, KEK_PII, KEK_R2, STRIPE_SECRET, STRIPE_WEBHOOK_SECRET,
+      SCORING_HMAC, GOOGLE_CLIENT_SECRET, OUTLOOK_CLIENT_SECRET, SMTP_PASSWORD,
+      SMS_PROVIDER_KEY (for prompt G)
+
+Acceptance
+  - Audit report committed at SECURITY_REVIEW.md (no scope leak — internal only).
+  - Contracts download flow: admin clicks "Download" → 5-min one-time URL signed
+    by Worker → R2 → file. Direct R2 access denied even with bucket name.
+  - PII columns return ciphertext when read with raw SQL; only Worker decrypts.
+  - TOTP no longer touches password_hash. Affected users notified.
+  - Cloudflare Access required for /api/admin/*. Verified by failing curl without
+    Cf-Access-Jwt-Assertion.
+  - All security headers present (verified by securityheaders.com → A+).
+  - Lighthouse Best Practices ≥ 95.
+```
+
+---
+
+## Replit Prompt C — Fix Admin Console "All Contracts" (esign ↔ documents reconciliation)
+
+```
+Objective
+  Admin Console > Contracts shows nothing under Sent / Pending / Signed even after
+  agreements are sent and signed. Root cause: /api/admin/contracts (worker route
+  cloudflare-worker/src/routes/admin-contracts.ts:69) reads from the `documents`
+  table, but the actual e-sign flow (cloudflare-worker/src/routes/esign.ts) writes
+  to `esign_envelopes` + `esign_recipients`. Two parallel systems, one admin view.
+
+Fix in two phases.
+
+Phase 1 — Make the admin view show everything (no data loss)
+  Modify cloudflare-worker/src/routes/admin-contracts.ts to UNION both tables in
+  the list/detail/stats endpoints:
+    GET /api/admin/contracts            — list = documents ∪ esign_envelopes
+    GET /api/admin/contracts/stats      — counts across both
+    GET /api/admin/contracts/:uid       — detail; lookup tries esign_envelopes
+                                           first by envelope_uuid, then documents
+    GET /api/admin/contracts/:uid/download — same lookup; returns gated URL
+    POST /api/admin/contracts/:uid/resend — works on esign_envelopes
+                                            (re-sends signing email)
+    POST /api/admin/contracts/:uid/void   — works on both
+
+  Mapping `esign_envelopes` → admin contract row:
+    uid                = envelope_uuid
+    title              = envelope.title
+    doc_type           = envelope.doc_type or 'esign'
+    status             = envelope.status   ('sent','viewed','signed','declined','voided','expired')
+    recipient_email    = first esign_recipients.email
+    sent_at            = envelope.created_at
+    signed_at          = max(esign_recipients.signed_at)
+    file_key           = envelope.signed_pdf_key (R2)
+    project_id / founder_email — joined the same way
+
+Phase 2 — Single source of truth going forward
+  All new agreement types must write to esign_envelopes (with doc_type set to the
+  existing `documents.doc_type` taxonomy). Stop new INSERTs into `documents`.
+  Backfill: a one-shot script `scripts/migrate_documents_to_esign.ts` copies any
+  `documents` rows that represent contracts (doc_type IN ('cofounder_agreement',
+  'safe', 'nda', 'investment_agreement', 'option_grant', '83b_election')) into
+  esign_envelopes, preserving timestamps and file_key. Mark migrated rows in
+  `documents` with `migrated_to_esign_id`. Keep the originals 30 days for safety,
+  then drop.
+
+Frontend (frontend/src/pages/AdminPage.jsx ContractsPanel)
+  - Tabs Sent / Pending / Signed / Voided / All — already exist; verify the
+    status filter values match the union mapping above.
+  - Each row shows: title, recipient_email, project_name, doc_type, status,
+    sent_at, signed_at, [Download] [Resend] [Void] actions.
+  - Empty state: "No contracts yet for this filter."
+  - Add a small banner on the page: "Now showing all e-sign envelopes + legacy
+    documents. Migration in progress."
+
+Acceptance
+  - Sending an agreement (any flow that uses /api/legal/esign/send) immediately
+    appears in Admin > Contracts > Sent within 5 seconds.
+  - Signed contracts appear in the Signed tab with signed_at populated.
+  - Stats counters match the underlying union.
+  - Download links produce the actual signed PDF (gated through Worker, no public
+    R2 URL leaked — see Prompt B).
+  - All existing legacy documents still appear unless voided.
+```
+
+---
+
+## Replit Prompt D — Admin > Due Diligence (Axal VC end-to-end DD module)
+
+```
+Objective (bird's eye)
+  Build a Due Diligence engine that lets Axal admins, partners, investors and
+  mentors run rigorous DD on every project, founder, mentor, and investor in the
+  ecosystem. Pulls signals from inside the platform AND outside (web, news, court
+  records, sanctions lists, social, GitHub footprint). Routes parts of the DD to
+  expert reviewers, tracks their input, calculates a composite risk score,
+  produces an Axal-VC-branded PDF report, and notifies parties from
+  noreply@axal.vc with embedded contract links when DD progresses.
+
+Modules (sub-prompts — implement in this order)
+
+  D1. Schema + core service
+       Tables (D1; PII columns encrypted per Prompt B):
+         dd_cases              (id, subject_type, subject_id, opened_by, status,
+                                composite_score, risk_band, opened_at, closed_at)
+         dd_sections           (id, case_id, kind, weight, score, status,
+                                assigned_to, due_at, completed_at)
+              kinds = 'technical','profiling','financial','legal',
+                      'reputational','market','team','compliance','custom'
+         dd_findings           (id, section_id, severity, title, body, evidence_url,
+                                source, source_kind, created_by, created_at)
+              severity = 'info','low','med','high','critical'
+              source_kind = 'platform','public_web','registry','sanctions',
+                            'court','news','social','github','expert','manual'
+         dd_external_sources   (id, case_id, kind, url, scraped_at, payload_json)
+         dd_attachments        (id, case_id|section_id, file_key, filename,
+                                content_type, sha256, uploaded_by, uploaded_at)
+         dd_reviewers          (id, case_id, section_id, user_id, role,
+                                assigned_at, accepted_at, completed_at)
+         dd_reports            (id, case_id, version, generated_by, file_key_pdf,
+                                generated_at)
+         dd_audit_log          (id, case_id, actor, action, payload_json, ts)
+
+  D2. External-data ingestion (workers, queues, secrets in Wrangler)
+       Connectors (each behind a feature flag, run async via JOB_QUEUE):
+         - Companies House / OpenCorporates (legal entity registry)
+         - SEC EDGAR (US filings, Form D)
+         - Sanctions: OFAC, EU, UK consolidated
+         - Court records: PACER (paid) — stub now, integrate later
+         - Adverse media: NewsAPI / GDELT
+         - Social: LinkedIn person/company (already in Refer & Earn flow)
+         - GitHub: org commits, language profile, contributors, repo age
+         - Domain/whois, DNS history (built-in fetch)
+         - Crunchbase / PitchBook (already in Integrations roadmap)
+         - Trustpilot / Glassdoor scrape (light)
+       Each connector returns normalised JSON → dd_external_sources row →
+       LLM extractor produces dd_findings with severity. Provider keys stored
+       as Wrangler secrets.
+
+  D3. Expert routing
+       Sections can be assigned to internal users by role + expertise tags.
+       /api/dd/cases/:id/sections/:sid/assign  body { user_id, due_at }
+       Triggers email via noreply@axal.vc with a magic link, plus an in-app
+       notification. Reviewer completes the section with a verdict +
+       narrative + evidence files. Each completion appends to dd_audit_log
+       and can attach an NDA/Reviewer Agreement (uses the e-sign system from
+       Prompt C — doc_type='dd_reviewer_nda').
+
+  D4. Risk scoring + dashboard
+       Composite formula:
+         section_score = weighted_avg(findings_severity_to_number)
+         case_score    = weighted_avg(section_scores by section.weight)
+         risk_band     = green (>80) / yellow (55-80) / amber (35-55) / red (<35)
+       Show case dashboard with section cards, finding heatmap, evidence
+       timeline, reviewer queue.
+
+  D5. Axal-VC branded PDF report
+       Uses Cloudflare Browser Rendering to render an HTML report template
+       (frontend/src/pages/admin/DueDiligenceReportTemplate.jsx) with:
+         - Cover page: Axal VC wordmark, subject, case id, generated_at,
+                       confidentiality footer
+         - Executive summary: composite score, risk band, top findings
+         - Per-section pages with findings, evidence, reviewer narratives
+         - Appendix: external data sources, raw evidence list, audit log
+       Endpoint POST /api/dd/cases/:id/report  → renders, stores in R2
+       (encrypted per Prompt B), creates dd_reports row, returns gated download
+       URL.
+
+  D6. Notifications + email templates
+       Outgoing email from noreply@axal.vc via existing email service with
+       templates:
+         - dd_section_assigned        (to reviewer, with magic link + due date)
+         - dd_section_completed       (to case owner)
+         - dd_report_ready            (to case owner + investor distro list)
+         - dd_high_severity_finding   (to admins + case owner)
+       In-app notifications mirror these (notifications table, already exists).
+       Reply-to: a real Axal address, configurable.
+
+Frontend
+  Add /admin/due-diligence and /admin/due-diligence/:id routes.
+  - List view: filter by subject_type, status, risk band, owner.
+  - Case view: section cards with status pills, "Run external scan" button,
+    findings table, reviewer panel, "Generate PDF report" button, audit log
+    drawer.
+  - Reviewer view (lighter, scoped to one section) with finding-add form.
+
+Worker routes (cloudflare-worker/src/routes/due_diligence.ts)
+  POST   /api/dd/cases                              create case
+  GET    /api/dd/cases                              list with filters
+  GET    /api/dd/cases/:id                          full case
+  PUT    /api/dd/cases/:id                          patch (status, etc.)
+  POST   /api/dd/cases/:id/sections                 add custom section
+  POST   /api/dd/cases/:id/sections/:sid/assign     assign reviewer
+  POST   /api/dd/cases/:id/sections/:sid/complete   reviewer submits verdict
+  POST   /api/dd/cases/:id/findings                 add manual finding
+  POST   /api/dd/cases/:id/scan                     fan out external connectors
+                                                    via JOB_QUEUE
+  POST   /api/dd/cases/:id/report                   render + store PDF
+  GET    /api/dd/cases/:id/report/:rid/download     gated URL
+  GET    /api/dd/cases/:id/audit                    audit log
+
+Access
+  All /api/dd/* requires requireRole(['admin','partner','investor','mentor'])
+  AND requireCfAccess for admin sub-paths. Founders cannot read DD on their
+  own case but receive notifications when a final report is shared. Reviewers
+  see only sections assigned to them.
+
+Acceptance
+  - Admin can open a DD case on a project, run external scans, see findings
+    populate from each connector.
+  - Section assigned to a mentor → mentor receives email + in-app notification,
+    signs the reviewer NDA, submits verdict.
+  - Composite score updates live as findings stream in.
+  - Generate Report → Axal-branded PDF appears, downloadable via gated link.
+  - Every state change appears in dd_audit_log.
+  - All PII in the DD case is encrypted at rest (Prompt B).
+```
+
+---
+
+## Replit Prompt E — Market Intelligence: "Axal Investor Signals" + investor profiling chatbot
+
+```
+Objective
+  Capture investor inputs (sectors, ticket sizes, stage, geo, thesis) via a
+  short profiling chatbot, aggregate them anonymously, and surface live
+  investor signals on the Market Intelligence page so founders can read the
+  market in real time.
+
+Two parts:
+
+  E1. Investor profiling chatbot ("Tell us who you are" — Investor variant)
+      After an investor finishes the role-detection step in
+      OnboardingPersonaPage / OnboardingInvestorPage, route them through a
+      6–8 question chatbot. Questions (with shape):
+        1. Primary sectors of interest         (multi, sector taxonomy)
+        2. Geographies you actively invest in  (multi, country/region)
+        3. Stage focus                          (multi: pre-seed, seed, A, B+)
+        4. Typical ticket size                  (range slider $25k–$10M)
+        5. Annual deployment target             (number)
+        6. Lead vs follow                       (single)
+        7. Thesis in one sentence              (free text, ≤240 chars)
+        8. Allergies / hard pass list           (free text)
+      Persisted in a new table:
+        investor_profiles(user_id PK, sectors_json, geos_json, stages_json,
+                          ticket_min, ticket_max, deployment_target,
+                          lead_or_follow, thesis_text, allergies_text,
+                          updated_at)
+      Endpoint:
+        GET/PUT /api/investor-profile/me
+
+  E2. "Axal Investor Signals" section on Market Intelligence
+      Add a new tab/panel on frontend/src/pages/MarketIntelPage.jsx titled
+      "Axal Investor Signals" with:
+        - Sector heatmap: % of investors active in each sector
+        - Average ticket size per sector + per stage (median + IQR)
+        - Most-cited thesis keywords (n-gram extraction, anonymised)
+        - Stage allocation pie
+        - Geo heatmap
+        - "Investor appetite trend" line over time (rolling 30-day)
+      All visualisations are based on aggregates ONLY. Suppress any cell with
+      n < 5 to prevent re-identification (k-anonymity = 5).
+
+      Worker endpoint:
+        GET /api/market-intel/investor-signals?sector=&stage=&geo=
+          → { sectors: [{key, count, share, ticket_med, ticket_p25, ticket_p75}],
+              stages: [...],
+              geos: [...],
+              thesis_keywords: [{term, weight}],
+              trend: [{week, count, ticket_med}],
+              n_total, n_filtered, suppressed: bool }
+
+      Re-runs as a scheduled job every 6 hours (cron trigger) writing to
+      `investor_signals_snapshots` for fast reads + history.
+
+Privacy
+  Aggregations only. No row-level investor data ever leaves /api/market-intel.
+  Investor consent captured at the end of E1 (toggle: "Contribute my profile
+  to anonymised market signals"; default ON, can opt out from Settings >
+  Privacy). Honour the opt-out in aggregations.
+
+Frontend
+  - frontend/src/pages/onboarding/InvestorProfileChatbot.jsx — the 8-step
+    flow (re-uses the existing chatbot UI shell).
+  - MarketIntelPage.jsx new tab "Axal Investor Signals" with the panels above.
+  - Settings > Privacy: "Share my investor profile in anonymised market
+    aggregates" toggle.
+
+Acceptance
+  - New investor signs up → completes the chatbot → row exists in
+    investor_profiles.
+  - Market Intel page shows real numbers (no zero state) once n ≥ 5 investors
+    have profiles.
+  - Cells with n < 5 render as "Insufficient data" (not zero).
+  - Opting out in Settings removes the user's contribution within 6 hours.
+  - Existing investors see a one-time prompt "Help calibrate Axal's market
+    signals — 2 minutes" linking back to the chatbot.
+```
+
+---
+
+## Replit Prompt F — Personal Assistant chatbot on dashboard
+
+```
+Objective
+  After the role-detection chatbot ("Tell us who you are") completes on first
+  login, keep that chatbot alive as a persistent personal assistant on every
+  user's Dashboard. It knows the user's role, current Spin-Out Lab week (if
+  applicable), tier, recent activity, and unread notifications, and proactively
+  suggests next actions across the platform's features.
+
+Capabilities
+  - Suggests features available for the user's current role + tier + sprint week
+  - Walks the user through how to use a feature (mini-tutorials)
+  - Answers "where do I…" / "how do I…" with deep links into the app
+  - Drafts content (project descriptions, OKRs, deck slides, email outreach)
+  - Surfaces alerts: contracts pending signature, mentor sessions today,
+    DD findings (if admin), billing about to renew
+  - Offers feedback to the user but never modifies data without confirmation
+
+Architecture
+  Frontend: <PersonalAssistant /> component pinned bottom-right of Dashboard
+            (collapsible, persistent across pages, hidden on print views).
+  Backend: cloudflare-worker/src/routes/assistant.ts
+            POST /api/assistant/message { conversation_id, content }
+              → server-sent events stream from Worker → Anthropic API
+            GET  /api/assistant/conversations
+            GET  /api/assistant/conversations/:id
+            POST /api/assistant/feedback { message_id, vote: up|down, note? }
+
+  Context injection (server-side, never expose secrets):
+    - Static system prompt (role + tier + spin-out week + tone)
+    - Tool list for tool-use:
+        listAvailableFeatures(role, tier, week) → returns feature list
+        deepLink(featureKey)                    → returns route path
+        recentActivity(userId, limit=10)
+        pendingContracts(userId)
+        upcomingMeetings(userId)
+        scoringSummary(projectId)
+    - Each tool implemented as a Worker handler called directly (no extra
+      hop through HTTP).
+  Model: claude-haiku-4-5-20251001 by default for speed, claude-sonnet-4-6 if
+         the user is admin or message length > 4k chars.
+  Caching: prompt caching enabled on the system prompt + tool definitions
+           (≥1024 tokens) for fast first-token latency.
+
+Persistence
+  Tables:
+    assistant_conversations(id, user_id, title, created_at, updated_at)
+    assistant_messages(id, conversation_id, role, content, tool_calls_json,
+                       created_at, model, latency_ms, token_in, token_out)
+    assistant_feedback(id, message_id, user_id, vote, note, created_at)
+  Retention 90 days for free, 1 year for paid; admin opt-in extended retention.
+
+Privacy + safety
+  - Never includes other users' PII in system prompt.
+  - Refuses to take destructive actions (delete, void, send) — only suggest +
+    deep-link.
+  - Output filtered for prompt-injection (dangerous patterns from tool results
+    are sanitised before re-prompting).
+
+Frontend touchpoints
+  - LandingPage / Dashboard.jsx mount the assistant.
+  - Onboarding completion route now sets users.assistant_enabled = 1.
+  - SettingsPage > Notifications: "Personal assistant proactive nudges" toggle.
+
+Acceptance
+  - New user finishes onboarding → assistant greets by name, role, and lists 3
+    starter actions.
+  - Asking "How do I add a co-founder agreement?" produces a deep-link button
+    that routes to /legal/cofounder-agreement.
+  - Streaming works with no Worker timeout for messages up to 60s.
+  - Tool calls (e.g. "what's pending for me?") return real platform data.
+  - Conversations persist across reloads; user can rename + delete.
+  - Cost-per-conversation logged in admin analytics from earlier prompt.
+```
+
+---
+
+## Replit Prompt G — SMS 2FA via Google Cloud Identity Platform + fix TOTP storage bug
+
+```
+Objective
+  Add SMS as an alternative second factor in Settings > Security. Use Google
+  Cloud Identity Platform (Firebase Auth Phone) for delivery + verification.
+  TOTP stays as the recommended factor; users can enrol both. Also fix the
+  underlying bug where TOTP secrets currently overwrite users.password_hash
+  (cloudflare-worker/src/routes/auth.ts:298) — separate this into a clean
+  auth_totp table.
+
+Plan
+
+  G1. Move TOTP off password_hash (prerequisite — DO THIS FIRST in this PR)
+      Migration: create table auth_totp(user_id PK, secret_ciphertext,
+      backup_codes_ciphertext, created_at). Update setup-totp / verify-totp /
+      disable-totp routes to use auth_totp. On migration, anyone whose
+      password_hash currently looks like a base32 TOTP secret is force-reset:
+      send password-reset email + clear password_hash. Mark them with
+      users.password_reset_required = 1.
+
+  G2. Add SMS factor schema
+        ALTER TABLE users ADD COLUMN tfa_methods TEXT DEFAULT '[]';  -- json: ['totp','sms']
+        CREATE TABLE auth_sms (
+          user_id INTEGER PRIMARY KEY,
+          phone_e164_ciphertext TEXT NOT NULL,
+          phone_last4 TEXT NOT NULL,
+          firebase_uid TEXT,
+          last_verified_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+  G3. Google Cloud Identity Platform integration
+      - Server-side: use Firebase Admin SDK from the Worker via the REST API
+        (no Node SDK in CF Workers — plain fetch to identitytoolkit.googleapis.com).
+      - Endpoints:
+          POST /api/auth/sms/start-enrollment { phone_e164 }
+              → calls Identity Toolkit accounts:sendVerificationCode
+              → returns { sessionInfo }
+          POST /api/auth/sms/confirm-enrollment { sessionInfo, code }
+              → verifyPhoneNumber → upsert auth_sms row + tfa_methods
+          POST /api/auth/sms/start-challenge      (during login)
+              → reuses sendVerificationCode keyed off the user's stored phone
+          POST /api/auth/sms/verify-challenge { sessionInfo, code }
+              → returns JWT (same login flow as TOTP)
+          POST /api/auth/sms/disable
+      - Wrangler secrets: GCP_IDENTITY_API_KEY, GCP_PROJECT_ID,
+        GCP_SERVICE_ACCOUNT_JSON (for server-to-server calls if needed).
+      - Rate limit every endpoint above (10/min/IP, 5/min/user).
+      - Phone numbers stored encrypted (Prompt B column cipher).
+      - Show only last 4 digits anywhere in UI.
+
+  G4. Login flow
+      If user has tfa_methods = ['totp','sms']:
+        - After password OK → ask user to pick TOTP or SMS.
+        - On SMS pick → server starts challenge → frontend shows code input.
+      If user has only one method, skip the picker.
+      Recovery: backup codes (existing TOTP backup codes table) accept either
+      method's challenge.
+
+  G5. Frontend
+      Settings > Security tab adds:
+        - "SMS authentication" panel: Enabled / Disabled, last 4 of phone,
+          Add / Change / Remove buttons.
+        - Enrollment wizard: enter phone → receive code → enter code → success.
+        - "Recommended factor: Authenticator app (TOTP)" disclosure.
+      Login page: factor picker after password, code-entry screen for SMS.
+
+Security notes
+  - SMS is a weaker factor than TOTP (SIM-swap risk). Display a banner in the
+    enrollment wizard: "SMS is convenient but less secure than an authenticator
+    app. Consider using both."
+  - High-risk endpoints (impersonation, billing changes, contract void, DD
+    report download) require TOTP specifically — SMS not accepted. Implement
+    via requireFactor('totp') middleware on those routes.
+  - Country code allow-list configurable in admin to prevent toll-fraud.
+
+Acceptance
+  - All existing TOTP users keep working post-migration; password_hash never
+    touched again.
+  - Anyone who had TOTP enabled by the broken flow gets a password-reset email
+    on first deploy.
+  - Settings > Security shows both factors. Enabling SMS sends a real text via
+    Google Cloud, verifies, and persists.
+  - Logging in with SMS-only works. Logging in with both methods enabled shows
+    the picker.
+  - High-risk routes still require TOTP regardless of SMS being enrolled.
+  - Phone numbers encrypted at rest (Prompt B verified).
+  - Country allow-list enforced.
+```
+
+---
+
+## Order summary
+
+```
+Phase 1 (foundation) — must merge first:
+  Prompt B  Security hardening + safe storage
+  Prompt C  Contracts admin bug fix
+
+Phase 2 (parallel after Phase 1):
+  Prompt D  Due Diligence module
+  Prompt E  Investor Signals + chatbot
+  Prompt F  Personal Assistant chatbot
+  Prompt G  SMS 2FA + TOTP storage fix
+```
+
+Each prompt is self-contained and can be pasted to Replit on its own. Want me to expand the table schemas (especially Due Diligence and Personal Assistant), draft the email templates for `noreply@axal.vc`, or sketch the Axal-VC PDF report layout?

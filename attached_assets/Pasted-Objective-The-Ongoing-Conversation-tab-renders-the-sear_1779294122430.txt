@@ -1,0 +1,114 @@
+Objective
+  The Ongoing Conversation tab renders the search UI but the list is
+  always "No conversations." even for users who've used the Personal
+  Advisor. The Onboarding tab is also empty. Both must populate.
+
+Diagnostic
+  1. Check the actual database:
+       SELECT COUNT(*) FROM advisor_conversations;
+       SELECT user_id, COUNT(*) FROM advisor_messages GROUP BY user_id;
+       SELECT user_id, COUNT(*) FROM onboarding_messages GROUP BY user_id;
+     If these are non-zero for the user being viewed AND the UI says
+     "No conversations", the bug is in the read endpoint or the
+     authz check.
+
+  2. Inspect the read endpoints:
+       GET /api/admin/users/:id/conversations/onboarding
+       GET /api/admin/users/:id/conversations/advisor
+     Likely failure modes:
+       a. The endpoints don't exist yet (return 404 silently
+          interpreted as empty list).
+       b. The endpoints exist but JOIN onto a table whose user_id
+          column was renamed during a migration; query returns 0.
+       c. requireAdmin(c) returns 401 before any data is fetched.
+       d. The frontend calls the wrong URL (e.g. /api/admin/users/
+          :id/onboarding without /conversations/).
+
+Fix
+  1. Mount the endpoints if missing:
+       cloudflare-worker/src/routes/admin.ts
+         GET /users/:id/conversations/onboarding
+         GET /users/:id/conversations/advisor
+         GET /users/:id/conversations/advisor/:conversation_id
+       Each requireAdmin + requireCfAccess (Prompt HD).
+
+  2. Endpoint contracts:
+     GET /onboarding
+       SELECT m.role, m.content, m.created_at AS ts,
+              m.extracted_persona, m.model, m.latency_ms
+         FROM onboarding_messages m
+         WHERE m.user_id = ${id}
+         ORDER BY m.created_at ASC;
+       Return:
+         { messages: [...],
+            summary: { extracted_persona,
+                        message_count,
+                        completed_at: max(...) },
+            empty: messages.length === 0,
+            empty_reason: 'never_completed' | 'in_progress' }
+
+     GET /advisor
+       SELECT c.id, c.started_at, c.last_message_at, c.persona,
+              c.message_count, c.completion_pct
+         FROM advisor_conversations c
+         WHERE c.user_id = ${id}
+         ORDER BY c.last_message_at DESC
+         LIMIT ${limit}
+         OFFSET ${offset};
+       Return { conversations: [...], total }
+
+     GET /advisor/:conversation_id
+       SELECT m.role, m.content, m.created_at AS ts,
+              m.question_id, m.written_to, m.model,
+              m.latency_ms, m.token_in, m.token_out
+         FROM advisor_messages m
+         WHERE m.conversation_id = ${conversation_id}
+         ORDER BY m.created_at ASC;
+       Return { messages: [...] }
+
+  3. Frontend
+     The admin user-detail modal's two tabs:
+       Onboarding tab
+         Fetches /onboarding once on tab open. Renders messages
+         OR an honest empty state explaining whether the user
+         never completed (vs the system has no record).
+       Ongoing Conversation tab
+         Fetches /advisor on tab open. Left rail shows conversations
+         (date + persona + msg count). Selecting a conversation
+         fetches /advisor/:id and renders messages on the right.
+         Search box filters by persona / model / state across the
+         left rail.
+
+  4. CSV export
+     Already in the screenshot. Endpoint:
+       POST /api/admin/users/:id/conversations/advisor/export
+         body { from, to, persona?, model? }
+         → returns a downloadable CSV with: ts, role, content,
+            question_id, written_to, model, latency_ms.
+
+  5. Hide the "No conversations." string when a fetch hasn't returned
+     yet — show a skeleton; only show empty state after a 200 with
+     [].
+
+Audit + privacy
+  - Every admin view of a transcript writes to admin_audit_log
+    (admin_user_id, viewed_user_id, conversation_id, viewed_at).
+  - The user being viewed receives a notification "An admin viewed
+    your transcript" unless suppressed by an active investigation
+    flag.
+
+Tests
+  test/admin.user-conversations.test.ts:
+    - Two users, one with advisor history, one without.
+    - GET as admin returns conversations for the first, [] for the
+      second.
+    - GET as non-admin → 401.
+    - View triggers an admin_audit_log row.
+
+Acceptance
+  - Admin > User > Onboarding shows the actual transcript for users
+    who completed the onboarding chatbot.
+  - Admin > User > Ongoing Conversation lists every advisor
+    conversation; clicking one shows the messages.
+  - Empty states distinguish "never used" from "no messages yet".
+  - Every view logged.

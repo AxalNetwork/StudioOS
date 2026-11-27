@@ -1,0 +1,66 @@
+{
+  "skill": "product-instrumentation-plan",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "record_id": "goal-export-01",
+        "recorded_at": "2026-10-24",
+        "goal": "Measure accounts reaching their first successful report export"
+      },
+      "build.records": {
+        "record_id": "event-spec-04",
+        "recorded_at": "2026-10-25",
+        "existing_events": [
+          {
+            "name": "export_clicked",
+            "trigger": "Client button click",
+            "properties": [
+              "session_id",
+              "timestamp"
+            ]
+          }
+        ],
+        "proposed_success_event": "report_exported",
+        "server_request_key": "request_id",
+        "retention_period": null,
+        "collection_review": "Pending owner review"
+      },
+      "grow.records": {
+        "record_id": "telemetry-audit-09",
+        "observed_at": "2026-10-26",
+        "events": [
+          {
+            "event_id": "evt-001",
+            "name": "export_clicked",
+            "request_id": "req-017"
+          },
+          {
+            "event_id": "evt-001",
+            "name": "export_clicked",
+            "request_id": "req-017"
+          }
+        ],
+        "success_event_records": null
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "report_exported",
+      "request_id",
+      "export_clicked"
+    ],
+    "must_say_not_recorded": [
+      "retention period",
+      "successful exports"
+    ],
+    "must_not_include": [
+      "I deployed the instrumentation",
+      "Collection consent is confirmed",
+      "There were two successful exports"
+    ]
+  }
+}

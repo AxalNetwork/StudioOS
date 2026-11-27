@@ -1,0 +1,35 @@
+Investor Appendix deck shipped to PR #53 — `frontend/src/decks/templates/investor_appendix_app.tsx`. **42 slides total** in one file.
+
+**Part I — Core deck (12)**
+
+Vision · Problem · Insight · Solution · Product · Market · Traction · Business Model · GTM · Competition & Moat · Team · Fundraise (inverts to ink).
+
+**Part II — Appendix (30, sections A–I)**
+
+| § | Slides | Topics |
+|---|---|---|
+| A · Market | A1–A4 | Landscape · Segmentation · Drivers · Geos |
+| B · Product | A5–A9 | Architecture · Tech stack · Data arch · Security · Roadmap |
+| C · Traction | A10–A15 | Revenue history · Retention cohorts · Customer growth · Segmentation · Pipeline · Usage |
+| D · Customers | A16–A19 | Profiles · Journey · Case studies · Testimonials |
+| E · Unit economics | A20–A23 | CAC · LTV · Payback · Margin |
+| F · GTM | A24–A26 | Funnel · Channels · Partnerships |
+| G · Defensibility | A27–A28 | Competitive matrix · Moat analysis |
+| H · Team & ops | A29 | Org plan |
+| I · Financials | A30 | 3-yr P&L · Hiring · Cash & burn · Capital allocation |
+
+Each appendix section opens with a full-bleed divider card. Footer Deck/Appendix toggle; `A` keyboard shortcut jumps straight to the appendix.
+
+**Reusable chart library**
+
+`ArrAreaChart`, `NrrLine`, `BarCompare`, `MarketRings`, `CohortGrid` (M0..Mn heatmap with per-cell pct values), `MoatPentagon`, `PositioningMap`, `Flywheel`, `Funnel`, `DonutChart` — plus Recharts ComposedChart for cohort combo, customer growth, payback (horizontal bars), LTV curve (area), cash & burn.
+
+**Editorial register**
+
+Source Serif Pro display + Inter sans + JetBrains Mono numerics; crimson + navy + gold + emerald palette; warm-paper background; Confidential rail on every slide.
+
+**Axal binding documented at bottom of file**
+
+Maps to `projects.*`, `financial_models.*`, `metrics_snapshots.*`, `rounds.*`, `captable.*`, `users.*` (founders/leadership), `cohort_grids`, `pipeline_snapshots`, `customer_success_stories`, `advisor_answers` (testimonials), `competitive_matrix`, `financial_plans`, `hiring_plans`, `capital_allocation_plans`, `partnerships`, `compliance_certs` — all consistent with Prompt MD's migration extension.
+
+Two templates remain: `one_pager_teaser` (1 slide), `narrative_brand` (15 slides), plus the still-unfinished `series_b_diligence` SAMPLE_DATA from the prior session.

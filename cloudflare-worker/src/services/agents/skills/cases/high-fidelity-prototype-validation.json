@@ -1,0 +1,34 @@
+{
+  "skill": "high-fidelity-prototype-validation",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "High-Fidelity Prototype Validation",
+        "task_scope": "Validates high-fidelity prototypes against target tasks and acceptance criteria before implementation.",
+        "evidence": [
+          "prototype task coverage"
+        ],
+        "omitted_field": "prototype completion rate"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for prototype task coverage."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "prototype task coverage"
+    ],
+    "must_say_not_recorded": [
+      "prototype completion rate"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

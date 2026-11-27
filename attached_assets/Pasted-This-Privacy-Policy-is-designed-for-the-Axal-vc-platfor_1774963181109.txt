@@ -1,0 +1,59 @@
+This **Privacy Policy** is designed for the Axal.vc platform, incorporating 2026 legal standards, including the **SEC Regulation S-P amendments** (effective for smaller firms by June 2026) and evolving AI disclosure requirements.
+
+---
+
+# PRIVACY POLICY
+**Last Updated:** March 31, 2026  
+**Entity:** Axal Management, LLC (“we,” “us,” or “our”)
+
+At Axal.vc, we recognize that our investors and founders entrust us with highly sensitive financial and personal information. This Privacy Policy explains how we collect, protect, and use your information in compliance with the **Gramm-Leach-Bliley Act (GLBA)**, **SEC Regulation S-P**, and applicable state and international privacy laws (CCPA/GDPR).
+
+### 1. INFORMATION WE COLLECT
+We collect "Non-Public Personal Information" (NPI) to provide venture capital services and comply with federal law:
+* **Identity Data:** Full name, Social Security Number (SSN), Tax ID, passport/driver’s license (for KYC/AML), and date of birth.
+* **Financial Data:** Net worth, accredited investor status, bank account numbers, wire instructions, and investment history.
+* **Professional Data:** Current firm, title, and investment sectors of interest.
+* **Technical Data:** IP address, browser type, and "Global Privacy Control" (GPC) signals.
+
+### 2. HOW WE USE YOUR INFORMATION
+We process your data for the following "Business Purposes":
+* **Onboarding:** To verify your identity and suitability for private placements.
+* **Transaction Processing:** To facilitate capital calls, distributions, and K-1 tax reporting.
+* **Compliance:** To meet anti-money laundering (AML) and "know your customer" (KYC) regulatory requirements.
+* **AI & Analytics:** We may use anonymized data to improve our deal-matching algorithms. **We do not sell your personal data to third parties for marketing.**
+
+### 3. DISCLOSURE TO THIRD PARTIES
+We only share your information with non-affiliated third parties as permitted by law:
+* **Service Providers:** Fund administrators, legal counsel, and KYC/AML verification vendors. These providers are contractually bound to maintain 2026 SEC-level data security standards.
+* **Regulatory Bodies:** When required by the SEC, FINRA, or other governmental authorities.
+* **Target Companies:** Basic identity info may be shared with companies in which you are actively seeking to invest (for their cap table management).
+
+### 4. DATA SECURITY & INCIDENT RESPONSE
+In accordance with the **2026 SEC Regulation S-P Safeguards Rule**:
+* **Safeguards:** We maintain administrative, technical, and physical safeguards (including encryption at rest and in transit) to protect your NPI.
+* **Breach Notification:** In the event of a "significant security incident" involving your sensitive information, we will notify you within **30 days** of discovery, as required by federal law.
+
+### 5. YOUR PRIVACY RIGHTS
+Depending on your residency (e.g., California, EU), you may have the right to:
+* **Access:** Request a portable copy of the data we hold about you.
+* **Correction:** Request that we fix inaccurate financial or identity records.
+* **Deletion:** Request the deletion of your data (subject to our legal obligation to retain financial records for 5–7 years under SEC record-keeping rules).
+* **Opt-Out:** Opt out of "Profiling" or "Automated Decision Making" regarding investment opportunities.
+
+### 6. RETENTION
+We retain your NPI for as long as your account is active and for the minimum period required by SEC and IRS regulations (typically **7 years** after the dissolution of a fund or termination of a relationship).
+
+### 7. CONTACT US
+For privacy requests or to report a suspected security issue:
+**Privacy Officer** Axal Management, LLC  
+[Your Physical Address]  
+**Email:** privacy@axal.vc
+
+---
+
+### Implementation Guide for Axal.vc:
+1.  **The "72-Hour" Vendor Clause:** Since you are likely using third-party software for your platform, ensure your contracts with those vendors require them to notify *you* within 72 hours of a breach so you can meet your 30-day notice obligation to investors.
+2.  **Global Privacy Control (GPC):** By 2026, most jurisdictions require your site to automatically honor GPC signals (browser settings that tell sites not to track). Ensure your dev team has enabled this.
+3.  **Data Mapping:** Under the new Reg S-P, you must have a "Data Map" showing exactly where SSNs and Wire Instructions are stored.
+
+**Does your platform use any AI-driven "matching" for deals? If so, we should add a specific disclosure about "Algorithmic Transparency" in Section 2.**

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@500&amp;display=swap" rel="stylesheet">
+  <script src="archetype-full.js"></script>
+  <style>
+    body{margin:0}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .af{container-type:inline-size;min-height:100%;box-sizing:border-box}
+    @container (max-width:700px){.af-2{grid-template-columns:minmax(0,1fr)!important}.af-tl{flex-direction:column!important;align-items:stretch!important}.af-tl-line{display:none!important}.af-tl-pt{flex-direction:row!important;align-items:flex-start!important;text-align:left!important}.af-h2{font-size:18px!important}.af-tbl{grid-template-columns:minmax(0,1fr) 120px!important;gap:4px 10px!important;padding:9px 12px!important}.af-tbl>span:nth-child(2),.af-tbl>span:nth-child(4){justify-self:start}}
+  </style>
+</helmet>
+<div class="af" style="font-family:Inter,system-ui,sans-serif;background:{{ th.bg }};color:{{ th.ink }};padding:28px 24px 40px;display:flex;flex-direction:column;gap:36px">
+
+  <!-- 1 · SKILLS -->
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <div style="font:700 10px 'Roboto Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:{{ th.muted }}">Skills</div>
+    <h2 class="af-h2" style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Your skills, two ways</h2>
+    <sc-if value="{{ sk.loading }}" hint-placeholder-val="{{ false }}"><div style="background:{{ th.card }};border:1px solid {{ th.hair }};border-radius:16px;padding:22px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:24px;align-items:center" class="af-2"><div style="width:260px;height:260px;border-radius:50%;background:{{ th.well }}"></div><div style="display:flex;flex-direction:column;gap:10px"><div style="height:12px;width:60%;border-radius:99px;background:{{ th.well }}"></div><div style="height:12px;width:85%;border-radius:99px;background:{{ th.well }}"></div><div style="height:12px;width:40%;border-radius:99px;background:{{ th.well }}"></div></div></div></sc-if>
+    <sc-if value="{{ sk.error }}" hint-placeholder-val="{{ false }}"><div style="background:{{ th.redBg }};border:1px solid {{ th.redBd }};border-radius:16px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:14px;font-weight:600;color:#b91c1c">Your skills could not be read.</span><span style="font-size:13px;font-weight:700;color:#b91c1c;border:1px solid {{ th.redBd }};border-radius:9px;padding:8px 12px">Try again</span></div></sc-if>
+    <sc-if value="{{ sk.ready }}" hint-placeholder-val="{{ true }}">
+      <div class="af-2" style="background:{{ th.card }};border:1px solid {{ th.hair }};border-radius:16px;padding:22px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="position:relative;width:100%;max-width:300px;aspect-ratio:1;margin:18px auto">
+            <svg viewBox="0 0 260 260" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible" aria-label="Skills radar">
+            <sc-for list="{{ rings }}" as="r" hint-placeholder-count="5"><polygon points="{{ r }}" fill="none" stroke="{{ th.grid }}" stroke-width="1"></polygon></sc-for>
+            <sc-for list="{{ spokes }}" as="s" hint-placeholder-count="8"><line x1="130" y1="130" x2="{{ s.x2 }}" y2="{{ s.y2 }}" stroke="{{ th.grid }}" stroke-width="1"></line></sc-for>
+            <path d="{{ sk.selfPath }}" fill="rgba(124,58,237,.22)" stroke="#7c3aed" stroke-width="2" stroke-linejoin="round"></path>
+            <sc-for list="{{ sk.selfMarks }}" as="m" hint-placeholder-count="1"><circle cx="{{ m.cx }}" cy="{{ m.cy }}" r="4.5" fill="#7c3aed"></circle></sc-for>
+            <sc-for list="{{ sk.dots }}" as="d" hint-placeholder-count="5"><circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="5" fill="{{ th.card }}" stroke="#92400e" stroke-width="2"></circle></sc-for>
+          </svg>
+            <sc-for list="{{ labelPos }}" as="l" hint-placeholder-count="8"><span style="{{ l.style }}"><span style="font-size:10.5px;font-weight:600;color:{{ th.ink }}">{{ l.t }}</span></span></sc-for>
+            <sc-if value="{{ sk.allNRLabel }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font:600 9.5px 'Roboto Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:{{ th.muted }};background:{{ th.card }};padding:2px 6px;border-radius:4px;white-space:nowrap">Not recorded</span></sc-if>
+            <sc-for list="{{ sk.gaps }}" as="g" hint-placeholder-count="1"><span style="{{ g.style }}"><span style="font:600 8.5px 'Roboto Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:{{ th.muted }};background:{{ th.card }};padding:1px 4px;border-radius:4px">Not recorded</span></span></sc-for>
+            <sc-for list="{{ sk.evOnly }}" as="e" hint-placeholder-count="1"><span style="{{ e.style }}"><span style="font:600 8.5px 'Roboto Mono',monospace;color:#92400e;background:{{ th.card }};padding:1px 4px;border-radius:4px">{{ e.t }}</span></span></sc-for>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:{{ th.muted }}"><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:10px;border-radius:3px;background:rgba(124,58,237,.22);border:2px solid #7c3aed"></span>Self, 0 to 5</span><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;border:2px solid #92400e"></span>Evidence, platform activity</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <div style="border:1px solid {{ th.hair }};border-radius:12px;overflow:hidden">
+            <div class="af-tbl" style="display:grid;grid-template-columns:minmax(0,1.4fr) 150px 70px 70px;gap:10px;padding:8px 14px;background:{{ th.well }};font:700 10px 'Roboto Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:{{ th.muted }}"><span>Axis</span><span>State</span><span>Self</span><span>Evidence</span></div>
+            <sc-for list="{{ sk.rows }}" as="r" hint-placeholder-count="8"><div class="af-tbl" style="display:grid;grid-template-columns:minmax(0,1.4fr) 150px 70px 70px;gap:10px;padding:8px 14px;border-top:1px solid {{ th.hair }};align-items:center;font-size:12.5px"><span style="font-weight:600">{{ r.axis }}</span><span><span style="{{ r.stStyle }}">{{ r.st }}</span></span><span style="font:500 12px 'Roboto Mono',monospace;color:{{ th.muted }};white-space:nowrap"><sc-if value="{{ r.selfNR }}" hint-placeholder-val="{{ false }}">—</sc-if>{{ r.self }}</span><span style="font:500 12px 'Roboto Mono',monospace;color:{{ th.muted }};white-space:nowrap"><sc-if value="{{ r.evNR }}" hint-placeholder-val="{{ false }}">—</sc-if>{{ r.ev }}</span></div></sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{ legend }}" as="l" hint-placeholder-count="5"><div style="display:flex;gap:10px;align-items:baseline;font-size:12.5px;line-height:1.5;color:{{ th.muted }}"><span style="{{ l.style }}">{{ l.t }}</span><span>{{ l.d }}</span></div></sc-for></div>
+          <sc-if value="{{ sk.allNR }}" hint-placeholder-val="{{ false }}"><div style="border:1px dashed {{ th.hairStrong }};border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:13px;color:{{ th.muted }}">Answer a few skill questions with Eadwyn to fill this in.</span><a href="/studio" style="font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 12px">Open Eadwyn</a></div></sc-if>
+        </div>
+      </div>
+    </sc-if>
+    <p style="margin:0;font-size:12.5px;line-height:1.55;color:{{ th.muted }}">Evidence counts what you have done on the platform. It is not an assessment of how good you are.</p>
+  </section>
+
+  <!-- 2 · HISTORY -->
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <div style="font:700 10px 'Roboto Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:{{ th.muted }}">History</div>
+    <h2 class="af-h2" style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">How your archetype has changed</h2>
+    <sc-if value="{{ tl.loading }}" hint-placeholder-val="{{ false }}"><div style="background:{{ th.card }};border:1px solid {{ th.hair }};border-radius:16px;padding:26px 22px;display:flex;gap:24px;align-items:center"><div style="height:2px;flex:1;background:{{ th.well }}"></div><div style="width:14px;height:14px;border-radius:50%;background:{{ th.well }}"></div><div style="height:2px;flex:1;background:{{ th.well }}"></div><div style="width:14px;height:14px;border-radius:50%;background:{{ th.well }}"></div><div style="height:2px;flex:1;background:{{ th.well }}"></div></div></sc-if>
+    <sc-if value="{{ tl.error }}" hint-placeholder-val="{{ false }}"><div style="background:{{ th.redBg }};border:1px solid {{ th.redBd }};border-radius:16px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:14px;font-weight:600;color:#b91c1c">Your history could not be read.</span><span style="font-size:13px;font-weight:700;color:#b91c1c;border:1px solid {{ th.redBd }};border-radius:9px;padding:8px 12px">Try again</span></div></sc-if>
+    <sc-if value="{{ tl.ready }}" hint-placeholder-val="{{ true }}">
+      <div style="background:{{ th.card }};border:1px solid {{ th.hair }};border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div class="af-tl" style="display:flex;align-items:flex-start;gap:0;position:relative">
+          <div class="af-tl-line" style="position:absolute;left:0;right:0;top:9px;height:2px;background:{{ th.grid }}"></div>
+          <sc-for list="{{ tl.points }}" as="p" hint-placeholder-count="5">
+            <div class="af-tl-pt" style="flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;min-width:0;padding:0 6px">
+              <span style="width:20px;height:20px;border-radius:50%;flex:none;display:grid;place-items:center;background:{{ p.dotBg }};border:2px solid {{ p.dotBd }}"><sc-if value="{{ p.cur }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span></sc-if></span>
+              <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:13.5px;font-weight:{{ p.weight }};color:{{ p.nameColor }}">{{ p.name }}</span><span style="font:500 11px 'Roboto Mono',monospace;color:{{ th.muted }}">{{ p.date }}</span><span style="font-size:12px;color:{{ th.muted }}">{{ p.trigger }}</span><sc-if value="{{ p.cur }}" hint-placeholder-val="{{ false }}"><span style="align-self:center;font:600 10px 'Roboto Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:{{ th.tint }};border:1px solid {{ th.tintBd }};border-radius:99px;padding:2px 8px">Current</span></sc-if></div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ tl.single }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:13px;line-height:1.55;color:{{ th.muted }}">This is your first archetype. Changes appear here as your answers and activity build up.</p></sc-if>
+        <p style="margin:0;font-size:12px;line-height:1.5;color:{{ th.muted }}">Triggers: an answer, platform activity, a scheduled review, or an engine update.</p>
+      </div>
+    </sc-if>
+  </section>
+
+  <!-- 3 · MATCHES -->
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <div style="font:700 10px 'Roboto Mono',monospace;letter-spacing:.11em;text-transform:uppercase;color:{{ th.muted }}">Matches</div>
+    <h2 class="af-h2" style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Who you match with</h2>
+    <sc-if value="{{ mt.locked }}" hint-placeholder-val="{{ false }}"><div style="background:{{ th.card }};border:1px solid {{ th.hair }};border-radius:16px;padding:22px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap"><div style="display:flex;gap:12px;align-items:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ th.muted }}" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span style="font-size:14px;color:{{ th.muted }}">Matches are not included in your plan.</span></div><a href="/pricing" style="font-size:13px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:9px 14px">See plans</a></div></sc-if>
+    <sc-if value="{{ mt.error }}" hint-placeholder-val="{{ false }}"><div style="background:{{ th.redBg }};border:1px solid {{ th.redBd }};border-radius:16px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:14px;font-weight:600;color:#b91c1c">Matches could not be read.</span><span style="font-size:13px;font-weight:700;color:#b91c1c;border:1px solid {{ th.redBd }};border-radius:9px;padding:8px 12px">Try again</span></div></sc-if>
+    <sc-if value="{{ mt.ready }}" hint-placeholder-val="{{ true }}">
+      <div style="background:{{ th.tint }};border:1px solid {{ th.tintBd }};border-radius:14px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+        <span style="font-size:13.5px;line-height:1.5;color:{{ th.ink }}">Only members who publish their archetype appear here. Publish yours so they can find you.</span>
+        <div style="display:flex;align-items:center;gap:10px"><span style="font:600 11px 'Roboto Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:{{ th.muted }}">{{ mt.pubState }}</span><span style="{{ mt.togWrap }}"><span style="{{ mt.togKnob }}"></span></span><span style="font-size:12.5px;font-weight:600">{{ mt.pubLabel }}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ mt.types }}" as="t" hint-placeholder-count="3">
+          <div style="background:{{ th.card }};border:1px solid {{ th.hair }};border-radius:16px;overflow:hidden">
+            <div style="padding:14px 18px;border-bottom:1px solid {{ th.hair }};display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:800;letter-spacing:-.01em">{{ t.name }}</span><span style="font-size:13px;line-height:1.5;color:{{ th.muted }}">{{ t.why }}</span></div>
+            <sc-if value="{{ t.hasMembers }}" hint-placeholder-val="{{ true }}">
+              <sc-for list="{{ t.members }}" as="m" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid {{ th.hair }};flex-wrap:wrap"><div style="display:flex;align-items:center;gap:10px;min-width:0"><span style="width:28px;height:28px;border-radius:50%;flex:none;background:{{ th.well }};border:1px solid {{ th.hair }}"></span><span style="font-size:13.5px;font-weight:600">{{ m.name }}</span><span style="font-size:12.5px;color:{{ th.muted }}">{{ m.role }}</span><span style="font:600 10.5px 'Roboto Mono',monospace;color:#6d28d9;background:{{ th.tint }};border:1px solid {{ th.tintBd }};border-radius:99px;padding:2px 8px">{{ m.arch }}</span></div><span style="display:flex;align-items:center;gap:6px"><span style="font-size:11px;font-weight:600;color:{{ th.faint }};border:1px dashed {{ th.hairStrong }};border-radius:99px;padding:2px 8px;white-space:nowrap">{{ valuesChip }}</span><span style="font:600 9.5px 'Roboto Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:{{ th.faint }}">coming soon</span></span></div></sc-for>
+              <sc-if value="{{ t.hasMore }}" hint-placeholder-val="{{ false }}"><div style="padding:10px 18px;font-size:12.5px;font-weight:600;color:#6d28d9">and {{ t.more }} more</div></sc-if>
+            </sc-if>
+            <sc-if value="{{ t.hasMembers }}" hint-placeholder-val="{{ true }}"></sc-if>
+            <sc-if value="{{ t.none }}" hint-placeholder-val="{{ false }}"><div style="padding:14px 18px;font-size:13px;color:{{ th.muted }}">No member has published this archetype yet.</div></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin:0;font-size:12px;line-height:1.5;color:{{ th.muted }}">You see a member's name, role and published archetype only. Scores, traits, skills, values and history stay private.</p>
+    </sc-if>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1232},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light' | 'dark'&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;section&quot;:&quot;Theme&quot;},&quot;skills&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;mixed&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;mixed&quot;,&quot;none&quot;,&quot;loading&quot;,&quot;error&quot;],&quot;section&quot;:&quot;States&quot;},&quot;history&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;five&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;one&quot;,&quot;five&quot;,&quot;loading&quot;,&quot;error&quot;],&quot;section&quot;:&quot;States&quot;},&quot;matches&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;members&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;members&quot;,&quot;none&quot;,&quot;locked&quot;,&quot;error&quot;],&quot;section&quot;:&quot;States&quot;},&quot;published&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;States&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    if (typeof ARCH_FULL === 'undefined') { this._t = setInterval(() => { if (typeof ARCH_FULL !== 'undefined') { clearInterval(this._t); this.forceUpdate(); } }, 50); }
+  }
+  componentWillUnmount() { if (this._t) clearInterval(this._t); }
+  renderVals() {
+    const D = typeof ARCH_FULL !== 'undefined' ? ARCH_FULL : null;
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const th = dark
+      ? { bg: '#0f0d17', card: '#18181b', well: '#232330', ink: '#f4f3f7', muted: '#a1a1aa', faint: '#71717a', hair: '#2a2a35', hairStrong: '#3f3f4a', grid: '#2f2f3b', tint: '#1f1a33', tintBd: '#3b2a66', redBg: '#2a1416', redBd: '#5b1f24' }
+      : { bg: '#f4f3f7', card: '#fff', well: '#f4f3f7', ink: '#18181b', muted: '#6b6577', faint: '#a1a1aa', hair: '#ececf1', hairStrong: '#d4d1dc', grid: '#e4e2ec', tint: '#f4f0fe', tintBd: '#ddd0fb', redBg: '#fef2f2', redBd: '#fecaca' };
+    const skState = this.props.skills ?? 'mixed';      // mixed | none | loading | error
+    const tlState = this.props.history ?? 'five';      // one | five | loading | error
+    const mtState = this.props.matches ?? 'members';   // members | none | locked | error
+    const published = this.props.published ?? true;
+    const empty = { selfPath: '', dots: [], gaps: [], evOnly: [], rows: [] };
+    const skData = D ? (skState === 'none' ? D.skills.none : D.skills.mixed) : empty;
+    const sk = Object.assign({ loading: skState === 'loading', error: skState === 'error', ready: skState === 'mixed' || skState === 'none', allNR: skState === 'none' }, skData);
+    const pts = D ? (tlState === 'one' ? D.timeline.one : D.timeline.five) : [];
+    const tl = { loading: tlState === 'loading', error: tlState === 'error', ready: tlState === 'one' || tlState === 'five', single: tlState === 'one',
+      points: pts.map(p => ({ name: p.name, date: p.date, trigger: p.trigger, cur: p.cur, dotBg: p.cur ? '#7c3aed' : th.card, dotBd: p.cur ? '#7c3aed' : th.hairStrong, weight: p.cur ? 800 : 600, nameColor: p.cur ? '#6d28d9' : th.ink })) };
+    const types = D ? (mtState === 'none' ? D.typesEmpty : D.types) : [];
+    const mt = { locked: mtState === 'locked', error: mtState === 'error', ready: mtState === 'members' || mtState === 'none',
+      types: types.map(t => Object.assign({}, t, { none: !t.hasMembers })),
+      pubState: published ? 'Published' : 'Not published', pubLabel: published ? 'Unpublish' : 'Publish',
+      togWrap: 'width:34px;height:20px;border-radius:99px;position:relative;flex:none;background:' + (published ? '#7c3aed' : th.hairStrong),
+      togKnob: 'position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;' + (published ? 'right:2px' : 'left:2px') };
+    return { th, sk, tl, mt, rings: D ? D.rings : [], spokes: D ? D.spokes : [], labelPos: D ? D.labelPos : [], legend: D ? D.legend : [], valuesChip: D ? D.valuesChip : '' };
+  }
+}
+</script>
+</body></html>

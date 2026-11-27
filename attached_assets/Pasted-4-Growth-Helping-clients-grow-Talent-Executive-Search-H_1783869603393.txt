@@ -1,0 +1,730 @@
+4. Growth
+Helping clients grow.
+Talent
+Executive Search
+Hiring Support
+Candidate Network
+Recruiters
+Customers
+Customer Introductions
+Sales Opportunities
+Enterprise Introductions
+Channel Partners
+Partnerships
+Strategic Partners
+Technology Partners
+Resellers
+Distribution
+Capital
+Investor Introductions
+VC Firms
+Angel Investors
+Family Offices
+Grants
+Experts
+Subject Matter Experts
+Advisors
+Mentors
+Coaches
+
+
+
+4. Growth
+Helping clients grow.
+
+Talent
+Helping clients build teams and access critical expertise.
+
+Executive Search
+Finding senior leadership talent.
+Purpose:
+Help companies recruit executives who can unlock growth.
+
+Executive Search Pipeline
+Manage candidates through:
+Talent Need Identified
+
+↓
+
+Role Definition
+
+↓
+
+Candidate Sourcing
+
+↓
+
+Screening
+
+↓
+
+Interviews
+
+↓
+
+Offer
+
+↓
+
+Hired
+
+Executive Roles
+Track:
+CEO
+CTO
+CFO
+COO
+CMO
+VP Sales
+VP Engineering
+Board Members
+
+Candidate Profiles
+Contains:
+Personal Information
+Name
+Location
+Contact information
+LinkedIn
+Website
+
+Professional Background
+Current role
+Previous companies
+Experience
+Industry expertise
+Skills
+Achievements
+
+Career History
+Track:
+Companies
+Positions
+Duration
+Accomplishments
+Exits
+
+Candidate Fit
+AI evaluates:
+Experience match
+Industry fit
+Leadership style
+Company stage experience
+Cultural alignment
+Example:
+Candidate:
+
+Alex Martin
+
+
+Fit Score:
+
+92/100
+
+
+Strengths:
+
+✓ Scaled SaaS company
+✓ Enterprise sales experience
+✓ Previous exit
+
+
+Recommendation:
+
+Strong VP Sales candidate
+
+Hiring Support
+Helping clients build teams beyond executives.
+
+Hiring Strategy
+Includes:
+Hiring plan
+Headcount roadmap
+Role prioritization
+Compensation strategy
+
+Job Creation
+Manage:
+Job descriptions
+Requirements
+Skills
+Seniority
+Compensation range
+
+Hiring Pipeline
+Track:
+Applicants
+Interviews
+Technical reviews
+References
+Offers
+
+Hiring Analytics
+Measure:
+Time-to-hire
+Cost-per-hire
+Candidate conversion
+Hiring success rate
+
+Candidate Network
+A private talent database.
+Purpose:
+Build a long-term talent advantage.
+
+Candidate Database
+Contains:
+Engineers
+Executives
+Sales leaders
+Product managers
+Designers
+Researchers
+Operators
+
+Candidate Intelligence
+Track:
+Skills
+Interests
+Availability
+Career goals
+Location preferences
+
+Talent Matching
+AI recommends:
+"Which candidates fit this startup's CTO search?"
+Based on:
+Experience
+Industry
+Stage
+Skills
+Network
+
+Recruiters
+Manage recruiting partners.
+
+Recruiter Database
+Contains:
+Recruiter profiles
+Agencies
+Specializations
+Regions
+Fees
+
+Recruiter Relationships
+Track:
+Assignments
+Candidates submitted
+Success rate
+Fees paid
+Performance
+
+Customers
+Helping clients acquire customers and revenue opportunities.
+
+Customer Introductions
+Connecting startups with potential customers.
+Purpose:
+Turn relationships into commercial opportunities.
+
+Customer Database
+Track:
+Companies
+Decision makers
+Industry
+Revenue size
+Location
+Buying needs
+
+Introduction Workflow
+Identify Opportunity
+
+↓
+
+Find Connection
+
+↓
+
+Request Introduction
+
+↓
+
+Make Introduction
+
+↓
+
+Track Outcome
+
+Introduction Tracking
+Measure:
+Introductions made
+Meetings created
+Deals generated
+Revenue impact
+
+Sales Opportunities
+Helping clients find deals.
+
+Opportunity Pipeline
+Track:
+Target Account
+
+↓
+
+Contacted
+
+↓
+
+Meeting
+
+↓
+
+Proposal
+
+↓
+
+Negotiation
+
+↓
+
+Closed Won
+
+Opportunity Records
+Contains:
+Customer
+Deal value
+Contact person
+Stage
+Probability
+Expected close date
+
+Enterprise Introductions
+Connecting startups with large organizations.
+
+Enterprise Database
+Track:
+Fortune companies
+Industry leaders
+Innovation teams
+Procurement contacts
+
+Enterprise Matching
+AI recommends:
+"Which enterprises need this startup's solution?"
+Based on:
+Industry
+Technology
+Use case
+Strategic fit
+
+Channel Partners
+Helping companies scale distribution.
+
+Partner Types
+Resellers
+Integrators
+Distributors
+Agencies
+Marketplaces
+
+Partner Profiles
+Track:
+Partner type
+Geography
+Customer base
+Revenue potential
+Relationship status
+
+Partnerships
+Building strategic ecosystem relationships.
+
+Strategic Partners
+Creating high-value business relationships.
+
+Strategic Partner Database
+Track:
+Companies
+Partnership goals
+Contacts
+Opportunities
+
+Partnership Pipeline
+Stages:
+Target Partner
+
+↓
+
+Conversation
+
+↓
+
+Proposal
+
+↓
+
+Agreement
+
+↓
+
+Active Partnership
+
+Partnership Outcomes
+Measure:
+Revenue generated
+Customers acquired
+Market expansion
+Strategic value
+
+Technology Partners
+Connecting companies with technology providers.
+Examples:
+Cloud providers
+AI platforms
+APIs
+Infrastructure providers
+Software vendors
+
+Technology Partner Records
+Track:
+Partner benefits
+Discounts
+Credits
+Integrations
+Technical contacts
+
+Resellers
+Managing indirect sales channels.
+
+Reseller Profiles
+Contains:
+Company
+Market
+Customer base
+Sales capability
+
+Reseller Management
+Track:
+Agreements
+Revenue share
+Performance
+Pipeline
+
+Distribution
+Helping companies expand market reach.
+
+Distribution Channels
+Examples:
+Retail
+Online marketplaces
+Enterprise channels
+International distributors
+
+Distribution Planning
+Track:
+Target markets
+Channel strategy
+Partners
+Revenue goals
+
+Capital
+Helping clients access funding.
+
+Investor Introductions
+Connecting companies with investors.
+
+Investor Matching
+AI matches startups with:
+Investment thesis
+Sector
+Stage
+Geography
+Check size
+
+Example:
+Startup:
+
+AI Security
+
+
+Recommended Investors:
+
+✓ Cyber VC
+✓ Enterprise SaaS VC
+✓ AI Specialists
+
+
+Match:
+
+94%
+
+Investor Relationship Tracking
+Track:
+Introductions
+Meetings
+Feedback
+Interest
+Investment outcome
+
+VC Firms
+Database of venture investors.
+
+VC Profile
+Contains:
+Fund size
+Partners
+Investment focus
+Portfolio
+Check size
+
+VC Matching
+Match based on:
+Stage
+Industry
+Geography
+Investment history
+
+Angel Investors
+Individual investor network.
+
+Angel Profiles
+Track:
+Background
+Investments
+Expertise
+Check size
+Interests
+
+Syndication
+Manage:
+Investor groups
+Introductions
+Round participation
+
+Family Offices
+Private capital relationships.
+
+Family Office Profiles
+Track:
+Investment preferences
+Direct investment interests
+Fund investments
+Contact relationships
+
+Grants
+Helping companies access non-dilutive capital.
+
+Grant Database
+Track:
+Government grants
+Research grants
+Innovation programs
+Startup programs
+
+Grant Matching
+AI recommends:
+Relevant grants
+Eligibility
+Deadlines
+Application requirements
+
+Experts
+Connecting companies with specialized knowledge.
+
+Subject Matter Experts
+Domain specialists.
+
+Expert Profiles
+Contains:
+Expertise areas
+Industry experience
+Publications
+Companies worked with
+Availability
+
+Expert Matching
+Example:
+Need:
+
+Healthcare Regulatory Expert
+
+
+Match:
+
+Dr. Sarah Lee
+
+
+Score:
+
+95/100
+
+Advisors
+Connecting companies with experienced operators.
+
+Advisor Database
+Track:
+Background
+Companies advised
+Expertise
+Availability
+Compensation
+
+Advisor Matching
+Based on:
+Company stage
+Industry
+Challenge
+Geography
+
+Mentors
+Supporting founders and teams.
+
+Mentor Profiles
+Track:
+Experience
+Mentoring topics
+Previous startups
+Availability
+
+Mentorship Programs
+Manage:
+Mentor assignments
+Sessions
+Feedback
+Progress
+
+Coaches
+Leadership and personal development support.
+
+Coach Database
+Categories:
+Executive coaches
+Leadership coaches
+Sales coaches
+Product coaches
+Communication coaches
+
+Coaching Management
+Track:
+Sessions
+Goals
+Progress
+Outcomes
+
+Growth Analytics Dashboard
+Measures advisor impact.
+
+Growth KPIs
+Track:
+Talent
+Candidates introduced
+Hires completed
+Executive placements
+Customers
+Introductions made
+Meetings created
+Revenue generated
+Partnerships
+Partnerships created
+Strategic value
+Capital
+Investor introductions
+Funding raised
+Experts
+Experts matched
+Sessions completed
+
+Example:
+Growth Impact
+
+Client:
+
+Neural AI
+
+
+Talent:
+
+✓ CTO hired
+
+
+Customers:
+
+✓ 15 enterprise introductions
+✓ $2M pipeline created
+
+
+Capital:
+
+✓ 12 investor meetings
+✓ $8M raised
+
+
+Experts:
+
+✓ 5 domain experts connected
+
+AI Growth Assistant
+The intelligence layer.
+
+Network Intelligence
+Answers:
+"Who in my network can help this startup enter healthcare?"
+
+Opportunity Discovery
+Finds:
+Customer opportunities
+Investors
+Partners
+Talent
+
+Matching Engine
+Automatically connects:
+Startups ↔ Investors
+Companies ↔ Customers
+Teams ↔ Candidates
+Problems ↔ Experts
+
+Growth Recommendations
+Example:
+Detected Challenge:
+
+Enterprise sales slowing.
+
+
+Recommended Actions:
+
+1. Introduce 5 enterprise buyers
+2. Add VP Sales advisor
+3. Partner with channel reseller
+
+Final Growth Record
+Example:
+Client:
+
+AI Startup
+
+
+Growth Initiatives:
+
+Talent:
+✓ CTO recruited
+
+
+Customers:
+✓ 20 enterprise introductions
+✓ 5 active opportunities
+
+
+Partnerships:
+✓ Cloud partnership created
+
+
+Capital:
+✓ $10M fundraising completed
+
+
+Experts:
+✓ AI security advisor connected
+
+
+Impact:
+
+$25M pipeline created

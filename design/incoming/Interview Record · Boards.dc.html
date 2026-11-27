@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Validate › Customer research · #3710</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">One interview, and its session</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The interview record on desktop, phone and tablet (IV-D1 to IV-D5, IV-M1 to IV-M7, IV-S1, IV-S2) and the session page it opens (REC1 to REC6). Built from the final prompt with the Ask addendum: Ask carries the “[3] waiting” chip, and every cost reads as a hold.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="8">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Interview Record Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap, wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 1200}px` }; };
+    return { groups: [
+      { id: 'Page', t: 'The interview record at 1440, Ask panel closed', fr: [F('rec0', 'Interview record · /validate/customer-research/[54]', 1440, 2416)] },
+      { id: 'IV-D1', t: 'Desktop header (pending owner: one record header for every cycle)', note: 'The back link sits above the eyebrow, never among the tabs. One action row: the primary, Ask with “[3] waiting”, Email, Edit details and ⋯. When no findings wait, the primary is Open recording, which plays the latest audio in a player docked under the header.', fr: [F('ivd1a', '⋯ open · Open the session and Delete', 1440, 620), F('ivd1c', 'Delete confirm', 1440, 620), F('ivd1b', 'No findings waiting · Open recording plays in place', 1440, 760)] },
+      { id: 'IV-D2', t: 'Fact cards', note: 'Judge fit is the member’s decision, so it has no Ask trigger. Consent cannot be added after recording, so it has no action.', fr: [F('ivd2', 'Four even cards · gaps with their one action · Edit details', 1440, 1052)] },
+      { id: 'IV-D3', t: 'Email the interviewee (pending owner: the Sheet now, the Ask panel later)', note: 'Draft with Eadwyn is replaced by Ask and a field trigger on the blank Body. The draft arrives as a preview in the Ask panel; Accept places it, marked Not saved until Send.', fr: [F('ivd3a', 'The composer in the right Sheet', 1440, 1000), F('ivd3b', 'The preview, then the composer after Accept', 1440, 906)] },
+      { id: 'IV-D4', t: 'Widths 1280 and 1024, and dark', note: 'At 1024 the action row moves under the title and Edit details moves into ⋯.', fr: [F('rec1280', '1280', 1280, 1100), F('rec1024', '1024', 1024, 1100), F('rec0-d', 'Dark · 1440', 1440, 2416)] },
+      { id: 'IV-D5', t: 'Ask panel open on the record', fr: [F('ivd5', 'Answers with cited quotes, then proposals grouped by module', 1440, 1180)] },
+      { id: 'IV-M1', t: 'Top of the page · phone', fr: [F('ivm1', 'Sticky header · At a glance', 390, 844)] },
+      { id: 'IV-M2', t: 'Sections', note: 'The selected section is kept in the address, so a reload returns to it.', fr: [F('ivm2', 'Scrolled · segmented control sticky under the header', 390, 844)] },
+      { id: 'IV-M3', t: 'Transcript', fr: [F('ivm3', 'Search with up and down · tapped line · sticky player', 390, 844)] },
+      { id: 'IV-M4', t: 'Findings', fr: [F('ivm4', 'Accept, Edit and Discard in the thumb zone', 390, 1180)] },
+      { id: 'IV-M5', t: 'Ask as a bottom sheet', fr: [F('ivm5a', 'Half height', 390, 844), F('ivm5b', 'Full height · input above the keyboard', 390, 844)] },
+      { id: 'IV-M6', t: 'Record states · phone', fr: [F('ivm6a', 'Processing', 390, 760), F('ivm6b', 'No audio', 390, 760), F('ivm6c', 'Failed', 390, 760), F('ivm6d', 'Consent declined', 390, 760), F('ivm6e', 'Empty findings', 390, 760), F('ivm6f', 'Waiting', 390, 760), F('ivm6g', 'One block could not be read', 390, 760), F('ivm6h', 'Loading', 390, 760), F('ivm1-d', 'Dark · IV-M1', 390, 844), F('ivm2-d', 'Dark · IV-M2', 390, 844), F('ivm3-d', 'Dark · IV-M3', 390, 844), F('ivm4-d', 'Dark · IV-M4', 390, 1180)] },
+      { id: 'IV-M7', t: 'Tablet 768 (pending owner: two columns from 768 on this record)', fr: [F('ivm7', '768 · two columns, sticky player under the main column', 768, 1024)] },
+      { id: 'IV-S1', t: 'AI states', fr: [F('ivs1', 'Out of tokens · AI paused · Running · AI off on this page', 1440, 851)] },
+      { id: 'IV-S2', t: 'Who is reading', fr: [F('ivs2a', 'Read-only admin access', 1440, 1160), F('ivs2b', 'A member without write access', 1440, 900), F('ivs2c', 'Permission refused · a refused write', 1440, 700)] },
+      { id: 'REC1', t: 'Session page · desktop (pending owner: a failed join opens a fresh session)', note: 'The stepper is the one status. It merges the bot and the processing, and the primary follows it.', fr: [F('rec1', 'Ready · /validate/session/[212]', 1440, 1168)] },
+      { id: 'REC2', t: 'Failure, made actionable', fr: [F('rec2a', 'Three failures, one panel each', 1440, 510), F('rec2b', 'See details in the right Sheet', 1440, 1000)] },
+      { id: 'REC3', t: 'Participants', fr: [F('rec3', 'Timeline with speaker share · live roster', 1440, 371)] },
+      { id: 'REC4', t: 'Transcript', fr: [F('rec4', 'Ready · Processing · Not available', 1440, 612)] },
+      { id: 'REC5', t: 'Cost, in the right column', fr: [F('rec5', 'Charged · nothing charged · unreadable · no budget', 1440, 414)] },
+      { id: 'REC6', t: 'Session states', fr: [F('rec6a', 'Through the lifecycle', 1440, 1576), F('rec6b', 'Failed at each step', 1440, 1241), F('rec6c', 'Declined, limits, tokens, paused, unreadable', 1440, 1150), F('rec6d', 'Loading', 1440, 1000), F('rec6e', 'Participants could not be read', 1440, 1180), F('rec6p1', 'Phone · stepper collapsed to [4 of 9]', 390, 844), F('rec6p2', 'Phone · stepper expanded', 390, 844), F('rec1-d', 'Dark', 1440, 1168)] }
+    ] };
+  }
+}
+</script>
+</body></html>

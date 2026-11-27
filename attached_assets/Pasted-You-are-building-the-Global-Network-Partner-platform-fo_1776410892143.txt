@@ -1,0 +1,89 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, and the following D1 tables from all previous builds:
+- users (with roles and kyc_status)
+- referrals, referral_chains, commissions, payouts
+- deals, project_stages, mvp_tasks, metrics_snapshots, decision_gates
+- user_preferences, match_scores
+- workflows, workflow_tasks, shared_services_log
+- syndicates, syndicate_members
+- marketplace_profiles
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add complete, production-grade **Database models/schemas (D1 only)** focused on Partners, Relationships, and Activity Tracking with these exact requirements:
+
+1. **Core Partner Schema Enhancements**  
+   - Extend the existing `users` table (do NOT create a new one) with these new columns:
+     • partner_since (timestamp)
+     • total_earnings (decimal, default 0)
+     • network_score (float, default 0) → computed from AI or activity
+     • verified_badges (json array) e.g. ["top_referrer", "syndicate_lead"]
+     • last_active (timestamp)
+
+2. **New Relationships Tables**  
+   Create these tables with proper foreign keys, indexes, and constraints:
+   - `partner_relationships`
+     • id (PK)
+     • partner_a_id (FK to users.id)
+     • partner_b_id (FK to users.id)
+     • relationship_type (text: 'co_investor', 'advisor_founder', 'operator_partner', 'strategic_alliance', 'mentor_mentee')
+     • strength_score (float, 0-100) → AI-updatable
+     • metadata (json)
+     • created_at, updated_at
+     • UNIQUE constraint on (partner_a_id, partner_b_id)
+   - `relationship_events`
+     • id (PK)
+     • relationship_id (FK)
+     • event_type (text)
+     • details (json)
+     • created_at
+
+3. **Comprehensive Activity Tracking**  
+   Create a centralized audit-style table:
+   - `activity_logs`
+     • id (PK)
+     • user_id (FK to users.id)
+     • action_type (text: 'dashboard_view', 'deal_review', 'syndicate_join', 'referral_convert', 'studio_ops_task', 'ai_scoring', 'payout_request', etc.)
+     • entity_type (text) → e.g. 'deal', 'syndicate', 'workflow'
+     • entity_id (text)
+     • ip_address (text, optional)
+     • user_agent (text, optional)
+     • metadata (json)
+     • created_at (timestamp)
+     • Add indexes on user_id, action_type, created_at for fast analytics.
+
+4. **Views & Helper Tables**  
+   - Create a D1 VIEW `partner_summary` that joins users + total earnings + network_score + active relationships count.
+   - Create a simple `activity_stats` table for pre-aggregated daily/weekly metrics (user_id, date, action_count, earnings_today, etc.) — populated via triggers or backend jobs.
+
+5. **Migration & Seeding**  
+   - Provide a complete migration script (SQL) that adds the new columns to users and creates all new tables + indexes + the view.
+   - Seed 5–10 sample relationships and activity logs for testing (use existing user IDs).
+
+6. **Backend Integration (add to main.py)**  
+   - Helper functions to log activity (`log_activity(user_id, action_type, entity_type, entity_id, metadata)`).
+   - Endpoints (protected by RBAC):
+     • GET /api/partners/relationships (list my relationships with strength scores)
+     • POST /api/relationships (create new relationship)
+     • GET /api/activity/logs (my activity feed, paginated)
+     • GET /api/partner/summary (returns partner_summary view for current user)
+   - Use Replit AI helper to auto-update `strength_score` or `network_score` when relationships or activity changes.
+
+7. **Security & Best Practices**  
+   - Enforce no self-relationships.
+   - All activity_logs are append-only (no updates/deletes).
+   - Rate limit relationship creation.
+   - Use D1 best practices: prepared statements, transactions, indexes on all FKs and frequently queried columns.
+   - Store everything in Replit’s D1 (no other DBs).
+
+Build this step-by-step:  
+1. First run the full D1 migration script (show the exact SQL).  
+2. Then add the backend helper functions and activity logging.  
+3. Then implement the new endpoints.  
+4. Finally update the Partner Dashboard (or add a new /network-relationships.html tab) to display the new relationships and activity feed using the existing UI style.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

@@ -1,0 +1,69 @@
+Objective
+  Anonymised advisor answers feed the existing Market Intelligence
+  sections:
+    - Axal Investor Signals
+    - Founder Sentiment
+    - TALC Positioning
+    - Demand & Supply Atlas
+    - Founder–Investor Fit
+    - Partner Marketplace Pulse
+    - Sector Heat
+    - Sentiment Geography
+    - Capital Velocity
+  These remain ADDITIVE to the existing external-source pipeline
+  (Crunchbase, EDGAR, GDELT, USPTO, etc.). Never replace external data.
+
+Extractor pipeline (cloudflare-worker/src/services/market_intel/extractors/)
+  advisor_sentiment.ts
+    On every advisor_answer commit where question.sentiment_eligible
+    is true, enqueue a job:
+      embed value with @cf/baai/bge-base-en-v1.5
+      classify valence/energy/topic with @cf/meta/llama-3.3-70b-fp8-fast
+      → market_intel_signals row { source='advisor', metric_key='sentiment',
+                                    sector, geo, persona, value: {valence, energy},
+                                    snapshot_ts }
+  advisor_talc.ts
+    On every answer where question.talc_eligible:
+      Parse the chosen TALC bucket → market_intel_signals row.
+  advisor_thesis_embedding.ts
+    Investor thesis answers + founder one-liner answers → bge embeddings
+    stored in market_intel_embeddings for similarity matching (Founder
+    ↔ Investor Fit).
+  advisor_demand_supply.ts
+    Founder "need" answers + partner "offer" answers → bilateral signal.
+  advisor_capital_velocity.ts
+    Investor deployment target / current deployment pace →
+    quarterly velocity index.
+  advisor_partner_pulse.ts
+    Partner rate cards / capacity / comp preferences → marketplace pulse.
+
+Privacy
+  - k-anonymity ≥ 5 enforced on every aggregate.
+  - No row-level pass-through. Free-text excerpts paraphrased by the
+    LLM before display; raw text never leaves /api/market-intel.
+  - User opt-out in Settings > Privacy ("Contribute my advisor
+    answers to anonymised Market Intelligence") — default ON.
+  - Opt-out removes contributions within 6 hours (next aggregation run).
+  - Investor identities masked behind hashed IDs until a signed
+    pairwise NDA exists.
+
+Aggregator
+  Nightly cron computes market_intel_aggregates rows for every MI
+  section, granularity {1d, 7d, 30d, 90d}, with n, ci_lower, ci_upper.
+  Suppress cells with n<5 at read time, not write time, so retroactive
+  opt-out is correct.
+
+Endpoints (cloudflare-worker/src/routes/market_intel.ts — extend)
+  All these already exist (Prompt AK): sentiment, talc,
+  demand-supply, fit, partner-pulse, sector-heat, capital-velocity,
+  sentiment-geo. Wire them to read the new advisor-sourced rows as a
+  second `source_kind` line alongside external sources.
+
+Acceptance
+  - Every MI tab now shows TWO data series where applicable: "external"
+    and "community (advisor)".
+  - Aggregates update within hours of new advisor answers (cron) or
+  minutes if the user explicitly triggers a refresh (admin only).
+  - n<5 cells render "Insufficient data" (no zero ghosts).
+  - Opt-out flow verified by removing a test user and confirming
+    their data no longer appears in next aggregation.

@@ -1,0 +1,26 @@
+#27 - Auto-fill & color the Lab Activity strip
+What & Why
+On the Spin-Out Demo Day deck's Cover slide, the "LAST 30 DAYS · LAB ACTIVITY" field is currently surfaced in the slide editor as a raw, hand-editable JSON textarea (cover_activity_log_json). Founders shouldn't be editing this — it's a computed pulse of their Lab activity over the last 30 days. Two changes:
+1. Make the Lab Activity data non-editable in the editor — it should be inserted automatically from the founder's Lab data, not shown as an editable JSON blob.
+2. In the rendered Cover slide graph, color each module (the source of each logged event — e.g. milestones, interviews, advisor answers) with its own distinct color instead of every bar being the same violet, with a small legend so the colors are legible.
+Done looks like
+* Opening the Cover slide in the Pitch Deck Builder editor no longer shows the "LAST 30 DAYS · LAB ACTIVITY" JSON textarea as an editable field. The activity data is populated automatically and cannot be hand-edited (either hidden or shown read-only with an "auto" indicator).
+* The rendered Cover slide's 30-day activity strip shows each day's activity broken down by module, with a different color per module, plus a compact legend mapping color → module.
+* Days with no activity still render as the existing faint skeleton dots.
+* Exported PDF/PowerPoint decks reflect the same multi-color strip (rendering parity with the on-screen slide).
+* Sample/empty decks still render gracefully (no crash, skeleton state intact).
+Out of scope
+* Changing which event sources count as "Lab activity" beyond what's already aggregated (milestones, interviews, advisor answers) — only attributing them per-module for color.
+* Any other Cover slide fields or other slides.
+* Redesigning the overall Cover layout.
+Steps
+1. Stop surfacing the activity log as an editable field. In the deck builder's Cover field list, remove cover_activity_log_json from the editable fields (or mark it as an auto/read-only field type the editor renders non-interactively). Ensure the value is still computed and persisted so the slide renders, and that saving the deck does not wipe it. If a new "auto/read-only" field treatment is introduced, handle it in the slide editor's field renderer so it shows the value (or a short "auto-populated from Lab activity" note) without an editable input.
+2. Track activity per module in the backend. Change the activity-log computation so each day carries a per-module breakdown (counts keyed by module/kind: milestone, interview, advisor) rather than collapsing everything into a single count with kind: 'lab'. Keep a total for height scaling. Preserve the 30-day zero-filled window and the 30-day age cutoff. Update the emitted JSON payload accordingly.
+3. Update the shared data type. Update the ActivityLogDay type (and the backend activity_log type) so frontend and backend agree on the new per-module shape. Keep backward-compatible parsing so older saved decks (single-count shape) still render without error.
+4. Render module colors + legend. Update the ActivityLog30Day component so each day's bar is segmented/stacked by module with a distinct color per module drawn from the deck's theme palette, and add a small legend below the strip. Keep the empty-day skeleton dot behavior and overall sizing.
+5. Verify export parity. Confirm the PDF/PowerPoint export path renders the same multi-color strip and legend, and that sample/empty decks don't crash.
+Relevant files
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:698-724,1147-1169
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:189-194,1079-1083,1104-1105
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:101,146-149,216,528,1515,2279-2304
+* frontend/src/pages/PitchDeckPage.jsx:762-906

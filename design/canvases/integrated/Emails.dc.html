@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,-apple-system,'Segoe UI',Arial,sans-serif;background:#e6e5ea;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}
+    .ab{padding:38px 44px 30px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .em{width:600px;min-width:600px;flex:none;background:#fff;border:1px solid #e8e6ee;box-shadow:0 2px 14px rgba(36,31,56,.09)}
+    .mono{font-family:'Roboto Mono','SFMono-Regular',Consolas,monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono','SFMono-Regular',Consolas,monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .h1{margin:0;font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.24}
+    .p{margin:0;font-size:15px;line-height:1.65;color:#332e45}
+    .sm{margin:0;font-size:12.5px;line-height:1.6;color:#6b6577}
+    .cta{display:block;text-align:center;font-size:15px;font-weight:700;padding:15px 0;background:#7c3aed;color:#fff;border-radius:8px;text-decoration:none}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:600px}
+    .note{font-size:11px;line-height:1.6;color:#6b6577}
+  </style>
+</helmet>
+
+<!-- shared spec -->
+<section class="ab" id="m0">
+  <div class="ab-hd"><a class="ab-id" href="#m0">M0</a><span class="ab-nm">Shared chrome &amp; constraints</span><span class="ab-sub">600px · single column · table-friendly spacing</span></div>
+  <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+    <div style="width:600px;flex:none;background:#fff;border:1px solid #e8e6ee">
+      <div style="padding:20px 32px;border-bottom:1px solid #e8e6ee">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="width:22px;height:22px;border-radius:6px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">A</span>
+          <span style="font-size:13px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        </div>
+      </div>
+      <div style="padding:26px 32px">
+        <div class="lbl">Header</div>
+        <p class="sm" style="margin-top:8px">Wordmark and a hairline. No navigation, no hero image — anything an image blocker removes must not be load-bearing.</p>
+        <div style="height:1px;background:#e8e6ee;margin:20px 0"></div>
+        <div class="lbl">Footer</div>
+        <p class="sm" style="margin-top:8px">Sender identity, postal address, preferences link. Unsubscribe appears on the weekly digest and the broadcast invitations — never on transactional mail, and never on the GP&rsquo;s personal notes.</p>
+      </div>
+      <div style="padding:22px 32px;background:#fbfaff;border-top:1px solid #e8e6ee">
+        <p class="note" style="margin:0">Axal VC Management LLC, 16192 Coastal Hwy, Lewes, DE 19958, United States</p>
+        <p class="note" style="margin:8px 0 0">Sent to ines@meridianrobotics.nl because you hold a Founder licence.<br><a href="#prefs" style="color:#6d28d9">Notification preferences</a> · <span style="color:#6b6577">Unsubscribe not offered — this message is essential to your account</span></p>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:300px;display:grid;gap:12px">
+      <div style="background:#fff;border:1px solid #e8e6ee;border-radius:12px;padding:17px 19px">
+        <div class="lbl">Constraints applied to all {{ totalEmails }}</div>
+        <div style="display:grid;gap:10px;margin-top:11px">
+          <sc-for list="{{ rules }}" as="r" hint-placeholder-count="5">
+            <div style="border-left:2px solid #7c3aed;padding-left:11px">
+              <div style="font-size:12.5px;font-weight:700">{{ r.rule }}</div>
+              <div style="font-size:11.5px;color:#4a4459;margin-top:4px;line-height:1.55">{{ r.why }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#fffdf5;border:1px solid #fcd34d;border-radius:12px;padding:16px 18px">
+        <div class="lbl" style="color:#92400e">Essential vs. non-essential</div>
+        <p style="margin:8px 0 0;font-size:12px;color:#78350f;line-height:1.6">{{ essentialNote }}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- the five emails -->
+<!-- ══════════ SET A · broadcast invites ══════════ -->
+<sc-for list="{{ setA }}" as="e" hint-placeholder-count="4">
+  <section class="ab" id="{{ e.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ e.href }}">{{ e.tag }}</a><span class="ab-nm">{{ e.name }}</span><span class="ab-sub">{{ e.sub }}</span></div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div class="mono" style="font-size:11px;color:#6b6577;margin-bottom:9px;max-width:600px;line-height:1.6">
+          <strong style="color:#241f38">Subject</strong>&nbsp; {{ e.subject }}<br>
+          <strong style="color:#241f38">Preheader</strong>&nbsp; {{ e.preheader }}
+        </div>
+        <div class="em">
+          <div style="padding:20px 32px;border-bottom:1px solid #e8e6ee;display:flex;align-items:center;gap:9px">
+            <span style="width:22px;height:22px;border-radius:6px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">A</span>
+            <span style="font-size:13px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+          </div>
+          <div style="padding:30px 32px 32px">
+            <h1 class="h1">{{ e.h1 }}</h1>
+            <p class="p" style="margin-top:16px">{{ e.line }}</p>
+            <div style="margin-top:20px;padding:18px;background:#f4f0fe;border-radius:11px">
+              <div style="display:grid;gap:11px">
+                <sc-for list="{{ e.bullets }}" as="b" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:flex-start;gap:10px">
+                    <span style="width:5px;height:5px;border-radius:50%;background:#7c3aed;flex:none;margin-top:6px"></span>
+                    <div style="min-width:0">
+                      <span style="font-size:13px;font-weight:700">{{ b.k }}</span>
+                      <span style="font-size:12.5px;color:#4a4459"> — {{ b.v }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="margin-top:24px"><span class="cta">{{ e.cta }}</span></div>
+            <div style="margin-top:24px;padding-top:20px;border-top:1px solid #e8e6ee;display:flex;align-items:flex-start;gap:13px">
+              <img src="uploads/photo-1-2d2a1898.png" alt="Guillaume Lauzier" width="44" height="44" style="width:44px;height:44px;border-radius:50%;flex:none;object-fit:cover;display:block" />
+              <div style="min-width:0">
+                <div class="lbl">Invited by</div>
+                <div class="mono" style="font-size:12.5px;font-weight:700;margin-top:5px">Guillaume Lauzier</div>
+                <div class="mono" style="font-size:11px;color:#4a4459;margin-top:3px">Founder, Managing Partner &amp; GP, Axal VC</div>
+                <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:5px;line-height:1.6">guillaume.lauzier@axal.vc · linkedin.com/in/guillaumelauzier</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:22px 32px;background:#fbfaff;border-top:1px solid #e8e6ee">
+            <p class="note" style="margin:0">{{ e.address }}</p>
+            <p class="note" style="margin:8px 0 0">{{ e.why }}<br><a href="#prefs" style="color:#6d28d9">Notification preferences</a><span> · </span><a href="#unsub" style="color:#6b6577">Unsubscribe</a></p>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:290px;background:#fff;border:1px solid #e8e6ee;border-radius:12px;padding:17px 19px">
+        <div class="lbl">Inviter block</div>
+        <p style="margin:9px 0 0;font-size:12px;color:#332e45;line-height:1.6">Photo, name, title and contact line — identical across all four personas and both sets, so a recipient who receives two invitations sees the same sender rather than two identities.</p>
+        <div class="lbl" style="margin-top:15px;padding-top:13px;border-top:1px solid #f0eef5">Value proposition</div>
+        <div style="display:grid;gap:9px;margin-top:11px">
+          <sc-for list="{{ e.bullets }}" as="b" hint-placeholder-count="5">
+            <div style="font-size:12px;color:#332e45;line-height:1.55"><strong>{{ b.k }}</strong> · {{ b.v }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+</sc-for>
+<div class="ab" style="padding-top:0"><div class="cap" style="max-width:1000px">{{ setACap }}</div></div>
+
+<!-- ══════════ SET B · personal invites from the GP ══════════ -->
+<sc-for list="{{ setB }}" as="e" hint-placeholder-count="4">
+  <section class="ab" id="{{ e.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ e.href }}">{{ e.tag }}</a><span class="ab-nm">{{ e.name }}</span><span class="ab-sub">{{ e.sub }}</span></div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div class="mono" style="font-size:11px;color:#6b6577;margin-bottom:9px;max-width:600px;line-height:1.6">
+          <strong style="color:#241f38">Subject</strong>&nbsp; {{ e.subject }}<br>
+          <strong style="color:#241f38">Preheader</strong>&nbsp; {{ e.preheader }}
+        </div>
+        <div class="em">
+          <div style="padding:20px 32px;border-bottom:1px solid #e8e6ee;display:flex;align-items:center;gap:9px">
+            <span style="width:22px;height:22px;border-radius:6px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">A</span>
+            <span style="font-size:13px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+          </div>
+          <div style="padding:26px 32px 18px;background:#f4f0fe;display:flex;align-items:center;gap:14px">
+            <div style="min-width:0">
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.02em">Hi [First Name],</div>
+            </div>
+          </div>
+          <div style="padding:24px 32px 30px">
+            <sc-for list="{{ e.note }}" as="n" hint-placeholder-count="3">
+              <p class="p" style="margin-top:0;margin-bottom:14px">{{ n }}</p>
+            </sc-for>
+            <div style="margin-top:20px"><span class="cta">{{ e.cta }}</span></div>
+            <div style="margin-top:26px;padding-top:20px;border-top:1px solid #e8e6ee;display:flex;align-items:flex-start;gap:13px">
+              <img src="uploads/photo-1-2d2a1898.png" alt="Guillaume Lauzier" width="44" height="44" style="width:44px;height:44px;border-radius:50%;flex:none;object-fit:cover;display:block" />
+              <div style="min-width:0">
+              <div class="mono" style="font-size:13px;font-weight:700">Guillaume Lauzier</div>
+              <div class="mono" style="font-size:11.5px;color:#4a4459;margin-top:3px">Founder, Managing Partner &amp; GP, Axal VC</div>
+              <div class="mono" style="font-size:11px;color:#6b6577;margin-top:6px;line-height:1.6">guillaume.lauzier@axal.vc · linkedin.com/in/guillaumelauzier</div>
+              <p class="note" style="margin:10px 0 0">{{ e.address }}</p>
+              </div>
+            </div>
+          </div>
+          <div style="padding:22px 32px;background:#fbfaff;border-top:1px solid #e8e6ee">
+            <p class="note" style="margin:0">{{ e.why }}</p>
+            <p class="note" style="margin:8px 0 0"><a href="#prefs" style="color:#6d28d9">Notification preferences</a></p>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:290px;background:#fff;border:1px solid #e8e6ee;border-radius:12px;padding:17px 19px">
+        <div class="lbl">Placeholders in this template</div>
+        <div style="display:grid;gap:9px;margin-top:11px">
+          <div style="font-size:12px;color:#332e45;line-height:1.55"><strong>Headshot</strong> · supplied, 44px circular, in the sign-off only. Decorative — name, title and contacts are text, so the block reads in the third of clients that block images</div>
+          <div style="font-size:12px;color:#332e45;line-height:1.55"><strong>[First Name]</strong> · merge field; the letter reads wrong without it</div>
+          <div style="font-size:12px;color:#332e45;line-height:1.55"><strong>Phone</strong> · dropped rather than left as a placeholder in the contact line</div>
+        </div>
+        <p class="note" style="margin:13px 0 0">No unsubscribe, and no signature image. A personal note from a named sender is not a list; and a typed sign-off reads as sincere where a scanned signature on a merge-filled letter reads as automated.</p>
+      </div>
+    </div>
+  </section>
+</sc-for>
+<div class="ab" style="padding-top:0"><div class="cap" style="max-width:1000px">{{ setBCap }}</div></div>
+
+<sc-for list="{{ emails }}" as="e" hint-placeholder-count="5">
+  <section class="ab" id="{{ e.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ e.href }}">{{ e.tag }}</a><span class="ab-nm">{{ e.name }}</span><span class="ab-sub">{{ e.sub }}</span></div>
+
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div class="mono" style="font-size:11px;color:#6b6577;margin-bottom:9px;max-width:600px;line-height:1.6">
+          <strong style="color:#241f38">Subject</strong>&nbsp; {{ e.subject }}<br>
+          <strong style="color:#241f38">Preheader</strong>&nbsp; {{ e.preheader }}
+        </div>
+
+        <div class="em">
+          <div style="padding:20px 32px;border-bottom:1px solid #e8e6ee;display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="width:22px;height:22px;border-radius:6px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">A</span>
+              <span style="font-size:13px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+            </div>
+            <sc-if value="{{ e.chrome }}"><span class="lbl">{{ e.chrome }}</span></sc-if>
+          </div>
+
+          <div style="padding:30px 32px 32px">
+            <sc-if value="{{ e.eyebrow }}"><div class="lbl" style="{{ e.eyebrowStyle }}">{{ e.eyebrow }}</div></sc-if>
+            <h1 class="h1" style="{{ e.h1Style }}">{{ e.h1 }}</h1>
+
+            <sc-for list="{{ e.paras }}" as="p" hint-placeholder-count="2">
+              <p class="p" style="margin-top:16px">{{ p }}</p>
+            </sc-for>
+
+            <sc-if value="{{ e.tint }}">
+              <div style="{{ e.tintStyle }}">
+                <sc-if value="{{ e.tint.label }}"><div class="lbl" style="color:{{ e.tint.ink }}">{{ e.tint.label }}</div></sc-if>
+                <sc-for list="{{ e.tint.rows }}" as="r" hint-placeholder-count="3">
+                  <div style="{{ r.rowStyle }}">
+                    <span style="font-size:13px;font-weight:{{ r.weight }};color:{{ r.kInk }}">{{ r.k }}</span>
+                    <span class="mono" style="font-size:13.5px;font-weight:{{ r.weight }};color:{{ r.vInk }};text-align:right">{{ r.v }}</span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ e.tint.foot }}"><p class="note" style="margin:12px 0 0">{{ e.tint.foot }}</p></sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ e.chips }}">
+              <div style="margin-top:18px;padding:16px 18px;background:#f4f0fe;border-radius:11px">
+                <div class="lbl" style="color:#6d28d9">{{ e.chipsLabel }}</div>
+                <div style="display:grid;gap:9px;margin-top:11px">
+                  <sc-for list="{{ e.chips }}" as="c" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:flex-start;gap:10px">
+                      <span class="mono" style="font-size:10px;font-weight:700;color:#6d28d9;background:#fff;border-radius:5px;padding:2px 6px;flex:none">{{ c.n }}</span>
+                      <div style="min-width:0">
+                        <div style="font-size:13px;font-weight:700;line-height:1.4">{{ c.k }}</div>
+                        <div style="font-size:12px;color:#4a4459;margin-top:3px;line-height:1.5">{{ c.v }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ e.cards }}">
+              <div style="display:grid;gap:11px;margin-top:20px">
+                <sc-for list="{{ e.cards }}" as="c" hint-placeholder-count="3">
+                  <div style="border:1px solid #e8e6ee;border-radius:11px;padding:16px 17px">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                      <div style="min-width:0">
+                        <div class="lbl">{{ c.kicker }}</div>
+                        <div style="font-size:14.5px;font-weight:800;letter-spacing:-.01em;margin-top:7px;line-height:1.35">{{ c.title }}</div>
+                      </div>
+                      <sc-if value="{{ c.figure }}">
+                        <div style="text-align:right;flex:none">
+                          <div class="mono" style="font-size:17px;font-weight:700;letter-spacing:-.02em;color:{{ c.figInk }}">{{ c.figure }}</div>
+                          <div class="mono" style="font-size:10px;color:#6b6577;margin-top:3px">{{ c.figNote }}</div>
+                        </div>
+                      </sc-if>
+                    </div>
+                    <p class="sm" style="margin-top:9px">{{ c.body }}</p>
+                    <sc-if value="{{ c.link }}"><div style="font-size:12.5px;font-weight:700;color:#6d28d9;margin-top:10px">{{ c.link }} →</div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <div style="margin-top:24px"><span class="cta">{{ e.cta }}</span></div>
+            <sc-if value="{{ e.ctaNote }}"><p class="note" style="margin:11px 0 0;text-align:center">{{ e.ctaNote }}</p></sc-if>
+
+            <sc-if value="{{ e.security }}">
+              <div style="margin-top:22px;padding-top:18px;border-top:1px solid #e8e6ee">
+                <div class="lbl">{{ e.security.label }}</div>
+                <p class="note" style="margin:8px 0 0">{{ e.security.body }}</p>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="padding:22px 32px;background:#fbfaff;border-top:1px solid #e8e6ee">
+            <p class="note" style="margin:0">Axal VC Management LLC, 16192 Coastal Hwy, Lewes, DE 19958, United States</p>
+            <p class="note" style="margin:8px 0 0">{{ e.why }}<br><a href="#prefs" style="color:#6d28d9">Notification preferences</a><sc-for list="{{ e.footLinks }}" as="l" hint-placeholder-count="2"><span> · </span><a href="{{ l.href }}" style="{{ l.style }}">{{ l.label }}</a></sc-for></p>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:290px;background:#fff;border:1px solid #e8e6ee;border-radius:12px;padding:17px 19px">
+        <div class="lbl">Why it is built this way</div>
+        <p style="margin:9px 0 0;font-size:12.5px;color:#332e45;line-height:1.65">{{ e.rationale }}</p>
+        <div style="display:grid;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f0eef5">
+          <sc-for list="{{ e.facts }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:11.5px;color:#6b6577">{{ f.k }}</span>
+              <span class="mono" style="font-size:11.5px;font-weight:700;text-align:right">{{ f.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="cap">{{ e.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', HAIR = '#e8e6ee', MUT = '#6b6577';
+    const eur = (n) => '\u20AC' + n.toLocaleString('en-US');
+
+    // ══ ONE commitment record, so every figure in the capital-call table reconciles. ══
+    const COMMIT = 2000000, PRIOR = 0.42, THIS = 0.18;
+    const priorAmt = COMMIT * PRIOR, thisAmt = COMMIT * THIS;
+
+    const tintBlock = (kind) => kind === 'amber'
+      ? 'margin-top:18px;padding:16px 18px;background:#fffdf5;border:1px solid #fcd34d;border-radius:11px'
+      : (kind === 'table'
+          ? 'margin-top:20px;padding:4px 18px 16px;background:#fff;border:1px solid ' + HAIR + ';border-radius:11px'
+          : 'margin-top:18px;padding:16px 18px;background:' + VT + ';border-radius:11px');
+
+    const row = (k, v, opt) => {
+      const o = opt || {};
+      return { k, v, weight: o.strong ? '800' : '500',
+        kInk: o.strong ? '#241f38' : '#4a4459',
+        vInk: o.warn ? '#92400e' : (o.strong ? '#241f38' : '#332e45'),
+        rowStyle:'display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:11px 0;'
+          + (o.strong ? 'border-top:1px solid ' + HAIR + ';border-bottom:1px solid ' + HAIR
+                      : (o.last ? '' : 'border-bottom:1px solid #f0eef5')) };
+    };
+
+    // ══ ONE persona record. Set A and Set B both read it, so a value prop cannot say two
+    // different things in the broadcast and the personal note. ══
+    const PERSONAS = [
+      { key:'founder', label:'Founder',
+        h1:'You\u2019re invited to build with Axal VC',
+        line:'Axal VC backs technical founders through incorporation, the first cheque, and the paperwork nobody warns you about.',
+        bullets:[
+          ['Incorporation', 'Delaware C-Corp or your jurisdiction, filed and tracked'],
+          ['Cap table', 'Founder stock, vesting, 83(b) — one record, not a spreadsheet'],
+          ['Capital', 'Warm introductions to investors who write at your stage'],
+          ['Data room', 'Diligence-ready from the first cheque, not assembled in a panic'],
+          ['Advisor network', 'Matched by what you are actually stuck on']
+        ],
+        cta:'Create your founder account',
+        gpNote:['I came across what you are building and wanted to write personally rather than let a template do it.',
+                'Axal VC exists for the part most founders do alone — incorporation, the cap table, the first cheque. If any of that is ahead of you, I think we would be useful.',
+                'No obligation either way. If it is not the right moment, say so and I will leave it.'],
+        gpCta:'Create your founder account' },
+      { key:'investor', label:'Investor',
+        h1:'Curated spin-out deal flow, and the LP side in one place',
+        line:'Axal VC opens its spin-out pipeline to investors, and gives LPs their fund reporting and capital calls in the same workspace.',
+        bullets:[
+          ['Deal flow', 'Spin-outs at first-cheque stage, screened before they reach you'],
+          ['Diligence', 'Data rooms prepared to a standard, not per-founder improvisation'],
+          ['LP workspace', 'Commitments, called capital, and distributions in one ledger'],
+          ['Capital calls', 'Notice, figures, and wire instructions where they belong'],
+          ['Fund reporting', 'Quarterly reports issued as frozen snapshots, re-downloadable']
+        ],
+        cta:'Set up your LP account',
+        gpNote:['I am writing personally because a template would undersell this.',
+                'We are opening the spin-out pipeline to a small number of investors, and LPs get their reporting and capital calls in the same place rather than in an inbox.',
+                'Happy to walk you through the current fund before you decide anything.'],
+        gpCta:'Set up your LP account' },
+      { key:'advisor', label:'Advisor',
+        h1:'Join the Axal VC advisor network',
+        line:'Advisors hold office hours and get matched to founders by expertise, not by availability.',
+        bullets:[
+          ['Office hours', 'You set the slots; founders book against your real calendar'],
+          ['Matched by expertise', 'Founders reach you because of what you know'],
+          ['Structured engagements', 'Scope, term, and equity agreed in writing up front'],
+          ['Track record', 'Outcomes recorded, with the founder\u2019s consent, not self-reported'],
+          ['One workspace', 'Sessions, notes, and agreements in a single place']
+        ],
+        cta:'Complete your advisor profile',
+        gpNote:['I wanted to ask you directly rather than through a form.',
+                'We match advisors to founders by expertise rather than availability, which means fewer sessions and better ones. Your name came up for exactly that reason.',
+                'A short call first if you prefer — entirely up to you.'],
+        gpCta:'Complete your advisor profile' },
+      { key:'partner', label:'Partner',
+        h1:'Join the Axal VC Partner Network',
+        line:'Service partners get referrals from founders who need what they do, and co-marketing that reaches the same audience.',
+        bullets:[
+          ['Referrals', 'Founders with a stated need, not a scraped contact list'],
+          ['Service placement', 'Listed where founders look for the work you do'],
+          ['Co-marketing', 'Joint content and events with attribution back to you'],
+          ['Scoped engagements', 'Terms and deliverables agreed before work starts'],
+          ['One relationship', 'Referrals, delivery, and payment through one workspace']
+        ],
+        cta:'Join the Partner Network',
+        gpNote:['This is a personal note rather than a broadcast.',
+                'Our founders keep needing the work you do, and at the moment they find people by asking around. I would rather send them to you properly.',
+                'If the timing is wrong, tell me and I will come back later.'],
+        gpCta:'Join the Partner Network' }
+    ];
+
+    const ADDRESS = 'Axal VC Management LLC, 16192 Coastal Hwy, Lewes, DE 19958, United States';
+    const bulletRows = (bs) => bs.map(([k, v]) => ({ k, v }));
+
+    return {
+      // ── SET A · broadcast invites ──
+      setA: PERSONAS.map((p, i) => ({
+        id:'a' + (i + 1), href:'#a' + (i + 1), tag:'A' + (i + 1),
+        name:'Email · Invite · ' + p.label, sub:'standard · sent by the Axal VC team',
+        subject:'You\u2019re invited to join Axal VC as ' + (p.key === 'advisor' ? 'an advisor' : (p.key === 'investor' ? 'an investor' : 'a ' + p.key)),
+        preheader:'Invited by Guillaume Lauzier at Axal VC. The link does not expire.',
+        h1:p.h1, line:p.line, bullets:bulletRows(p.bullets), cta:p.cta,
+
+        why:'You received this because someone at Axal VC invited you. This is a one-time invitation, not a subscription.',
+        address:ADDRESS
+      })),
+
+      // ── SET B · personal invites from the GP ──
+      setB: PERSONAS.map((p, i) => ({
+        id:'b' + (i + 1), href:'#b' + (i + 1), tag:'B' + (i + 1),
+        name:'Email · Invite · ' + p.label + ' (GP)', sub:'personal note · sent by the Managing Partner',
+        subject:'A note about Axal VC',
+        preheader:p.gpNote[0],
+        note:p.gpNote, cta:p.gpCta, address:ADDRESS,
+        why:'A personal message from Guillaume Lauzier. Not a marketing list — there is nothing to unsubscribe from.'
+      })),
+
+      // Derived, so a claim about the sheet's size cannot go stale as the sheet grows.
+      totalEmails: String(4 + 4 + 5),
+      setACap:'Four personas, one skeleton. The value bullets are the only thing that changes, which is deliberate: a broadcast invite earns trust by being specific about what the reader gets, not by being individually written. The inviter block sits below the CTA rather than above it, carrying the photo, title and contact details — an invitation from a named partner with a reachable address is harder to mistake for a mail-merge, and putting it after the ask means the reader is not asked to evaluate the sender before the offer. The photo is decorative: name, title and contacts are text, so the block survives the third of clients that block images.',
+      setBCap:'The same four propositions written as letters. Two things distinguish Set B structurally rather than decoratively: the lavender band behind the greeting, and the absence of an unsubscribe — because a personal note from a named human is not a list, and offering to unsubscribe from it would be a category error. The headshot appears once, in the sign-off, which is where a letter carries identity — a face beside the greeting as well would be two of the same photo in six hundred pixels, and repetition is what makes a personal note read as a merge. It is decorative either way: name, title and contacts are text, because a third of clients block images. The sign-off is typed rather than a scanned signature: a signature image on a letter with a merge field in the greeting undercuts the personal claim it is meant to support, and it is one more thing a blocking client would strip.',
+
+      rules: [
+        { rule:'Single column, 600px, no floats', why:'Outlook renders this as a table. Anything relying on flex or grid collapses to stacked blocks, which is why nothing here depends on side-by-side.' },
+        { rule:'System-font fallback declared', why:'Inter first, then -apple-system, Segoe UI, Arial. Clients that block webfonts get a metric-similar stack rather than Times New Roman.' },
+        { rule:'No load-bearing images', why:'Roughly a third of clients block them by default. The wordmark is a coloured block with a letter, not a logo file, and no figure lives inside an image.' },
+        { rule:'One CTA per message', why:'A second button halves the first. Secondary routes are plain links in the footer.' },
+        { rule:'Deadlines in amber, never in red', why:'Red reads as failure. These are dates you can still meet, and the palette should say so.' }
+      ],
+      essentialNote:'Unsubscribe appears on the weekly digest and on the four broadcast invitations, because both are mail you can decline. It appears on neither the GP\u2019s personal notes — a letter from a named human is not a list — nor the transactional four — an invite you asked for, a signature request, a capital call with a payment deadline, and a decision on an application you submitted. Offering to unsubscribe from a capital call would be offering something we cannot honour.',
+
+      emails: [
+        {
+          id:'m1', href:'#m1', tag:'M1', name:'Email · Invite', sub:'teammate invite · founder workspace',
+          subject:'Ines invited you to Meridian Robotics on Axal VC',
+          preheader:'You have been added as an Engineer. The link does not expire.',
+          chrome:null, eyebrow:'YOU HAVE BEEN INVITED', eyebrowStyle:'', h1Style:'margin-top:11px',
+          h1:'Ines Marchetti added you to Meridian Robotics',
+          paras:[
+            'You have been given a seat on the Meridian Robotics workspace on Axal VC. Ines set your role as Engineer, which gives you the product and roadmap surfaces and leaves cap table and fundraise closed.',
+            'Sign in with this address and the workspace will be waiting. If you already have an Axal VC account, this seat joins it rather than creating a second one.'
+          ],
+          tint:{ label:'YOUR SEAT', ink:VD, style:'lav', rows:[
+            row('Workspace','Meridian Robotics'),
+            row('Invited by','Ines Marchetti · Founder'),
+            row('Your role','Engineer', { strong:true }),
+            row('Seat type','Full-time · internal', { last:true })
+          ], foot:'Role and access are set by the workspace admin and can be changed at any time.' },
+          cta:'Join Meridian Robotics',
+          ctaNote:'This invite does not expire. It can be revoked by the workspace admin.',
+          security:null,
+          why:'Sent to lukas@meridianrobotics.nl because Ines Marchetti invited you to a workspace.',
+          footLinks:[],
+          rationale:'The role is stated before the button, because "join" without knowing what you are joining as is an invitation to a surprise. Naming what the role excludes — cap table, fundraise — is more useful than listing what it includes, since the exclusions are what a new engineer would otherwise go looking for.',
+          facts:[{ k:'Expiry', v:'None' }, { k:'Unsubscribe', v:'Not offered' }, { k:'Images required', v:'None' }],
+          cap:'Transactional: no unsubscribe, because the recipient asked for nothing and can simply not act. Revocation is named so the absence of an expiry does not read as a permanent open door.'
+        },
+        {
+          id:'m2', href:'#m2', tag:'M2', name:'Email · Signature', sub:'signature request · 7-day link',
+          subject:'Signature requested: SAFE — Meridian Robotics',
+          preheader:'Latitude Seed has countersigned. Your link expires 2 September.',
+          chrome:'SIGNATURE REQUEST', eyebrow:null, h1Style:'', 
+          h1:'SAFE — Meridian Robotics',
+          paras:[
+            'Latitude Seed countersigned this morning. The document is now waiting on your signature and nothing else.',
+            'You will see the full agreement before signing, and you can download a copy at any point afterwards.'
+          ],
+          tint:{ label:'DOCUMENT', ink:MUT, style:'table', rows:[
+            row('Document','SAFE'),
+            row('Company','Meridian Robotics B.V.'),
+            row('Counterparty','Latitude Seed · countersigned'),
+            row('Signatories','2 of 2 · you are the last'),
+            row('Link expires','2 Sep 2026 · 18:00 CEST', { strong:true, warn:true, last:true })
+          ], foot:'After expiry the envelope voids and has to be reissued by the sender — the document itself is unaffected.' },
+          cta:'Review & sign',
+          ctaNote:'Opening the document does not sign it.',
+          security:{ label:'BEFORE YOU CLICK', body:'This email comes from notifications@axal.vc and the link opens on app.axal.vc. We will never ask for a password, a wire, or a document by reply. If anything looks off, sign in directly and the request will be waiting under Send for Signature.' },
+          why:'Sent to ines@meridianrobotics.nl because a document is awaiting your signature.',
+          footLinks:[],
+          rationale:'The expiry is the only amber figure and it sits in the table rather than in prose, because a date buried in a sentence is a date people miss. The security note is specific — the sending address, the destination domain, and the three things we never ask for — since a vague "beware of phishing" teaches nothing.',
+          facts:[{ k:'Link life', v:'7 days' }, { k:'Amber items', v:'1 · expiry' }, { k:'Unsubscribe', v:'Not offered' }],
+          cap:'The signature email is the most impersonated message any platform sends, so it states its own provenance and offers a route that does not involve trusting the link at all.'
+        },
+        {
+          id:'m3', href:'#m3', tag:'M3', name:'Email · Capital Call', sub:'Fund II · call №3 · the most formal message on the sheet',
+          subject:'Capital call №3 — Axal VC Fund II — due 9 September 2026',
+          preheader:eur(thisAmt) + ' due. Wire instructions are in your LP workspace, never in email.',
+          chrome:'CAPITAL CALL', eyebrow:'AXAL VC FUND II · CALL №3', eyebrowStyle:'', h1Style:'margin-top:11px',
+          h1:'Capital call №3',
+          paras:[
+            'This notice calls ' + Math.round(THIS * 100) + '% of your commitment to Axal VC Fund II. The proceeds fund one new investment and the annual management fee, both itemised in the notice in your workspace.',
+            'Payment is due 9 September 2026. This is a draw against capital you have already committed, not a new subscription.'
+          ],
+          tint:{ label:'YOUR POSITION', ink:MUT, style:'table', rows:[
+            row('Commitment', eur(COMMIT)),
+            row('Called to date', eur(priorAmt) + ' · ' + Math.round(PRIOR * 100) + '%'),
+            row('This call', Math.round(THIS * 100) + '% of commitment'),
+            row('Amount due', eur(thisAmt), { strong:true }),
+            row('Due date','9 Sep 2026', { warn:true }),
+            row('Unfunded after payment', eur(COMMIT - priorAmt - thisAmt) + ' · ' + Math.round((1 - PRIOR - THIS) * 100) + '%', { last:true })
+          ], foot:'Percentages are of your commitment, not of the fund. Figures as at 26 Aug 2026.' },
+          cta:'View capital call',
+          ctaNote:'Signing in shows the itemised notice and the wire details.',
+          security:{ label:'WIRE INSTRUCTIONS', body:'Bank details are available in your LP workspace and are never sent by email — not in this message, not in an attachment, not on request. Any email that appears to come from us carrying account numbers is fraudulent. Wire from the account you were verified under, using the reference shown in the workspace.' },
+          why:'Sent to m.halloran@keystone.lp because you hold a commitment in Axal VC Fund II. Capital notices cannot be turned off.',
+          footLinks:[],
+          rationale:'Every figure derives from one commitment and one call rate, so the table cannot contradict the workspace. The wire notice is the whole reason this email is formal: business-email compromise targets exactly this message, and the defence is a standing rule stated the same way every time rather than a warning that varies.',
+          facts:[{ k:'Figures derived from', v:'1 commitment' }, { k:'Bank details in email', v:'Never' }, { k:'Mutable', v:'No' }],
+          cap:'The most formal message on the sheet, and the only one that states a rule about its own content: wire details live in the workspace, never here. Amber marks the due date only — the amount is ink, because it is a fact rather than a deadline.'
+        },
+        {
+          id:'m4', href:'#m4', tag:'M4', name:'Email · Digest', sub:'weekly founder digest · the only unsubscribable transactional message',
+          subject:'Your week: MRR up 8%, two office-hours slots open',
+          preheader:'Week of 24 August. Three things worth two minutes.',
+          chrome:'WEEKLY DIGEST', eyebrow:'WEEK OF 24 AUGUST', eyebrowStyle:'', h1Style:'margin-top:11px',
+          h1:'Three things from your week',
+          paras:['Nothing here needs action today. It is a summary, and the numbers link back to the surfaces they came from.'],
+          tint:null,
+          cards:[
+            { kicker:'METRICS · MERIDIAN ROBOTICS', title:'MRR up 8% on last week', figure:'+8%', figNote:'wk/wk', figInk:'#047857',
+              body:'Two pilots converted to paid. Burn flat, so runway extended by three weeks.', link:'Open Metrics' },
+            { kicker:'OFFICE HOURS', title:'Priya Nair · Thursday 14:00', figure:'2', figNote:'slots left', figInk:VD,
+              body:'Pricing and packaging for pre-seed hardware. Forty-five minutes, video.', link:'Book a slot' },
+            { kicker:'PLATFORM EVENT', title:'Pricing pressure-test workshop', figure:'9 Sep', figNote:'waitlist', figInk:'#92400e',
+              body:'You are on the waitlist. Two seats usually free up in the final week.', link:'See the event' }
+          ],
+          cta:'Open your dashboard',
+          ctaNote:null,
+          security:null,
+          why:'Sent to ines@meridianrobotics.nl as part of your weekly digest.',
+          // Real anchors, not an HTML blob through a text hole. Frequency first, by design.
+          footLinks:[{ label:'Manage frequency', href:'#freq', muted:false },
+                     { label:'Unsubscribe from digests', href:'#unsub', muted:true }],
+          rationale:'The only non-essential message among the transactional templates, so it is the only one of those carrying an unsubscribe — the four broadcast invitations carry one too, for the same reason, while the GP\u2019s personal notes do not. It offers frequency first, because most people who want out of a weekly want a monthly rather than nothing. Each card leads with a figure so the email is useful in the preview pane without being opened.',
+          facts:[{ k:'Cards', v:'3' }, { k:'Actions required', v:'0' }, { k:'Unsubscribe', v:'Offered' }],
+          cap:'Opens by saying nothing needs action, which is what makes a digest safe to skim. Frequency management sits ahead of unsubscribe in the footer for the same reason.'
+        },
+        {
+          id:'m5', href:'#m5', tag:'M5', name:'Email · Decision', sub:'Spin-Out Lab · programme-specific, not platform-wide',
+          subject:'You\u2019re in — Spin-Out Lab Cohort 7',
+          preheader:'Cohort 7 starts 28 September. Four things before then.',
+          chrome:'SPIN-OUT LAB · COHORT 7', eyebrow:'APPLICATION DECISION', eyebrowStyle:'', h1Style:'margin-top:11px',
+          h1:'Meridian Robotics is in Cohort 7',
+          paras:[
+            'Joris and the Benelux team met on Friday and Meridian Robotics is one of eight companies in Cohort 7. What decided it was the pilot at the Borssele site: a two-day rope-access job cut to four hours, verified by someone other than you.',
+            'Cohort 7 runs twenty-eight days from 28 September and ends with Demo Day on 26 October. It is full-time in practice, if not in name.'
+          ],
+          tint:{ label:'THE PROGRAMME', ink:VD, style:'lav', rows:[
+            row('Cohort','Spin-Out Lab · Cohort 7'),
+            row('Starts','28 Sep 2026'),
+            row('Demo Day','26 Oct 2026'),
+            row('Companies','8', { last:true })
+          ], foot:'The Spin-Out Lab is one programme inside Axal VC. Your platform account stays as it is.' },
+          chipsLabel:'BEFORE 28 SEPTEMBER',
+          chips:[
+            { n:'01', k:'Accept your place', v:'Within five working days, or it goes to the next company on the list.' },
+            { n:'02', k:'Name your TU Delft contact', v:'We open the licence conversation in week one, and it moves faster with a name.' },
+            { n:'03', k:'Add your co-founder', v:'Amara needs her own seat before the first session, not a shared login.' },
+            { n:'04', k:'Block the calendar', v:'Four Mondays, 09:00 to 17:00. These are not optional and not recorded.' }
+          ],
+          cta:'Begin onboarding',
+          ctaNote:'Five working days to accept · expires 2 September',
+          security:null,
+          why:'Sent to ines@meridianrobotics.nl because you applied to the Spin-Out Lab.',
+          footLinks:[],
+          rationale:'The congratulation is one sentence and then it names the specific thing that decided it, because a warm decision letter that could have been sent to anyone is not warm. The checklist is numbered and consequential — each item says what happens if it is skipped — which is more respectful of a founder\u2019s week than an enthusiastic paragraph.',
+          facts:[{ k:'Accept window', v:'5 working days' }, { k:'Checklist items', v:'4' }, { k:'Scope', v:'Programme' }],
+          cap:'Programme-specific, and the tinted block says so outright — the Spin-Out Lab is one programme inside Axal VC, and the platform account is unchanged. Acceptance carries a deadline because eight places and a waiting list make it a real one.'
+        }
+      ].map(e => Object.assign({}, e, {
+        tintStyle: e.tint ? tintBlock(e.tint.style) : '',
+        chipsLabel: e.chipsLabel || null,
+        // Real anchors: empty array on the four transactional emails, so their
+        // "no unsubscribe" state is produced rather than asserted.
+        footLinks: (e.footLinks || []).map(l => Object.assign({}, l,
+          { style:'color:' + (l.muted ? MUT : VD) + ';text-decoration:none' }))
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+#24 - Clear Code-Quality Scanning Alerts
+What & Why
+The remaining (and largest by count of real-source) bucket is CodeQL "Note"/"Warning" quality alerts surfaced because CodeQL runs the security-and-quality pack. These are low-risk and mechanical: unused imports/variables/functions, empty except, useless conditionals/assignments, duplicate dict keys, implicit string concatenation in lists, and unused loop variables. Clearing them removes the standing noise so future real findings stand out.
+This task edits many real source files across frontend/, cloudflare-worker/, and backend/. Because it overlaps the same files as the security-fix task, it depends on that task to avoid merge conflicts.
+Done looks like
+* Unused imports/variables/functions removed across the inventory below (frontend pages/components/templates, worker routes/services incl. landingTemplates.ts and decks, backend routes).
+* Empty except blocks given explicit handling (log via the project's error path, or a commented intentional pass) — never a silent swallow, matching the "explicit errors over silent fallbacks" preference.
+* Useless conditionals/assignments removed; duplicate dict key (brand route #2328) de-duplicated; implicit string-concat lists (profiling route) fixed; unused loop var in worker values route fixed.
+* Behavior is unchanged; npm run test:drift is green and the dev backend still imports/boots.
+Out of scope
+* Anything in docs/** or attached_assets/** (excluded from scanning by the noise task).
+* Real security fixes and false-positive suppressions (separate task).
+* Refactors beyond removing dead code / fixing the flagged smell.
+Steps
+1. Remove unused imports/variables/functions per the CodeQL inventory; verify each removal is truly unused (no dynamic/JSX/string reference) before deleting.
+2. Replace empty except blocks with explicit handling or an intentional, commented pass.
+3. Fix useless conditionals/assignments, the duplicate dict key, implicit string-concat lists, and the unused loop variable.
+4. Run npm run test:drift (and a backend import smoke) and confirm green.
+Constraints / notes
+* Behavior-preserving only. Do not alter control flow when fixing empty-except beyond surfacing/handling the error.
+* Be careful with "unused" symbols that are actually used via JSX, re-export, or dynamic access — verify before removing.
+* Coordination: several still-draft feature tasks touch overlapping files (brand page / regenerate-section, waitlist, and the landing-template/logo work on landingTemplates.ts and frontend/src/templates/*). Run this after those land, or coordinate, to avoid conflicts.
+Relevant files
+* cloudflare-worker/src/services/landingTemplates.ts
+* cloudflare-worker/src/routes/ (matches, events, dd, news, imports, calendar, mentors, decks, wellbeing, refer_earn, customer_chat, admin_x, linkedin, profiling, brand, captable, onboarding, market_intel, progress)
+* cloudflare-worker/src/services/use_of_funds.py (note: backend) and backend/app/services/use_of_funds.py:66
+* frontend/src/pages/ (AdminPage, SettingsPage, IncorporatePage, ValuesAssessmentPage, ArticleAuthorPage, ArticleReaderPage, PitchDeckPage, LandingPage, OnboardingChatPage, RecoverPage, PublicRoadmapPage, ReferEarnPage, TicketsPage, BrandBuilderPage)
+* frontend/src/templates/ (series_a_growth_app, series_b_diligence_app, minimal_seed, minimal_seed_app, demo_day_app, narrative_brand_app, sales_commercial_app, partnership_bd_app, investor_appendix_app, sequoia_classic, kawasaki_10_20_30, SpinoutDemoDayPage, InvestorDealflowHomePage, PartnerPartnershipHomePage)
+* frontend/src/components/ (ShareViewerSignupModal, CompanyProfilePanel, BillingDashboard, AxalCheckout, RouteErrorBoundary, DataImportsTab)
+* backend/app/api/routes/brand.py:162,397,832
+* backend/app/api/routes/progress.py:245,303
+* backend/app/api/routes/project_members.py:34
+* backend/app/api/routes/projects.py:16-18
+* backend/app/api/routes/captable.py:53
+* backend/app/api/routes/onboarding.py:340
+* backend/app/api/routes/matches.py:72
+* backend/app/api/routes/market_intel.py:488
+* backend/app/api/routes/profiling.py:152-206
+* cloudflare-worker/src/routes/values.ts:142
+* cloudflare-worker/src/routes/linkedin.ts:308
+Dependencies
+
+Fix real security findings flagged by code scanning
+Main

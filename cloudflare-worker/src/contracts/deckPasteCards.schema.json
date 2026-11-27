@@ -1,0 +1,12 @@
+{
+  "$id": "deckPasteCards",
+  "title": "POST /api/decks/:id/paste (D1545, #3788)",
+  "description": "The reply the deck v2 adapter's `pasteCards` method passes through: another deck's cards as a save keeps them, without uid, status, assignee or notes, and how many asked for were not found (`routes/deck_media.ts`). Nothing is saved. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cards", "missing"],
+  "properties": {
+    "cards": { "type": "array", "items": { "type": "object" } },
+    "missing": { "type": "integer", "minimum": 0 }
+  }
+}

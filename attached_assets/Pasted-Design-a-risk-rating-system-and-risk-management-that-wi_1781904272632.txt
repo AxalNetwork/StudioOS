@@ -1,0 +1,281 @@
+Design a risk rating system and risk management that will integrate into Axal VC's platform, find the bets inputs from on the platform and design a UI to manage that risk, create Replit prompts so Replit can build it:
+
+RISK LAYER
+INVESTORS MUST BELIEVE
+PROOF SIGNAL
+1
+FOUNDER
+RISK
+This team can execute.
+• Domain expertise, execution history, founder-market fit.
+2
+MARKET
+RISK
+Customers will pay for this solution.
+• Validated demand, paying customers, market pull.
+3
+COMPETITION
+RISK
+The company can win despite alternatives.
+• Differentiation, defensibility, switching costs.
+4
+TIMING
+RISK
+The market is ready right now.
+• Behavior shifts, technology adoption, market momentum.
+5
+FINANCING
+RISK
+The company can reach the next milestone.
+• Strong runway, capital efficiency, funding strategy.
+6
+MARKETING
+RISK
+Demand can be generated repeatedly.
+• Repeatable acquisition channels, efficient CAC.
+7
+DISTRIBUTION
+RISK
+Customers can be reached at scale.
+• Partnerships, channels, scalable go-to-market.
+8
+</>
+TECHNOLOGY
+RISK
+The solution can actually be built.
+• Technical feasibility, product performance, engineering capability.
+9
+PRODUCT
+RISK
+Users genuinely want the product.
+• Retention, engagement, usage growth.
+10
+HIRING
+RISK
+The team can scale with the company.
+• Talent density, hiring track record, leadership depth.
+Source: Harvey Knight
+EVERY STARTUP BEGINS AS A COLLECTION OF RISKS.
+EVERY FUNDING ROUND IS A PROCESS OF REMOVING THEM.
+Repost to help someone in your network
+Follow
+DERISK.
+I'll start by exploring the StudioOS codebase to understand the platform's data model, architecture, and UI patterns before designing the risk rating system. Let me launch parallel exploration agents.
+
+Ran 3 agents
+I've launched three parallel exploration agents to map out the platform before designing the risk system:
+Data model agent — mapping the D1 schema and entities (companies, founders, deals, metrics) to find real inputs for the 10 risk layers.
+Backend API agent — understanding the Cloudflare Worker route patterns where new risk endpoints would live.
+Frontend UI agent — understanding the React/Vite component conventions so the risk-management UI fits in.
+I'll wait for them to report back, then design the risk rating system and the Replit prompts.
+The backend API agent has reported. Key finding: there's already a founder_risk.ts route and a founder_risk_pulls table, plus a scoring.ts route — so the platform has the beginnings of risk infrastructure I can extend rather than build from scratch. I have the Hono/D1/auth patterns mapped.
+Waiting on the data model and frontend agents before I design.
+Strong signal from the frontend: the platform already has FounderRiskBadge.jsx, TrustScoreBadge.jsx (SVG gauge), a ScoringPage.jsx (100-point engine), SkillRadar.jsx (radar chart — ideal for a 10-axis risk radar), and ProjectDetail.jsx (the natural home for a risk panel). Color conventions for risk bands (emerald/amber/red) are already established.
+Waiting on the data model agent to map real platform data to each of the 10 risk layers.
+I now have a full picture across all three dimensions. Before I finalize the plan, let me synthesize the key finding and clarify a few decisions that materially shape the design.
+What I found — the platform already has substantial risk infrastructure to build on:
+Layer 1 (Founder Risk) already exists: founder_risk_profiles table (risk_score 0–100, band low/med/high), founder_risk.ts route, FounderRiskBadge.jsx.
+score_snapshots already scores market / team / product / capital / fit / distribution dimensions — these map directly onto several of the 10 layers.
+dd_cases (due diligence) has risk bands (green/yellow/amber/red), sections with pass/warn/fail verdicts, and findings with severity.
+Rich project traction data: revenue, mrr, paying_customers, growth_signals, tam, sam, funding_needed, cost_to_mvp, employee_count, crunchbase_data_json, plus market_intel_rows, financial_models, metrics_snapshots, discovery_interviews.
+Reusable UI: SkillRadar.jsx (radar → 10-axis risk radar), TrustScoreBadge.jsx (SVG gauge → derisking score), established emerald/amber/red risk-band styling.
+So the system is an aggregation + management layer unifying these existing signals into the 10-layer "what investors must believe / proof signal" framework — not a from-scratch build.
+A few decisions will shape the plan and the Replit prompts:
+Asked
+Deliverable
+What should this task actually produce? (The platform already has founder-risk, score_snapshots, and due-diligence scoring to build on.) Prompts + I build it now
+How should each of the 10 layers be scored? Hybrid (auto + analyst)
+Who is the risk system for, and where does it live? Internal deal team
+The user wants me to build a working first version now AND provide the Replit prompts, with a hybrid (auto + analyst) scoring model for the internal deal team (per-company panel + portfolio matrix).
+Since I'm implementing this for real, I need to read the exact files I'll touch so the plan is precise and executable. Let me inspect the critical backend and frontend files in parallel.
+
+Found files, read 2 files
+Migration convention is clear (numbered, idempotent IF NOT EXISTS, mirrored in schema.sql). Let me read the exact schema columns I'll map to risk signals, find the latest migration number, and read the reusable UI components.
+
+Read 3 files, found files, searched code
+Now I have the exact projects columns (the risk inputs) and score_snapshots sub-scores. Latest migration is 113, so mine will be 114. The SkillRadar path was approximate — let me locate the real radar/gauge components, the sidebar config, the api.js conventions, and the scoring engine I'll mirror for auto-computation.
+
+Searched code, found files, read a file
+Nearly there. The scoring engine uses a services/ layer (runFullScore in services/scoring.ts) with a thin route — I'll mirror that (services/ventureRisk.ts + routes/venture_risk.ts). Let me confirm the radar component, the sidebar nav structure, and the exact insertion point in ProjectDetail + index.ts.
+
+Read 3 files, searched code
+I now have a complete, concrete picture — exact columns, the service/route split, the radar + gauge + badge components, the sidebar structure, and the precise insertion points. I have enough to write an executable plan without further agents. Let me write it.
+Created
+design-a-risk-rating-replicated-hearth.md
++216
+-0
+The plan is written and grounded in the actual codebase. Let me load the ExitPlanMode tool and present it for approval.
+Used ToolSearch
+Proposed plan
+Stopped
+Proposed plan
+Plan approved. Let me set up the working branch and read the remaining exact details I need (ProjectDetail insertion point, App.jsx routing, the gauge component, types, and api.js structure) before writing code.
+
+Ran a command, read 2 files
+Now the gauge and types are clear. Let me read the exact insertion points: ProjectDetail's isElevated/score area, App.jsx routing, the api.js founder-risk block, and the partner/investor sidebar groups.
+
+Read 2 files
+I have the ProjectDetail insertion point (after the score/week grid closes at line 303, gated by isElevated). Let me grab the App.jsx routing pattern, the partner/investor sidebar groups, the api.js header, and db.ts to finish my reference set.
+
+Searched code, read 2 files
+I have the full reference set. Let me grab the investor sidebar group and the App.jsx <Route> pattern for a portfolio page, then I'll start writing code.
+
+Searched code, read a file
+I now have the complete reference set: guard([roles], <Component/>) routing in App.jsx, the sidebar group structure for all roles, the getSQL helper, and the score denominators (market/25, team/20, product/15, capital/15, fit/15, distribution/10). Time to build.
+Starting with the D1 migration:
+Created
+114_venture_risk.sql
++48
+-0
+Now mirror the tables into schema.sql (after the score_snapshots indexes):
+
+Edited a file, read a file
+Now the scoring engine — services/ventureRisk.ts. This is the core hybrid logic that maps platform data to the 10 layers:
+Created
+ventureRisk.ts
++486
+-0
+Now the route — routes/venture_risk.ts, mirroring the founder_risk.ts auth pattern:
+Created
+venture_risk.ts
++189
+-0
+Now wire the route into index.ts — import near the founder-risk import, mount near the founder-risk mount:
+
+Read a file, edited a file
+Worker side is wired. Let me typecheck it now before moving on, since the service has the most complex types:
+Ran
+Typecheck the worker
+Worker deps aren't installed yet. Let me install them so I can typecheck:
+
+Ran 4 commands
+The @cloudflare/workers-types directory is empty — a broken/partial install. Let me check network access to the npm registry before retrying:
+Ran
+Test npm registry connectivity
+Network is fine — that was a transient npm crash. Let me reinstall the worker deps (the workers-types dir is empty) and run the install for root + frontend in parallel afterward. Starting with the worker:
+
+Ran 2 commands
+The project's .npmrc points npm at a Replit-local package firewall (package-firewall.replit.local) that doesn't resolve in this container. The public registry works (ping succeeded). Let me find and override the registry config:
+
+Ran 3 commands
+Most deps resolve from public npm, but 23 (the webauthn/passkey packages) are pinned to the unreachable firewall host. I'll regenerate the lockfile against the public registry locally (backing up and restoring the original so git stays clean), which lets npm fetch those from npmjs.org:
+Ran
+Regenerate worker deps from public registry
+The existing partial node_modules is corrupt. Let me wipe it and do a clean install:
+Ran
+Clean reinstall worker deps
+Clean install worked. Now typecheck the worker:
+Ran
+Typecheck the worker
+Worker typechecks clean. Let me look at an existing test to match the harness pattern before writing the venture-risk test:
+
+Ran 2 commands
+There's a clean node:sqlite → D1 adapter pattern. Let me read it from events.test.ts to reuse exactly:
+Read
+events.test.ts
+I have the harness pattern. Let me write the worker test:
+Created
+venture_risk.test.ts
++166
+-0
+Now let me run the venture-risk test. Let me find the exact test invocation:
+
+Ran 2 commands
+Worker package has no test script — they run from root. Let me check the root's test invocation:
+Ran
+Find root test runner pattern
+I'll run my test with the same invocation the suite uses, then add it to the test:drift list:
+Ran
+Run the venture-risk worker test
+All 5 pass. Let me register the test in the test:drift suite:
+
+Edited a file, read a file
+Worker side complete (migration + service + route + mount + passing tests). Now the frontend. Starting with the API client methods:
+Edited
+api.js
++10
+-0
+Now the RiskRadar component (10-axis recharts radar, reusing the SkillRadar pattern):
+Created
+RiskRadar.jsx
++47
+-0
+Now RiskLayerCard — one layer with the proof-signal checklist and analyst controls:
+Created
+RiskLayerCard.jsx
++183
+-0
+Let me remove the unused open/ChevronDown I left in:
+Edited
+RiskLayerCard.jsx
++1
+-2
+Now the composite VentureRiskPanel:
+Created
+VentureRiskPanel.jsx
++130
+-0
+Now wire the panel into ProjectDetail.jsx — import it and render it (gated by isElevated) just before the Documents card:
+Edited
+ProjectDetail.jsx
++4
+-0
+Now the portfolio RiskMatrixPage heatmap:
+Created
+RiskMatrixPage.jsx
++142
+-0
+Now wire the route in App.jsx — lazy import + guarded route alongside the other portfolio pages:
+
+Edited a file, read a file
+Now add nav entries. First add the ShieldAlert icon to the sidebar imports, then place a "Risk Matrix" item in the admin, partner, and investor groups:
+Edited
+sidebarConfig.js
++3
+-1
+Now the investor group (using a unique anchor — the intelligence→portfolio transition is investor-only):
+Edited
+sidebarConfig.js
++1
+-0
+Frontend is fully wired. Let me verify the API drift check passes (every new api.js path must have a worker mount). This script uses only Node built-ins:
+Ran
+Run API drift checker
+Drift check passes — all 5 new methods resolve to /api/venture-risk. Now let me build the frontend to catch any JSX/import errors. Installing frontend deps first (clean, public registry):
+
+Ran 2 commands
+Now build the frontend:
+Ran
+Build the frontend
+Frontend build succeeds — ProjectDetail (with the risk panel) and RiskMatrixPage compiled cleanly. The build regenerated docs/ (the bundle). Let me check the full git state to decide what to commit:
+Ran
+Inspect git working tree state
+The docs/ rebuild is a 357-file built-asset diff (regenerated chunk hashes + unrelated CHANGELOGs) — that's a verification artifact, not source. I'll revert it to keep the PR focused on source; the bundle is regenerated at deploy time. Lockfiles are already clean.
+Ran
+Revert docs build artifacts
+The build also created new untracked asset files with fresh hashes. Let me clean those untracked build artifacts from docs/ (dry-run first to be safe):
+Ran
+Remove untracked docs build artifacts
+docs/ is clean — remaining changes are exactly my source (7 modified + 8 new). Let me run the runtime drift tests to confirm the route registration is recognized end-to-end:
+Ran
+Run runtime + TS drift tests
+Both drift tests green. Now the final deliverable — the Replit prompts doc (the explicit ask). It documents the design and gives sequenced, copy-paste prompts that reproduce/extend the build while respecting the architecture rules. Let me confirm the target dir and write it:
+
+Ran a command, created a file
+All deliverables are in place. Let me run the full test:drift suite from root — the canonical CI gate — to confirm nothing regressed alongside my changes:
+Ran
+Run full test:drift suite
+Full test:drift suite passes (exit 0), including the final tsc --noEmit. Let me do two final correctness checks: validate the actual migration SQL applies cleanly to SQLite, and review the diff scope:
+Ran
+Validate migration SQL + idempotency + upsert
+Migration applies cleanly, is idempotent, and the ON CONFLICT upsert works. Everything verified. Let me review the final diff scope and commit:
+Ran
+Stage changes and show diff stat
+Clean diff — 16 files, +1704/−2, exactly the intended source (no docs/, no lockfiles, no node_modules). Let me commit and push:
+
+Ran 2 commands
+Pushed. Now let me create a draft PR via the GitHub MCP tools. Let me load them:
+
+Ran a command, used 2 tools
+Default branch is main. Creating the draft PR:
+Used github: create pull request

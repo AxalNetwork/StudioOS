@@ -1,0 +1,251 @@
+Hard constraint
+  axal.vc (apex) is served by GitHub Pages (marketing site). Do NOT
+  attach a Cloudflare custom domain to the apex. Do NOT route the
+  Worker on the apex.
+
+Target architecture
+    axal.vc            → GitHub Pages — marketing — UNCHANGED
+    app.axal.vc        → Cloudflare Pages — frontend SPA (signed-in app)
+    app.axal.vc/api/*  → Cloudflare Worker — production API
+                          (same-origin under the SPA — best for cookies,
+                          CORS, CSP)
+    cdn.axal.vc        → R2 public bucket (optional; truly public assets)
+    status.axal.vc     → public status page (Worker)
+    backup.app.axal.vc → GitHub Pages failover for the SPA (Prompt BF)
+                          (not on axal.vc apex; reserved)
+    *.workers.dev      → preview / dev only; never appears in any
+                          provider callback or production link.
+
+End-to-end migration checklist (commit at MIGRATE_TO_CUSTOM_DOMAIN.md)
+
+  1. wrangler.toml
+       routes = [
+         { pattern = "app.axal.vc/api/*", custom_domain = true },
+       ]
+     Remove any reference to workers.dev in production. Add
+     [env.preview] block that DOES use workers.dev:
+       [env.preview]
+       name = "studioos-preview"
+       (no custom routes; workers.dev resolves the preview)
+
+  2. Cloudflare Dashboard
+       a. Workers > studioos > Triggers > Custom Domains:
+          add app.axal.vc with pattern /api/* (custom_domain = true
+          binds the subdomain; Pages handles everything else under
+          app.axal.vc/*).
+       b. Cloudflare Pages > axal-frontend > Custom domains:
+          add app.axal.vc. Do NOT add axal.vc — that's GitHub Pages.
+       c. DNS records (in Cloudflare DNS for axal.vc zone):
+          A/AAAA: axal.vc                → GitHub Pages IPs (existing;
+                                            DNS-only / unproxied — do
+                                            not toggle to proxied or it
+                                            breaks Pages)
+          CNAME: app.axal.vc             → Cloudflare Pages target
+                                            (proxied / orange-cloud ON)
+          CNAME: cdn.axal.vc             → public.r2.dev or R2
+                                            custom-domain target
+          CNAME: status.axal.vc          → app.axal.vc (status served
+                                            by the same Worker)
+          CNAME: backup.app.axal.vc      → axalnetwork.github.io
+                                            (DNS-only)
+          TXT  : axal.vc                  → existing GitHub Pages
+                                            verification records — DO
+                                            NOT remove
+       d. SSL/TLS: Full (strict) on the axal.vc zone overall.
+          HSTS preload: only enable AFTER you're confident all
+          subdomains are TLS-ready. Apex preload would lock GitHub
+          Pages into the policy too.
+       e. Cloudflare Access policies: re-apply admin/monitoring/infra
+          gates to app.axal.vc/api/admin/*, etc.
+
+  3. Worker code — replace every hard-coded URL
+     grep -rn "workers.dev\|studioos.guillaumelauzier" cloudflare-worker/
+     Replace constants with:
+       env.PUBLIC_BASE_URL = 'https://app.axal.vc'      // app + API
+       env.PUBLIC_MARKETING_URL = 'https://axal.vc'      // GitHub Pages
+     Common locations to fix:
+       - OAuth redirect_uri builders (Google, Outlook, LinkedIn,
+         Stripe Connect, HubSpot, Salesforce, Carta, Calendly,
+         Slack, DocuSign, Persona)
+       - email templates with magic links / signing links / unsubscribe
+       - signed-download URL signing service
+       - share/embed links produced in API responses
+       - Stripe checkout success_url / cancel_url
+       - Stripe Connect refresh / return URLs
+       - sitemap base (marketing sitemap = axal.vc; app sitemap, if
+         any, = app.axal.vc)
+       - robots.txt for the app (disallow indexing of /app/* if
+         signed-in routes shouldn't be crawled)
+       - openapi.json server entry — set to https://app.axal.vc/api
+
+  4. Frontend code — API base
+     frontend/src/lib/api.js BASE constant must be '/api'
+     (same-origin relative — works because /api/* is on the same
+     host as the SPA). Remove any absolute base.
+     vite.config.js: dev proxy to local Worker is fine; do not put
+     workers.dev in the production build.
+
+  5. CORS allow-list (worker middleware)
+     Because the API and SPA share the same host (app.axal.vc),
+     most reads/writes are SAME-ORIGIN — no CORS needed for them.
+     Cross-origin still applies to:
+       - Marketing site (axal.vc) hitting any /api/* (e.g. /contact,
+         /demo form submissions, /api/public/status from a status
+         widget)
+     CORS allow-list:
+       https://axal.vc
+       https://app.axal.vc
+       https://status.axal.vc
+       (no localhost in production; dev allow-list separate)
+
+  6. CSP connect-src
+     Worker middleware setting CSP on the SPA bundle:
+       connect-src 'self' https://app.axal.vc https://api.stripe.com
+                   https://*.cloudflareaccess.com;
+     Marketing site (axal.vc) CSP is owned by Jekyll; keep its
+     existing config — just ensure it allows https://app.axal.vc
+     if any marketing widget calls back to the API (e.g. /contact).
+
+  7. Cookie domain
+     Session / auth cookies are issued by the Worker at app.axal.vc.
+     Use:
+       Domain=app.axal.vc      (single subdomain — tightest scope)
+     OR
+       Domain=.axal.vc; SameSite=Lax    (broader — shareable with
+                                          status.axal.vc etc.)
+     Recommended: Domain=app.axal.vc. The marketing site doesn't
+     need the auth cookie.
+     Flags: HttpOnly; Secure; SameSite=Lax; Path=/. Use __Host-
+     prefix on tokens where possible.
+
+  8. AI Gateway slug
+     URLs constructed from env.CF_ACCOUNT_ID + env.CF_AI_GATEWAY_SLUG
+     — should already be free of workers.dev. Confirm.
+
+  9. Webhook receivers — update at every provider
+     New destinations:
+       Stripe        https://app.axal.vc/api/integrations/stripe/webhook
+       Persona       https://app.axal.vc/api/integrations/persona/webhook
+       Sumsub        https://app.axal.vc/api/integrations/sumsub/webhook
+       HubSpot       https://app.axal.vc/api/integrations/hubspot/webhook
+       Salesforce    https://app.axal.vc/api/integrations/salesforce/webhook
+       Calendly      https://app.axal.vc/api/integrations/calendly/webhook
+       Slack         https://app.axal.vc/api/integrations/slack/webhook
+       DocuSign      https://app.axal.vc/api/integrations/docusign/webhook
+       Affinity      https://app.axal.vc/api/integrations/affinity/webhook
+       GitHub Forms  https://app.axal.vc/api/forms/github-webhook
+       Google Calendar push   https://app.axal.vc/api/calendar/google/push
+       Microsoft Graph notify https://app.axal.vc/api/calendar/outlook/notification
+     Also rotate Sumsub secret to keep replay protection fresh.
+
+  10. OAuth provider apps — redirect URIs
+       For each app, ADD the new URI, then REMOVE the workers.dev URI:
+         Google Cloud Console > Credentials > OAuth 2.0 Client
+           https://app.axal.vc/api/calendar/google/callback
+           https://app.axal.vc/api/auth/google/callback        (if SSO)
+         Microsoft Entra ID > App registrations > Authentication
+           https://app.axal.vc/api/calendar/outlook/callback
+         LinkedIn Developers > Auth > Authorized redirect URLs
+           https://app.axal.vc/api/refer-earn/linkedin/callback
+         Stripe Connect Platform > Settings > Redirect URI
+           https://app.axal.vc/api/integrations/stripe/callback
+         HubSpot App > Auth > Redirect URLs
+           https://app.axal.vc/api/integrations/hubspot/callback
+         Salesforce Connected App > Callback URL
+           https://app.axal.vc/api/integrations/salesforce/callback
+         Carta App > Redirect URI
+           https://app.axal.vc/api/integrations/carta/callback
+         Calendly App > Webhook subscription / Redirect URI
+           https://app.axal.vc/api/integrations/calendly/callback
+         Slack App > Redirect URLs
+           https://app.axal.vc/api/integrations/slack/callback
+         DocuSign App > Redirect URIs
+           https://app.axal.vc/api/integrations/docusign/callback
+         Persona (if Inquiry redirect used)
+           https://app.axal.vc/api/integrations/persona/callback
+         Affinity API: token-based, no redirect — skip.
+
+  11. Email-from + DKIM/SPF/DMARC for axal.vc
+       DNS in Cloudflare for the axal.vc zone:
+         SPF (TXT @):
+           "v=spf1 include:_spf.google.com -all"
+            (replace include with your actual provider — Gmail
+             Workspace, Postmark, SES, etc.)
+         DKIM (TXT, selector per provider):
+           per-provider published TXT record
+         DMARC (TXT _dmarc.axal.vc):
+           "v=DMARC1; p=reject; rua=mailto:dmarc@axal.vc;
+            ruf=mailto:dmarc@axal.vc; fo=1; pct=100"
+         MX records: pointed at your inbound mail provider; do
+            NOT mix conflicting MX configurations.
+       Reply-to addresses (noreply@, support@, security@,
+       compliance@, billing@, legal@, privacy@, dpo@) all on
+       axal.vc — these are mail-domain identifiers, NOT URL
+       hosts. They don't conflict with Pages on axal.vc.
+       Verify with mail-tester.com → score ≥ 9/10.
+
+  12. AI Gateway + Workers Analytics references
+       Dashboard widgets that link to /api/* in admin monitoring
+       point at app.axal.vc/api/*, not workers.dev.
+
+  13. Documentation + sitemaps
+       - Marketing sitemap (axal.vc/sitemap.xml) — owned by Jekyll;
+         leave alone unless you're adding new marketing pages.
+       - App sitemap (app.axal.vc/sitemap.xml) — generated by the
+         Worker; lists public app routes (Public Directory profiles,
+         Insights articles, etc.).
+       - Update SECURITY.md, README.md, CLAUDE.md, /SECRETS_INVENTORY.md
+         to reference app.axal.vc for API + SPA. Mark axal.vc as
+         "marketing — GitHub Pages, do not point Cloudflare at apex".
+
+  14. Cross-origin form posts FROM the marketing site
+       The marketing Jekyll site (axal.vc) submitting /contact and
+       /demo forms must POST to https://app.axal.vc/api/forms/*.
+       This is cross-origin: the Worker must:
+         a. include CORS headers allowing https://axal.vc
+         b. accept POST + OPTIONS preflight
+         c. apply Turnstile validation server-side
+       The marketing JS must include credentials: 'omit' on these
+       requests — they don't carry auth.
+
+Migration order
+  a. Land the wrangler.toml + DNS change (CNAME app.axal.vc) so
+     app.axal.vc/api/* responds.
+  b. Keep workers.dev resolving in parallel for fallback.
+  c. Update each provider callback ONE AT A TIME, verifying each
+     round-trip end-to-end before moving on.
+  d. Once every provider is on app.axal.vc, remove the workers.dev
+     production binding from wrangler.toml so the URL serves only
+     the preview environment.
+  e. Final smoke test (in the next section).
+
+Smoke test (manual, after migration)
+  - Visit https://axal.vc — marketing site loads from GitHub Pages
+    unchanged.
+  - Visit https://app.axal.vc — SPA loads.
+  - Sign up via magic link — email link points to app.axal.vc;
+    consuming the link signs you in.
+  - Connect Google Calendar — round-trips successfully.
+  - Connect Stripe Connect — round-trips; webhook fires; mock
+    invoice processed.
+  - Receive a Calendly webhook from a test booking — handler
+    executes; event lands in Calendar.
+  - Send a contact-form submission from axal.vc — Worker accepts
+    cross-origin POST; GitHub Issue created.
+  - Check security headers on app.axal.vc — A+ at securityheaders.com.
+  - Check DNS propagation for SPF / DKIM / DMARC — mail-tester.com
+    score ≥ 9/10.
+  - Curl https://studioos.guillaumelauzier.workers.dev/api/* — 404
+    for production routes (only preview resolves now).
+
+Acceptance
+  - grep -rn "workers.dev" cloudflare-worker frontend → 0 hits in
+    production paths (only in [env.preview] config block).
+  - All provider callbacks registered at app.axal.vc.
+  - All webhook destinations at app.axal.vc.
+  - Marketing site axal.vc untouched and still served by GitHub
+    Pages.
+  - DKIM/SPF/DMARC pass.
+  - Smoke test items above all green.
+  - MIGRATE_TO_CUSTOM_DOMAIN.md committed with the per-provider
+    completion checklist.

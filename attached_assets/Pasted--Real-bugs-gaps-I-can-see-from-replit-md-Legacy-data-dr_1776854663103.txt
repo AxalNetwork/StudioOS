@@ -1,0 +1,12 @@
+🐛 Real bugs / gaps I can see from replit.md
+
+Legacy data drift. entities still has a vc_fund type marked DEPRECATED but not removed. lp_investors is read-only but the code path to it isn't sealed — a rogue insert will silently corrupt LP ledgers. Same for capital_calls.lp_investor_id.
+Jekyll theme cruft. The README at the root describes header/nav/footer/blog variations you aren't using (the React SPA replaced them). Still shipping in the repo and confusing new contributors.
+JWT_SECRET dev-fallback in Python — replit.md says "no fallback" but the env section says "defaults to dev key if not set". One of those is wrong. Confirm which, and fail-fast if unset in prod.
+Worker ↔ FastAPI doubled surface area. cloudflare-worker/ re-implements auth, scoring, projects, legal, partners, capital, deals, tickets, users, admin, activity, market-intel, advisory. Two sources of truth will drift. Pick edge-first and make FastAPI a narrow admin-only surface, or vice versa.
+/api/funds auto-fan-out refusal is good, but no UI guard. Operators can still trigger cross-fund distribution from FundsPage.jsx if they construct the request manually. Add a client-side fund_id required-select before the button enables.
+Secondary listing placeholder pollution. legalcap.ts /spinout/go-independent creates a 0-share listing to precompute AI fair value. /marketplace filters them out — but /events and /my-portfolio don't consistently. Audit all three endpoints.
+Semantic search legacy vectors. The fix ships a runtime scrub, but the one-time backfill (POST /api/search/backfill) is operational work that hasn't been run. Mark in PRODUCTION.md as a release-blocker.
+Rate limits uneven. Worker has per-bucket limits (user 60/min, ai 10/min, spinout 5/hr, global 1000/min). FastAPI backend only has login + resend-verification throttled. Align.
+No CSP / SRI. I don't see a Content-Security-Policy header in the security headers middleware. Add one to match the Zero Trust posture.
+4 "test" issues on GitHub from the support-ticket-to-GitHub integration — those are just probes from March/April, but the auto-create logic has no label filter, so real tickets will drown in them. Add an origin: staging / origin: production label discriminator.

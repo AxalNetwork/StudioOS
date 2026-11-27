@@ -1,0 +1,102 @@
+Objective
+  New users land in the app, complete the persona chatbot, then often
+  drift. Add a clear completion experience + a persistent checklist
+  that nudges them through the value-creating actions for their role.
+
+Per-role checklist (10 items each)
+  newFounder:
+    [ ] Complete persona chatbot
+    [ ] Add your project (or accept the auto-created one)
+    [ ] Log 3 customer-discovery interviews
+    [ ] Add 3 quarterly OKRs
+    [ ] Connect Google or Outlook Calendar
+    [ ] Upload or generate brand basics
+    [ ] Draft Pitch Deck (≥ 5 slides)
+    [ ] Run your first Diligence & Scoring
+    [ ] Book a mentor session (or request co-founder match)
+    [ ] Invite a team member
+
+  existingFounder:
+    [ ] Complete persona chatbot
+    [ ] Connect Stripe (verify MRR)
+    [ ] Connect Plaid (verify cash)
+    [ ] Connect or upload cap table (Carta or PDF)
+    [ ] Populate Financial Model
+    [ ] Confirm 83(b) status
+    [ ] Confirm IP assignments signed
+    [ ] Add 3 quarterly OKRs
+    [ ] Run Scoring (with verified evidence)
+    [ ] Send first NDA to an investor
+
+  investor:
+    [ ] Complete persona chatbot
+    [ ] Complete KYC + Accreditation
+    [ ] Sign Investor NDA with Axal
+    [ ] Save your thesis + watchlist preferences
+    [ ] Connect Affinity / HubSpot (optional)
+    [ ] Review 3 matched founders
+    [ ] Request your first intro (triggers 3-way NDA)
+    [ ] Set deployment target + reserve %
+    [ ] Open your first deal-room
+    [ ] Configure notifications
+
+  operatingPartner:
+    [ ] Accept partner invitation
+    [ ] Complete profiling chatbot
+    [ ] Disclose conflicts
+    [ ] Pick deal-type proposal + sign agreement
+    [ ] Configure KYB documents
+    [ ] Add at least one service / offer
+    [ ] Provide 2 references
+    [ ] Receive one-time referral code
+    [ ] Make first qualified intro (if sourcing)
+    [ ] Configure notifications
+
+  mentor:
+    [ ] Complete persona chatbot
+    [ ] Add expertise tags + sectors + stages
+    [ ] Pick comp model
+    [ ] Connect Calendly or Google Calendar
+    [ ] Provide 2 references
+    [ ] Sign Mentor NDA + engagement disclaimer
+    [ ] Set weekly capacity
+    [ ] Surface availability slots
+    [ ] Accept first session booking
+    [ ] Configure notifications
+
+Implementation
+  Schema:
+    CREATE TABLE onboarding_checklist_progress (
+      user_id INTEGER NOT NULL,
+      item_key TEXT NOT NULL,
+      completed_at DATETIME,
+      skipped_at DATETIME,
+      PRIMARY KEY (user_id, item_key)
+    );
+  Endpoints:
+    GET  /api/onboarding/checklist
+    POST /api/onboarding/checklist/:item/complete
+    POST /api/onboarding/checklist/:item/skip
+  Auto-detection: many items can be marked complete by side-effects
+  (e.g. when a Stripe integration row appears, mark
+  'connect_stripe' complete automatically).
+
+UI
+  Persistent panel in the dashboard top-right (collapsible):
+    "Onboarding · 4 / 10"
+    progress bar + next 3 items as clickable rows.
+  Settings > Onboarding shows the full list.
+  Once 8/10 items complete: show a confetti "Welcome to Axal"
+  celebration once.
+
+Product tour
+  First-login coachmarks (5 step tour) using a small overlay
+  component. Skippable. Tracked so it doesn't re-fire.
+
+Acceptance
+  - Each role lands on the dashboard with a populated checklist
+    specific to their role.
+  - Items mark complete automatically when the side-effect lands.
+  - Tour fires once and never again.
+  - Settings > Onboarding lets the user re-run the tour or reset
+    the checklist.

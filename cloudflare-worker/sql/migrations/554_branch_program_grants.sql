@@ -1,0 +1,31 @@
+-- 554 / D984 / #2775: Program grants part 3 — the branch's dated copy of the
+-- programs HQ grants its licence. Assigned by S21 on #2775 (D981 §6).
+-- Additive: one nullable column.
+--
+-- WHERE IT RIDES. On the licence copy itself, `branch_licence` (256), as the
+-- terms schedule does (`terms_json`, 512, D797). So the copy is dated by the
+-- row's `pushed_at`, HQ's clock for when it asserted the content (256's rule),
+-- and it travels on the push that already exists: every licence transition
+-- and terms save pushes, a push that does not land is retried (D272), and a
+-- branch holding no copy pulls one on its first read (D244). Since D984 a
+-- grant write pushes too (`routes/admin_program_grants.ts`).
+--
+-- WHAT IT HOLDS. A JSON object HQ assembles (`programCopy` in
+-- `services/licencePrograms.ts`):
+--   { "grants":   [ the licence's program_grants rows, the columns a studio
+--                   reads: state, terms, dates, the schedule, HQ's note ],
+--     "offered":  { program_key: true | false }  -- HQ's "can be granted" }
+-- The rows are carried raw, not as "in force", because in force depends on
+-- the day: the branch works it out from the row and its own clock, with the
+-- licence status and renewal the same copy holds.
+--
+-- THREE STATES, NEVER CONFUSED:
+--   SQL NULL           no push has carried programs yet (a copy from before
+--                      554, or none at all): "HQ has not sent this yet".
+--   {"grants": [] …}   HQ sent it, and the licence holds no grant.
+--   unparseable        unreadable: a 5xx, never an empty list.
+--
+-- EMPTY ON HQ AND THAT IS CORRECT, as 256 says of the whole table: HQ reads
+-- `program_grants` itself.
+
+ALTER TABLE branch_licence ADD COLUMN program_grants_json TEXT;

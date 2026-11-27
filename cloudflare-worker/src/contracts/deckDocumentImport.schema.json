@@ -1,0 +1,44 @@
+{
+  "$id": "deckDocumentImport",
+  "title": "POST /api/decks/imports (D1563, #3810)",
+  "description": "The reply the deck v2 adapter's `importDocument` method passes through (`routes/deck_imports.ts`): what the import made (`outline` from a paste, DOCX or PDF; `cards` from a .pptx), the venture's proposal it stored and its hash, the outline's rows when it made one, and the import's own counts. A share the deck cannot have (no words) is null, never 0. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "source", "proposal", "proposal_hash", "counts"],
+  "properties": {
+    "kind": { "enum": ["outline", "cards"] },
+    "source": { "enum": ["paste", "docx", "pdf", "pptx"] },
+    "proposal": {
+      "type": "object",
+      "required": ["id", "project_id", "slides", "outline"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "project_id": { "type": "integer", "minimum": 1 },
+        "slides": { "type": "array", "maxItems": 60 },
+        "outline": { "type": "object" }
+      }
+    },
+    "proposal_hash": { "type": "string" },
+    "outline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rows", "proposed_by"],
+      "properties": {
+        "rows": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/row" } },
+        "proposed_by": { "const": "Your document" }
+      }
+    },
+    "counts": { "type": "object" }
+  },
+  "$defs": {
+    "row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["card", "title", "purpose"],
+      "properties": {
+        "card": { "type": "string" },
+        "title": { "type": "string" },
+        "purpose": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

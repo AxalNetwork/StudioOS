@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:40px 44px 32px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .fr{width:1080px;min-width:1080px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden}
+    .mono{font-family:'Roboto Mono',monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .c{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .in{width:100%;box-sizing:border-box;font-family:Inter,sans-serif;font-size:14px;color:#241f38;padding:12px 14px;border:1px solid #e8e6ee;border-radius:10px;background:#fff}
+    .btn{display:block;width:100%;box-sizing:border-box;text-align:center;font-size:14px;font-weight:700;padding:13px 0;border-radius:10px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;cursor:pointer}
+    .btn:hover{background:#6d28d9;border-color:#6d28d9}
+    .btn2{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;box-sizing:border-box;font-size:13.5px;font-weight:600;padding:11px 0;border-radius:10px;background:#fff;color:#241f38;border:1px solid #e8e6ee;cursor:pointer}
+    .btn2:hover{border-color:#d9d5e4}
+    .amber{font-size:10px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#fcd34d;color:#92400e;white-space:nowrap}
+    .hair{height:1px;background:#e8e6ee}
+    .step{display:flex;gap:11px;align-items:flex-start}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:1080px}
+  </style>
+</helmet>
+
+<!-- ══════════ A1 · SIGN IN ══════════ -->
+<section class="ab" id="a1">
+  <div class="ab-hd"><a class="ab-id" href="#a1">A1</a><span class="ab-nm">Sign in</span><span class="ab-sub">magic link primary · SSO secondary · application route for non-members</span></div>
+  <div class="fr" style="background:#f4f0fe;padding:0">
+    <div style="padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:26px;height:26px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:-.02em">A</span>
+        <span style="font-size:14px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+      </div>
+      <span class="lbl">{{ platformNote }}</span>
+    </div>
+
+    <div style="display:flex;justify-content:center;padding:34px 28px 62px">
+      <div style="width:404px">
+        <div class="c" style="padding:30px 30px 26px">
+          <h1 style="margin:0;font-size:25px;font-weight:800;letter-spacing:-.02em;line-height:1.15">Sign in</h1>
+          <div style="font-size:13.5px;color:#6b6577;margin-top:7px;line-height:1.5">We send a one-time link. No password to lose, forget, or reuse.</div>
+
+          <div style="margin-top:22px">
+            <div class="lbl" style="margin-bottom:7px">Work email</div>
+            <input class="in" value="ines@meridianrobotics.nl">
+          </div>
+          <div style="margin-top:14px"><span class="btn">Email me a sign-in link</span></div>
+          <div class="mono" style="font-size:11px;color:#6b6577;margin-top:9px;line-height:1.5">Links expire in 15 minutes and work once.</div>
+
+          <div style="display:flex;align-items:center;gap:12px;margin:22px 0">
+            <div class="hair" style="flex:1"></div><span class="lbl">or</span><div class="hair" style="flex:1"></div>
+          </div>
+
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ sso }}" as="s" hint-placeholder-count="2">
+              <span class="btn2"><span style="width:18px;height:18px;display:block;flex:none" dangerouslySetInnerHTML="{{ s.icon }}"></span><span>{{ s.label }}</span></span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="c" style="padding:17px 20px;margin-top:13px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:700">Not a member yet?</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:5px;line-height:1.55">{{ applyNote }}</div>
+            </div>
+            <span style="font-size:13px;font-weight:700;color:#6d28d9;white-space:nowrap;flex:none">Apply to Axal VC →</span>
+          </div>
+        </div>
+
+        <div class="mono" style="font-size:10.5px;color:#6b6577;text-align:center;margin-top:16px;line-height:1.6">{{ adminNote }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ A2 · CHOOSE ROLE ══════════ -->
+<section class="ab" id="a2">
+  <div class="ab-hd"><a class="ab-id" href="#a2">A2</a><span class="ab-nm">Choose your role</span><span class="ab-sub">first sign-in only · four licences, admin excluded by design</span></div>
+  <div class="fr">
+    <div style="padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:26px;height:26px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">A</span>
+        <span style="font-size:14px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+      </div>
+      <span class="mono" style="font-size:11.5px;color:#6b6577">ines@meridianrobotics.nl</span>
+    </div>
+
+    <div style="padding:38px 64px 46px">
+      <h1 style="margin:0;font-size:27px;font-weight:800;letter-spacing:-.02em;line-height:1.15">How will you use Axal VC?</h1>
+      <div style="font-size:14px;color:#6b6577;margin-top:8px;line-height:1.55;max-width:560px">This sets your workspace, not your permissions. You can hold more than one licence later — each is bought and onboarded separately.</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px">
+        <sc-for list="{{ roles }}" as="r" hint-placeholder-count="4">
+          <div style="{{ r.cardStyle }}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+              <span style="{{ r.iconWrap }}" dangerouslySetInnerHTML="{{ r.icon }}"></span>
+              <span style="{{ r.radio }}"><sc-if value="{{ r.on }}"><span style="width:9px;height:9px;border-radius:50%;background:#7c3aed;display:block"></span></sc-if></span>
+            </div>
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.015em;margin-top:14px">{{ r.name }}</div>
+            <div style="font-size:13.5px;color:#4a4459;margin-top:6px;line-height:1.55">{{ r.desc }}</div>
+            <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:12px;padding-top:11px;border-top:1px solid #f0eef5">{{ r.meta }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:26px;flex-wrap:wrap">
+        <div class="mono" style="font-size:10.5px;color:#6b6577;line-height:1.6;max-width:520px">{{ adminFine }}</div>
+        <span class="btn" style="width:auto;padding:13px 30px">Continue as Founder</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ A3–A6 · WIZARDS ══════════ -->
+<sc-for list="{{ wizards }}" as="w" hint-placeholder-count="4">
+  <section class="ab" id="{{ w.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ w.href }}">{{ w.tag }}</a><span class="ab-nm">{{ w.title }}</span><span class="ab-sub">{{ w.sub }}</span></div>
+    <div class="fr">
+      <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+          <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+          <span style="{{ w.rolePill }}">{{ w.role }}</span>
+        </div>
+        <span class="mono" style="font-size:11px;color:#6b6577">{{ w.who }}</span>
+      </div>
+
+      <div style="display:flex">
+        <div style="width:254px;flex:none;padding:28px 24px;border-right:1px solid #e8e6ee;background:#fff">
+          <div class="lbl" style="margin-bottom:16px">Setup · {{ w.stepCount }}</div>
+          <div style="display:grid;gap:2px">
+            <sc-for list="{{ w.rail }}" as="s" hint-placeholder-count="4">
+              <div class="step">
+                <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                  <span style="{{ s.dot }}">{{ s.num }}</span>
+                  <sc-if value="{{ s.line }}"><span style="{{ s.lineStyle }}"></span></sc-if>
+                </div>
+                <div style="min-width:0;padding-bottom:{{ s.pad }}px">
+                  <div style="font-size:13px;font-weight:{{ s.weight }};color:{{ s.ink }};line-height:1.35">{{ s.name }}</div>
+                  <sc-if value="{{ s.note }}"><div style="font-size:11px;color:#6b6577;margin-top:4px;line-height:1.45">{{ s.note }}</div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="mono" style="font-size:10px;color:#6b6577;margin-top:22px;padding-top:16px;border-top:1px solid #f0eef5;line-height:1.6">{{ w.railNote }}</div>
+        </div>
+
+        <div style="flex:1;min-width:0;padding:30px 34px 38px">
+          <div class="lbl">Step {{ w.cur }} of {{ w.total }}</div>
+          <h1 style="margin:9px 0 0;font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2">{{ w.h1 }}</h1>
+          <div style="font-size:13.5px;color:#6b6577;margin-top:7px;line-height:1.55;max-width:560px">{{ w.lede }}</div>
+
+          <div style="display:grid;gap:16px;margin-top:24px">
+            <sc-for list="{{ w.fields }}" as="f" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                  <span class="lbl">{{ f.label }}</span>
+                  <sc-if value="{{ f.hint }}"><span class="mono" style="font-size:10px;color:#6b6577">{{ f.hint }}</span></sc-if>
+                </div>
+
+                <sc-if value="{{ f.isInput }}">
+                  <div style="margin-top:8px"><input class="in" value="{{ f.value }}"></div>
+                </sc-if>
+
+                <sc-if value="{{ f.isChips }}">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                    <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="5"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ f.isRadio }}">
+                  <div style="display:grid;gap:9px;margin-top:10px">
+                    <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                      <div style="{{ o.rowStyle }}">
+                        <span style="{{ o.radio }}"><sc-if value="{{ o.on }}"><span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:block"></span></sc-if></span>
+                        <div style="min-width:0;flex:1">
+                          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            <span style="font-size:13.5px;font-weight:{{ o.weight }}">{{ o.name }}</span>
+                            <sc-if value="{{ o.badge }}"><span class="amber">{{ o.badge }}</span></sc-if>
+                          </div>
+                          <div style="font-size:11.5px;color:#6b6577;margin-top:4px;line-height:1.5">{{ o.note }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ f.isGrid }}">
+                  <div style="margin-top:11px;border:1px solid #e8e6ee;border-radius:12px;overflow:hidden">
+                    <div style="display:grid;grid-template-columns:64px repeat(5,1fr);background:#fbfaff;border-bottom:1px solid #e8e6ee">
+                      <span></span>
+                      <sc-for list="{{ f.days }}" as="d" hint-placeholder-count="5"><span class="lbl" style="text-align:center;padding:9px 0">{{ d }}</span></sc-for>
+                    </div>
+                    <sc-for list="{{ f.rows }}" as="r" hint-placeholder-count="4">
+                      <div style="display:grid;grid-template-columns:64px repeat(5,1fr);border-top:1px solid #f0eef5">
+                        <span class="mono" style="font-size:10.5px;color:#6b6577;padding:9px 0 9px 12px">{{ r.time }}</span>
+                        <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5"><span style="{{ c.style }}">{{ c.mark }}</span></sc-for>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:9px;line-height:1.55">{{ f.gridNote }}</div>
+                </sc-if>
+
+                <sc-if value="{{ f.isCard }}">
+                  <div style="{{ f.cardStyle }}">
+                    <div style="display:flex;align-items:flex-start;gap:12px">
+                      <span style="{{ f.cardIconWrap }}" dangerouslySetInnerHTML="{{ f.cardIcon }}"></span>
+                      <div style="min-width:0;flex:1">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                          <span style="font-size:14px;font-weight:800;letter-spacing:-.01em">{{ f.cardTitle }}</span>
+                          <sc-if value="{{ f.badge }}"><span class="amber">{{ f.badge }}</span></sc-if>
+                        </div>
+                        <div style="font-size:12.5px;color:#4a4459;margin-top:7px;line-height:1.6">{{ f.cardBody }}</div>
+                        <sc-if value="{{ f.cardRows }}">
+                          <div style="display:grid;gap:7px;margin-top:12px">
+                            <sc-for list="{{ f.cardRows }}" as="cr" hint-placeholder-count="3">
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;background:#fff;border:1px solid #e8e6ee;border-radius:9px">
+                                <span style="font-size:12px;font-weight:600">{{ cr.k }}</span>
+                                <span style="{{ cr.pill }}">{{ cr.v }}</span>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                        <sc-if value="{{ f.cardFoot }}"><div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:11px;line-height:1.55">{{ f.cardFoot }}</div></sc-if>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ f.isInvite }}">
+                  <div style="display:grid;gap:9px;margin-top:10px">
+                    <sc-for list="{{ f.invites }}" as="i" hint-placeholder-count="3">
+                      <div style="display:grid;grid-template-columns:1.4fr 1fr auto;gap:9px;align-items:center">
+                        <input class="in" value="{{ i.email }}" style="font-family:'Roboto Mono',monospace;font-size:12.5px">
+                        <input class="in" value="{{ i.role }}" style="font-size:12.5px">
+                        <span style="{{ i.pill }}">{{ i.state }}</span>
+                      </div>
+                    </sc-for>
+                    <span style="font-size:13px;font-weight:700;color:#6d28d9;cursor:pointer;margin-top:2px">+ Add another</span>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:28px;padding-top:20px;border-top:1px solid #e8e6ee;flex-wrap:wrap">
+            <span class="mono" style="font-size:10.5px;color:#6b6577;line-height:1.55;max-width:520px">{{ w.footNote }}</span>
+            <div style="display:flex;align-items:center;gap:10px;flex:none">
+              <span style="font-size:13.5px;font-weight:600;color:#6b6577;cursor:pointer">Back</span>
+              <span class="btn" style="width:auto;padding:12px 26px">{{ w.cta }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">{{ w.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p, w){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(w||1.8)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', HAIR = '#e8e6ee', MUT = '#6b6577';
+
+    const I = {
+      // Brand marks are fill-geometry — they must NOT go through ic(), which strokes outlines
+      // and would render the Google G as a swirl. Emitted directly, in brand colours.
+      google: { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%">'
+        + '<path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.5h3.24c1.9-1.74 2.98-4.3 2.98-7.35Z"/>'
+        + '<path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.42l-3.24-2.5c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.75-5.59-4.1H3.06v2.58A10 10 0 0 0 12 22Z"/>'
+        + '<path fill="#FBBC05" d="M6.41 13.94a6 6 0 0 1 0-3.83V7.53H3.06a10 10 0 0 0 0 8.98l3.35-2.57Z"/>'
+        + '<path fill="#EA4335" d="M12 5.98c1.47 0 2.79.5 3.83 1.5l2.87-2.87A10 10 0 0 0 3.06 7.53l3.35 2.58C7.2 7.73 9.4 5.98 12 5.98Z"/></svg>' },
+      linked: { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%">'
+        + '<rect width="24" height="24" rx="4" fill="#0A66C2"/>'
+        + '<path fill="#fff" d="M8.3 18.4H5.6V9.9h2.7v8.5ZM6.95 8.7a1.57 1.57 0 1 1 0-3.15 1.57 1.57 0 0 1 0 3.15ZM18.4 18.4h-2.7v-4.14c0-.99-.02-2.26-1.38-2.26-1.38 0-1.6 1.08-1.6 2.19v4.21H10V9.9h2.6v1.16h.03a2.85 2.85 0 0 1 2.56-1.4c2.74 0 3.25 1.8 3.25 4.15v4.59Z"/></svg>' },
+      found:  this.ic('<path d="M4 21V9l8-5 8 5v12"/><path d="M9.5 21v-6h5v6"/>'),
+      inv:    this.ic('<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>'),
+      adv:    this.ic('<circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/>'),
+      part:   this.ic('<path d="M4 8h16v12H4Z"/><path d="M8.5 8V5.6A1.6 1.6 0 0 1 10 4h4a1.6 1.6 0 0 1 1.6 1.6V8"/><path d="M4 13h16"/>'),
+      shield: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      mega:   this.ic('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1Z"/><path d="M15.5 9.5a4 4 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10"/>')
+    };
+
+    const iconWrap = (tint, ink) => 'width:38px;height:38px;border-radius:11px;background:'+tint+';color:'+ink+';display:flex;align-items:center;justify-content:center;padding:9px;box-sizing:border-box;flex:none';
+    const radio = (on) => 'width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:#fff;border:'
+      + (on ? '1.5px solid ' + V : '1.5px solid ' + HAIR);
+    const pill = (t) => {
+      const M = { Sent:[VT,VD,'#ddd0fb'], Joined:['#ecfdf5','#047857','#a7f3d0'],
+                  Draft:['#f4f3f7',MUT,HAIR], Required:['#fef9e7','#92400e','#fcd34d'],
+                  Pending:['#fef9e7','#92400e','#fcd34d'], Verified:['#ecfdf5','#047857','#a7f3d0'] };
+      const c = M[t] || M.Draft;
+      return 'font-size:10px;font-weight:700;font-family:\'Roboto Mono\',monospace;letter-spacing:.05em;padding:4px 9px;border-radius:99px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const chips = (list) => list.map(([label, on]) => ({ label,
+      style:'font-size:13px;font-weight:' + (on ? '700' : '600') + ';padding:9px 15px;border-radius:99px;cursor:pointer;border:'
+        + (on ? '1px solid '+V+';background:'+VT+';color:'+VD : '1px solid '+HAIR+';background:#fff;color:#4a4459') }));
+
+    const rail = (steps, cur) => steps.map((s, i) => {
+      const done = i + 1 < cur, on = i + 1 === cur, last = i === steps.length - 1;
+      return {
+        num: done ? '✓' : String(i + 1),
+        name: s[0], note: s[1] || null,
+        weight: on ? '700' : '600',
+        ink: on ? '#241f38' : (done ? '#4a4459' : MUT),
+        pad: last ? 0 : 16, line: !last,
+        lineStyle:'width:1.5px;flex:1;min-height:'+(s[1] ? 30 : 18)+'px;background:'+(done ? V : HAIR)+';margin:5px 0',
+        dot:'width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:11px;font-weight:700;'
+          + (done ? 'background:'+V+';color:#fff;border:1.5px solid '+V
+              : (on ? 'background:'+VT+';color:'+VD+';border:1.5px solid '+V : 'background:#fff;color:'+MUT+';border:1.5px solid '+HAIR))
+      };
+    });
+
+    const rolePill = (tint, ink) => 'font-size:10px;font-weight:700;font-family:\'Roboto Mono\',monospace;letter-spacing:.06em;padding:3px 9px;border-radius:99px;background:'+tint+';color:'+ink+';border:1px solid '+HAIR+';margin-left:4px';
+    const opts = (list) => list.map(o => ({ name:o[0], note:o[1], on:o[2], badge:o[3] || null,
+      weight:o[2] ? '700' : '600', radio:radio(o[2]),
+      rowStyle:'display:flex;align-items:flex-start;gap:12px;padding:14px 15px;border-radius:12px;cursor:pointer;border:'
+        + (o[2] ? '1.5px solid '+V+';background:'+VT : '1px solid '+HAIR+';background:#fff') }));
+    const field = (o) => Object.assign({ isInput:false, isChips:false, isRadio:false, isGrid:false,
+      isCard:false, isInvite:false, hint:null }, o);
+
+    const DAYS = ['Mon','Tue','Wed','Thu','Fri'];
+    const SLOTS = [
+      { time:'09:00', on:[0,0,1,0,0] }, { time:'11:00', on:[1,0,1,0,1] },
+      { time:'14:00', on:[0,1,0,1,0] }, { time:'16:00', on:[1,0,0,0,1] }
+    ];
+    const slotCount = SLOTS.reduce((a, r) => a + r.on.filter(Boolean).length, 0);
+    const CAP = 6;
+
+    return {
+      // One hole for the whole label, so the flex gap separates icon from text and nothing else.
+      sso: [{ label:'Continue with Google', icon:I.google }, { label:'Continue with LinkedIn', icon:I.linked }],
+      platformNote:'Platform sign-in',
+      applyNote:'Axal VC admits members by application, whichever licence you hold. Founder applications are reviewed by the territory team.',
+      adminNote: 'Admin and subsidiary-operator access is granted by invitation only — it is not a role you can pick here.',
+
+      roles: [
+        { name:'Founder', on:true, tint:VT, ink:VD, icon:I.found, desc:'I’m building a company.',
+          meta:'Incorporation, cap table, raise, customer discovery' },
+        { name:'Investor / LP', on:false, tint:'#eef0ff', ink:'#4338ca', icon:I.inv, desc:'I back companies and funds.',
+          meta:'Deal flow, portfolio, fund reporting · accreditation required' },
+        { name:'Advisor', on:false, tint:'#eefbf5', ink:'#047857', icon:I.adv, desc:'I coach founders and run office hours.',
+          meta:'Practice, cohorts, expertise profile' },
+        { name:'Partner', on:false, tint:'#fff6e9', ink:'#92400e', icon:I.part, desc:'My firm provides services to portfolio companies.',
+          meta:'Pipeline, delivery, offers · firm-level licence' }
+      ].map(r => ({ name:r.name, desc:r.desc, meta:r.meta, on:r.on, icon:r.icon,
+        iconWrap: iconWrap(r.tint, r.ink), radio: radio(r.on),
+        cardStyle:'background:#fff;border-radius:16px;padding:22px 22px 20px;cursor:pointer;border:'
+          + (r.on ? '1.5px solid '+V+';box-shadow:0 0 0 3px rgba(124,58,237,.09)' : '1px solid '+HAIR) })),
+      adminFine: 'Admin access is invite-only. If you operate a territory under the Axal VC brand, your licence is issued by HQ and arrives by email — it is never self-selected.',
+
+      wizards: [
+        {
+          id:'a3', href:'#a3', tag:'A3', title:'Founder onboarding', sub:'4 steps · Meridian Robotics, TU Delft spin-out',
+          role:'FOUNDER', rolePill:rolePill(VT, VD), who:'Ines Marchetti · ines@meridianrobotics.nl',
+          stepCount:'4 steps', cur:'2', total:'4',
+          rail: rail([['Venture basics','Meridian Robotics · pre-seed'], ['Company origin','Spin-outs answer two more'],
+                      ['What you need first'], ['Invite your team']], 2),
+          railNote:'Answers route your first week. Nothing here is public, and every field can change later.',
+          h1:'Where does the company come from?',
+          lede:'Most founders answer this in one click and move on. Only a spin-out needs the two extra fields below, because only a spin-out has IP sitting with someone else.',
+          fields:[
+            field({ label:'Origin', isRadio:true, options: opts([
+              ['Independent','Built outside an institution. You already own what you have made — nothing further to answer.', false],
+              ['University spin-out','IP originates from a research institution and needs assignment or licence.', true, 'REVEALS 2 FIELDS'],
+              ['Corporate spin-out','Carved out of an employer. Expect an existing agreement to unwind.', false, 'REVEALS 2 FIELDS']
+            ]) }),
+            field({ label:'Institution · revealed by spin-out', isInput:true, value:'Delft University of Technology (TU Delft)' }),
+            field({ label:'IP status · revealed by spin-out', hint:'Determines your Incorporate checklist', isChips:true,
+              chips: chips([['Disclosed to TTO', true], ['Licence negotiated', true], ['Assigned to company', false], ['Patent filed', true], ['Not yet disclosed', false]]) }),
+            field({ label:'What this unlocks', isCard:true, cardTitle:'University IP pack', badge:'ADDED TO WEEK 1',
+              cardIcon:I.shield, cardIconWrap: iconWrap(VT, VD),
+              cardStyle:'margin-top:11px;background:'+VT+';border:1px solid #ddd0fb;border-radius:13px;padding:16px 17px',
+              cardBody:'Because the IP sits with TU Delft, incorporation is gated on a signed licence. We add the transfer-office checklist to your first week and hold the Delaware filing until it clears. This also makes you eligible for the Spin-Out Lab, one of the programmes inside Axal VC — you can apply from your dashboard once setup is done.',
+              cardFoot:'Sequenced, not blocked — you can work the rest of Week 1 while the TTO responds. An independent founder skips all of this and lands straight on step 3.' })
+          ],
+          footNote:'A wrong answer here costs a fortnight, so it is worth getting right. You can revise origin until incorporation is filed.',
+          cta:'Continue', cap:'Step 2 of 4, shown in its spin-out state. Origin is asked of every founder; the institution and IP fields are conditional, and picking Independent skips both. The Spin-Out Lab is surfaced as a consequence of the answer rather than as the frame around the product.'
+        },
+        {
+          id:'a4', href:'#a4', tag:'A4', title:'Investor / LP onboarding', sub:'4 steps · accreditation before deal flow',
+          role:'INVESTOR', rolePill:rolePill('#eef0ff', '#4338ca'), who:'Marcus Halloran · m.halloran@keystone.lp',
+          stepCount:'4 steps', cur:'3', total:'4',
+          rail: rail([['Accreditation','Attested'], ['Check size & sectors','EUR 250k–1M · 3 sectors'],
+                      ['Verification','Handed to Compliance'], ['Deal-flow preferences']], 3),
+          railNote:'Attestation is your statement. Verification is our evidence. They are separate steps on purpose.',
+          h1:'Verification continues in Compliance',
+          lede:'You have attested; that is not the same as being verified. Deal flow stays closed until Compliance clears the documents, and we would rather say so than imply access you do not have.',
+          fields:[
+            field({ label:'Handoff', isCard:true, cardTitle:'KYC and accreditation review', badge:'2–3 BUSINESS DAYS',
+              cardIcon:I.shield, cardIconWrap: iconWrap('#fef9e7', '#92400e'),
+              cardStyle:'margin-top:11px;background:#fffdf5;border:1px solid #fcd34d;border-radius:13px;padding:16px 17px',
+              cardBody:'Your file has moved to the Compliance queue. You will receive a secure upload link; nothing is required in this window.',
+              cardRows:[
+                { k:'Accreditation attestation', v:'Verified', pill:pill('Verified') },
+                { k:'Identity documents', v:'Pending', pill:pill('Pending') },
+                { k:'Sanctions screening', v:'Pending', pill:pill('Pending') },
+                { k:'Source of funds', v:'Required', pill:pill('Required') }
+              ],
+              cardFoot:'Until all four clear, you can browse the platform and see fund summaries — commitments and full deal rooms stay closed.' }),
+            field({ label:'Confirmed on the previous step', hint:'Editable until verification completes', isChips:true,
+              chips: chips([['EUR 250k–1M per cheque', true], ['Deep tech', true], ['Robotics', true], ['Climate', true], ['Fintech', false], ['Consumer', false]]) })
+          ],
+          footNote:'We do not soft-open access while a file is pending. A half-verified investor is a compliance incident waiting for a date.',
+          cta:'Continue to preferences', cap:'Step 3 of 4. The handoff is the design point: attestation and verification are rendered as different things, and access is gated on the second.'
+        },
+        {
+          id:'a5', href:'#a5', tag:'A5', title:'Advisor onboarding', sub:'3 steps · expertise, availability, practice link',
+          role:'ADVISOR', rolePill:rolePill('#eefbf5', '#047857'), who:'Dr. Priya Raghavan · priya@ravenscourt.io',
+          stepCount:'3 steps', cur:'2', total:'3',
+          rail: rail([['Expertise areas','6 selected'], ['Office-hours availability'], ['Link your practice profile']], 2),
+          railNote:'Availability drives cohort matching. Founders book directly into these slots.',
+          h1:'When can founders book you?',
+          lede:'Pick recurring weekly slots. Cohort founders book directly; you approve nothing per-booking, which is the point of publishing a grid rather than trading emails.',
+          fields:[
+            field({ label:'Weekly availability', hint:'Europe/Amsterdam · CEST', isGrid:true, days:DAYS,
+              rows: SLOTS.map(r => ({ time:r.time, cells:r.on.map(on => ({ mark: on ? '●' : '',
+                style:'text-align:center;padding:10px 0;font-size:12px;cursor:pointer;border-left:1px solid #f0eef5;color:'
+                  + (on ? VD : MUT) + ';background:' + (on ? VT : '#fff') })) })),
+              gridNote: slotCount + ' slots published · 45 minutes each · a founder cancelling inside 12 hours still burns the slot' }),
+            field({ label:'Session length', isChips:true, chips: chips([['30 min', false], ['45 min', true], ['60 min', false]]) }),
+            field({ label:'Cap', isCard:true, cardTitle:'Weekly booking cap', badge:CAP + ' OF ' + slotCount + ' PUBLISHED',
+              cardIcon:I.adv, cardIconWrap: iconWrap('#eefbf5', '#047857'),
+              cardStyle:'margin-top:11px;background:#fff;border:1px solid '+HAIR+';border-radius:13px;padding:16px 17px',
+              cardBody:'Publishing ' + slotCount + ' slots does not commit you to ' + slotCount + ' sessions. The cap is the number founders can actually take in a week; the extra ' + (slotCount - CAP) + ' exist so the calendar has give.',
+              cardFoot:'Raise or lower the cap any time. Slots already booked are never revoked by a cap change.' })
+          ],
+          footNote:'Blackout dates and holidays come after the cohort is assigned — this step is the recurring shape, not the exceptions.',
+          cta:'Continue', cap:'Step 2 of 3. Published slots and the weekly cap are separate numbers, because a calendar with no slack cannot absorb a reschedule.'
+        },
+        {
+          id:'a6', href:'#a6', tag:'A6', title:'Partner onboarding', sub:'3 steps · firm type, services, co-marketing',
+          role:'PARTNER', rolePill:rolePill('#fff6e9', '#92400e'), who:'Sofia Lindqvist · sofia@nordicacounsel.se',
+          stepCount:'3 steps', cur:'3', total:'3',
+          rail: rail([['Firm type','Legal'], ['Services offered','4 selected'], ['Co-marketing']], 3),
+          railNote:'Your firm is the licence holder. Colleagues are added under it once this is done.',
+          h1:'Co-marketing',
+          lede:'Optional, and separable — you can appear in the partner directory without agreeing to joint content, and the reverse is not possible.',
+          fields:[
+            field({ label:'Opt-ins', isRadio:true, options: opts([
+              ['Directory listing only','Your firm appears where founders search for counsel. No joint content, no logo use.', false],
+              ['Directory + case studies','We may write up an engagement with your named consent, per instance.', true],
+              ['Full co-marketing','Adds joint events, cohort workshops and reciprocal logo use under the brand guidelines.', false]
+            ]) }),
+            field({ label:'Consent', isCard:true, cardTitle:'Per-instance consent, not a blanket grant', badge:'PARTNER AGREEMENT \u00A74',
+              cardIcon:I.mega, cardIconWrap: iconWrap('#fff6e9', '#92400e'),
+              cardStyle:'margin-top:11px;background:#fff;border:1px solid '+HAIR+';border-radius:13px;padding:16px 17px',
+              cardBody:'Case studies name a client. Every write-up is sent to you for approval before it is published, and a decline is recorded without a reason being required.',
+              cardFoot:'Revocable at any time from Offers → Co-marketing. Published pieces stay up unless you ask for removal.' }),
+            field({ label:'Invite colleagues', hint:'Under the firm licence', isInvite:true, invites:[
+              { email:'anders@nordicacounsel.se', role:'Partner', state:'Sent', pill:pill('Sent') },
+              { email:'lena@nordicacounsel.se', role:'Associate', state:'Sent', pill:pill('Sent') },
+              { email:'', role:'Paralegal', state:'Draft', pill:pill('Draft') }
+            ] })
+          ],
+          footNote:'Colleagues inherit the firm\u2019s services and co-marketing setting. Only the firm admin can change either.',
+          cta:'Finish setup', cap:'Step 3 of 3. Directory listing and co-marketing are decoupled, because a firm that wants findability should not have to trade a client name for it.'
+        }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

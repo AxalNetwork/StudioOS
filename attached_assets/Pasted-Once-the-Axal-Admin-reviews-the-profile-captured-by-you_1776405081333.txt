@@ -1,0 +1,58 @@
+Once the **Axal Admin** reviews the profile captured by your chatbot, they will propose a specific legal "Closing Binder." Since Axal operates as a **programmable venture studio**, these agreements are often standardized templates triggered by the **Legal Engine**.
+
+Here is what the admin will propose for each profile type:
+
+---
+
+### 1. The Investor Profile
+Investors are categorized by their "check size" and commitment type.
+
+| Sub-Profile | Admin Proposed Agreement | Key Engagement |
+| :--- | :--- | :--- |
+| **Limited Partner (LP)** | **Subscription Booklet & LPA** | Committing capital to the main VC fund for a 7–10 year term. |
+| **Syndicate Partner** | **SPV Joinder Agreement** | Investing in a specific "Spin-Out" subsidiary on a deal-by-deal basis. |
+| **Co-Investor** | **Co-Investment Side Letter** | Aligning terms between Axal and an external VC firm for a joint round. |
+
+---
+
+### 2. The Operator / Advisor Profile
+For those providing "sweat equity" or specialized expertise to the projects.
+
+* **Venture Partner / Advisor:** The admin will propose a **Venture Share Agreement** (often based on the **FAST**—Founder Advisor Standard Template). This defines the vesting schedule for equity in the Holding Company or specific subsidiaries.
+* **Operating Partner:** A **Master Service Agreement (MSA)** with an **Equity-for-Services** rider. This allows the operator to bill the Management Company while earning a "carry" in the fund.
+
+---
+
+### 3. The Legal & Service Provider Profile
+These partners provide the "Infrastructure" for the 30-day spin-outs.
+
+* **Preferred Legal Counsel:** An **Engagement Letter** that defines fixed-fee structures for "Spin-Out Packages" (Incorporation, IP Transfer, SAFE issuance).
+* **Technical Partner:** A **White-Label Service Agreement**. This allows the partner to integrate their MVP development tools directly into the **StudioOS Legal Engine**.
+
+---
+
+### 4. The Project Founder Profile
+For entrepreneurs entering the "30-Day Spin-Out Engine."
+
+* **Founder Collaboration Agreement:** Signed during the initial "Validated Idea" phase. It defines the IP ownership (held by Axal Holding Co) and the success metrics for the decision gate.
+* **Spin-Out Subsidiary SPA:** Once the project passes the "Gate," the admin proposes the **Stock Purchase Agreement** and **IP License/Transfer**, officially creating the new Delaware entity with the founder as a major shareholder.
+
+---
+
+### 5. The Liquidity Profile
+Focused on the "Returns" arrow of the Axal flowchart.
+
+* **Secondary Purchase Agreement (SPA):** Proposed when an early LP or Founder wants to sell their vested shares to a secondary fund before a full exit.
+* **M&A Advisory Mandate:** A contract for investment banks or brokers to begin the "Exit" process for a successful subsidiary.
+
+---
+
+### How the Admin Sends These (The "Trigger")
+In your **Replit/Cloudflare** system, once the Admin clicks **"Verify Profile"** in the dashboard:
+1.  **D1 Update:** The database changes `admin_status` to `'verified'`.
+2.  **Document Generation:** The **Legal Engine** (integrated via an API like HelloSign or DocuSign) automatically drafts the relevant agreement using the data captured by the AI (Legal Name, EIN, Signatory).
+3.  **Email Notification:** The user receives a link to sign their "Axal Partnership Binder."
+
+> **Axal Pro-Tip:** Since Axal is a Delaware LLC, all these agreements will include a **"Choice of Law"** clause pointing to the State of Delaware, ensuring all partners operate under the same legal framework regardless of their physical location.
+
+**Would you like me to help you write the code for the "Admin Dashboard" view in your Replit project so you can see and verify these profiles?**

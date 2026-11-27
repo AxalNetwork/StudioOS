@@ -1,0 +1,34 @@
+{
+  "skill": "linkedin-company-growth",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "LinkedIn Company Page Growth Strategy",
+        "task_scope": "Designs a company-page growth system covering audience, content pillars, employee participation and distribution.",
+        "evidence": [
+          "employee advocacy and audience distribution"
+        ],
+        "omitted_field": "baseline follower count"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for employee advocacy and audience distribution."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "employee advocacy and audience distribution"
+    ],
+    "must_say_not_recorded": [
+      "baseline follower count"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

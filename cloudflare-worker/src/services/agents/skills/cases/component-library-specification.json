@@ -1,0 +1,34 @@
+{
+  "skill": "component-library-specification",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "synthetic_fixture": true,
+        "skill_name": "Component Library Specification",
+        "task_scope": "Specifies reusable UI component APIs, variants, slots, composition, accessibility and implementation acceptance criteria.",
+        "evidence": [
+          "component API contract"
+        ],
+        "omitted_field": "keyboard interaction"
+      },
+      "build.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for component API contract."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "component API contract"
+    ],
+    "must_say_not_recorded": [
+      "keyboard interaction"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

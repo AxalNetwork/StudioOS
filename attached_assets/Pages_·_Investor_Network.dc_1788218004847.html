@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#4338ca;background:#f5f5ff;border-color:#c7d2fe;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f5f5ff;border-color:#c7d2fe;color:#4338ca;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f5f5ff;border:1px solid #c7d2fe;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4338ca;background:#e8e8ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #4338ca;background:#4338ca;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .lock{font-size:9px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:2px 5px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="3">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /network</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#4338ca;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span><sc-if value="{{ n.locked }}"><span class="lock">Inst.</span></sc-if></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Network</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="3">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#4338ca;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="indigo" page="Network" hint-size="100%,580px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const N = { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff' };
+    // CANONICAL Investor shell — 9 rows, matching Detail Layer Canvas I_ROWS.
+    const ROWS = ['Home','Deals','Portfolio','Axal VC Fund','Fund','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Network' ? 'nav on' : 'nav',
+      locked: label === 'Fund',
+      style: label === 'Network' ? 'color:'+N.deep+';background:'+N.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+N.ink
+        : (label === 'Fund' ? 'color:#615c6e' : '') }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Relationships','Introductions','Organizations'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Introductions' }));
+
+    const pill = (t) => {
+      const M = { 'Strong':['#ecfdf5','#047857','#a7f3d0'], 'Made':['#ecfdf5','#047857','#a7f3d0'],
+        'Accepted':['#ecfdf5','#047857','#a7f3d0'],
+        'Warm':['#f5f5ff','#3730a3','#c7d2fe'], 'Asked':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Offered':['#f5f5ff','#3730a3','#c7d2fe'], 'In motion':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Going cold':['#fffbeb','#92400e','#fde68a'], 'No reply':['#fffbeb','#92400e','#fde68a'],
+        'Declined':['#fef2f2','#b91c1c','#fecaca'], 'Dormant':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Dormant'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven'][n] || String(n);
+    const bothOrAll = (n) => n === 2 ? 'Both' : 'All ' + nWord(n);
+    const Cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    // ══ Network curation rate — Mistral Small 3.1 24B, as the rail declares. ══
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * 0.351 + tout / 1e6 * 0.555;
+
+    // ══ ONE relationship book, investor-typed: founders met, co-investors, LPs, advisors.
+    // Every count on all three pages derives from it. ══
+    const COLD_AT = 60;
+    const BOOK = [
+      { name:'Guillaume Lauzier', org:'Novacraft Labs', type:'Founder', str:'Strong', days:6, ctx:'Term sheet out' },
+      { name:'Marisol Vega', org:'Thornbury Capital', type:'Co-investor', str:'Strong', days:9, ctx:'Co-led Aperture' },
+      { name:'A. Whitfield', org:'Meridian', type:'LP', str:'Strong', days:14, ctx:'Largest commitment' },
+      { name:'Dev Raman', org:'Latitude Seed', type:'Co-investor', str:'Warm', days:22, ctx:'Recused on Aperture' },
+      { name:'Priyanka Raghunathan', org:'Independent', type:'Advisor', str:'Warm', days:31, ctx:'Diligence on pricing' },
+      { name:'S. Mwangi', org:'Independent', type:'LP', str:'Warm', days:74, ctx:'KYC outstanding' },
+      { name:'Tobias Ncube', org:'Verwood', type:'Founder', str:'Warm', days:96, ctx:'Passed in May' }
+    ];
+    const cold = BOOK.filter(p => p.days > COLD_AT);
+    const strong = BOOK.filter(p => p.str === 'Strong').length;
+    const byType = (t) => BOOK.filter(p => p.type === t).length;
+    const coldestEntry = cold.reduce((m, c) => (!m || c.days > m.days ? c : m), null);
+    const coldest = coldestEntry ? coldestEntry.days : 0;
+    const coldestName = coldestEntry ? coldestEntry.name : '—';
+    const bookRows = BOOK.map(p => ({ cells:[
+      cell(p.name), cell(p.org), cell(p.type),
+      cell('', { pill: p.days > COLD_AT ? 'Going cold' : p.str }),
+      cell(p.days + ' days ago · ' + p.ctx)
+    ]}));
+
+    // ══ ONE intro ledger. Direction and outcome both recorded, including the ones that died. ══
+    const INTROS = [
+      { who:'Marisol Vega → Aperture', dir:'Offered', state:'Made', via:'direct', out:'Co-invested. The intro became a syndicate.' },
+      { who:'you → Halverton VP Eng', dir:'Offered', state:'Made', via:'direct', out:'Hired in June. Logged in Value-add.' },
+      { who:'Priyanka → Kelp Bio', dir:'Asked', state:'Accepted', via:'Priyanka', out:'Diligence call happened. We passed anyway.' },
+      { who:'you → Aperture CFO', dir:'Offered', state:'No reply', via:'direct', out:'Promised in June, never made. Shows as owed in Value-add.' },
+      { who:'Dev Raman → Thornfield', dir:'Asked', state:'In motion', via:'Dev Raman', out:'Double opt-in sent. Both agreed, not yet scheduled.' },
+      { who:'you → Lumen Works', dir:'Offered', state:'Declined', via:'direct', out:'They wanted an LP intro we would not make.' }
+    ];
+    const given = INTROS.filter(i => i.dir === 'Offered').length;
+    const received = INTROS.filter(i => i.dir === 'Asked').length;
+    const landed = INTROS.filter(i => i.state === 'Made' || i.state === 'Accepted').length;
+    const ledgerRead = given > received ? 'net giver to the network'
+      : (given < received ? 'net taker — worth evening up' : 'even');
+    const introRows = INTROS.map(i => ({ cells:[
+      cell(i.who), cell(i.dir), cell('', { pill:i.state }), cell(i.via),
+      cell(i.out, { seam: i.state === 'Made' ? 'Support given' : null })
+    ]}));
+
+    // ══ Organizations are a lens over the book, not a second address list. ══
+    const ORGS = ['Novacraft Labs','Thornbury Capital','Latitude Seed','Meridian','Verwood','Independent'];
+    const orgOf = (o) => BOOK.filter(p => p.org === o);
+    const MAPPED = BOOK.filter(p => p.org !== 'Independent').length;
+    const kindOf = (o) => o === 'Novacraft Labs' ? 'Portfolio'
+      : o === 'Verwood' ? 'Passed'
+      : o === 'Meridian' ? 'LP'
+      : o === 'Independent' ? 'Unaffiliated' : 'Co-investor';
+    const orgRows = ORGS.map(o => {
+      const people = orgOf(o);
+      const freshest = people.reduce((m, p) => Math.min(m, p.days), 999);
+      const note = o === 'Novacraft Labs' ? 'Term sheet out. The relationship predates the deal.'
+        : o === 'Thornbury Capital' ? 'Co-led Aperture. Also a fund we track in Research.'
+        : o === 'Latitude Seed' ? 'Co-investor who recused on Aperture. Conflict, not coldness.'
+        : o === 'Meridian' ? 'Largest LP. Belongs in the register too, and in both.'
+        : o === 'Verwood' ? 'Passed in May. Kept warm rather than closed.'
+        : 'Not an organization — where unaffiliated advisors and individual LPs land.';
+      return { cells:[ cell(o), cell(kindOf(o)), cell(String(people.length)),
+        cell(people.length ? freshest + ' days ago' : '—'), cell(note) ]};
+    });
+
+    const PAGES = [
+      { id:'in1', badge:'IN1', route:'/network/relationships', zone:'Relationships', arch:'MATCH ENGINE',
+        title:'Network · Relationships', h1:'Relationship book',
+        blurb:'Compressed shows who you spoke to recently. The full book adds every relationship typed for this product — founders met, co-investors, LPs, advisors — with strength, deal context and the cold flag that is the only thing a book is actually for.',
+        sub:'Full book, strength, notes and reminders.',
+        cmpTitle:'Book · ' + BOOK.length + ' relationships',
+        cmpBody:strong + ' strong across ' + nWord(4) + ' types. ' + Cap(nWord(cold.length)) + ' going cold past ' + COLD_AT + ' days.',
+        viewMore:'View more · ' + BOOK.length + ' relationships, ' + cold.length + ' cold →',
+        filters: fil(['Everyone','Founders','Co-investors','LPs','Going cold'], 0), ops:['Add person','Set reminders','Export'],
+        adds:[ { label:'In the book', value:String(BOOK.length), note:byType('Founder') + ' founders, ' + byType('Co-investor') + ' co-investors, ' + byType('LP') + ' LPs' },
+          { label:'Strong', value:String(strong), note:'of ' + BOOK.length },
+          { label:'Going cold', value:String(cold.length), note:'past ' + COLD_AT + ' days' },
+          // Name must belong to the holder of the maximum, not the last cold entry in BOOK order.
+          { label:'Coldest', value:coldest + ' d', note:coldestName } ],
+        instTitle:'The book', instMeta:'Cold flag overrides strength — an unworked tie is not currently strong',
+        cols:'1.2fr 1.1fr .9fr 1fr 1.6fr', head:['Person','Organization','Type','State','Last touch and context'],
+        rows: bookRows,
+        instNote:'The cold flag replaces the strength label rather than sitting beside it, because a warm relationship untouched for 96 days is not currently warm — it is one you used to have. '
+          + bothOrAll(cold.length) + ' cold entries carry unfinished business: an LP whose KYC is still outstanding, and a founder we passed on in May and never told why.',
+        aiLabel:'Proposal · ' + nWord(cold.length) + ' re-engagement lines', aiCost:c4(runCost(cold.length * 3400, cold.length * 520)),
+        aiBody:'One line each, drawn from the last real exchange rather than "just checking in" — the LP needs a KYC nudge with a deadline, and the founder we passed on deserves the reason we never sent. Different problems, so different letters.',
+        aiAccept:'Review the ' + nWord(cold.length), aiFoot:'Screened before any send.' },
+
+      { id:'in2', badge:'IN2', route:'/network/introductions', zone:'Introductions', arch:'FEED',
+        title:'Network · Introductions', h1:'Introductions',
+        blurb:'Compressed shows what is in motion. The full feed is the ledger — every ask and offer, who carried it, and what came of it, including the ones that quietly died. That half is the useful one.',
+        sub:'Asks and offers ledger, double opt-in flows.',
+        cmpTitle:'Introductions · ' + INTROS.length + ' tracked',
+        cmpBody:landed + ' landed, 1 in motion, 1 promised and never made.',
+        viewMore:'View more · ' + INTROS.length + ' intros, both directions →',
+        filters: fil(['All','Offered','Asked','Stalled'], 0), ops:['Request an intro','Offer one','Export'],
+        adds:[ { label:'Tracked', value:String(INTROS.length), note:'both directions' },
+          { label:'Landed', value:String(landed), note:'made or accepted' },
+          { label:'Given / received', value:given + ' / ' + received, note:ledgerRead },
+          { label:'Unmade', value:'1', note:'promised in June' } ],
+        instTitle:'Introduction ledger', instMeta:'Made intros are seam-marked as support given',
+        cols:'1.4fr .8fr 1fr .9fr 1.9fr', head:['Introduction','Direction','State','Via','Outcome'],
+        rows: introRows,
+        instNote:'An intro that lands is marked as support given and appears on the Portfolio value-add ledger — the two pages read the same event, which is why the unmade Aperture CFO intro shows as owed there rather than being quietly forgotten here. Recording who carried an intro is what makes a stall visible instead of mysterious.',
+        aiLabel:'Proposal · double opt-in draft', aiCost:c4(runCost(2600, 470)),
+        aiBody:'Two separate messages rather than one CC — each side asked privately before either name reaches the other. Written from both parties\u2019 real context: what Thornfield needs at this stage, what Dev actually writes cheques for, and why the overlap is not obvious from outside.',
+        aiAccept:'Ask both', aiFoot:'Neither name is shared until both agree.' },
+
+      { id:'in3', badge:'IN3', route:'/network/organizations', zone:'Organizations', arch:'COLLECTION',
+        title:'Network · Organizations', h1:'Organizations',
+        blurb:'Compressed lists the firms you deal with. The full collection adds profiles, the people you know at each, and the history — treated as a lens over the book above rather than a second address list.',
+        sub:'Org profiles, people and history.',
+        cmpTitle:'Organizations · ' + ORGS.length,
+        cmpBody:MAPPED + ' of ' + BOOK.length + ' people sit at a named firm. The rest are unaffiliated.',
+        viewMore:'View more · ' + ORGS.length + ' orgs, ' + MAPPED + ' people mapped →',
+        filters: fil(['All','Portfolio','Co-investors','LPs','Passed'], 0), ops:['Add org','Merge duplicates','Export'],
+        adds:[ { label:'Organizations', value:String(ORGS.length), note:'incl. one placeholder' },
+          { label:'People mapped', value:String(MAPPED), note:'of ' + BOOK.length + ' in the book' },
+          { label:'Unaffiliated', value:String(BOOK.length - MAPPED), note:'advisors and individual LPs' },
+          { label:'Dual-listed', value:'2', note:'Thornbury and Meridian' } ],
+        instTitle:'Organizations', instMeta:'People counts read from the relationship book',
+        cols:'1.2fr 1fr .7fr 1fr 2fr', head:['Organization','Kind','People','Freshest','Note'],
+        rows: orgRows,
+        instNote:'Counts are computed from the book rather than stored again, so an organization cannot claim contacts you do not have. Two entries are deliberately dual-listed: Thornbury is a co-investor here and a tracked fund in Research, Meridian is a relationship here and a commitment in the LP register. Merging either would lose the distinction between knowing a firm and being funded by one.',
+        aiLabel:'Proposal · org summary, Verwood', aiCost:c4(runCost(3100, 430)),
+        aiBody:'Everything on file in six lines: a founder we passed on in May, the stated reason, the 96 days of silence since, and the fact they are also a fund in the Research library. Enough to decide whether to re-open the relationship or close it properly.',
+        aiAccept:'Save to profile', aiFoot:'Cites the pass record and the library entry.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

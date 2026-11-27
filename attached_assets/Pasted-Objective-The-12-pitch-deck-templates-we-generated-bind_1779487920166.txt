@@ -1,0 +1,124 @@
+Objective
+  The 12 pitch-deck templates we generated bind to platform fields
+  that don't all exist yet. Without them, autofill renders "—". Add
+  the missing columns, expose them via heuristicSlides(), and add
+  question-bank entries so the Personal Advisor populates them.
+
+Audit gap (compare deck templates vs current schema)
+  The 12 templates reference these fields. Mark each as PRESENT or
+  MISSING in current schema (commit DECK_AUTOFILL_AUDIT.md):
+
+    projects.name                          PRESENT
+    projects.tagline                       check
+    projects.problem_statement             PRESENT
+    projects.solution                      PRESENT
+    projects.why_now                       PRESENT
+    projects.market_urgency                check
+    projects.business_model                MISSING
+    projects.one_liner                     MISSING
+    projects.wedge                         MISSING
+    projects.target_icp_json               MISSING
+    projects.sector                        PRESENT
+    projects.subsector                     MISSING
+    projects.tam_usd                       check (was 'tam'?)
+    projects.sam_usd                       check
+    projects.som_usd                       MISSING
+    projects.tam_source_url                MISSING
+    projects.team_one_line                 MISSING
+    projects.traction_one_line             MISSING
+    projects.competitors_json              MISSING
+    projects.tech_stack_json               MISSING
+    projects.brand_palette_json            MISSING
+    projects.brand_voice                   MISSING
+
+    financial_models.mrr_usd               check
+    financial_models.arr_usd               MISSING
+    financial_models.monthly_burn_usd      MISSING
+    financial_models.cash_in_bank_usd      MISSING
+    financial_models.runway_months         MISSING
+    financial_models.paying_customers      MISSING
+    financial_models.gross_margin_pct      MISSING
+    financial_models.monthly_churn_pct     MISSING
+    financial_models.nrr_pct               MISSING
+    financial_models.cac_usd               MISSING
+    financial_models.ltv_usd               MISSING
+    financial_models.payback_months        MISSING
+    financial_models.magic_number          MISSING
+    financial_models.rule_of_40            MISSING
+    financial_models.mom                   MISSING
+
+    metrics_snapshots.dau                  check
+    metrics_snapshots.wau                  MISSING
+    metrics_snapshots.mau                  MISSING
+    metrics_snapshots.stickiness_pct       MISSING
+    metrics_snapshots.activation_pct       MISSING
+    metrics_snapshots.time_to_value_min    MISSING
+    metrics_snapshots.m1_retention         MISSING
+    metrics_snapshots.m3_retention         MISSING
+    metrics_snapshots.m6_retention         MISSING
+    metrics_snapshots.m12_retention        MISSING
+
+    rounds.target_amount_usd               check
+    rounds.valuation_cap_usd               MISSING
+    rounds.use_of_funds                    PRESENT
+    rounds.stage                           check
+    rounds.instrument                      MISSING
+
+    captable.option_pool_pct               MISSING
+    captable.outstanding_safes_usd         MISSING
+    captable.has_mfn_flags                 MISSING
+
+    users.email (for contact slide)        PRESENT
+
+Tasks
+
+  1. Add missing columns via an additive migration
+     cloudflare-worker/sql/migrations/00xx_deck_autofill_fields.sql.
+     ALTER TABLE ... ADD COLUMN ... where missing. No drops, no
+     renames. Index nothing — these are slide-fill fields, not query
+     hot paths.
+
+  2. Update cloudflare-worker/src/routes/decks.ts heuristicSlides()
+     to read every field listed above. Where a field is empty,
+     return the same "—" / placeholder the templates already expect.
+
+  3. Wire Personal Advisor question bank
+     Add question entries to
+     cloudflare-worker/src/services/advisor/banks/existingFounder.ts
+     and newFounderSpinout.ts for every MISSING field. Each entry:
+       - persona, section, page_target (the exact path the deck
+         template binds to)
+       - importance: 'critical' for cover/problem/solution/team/
+         traction/ask fields; 'high' for unit economics + retention;
+         'med' for the rest.
+       - evidence: 'required' for mrr_usd, arr_usd, cash_in_bank_usd,
+         monthly_burn_usd, paying_customers (anti-cheat).
+     Honour the bank's existing drift-check (npm run test:drift);
+     keep per-bank counts above the established minimums.
+
+  4. Wire the write-router so an advisor answer to
+     question_id=existingFounder.financials.cac writes to
+     financial_models.cac_usd. The router already exists; just add
+     the mapping rows.
+
+  5. Update the Pitch Deck editor's "Fill from project" button to
+     call POST /api/decks/:id/autofill which re-runs heuristicSlides
+     against the latest data. Surface per-slide confidence (filled
+     vs. placeholder) in the editor's right rail.
+
+Tests
+  cloudflare-worker/test/decks.autofill.test.ts
+    - Seeds a project with the full field set.
+    - Renders YC seed template via the autofill route.
+    - Asserts no "—" placeholders for fields that have data.
+  Same for series_a_growth + series_b_diligence (the most field-
+  hungry templates).
+
+Acceptance
+  - DECK_AUTOFILL_AUDIT.md committed with all fields marked.
+  - Migration applied; new columns exist.
+  - heuristicSlides() exposes every field the templates need.
+  - Advisor's existingFounder + newFounderSpinout banks expanded;
+    drift check still green.
+  - Editor "Fill from project" populates ≥ 90% of fields on a
+    fully-completed sample project.

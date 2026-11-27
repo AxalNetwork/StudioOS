@@ -1,0 +1,81 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, D1 tables for users, deals, project_stages, decision_gates, legal_documents, subsidiaries, capital_calls, spinout_events, workflows, activity_logs, and every other table from all previous builds. We also have the Partner Dashboard, Pipeline Board, Legal/Capital Engine, and Spin-Out Wizard.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add complete **Monitoring, Rate Limiting, Observability, and Horizontal Scaling** for high-volume operations (dozens of parallel projects, hundreds of partners, AI calls, spin-outs) with these exact requirements:
+
+1. **Database Models (new D1 tables for observability)**  
+   Create these tables with proper indexes:
+   - `system_metrics`
+     • id (PK)
+     • timestamp (timestamp)
+     • metric_name (text: 'requests_per_minute', 'ai_calls', 'spinouts_completed', 'pipeline_throughput', etc.)
+     • value (float)
+     • labels (json) → e.g. {"endpoint": "/api/spinout", "role": "operator"}
+   - `rate_limit_logs`
+     • id (PK)
+     • user_id (FK)
+     • endpoint (text)
+     • requests_in_window (integer)
+     • blocked (boolean)
+     • created_at
+   - Extend `activity_logs` with optional `latency_ms` and `status_code` columns.
+
+2. **Rate Limiting Middleware**  
+   - Implement a FastAPI middleware (and equivalent Cloudflare Worker middleware) using a sliding-window algorithm stored in D1.
+   - Limits:
+     • 60 requests/min per user for most endpoints
+     • 10 AI scoring calls/min per user
+     • 5 spin-out executions/hour (operator only)
+     • Global 1000 req/min burst protection
+   - Return 429 with JSON message + retry-after header.
+
+3. **Monitoring & Observability**  
+   - Automatic logging of every request: latency, status code, user_id, endpoint, AI calls, pipeline events.
+   - Replit AI-powered anomaly detection: daily summary of unusual activity (e.g. “Spike in spin-out requests”).
+   - Simple metrics collector that writes to `system_metrics` every 60 seconds.
+   - Error tracking: capture exceptions and log to D1 with stack trace snippet.
+
+4. **Horizontal Scaling & Cloudflare Optimization**  
+   - All high-volume endpoints (matches, pipeline, spin-out, dashboard) must be wrapped so they can run as Cloudflare Workers (already in cloudflare-worker/ folder).
+   - Add a simple queue system using D1 + background workers for non-critical tasks (e.g. AI scoring, metric aggregation).
+   - Provide wrangler.toml updates and a `deploy-workers.sh` script that deploys rate-limit + monitoring logic to the edge.
+   - Add basic auto-scaling note: “Cloudflare Workers auto-scale horizontally; Replit serves as dev + admin backend.”
+
+5. **Backend Endpoints & Middleware (add to main.py + cloudflare-worker/)**  
+   - Global middleware: `RateLimitMiddleware` and `ObservabilityMiddleware`
+   - GET /api/monitoring/metrics (admin-only) — returns latest system_metrics + charts data
+   - GET /api/monitoring/anomalies (Replit AI summary)
+   - GET /api/monitoring/rate-limits (admin view of blocked attempts)
+   - All existing endpoints now protected by the new middleware.
+
+6. **Frontend**  
+   - New admin-only page /monitoring.html (accessible only to 'admin' role)
+   - Live dashboard with:
+     • Real-time metrics charts (Chart.js: requests/min, AI calls, spin-out throughput)
+     • Rate-limit heatmap
+     • Anomaly alerts panel (AI-generated)
+     • System health status (green/yellow/red)
+   - Integrate a “Monitoring” link into the existing Partner Dashboard sidebar (visible to admins only).
+   - Use Server-Sent Events (SSE) or polling for live updates.
+
+7. **Security & Best Practices**  
+   - RBAC: Only admins see full monitoring; operators see limited throughput stats.
+   - All secrets in Replit Secrets.
+   - Retain data for 30 days only (add cleanup job).
+   - Full audit trail — every rate-limit block and metric write logged.
+   - Keep it lightweight (no external services like Prometheus yet; ready for future).
+
+Build this step-by-step:  
+1. First create the new D1 tables + migration + extend activity_logs.  
+2. Then implement Rate Limiting Middleware (FastAPI + Cloudflare Worker version).  
+3. Then add Observability Middleware + metrics collector + Replit AI anomaly detection.  
+4. Then update wrangler.toml and add deployment scripts for horizontal scaling.  
+5. Finally build the /monitoring.html frontend dashboard and integrate with existing UI.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

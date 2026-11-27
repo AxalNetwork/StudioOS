@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span><span style="font-size:13px;font-weight:700">{{ v.company }}</span><span style="display:flex;align-items:center"><span role="img" aria-label="Studio" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.studioI }}"></span><span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span></span></div></sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><nav aria-label="Raise modules" style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="9"><a href="{{ g.href }}" style="{{ g.s }}">{{ g.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.msel }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Raise modules" style="{{ v.mselS }}"><span style="{{ v.eyeS }}">Module</span><b style="flex:1;text-align:left">{{ v.title }}</b><span aria-hidden="true">▾</span></button></sc-if><sc-if value="{{ v.moved }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.movedS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1">{{ v.moved }}</span><button type="button" style="{{ v.dismissS }}">Dismiss</button></div></sc-if><sc-if value="{{ v.tbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.tbarS }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ v.tbarChips }}" as="g" hint-placeholder-count="4"><span title="{{ g.tip }}" style="{{ g.s }}">{{ g.t }}</span></sc-for></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><sc-if value="{{ v.tbarNote }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tbarNoteS }}">{{ v.tbarNote }}</span></sc-if><sc-for list="{{ v.tbarBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a aria-current="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  <sc-if value="{{ v.pnav }}" hint-placeholder-val="{{ false }}"><nav aria-label="Cycles" style="{{ v.pnavS }}"><sc-for list="{{ v.pnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}"><span aria-hidden="true" style="{{ pn.ds }}"></span>{{ pn.t }}</a></sc-for></nav></sc-if></main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railX }}">›</button></div><p style="{{ v.railP }}">{{ v.rail.line }}</p><button type="button" style="{{ v.railB }}">{{ v.rail.btn }}</button><sc-for list="{{ v.rail.items }}" as="ri" hint-placeholder-count="3"><div style="{{ v.railI }}"><span style="{{ v.eyeS }}">{{ ri.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ ri.t }}</span></div></sc-for></aside></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;CRL1&quot;,&quot;options&quot;:[&quot;CRL1&quot;,&quot;CRL2&quot;,&quot;CRL3&quot;,&quot;CRL4&quot;,&quot;CRL5&quot;,&quot;CRL6&quot;,&quot;CRL7&quot;,&quot;CRL8&quot;,&quot;CRL9&quot;,&quot;CRL10&quot;,&quot;CRL11&quot;,&quot;CRL12&quot;,&quot;CRL13a&quot;,&quot;CRL13b&quot;,&quot;CRL14&quot;,&quot;CRL15a&quot;,&quot;CRL15b&quot;,&quot;CRL16a&quot;,&quot;CRL16b&quot;,&quot;CRL16c&quot;,&quot;CRL16d&quot;,&quot;CRL17a&quot;,&quot;CRL17b&quot;,&quot;CRL18a&quot;,&quot;CRL18b&quot;,&quot;CRL18c&quot;,&quot;CRL19&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'CRL1';
+    const dark = B === 'CRL19', phone = /^CRL18/.test(B);
+    const crop = ['CRL5', 'CRL6', 'CRL10', 'CRL14', 'CRL15b', 'CRL16a', 'CRL16c'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    const EYEBROW = 'font-size:10px;font-weight:800;color:' + c.vt + ';text-transform:uppercase;letter-spacing:.09em;line-height:1.5;text-decoration:none';
+    const G12 = 'display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start', PCOL = 'display:flex;flex-direction:column;gap:14px;min-width:0', G2 = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start', G3 = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start';
+    const cc = (blocks, n) => ({ s: 'grid-column:span ' + (n || 12) + ';' + PCOL, blocks });
+    const one = (b) => [{ s: STACK, blocks: b }];
+    const NS1 = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink, BTNR = 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap', MS = 'font:600 12px ' + MO + ';color:' + c.mu, MV = 'font:700 13px ' + MO + ';color:' + c.ink, MB = { ts: 'font-family:' + MO + ';font-weight:700' };
+    const PILL = 'display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.6;white-space:nowrap;';
+    const DASHT = PILL + 'color:' + c.mu + ';background:' + c.card + ';border:1px dashed ' + c.mu;
+    const FX = (a) => a.map(x => Object.assign({ sub: false }, x));
+    const ERR = (t, tone, btns) => R({ rs: NOTE(tone || 'r'), lead: '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'a' ? c.amT : c.neg), t, ts: 'font-size:13px;font-weight:700;line-height:1.5;color:' + (tone === 'a' ? c.amT : c.neg), btns: btns || false });
+    const lab = (t) => K({ cs: PLAIN, note: t, ns: eyeS });
+    const SRCM = { Connector: ['⇄', 'v'], Document: ['▤', 's'], Recorded: ['●', 'a'], Signed: ['✓', 'g'], Typed: ['✎', 'n'] };
+    const cSRC = (k) => { const b = k.split(' · ')[0]; return pl(SRCM[b][0], k, SRCM[b][1]); };
+    const FITM = { Fits: ['✓', 'g'], 'Outside its focus': ['↔', 'n'], Unclear: ['?', 'n'] };
+    const cFIT = (w) => w === 'Not recorded' ? { t: 'Fit not recorded', s: DASHT } : pl(FITM[w][0], w, FITM[w][1]);
+    const STM = { Soft: ['○', 'n'], 'Indicated through a call': ['◔', 's'], Pending: ['◷', 'a'], Signed: ['✓', 'g'], 'Sent, not yet confirmed': ['→', 'a'], Received: ['✓', 'g'] };
+    const cST = (w) => w === 'Status not recorded' ? { t: 'Status not recorded', s: DASHT } : pl(STM[w][0], w, STM[w][1]);
+    const cSTG = (w) => pl(w === 'Committed' ? '✓' : w === 'Passed' ? '–' : '●', w, w === 'Committed' ? 'g' : w === 'Passed' ? 'n' : 'v');
+    const INVP = (k) => pl('●', k === 'Angel' ? 'Investor · angel' : k === 'Syndicate' ? 'Investor · syndicate' : 'Investor', 's');
+    const EADL = 'display:grid;place-items:center;width:22px;height:22px;border-radius:999px;flex:none;background:#7c3aed;color:#fff;font:800 11px ' + SG;
+    const EADLINE = 'Proposed by Eadwyn. Check it, then Accept.', FITLINE = 'Fit compares their stated focus with your sector. It is not a score.';
+    const cRED = (t) => ({ t, s: 'font:700 11px ' + SG + ';color:' + c.neg });
+    const OWN = { A: '[Founder A]', B: '[Founder B]' };
+    const HATCH = (col) => 'width:14px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px solid ' + col + ';background:repeating-linear-gradient(45deg,' + col + ' 0 2px,' + c.card + ' 2px 5px)';
+    const DASHSW = 'width:14px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1.5px dashed ' + c.mu, DOTSW = 'width:14px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1.5px dotted ' + c.mu;
+    const RMODS = [['Overview', '/raise'], ['Calls', '/raise/capital-relationships/calls'], ['Fundraising readiness', '/raise/fundraising-readiness'], ['Investor narrative', '/raise/investor-narrative'], ['Pitch deck', '/raise/pitch'], ['Data room', '/raise/data-room'], ['Cap table', '/raise/cap-table'], ['Use of funds', '/raise/use-of-funds'], ['Capital relationships', '/raise/capital-relationships']];
+    const gateM = RMODS.map(([t, href]) => ({ t, href, s: 'display:inline-flex;align-items:center;min-height:30px;padding:0 12px;border-radius:999px;box-sizing:border-box;font-size:12.5px;text-decoration:none;white-space:nowrap;' + (t === 'Capital relationships' ? 'background:' + c.lav + ';border:1px solid ' + c.lavE + ';color:' + c.vt + ';font-weight:800' : 'background:' + c.card + ';border:1px solid ' + c.hair + ';color:' + c.mu + ';font-weight:600') }));
+    const TABL = [['Overview', '', false, false], ['Pipeline', 'pipeline', '[24]', false], ['Match', 'match', false, false], ['Outreach', 'outreach', '[5]', true], ['Commitments', 'commitments', false, false], ['Calls', 'calls', '[2]', true], ['Activity', 'activity', false, false]];
+    let tbChips = [], tbBtns = [{ t: 'Add investor', s: btnP, al: 'Add investor' }, { t: '⋯', s: btnS + ';min-width:38px;padding:0 10px', al: 'More: Import investors, Export, Round settings' }], tbNote = false;
+    const WP = '[Name] · [Other Co] can introduce';
+    const PL = [
+      ['[Fund E]', 'Fund', 'Identified', 'Fits', WP, 'Ask [Name] for an intro', '[5 Nov]', 0, 0, 0, 0, 'A', '—', 0],
+      ['[Fund F]', 'Fund', 'Identified', 'Unclear', 0, 'Read their recent investments', '[6 Nov]', 0, 0, 0, 0, 'B', '—', 0],
+      ['[Name]', 'Angel', 'Identified', 'Not recorded', 0, 0, 0, 0, 0, 0, 0, 'A', '—', 0],
+      ['[Fund G]', 'Fund', 'Identified', 'Fits', 0, 'Find a warm path', '[9 Nov]', 0, 0, 0, 0, 'B', '—', 0],
+      ['[Fund H]', 'Fund', 'Identified', 'Unclear', 0, 0, 0, 0, 0, 0, 0, 'A', '—', 0],
+      ['[Fund J]', 'Fund', 'Identified', 'Outside its focus', 0, 'Check the stages they invest at', '[10 Nov]', 0, 0, 0, 0, 'B', '—', 0],
+      ['[Fund P]', 'Fund', 'Contacted', 'Fits', 0, 'Follow up on the intro email', '[30 Oct]', 0, 0, 0, 0, 'A', '[14 Oct]', 0],
+      ['[Fund Q]', 'Fund', 'Contacted', 'Fits', 0, 'Answer their question on the call', '[22 Oct]', 0, 0, 0, 0, 'B', '[19 Oct]', 1],
+      ['[Fund R]', 'Fund', 'Contacted', 'Outside its focus', 0, 0, 0, 0, 0, 0, 0, 'A', '[2 Oct]', 0],
+      ['[Name]', 'Angel', 'Contacted', 'Unclear', WP, 'Book a first call', '[4 Nov]', 0, 0, 0, 0, 'A', '[12 Oct]', 0],
+      ['[Fund S]', 'Fund', 'Contacted', 'Fits', 0, 'Send the deck link', '[3 Nov]', 0, 0, 0, 0, 'B', '[15 Oct]', 0],
+      ['[Lumen Ventures]', 'Fund', 'Meeting', 'Fits', 0, 'Write up the partner meeting', '[23 Oct]', 0, 0, 0, 0, 'A', '[16 Oct]', 0],
+      ['[Fund M]', 'Fund', 'Meeting', 'Unclear', 0, 'Send two customer references', '[15 Oct]', 1, 0, 0, 0, 'B', '[7 Oct]', 0],
+      ['[Name]', 'Angel', 'Meeting', 'Fits', WP, 'Share the product demo', '[19 Oct]', 1, 0, 0, 0, 'A', '[9 Oct]', 0],
+      ['[Fund N]', 'Fund', 'Meeting', 'Outside its focus', 0, 0, 0, 0, 0, 0, 0, 'B', '[13 Oct]', 0],
+      ['[Bluefern Capital]', 'Fund', 'Diligence', 'Fits', WP, 'Share the [Q3] metrics pack', '[26 Oct]', 0, '$200,000', 'Recorded', 'Indicated through a call', 'B', '[20 Oct]', 1],
+      ['[Harbor Seed Fund]', 'Fund', 'Diligence', 'Fits', 0, 'Send the data-room link', '[12 Oct]', 1, 0, 0, 0, 'A', '[8 Oct]', 0],
+      ['[Fund K]', 'Fund', 'Committed', 'Fits', 0, 'Send the signed copy to counsel', '[29 Oct]', 0, '$250,000', 'Signed', 'Signed', 'A', '[17 Oct]', 0],
+      ['[Name]', 'Angel', 'Committed', 'Fits', WP, 'Send a welcome note', '[30 Oct]', 0, '$150,000', 'Connector · Mercury', 'Received', 'B', '[2 Oct]', 0],
+      ['[Fund L]', 'Fund', 'Committed', 'Unclear', 0, 'Countersign in the closing room', '[27 Oct]', 0, '$200,000', 'Recorded', 'Pending', 'A', '[19 Oct]', 0],
+      ['[Northwind Angels]', 'Syndicate', 'Committed', 'Fits', 0, 'Say how sure the commitment is', '[21 Oct]', 0, '$100,000', 'Typed', 'Status not recorded', 'B', '[16 Oct]', 0],
+      ['[Name]', 'Angel', 'Committed', 'Not recorded', 0, 'Confirm the amount', '[2 Nov]', 0, '$75,000', 'Typed', 'Soft', 'A', '[12 Oct]', 0],
+      ['[Fund T]', 'Fund', 'Passed', 'Outside its focus', 0, 0, 0, 0, 0, 0, 0, 'A', '[30 Sep]', 0],
+      ['[Fund U]', 'Fund', 'Passed', 'Not recorded', 0, 0, 0, 0, 0, 0, 0, 'B', '[25 Sep]', 0]
+    ];
+    const dd = (s) => s ? parseInt(s.slice(1), 10) + (s.indexOf('Nov') > 0 ? 31 : 0) : 99;
+    const pcard = (p, ph) => K({ cs: CARD + ';padding:10px 11px;gap:7px' + (p[0] === '[Bluefern Capital]' ? ';border-color:' + c.lavE : ''), title: p[0], hs: 'margin:0;font-size:13px;font-weight:800;line-height:1.3', meta: '⋯', ms: 'font-size:15px;line-height:1;color:' + c.mu,
+      tags: [INVP(p[1]), cFIT(p[3])].concat(p[13] ? [pl('◔', 'via call', 's')] : []),
+      rows: [p[4] ? R({ rs: 'display:flex;padding:0', t: p[4], ts: 'font-size:11.5px;line-height:1.4;color:' + c.mu }) : null,
+        p[5] ? R({ rs: 'display:flex;flex-direction:column;gap:3px;padding:0', t: p[5], ts: 'font-size:12px;font-weight:600;line-height:1.4', sub: p[7] ? false : 'due ' + p[6], ss: 'font:500 11px ' + MO + ';color:' + c.mu, tags: p[7] ? [cRED('Overdue · due ' + p[6])] : false }) : R({ rs: 'display:flex;padding:0', t: 'No next step', ts: 'font-size:12px;color:' + c.mu }),
+        p[8] ? R({ rs: 'display:flex;flex-direction:column;gap:4px;padding:0', t: '[' + p[8] + ']', ts: 'font:700 12.5px ' + MO, tags: [cST(p[10]), cSRC(p[9])] }) : null].filter(Boolean),
+      rowsS: 'display:flex;flex-direction:column;gap:6px', btns: [{ t: 'Move to… ▾', s: ph ? btnS + ';min-height:44px;width:100%' : btnSm }] });
+    const pipeBar = (view) => K({ cs: PLAIN, title: 'Pipeline · [24] investors', hs: eyeS, ths: 'display:flex;align-items:center;gap:11px;flex-wrap:wrap', tog: seg(['Board', 'List'], view), tbar: { search: 'Search investors', chips: [tag('Stage ▾'), tag('Fit ▾'), tag('Warm path ▾'), tag('Source ▾'), tag('Next step ▾'), tag('Sort: Next step due ▾')] }, foot: view === 'Board' ? 'Drag a card to move it, or use Move to… on any card. Moving into Committed asks how sure it is.' : false });
+    const SHOWN = { Identified: 3, Contacted: 3, Meeting: 3, Diligence: 2, Committed: 5 };
+    const boardCols = () => { const out = [{ s: 'grid-column:1/-1;' + PCOL, blocks: [pipeBar('Board')] }];
+      ['Identified', 'Contacted', 'Meeting', 'Diligence', 'Committed'].forEach(st => { const ps = PL.filter(p => p[2] === st), more = ps.length - SHOWN[st];
+        out.push({ s: PCOL + ';gap:9px', blocks: [K({ cs: PLAIN + ';padding:2px 2px 6px;border-bottom:2px solid ' + c.hair, title: st, hs: 'margin:0;font-size:13px;font-weight:800', meta: '[' + ps.length + ']', ms: 'font:700 12px ' + MO + ';color:' + c.mu, note: st === 'Committed' ? '[$775,000] · [$600,000] counted' : st === 'Diligence' ? '[$200,000] indicated' : false, ns: 'margin:0;font:600 11px ' + MO + ';color:' + c.mu })].concat(ps.slice(0, SHOWN[st]).map(p => pcard(p))).concat(more > 0 ? [K({ cs: PLAIN, btns: [{ t: '+' + more + ' more', s: btnG }] })] : []) }); });
+      out.push({ s: PCOL, blocks: [K({ cs: CARD + ';padding:10px 6px;align-items:center;text-align:center;gap:6px', title: 'Passed', hs: 'margin:0;font-size:12px;font-weight:800', note: '[2]', ns: 'margin:0;font:700 16px ' + MO + ';color:' + c.ink, btns: [{ t: 'Open', s: btnG }] })] });
+      return out; };
+    const LIST = PL.filter(p => p[2] !== 'Passed').slice().sort((a, b) => (b[7] - a[7]) || (dd(a[6]) - dd(b[6])));
+    const lrow = (p, i) => [CL(i < 3 ? '☑' : '☐', { ts: 'font-size:15px;color:' + (i < 3 ? c.vt : c.mu) }), CL(p[0], { ts: 'font-weight:700;line-height:1.35', sub: p[1] === 'Fund' ? 'Fund' : p[1] === 'Angel' ? 'Angel investor' : 'Syndicate' }), CL('', { pill: cSTG(p[2]) }), CL('', { pill: cFIT(p[3]) }), p[4] ? CL(p[4], { ts: 'font-size:12px;line-height:1.35' }) : CL('No warm path', MU), p[12] === '—' ? CL('—', MU) : CL(p[12], MN), p[5] ? CL(p[5], { ts: 'font-size:12.5px;font-weight:600;line-height:1.35', sub: p[7] ? false : 'due ' + p[6], pill: p[7] ? cRED('Overdue · due ' + p[6]) : false }) : CL('No next step', MU), p[8] ? CL('[' + p[8] + ']', { ts: 'font-family:' + MO + ';font-weight:700', pill: cSRC(p[9]) }) : CL('Not recorded', MU), p[10] ? CL('', { pill: cST(p[10]) }) : CL('—', MU), CL(OWN[p[11]], { ts: 'font-size:12px' }), DOTS];
+    const bulkK = () => K({ cs: CARD + ';padding:10px 14px;background:' + c.lav + ';border-color:' + c.lavE, rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:0', t: '[3] selected', ts: 'font-size:13px;font-weight:800', btns: [{ t: 'Move stage', s: btnS }, { t: 'Set next step', s: btnS }, { t: 'Export selected', s: btnS }, { t: 'Clear', s: btnG }] })] });
+    const listT = () => { const rws = LIST.slice(0, 12), t = TB({ gc: '.26fr 1.15fr .95fr 1.15fr .95fr .75fr 1.25fr 1.6fr 1.85fr .85fr .26fr', minW: 1080, cols: ['', 'Investor · firm', 'Stage', 'Fit', 'Warm path', 'Last contact', 'Next step · due', 'Amount', 'Commitment', 'Owner', ''], rows: rws.map(lrow), count: '1–24 of [24]', foot: 'Twelve of the twenty-four rows are drawn. A row opens the investor. ' + FITLINE });
+      const bi = rws.findIndex(p => p[0] === '[Bluefern Capital]'); if (bi >= 0 && t.rows && t.rows[bi]) t.rows[bi].s += ';background:' + c.lav; return t; };
+    const listCols = () => [cc([pipeBar('List'), bulkK(), listT()])];
+    const RBS = [['Received', 150, S[3], 0], ['Signed', 250, S[0], 0], ['Pending', 200, S[1], 0], ['Indicated', 200, S[2], 1], ['Soft', 75, S[4], 1]];
+    const roundSvg = (W, big, id) => { const H = big ? 104 : 16, bh = big ? 30 : 10, by = big ? 30 : 3, sc = W / 1500; let hi = 0, x = 0;
+      let s = svgOpen(W, H, 'Committed 600,000 of the 1,500,000 target, 40 percent: received 150,000, signed 250,000 and pending 200,000. Indicated 200,000 and soft 75,000 are not counted.') + '<defs>' + RBS.filter(r => r[3]).map((r, i) => '<pattern id="' + id + i + '" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="' + c.card + '"/><line x1="0" y1="0" x2="0" y2="6" stroke="' + r[2] + '" stroke-width="2.4"/></pattern>').join('') + '</defs>';
+      s += '<rect x=".5" y="' + (by + .5) + '" width="' + (W - 1) + '" height="' + (bh - 1) + '" rx="' + (big ? 6 : 4) + '" fill="' + c.raised + '" stroke="' + c.hair + '"/>';
+      RBS.forEach(r => { const w = r[1] * sc; s += '<rect x="' + x.toFixed(1) + '" y="' + by + '" width="' + Math.max(1, w - 1.5).toFixed(1) + '" height="' + bh + '" fill="' + (r[3] ? 'url(#' + id + (hi++) + ')' : r[2]) + '"' + (r[3] ? ' stroke="' + r[2] + '"' : '') + ' tabindex="0"><title>' + r[0] + ' [$' + r[1] + ',000]' + (r[3] ? ' · not counted' : '') + '</title></rect>'; if (big) s += '<text x="' + (x + w / 2).toFixed(1) + '" y="' + (by + bh + 17) + '" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.ink + '">' + r[0] + '</text><text x="' + (x + w / 2).toFixed(1) + '" y="' + (by + bh + 32) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + c.ink + '">[$' + r[1] + ',000]</text>'; x += w; });
+      if (big) { const cx = 600 * sc, nx = 875 * sc; s += '<text x="' + (cx / 2).toFixed(1) + '" y="' + (by - 9) + '" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="11.5" font-weight="700" fill="' + c.ink + '">Counted · [$600,000] · 40%</text><text x="' + ((cx + nx) / 2).toFixed(1) + '" y="' + (by - 9) + '" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.mu + '">Not counted · [$275,000]</text><text x="' + (W - 2) + '" y="' + (by - 9) + '" text-anchor="end" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.mu + '">Target [$1,500,000]</text><line x1="' + cx.toFixed(1) + '" x2="' + cx.toFixed(1) + '" y1="' + (by - 4) + '" y2="' + (by + bh + 4) + '" stroke="' + c.ink + '" stroke-width="1.5"/>'; }
+      return { __html: s + '</svg>' }; };
+    const FUN = [['Identified', 6, 9], ['Contacted', 5, 4], ['Meeting', 4, 3], ['Diligence', 2, 1], ['Committed', 5, 2]];
+    const funSvg = (W) => { const ph = W < 500, L = ph ? 80 : 104, rp = ph ? 40 : 190, T = 6, rh = 40, bw = W - L - rp, X = (n) => +(n / 10 * bw).toFixed(1), H = T + 5 * rh + 34;
+      let s = svgOpen(W, H, 'Pipeline by stage today: Identified 6, Contacted 5, Meeting 4, Diligence 2 and Committed 5, with 600,000 counted. Thirty days ago: 9, 4, 3, 1 and 2. Passed 2, shown apart.');
+      FUN.forEach(([st, n, p], i) => { const y = T + i * rh; s += '<text x="0" y="' + (y + 21) + '" font-family="Space Grotesk,sans-serif" font-size="12.5" font-weight="700" fill="' + c.ink + '">' + st + '</text><rect x="' + L + '" y="' + (y + 7) + '" width="' + X(n) + '" height="20" rx="4" fill="' + S[0] + '" tabindex="0"><title>' + st + ' · [' + n + '] today · [' + p + '] 30 days ago</title></rect><rect x="' + L + '" y="' + (y + 4) + '" width="' + X(p) + '" height="26" rx="5" fill="none" stroke="' + c.mu + '" stroke-width="1.3" stroke-dasharray="1.5 3"/><text x="' + (L + Math.max(X(n), X(p)) + 8) + '" y="' + (y + 21) + '" font-size="11.5" font-weight="700" fill="' + c.ink + '">[' + n + ']' + (st === 'Committed' && !ph ? ' · [$600,000] counted' : '') + '</text>'; });
+      const ly = T + 5 * rh + 6; s += '<line x1="0" x2="' + W + '" y1="' + ly + '" y2="' + ly + '" stroke="' + c.hair + '"/><text x="0" y="' + (ly + 20) + '" font-family="Space Grotesk,sans-serif" font-size="12" fill="' + c.mu + '">Passed · [2] · shown apart, not in the funnel</text>';
+      return { __html: s + '</svg>' }; };
+    const tileK = (eye, val, extra) => K(Object.assign({ cs: CARD + ';gap:6px', eye, title: val, hs: 'margin:0;font:700 22px ' + MO + ';letter-spacing:-.01em;color:' + c.ink }, extra || {}));
+    const rStrip = (o) => { o = o || {}; return [cc([tileK('TARGET', '[$1,500,000]', { note: 'Round [Seed] · from Round settings', ns: 'margin:0;font-size:12.5px;color:' + c.mu, btns: o.settings ? [{ t: 'Round settings', s: btnSm }] : false })], 3),
+      cc([tileK('COMMITTED', '[$600,000]', { meta: '40% of target', ms: 'font:700 11.5px ' + MO + ';color:' + c.vt, svg: roundSvg(250, false, 'rt' + B + (o.id || '')), foot: 'Received, Signed and Pending count. Indicated [$200,000] and Soft [$75,000] are hatched: not counted.', fs: 'margin:0;font-size:11.5px;line-height:1.45;color:' + c.mu })], 3),
+      cc([tileK('INVESTORS IN CONVERSATION', '[11]', { note: 'Contacted [5] · Meeting [4] · Diligence [2]', ns: 'margin:0;font:500 12px ' + MO + ';color:' + c.mu })], 3),
+      cc([tileK('CLOSES', '[14 Dec 2026]', { note: '[54 days] from today', ns: 'margin:0;font:500 12px ' + MO + ';color:' + c.mu })], 3)]; };
+    const NEED = [['Overdue', 'r', 'Send the data-room link to [Harbor Seed Fund] was due [12 Oct].', ['Open', 'Done']], ['Mercury', 'v', 'A [$50,000] credit from [Name] arrived on [9 Oct]. Is it this round?', ['Match to an investor', 'Not this round']], ['Eadwyn', 'v', 'Eadwyn drafted next steps from your note on the [Lumen Ventures] meeting.', ['Review']], ['Call', 's', '[2] investors answered your Call for Capital.', ['Open Calls']], ['Status', 'a', '[Northwind Angels] is at Committed with no status. Say how sure it is.', ['Set status']]];
+    const needsK = (n) => K({ title: 'Needs you', meta: '[' + (n || 5) + ']', ms: MS, rows: NEED.slice(0, n || 5).map(([k, tone, t, b]) => R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid ' + c.hair, lead: k, ls: pl('', k, tone).s + ';flex:none', t, ts: 'font-size:13px;font-weight:600;line-height:1.5', btns: b.map(x => ({ t: x, s: btnSm })) })) });
+    const funK = (W) => K({ title: 'Pipeline by stage', tog: TOG(), legend: [{ t: 'Today', sw: dotSw(S[0]) }, { t: '30 days ago', sw: DOTSW }], svg: funSvg(W || 720) });
+    const followK = () => K({ title: 'Follow-ups', rows: [R({ t: 'Overdue', ts: 'font-size:13px;font-weight:700;color:' + c.neg, v: '[3]', vs: 'font:700 13px ' + MO + ';color:' + c.neg, act: 'Open in Outreach', as: btnSm }), R({ t: 'Due in 7 days', v: '[5]', vs: MV, act: 'Open in Outreach', as: btnSm }), R({ t: 'No next step', v: '[4]', vs: MV, act: 'Open in Outreach', as: btnSm })] });
+    const meetK = () => K({ title: 'Next meetings', rows: [['Thu [22 Oct] · 16:00', '[Fund Q]', 'Video call'], ['Fri [23 Oct] · 15:30', '[Bluefern Capital]', '[Their office]'], ['Mon [26 Oct] · 09:00', '[Fund M]', 'Video call']].map(([w, t, p]) => R({ t, ts: 'font-size:13px;font-weight:700', sub: p, v: w, vs: MS })), btns: [{ t: 'Open Calendar', s: btnG }] });
+    const recentK = () => K({ title: 'Recently', rows: [['[Founder B] moved [Bluefern Capital] to Diligence', '2 h'], ['[Fund L] committed in their deal room', '2 d'], ['[Bluefern Capital] indicated through your Call for Capital', '2 d'], ['[Founder A] logged a meeting with [Lumen Ventures]', '5 d'], ['[Founder B] added [Fund S]', '6 d']].map(([t, w]) => R({ t, ts: 'font-size:12.5px;font-weight:500;line-height:1.45', v: w, vs: MS })) });
+    const fitK = () => K({ title: 'Fit across your pipeline', stacks: [{ lab: '[24] investors', sum: 'Fit across 24 investors: 12 fit, 4 are outside their focus, 5 are unclear and 3 are not recorded.', leg: [{ t: 'Fits [12]', sw: dotSw(S[0]) }, { t: 'Outside its focus [4]', sw: dotSw(S[1]) }, { t: 'Unclear [5]', sw: dotSw(S[2]) }, { t: 'Not recorded [3]', sw: DASHSW }], segs: [{ tip: 'Fits · [12]', s: 'display:block;height:100%;flex:12;background:' + S[0] }, { tip: 'Outside its focus · [4]', s: 'display:block;height:100%;flex:4;background:' + S[1] }, { tip: 'Unclear · [5]', s: 'display:block;height:100%;flex:5;background:' + S[2] }, { tip: 'Not recorded · [3]', s: 'display:block;height:100%;flex:3;box-sizing:border-box;border:1.5px dashed ' + c.mu + ';background:' + c.card }] }], foot: FITLINE });
+    const ovCols = () => rStrip().concat([cc([needsK()]), cc([funK(), followK()], 8), cc([meetK(), recentK(), fitK()], 4)]);
+    const TL4 = [['◷', 'Due [26 Oct]', 'Share the [Q3] metrics pack', '[Founder B]', 0], ['▦', 'Meeting · [20 Oct]', '‘Partner meeting. They asked for the data room and the [Q3] metrics pack.’', '[Founder B]', 1], ['☏', 'Call · [14 Oct]', '‘First call. Strong interest in robotics for warehouses.’', '[Founder A]', 0], ['→', 'Intro · [9 Oct]', '‘Introduced by [Name] at [Other Co].’', '[Founder B]', 0], ['✎', 'Note · [6 Oct]', '‘Added from Match.’', '[Founder A]', 0]];
+    const drawerHead = K({ cs: PLAIN, eye: 'INVESTOR', title: '[Bluefern Capital]', hs: H18, meta: 'Esc to close', note: '[Name] · Partner · [name]@[bluefern].example', tags: [pl('●', 'Investor', 's'), cSTG('Diligence'), cFIT('Fits'), pl('', 'Lead: [Founder B]', 'v')], btns: [{ t: 'Log a step', s: btnP }, { t: 'Edit', s: btnS }, { t: '⋯', s: btnG }], foot: '⋯ holds Mark passed and Delete.' });
+    const drawerBody = [
+      K({ cs: SEC, title: 'Facts', hs: eyeS, facts: FX([{ k: 'Stage', v: 'Diligence' }, { k: 'Fit', v: 'Fits', sub: 'Their focus: [Robotics, Industrial]. Your sector: [Robotics].' }, { k: 'Warm path', v: '[Name] · [Other Co] can introduce' }, { k: 'Next step', v: 'Share the [Q3] metrics pack', sub: 'due [26 Oct]' }, { k: 'Last contact', v: '[20 Oct 2026]', sub: 'Meeting' }, { k: 'Check size', v: '[$250,000]', sub: 'Typed' }, { k: 'Commitment', v: 'Indicated through a call · [$200,000]', sub: 'Recorded · indicative, not signed' }]), foot: FITLINE }),
+      K({ cs: SEC, title: 'Timeline', hs: eyeS, rows: TL4.map(x => R({ lead: x[0], ls: 'width:16px;text-align:center;flex:none;color:' + (x[0] === '◷' ? c.amT : c.vt), eye: x[1].toUpperCase(), t: x[2], ts: 'font-size:13px;font-weight:500;line-height:1.5', sub: x[0] === '◷' ? 'Not done yet' : 'Logged by ' + x[3], ss: 'font-size:11.5px;color:' + c.mu, tags: x[4] ? [pl('▦', 'On your calendar', 'n')] : false })), btns: [{ t: 'Log a step', s: btnSm }] }),
+      K({ cs: SEC, title: 'Feedback', hs: eyeS, rows: [R({ eye: 'THEY SAID · [20 OCT]', t: '‘We want to see customer concentration below 30%.’', ts: 'font-size:13px;line-height:1.5' }), R({ eye: 'YOUR ANSWER', t: '‘Our top customer is 22% of [Q3] revenue. The detail is in the data room.’', ts: 'font-size:13px;line-height:1.5' })], btns: [{ t: 'Add feedback', s: btnSm }] }),
+      K({ cs: SEC, title: 'Materials', hs: eyeS, rows: [['Deck link', 'viewed [3]× · last [10 Oct]'], ['Data room', 'opened [4] of [9] folders'], ['Call for Capital · [Seed extension]', 'opened [19 Oct]']].map(([t, v2]) => R({ t, ts: 'font-size:13px;font-weight:700', v: v2, vs: MS })) }),
+      K({ cs: SEC, title: 'Commitments', hs: eyeS, rows: [R({ rs: 'display:flex;flex-direction:column;gap:5px;padding:4px 0', t: '[$200,000] · through [Seed extension] · [19 Oct]', ts: 'font:700 12.5px ' + MO, tags: [cST('Indicated through a call'), cSRC('Recorded')], sub: 'Indicative, not signed.', ss: 'font-size:12px;color:' + c.mu })], btns: [{ t: 'Open the deal', s: btnS }], foot: 'Open the closing room appears here once a closing line exists.' }),
+      K({ cs: SEC, title: 'Notes', hs: eyeS, rows: [R({ rs: 'display:flex;padding:10px 12px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';min-height:64px;box-sizing:border-box', t: '[Their partner prefers to lead. Ask about their reserve for follow-ons.]', ts: 'font-size:13px;line-height:1.55' })], foot: 'Saved [2 min] ago by [Founder B].' }),
+      K({ cs: SEC, title: 'Activity', hs: eyeS, rows: [['[Founder B] moved it Meeting → Diligence', '[21 Oct] 09:12'], ['[Founder B] logged a meeting', '[20 Oct] 18:10'], ['[Bluefern Capital] indicated [$200,000] through [Seed extension]', '[19 Oct] 11:03'], ['[Founder A] logged a call', '[14 Oct] 17:40']].map(([t, w]) => R({ t, ts: 'font-size:12.5px;font-weight:500;line-height:1.45', v: w, vs: MS })), btns: [{ t: 'See all in Activity', s: btnG }] })];
+    const closeK = K({ cs: SEC, btns: [{ t: 'Close', s: btnS }], bs: BTNR });
+    const chips = (eye, list, sel) => R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, tags: list.map(t => tag(t, t === sel)) });
+    const addDlg = dlg('Add investor', 'To the [Seed] pipeline. Only you and your co-founders see it.', [
+      K({ cs: SEC, rows: [field('INVESTOR · SEARCHES THE FUND DIRECTORY', '[Blue', { ts: FIN })] }),
+      K({ cs: CARD + ';padding:4px 10px;gap:0', rows: [R({ t: '[Bluefern Capital]', ts: 'font-size:13px;font-weight:700', sub: 'Focus: [Robotics, Industrial] · Seed · Europe', st: cFIT('Fits') }), R({ t: '[Blueline Partners]', ts: 'font-size:13px;font-weight:700', sub: 'Focus: [Fintech] · Series A · North America', st: cFIT('Outside its focus') }), R({ t: 'Keep “[Blue]” as a typed name', ts: 'font-size:13px;font-weight:600;color:' + c.vt })] }),
+      K({ cs: PLAIN, rows: [ERR('[Bluefern Capital] is already in your pipeline. Open it.', 'a', [{ t: 'Open it', s: btnSm }])] }),
+      K({ cs: SEC, rows: [field('EMAIL', '[name]@[bluefern].example'), field('FIRM', '[Bluefern Capital]'), chips('STAGE', ['Identified', 'Contacted', 'Meeting', 'Diligence', 'Committed'], 'Identified'), chips('WARM PATH', ['[Name] · [Other Co]', '[Name] · [Fund V]', 'No warm path'], '[Name] · [Other Co]'), field('CHECK SIZE · OPTIONAL · TYPED', 'Type an amount', { ts: FIE + ';font-family:' + MO }), field('CURRENCY', 'USD ▾'), field('NEXT STEP', '[Send the deck link]'), field('DUE', '[28 Oct 2026]', { ts: FIN + ';font-family:' + MO }), field('NOTES', 'Write a note…', { ts: FIE + ';min-height:52px' })], foot: 'Fit is read from the fund’s stated focus.' })
+    ], [{ t: 'Cancel', s: btnS }, { t: 'Add investor', s: btnP }]);
+    const impDlg = dlg('Import investors', 'From a CSV file. Nothing is added until you press Import.', [
+      K({ cs: SEC, rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:14px;border-radius:10px;border:1.5px dashed ' + c.lavE + ';background:' + c.lav, lead: '▤', ls: 'font-size:16px;flex:none;color:' + c.vt, t: '[investors.csv] · [14] rows', ts: 'font:700 12.5px ' + MO, act: 'Choose another file', as: btnSm })] }),
+      K({ cs: SEC, title: 'Map columns', hs: eyeS, rows: [['name', 'Name'], ['email', 'Email'], ['firm', 'Firm'], ['amount', 'Amount'], ['notes', 'Notes'], ['stage', 'Stage']].map(([a, b2]) => R({ t: 'CSV column · ' + a, ts: 'font:600 12.5px ' + MO, v: b2 + ' ▾', vs: 'font-size:12.5px;font-weight:700;color:' + c.ink })) }),
+      TB({ title: 'Preview · first five rows', pager: false, gc: '1.1fr 1.7fr 1.1fr 1fr .9fr', minW: 0, cols: ['Name', 'Email', 'Firm', 'Amount', 'Stage'], rows: [['[Name]', CL('[name]@[fund-v].example', MN), '[Fund V]', CL('[$100,000]', MN), 'Identified'], ['[Name]', CL('[name]@[fund-w].example', MN), '[Fund W]', CL('Not recorded', MU), 'Identified'], ['[Name]', CL('[name]@example.com', MN), CL('—', MU), CL('[$25,000]', MN), 'Contacted'], ['[Name]', CL('[name]@[fund-x].example', MN), '[Fund X]', CL('Not recorded', MU), 'Identified'], ['[Name]', CL('—', MU), CL('—', MU), CL('Not recorded', MU), 'Identified']] }),
+      K({ cs: SEC, rows: [R({ t: '[12] ready · [2] skipped', ts: 'font:700 13px ' + MO }), ERR('Row 5 · [Name] · no email and no firm, so it cannot be matched.', 'a'), ERR('Row 11 · [Harbor Seed Fund] · already in your pipeline.', 'a')], rowsS: 'display:flex;flex-direction:column;gap:8px', foot: 'Amounts import as Typed.' })
+    ], [{ t: 'Cancel', s: btnS }, { t: 'Import [12]', s: btnP }]);
+    const dStep = dlg('Log a step · [Lumen Ventures]', 'It goes on their timeline. Your co-founders see it.', [K({ cs: SEC, rows: [chips('WHAT', ['Meeting', 'Intro', 'Email', 'Call', 'Note'], 'Meeting'), field('NOTE', '[Second meeting with the partners.]', { ts: FIN + ';min-height:56px;font-weight:500' }), field('ON', '[29 Oct 2026]', { ts: FIN + ';font-family:' + MO, sub: 'A later date is due, not done.' }), CHK('Also add to my calendar', true)] })], [{ t: 'Cancel', s: btnS }, { t: 'Log step', s: btnP }]);
+    const dNext = dlg('Set next step · [Harbor Seed Fund]', 'Your co-founders see it in Outreach.', [K({ cs: SEC, rows: [field('NEXT STEP', '[Send the data-room link]'), field('DUE', '[22 Oct 2026]', { ts: FIN + ';font-family:' + MO }), chips('WARM PATH', ['[Name] · [Other Co]', 'No warm path'], 'No warm path')] })], [{ t: 'Cancel', s: btnS }, { t: 'Save next step', s: btnP }]);
+    const dStatus = dlg('How sure is [Northwind Angels]’s commitment?', 'They moved to Committed. Only what you set here counts.', [K({ cs: SEC, rows: [field('AMOUNT', 'Type an amount', { ts: FIE + ';font-family:' + MO }), field('CURRENCY', 'USD ▾'), RAD('Soft', false, 'An amount you typed. It is not counted as committed.'), RAD('Signed outside Axal', true, 'Attach the signed document. It counts as Signed.'), field('SIGNED DOCUMENT', 'Attach a file', { ts: FIE }), RAD('Received outside Axal', false, 'Give the date the money arrived. It counts as Received.')] }), K({ cs: PLAIN, note: 'A status you do not set stays ‘Status not recorded’ and is not counted as committed.' })], [{ t: 'Leave it unset', s: btnS }, { t: 'Save status', s: btnP }]);
+    const dFeed = dlg('Add feedback · [Bluefern Capital]', 'It goes on their timeline, with your answer beside it.', [K({ cs: SEC, rows: [field('WHAT THEY SAID', '[We want to see customer concentration below 30%.]', { ts: FIN + ';min-height:52px;font-weight:500' }), field('YOUR ANSWER · OPTIONAL', 'Write your answer…', { ts: FIE + ';min-height:52px' })] })], [{ t: 'Cancel', s: btnS }, { t: 'Save feedback', s: btnP }]);
+    const dRound = dlg('Round settings', 'For [Acme Robotics]’s [Seed]. Changes show in Activity.', [K({ cs: SEC, rows: [field('ROUND NAME', '[Seed]'), field('TARGET', '[$1,500,000]', { ts: FIN + ';font-family:' + MO }), field('CURRENCY', 'USD ▾'), field('CLOSE DATE', '[14 Dec 2026]', { ts: FIN + ';font-family:' + MO }), field('NOTES', 'Write a note…', { ts: FIE + ';min-height:52px' })] }), K({ cs: PLAIN, note: 'Instrument and terms are set in the Call for Capital and the closing room.' })], [{ t: 'Cancel', s: btnS }, { t: 'Save round', s: btnP }]);
+    const dClose = dlg('New close', 'A close groups the commitments that sign together.', [K({ cs: SEC, rows: [field('NAME', '[Second close]'), field('TARGET DATE', '[30 Nov 2026]', { ts: FIN + ';font-family:' + MO }), chips('STATE', ['Planned', 'Open', 'Closed'], 'Planned')] })], [{ t: 'Cancel', s: btnS }, { t: 'Add close', s: btnP }]);
+    const MR = [['[Fund V]', '[Robotics, Industrial]', 'Seed', 'Europe', '[$120M]', 'Fits', '[Name] works there'], ['[Fund W]', '[Hardware, Robotics]', 'Seed', 'Europe', 0, 'Fits', 0], ['[Fund X]', '[Deep tech]', 'Pre-seed · Seed', 'Europe', '[$60M]', 'Unclear', 0], ['[Fund Y]', '[Industrial automation, Robotics]', 'Seed', 'North America', '[$300M]', 'Fits', '[Name] works there'], ['[Fund Z]', '[Robotics]', 'Seed · Series A', 'Europe', '[$500M]', 'Fits', 0]];
+    const matchT = () => TB({ title: 'From the fund directory', tbar: { search: 'Search funds', chips: [tag('Sort: Fits first ▾')] }, gc: '1.6fr .9fr .9fr .75fr 1.6fr 1.05fr 1.05fr', minW: 800, cols: ['Fund · focus', 'Stage', 'Geography', 'Fund size', 'Fit', 'Warm path', ''], rows: MR.map(m => [CL(m[0], { ts: 'font-weight:700', sub: 'Focus: ' + m[1] }), m[2], m[3], m[4] ? CL(m[4], MN) : CL('Not recorded', MU), CL('', { pill: cFIT(m[5]), sub: 'Their focus: ' + m[1] + '. Your sector: [Robotics].' }), m[6] ? CL(m[6], { ts: 'font-size:12px;line-height:1.35' }) : CL('—', MU), CL('Add to pipeline · Not for us', LK)]), count: '1–25 of [312]', foot: 'Add to pipeline opens Add investor with the fund filled in. Not for us hides it from your results.' });
+    const matchCols = () => [{ s: 'grid-column:1/-1;' + PCOL, blocks: [K({ cs: PLAIN, rows: [INFOROW('Match reads each investor’s stated focus against your venture. It never shows another venture’s data.')] })] },
+      { s: PCOL, blocks: [K({ title: 'Filters', hs: eyeS, rows: [['STAGE THEY INVEST AT', ['Pre-seed', 'Seed', 'Series A'], 'Seed'], ['SECTOR', ['Robotics', 'Industrial', 'Hardware'], 'Robotics'], ['GEOGRAPHY', ['Europe', 'North America', 'Anywhere'], 'Europe'], ['FUND SIZE', ['Under $50M', '$50M–$250M', 'Over $250M'], 0], ['FIT', ['Fits', 'Unclear'], 'Fits']].map(([e, l2, sel]) => chips(e, l2, sel)).concat([CHK('Has a warm path', false)]), foot: FITLINE })] },
+      { s: PCOL, blocks: [matchT(), K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, title: 'Investors on Axal', note: '[18] verified investors on Axal have a published focus that fits [Acme Robotics]. Their names stay private until they answer a Call for Capital.', ns: NS1, btns: [{ t: 'Open Calls', s: btnS }] }), K({ title: 'Your network', rows: [['[Name]', 'Partner at [Fund V] · you met at [Other Co]'], ['[Name]', 'Venture partner at [Fund Y]']].map(([t, s2]) => R({ t, ts: 'font-size:13px;font-weight:700', sub: s2, act: 'Ask for an intro', as: btnSm })), foot: 'Ask for an intro opens a draft in Outreach. You send it from your own email.' })] }];
+    const fuGroup = (label, list, red) => [R({ rs: 'display:flex;padding:12px 0 2px', t: label, ts: eyeS + (red ? ';color:' + c.neg : '') })].concat(list.map(p => R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid ' + c.hair, t: p[0], ts: 'font-size:13px;font-weight:700', sub: p[5] ? (red ? 'Overdue · ' : '') + p[5] + ' · due ' + p[6] + ' · last contact ' + p[12] : 'No next step · ' + p[2] + ' · last contact ' + p[12], ss: 'font-size:12px;line-height:1.45;color:' + (red ? c.neg : c.mu), btns: p[5] ? [{ t: 'Done', s: btnSm }, { t: 'Snooze', s: btnSm }, { t: 'Draft a message', s: btnSm }] : [{ t: 'Set next step', s: btnSm }] })));
+    const DR3 = [['INTRO REQUEST · TO [NAME] AT [OTHER CO]', '“Hi [Name], would you introduce me to [Partner] at [Fund E]? We are raising our [Seed] for [Acme Robotics], and their robotics focus fits. I can send a short note you can forward.”'], ['FOLLOW-UP · TO [LUMEN VENTURES]', '“Thank you for Friday’s meeting. As promised, here is the data-room link and our [Q3] metrics pack. Happy to answer anything before your partner meeting.”'], ['THANK-YOU AFTER A PASS · TO [FUND T]', '“Thank you for taking the time to look at [Acme Robotics]. We would value staying in touch as the company grows.”']];
+    const draftsK = () => K({ title: 'Drafts', meta: '[3]', ms: MS, note: 'Eadwyn drafts. You send it from your own email.', ns: 'margin:0;font-size:12.5px;color:' + c.mu, rows: DR3.map(([e, t]) => R({ rs: 'display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair, lead: 'E', ls: EADL, eye: e, t, ts: 'font-size:13px;line-height:1.55', sub: EADLINE, ss: 'font-size:11.5px;color:' + c.mu, btns: [{ t: 'Copy', s: btnSm }, { t: 'Open in my email', s: btnSm }, { t: 'Edit', s: btnSm }, { t: 'Dismiss', s: btnSm }] })) });
+    const matT = () => TB({ title: 'Materials sent', pager: false, gc: '1.2fr 1.2fr 1.2fr 1.2fr', minW: 640, cols: ['Investor', 'Deck link', 'Data room', 'Call for Capital'], rows: [[CL('[Bluefern Capital]', BD), CL('Viewed [3]× · last [10 Oct]', MN), CL('Opened [4] of [9] folders', MN), CL('Opened [Seed extension]', { ts: 'font-size:12.5px' })], [CL('[Lumen Ventures]', BD), CL('Viewed [2]× · last [16 Oct]', MN), CL('Opened [2] of [9] folders', MN), CL('Not sent', MU)], [CL('[Harbor Seed Fund]', BD), CL('Viewed [1]× · last [8 Oct]', MN), CL('Not shared yet', MU), CL('Not sent', MU)], [CL('[Fund Q]', BD), CL('Not sent', MU), CL('Not shared yet', MU), CL('Asked a question', { ts: 'font-size:12.5px' })]], foot: 'Deck links come from the Pitch deck; data-room access from the Data room.' });
+    const updK = () => K({ title: 'Updates to prospects', rows: [R({ t: '[September update] · shared [2 Oct] with [9] prospects', ts: 'font-size:13px;font-weight:700;line-height:1.4', sub: 'Shared from Grow', st: pl('✓', 'Shared', 'g') }), R({ t: '[Pipeline update · August]', ts: 'font-size:13px;font-weight:700', sub: 'Recorded on the timeline, never emailed.', st: pl('–', 'Read only', 'n') })], btns: [{ t: 'Share an update', s: btnS }] });
+    const outreachCols = () => [cc([K({ title: 'Follow-ups', meta: '[3] overdue · [5] due in 7 days', ms: MS, rows: fuGroup('OVERDUE · [3]', PL.filter(p => p[7]), 1).concat(fuGroup('TODAY · [1]', PL.filter(p => p[6] === '[21 Oct]')), fuGroup('THIS WEEK · [4]', PL.filter(p => !p[7] && p[6] && p[6] !== '[21 Oct]' && dd(p[6]) <= 28)), fuGroup('NO NEXT STEP · [4]', PL.filter(p => !p[5] && p[2] !== 'Passed'))) })], 7), cc([draftsK()], 5), cc([matT(), K({ cs: PLAIN, btns: [{ t: 'Send a deck link', s: btnS }] })], 8), cc([updK()], 4)];
+    const CM = [['[Fund K]', '$250,000', 'Signed', 'Signed', '[17 Oct]', 'First close', 'Direct', 'Open closing room'], ['[Name]', '$150,000', 'Received', 'Connector · Mercury', '[2 Oct]', 'First close', 'Direct', 'Open closing room'], ['[Fund L]', '$200,000', 'Pending', 'Recorded', '[19 Oct]', 'First close', 'Third-party fund', 'Open closing room'], ['[Bluefern Capital]', '$200,000', 'Indicated through a call', 'Recorded', '[19 Oct]', 0, 0, 'Open the deal'], ['[Northwind Angels]', '$100,000', 'Status not recorded', 'Typed', '[16 Oct]', 0, 0, 'Set status'], ['[Name]', '$75,000', 'Soft', 'Typed', '[12 Oct]', 0, 0, 'Set status']];
+    const cmT = () => TB({ title: 'Every commitment', tbar: { search: 'Search investors', chips: [tag('Status ▾'), tag('Close ▾'), tag('Sort: Amount ▾')] }, gc: '1.35fr .9fr 1.55fr 1.35fr .7fr .95fr 1.05fr 1.05fr', minW: 1040, cols: ['Investor', 'Amount', 'Status', 'Source', 'Date', 'Close or tranche', 'Route', ''], rows: CM.map(m => [CL(m[0], BD), CL('[' + m[1] + ']', MB), CL('', { pill: cST(m[2]) }), CL('', { pill: cSRC(m[3]) }), CL(m[4], MN), m[5] ? m[5] : CL('—', MU), m[6] ? m[6] : CL('Once a closing exists', MU), CL(m[7], LK)]), count: '1–6 of [6]' });
+    const closesK = () => K({ title: 'Closes and tranches', rows: [R({ t: 'First close', ts: 'font-size:13px;font-weight:700', sub: 'Target [14 Nov 2026] · Received [$150,000] · Signed [$250,000] · Pending [$200,000]', ss: 'font:500 11.5px ' + MO + ';color:' + c.mu + ';line-height:1.5', st: pl('◷', 'Open', 'a') }), R({ t: 'Final close', ts: 'font-size:13px;font-weight:700', sub: 'Target [14 Dec 2026] · nothing assigned yet', ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, st: pl('○', 'Planned', 'n') })], btns: [{ t: 'New close', s: btnSm }] });
+    const proT = () => TB({ title: 'Pro-rata', pager: false, gc: '1.4fr .8fr 1fr .9fr .9fr', minW: 0, cols: ['Holder', 'Prior stake', 'Entitlement', 'Taking', 'State'], rows: [['[Pre-seed Fund A]', CL('[8.0%]', MN), CL('[$120,000]', MN), CL('—', MU), CL('', { pill: pl('◷', 'Offered', 'a') })], ['[Name]', CL('[1.5%]', MN), CL('[$22,500]', MN), CL('[$22,500]', MN), CL('', { pill: pl('✓', 'Taking', 'g') })], ['[Name]', CL('[0.5%]', MN), CL('[$7,500]', MN), CL('—', MU), CL('', { pill: pl('–', 'Waived', 'n') })], ['[Name]', CL('[0.3%]', MN), CL('[$4,500]', MN), CL('—', MU), CL('', { pill: pl('–', 'Expired', 'n') })]] });
+    const mercK = () => K({ title: 'From Mercury', rows: [R({ t: 'Credit [$50,000] · from [Name] · [9 Oct]', ts: 'font:700 12.5px ' + MO, tags: [cSRC('Connector · Mercury')], btns: [{ t: 'Match', s: btnSm }, { t: 'Not this round', s: btnSm }] }), R({ t: 'Credit [$150,000] · from [Name] · [2 Oct]', ts: 'font:700 12.5px ' + MO, sub: 'Matched to [Name] · Received', st: pl('✓', 'Matched', 'g') })] });
+    const legC = [{ t: 'Received [$150,000]', sw: dotSw(S[3]) }, { t: 'Signed [$250,000]', sw: dotSw(S[0]) }, { t: 'Pending [$200,000]', sw: dotSw(S[1]) }, { t: 'Indicated [$200,000] · not counted', sw: HATCH(S[2]) }, { t: 'Soft [$75,000] · not counted', sw: HATCH(S[4]) }];
+    const commitCols = () => rStrip({ settings: 1, id: 'c' }).concat([cc([K({ title: 'Committed against the target', tog: TOG(), legend: legC, svg: roundSvg(1060, true, 'rb' + B), foot: 'Status not recorded: [$100,000] from [Northwind Angels] is not counted until you set how sure it is.' })]), cc([cmT()]), cc([closesK(), mercK()], 6), cc([proT()], 6), cc([K({ cs: PLAIN, rows: [INFOROW('Commitments become signed only in the closing room. This tab shows them; it does not sign them.')] })])]);
+    const ACTR = [['[21 Oct] 09:12', '[Founder B]', 'Founder', 'Moved [Bluefern Capital] Meeting → Diligence', 'Typed'], ['[21 Oct] 08:40', 'Eadwyn', 'Proposes only', 'Drafted next steps from your note on [Lumen Ventures]', 'E'], ['[20 Oct] 18:10', '[Founder B]', 'Founder', 'Logged a meeting with [Bluefern Capital]', 'Typed'], ['[19 Oct] 14:22', '[Fund L]', 'Investor', 'Committed [$200,000] in their deal room', 'Recorded'], ['[19 Oct] 11:03', '[Bluefern Capital]', 'Investor', 'Indicated [$200,000] through [Seed extension]', 'Recorded'], ['[17 Oct] 16:45', '[Founder A]', 'Founder', 'Accepted Eadwyn’s next step for [Fund S]', 'Typed'], ['[16 Oct] 16:30', '[Founder A]', 'Founder', 'Logged a meeting with [Lumen Ventures]', 'Typed'], ['[14 Oct] 10:00', '[Founder B]', 'Founder', 'Imported [12] investors', 'Document · [investors.csv]'], ['[2 Oct] 09:00', 'Mercury', 'Connector', 'Matched a [$150,000] credit to [Name]', 'Connector · Mercury']];
+    const actT = () => TB({ title: 'Activity', tbar: { search: 'Search activity', chips: [tag('Person ▾'), tag('Kind ▾'), tag('Investor ▾'), tag('Export')] }, gc: '.95fr 1.1fr 2.4fr 1.3fr', minW: 900, cols: ['When', 'Who', 'What', 'Source'], rows: ACTR.map(a => [CL(a[0], MN), CL(a[1], { ts: 'font-weight:700', sub: a[2] }), CL(a[3], { ts: 'font-size:13px;line-height:1.4' }), a[4] === 'E' ? CL('', { pill: pl('E', 'Proposed by Eadwyn', 'v') }) : CL('', { pill: cSRC(a[4]) })]), count: '1–25 of [86]', foot: 'Nine of the first twenty-five rows are drawn.' });
+    const propRow = (t, sub) => R({ rs: 'display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE, lead: 'E', ls: EADL, t, ts: 'font-size:13px;font-weight:700;line-height:1.45', sub, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45', btns: [{ t: 'Accept', s: btnSm }, { t: 'Edit', s: btnSm }, { t: 'Dismiss', s: btnSm }] });
+    const eadPanel = [K({ cs: PLAIN, eye: 'EADWYN · PROPOSALS', title: 'From your notes and feedback', hs: H18, meta: 'Esc to close', note: EADLINE }),
+      K({ cs: SEC, title: 'From your note on the [Lumen Ventures] meeting · [16 Oct]', hs: eyeS, rows: [R({ rs: NOTE('n'), t: '‘Good partner meeting. They asked for the data room and the [Q3] metrics pack by Friday.’', ts: 'font-size:13px;line-height:1.55' }), propRow('Next step: send the [Q3] metrics pack by [23 Oct]', 'From: “…the [Q3] metrics pack by Friday.”'), propRow('Move to Diligence: they asked for the data room', 'From: “They asked for the data room…”')], rowsS: 'display:flex;flex-direction:column;gap:8px', btns: [{ t: 'Accept all [2]', s: btnS }], foot: 'Accept all takes at most 50 at a time.' }),
+      K({ cs: SEC, title: 'From feedback across investors', hs: eyeS, rows: [R({ lead: 'E', ls: EADL, t: 'Three investors raised [customer concentration].', ts: 'font-size:13px;font-weight:700', sub: '[Bluefern Capital] · [Fund M] · [Harbor Seed Fund]', tags: [pl('', 'Read only', 'n')] })] }),
+      K({ cs: SEC, btns: [{ t: 'Close', s: btnS }], bs: BTNR })];
+    const summaryCols = (who) => [cc([K({ cs: PLAIN, rows: [R({ rs: NOTE('v'), lead: 'i', ls: INFO, t: 'You are viewing [Acme Robotics] as ' + who + '. The founders see that you opened it, and why.', ts: 'font-size:13px;font-weight:600;line-height:1.5' })] })])].concat(rStrip({ id: who === 'HQ' ? 'h' : 'a' })).concat([cc([funK()], 8), cc([K({ title: 'Counts', rows: [['Investors in the pipeline', '[24]'], ['Follow-ups overdue', '[3]'], ['Due in 7 days', '[5]'], ['Passed', '[2]']].map(([t, n]) => R({ t, v: n, vs: MV })), foot: 'Counts only. Investor names, emails, notes and amounts per investor stay with the founders.' }), K({ cs: PLAIN, btns: [{ t: 'Leave a note for the founders', s: btnS }] })], 4)]);
+    let shell = 'founder', head = true, crumb = 'Raise · What resources does this venture need?', crumbHref = '/raise', crumbS = EYEBROW, title = 'Capital relationships', hpills = false, hbtns = phone ? [] : [HB('Call for Capital', btnP)], hlines = [{ t: 'Every investor in this raise: where they stand, what you owe them next, and what they have committed.' }], scope = false, gateV = phone ? false : gateM, msel = phone, moved = false, tbarOn = true, tabCur = 'Overview', tabsOn = true, tabCounts = true, grid = G12, cols = [], minH = 900;
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 600)];
+    const CEN = ';max-width:620px;margin:90px auto 0;width:100%';
+    const MUTEB = 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + ';text-decoration:none';
+    if (B === 'CRL1' || B === 'CRL19') { cols = ovCols(); minH = 1250; }
+    else if (B === 'CRL2') { tabCur = 'Pipeline'; grid = 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) 92px;gap:10px;align-items:start'; cols = boardCols(); minH = 1500; }
+    else if (B === 'CRL3') { tabCur = 'Pipeline'; cols = listCols(); minH = 1150; }
+    else if (B === 'CRL4') { tabCur = 'Pipeline'; cols = listCols().concat(over([drawerHead].concat(drawerBody, [closeK]), 620)); minH = 2500; }
+    else if (B === 'CRL7') { tabCur = 'Match'; grid = 'display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;align-items:start'; cols = matchCols(); minH = 1150; }
+    else if (B === 'CRL8') { tabCur = 'Outreach'; cols = outreachCols(); minH = 1350; }
+    else if (B === 'CRL9') { tabCur = 'Commitments'; cols = commitCols(); minH = 1500; }
+    else if (B === 'CRL11') { tabCur = 'Pipeline'; cols = listCols().concat(over(eadPanel, 620)); minH = 1250; }
+    else if (B === 'CRL12') { tabCur = 'Activity'; cols = [cc([actT()])]; }
+    else if (B === 'CRL13a' || B === 'CRL13b') { tabCur = B === 'CRL13a' ? 'Pipeline' : 'Match'; moved = B === 'CRL13a' ? 'The investor pipeline is now Capital relationships › Pipeline.' : 'Investor match is now Capital relationships › Match.'; cols = []; minH = 440; }
+    else if (B === 'CRL15a') { tabCounts = false; cols = [cc([sk(1)], 3), cc([sk(1)], 3), cc([sk(1)], 3), cc([sk(1)], 3), cc([sk(3)]), cc([sk(5)], 8), cc([sk(4)], 4)]; }
+    else if (B === 'CRL16b' || B === 'CRL16d') { shell = B === 'CRL16b' ? 'admin' : 'hq'; crumb = 'Accounts › [Acme Robotics]'; crumbHref = '/admin/accounts'; crumbS = MUTEB; hbtns = []; hpills = [pl('', 'Summary only', 'n')]; hlines = [{ t: 'The round at a glance for a venture you support. Investor names, emails, notes and amounts per investor stay with the founders.' }]; gateV = false; tbarOn = false; tabsOn = false; cols = summaryCols(B === 'CRL16b' ? 'a studio admin' : 'HQ'); minH = 1000; }
+    else if (B === 'CRL17a') { shell = 'explorer'; head = false; tabsOn = false; tbarOn = false; cols = [cc([CENTER('⊘', 'Capital relationships opens once your profile is set.', 'Founders run their raise here.', [{ t: 'Set up your profile', s: btnP }, { t: 'Go to your home', s: btnS }], CEN)])]; }
+    else if (B === 'CRL17b') { head = false; tabsOn = false; tbarOn = false; cols = [cc([CENTER('⊘', 'This venture belongs to another company.', 'Switch company, or ask its founder.', [{ t: 'Switch company', s: btnS }], CEN)])]; }
+    else if (crop) { head = false; tabsOn = false; tbarOn = false;
+      if (B === 'CRL5') { grid = G2; cols = [{ s: DLGS, blocks: [lab('Add investor')].concat(addDlg) }, { s: DLGS, blocks: [lab('Import investors')].concat(impDlg) }]; }
+      else if (B === 'CRL6') { grid = G2; cols = [['Log a step', dStep], ['Set next step', dNext], ['Commitment status · on reaching Committed', dStatus], ['Add feedback', dFeed]].map(([l, d]) => ({ s: DLGS, blocks: [lab(l)].concat(d) })); }
+      else if (B === 'CRL10') { grid = G2; cols = [['Round settings', dRound], ['New close', dClose]].map(([l, d]) => ({ s: DLGS, blocks: [lab(l)].concat(d) })); }
+      else if (B === 'CRL14') { grid = G3; cols = [['No investors', CENTER('○', 'No investors yet.', 'Add one, import a list, or find funds that fit.', [{ t: 'Add investor', s: btnP }, { t: 'Import', s: btnS }, { t: 'Open Match', s: btnS }])], ['No round', K({ eye: 'ROUND', title: 'Round not set', hs: 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em', note: 'Set a target and a close date to see how far the round has come.', ns: NS1, rows: [R({ t: 'Target', v: 'Not recorded', vs: 'font-size:12px;color:' + c.mu }), R({ t: 'Closes', v: 'Not recorded', vs: 'font-size:12px;color:' + c.mu })], btns: [{ t: 'Set the round', s: btnS }] })], ['Match with no fit', CENTER('○', 'No fund in the directory lists a focus that fits [Robotics].', 'Widen the filters or add investors you know.', [{ t: 'Widen the filters', s: btnS }, { t: 'Add investor', s: btnS }])]].map(([l, k]) => ({ s: PCOL, blocks: [lab(l), k] })); }
+      else if (B === 'CRL15b') { grid = G2; cols = [{ s: PCOL, blocks: [lab('One block failed · the rest stays drawn'), K({ title: 'Follow-ups', rows: [ERR('Could not be read. This is not a claim that there is nothing.', 'r', [{ t: 'Try again', s: btnSm }])] }), meetK()] }, { s: PCOL, blocks: [lab('The whole tool failed'), K({ rows: [ERR('Capital relationships could not be read. That is not the same as an empty pipeline.', 'r', [{ t: 'Try again', s: btnS }])], foot: 'Nothing can be saved until it reads.' })] }]; }
+      else if (B === 'CRL16a') { grid = G2; cols = [{ s: PCOL, blocks: [lab('Co-founder · the tool’s More menu'), K({ rows: ['Import investors', 'Export'].map(t => R({ t, ts: 'font-size:13px;font-weight:600' })), foot: 'Round settings is not here: only [Founder A], the owner, changes the round.' })] }, { s: PCOL, blocks: [lab('Co-founder · an investor’s More menu'), K({ rows: [R({ t: 'Mark passed', ts: 'font-size:13px;font-weight:600' })], foot: 'Delete is not here: only [Founder A], the owner, deletes an investor. Everything else works as it does for the owner.' })] }]; }
+      else if (B === 'CRL16c') cols = [dlgCol(dlg('Why are you opening [Acme Robotics]?', 'The founders see your reason and when you opened it.', [K({ cs: SEC, rows: [field('REASON · REQUIRED', 'Write a reason…', { ts: FIE + ';min-height:56px' })] })], [{ t: 'Cancel', s: btnS }, { t: 'Open the summary', s: btnP }]))]; }
+    else if (phone) { grid = STACK;
+      if (B === 'CRL18a') cols = one([TL([['Target', '[$1,500,000]', 'Round [Seed]'], ['Committed', '[$600,000]', '40% · Indicated and Soft not counted'], ['In conversation', '[11]', 'Contacted, Meeting, Diligence'], ['Closes', '[14 Dec 2026]', '[54 days]']], 2), needsK(3), funK(340)]);
+      else if (B === 'CRL18b') { tabCur = 'Pipeline'; cols = one([K({ cs: PLAIN, tags: ['Identified [6]', 'Contacted [5]', 'Meeting [4]', 'Diligence [2]', 'Committed [5]', 'Passed [2]'].map(t => tag(t, t === 'Diligence [2]')), foot: '‹ Meeting · stage 4 of 6 · Committed › · swipe between stages' })].concat(PL.filter(p => p[2] === 'Diligence').map(p => pcard(p, 1)))); }
+      else if (B === 'CRL18c') { crumb = '‹ Pipeline'; crumbHref = '/raise/capital-relationships/pipeline'; crumbS = MUTEB; title = '[Bluefern Capital]'; hpills = [cSTG('Diligence'), cFIT('Fits')]; hlines = [{ t: '[Name] · Partner · [name]@[bluefern].example' }]; msel = false; tbarOn = false; tabsOn = false; cols = one([K({ cs: PLAIN, btns: [{ t: 'Log a step', s: btnP + ';min-height:44px;width:100%' }] })].concat([drawerBody[0], drawerBody[1], drawerBody[4]])); } }
+    const SIDES = { founder: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], investor: ['Studio', 'Spin-Out Lab', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust'], partner: ['Studio', 'Spin-Out Lab', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'], explorer: ['Studio', 'Spin-Out Lab', 'Messages', '§Account', 'My Profile'], admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'] };
+    const LIT = { founder: 'Raise', admin: 'Accounts', hq: 'Support' };
+    const adm = shell === 'admin' || shell === 'hq';
+    const rows = SIDES[shell].map(t => t[0] === '§' ? { t: t.slice(1), href: '#', st: 'display:block;padding:12px 20px 4px;text-decoration:none;' + eyeS } : { t, href: (adm ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === LIT[shell] ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') });
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const studioI = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const BADGE = { admin: ['[Studio Lisbon]', '#334155'], hq: ['HQ', '#881337'] }[shell];
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) 44px;min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed',
+      group: { founder: '[Acme Robotics] ▾', explorer: 'Home', admin: 'Admin', hq: 'HQ' }[shell] || '', groupS: shell === 'founder' ? 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink : 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: BADGE ? BADGE[0] : '', badgeS: BADGE ? 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + BADGE[1] : 'display:none',
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 14px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;color:' + c.ink, company: '[Acme Robotics]', studioI,
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: crumbS + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope, scopeTip: 'When the company holds more than one venture, choose which venture’s raise you see.', scopeS: 'display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 12px;border-radius:999px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:700 12.5px ' + SG + ';box-sizing:border-box;cursor:pointer',
+      gate: gateV, gateS: 'display:flex;gap:7px;flex-wrap:wrap',
+      msel, mselS: 'display:flex;align-items:center;gap:10px;min-height:44px;width:100%;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:9px;background:' + c.card + ';color:' + c.ink + ';font:600 13px ' + SG + ';cursor:pointer;box-sizing:border-box',
+      moved, movedS: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE + ';font-size:13px;color:' + c.ink, infoS: INFO, dismissS: btnG,
+      tbar: tbarOn, tbarS: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap;padding:9px 12px;border-radius:12px;background:' + c.card + ';border:1px solid ' + c.hair, tbarChips: tbChips, tbarBtns: tbBtns, tbarNote: tbNote, tbarNoteS: 'font-size:12.5px;font-weight:600;color:' + c.mu,
+      tabsL: 'Capital relationships', tabs: tabsOn ? TABL.map(([t, p, n, w]) => ({ t, href: '/raise/capital-relationships' + (p ? '/' + p : ''), n: tabCounts ? n : false, sel: t === tabCur ? 'page' : 'false', ns: 'display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';' + (w ? 'color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE : 'color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair), s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabCur ? c.vi : 'transparent') + ';color:' + (t === tabCur ? c.ink : c.mu) + ';font-weight:' + (t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar: false, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      pnav: phone ? ['Validate', 'Build', 'Raise', 'Grow', 'More'].map(t => ({ t, href: t === 'More' ? '#' : '/' + t.toLowerCase(), s: 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:60px;min-height:48px;font-size:11px;text-decoration:none;font-weight:' + (t === 'Raise' ? 800 : 600) + ';color:' + (t === 'Raise' ? c.vt : c.mu), ds: 'width:18px;height:18px;border-radius:5px;box-sizing:border-box;' + (t === 'Raise' ? 'background:' + c.lav + ';border:1.5px solid ' + c.vt : 'border:1.5px solid ' + c.mu) })) : false,
+      pnavS: 'display:flex;justify-content:space-around;border-top:1px solid ' + c.hair + ';background:' + c.card + ';padding:2px 0 4px;flex:none',
+      spine: isShell, spineTip: 'Eadwyn reads your pipeline and drafts next steps and messages. It never fills an amount, a commitment, a status or Fit.', spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;flex:none', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      rail: false, railS: '', railX: '', railP: '', railB: '', railI: '',
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '',
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,161 @@
+**Yes — great question.** The sidebar is getting long (especially in Admin mode), and the current list has some **logical overlap, duplication, and suboptimal ordering**. This is common as a platform grows from MVP to full StudioOS.
+
+I’ve analyzed the screenshots + the full feature set we built in Replit (pipeline, spin-outs, VC Fund, liquidity, network effects, etc.) and the live axal.vc branding.
+
+### 1. Duplicates / Items to Merge
+| Current items                  | Recommendation                          | Why |
+|--------------------------------|-----------------------------------------|-----|
+| **Legal & Compliance** + **Legal & Capital** | Merge → **Legal & Capital**            | They overlap heavily (IP, equity, compliance, SAFE, subsidiaries). One clear section. |
+| **Refer & Earn** + **Referral Network** | Merge → **Refer & Earn** (with sub-link to Referral Network if needed) | Same feature family; “Refer & Earn” is the user-facing name. |
+| **Capital & Investment** + **VC Funds** | Merge → **Capital & Investment**       | VC Funds is a subset of Capital. |
+| **Scoring Engine** + **AI Matches** | Keep separate but group under “Intelligence” | They are related but distinct (scoring vs matching). |
+
+**Merged list reduces Admin sidebar from 27 → 19 items** — much cleaner.
+
+### 2. Recommended Logical Order (User Flow)
+Think of the sidebar as a **funnel**:
+1. **Overview** (always first)
+2. **Core Operations** (what every user does daily)
+3. **Intelligence & AI**
+4. **Network & Growth**
+5. **Capital & Liquidity**
+6. **Legal & Ops**
+7. **Advanced / Admin** (last, role-restricted)
+
+### 3. Optimized Sidebar per Role (Final Recommendation)
+
+#### **Admin Mode** (full access)
+```
+Dashboard
+────────────────────────────────
+Core
+  Projects
+  Pipeline Board
+  Studio Ops
+  Spin-Outs* (new — see missing below)
+
+Intelligence
+  Scoring Engine
+  Market Intelligence
+  AI Advisory Suite
+  AI Matches
+  Deal Flow
+
+Network
+  Partners
+  Refer & Earn
+  Referral Network
+  Relationships
+  Network Effects
+
+Capital & Liquidity
+  Capital & Investment
+  VC Funds
+  Liquidity & Exits
+  Payouts
+
+Legal & Compliance
+  Legal & Capital
+
+Advanced
+  Monitoring
+  Activity Log
+  Support
+  API Bridge
+
+Portals
+  Founder Portal
+  Partner / Investor Portal
+```
+
+#### **Founder View** (keep it focused — founders care about their company)
+```
+Dashboard
+────────────────────────────────
+Core
+  Projects
+  Pipeline Board
+  Studio Ops
+  Spin-Outs*
+
+Intelligence
+  AI Advisory Suite
+
+Legal & Compliance
+  Legal & Capital
+
+Network & Growth
+  Refer & Earn
+  Referral Network
+  Relationships
+  Network Effects
+
+Capital & Liquidity
+  Liquidity & Exits
+  Payouts
+
+Support
+  Activity Log
+  Support
+  Identity Verification
+
+Founder Portal (highlighted)
+```
+
+#### **Partner / Investor View** (focus on deal flow, returns, syndication)
+```
+Dashboard
+────────────────────────────────
+Intelligence
+  Scoring Engine
+  Market Intelligence
+  AI Matches
+  Deal Flow
+
+Core
+  Projects
+  Pipeline Board
+
+Network
+  Partners
+  Refer & Earn
+  Referral Network
+  Relationships
+  Network Effects
+
+Capital & Liquidity
+  Capital & Investment
+  VC Funds
+  Liquidity & Exits
+  Payouts
+
+Legal & Compliance
+  Legal & Capital
+
+Support
+  Activity Log
+  Support
+  Identity Verification
+
+Partner / Investor Portal (highlighted)
+```
+
+### 4. Missing Items We Should Add
+These are high-value and already exist in the platform we built:
+
+- **Spin-Outs** → dedicated top-level item (core to the 30-day engine)
+- **Identity Verification** → already in Founder & Partner views; keep it (very important for KYC)
+- **Notifications** (or small bell icon in header) — users asked for this
+- **Integrations** (or rename “API Bridge” → “Integrations” for clarity)
+
+### 5. Implementation Tips
+- Use **dividers** (`────────────────────────────────`) or light sub-headings (Core, Intelligence, Network, etc.) — makes the sidebar scannable.
+- Keep the **“View as: Admin / Founder / Partner”** dropdown exactly as it is — it’s excellent UX.
+- Collapse advanced sections under an “Advanced” or “More” accordion for non-admin users if the list ever grows again.
+- Add **icons** consistently (you already have great ones).
+
+Would you like me to give you the **exact Replit Agent prompt** to:
+1. Update the sidebar code with this new structure (role-based + merged + reordered), **or**
+2. Also rebuild the front page (index.html) to match the new branding we discussed last message?
+
+Just say **“sidebar prompt”** or **“both”** and I’ll give you the ready-to-copy prompt(s) instantly.

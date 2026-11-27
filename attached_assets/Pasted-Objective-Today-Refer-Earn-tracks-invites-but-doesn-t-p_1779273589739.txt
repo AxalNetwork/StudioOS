@@ -1,0 +1,61 @@
+Objective
+  Today Refer & Earn tracks invites but doesn't pay out. Wire payouts
+  via Stripe Connect Express so referrers actually receive money.
+
+Tasks
+
+  1. Onboarding referrers
+     POST /api/refer-earn/connect/onboard
+       → creates a Stripe Connect Express account, returns the
+         Stripe-hosted onboarding URL.
+     Persist stripe_connect_account_id on users.
+     Block payouts until users.stripe_connect_charges_enabled = 1
+     AND verification status = 'verified'.
+
+  2. Payout ledger
+     CREATE TABLE referral_payouts (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       referrer_user_id INTEGER NOT NULL,
+       redemption_id INTEGER NOT NULL,
+       amount_usd_cents INTEGER NOT NULL,
+       status TEXT NOT NULL,         -- 'pending','approved','paid','reversed'
+       stripe_transfer_id TEXT,
+       earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+       approved_at DATETIME,
+       paid_at DATETIME
+     );
+
+  3. Approval rules
+     Auto-approve payouts where the referred user is:
+       - email-verified
+       - KYC-passed (if investor)
+       - past their 30-day refund window (no chargebacks)
+     Manual admin review for anything outside auto-rules.
+
+  4. Trigger payout
+     POST /api/admin/refer-earn/payouts/:id/pay
+       → creates Stripe Transfer to the referrer's connected account.
+       → updates referral_payouts.stripe_transfer_id + status='paid'.
+     Webhook handles transfer.paid → mark paid_at; transfer.failed →
+     revert + alert admin.
+
+  5. Referrer dashboard
+     /refer-earn page now shows:
+       - your code (short form, from Prompt DH)
+       - URL with copy button
+       - earned (pending), approved, paid
+       - Stripe Connect status + "Manage payout method" CTA
+       - referral history (anonymised email of referred user, status,
+         payout amount)
+
+Compliance
+  - 1099 reporting threshold ($600/year in US): auto-generate
+    1099-MISC at year-end for US referrers via Stripe's reporting.
+  - Block payouts to sanctioned jurisdictions; OFAC check on the
+    Connect account.
+
+Acceptance
+  - Referrer can complete Stripe Connect Express onboarding.
+  - A test redemption auto-approves → admin clicks Pay → Stripe
+    Transfer fires → referrer's connected account is credited.
+  - Referrer dashboard reflects earnings in real time.

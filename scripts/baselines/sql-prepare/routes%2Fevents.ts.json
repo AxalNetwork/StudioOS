@@ -1,0 +1,4 @@
+{
+  "SEAT_FREE_PREDICATE @ routes/events.ts": 4,
+  "sets.join(', ') @ routes/events.ts": 2
+}

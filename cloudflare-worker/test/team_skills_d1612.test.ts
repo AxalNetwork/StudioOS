@@ -1,0 +1,423 @@
+// D1612 (#3951, part A of #3945) — the agent skill library at /api/teams.
+//
+//   1. Read: HQ skills for every member, a company's skills for its members
+//      only, drafts for their writers only.
+//   2. Write: HQ skills by a Super Admin only, company skills by its editors;
+//      a draft is checked (taxonomy tags, roles, tools, output).
+//   3. Publish: an immutable version with its SKILL.md; an agent pinned to
+//      v1 stays on v1 until "Update to v2".
+//   4. Attach: the agent's role, its approved tools, its company, a published
+//      version, an editor of its scope; each refusal is a sentence and
+//      nothing is written.
+//   5. Assign one skill to several agents, all or nothing.
+//   (Cases 3 to 6 follow A2's contract, #3956: its codes, partial assign and radar shape.)
+//   6. The agent's radar: the 8 axes on the person's 0–5 scale, "Not
+//      recorded" where no skill tags an axis.
+//   7. A pasted SKILL.md lands as a draft and round-trips; an unreadable one is refused.
+//
+// Real SQLite: the baseline's tables, 089 (the taxonomy), 199 (Super Admin),
+// 597, 712 and 759.
+//
+//   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+//     --test cloudflare-worker/test/team_skills_d1612.test.ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { SignJWT } from 'jose';
+import { Hono } from 'hono';
+import { makeD1 } from './_d1_sqlite.mjs';
+import { passHqGate } from './_hq_skill_gate.ts';
+import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
+import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import teamSkills from '../src/routes/team_skills.ts';
+import { checkDraft, parseSkillMd, skillsRadar, toSkillMd, missingTools } from '../src/services/agents/skills.ts';
+
+const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
+const BASELINE = sql('schema_baseline.sql');
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+const SUPER = 1, ADMIN = 2, EDITOR = 10, MEMBER = 11, STRANGER = 12, OTHER_EDITOR = 13;
+const IN_CO = 7, ALONE = 8;
+
+function world(o: { events?: boolean } = {}) {
+  const { DB, db } = makeD1(
+    ['users', 'company_profiles', 'user_company_links', 'projects'].map((t) => stripForeignKeys(tableFromBaseline(BASELINE, t))).join('\n')
+    + AI_LOG_SCHEMA + sql('migrations/506_ai_rail_proposals.sql'),
+  );
+  addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
+  db.exec(sql('migrations/199_super_admin.sql'));
+  db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
+  db.exec(sql('migrations/712_team_agents.sql'));
+  db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
+  db.exec(sql('migrations/759_agent_skills.sql'));
+  db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
+  db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
+  db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence, written on every publish
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
+  if (o.events !== false) db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
+  const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
+  user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
+  user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
+  user.run(EDITOR, 'u-editor', 'editor@example.test', 'Eve Editor', 'founder', 100);
+  user.run(MEMBER, 'u-member', 'member@example.test', 'Max Member', 'founder', 101);
+  user.run(STRANGER, 'u-stranger', 'stranger@example.test', 'Sam Stranger', 'founder', 102);
+  user.run(OTHER_EDITOR, 'u-other', 'other@example.test', 'Oli Other', 'founder', 103);
+  db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  db.exec(`INSERT INTO company_profiles (id, uid, company_name) VALUES (1, 'co-uid-1', 'Acme'), (2, 'co-uid-2', 'Globex')`);
+  const link = db.prepare('INSERT INTO user_company_links (uid, user_id, company_id, role_in_company) VALUES (?, ?, ?, ?)');
+  link.run('l1', EDITOR, 1, 'Founder'); link.run('l2', MEMBER, 1, 'Member'); link.run('l3', OTHER_EDITOR, 2, 'Owner');
+  db.prepare('INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, ?, ?, 100, ?)').run(IN_CO, 'p7', 'Rocket', 1);
+  db.prepare('INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, ?, ?, 100, NULL)').run(ALONE, 'p8', 'Solo');
+  // The /studio taxonomy, as 090 seeds it (two axes are enough).
+  db.exec(`INSERT INTO skills (slug, category_slug, label) VALUES
+    ('investor_reporting', 'finance_ops', 'Investor reporting'), ('fp_and_a', 'finance_ops', 'FP&A'),
+    ('investor_relations', 'capital_network', 'Investor relations'), ('product_strategy', 'product', 'Product strategy')`);
+  const agent = db.prepare(`INSERT INTO team_agents (uid, scope_kind, company_id, project_id, role_key, first_name, model_id, tool_grants_json, sponsor_user_id, monthly_cap_microusd, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${EDITOR}, 5000000, ${EDITOR})`);
+  agent.run('a'.repeat(32), 'company', 1, null, 'cfo', 'Carla', MODEL, '[]');
+  agent.run('b'.repeat(32), 'company', 1, null, 'investor_relations', 'Ivy', MODEL, JSON.stringify([{ integration_uid: 'i1', tool: 'hubspot.read_contacts' }]));
+  agent.run('c'.repeat(32), 'project', null, IN_CO, 'cfo', 'Rory', MODEL, '[]');
+  agent.run('d'.repeat(32), 'project', null, ALONE, 'cfo', 'Solo', MODEL, '[]');
+  agent.run('e'.repeat(32), 'company', 2, null, 'cfo', 'Gil', MODEL, '[]');
+  const env: any = { DB, JWT_SECRET: 'd1612-fixture-only-secret', ENVIRONMENT: 'development', TEAM_AGENTS_ENABLED: 'true' };
+  return { db, env };
+}
+type W = ReturnType<typeof world>;
+const CFO = 'a'.repeat(32), IR = 'b'.repeat(32), PROJECT_CFO = 'c'.repeat(32), SOLO_CFO = 'd'.repeat(32), GLOBEX_CFO = 'e'.repeat(32);
+
+function app() {
+  const a = new Hono();
+  a.onError((e: any, c) => {
+    const status = AUTH_ERROR_STATUSES[e?.message];
+    return status ? c.json({ detail: e.message }, status) : c.json({ detail: 'Internal server error', m: String(e?.message) }, 500);
+  });
+  a.route('/api/teams', teamSkills);
+  return a;
+}
+async function call(w: W, who: number, method: string, path: string, body?: unknown) {
+  const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(w.env.JWT_SECRET));
+  const r = await app().request(`/api/teams${path}`, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body) }, w.env);
+  const text = await r.text();
+  return { status: r.status, body: (text ? JSON.parse(text) : null) as any, text };
+}
+
+const update = (over: Record<string, unknown> = {}) => ({
+  scope: 'hq', name: 'Draft the monthly investor update', purpose: 'From recorded metrics, a draft update for investors.',
+  steps: ['Read the last three months of recorded metrics', 'Write the highlights and the asks'],
+  tools: [], output_kind: 'draft', roles: ['cfo', 'investor_relations'],
+  tags: [{ slug: 'investor_reporting', level: 'proficient' }, { slug: 'investor_relations', level: 'working' }], ...over,
+});
+async function published(w: W, body: Record<string, unknown>, who = SUPER) {
+  const made = await call(w, who, 'POST', '/skills', body);
+  assert.equal(made.status, 201, made.text);
+  await passHqGate(w.db, made.body.skill.uid); // D4160: HQ's approval and golden cases, as HQ's process gives them
+  const pub = await call(w, who, 'POST', `/skills/${made.body.skill.uid}/publish`);
+  assert.equal(pub.status, 200, pub.text);
+  return made.body.skill.uid as string;
+}
+
+test('D1612: HQ skills are for every member, a company\'s for its members, drafts for their writers', async () => {
+  const w = world();
+  const hq = await published(w, update());
+  const hqDraft = (await call(w, SUPER, 'POST', '/skills', update({ name: 'Unfinished HQ skill' }))).body.skill.uid;
+  const mine = await published(w, update({ scope: 'company', company: 'co-uid-1', name: 'Acme board brief', roles: ['cfo'] }), EDITOR);
+  const myDraft = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme draft' }))).body.skill.uid;
+
+  const member = await call(w, MEMBER, 'GET', '/skills?company=co-uid-1');
+  assert.equal(member.status, 200);
+  assert.deepEqual(member.body.hq.map((s: any) => s.uid), [hq]);
+  assert.deepEqual(member.body.company.skills.map((s: any) => s.uid), [mine]);
+  assert.equal(member.body.company.can_write, false);
+  assert.equal(member.body.hq[0].author, 'Axal');
+  assert.equal(member.body.company.skills[0].author, 'Acme');
+  assert.equal(member.body.hq[0].draft, undefined, 'a reader sees no draft');
+
+  const editor = await call(w, EDITOR, 'GET', '/skills?company=co-uid-1');
+  assert.deepEqual(editor.body.company.skills.map((s: any) => s.uid).sort(), [mine, myDraft].sort());
+  assert.ok(!editor.body.hq.some((s: any) => s.uid === hqDraft), 'an HQ draft is the Super Admin\'s');
+  assert.ok((await call(w, SUPER, 'GET', '/skills')).body.hq.some((s: any) => s.uid === hqDraft));
+
+  assert.equal((await call(w, STRANGER, 'GET', '/skills?company=co-uid-1')).status, 404);
+  const stranger = await call(w, STRANGER, 'GET', '/skills');
+  assert.deepEqual(stranger.body.hq.map((s: any) => s.uid), [hq]);
+  assert.equal(stranger.body.company, null);
+  assert.equal((await call(w, STRANGER, 'GET', `/skills/${mine}`)).status, 404);
+  assert.equal((await call(w, MEMBER, 'GET', `/skills/${myDraft}`)).status, 404);
+  assert.equal((await call(w, OTHER_EDITOR, 'GET', `/skills/${mine}`)).status, 404);
+
+  // Filters: role, category, search, and the role grid's counts.
+  assert.deepEqual((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1&role=investor_relations')).body.company.skills, []);
+  assert.equal((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1&category=product')).body.hq.length, 0);
+  assert.equal((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1&q=BOARD')).body.company.skills.length, 1);
+  const cfo = member.body.roles.find((r: any) => r.key === 'cfo');
+  assert.deepEqual([cfo.skills, cfo.agents], [2, 2]);
+  assert.equal((await call(w, MEMBER, 'GET', '/skills?role=astronaut')).body.error, 'role_unknown');
+  assert.ok(!/@example\.test|"email"/.test(member.text + editor.text));
+});
+
+test('D1612: HQ skills are written by a Super Admin, company skills by its editors, and every draft is checked', async () => {
+  const w = world();
+  assert.equal((await call(w, ADMIN, 'POST', '/skills', update())).status, 403, 'an admin without Super Admin');
+  assert.equal((await call(w, EDITOR, 'POST', '/skills', update())).status, 403);
+  assert.equal((await call(w, MEMBER, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1' }))).status, 403);
+  assert.equal((await call(w, OTHER_EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1' }))).status, 404);
+  assert.equal((await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1' }))).status, 201);
+  const refused = async (over: Record<string, unknown>) => (await call(w, SUPER, 'POST', '/skills', update(over))).body.error;
+  assert.equal(await refused({ tags: [{ slug: 'astrology', level: 'expert' }] }), 'tag_unknown');
+  assert.equal(await refused({ tags: [{ slug: 'fp_and_a', level: 'guru' }] }), 'tags_invalid');
+  assert.equal(await refused({ tags: [] }), 'tags_invalid');
+  assert.equal(await refused({ roles: [] }), 'roles_missing');
+  assert.equal(await refused({ roles: ['astronaut'] }), 'role_unknown');
+  assert.equal(await refused({ tools: ['DROP TABLE'] }), 'tools_invalid');
+  assert.equal(await refused({ output_kind: 'email' }), 'output_invalid');
+  assert.equal(await refused({ steps: [] }), 'steps_invalid');
+  assert.equal(await refused({ name: '' }), 'name_missing');
+  assert.equal((await call(w, SUPER, 'POST', '/skills', update())).status, 201);
+  assert.equal((await call(w, SUPER, 'POST', '/skills', update())).body.error, 'slug_taken');
+});
+
+test('D4534: only a Super Admin edits or publishes an HQ draft; only a company\'s editors edit or publish its skill; a suspended one is not attached', async () => {
+  const w = world();
+  const hqDraft = (await call(w, SUPER, 'POST', '/skills', update({ name: 'HQ draft for the write gates' }))).body.skill.uid;
+  await passHqGate(w.db, hqDraft);
+  for (const who of [ADMIN, EDITOR, MEMBER]) {
+    // A draft is its writers' alone: to anyone else it does not exist (404), a plain admin included.
+    assert.equal((await call(w, who, 'PATCH', `/skills/${hqDraft}`, { name: 'Taken over' })).status, 404, `PATCH by ${who}`);
+    assert.notEqual((await call(w, who, 'POST', `/skills/${hqDraft}/publish`)).status, 200, `publish by ${who}`);
+  }
+  assert.equal((w.db.prepare('SELECT current_version FROM agent_skills WHERE uid = ?').get(hqDraft) as any).current_version, 0, 'nothing was published');
+  assert.equal((w.db.prepare('SELECT name FROM agent_skills WHERE uid = ?').get(hqDraft) as any).name, 'HQ draft for the write gates');
+
+  const co = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme write gates', roles: ['cfo'] }))).body.skill.uid;
+  assert.equal((await call(w, MEMBER, 'PATCH', `/skills/${co}`, { name: 'Taken over' })).status, 404, 'a member cannot read another\'s draft');
+  assert.equal((await call(w, OTHER_EDITOR, 'PATCH', `/skills/${co}`, { name: 'Taken over' })).status, 404, 'another company\'s editor');
+  assert.equal((await call(w, OTHER_EDITOR, 'POST', `/skills/${co}/publish`)).status, 404);
+  assert.equal((await call(w, EDITOR, 'POST', `/skills/${co}/publish`)).status, 200);
+  assert.equal((await call(w, MEMBER, 'PATCH', `/skills/${co}`, { name: 'Taken over' })).status, 403, 'a member reads the published skill, and may not edit it');
+  assert.equal((await call(w, MEMBER, 'POST', `/skills/${co}/publish`)).status, 403);
+
+  // HQ suspends it; the company's editor cannot attach it to an agent.
+  const id = (w.db.prepare('SELECT id FROM agent_skills WHERE uid = ?').get(co) as any).id;
+  w.db.prepare(`INSERT INTO agent_skill_moderation (skill_id, action, version, reason, created_by) VALUES (?, 'suspend', 1, 'Sends figures it never read.', ?)`).run(id, SUPER);
+  const put = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [co] });
+  assert.equal(put.status, 409, put.text);
+  assert.equal(put.body.error, 'skill_suspended');
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE skill_id = ?').get(id) as any).n, 0);
+});
+
+test('D4534: attaching, re-pinning and removing a skill on an agent is one skills_changed event each; nothing moved, nothing written', async () => {
+  const w = world();
+  const events = () => w.db.prepare("SELECT agent_id, actor_user_id, detail_json FROM team_agent_events WHERE kind = 'skills_changed' ORDER BY id").all() as any[];
+  const uid = await published(w, update());
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200);
+  let e = events();
+  assert.equal(e.length, 1);
+  assert.equal(e[0].actor_user_id, EDITOR);
+  assert.deepEqual(JSON.parse(e[0].detail_json), { added: [{ uid, version: 1 }], repinned: [], removed: [] });
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200);
+  assert.equal(events().length, 1, 'the same list again moves nothing and writes nothing');
+  assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { steps: ['Read the metrics', 'Draft'] })).status, 200);
+  await passHqGate(w.db, uid);
+  assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).status, 200);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid, version: 2 }] })).status, 200);
+  assert.deepEqual(JSON.parse(events()[1].detail_json), { added: [], repinned: [{ uid, from: 1, to: 2 }], removed: [] });
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [] })).status, 200);
+  assert.deepEqual(JSON.parse(events()[2].detail_json), { added: [], repinned: [], removed: [{ uid, version: 2 }] });
+  // Assign: one event per agent it was added to, none for one it refused.
+  const assign = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO, IR] });
+  assert.equal(assign.status, 200, assign.text);
+  e = events().slice(3);
+  assert.equal(assign.body.added, 2);
+  assert.deepEqual(e.map((x) => [x.agent_id, JSON.parse(x.detail_json).added]), [[1, [{ uid, version: 2 }]], [2, [{ uid, version: 2 }]]]);
+  assert.ok(!/@example\.test/.test(JSON.stringify(events())), 'no email in an event');
+});
+
+test('D4534: a company skill\'s publish and retirement are in the admin audit; an HQ publish keeps its own action', async () => {
+  const w = world();
+  const audit = () => w.db.prepare('SELECT admin_user_id, action, filters_json FROM admin_audit_log ORDER BY id').all() as any[];
+  const co = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme audit skill', roles: ['cfo'] }))).body.skill.uid;
+  assert.equal((await call(w, EDITOR, 'POST', `/skills/${co}/publish`)).status, 200);
+  assert.equal((await call(w, EDITOR, 'PATCH', `/skills/${co}`, { status: 'retired' })).status, 200);
+  // D4533 (F1): the draft's creation is the first row, under the company's own action name.
+  const created = audit().filter((r) => r.action.startsWith('company_skill_draft_'));
+  assert.deepEqual(created.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_draft_created']]);
+  assert.equal(JSON.parse(created[0].filters_json).company_id, 1);
+  const rows = audit().filter((r) => r.action.startsWith('company_skill_') && !r.action.startsWith('company_skill_draft_'));
+  assert.deepEqual(rows.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_published'], [EDITOR, 'company_skill_retired']]);
+  assert.equal(JSON.parse(rows[0].filters_json).skill_uid, co);
+  assert.equal(JSON.parse(rows[0].filters_json).company_id, 1);
+  assert.deepEqual(JSON.parse(rows[1].filters_json).after, { status: 'retired' });
+  await published(w, update({ name: 'HQ audit skill' }));
+  assert.ok(audit().some((r) => r.action === 'agent_skill_published'), 'HQ publish keeps agent_skill_published');
+});
+
+test('D4534: an event that cannot be written never undoes the attach it records', async () => {
+  const w = world({ events: false }); // the old CHECK, without skills_changed
+  const uid = await published(w, update());
+  const put = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] });
+  assert.equal(put.status, 200, put.text);
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links').get() as any).n, 1);
+});
+
+test('D1612: a published version is immutable; a pinned agent stays on it until "Update to v2"', async () => {
+  const w = world();
+  const uid = await published(w, update());
+  const v1 = w.db.prepare('SELECT * FROM agent_skill_versions').get() as any;
+  assert.equal(v1.version, 1);
+  assert.match(v1.skill_md, /^---\nname: "Draft the monthly investor update"\n/);
+  assert.throws(() => w.db.prepare('UPDATE agent_skill_versions SET name = ? WHERE id = ?').run('changed', v1.id), /immutable/);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200);
+
+  // Edit and publish v2: the agent keeps v1.
+  assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { steps: ['Read the metrics', 'Draft', 'List the asks'] })).status, 200);
+  assert.equal((await call(w, EDITOR, 'PATCH', `/skills/${uid}`, { name: 'Taken over' })).status, 403);
+  const reader = await call(w, MEMBER, 'GET', `/skills/${uid}`);
+  assert.equal(reader.body.skill.steps.length, 2, 'readers see the published version, not the edit');
+  await passHqGate(w.db, uid);
+  assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.skill.version, 2);
+  let mine = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
+  // A2 (#3956) names them pinned_version and current_version.
+  assert.equal(mine.body.skills[0].pinned_version, 1);
+  assert.equal(mine.body.skills[0].current_version, 2);
+  assert.equal(mine.body.skills[0].update_available, true);
+  assert.equal(mine.body.skills[0].steps.length, 2, 'the pinned version\'s steps');
+  assert.equal(mine.body.can_manage, false);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid, version: 2 }] })).body.skills[0].pinned_version, 2);
+  mine = await call(w, EDITOR, 'GET', `/agents/${CFO}/skills`);
+  assert.equal(mine.body.skills[0].update_available, false);
+
+  const detail = await call(w, MEMBER, 'GET', `/skills/${uid}`);
+  assert.deepEqual(detail.body.versions.map((v: any) => v.version), [2, 1]);
+  assert.deepEqual(detail.body.versions[0].by, { uid: 'u-super', name: 'Sue Super' });
+  assert.equal(detail.body.agents[0].company.name, 'Acme');
+  assert.equal(detail.body.agents[0].agents[0].uid, CFO);
+  assert.match(detail.body.skill.skill_md, /version: 2/);
+
+  // Retired: it stays where it is pinned and cannot be added again.
+  // D4160: an Axal skill is retired from HQ with its replacement (`admin_hq_skills.ts`), not here.
+  assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { status: 'retired' })).body.error, 'replacement_required');
+  w.db.prepare("UPDATE agent_skills SET status = 'retired' WHERE uid = ?").run(uid);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200, 'kept at its version');
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${PROJECT_CFO}/skills`, { skills: [uid] })).body.error, 'skill_retired');
+  assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.error, 'retired');
+});
+
+test('D1612: an agent gets a skill only of its role, with its approved tools, from its company, by an editor', async () => {
+  const w = world();
+  const forIr = await published(w, update({ name: 'Investor CRM digest', roles: ['investor_relations'], tools: ['hubspot.read_contacts'] }));
+  const needsMore = await published(w, update({ name: 'Pipeline read', roles: ['investor_relations', 'cfo'], tools: ['hubspot.read_deals'] }));
+  const acme = await published(w, update({ scope: 'company', company: 'co-uid-1', name: 'Acme close', roles: ['cfo'] }), EDITOR);
+  const draft = (await call(w, SUPER, 'POST', '/skills', update({ name: 'Never published' }))).body.skill.uid;
+  const links = () => Number((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links').get() as any).n);
+
+  // A2 (#3956)'s codes: role_mismatch and tool_not_approved are 422, the tool named.
+  const role = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [forIr] });
+  assert.deepEqual([role.status, role.body.error], [422, 'role_mismatch']);
+  const tools = await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [needsMore] });
+  assert.deepEqual([tools.status, tools.body.error, tools.body.tool], [422, 'tool_not_approved', { key: 'hubspot.read_deals', label: 'hubspot.read_deals' }]);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [forIr] })).status, 200, 'its granted tool');
+  const savedLinks = w.db.prepare('SELECT * FROM agent_skill_links').all();
+  const hq = await call(w, ADMIN, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] });
+  assert.deepEqual([hq.status, hq.body.error], [403, 'not_manager'], 'HQ has no editing seat');
+  assert.deepEqual(w.db.prepare('SELECT * FROM agent_skill_links').all(), savedLinks);
+  const crossCompany = await call(w, OTHER_EDITOR, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] });
+  assert.deepEqual([crossCompany.status, crossCompany.body.error], [404, 'not_found']);
+  assert.deepEqual(w.db.prepare('SELECT * FROM agent_skill_links').all(), savedLinks);
+  // A project outside any company takes HQ skills only, even from its own founder.
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${SOLO_CFO}/skills`, { skills: [acme] })).body.error, 'not_found');
+  w.db.prepare("INSERT INTO user_company_links (uid, user_id, company_id, role_in_company) VALUES (?, ?, 1, 'Admin')").run('l-super-acme', SUPER);
+  assert.equal((await call(w, SUPER, 'PUT', `/agents/${CFO}/skills`, { skills: [draft] })).body.error, 'version_not_published');
+  assert.deepEqual([(await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, (await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).body.error], [403, 'not_manager']);
+  assert.equal((await call(w, STRANGER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, 404);
+  assert.equal(links(), 1);
+  // A project agent inside Acme gets Acme's skills.
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${PROJECT_CFO}/skills`, { skills: [acme] })).status, 200);
+  // Setting the list replaces it.
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [] })).body.skills.length, 0);
+  assert.equal(links(), 1);
+  assert.deepEqual(missingTools(['a.b', 'c.d'], [{ integration_uid: 'x', tool: 'c.d' }]), ['a.b']);
+});
+
+test('D1612: assigning one skill to several agents writes each it can and names each it cannot (A2, #3956)', async () => {
+  const w = world();
+  const uid = await published(w, update({ roles: ['cfo'] }));
+  const first = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO, IR] });
+  assert.equal(first.status, 200, 'one agent never refuses the call');
+  assert.deepEqual([first.body.added, first.body.refused], [1, [{ agent_uid: IR, code: 'role_mismatch' }]]);
+  // Another company's agent reads as no agent; a member who is not an editor is told so.
+  assert.deepEqual((await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [GLOBEX_CFO] })).body.refused, [{ agent_uid: GLOBEX_CFO, code: 'not_found' }]);
+  assert.deepEqual((await call(w, MEMBER, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO] })).body.refused, [{ agent_uid: CFO, code: 'not_manager' }]);
+  const ok = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agents: [CFO, PROJECT_CFO] });
+  assert.deepEqual([ok.status, ok.body.added, ok.body.refused, ok.body.used_by], [200, 1, [], 2], 'one already had it');
+  assert.equal((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1')).body.hq[0].used_by, 2);
+});
+
+test('D1612: the agent\'s radar is the 8 axes on the person\'s scale, "Not recorded" where nothing tags an axis', async () => {
+  const w = world();
+  const a = await published(w, update({ roles: ['cfo'], tags: [{ slug: 'investor_reporting', level: 'proficient' }, { slug: 'investor_relations', level: 'working' }] }));
+  const b = await published(w, update({ name: 'FP&A pass', roles: ['cfo'], tags: [{ slug: 'fp_and_a', level: 'expert' }] }));
+  // A2 (#3956): no skills is no radar ("Not recorded"), never eight zeros; an axis no tag reaches is null.
+  const none = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
+  assert.equal(none.body.radar, null);
+  await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [a, b] });
+  const got = (await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`)).body.radar.axes;
+  assert.equal(got.length, 8);
+  const radar = Object.fromEntries(got.map((x: any) => [x.slug, x.level]));
+  assert.equal(radar.finance_ops, 5, 'the highest level on the axis');
+  assert.equal(radar.capital_network, 2);
+  assert.equal(radar.product, null);
+  const pure = skillsRadar([{ slug: 'x', level: 'expert' }], new Map([['x', 'design']]));
+  assert.equal(pure.find((p) => p.slug === 'design')!.value.available, true);
+});
+
+test('D1612: a pasted SKILL.md lands as a draft, round-trips, and an unreadable one is refused', async () => {
+  const w = world();
+  const tax = { taxonomy: new Set(['investor_reporting', 'investor_relations']), roleKeys: new Set(['cfo', 'investor_relations']) };
+  const d = (checkDraft(update(), tax) as any).draft;
+  const md = toSkillMd(d, 3);
+  const back = checkDraft(parseSkillMd(md), tax) as any;
+  assert.equal(back.ok, true);
+  assert.deepEqual({ ...back.draft }, { ...d });
+  assert.equal(parseSkillMd('no frontmatter here'), null);
+  assert.equal(parseSkillMd('---\nname: "x"\n---\n1. a'), null, 'no description');
+  assert.equal(parseSkillMd('---\nname: "x"\ndescription: !!python/object "y"\n---\n'), null, 'a YAML tag is not a scalar');
+  const quoted = parseSkillMd('---\nname: "A \\"quoted\\" name"\ndescription: "d"\nroles: [cfo]\ntools: []\noutput: brief\nhomepage: "ignored"\ntaxonomy:\n  - { slug: "investor_reporting", level: aware }\n---\n- Step one\n- Step two\n') as any;
+  assert.equal(quoted.name, 'A "quoted" name');
+  assert.deepEqual(quoted.steps, ['Step one', 'Step two']);
+  assert.equal('homepage' in quoted, false);
+
+  const made = await call(w, EDITOR, 'POST', '/skills', { scope: 'company', company: 'co-uid-1', skill_md: md });
+  assert.equal(made.status, 201, made.text);
+  assert.equal(made.body.skill.status, 'draft');
+  assert.equal(made.body.skill.name, 'Draft the monthly investor update');
+  assert.equal((await call(w, EDITOR, 'POST', '/skills', { scope: 'company', company: 'co-uid-1', skill_md: 'hello' })).body.error, 'skill_md_invalid');
+  const badTool = toSkillMd({ ...d, tools: ['not a tool'] }, 1);
+  assert.equal((await call(w, EDITOR, 'POST', '/skills', { scope: 'company', company: 'co-uid-1', skill_md: badTool })).body.error, 'tools_invalid', 'an import passes the same checks');
+});
+
+test('D1612: every route is off until TEAM_AGENTS_ENABLED is "true"', async () => {
+  const w = world();
+  w.env.TEAM_AGENTS_ENABLED = 'false';
+  assert.equal((await call(w, MEMBER, 'GET', '/skills')).body.error, 'team_agents_off');
+  assert.equal((await call(w, EDITOR, 'GET', `/agents/${CFO}/skills`)).status, 404);
+});
+
+test('#4733: a skill written without roles is held to every agent role; an explicit empty list is still refused', async () => {
+  const w = world();
+  const { roles: _drop, ...noRoles } = update({ scope: 'company', company: 'co-uid-1', name: 'No roles given' });
+  const made = await call(w, EDITOR, 'POST', '/skills', noRoles);
+  assert.equal(made.status, 201);
+  const page = await call(w, EDITOR, 'GET', `/skills/${made.body.skill.uid}`);
+  assert.equal(page.status, 200);
+  assert.equal((await call(w, EDITOR, 'POST', '/skills', { ...noRoles, name: 'Empty list', roles: [] })).body.error, 'roles_missing');
+  // A pasted SKILL.md with no roles line lands as a draft held to every role.
+  const md = '---\nname: "Pasted one"\ndescription: "Reads it."\noutput: draft\ntaxonomy:\n  - fp_and_a: working\n---\n1. Read it';
+  const pasted = await call(w, EDITOR, 'POST', '/skills', { scope: 'company', company: 'co-uid-1', skill_md: md });
+  assert.ok([201, 400].includes(pasted.status));
+  assert.notEqual(pasted.body.error, 'roles_missing');
+});

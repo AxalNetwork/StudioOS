@@ -1,0 +1,58 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, D1 tables for users (with roles/kyc_status), referrals, commissions, payouts, deals/projects, user_preferences, match_scores, workflows, workflow_tasks, shared_services_log, referral_chains, syndicates, syndicate_members, and marketplace_profiles from all previous builds. We also have RBAC middleware and full Replit AI integration.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add a complete **Partner-specific Dashboard** that serves as the central hub for all users with these exact requirements:
+
+1. **No new database tables needed** — reuse all existing tables.
+
+2. **Backend Endpoints (add to main.py)**  
+   - GET /api/dashboard (returns a single JSON payload with everything below, filtered by current user’s role via RBAC)
+     • proprietary_deal_flow: list of recent deals + their AI match_scores
+     • ai_scored_opportunities: top 10 co-investment matches + referral scores
+     • syndication_tools: user’s active syndicates, open syndicates they can join, and AI-recommended syndicates
+     • performance_analytics: total commissions earned, compounding referral earnings, payout history, network reach (levels + total referred), portfolio metrics
+   - All data must be real-time (fresh queries to existing tables + Replit AI for any on-the-fly summaries).
+
+3. **Role-Based Dashboard Personalization (RBAC)**  
+   - Investors/LPs: heavy focus on deal flow, co-investment matches, syndicates they can join, and returns analytics.
+   - Operators/Advisors: focus on marketplace opportunities, Studio Ops workflows assigned to them, and strategic oversight cards.
+   - Admins: full view + quick links to admin tools.
+
+4. **Frontend Dashboard (/dashboard.html — make this the default logged-in page)**  
+   - Modern, clean layout with sidebar navigation (Home, Matches, Syndicates, Marketplace, Studio Ops, Refer & Earn, Payouts, Network Graph).
+   - Top section: Welcome + role badge + quick stats (total earnings this month, active syndicates, AI score average).
+   - Four main cards/sections (use tabs or grid layout):
+     • **Proprietary Deal Flow** — scrollable list of cards (deal title, AI score badge, traction metrics, “View Details” button).
+     • **AI-Scored Opportunities** — grid of recommended co-investments and referral opportunities with score + one-sentence AI explanation (pull from match_scores).
+     • **Syndication Tools** — “Create Syndicate” button + list of open syndicates + “Join” buttons + AI “Recommended for You” section.
+     • **Performance Analytics** — 
+       • Charts (use Chart.js via CDN): earnings over time, referral chain growth, commission breakdown.
+       • Key metrics: total earned, pending payouts, network size, top referrers in your chain.
+   - Fully interactive: use fetch() to call /api/dashboard and update everything dynamically.
+   - Mobile-responsive and dark-mode friendly (match existing Axal branding).
+
+5. **Additional Polish**  
+   - “Refresh Scores” button that triggers Replit AI re-scoring for opportunities.
+   - Notifications bell (simple in-memory or D1-backed) for new deals, syndicate updates, or commission accruals.
+   - Direct links from dashboard cards to existing pages (/matches.html, /syndicates.html, /network.html, /studio-ops.html, etc.).
+   - Loading spinners and error handling.
+
+6. **Security & Best Practices**  
+   - Every API call protected by existing RBAC middleware.
+   - Rate limit dashboard endpoint.
+   - Cache dashboard payload for 30 seconds if needed for performance.
+   - Audit log dashboard views in shared_services_log for admins.
+
+Build this step-by-step:  
+1. First add the unified /api/dashboard backend endpoint that aggregates all existing data.  
+2. Then create the new dashboard.html frontend page with layout and cards.  
+3. Then wire up the dynamic fetch() calls and charts (Chart.js).  
+4. Finally add role-based personalization and polish (notifications, refresh button, sidebar).  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

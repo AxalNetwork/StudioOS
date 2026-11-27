@@ -1,0 +1,144 @@
+// D557 — authoring the Learning center: items, courses, modules and lessons;
+// D559's exercises and exams, D558's programs. Super Admin only. Worker:
+// routes/admin_learning*.ts, mounted at /api/admin/learning.
+import { LONG_TIMEOUT_MS, request } from '../api.js';
+
+const enc = encodeURIComponent;
+const body = (b) => JSON.stringify(b ?? {});
+
+/**
+ * D561 — one video part's deadline. A part takes as long as the uploader's
+ * connection needs, not the server, so it gets what a 1 Mbit/s line needs for
+ * its size, and never less than `LONG_TIMEOUT_MS`. The 30-second default would
+ * cut a 10 MB part off on anything slower than about 2.7 Mbit/s. A size that is
+ * not a number gets the long deadline, never none.
+ */
+const partDeadlineMs = (bytes) => {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return LONG_TIMEOUT_MS;
+  return Math.max(LONG_TIMEOUT_MS, Math.ceil((n * 8) / 1_000_000) * 1000);
+};
+
+export const adminLearningApi = {
+  listItems: () => request('/admin/learning/items'),
+  createItem: (b) => request('/admin/learning/items', { method: 'POST', body: body(b) }),
+  getItem: (uid) => request(`/admin/learning/items/${enc(uid)}`),
+  // D4181 (#4181, lr17): one video's analytics — views, completion, median watch time, drop-off; under five viewers, none.
+  itemAnalytics: (uid) => request(`/admin/learning/items/${enc(uid)}/analytics`),
+  updateItem: (uid, b) => request(`/admin/learning/items/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishItem: (uid) => request(`/admin/learning/items/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishItem: (uid) => request(`/admin/learning/items/${enc(uid)}/unpublish`, { method: 'POST' }),
+  archiveItem: (uid) => request(`/admin/learning/items/${enc(uid)}/archive`, { method: 'POST' }),
+
+  // D561 — upload a video to R2 in parts (routes/learning_video.ts). Start
+  // with the type and size; send each Blob slice of `part_size` with its
+  // number; complete with every {part_number, etag}; or abort. A part's
+  // deadline follows its size (`partDeadlineMs`), and `signal` lets the
+  // editor's Cancel stop the part in flight.
+  startVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads`, { method: 'POST', body: body(b) }),
+  uploadVideoPart: (uid, { key, upload_id, part_number }, blob, { signal, timeoutMs } = {}) => request(
+    `/admin/learning/items/${enc(uid)}/video/uploads/part?key=${enc(key)}&upload_id=${enc(upload_id)}&part_number=${enc(part_number)}`,
+    {
+      method: 'PUT', body: blob, headers: { 'Content-Type': 'application/octet-stream' },
+      signal, timeoutMs: timeoutMs === undefined ? partDeadlineMs(blob?.size) : timeoutMs,
+    },
+  ),
+  completeVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/complete`, { method: 'POST', body: body(b) }),
+  abortVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/abort`, { method: 'POST', body: body(b) }),
+
+  // #4176 (D4176) — the item's video on Cloudflare Stream (routes/learning_stream.ts). Every call answers
+  // 503 stream_unavailable until the owner turns Stream on. A file up to 200 MB is POSTed to `upload_url`;
+  // a larger one goes through tus at `streamTusEndpoint(uid)` (503 stream_tus_unavailable without the API token).
+  //   startStreamUpload(uid, { size_bytes, content_type, name? }) → 201 { stream_uid, protocol: 'post', upload_url, expires_at }
+  //   streamStatus(uid)            → { current, videos: [{ stream_uid, origin, state, error_code, error_message, duration_seconds, captions }] }
+  //   abandonStreamUpload(uid, s)  → { abandoned: true }; 409 stream_in_use for the video members watch
+  //   generateCaptions(uid, lang)  → 202 { caption }; uploadCaptions(uid, lang, vttText); deleteCaptions(uid, lang)
+  //   setStreamThumbnail(uid, pct) → { video }; chapters are `updateItem(uid, { chapters: [{ start_seconds, title }] })`
+  startStreamUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/stream/uploads`, { method: 'POST', body: body(b) }),
+  streamTusEndpoint: (uid) => `/api/admin/learning/items/${enc(uid)}/stream/uploads/tus`,
+  streamStatus: (uid) => request(`/admin/learning/items/${enc(uid)}/stream`),
+  abandonStreamUpload: (uid, streamUid) => request(`/admin/learning/items/${enc(uid)}/stream/${enc(streamUid)}/abandon`, { method: 'POST' }),
+  generateCaptions: (uid, language) => request(`/admin/learning/items/${enc(uid)}/stream/captions/generate`, { method: 'POST', body: body({ language }) }),
+  uploadCaptions: (uid, language, vtt) => request(`/admin/learning/items/${enc(uid)}/stream/captions/${enc(language)}`, {
+    method: 'PUT', body: vtt, headers: { 'Content-Type': 'text/vtt' },
+  }),
+  deleteCaptions: (uid, language) => request(`/admin/learning/items/${enc(uid)}/stream/captions/${enc(language)}`, { method: 'DELETE' }),
+  setStreamThumbnail: (uid, pct) => request(`/admin/learning/items/${enc(uid)}/stream/thumbnail`, { method: 'PATCH', body: body({ thumbnail_pct: pct }) }),
+  // #4179 (D4179) — copy an item's uploaded file to Stream, one item a call. The content read (`listItems`) carries
+  // each uploaded item's `stream_copy`: { state: 'none' | 'copying' | 'verified' | 'failed', … } for Copy to Stream,
+  // Copying…, Verified and Copy failed (with the route's words). 409 not_r2 / already_copied; 502 stream_copy_failed.
+  //   migrateVideoToStream(uid) → 202 { copy: { stream_uid, state: 'copying' } }
+  migrateVideoToStream: (uid) => request('/admin/learning/stream/migrations', { method: 'POST', body: body({ item_uid: uid }) }),
+
+  listCourses: () => request('/admin/learning/courses'),
+  // D4650 (#4650, part 4): the catalogue's coverage of the founder, investor, advisor and partner journeys.
+  coverage: () => request('/admin/learning/coverage'),
+  createCourse: (b) => request('/admin/learning/courses', { method: 'POST', body: body(b) }),
+  getCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}`),
+  updateCourse: (uid, b) => request(`/admin/learning/courses/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // #3935: a course's drawn cover (LE8): one quote for the draw and its checks, then the draw.
+  courseCoverQuote: (uid, prompt) => request(`/admin/learning/courses/${enc(uid)}/cover/quote`, { method: 'POST', body: body({ prompt }) }),
+  courseCoverDraw: (uid, prompt) => request(`/admin/learning/courses/${enc(uid)}/cover/draw`, { method: 'POST', body: body({ prompt }) }),
+  publishCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}/unpublish`, { method: 'POST' }),
+  archiveCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}/archive`, { method: 'POST' }),
+
+  addModule: (courseUid, b) => request(`/admin/learning/courses/${enc(courseUid)}/modules`, { method: 'POST', body: body(b) }),
+  reorderModules: (courseUid, order) => request(`/admin/learning/courses/${enc(courseUid)}/modules/order`, { method: 'POST', body: body({ order }) }),
+  updateModule: (uid, b) => request(`/admin/learning/modules/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  deleteModule: (uid) => request(`/admin/learning/modules/${enc(uid)}`, { method: 'DELETE' }),
+
+  addLesson: (moduleUid, b) => request(`/admin/learning/modules/${enc(moduleUid)}/lessons`, { method: 'POST', body: body(b) }),
+  reorderLessons: (moduleUid, order) => request(`/admin/learning/modules/${enc(moduleUid)}/lessons/order`, { method: 'POST', body: body({ order }) }),
+  updateLesson: (uid, b) => request(`/admin/learning/lessons/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  deleteLesson: (uid) => request(`/admin/learning/lessons/${enc(uid)}`, { method: 'DELETE' }),
+
+  // D559 — exercises, exams and reviews.
+  listExercises: () => request('/admin/learning/exercises'),
+  createExercise: (b) => request('/admin/learning/exercises', { method: 'POST', body: body(b) }),
+  getExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}`),
+  updateExercise: (uid, b) => request(`/admin/learning/exercises/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}/unpublish`, { method: 'POST' }),
+  archiveExercise: (uid) => request(`/admin/learning/exercises/${enc(uid)}/archive`, { method: 'POST' }),
+  // { status: 'accepted' | 'needs_work', feedback }
+  reviewSubmission: (uid, b) => request(`/admin/learning/submissions/${enc(uid)}/review`, { method: 'POST', body: body(b) }),
+
+  listExams: () => request('/admin/learning/exams'),
+  createExam: (b) => request('/admin/learning/exams', { method: 'POST', body: body(b) }),
+  getExam: (uid) => request(`/admin/learning/exams/${enc(uid)}`),
+  updateExam: (uid, b) => request(`/admin/learning/exams/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/unpublish`, { method: 'POST' }),
+  archiveExam: (uid) => request(`/admin/learning/exams/${enc(uid)}/archive`, { method: 'POST' }),
+  addQuestion: (examUid, b) => request(`/admin/learning/exams/${enc(examUid)}/questions`, { method: 'POST', body: body(b) }),
+  updateQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // D4650 (#4650, part 3): a question's explanation and revision links, allowed after the first attempt.
+  explainQuestion: (uid, b) => request(`/admin/learning/questions/${enc(uid)}/explanation`, { method: 'PUT', body: body(b) }),
+  deleteQuestion: (uid) => request(`/admin/learning/questions/${enc(uid)}`, { method: 'DELETE' }),
+
+  // D558 — programs: contents, assigned admins and enrolments.
+  listPrograms: () => request('/admin/learning/programs'),
+  createProgram: (b) => request('/admin/learning/programs', { method: 'POST', body: body(b) }),
+  getProgram: (uid) => request(`/admin/learning/programs/${enc(uid)}`),
+  // name, region, description, enrolment ('invite'|'open'), status ('draft'|'published'|'archived')
+  updateProgram: (uid, b) => request(`/admin/learning/programs/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // The full ordered list: [{ subject_kind: 'course'|'item'|'exam'|'exercise', subject_uid }].
+  setProgramContents: (uid, contents) => request(`/admin/learning/programs/${enc(uid)}/contents`, { method: 'PUT', body: body({ contents }) }),
+  assignProgramAdmin: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/admins`, { method: 'POST', body: body({ user_uid: userUid }) }),
+  unassignProgramAdmin: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/admins/${enc(userUid)}`, { method: 'DELETE' }),
+  enrolInProgram: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/enrollments`, { method: 'POST', body: body({ user_uid: userUid }) }),
+  unenrolFromProgram: (uid, userUid) => request(`/admin/learning/programs/${enc(uid)}/enrollments/${enc(userUid)}`, { method: 'DELETE' }),
+
+  // D560 — webinars.
+  listWebinars: () => request('/admin/learning/webinars'),
+  createWebinar: (b) => request('/admin/learning/webinars', { method: 'POST', body: body(b) }),
+  getWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}`),
+  updateWebinar: (uid, b) => request(`/admin/learning/webinars/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  publishWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/publish`, { method: 'POST' }),
+  unpublishWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/unpublish`, { method: 'POST' }),
+  cancelWebinar: (uid) => request(`/admin/learning/webinars/${enc(uid)}/cancel`, { method: 'POST' }),
+  // itemUid: a video item's uid, or null to detach.
+  setWebinarRecording: (uid, itemUid) => request(`/admin/learning/webinars/${enc(uid)}/recording`, { method: 'PUT', body: body({ item_uid: itemUid }) }),
+  recordAttendance: (uid, userUid, attended) => request(`/admin/learning/webinars/${enc(uid)}/registrations/${enc(userUid)}`, { method: 'PATCH', body: body({ attended }) }),
+};

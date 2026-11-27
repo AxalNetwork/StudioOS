@@ -1,0 +1,248 @@
+# Personal Advisor: fullscreen mode + Worker-AI voice-to-text
+
+## Context
+
+The Personal Advisor today (`frontend/src/components/advisor/PersonalAdvisor.jsx`) lets users collapse the widget to a small floating pill ("Minimise to bubble"). The user wants to drop that pattern and replace it with the opposite gesture: a **fullscreen** option that takes the chat over the full viewport. The fullscreen view must offer two clear ways to return to the dashboard. In addition, the Composer (input bar) gains a **mic button** that records audio, ships it to a new Cloudflare Workers AI endpoint, and drops the transcript back into the textarea.
+
+The deliverable is a set of self-contained Replit prompts the user can hand off one at a time.
+
+User-confirmed decisions:
+- Both exit buttons in fullscreen perform the same action — exit fullscreen back to the embedded card on the dashboard. Two visually distinct buttons, one underlying handler.
+- Voice capture uses `MediaRecorder` in the browser → base64 → POST to a new worker route → Workers AI Whisper (`@cf/openai/whisper-large-v3-turbo`) → return text.
+- Task prompts are decomposed into one prompt per task (4 prompts total).
+
+## Architecture compliance
+
+Per `/home/user/StudioOS/CLAUDE.md`:
+- New backend goes in `cloudflare-worker/src/routes/`. The Worker is the production API at `axal.vc`.
+- Workers AI is already bound (`wrangler.toml` lines 183-184, `[ai] binding = "AI"`). No config change needed.
+- Frontend ships from `frontend/` to Cloudflare Pages.
+- `backend/` (FastAPI) is dev-only — no changes there.
+- Drift test (`npm run test:drift`) enforces that every `api.advisor.*` method has a matching worker route.
+
+## Critical files to modify
+
+| File | Change |
+| --- | --- |
+| `frontend/src/components/advisor/PersonalAdvisor.jsx` | Drop `minimised` state and `MinimisedBubble`. Add `viewMode: 'normal' \| 'fullscreen'`. Add fullscreen overlay render branch. Replace `<Minus>` header button with `<Maximize2>`. Add mic button in `Composer`. |
+| `frontend/src/lib/api.js` | Add `api.advisor.transcribe(audio_base64, mime)` inside the existing `advisor:` block (~line 509-545). |
+| `cloudflare-worker/src/routes/advisor.ts` | Add `POST /transcribe` handler. Reuse `requireAuth(c)` and the existing Hono app (already mounted at `/api/advisor` in `cloudflare-worker/src/index.ts:452`). |
+
+No changes to `wrangler.toml`, no new route file, no `backend/` changes.
+
+## Implementation outline
+
+### 1. State model in PersonalAdvisor.jsx
+Replace `const [minimised, setMinimised] = useState(...)` (line 79) with:
+```js
+const [viewMode, setViewMode] = useState(
+  persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal'
+);
+```
+Migrate the old localStorage shape gracefully — if `persisted.minimised === true` is present from a previous session, just default to `'normal'` (the bubble is gone). Persist as `{ viewMode, conversation_id }` under the same `'advisor:state'` key (line 47).
+
+Delete `MinimisedBubble` (lines 663-677). Delete the `if (minimised) return <MinimisedBubble … />` branch at line 532.
+
+### 2. Header button
+In `Header` (lines 679-704), swap the minimize icon for a fullscreen icon:
+- Normal mode → `<Maximize2 size={16} />`, tooltip "Open fullscreen", calls `setViewMode('fullscreen')`.
+- Fullscreen mode renders its own header (next section); the embedded card's header reverts to its current look.
+
+`Maximize2` and `Minimize2` are already in lucide-react — add them to the import at line 36.
+
+### 3. Fullscreen overlay
+When `viewMode === 'fullscreen'`, replace the inline render with a portal-style overlay using the existing pattern from `PaywallModal.jsx` and `KeyboardShortcutsOverlay.jsx`:
+```jsx
+<div role="dialog" aria-modal="true"
+     className="fixed inset-0 z-[100] bg-white dark:bg-gray-900 flex flex-col print:hidden">
+  <FullscreenHeader onExit={() => setViewMode('normal')} … />
+  <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
+    {/* same Transcript + CurrentQuestion + Composer + right rail aside */}
+  </div>
+</div>
+```
+
+`FullscreenHeader` mirrors the existing `Header` (persona, progress) but has **two exit buttons** on the right, both calling `setViewMode('normal')`:
+- Primary: `<button>… <LayoutDashboard size={14}/> Back to dashboard</button>` (violet, filled)
+- Secondary: `<button>… <Minimize2 size={14}/> Normal view</button>` (outlined)
+
+Wire `useEscapeClose(() => setViewMode('normal'))` for the keyboard.
+
+Reuse the existing Transcript / CurrentQuestion / Composer / right-rail aside — pass the same props. The only layout difference is height (`flex-1` instead of `min-h-[420px]`/`max-h-[60vh]`).
+
+### 4. Voice-to-text in Composer
+Extend `Composer` (lines 864-921). Add a mic button between the textarea and the `SkipForward` button, mirroring its styling.
+
+Implementation sketch:
+```js
+const [recState, setRecState] = useState('idle'); // 'idle' | 'recording' | 'transcribing' | 'unsupported'
+const recRef = useRef(null);   // MediaRecorder
+const chunksRef = useRef([]);
+
+async function startRec() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mr = new MediaRecorder(stream);
+    chunksRef.current = [];
+    mr.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
+    mr.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
+      const b64 = await blobToBase64(blob);
+      setRecState('transcribing');
+      try {
+        const { text } = await api.advisor.transcribe(b64, blob.type);
+        if (text) setInput((cur) => (cur ? `${cur} ${text}` : text));
+      } finally { setRecState('idle'); }
+    };
+    mr.start();
+    recRef.current = mr;
+    setRecState('recording');
+  } catch {
+    setRecState('unsupported');
+  }
+}
+```
+Button rendering: `Mic` icon (lucide) gray when idle, red + `animate-pulse` when recording, `Loader2 animate-spin` when transcribing, disabled when `unsupported`. Tooltip describes the state.
+
+### 5. API client method
+In `frontend/src/lib/api.js`, inside the `advisor:` block (around line 542 after `toolAuto`):
+```js
+transcribe: (audio_base64, mime) =>
+  request('/advisor/transcribe', {
+    method: 'POST',
+    body: JSON.stringify({ audio_base64, mime: mime || 'audio/webm' }),
+  }),
+```
+
+### 6. Worker endpoint
+In `cloudflare-worker/src/routes/advisor.ts`, mirroring the existing route style:
+```ts
+advisor.post('/transcribe', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({})) as { audio_base64?: string; mime?: string };
+  if (!body.audio_base64) return c.json({ error: 'audio_base64 required' }, 400);
+
+  // Decode base64 → Uint8Array (Whisper accepts a byte array)
+  const bin = atob(body.audio_base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  const out: any = await c.env.AI.run('@cf/openai/whisper-large-v3-turbo', {
+    audio: [...bytes],
+  });
+  return c.json({ text: (out && (out.text ?? out.transcription)) || '' });
+});
+```
+The route is mounted at `/api/advisor/transcribe` because `app.route('/api/advisor', advisorRoutes)` is already wired in `cloudflare-worker/src/index.ts:452`.
+
+## Verification
+
+1. Frontend dev: `cd frontend && npm run dev`. Log in, open dashboard.
+   - Header now shows a `Maximize2` icon (no more minus). Click → overlay covers viewport.
+   - In fullscreen: both "Back to dashboard" and "Normal view" buttons exit to the embedded card; Esc also exits.
+   - Reload page → `viewMode` persists in localStorage `advisor:state`.
+2. Worker dev: `npx wrangler dev` from repo root.
+   - `curl -X POST localhost:8787/api/advisor/transcribe -H 'Authorization: Bearer …' -d '{"audio_base64":"…","mime":"audio/webm"}'` returns `{ text: "…" }`.
+3. End-to-end mic: click mic → grant permission → speak 3-5 words → click mic again to stop → transcript appears in textarea within ~2s.
+4. Drift test: `npm run test:drift` must pass — confirms `api.advisor.transcribe` has a matching `/advisor/transcribe` worker route.
+5. Edge cases: deny mic permission → button shows disabled state + tooltip; reload page → state survives; on mobile Safari the recording mime may be `audio/mp4` — Whisper accepts both.
+
+---
+
+## Replit task prompts (paste one at a time)
+
+### Prompt 1 — Refactor state: drop minimize-to-bubble, add view mode
+
+> In `frontend/src/components/advisor/PersonalAdvisor.jsx`, replace the minimize-to-bubble pattern with a fullscreen-view-mode state machine.
+>
+> Changes:
+> 1. Delete the `MinimisedBubble` subcomponent (lines ~663-677) and remove its import-side icon (`Sparkles` may still be used elsewhere — keep it).
+> 2. Replace `const [minimised, setMinimised] = useState(...)` at line ~79 with `const [viewMode, setViewMode] = useState(persisted.viewMode === 'fullscreen' ? 'fullscreen' : 'normal')`. Migration: if the persisted object only has the old `minimised` field, ignore it — default to `'normal'`.
+> 3. Update the localStorage write at line ~123 to persist `{ viewMode, conversation_id }` under the same `'advisor:state'` key.
+> 4. Delete the `if (minimised) return <MinimisedBubble … />` render branch at line ~532.
+> 5. In `Header`, replace the `<Minus>` / `<X>` button with a `<Maximize2 size={16} />` button (import `Maximize2` from `lucide-react`). Tooltip: "Open fullscreen". On click, call `setViewMode('fullscreen')`. Keep the same hover styles.
+>
+> Don't add the fullscreen overlay yet — that's the next task. Just verify the dashboard still renders the embedded advisor card and clicking the new button is a no-op (logs nothing).
+>
+> Verify: `cd frontend && npm run dev`, open `/dashboard`, confirm the advisor still renders inline, the maximize icon appears, and the page does not crash when clicking it.
+
+### Prompt 2 — Build the fullscreen overlay with two exit buttons
+
+> In `frontend/src/components/advisor/PersonalAdvisor.jsx`, add the fullscreen overlay rendered when `viewMode === 'fullscreen'`.
+>
+> Implementation:
+> 1. Add a new `FullscreenView` subcomponent next to `Header`. It receives the same props the main component already passes around (persona, progress, messages, tutor, question, busy, input, setInput, handleSend, skip, closeTutor, openTutor, focusSection, sectionStats, pickFocus, refreshProgress, labState, progressBumpToken, pendingEvidence). Reuse the existing `Transcript`, `CurrentQuestion`, `Composer`, and `AdvisorProgressWidget` exactly as the inline card does.
+> 2. Outer container: `<div role="dialog" aria-modal="true" className="fixed inset-0 z-[100] bg-white dark:bg-gray-900 flex flex-col print:hidden">`. Inner two-column grid `grid-cols-1 lg:grid-cols-3 flex-1 overflow-hidden`, chat column `lg:col-span-2 flex flex-col min-h-0`. Right rail `aside` reuses the same classes as the inline version but drops `max-h-[640px]` and `sticky` — fullscreen lets it scroll naturally.
+> 3. Fullscreen header (above the grid): same persona + progress display as the inline `Header`, but the right side has **two pill buttons** instead of the maximize icon:
+>    - Primary: `<button><LayoutDashboard size={14}/> Back to dashboard</button>` — violet filled, calls `setViewMode('normal')`.
+>    - Secondary: `<button><Minimize2 size={14}/> Normal view</button>` — outlined violet, also calls `setViewMode('normal')`.
+>    Both call the same handler — the two buttons are user-facing parity for the same action.
+> 4. Add `useEscapeClose(() => setViewMode('normal'))` inside the fullscreen render so Esc exits.
+> 5. In the main render, when `viewMode === 'fullscreen'` return `<FullscreenView … />` instead of the inline card.
+>
+> Verify: open the advisor, click the maximize icon → overlay covers the viewport with the same chat + right rail; click either exit button → returns to the embedded card; press Esc → also returns; reload page after entering fullscreen → state persists.
+
+### Prompt 3 — Add Worker AI Whisper transcription endpoint
+
+> In `cloudflare-worker/src/routes/advisor.ts`, add a `POST /transcribe` handler that runs Cloudflare Workers AI Whisper on a base64-encoded audio blob.
+>
+> Implementation:
+> 1. After the existing route definitions in `advisor.ts`, add:
+>    ```ts
+>    advisor.post('/transcribe', async (c) => {
+>      const user = await requireAuth(c);
+>      const body = await c.req.json().catch(() => ({})) as { audio_base64?: string; mime?: string };
+>      if (!body.audio_base64) return c.json({ error: 'audio_base64 required' }, 400);
+>      const bin = atob(body.audio_base64);
+>      const bytes = new Uint8Array(bin.length);
+>      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+>      const out: any = await c.env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: [...bytes] });
+>      return c.json({ text: (out && (out.text ?? out.transcription)) || '' });
+>    });
+>    ```
+> 2. No change needed in `cloudflare-worker/src/index.ts` — `app.route('/api/advisor', advisorRoutes)` (line ~452) already mounts the new route at `/api/advisor/transcribe`.
+> 3. In `frontend/src/lib/api.js`, inside the existing `advisor:` block (between `toolAuto` at line ~538 and the closing `}`), add:
+>    ```js
+>    transcribe: (audio_base64, mime) =>
+>      request('/advisor/transcribe', {
+>        method: 'POST',
+>        body: JSON.stringify({ audio_base64, mime: mime || 'audio/webm' }),
+>      }),
+>    ```
+>
+> Verify: `npx wrangler dev` from the repo root. With a valid auth cookie/token, POST to `http://localhost:8787/api/advisor/transcribe` with a tiny base64 webm sample → expect `{ text: "…" }` (text may be empty for non-speech audio, but no 500). Also run `npm run test:drift` to confirm the new api method matches the new worker route.
+
+### Prompt 4 — Mic button in the Composer
+
+> In `frontend/src/components/advisor/PersonalAdvisor.jsx`, add a voice-to-text mic button in the `Composer` subcomponent (around lines 864-921).
+>
+> Implementation:
+> 1. Add to the lucide imports: `Mic`.
+> 2. Inside `Composer`, add local state:
+>    ```js
+>    const [recState, setRecState] = useState('idle'); // 'idle' | 'recording' | 'transcribing' | 'unsupported'
+>    const recRef = useRef(null);
+>    const chunksRef = useRef([]);
+>    ```
+> 3. Helper `blobToBase64(blob)` returns a Promise resolving to the base64 string sans the `data:…;base64,` prefix.
+> 4. `startRec()` calls `navigator.mediaDevices.getUserMedia({ audio: true })`, creates a `MediaRecorder`, captures chunks; `onstop` builds a Blob, base64-encodes, calls `api.advisor.transcribe(b64, blob.type)`, and on success appends the returned `text` to the current `input` (`setInput(cur => (cur ? cur + ' ' + text : text))`). Releases the mic via `stream.getTracks().forEach(t => t.stop())`. On any error, set `recState` back to `'idle'` (and `'unsupported'` if `getUserMedia` is missing).
+> 5. `stopRec()` calls `recRef.current?.stop()`.
+> 6. Render the mic button **between the textarea and the `SkipForward` button** (insert after line ~899). Visual states:
+>    - idle: `<Mic size={16} />`, gray text, `title="Record voice"`.
+>    - recording: `<Mic size={16} />`, red (`text-red-600`), with `animate-pulse`, `title="Stop recording"`. Clicking calls `stopRec()`.
+>    - transcribing: `<Loader2 size={16} className="animate-spin" />`, disabled, `title="Transcribing…"`.
+>    - unsupported: disabled, gray, `title="Microphone unavailable"`.
+>    Use the same `p-2 text-gray-500 hover:text-gray-900 disabled:opacity-50` base classes as the Skip button.
+> 7. Disable the mic button while `busy || disabled` (same conditions as Send).
+>
+> Verify: open the advisor, click mic → grant browser permission → speak a sentence → click mic again to stop → transcript appears in the textarea within ~2 seconds. Test denying permission once: button should flip to a disabled/unsupported tooltip and stay there until refresh. Confirm both the embedded card and fullscreen view show the mic button (they share the `Composer`).
+
+---
+
+## Out of scope
+
+- No changes to backend FastAPI (Replit-dev only — never deployed).
+- No new wrangler binding (Workers AI already bound).
+- No analytics / token accounting for transcription spend — can be added later via the existing `aiRouter` if needed.
+- No live (streaming) transcription — single-shot record-then-transcribe per user decision.

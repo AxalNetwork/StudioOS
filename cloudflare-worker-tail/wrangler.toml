@@ -1,0 +1,56 @@
+#:schema node_modules/wrangler/config-schema.json
+# ---------------------------------------------------------------------------
+# Axal StudioOS – Tail Consumer Worker
+# ---------------------------------------------------------------------------
+# Receives `tailEvent` batches from the production `studioos` worker and
+# forwards structured JSON lines to the `studioos-logs` R2 bucket. Operators
+# query historical logs from R2 (Athena / DuckDB / parquet pipeline) — kept
+# 7 years for SOC 2 / regulatory retention. The Cloudflare-native
+# observability dashboard handles short-window debugging; this tail consumer
+# is the long-term archive.
+#
+# Deploy:
+#   cd cloudflare-worker-tail && npx wrangler deploy
+#
+# Producer->consumer wiring is owned ENTIRELY by the root `wrangler.toml`:
+# the `studioos` worker declares `studioos-tail` under BOTH
+# `[[tail_consumers]]` and `[[env.production.tail_consumers]]`. There is NO
+# dashboard step and NO doc to follow after deploy — deploying this worker
+# only publishes the consumer; the root config does the wiring on the next
+# `studioos` deploy. Do NOT bind a tail consumer by hand in the Cloudflare
+# dashboard. A manual binding — especially a REVERSE `studioos-tail` ->
+# `studioos` one — makes Cloudflare invoke `studioos.tail()`, which doesn't
+# exist (the main worker only exports `fetch()`/`scheduled()`), flooding
+# observability with "Handler does not export a tail() function." errors.
+# ---------------------------------------------------------------------------
+
+name = "studioos-tail"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# NOTE: do NOT add `[[tail_consumers]]` here. Cloudflare reads that
+# block on the PRODUCER side only — declaring it on this consumer
+# worker caused Cloudflare to invoke `studioos.tail()` (which doesn't
+# exist; the main worker only exports `fetch()`), generating an
+# "Handler does not export a tail() function." error for every tail
+# batch. The correct producer→consumer wiring lives in the root
+# `wrangler.toml` under BOTH `[[tail_consumers]]` (top-level / plain
+# `wrangler deploy`) and `[[env.production.tail_consumers]]` (the
+# `--env production` deploy path) — kept in lockstep.
+
+[[r2_buckets]]
+binding     = "LOGS"
+bucket_name = "studioos-logs"
+
+[vars]
+# Retention metadata stamped into each log object's R2 metadata. The R2
+# lifecycle rule (configured one-time in the Cloudflare dashboard)
+# transitions to Standard-IA after 90 days and expires after 7 years.
+RETENTION_DAYS = "2555"
+ENVIRONMENT    = "production"
+
+[observability]
+enabled            = true
+head_sampling_rate = 1

@@ -1,0 +1,246 @@
+/**
+ * Task #6 — Google Cloud Identity Platform (Firebase Auth Phone) REST client.
+ *
+ * Plain `fetch()` calls against `identitytoolkit.googleapis.com/v1`.
+ * Two endpoints are used:
+ *   - accounts:sendVerificationCode  → returns sessionInfo (opaque)
+ *   - accounts:signInWithPhoneNumber → consumes (sessionInfo, code), returns
+ *                                       Firebase ID token + localId (firebase_uid)
+ *
+ * Required env:
+ *   - GCIP_API_KEY        Web API key for the Identity Platform project.
+ *
+ * Optional env:
+ *   - GCIP_RECAPTCHA_TOKEN_FALLBACK  Development and synthetic smoke-test
+ *     escape hatch only. Production web sends use a fresh browser token;
+ *     never provision a constant fallback token in production.
+ *
+ * `isGcipConfigured(env)` is async: env `GCIP_API_KEY` wins, then the
+ * admin-managed `provider_oauth_keys` row (`gcip`). Routes that touch
+ * SMS await this and return 503 on a missing key so Settings / Login
+ * degrade gracefully.
+ */
+import type { Env } from '../types';
+import { loadOauthCreds } from './providerOauthKeys';
+import { withDeadline } from '../util/deadline';
+
+interface GcipEnv extends Env {
+  GCIP_API_KEY?: string;
+  GCIP_RECAPTCHA_TOKEN_FALLBACK?: string;
+}
+
+const ENDPOINT = 'https://identitytoolkit.googleapis.com/v1';
+
+/**
+ * Task #6 — Delete a phone factor from the upstream Identity Platform
+ * tenant. Required by the SMS-disable flow: clearing the local row alone
+ * would let an attacker who later compromised the GCIP project recover
+ * the phone→user binding.
+ *
+ * We call the Identity Toolkit Admin endpoint
+ *   POST /v1/projects/{projectId}/accounts:update
+ * with `{localId, deleteProvider:["phone"]}`. This requires a service
+ * account access token (NOT the public Web API key) — operators provision
+ * `GCIP_ADMIN_BEARER_TOKEN` as a worker secret, refreshed by an external
+ * job (the access token's 1h TTL is intentionally NOT auto-refreshed
+ * inside the worker — keeping a service-account JSON in worker secrets
+ * is a larger-blast-radius decision and out of scope here).
+ *
+ * Behaviour when admin creds are absent: returns `{ok:false, code:'admin_unconfigured'}`
+ * and the caller logs + proceeds to wipe local state. This is intentional —
+ * the worst case is a stale phone row in GCIP that no longer maps to a
+ * StudioOS account; it can't authenticate anything on its own.
+ */
+export async function deleteGcipPhone(
+  env: Env,
+  localId: string,
+): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+  if (!localId) return { ok: false, code: 'no_local_id', message: 'No GCIP local_id stored' };
+  let projectId = String(env.GCIP_PROJECT_ID || '').trim();
+  if (!projectId) {
+    try {
+      const cred = await loadOauthCreds(env, 'gcip');
+      projectId = String(cred?.id || '').trim();
+    } catch { /* fall through */ }
+  }
+  if (!projectId || !env.GCIP_ADMIN_BEARER_TOKEN) {
+    return { ok: false, code: 'admin_unconfigured', message: 'GCIP admin credentials not configured' };
+  }
+  try {
+    const url = `https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/accounts:update`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.GCIP_ADMIN_BEARER_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ localId, deleteProvider: ['phone'] }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, code: 'gcip_delete_failed', message: `${res.status}: ${body.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, code: 'gcip_delete_error', message: e?.message || 'unknown' };
+  }
+}
+
+async function loadGcipApiKey(env: Env): Promise<string | null> {
+  const fromEnv = String((env as GcipEnv).GCIP_API_KEY || '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const cred = await loadOauthCreds(env, 'gcip');
+    const secret = String(cred?.secret || '').trim();
+    return secret || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function isGcipConfigured(env: Env): Promise<boolean> {
+  return !!(await loadGcipApiKey(env));
+}
+
+/** D1445: Google's public v2 widget key, never the API credential. */
+export async function getRecaptchaSiteKey(env: Env): Promise<string | null> {
+  try {
+    return await withDeadline((async () => {
+      const key = await loadGcipApiKey(env);
+      if (!key) return null;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+      const source = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+      const cached = await env.RATE_LIMITS.get('gcip-recaptcha-site-key');
+      if (cached) {
+        try {
+          const value = JSON.parse(cached);
+          if (value.source === source && typeof value.siteKey === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value.siteKey)) return value.siteKey;
+        } catch { /* old or corrupt cache entries are refreshed */ }
+      }
+      const response = await fetch(`${ENDPOINT}/recaptchaParams?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(2_000) });
+      if (!response.ok) return null;
+      const body = await response.json() as { recaptchaSiteKey?: unknown };
+      const siteKey = body.recaptchaSiteKey;
+      if (typeof siteKey !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(siteKey)) return null;
+      await env.RATE_LIMITS.put('gcip-recaptcha-site-key', JSON.stringify({ source, siteKey }), { expirationTtl: 3600 });
+      return siteKey;
+    })(), 2_000, 'gcip-site-key');
+  } catch { return null; }
+}
+
+export interface SendCodeResult {
+  ok: true;
+  sessionInfo: string;
+}
+export interface SendCodeError {
+  ok: false;
+  code: 'invalid_phone' | 'quota_exceeded' | 'recaptcha_required' | 'region_blocked' | 'phone_auth_disabled' | 'upstream_error';
+  message: string;
+}
+
+/**
+ * Send the SMS verification code. `phoneE164` must be E.164 (e.g. +14155551234).
+ * `recaptchaToken` is the Firebase reCAPTCHA token from the SPA; pass null
+ * to fall back to GCIP_RECAPTCHA_TOKEN_FALLBACK (dev / smoke-test only).
+ */
+export async function sendVerificationCode(
+  env: Env,
+  phoneE164: string,
+  recaptchaToken: string | null,
+): Promise<SendCodeResult | SendCodeError> {
+  const key = await loadGcipApiKey(env);
+  if (!key) return { ok: false, code: 'upstream_error', message: 'GCIP not configured' };
+  const recaptcha = recaptchaToken || (env as GcipEnv).GCIP_RECAPTCHA_TOKEN_FALLBACK || '';
+  const body: Record<string, unknown> = { phoneNumber: phoneE164 };
+  if (recaptcha) body.recaptchaToken = recaptcha;
+  const res = await fetch(`${ENDPOINT}/accounts:sendVerificationCode?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = `upstream ${res.status}`;
+    let code: SendCodeError['code'] = 'upstream_error';
+    try {
+      const err = await res.json() as { error?: { message?: string } };
+      const m = err?.error?.message || '';
+      message = m || message;
+      if (/REGION/i.test(m)) code = 'region_blocked';
+      else if (/OPERATION_NOT_ALLOWED/i.test(m)) code = 'phone_auth_disabled';
+      else if (/INVALID_PHONE/i.test(m)) code = 'invalid_phone';
+      else if (/QUOTA|TOO_MANY/i.test(m)) code = 'quota_exceeded';
+      else if (/CAPTCHA/i.test(m)) code = 'recaptcha_required';
+    } catch {}
+    return { ok: false, code, message };
+  }
+  const json = await res.json() as { sessionInfo?: string };
+  if (!json.sessionInfo) return { ok: false, code: 'upstream_error', message: 'no sessionInfo' };
+  return { ok: true, sessionInfo: json.sessionInfo };
+}
+
+export interface VerifyResult {
+  ok: true;
+  phoneNumber: string;
+  localId: string;            // Firebase UID
+  idToken: string;
+}
+export interface VerifyError {
+  ok: false;
+  code: 'invalid_code' | 'session_expired' | 'upstream_error';
+  message: string;
+}
+
+export async function signInWithPhoneNumber(
+  env: Env,
+  sessionInfo: string,
+  code: string,
+): Promise<VerifyResult | VerifyError> {
+  const key = await loadGcipApiKey(env);
+  if (!key) return { ok: false, code: 'upstream_error', message: 'GCIP not configured' };
+  const res = await fetch(`${ENDPOINT}/accounts:signInWithPhoneNumber?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionInfo, code }),
+  });
+  if (!res.ok) {
+    let message = `upstream ${res.status}`;
+    let errCode: VerifyError['code'] = 'upstream_error';
+    try {
+      const err = await res.json() as { error?: { message?: string } };
+      const m = err?.error?.message || '';
+      message = m || message;
+      if (/INVALID_CODE|MISSING_CODE/i.test(m)) errCode = 'invalid_code';
+      else if (/CODE_EXPIRED|SESSION_EXPIRED/i.test(m)) errCode = 'session_expired';
+    } catch {}
+    return { ok: false, code: errCode, message };
+  }
+  const json = await res.json() as {
+    phoneNumber?: string; localId?: string; idToken?: string;
+  };
+  if (!json.phoneNumber || !json.localId || !json.idToken) {
+    return { ok: false, code: 'upstream_error', message: 'incomplete response' };
+  }
+  return { ok: true, phoneNumber: json.phoneNumber, localId: json.localId, idToken: json.idToken };
+}
+
+/**
+ * D278 — THE SENTENCE A PERSON READS FOR EACH SMS REFUSAL. `message` on the
+ * results above is Google Identity Platform's own text (a code such as
+ * `INVALID_CODE`, or an HTTP body); it goes to the log, and the body carries
+ * one of these instead.
+ */
+export const GCIP_SENTENCES: Record<string, string> = {
+  invalid_phone: 'That phone number could not be used. Check it, including the country code, and try again.',
+  quota_exceeded: 'Too many codes have been sent. Wait a few minutes and try again.',
+  recaptcha_required: 'Complete the check before a code can be sent.',
+  invalid_code: 'That code is not right. Check it and try again, or ask for a new one.',
+  session_expired: 'That code has expired. Ask for a new one.',
+  upstream_error: 'The code could not be sent or checked just now. Try again in a moment.',
+  region_blocked: 'Texts to this country are not enabled yet.',
+  phone_auth_disabled: "SMS backup isn't available yet. An administrator needs to finish setting it up.",
+  rate_limited: 'Too many codes asked for. Wait a minute and try again.',
+};
+
+export function gcipSentence(code: string): string {
+  return GCIP_SENTENCES[code] || GCIP_SENTENCES.upstream_error;
+}

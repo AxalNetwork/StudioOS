@@ -1,0 +1,43 @@
+# `pages/advisor/expertise` — the Expertise bucket, one file per zone
+
+Advisor › Expertise ("Package what I know") is five zones. Each is a **body
+only**: the crumb, the `h1`, the zone pills and the Worker AI rail are drawn by
+`frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx`, which mounts each of
+these through its `ZONE` map. The Expertise board's sections
+(`frontend/src/workspaces/boards/advisorExpertise.js`) read the same routes.
+
+| File | Zone | Route | Reads |
+| --- | --- | --- | --- |
+| `ProfileZone.jsx` | Public profile | `/expertise/profile` | `GET /api/advisors/me` |
+| `ServicesZone.jsx` | Services & pricing | `/expertise/services` | `GET /api/advisors/me/services` (200 a page) |
+| `ProofZone.jsx` | Proof | `/expertise/proof` | `GET /api/advisors/me/proof` (200 a page) |
+| `ThinkingZone.jsx` | Published thinking | `/expertise/thinking` | `GET /api/advisors/me/thinking` (100 a page) |
+| `VisibilityZone.jsx` | Visibility (EX-12, D4827) | `/expertise/visibility` | `GET /api/advisors/me/visibility?days=7\|30\|90` (100 links a page; D1597; top articles and session types without a link, D4827) |
+
+The modules they share:
+
+| File | What it holds |
+| --- | --- |
+| `kit.jsx` | The pieces every zone draws: `ZoneBody` (loading, unreadable, empty, populated, in that order, so a failed read is never an empty store), `Unrecorded`, `NothingYet`, `StatedLimit`, `MoreRows`, `StaleNote`, the form fields and `money`. `SaveNote` is a live region mounted empty, and a `Field`'s hint describes its control (D4711). |
+| `pages.js` | `usePagedList` (D4689): reads a list a page at a time, appends `next_offset` on "Show more", merges rows by key, and draws "Showing N of total" only while rows remain. A failed next page keeps the rows already read. After a write a zone calls `refresh()`, not `load()`: it re-reads in place, as many rows as are shown, and the newest read wins (D4711). |
+| `proofModel.js` | What one proof card says, pure (D4825): its one state from the Worker's own, who was asked or confirmed, the dated line, public or private, and the fixed sentences for publish and cancel refusals. `AttestConsentPage.jsx` reads its date and kind labels too. |
+| `expertiseModel.js` | What Services, Proof and Thinking say about themselves, pure (D4681): service states and edits, the publication state and the price with its code (D4824), proof deletion lines, and each article's real state, audience and next step. |
+| `ServiceCard.jsx` | One service as a card (D4824, EX-06): Draft, Published or Hidden as stored, one move with an Undo, Preview for a Published service, booking through Practice › Sessions. |
+| `licenceRefusal.js` | The 403 `advisor_licence_required` read the same way on every Expertise and Practice zone (#5363): `zoneError` turns it into the surface's licence sentence, and `ZoneBody` shows that sentence with no Try again. |
+| `sectionStates.jsx` | D4828 (#4828): the states every zone draws on #5129's components (`SectionState`: loading by word, Unavailable with its own Try again, the licence refusal as Refused), the limit counter (`useLimit`) and `InlineSaveStatus`, the one save status (`SaveNote` is its shipped name). A zone passes `what="Your …"` to `ZoneBody` to draw them. |
+| `feedback.js` | D4828: the save sentences ("Profile updated.", "Not saved, your text is kept.") and how a field's limit is counted, the Worker's way: trimmed, refused over the limit and never cut. |
+
+**EVERY FIGURE IS THE WHOLE LIST (D4689).** The list routes answer one page and,
+beside it, `counts` over the whole list (Visibility: `requests`). Tiles and
+summaries read those, never the length or the sum of the rows on screen.
+Opens are times a piece was opened here (`articles.views`), never people.
+
+**Adding a zone:** one file here, its row in `AdvisorBucketRoutes.jsx`'s `ZONE`
+map, and its row in the first table above. A list that can grow past one page
+reads through `usePagedList`.
+
+**After a write, `refresh()` (D4711).** `load()` is the first read: it draws the
+loading state, which unmounts every row and anything open on one. A write
+re-reads with `refresh()`, and a failed re-read shows `StaleNote` above the rows
+it kept. Opening a form moves focus into it; Escape closes it and focus returns
+to the button that opened it.

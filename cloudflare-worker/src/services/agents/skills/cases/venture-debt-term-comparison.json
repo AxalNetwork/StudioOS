@@ -1,0 +1,88 @@
+{
+  "skill": "venture-debt-term-comparison",
+  "version": 1,
+  "note": "Synthetic cents-based debt proposals. For a full USD 2 million principal over 12 interest-only months, A has USD 200,000 interest, USD 40,000 withheld fees, and USD 1,960,000 proceeds; B has USD 160,000 interest, USD 60,000 fees, and USD 1,940,000 proceeds. Warrants prevent an unsupported all-in cost ranking.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "project_id": "proj-cedar",
+        "name": "Cedar Metering",
+        "snapshot_date": "2026-06-30",
+        "source_id": "profile-cedar-0630"
+      },
+      "raise.records": {
+        "comparison": {
+          "id": "cedar-debt-comparison",
+          "as_of": "2026-06-30",
+          "currency": "USD",
+          "monetary_unit": "integer cents",
+          "horizon_months": 12,
+          "common_assumptions": "Full principal drawn on day one; principal remains unchanged for the first 12 months under both proposals; annual simple fixed interest; fees withheld at draw."
+        },
+        "proposals": [
+          {
+            "id": "cedar-debt-A",
+            "as_of": "2026-06-30",
+            "lender": "Juniper Credit",
+            "status": "indicative, unsigned",
+            "principal_cents": 200000000,
+            "fixed_annual_interest_rate_percent": 10,
+            "origination_fee_percent_of_principal": 2,
+            "fee_treatment": "withheld from principal at draw",
+            "interest_only_months": 12,
+            "maturity_months": 36,
+            "subsequent_amortization_schedule": null,
+            "warrant_coverage_percent_of_principal": 1,
+            "warrant_valuation_cents": null,
+            "covenant": {
+              "minimum_unrestricted_cash_cents": 25000000,
+              "test_frequency": "monthly"
+            }
+          },
+          {
+            "id": "cedar-debt-B",
+            "as_of": "2026-06-30",
+            "lender": "Rowan Capital",
+            "status": "indicative, unsigned",
+            "principal_cents": 200000000,
+            "fixed_annual_interest_rate_percent": 8,
+            "origination_fee_percent_of_principal": 3,
+            "fee_treatment": "withheld from principal at draw",
+            "interest_only_months": 12,
+            "maturity_months": 36,
+            "subsequent_amortization_schedule": null,
+            "warrant_coverage_percent_of_principal": 3,
+            "warrant_valuation_cents": null,
+            "covenant_attachment": {
+              "id": "rowan-covenant-schedule",
+              "title": "Financial covenant schedule",
+              "content_status": "unreadable"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "cedar-debt-A",
+      "cedar-debt-B",
+      "USD 200,000",
+      "USD 160,000",
+      "USD 1,960,000",
+      "USD 1,940,000",
+      "Unreadable",
+      "Propose"
+    ],
+    "must_say_not_recorded": [
+      "warrant valuation",
+      "amortization schedule"
+    ],
+    "must_not_include": [
+      "Rowan Capital is the cheapest lender",
+      "The covenant schedule confirms no financial covenants",
+      "The debt draw is approved"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+-- #5316 (D5316): why a signed engagement ended, stored rather than inferred.
+--
+-- `advisor_engagements.outcome` records active, renewed or ended, and nothing
+-- about why an engagement ended. The Practice v2 canvas (D4874, "Backend
+-- required") draws two endings: "Did not renew" and "Ended for another
+-- reason". This is that fact.
+--
+--   end_reason   'did_not_renew' | 'other', or NULL.
+--
+-- Written once, by `POST /me/engagements/:id/renewal` with decision "ended",
+-- which now requires it, in the same UPDATE that sets `outcome = 'ended'`.
+-- An unsigned row abandoned through `/advance` has no renewal to lose and
+-- keeps NULL, as its outcome does.
+--
+-- NOT BACK-FILLED. Engagements that ended before this column existed keep
+-- NULL, and the API and the page read that as "Not recorded": nobody asked
+-- why at the time, and a guess is not a record.
+--
+-- The CHECK is in the ALTER because SQLite accepts one there; the lazy
+-- bootstrap (services/advisorStoresSchema.ts) adds the bare column on a
+-- database adopted by baseline, and the route validates the value before
+-- every write, which is the check that runs on every database.
+ALTER TABLE advisor_engagements ADD COLUMN end_reason TEXT
+  CHECK (end_reason IS NULL OR end_reason IN ('did_not_renew', 'other'));

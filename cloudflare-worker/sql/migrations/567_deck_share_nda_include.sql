@@ -1,0 +1,25 @@
+-- 567 — a pitch deck link's NDA and what it includes (D902, #2681).
+-- Reserved by S1 as 540 on #2681 (Pitch deck studio part 8), 2026-10-24, and
+-- numbered after 549 (D895): 549 rebuilds pitch_deck_share_tokens from a fixed
+-- column list, so these two columns, added before it, would be dropped. 551,
+-- the first number tried after it, is D974's (S21's range); 567 is in S1's.
+--
+-- nda_required  1: the share read returns no card until the person opening
+--               the link has accepted the NDA on this link
+--               (`deck_share_conversions` type 'nda_signed'). 0 for every
+--               existing link, which opens as before.
+-- include_json  what the share read sends, as the share dialog chose it:
+--               {"figures":true,"sources":true,"notes":false,"bands":false}.
+--               NULL is that default (the owner's question 3, answer A as the
+--               canvas draws it). Whatever it says, a link never carries an
+--               internal score, a bank balance, an account or a counterparty,
+--               and a quote only with its consent recorded
+--               (`services/decks/shareInclude.ts`).
+--
+-- `view_limit` stays as it is here: #2674's migration 549 (S28) makes it
+-- nullable, and the read takes NULL, like the sentinel, as "no limit".
+--
+-- Grep first (D689 D-t): neither column exists on pitch_deck_share_tokens in
+-- an earlier migration or in schema_baseline.sql.
+ALTER TABLE pitch_deck_share_tokens ADD COLUMN nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1));
+ALTER TABLE pitch_deck_share_tokens ADD COLUMN include_json TEXT;

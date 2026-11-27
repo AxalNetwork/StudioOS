@@ -1,0 +1,150 @@
+
+Select alert #175
+Unused variable, import, function or class
+Note
+#175 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PayoutsPage.jsx :5
+main
+
+Select alert #174
+Unused variable, import, function or class
+Note
+#174 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PayoutsPage.jsx :2
+main
+
+Select alert #173
+Unused variable, import, function or class
+Note
+#173 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PartnersPage.jsx :4
+main
+
+Select alert #172
+Unused variable, import, function or class
+Note
+#172 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PartnerPortal.jsx :22
+main
+
+Select alert #171
+Unused variable, import, function or class
+Note
+#171 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PartnerInsightsPage.jsx :6
+main
+
+Select alert #170
+Unused variable, import, function or class
+Note
+#170 opened 5 days ago • Detected by CodeQL in frontend/.../pages/OnboardingPartnerPage.js... :1
+main
+
+Select alert #169
+Unused variable, import, function or class
+Note
+#169 opened 5 days ago • Detected by CodeQL in frontend/.../pages/OfficeHoursPage.jsx :248
+main
+
+Select alert #168
+Unused variable, import, function or class
+Note
+#168 opened 5 days ago • Detected by CodeQL in frontend/.../pages/OfficeHoursPage.jsx :8
+main
+
+Select alert #167
+Unused variable, import, function or class
+Note
+#167 opened 5 days ago • Detected by CodeQL in frontend/.../pages/NetworkEffectsPage.jsx :2
+main
+
+Select alert #166
+Unused variable, import, function or class
+Note
+#166 opened 5 days ago • Detected by CodeQL in frontend/.../pages/NeedsBoardPage.jsx :2
+main
+
+Select alert #165
+Unused variable, import, function or class
+Note
+#165 opened 5 days ago • Detected by CodeQL in frontend/.../pages/NeedsBoardPage.jsx :1
+main
+
+Select alert #164
+Unused variable, import, function or class
+Note
+#164 opened 5 days ago • Detected by CodeQL in frontend/.../pages/MetricsPage.jsx :177
+main
+
+Select alert #163
+Unused variable, import, function or class
+Note
+#163 opened 5 days ago • Detected by CodeQL in frontend/.../pages/MetricsPage.jsx :5
+main
+
+Select alert #162
+Unused variable, import, function or class
+Note
+#162 opened 5 days ago • Detected by CodeQL in frontend/.../pages/MetricsPage.jsx :4
+main
+
+Select alert #161
+Unused variable, import, function or class
+Note
+#161 opened 5 days ago • Detected by CodeQL in frontend/.../pages/MentorsPage.jsx :8
+main
+
+Select alert #160
+Unused variable, import, function or class
+Note
+#160 opened 5 days ago • Detected by CodeQL in frontend/.../pages/MarketplacePage.jsx :4
+main
+
+Select alert #158
+Unused variable, import, function or class
+Note
+#158 opened 5 days ago • Detected by CodeQL in frontend/.../pages/LegalPage.jsx :151
+main
+
+Select alert #157
+Unused variable, import, function or class
+Note
+#157 opened 5 days ago • Detected by CodeQL in frontend/.../pages/LegalPage.jsx :78
+main
+
+Select alert #156
+Unused variable, import, function or class
+Note
+#156 opened 5 days ago • Detected by CodeQL in frontend/.../pages/LegalPage.jsx :4
+main
+
+Select alert #155
+Unused variable, import, function or class
+Note
+#155 opened 5 days ago • Detected by CodeQL in frontend/.../pages/LegalCapitalPage.jsx :144
+main
+
+Select alert #154
+Unused variable, import, function or class
+Note
+#154 opened 5 days ago • Detected by CodeQL in frontend/.../pages/LegalCapitalPage.jsx :84
+main
+
+Select alert #153
+Unused variable, import, function or class
+Note
+#153 opened 5 days ago • Detected by CodeQL in frontend/.../pages/LegalCapitalPage.jsx :2
+main
+
+Select alert #152
+Unused variable, import, function or class
+Note
+#152 opened 5 days ago • Detected by CodeQL in frontend/.../pages/IncorporatePage.jsx :4
+main
+
+Select alert #150
+Unused variable, import, function or class
+Note
+#150 opened 5 days ago • Detected by CodeQL in frontend/.../pages/Dashboard.jsx :4
+main
+
+Select alert #149
+Unused variable, import, function or class
+Note
+#149 opened 5 days ago • Detected by CodeQL in frontend/.../pages/DealsPage.jsx :6
+main

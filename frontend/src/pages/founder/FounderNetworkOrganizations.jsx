@@ -1,0 +1,124 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
+import { api } from '../../lib/api';
+import { text } from '../../lib/absence';
+import { WorkerRail } from '../../ui';
+import { STRENGTHS, daysSince, isCold, organizationOf } from '../../lib/networkBook';
+import './founderNetworkRelationships.css';
+import './founderNetworkOrganizations.css';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { LensLink } from '../../workspaces/lens';
+
+const list = (value, ...keys) => {
+  if (Array.isArray(value)) return value;
+  for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
+  return [];
+};
+const organization = organizationOf;
+const isDormant = (people) => people.length > 0 && people.every((row) => isCold(row));
+/** The strongest tie a group holds, by the canvas's order; Not recorded when nobody is scored. */
+export const strongest = (people) => STRENGTHS.find((s) => people.some((row) => row.strength === s.value))?.label || 'Not recorded';
+const freshest = (people) => {
+  const values = people.map((row) => daysSince(row.last_activity_at)).filter((value) => value !== null);
+  return values.length ? `${Math.min(...values)} day${Math.min(...values) === 1 ? '' : 's'} ago` : 'Unavailable';
+};
+
+export default function FounderNetworkOrganizations({ embedded = false, role = 'founder', zoneFilters = null }) {
+  const [params, setParams] = useSearchParams();
+  const requestedId = params.get('project_id');
+  const [project, setProject] = useState(null);
+  const [contacts, setContacts] = useState([]);
+  const [status, setStatus] = useState('loading');
+  const [errors, setErrors] = useState([]);
+
+  const load = async () => {
+    setStatus('loading'); setErrors([]);
+    const [projectResult, contactResult] = await Promise.allSettled([api.listProjects(), api.contactsList()]);
+    const available = projectResult.status === 'fulfilled' ? list(projectResult.value, 'items', 'projects') : [];
+    const chosen = available.find((item) => String(item.id) === requestedId) || available[0] || (requestedId ? { id: Number(requestedId), name: 'Selected startup' } : null);
+    setProject(chosen);
+    if (chosen && String(chosen.id) !== requestedId) {
+      setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(chosen.id)); return next; }, { replace: true });
+    }
+    const all = contactResult.status === 'fulfilled' ? list(contactResult.value, 'items', 'contacts') : [];
+    setContacts(chosen ? all.filter((row) => row.project_id != null && String(row.project_id) === String(chosen.id)) : []);
+    const failed = [];
+    if (projectResult.status === 'rejected') failed.push('startup list');
+    if (contactResult.status === 'rejected') failed.push('relationship contacts');
+    setErrors(failed);
+    setStatus(chosen ? 'ready' : failed.length ? 'error' : 'empty');
+  };
+  useEffect(() => { load(); }, [requestedId]);
+
+  const groups = useMemo(() => {
+    const map = new Map();
+    contacts.forEach((row) => {
+      const name = organization(row);
+      if (!name) return;
+      if (!map.has(name)) map.set(name, []);
+      map.get(name).push(row);
+    });
+    return [...map.entries()].map(([name, people]) => ({ name, people, types: [...new Set(people.map((row) => row.audience).filter(Boolean))] })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [contacts]);
+  const mapped = contacts.filter((row) => organization(row));
+  const dualRole = groups.filter((group) => group.types.length > 1);
+  const dormant = groups.filter((group) => isDormant(group.people));
+  const contactsUnavailable = errors.includes('relationship contacts');
+  const query = project?.id ? `?project_id=${project.id}` : '';
+
+  return <main className={`fn-rel fn-org${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-organizations"><div className="fn-rel-shell"><section className="fn-rel-main">
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Organizations</strong></div><div className="fn-rel-title-row"><div><h1>Organizations</h1><p>Organization profiles, people and history from the relationship book.</p></div></div><nav aria-label="Network sections"><LensLink to={`/network/relationships${query}`}>Relationships</LensLink><LensLink to={`/network/introductions${query}`}>Introductions</LensLink><LensLink className="is-active" to={`/network/organizations${query}`}>Organizations</LensLink></nav></header>}
+    {/* Outside the header on purpose. These three zones only ever render
+        through NetworkWorkspace, which passes `embedded` and draws the crumb,
+        heading and zone nav itself — so everything inside that guard is dead
+        on the route a founder actually opens. The actions row placed in there
+        rendered nowhere, which a source test cannot see and a browser found. */}
+    <ZoneToolbar
+      className="mt-3"
+      role={role}
+      filters={zoneFilters ? zoneFilters({}) : []}
+      actions={founderZoneActions('network/organizations', { query, view: { scope: project?.name, header: ['Organization', 'People', 'Recorded types'], rows: groups, cells: (g) => [g.name, g.people.length, g.types.join(' + ')] } })}
+    />
+    {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-organizations-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
+    {status === 'loading' && <OrganizationSkeleton />}
+    {status === 'empty' && <NoProject />}
+    {status === 'error' && !project && <NoProject error />}
+    {status === 'ready' && project && <><div className="fn-rel-context"><div><span>Selected startup</span><strong data-testid="text-network-organizations-project">{text(project.name)}</strong><small>{text(project.sector, 'Sector not recorded')}</small></div><div><span>Source</span><strong>Relationship book lens</strong><small>Grouped by the organization set on each contact</small></div></div>
+      {/* The four chips that stood here are now the zone header row's four
+          notes. They filtered `groups`, which `contacts` can never fill: no
+          column on that table names an organisation, so `Funds` rendered "No
+          funds organizations are recorded" — a claim about this founder's data
+          from a page that had never had any to look at. The link stays. */}
+      <div className="fn-rel-tabs"><Link data-testid="link-open-network-organizations-relationships" to={`/network/relationships${query}`}>View relationship book <ChevronRight size={13} /></Link></div>
+      <div className="fn-rel-stats"><Stat label="Organizations" value={contactsUnavailable ? 'Unavailable' : groups.length} note={contactsUnavailable ? 'Relationship book source unavailable' : groups.length ? 'Explicit organization fields' : 'No organization fields returned'} muted={contactsUnavailable} /><Stat label="People mapped" value={contactsUnavailable ? 'Unavailable' : mapped.length} note={contactsUnavailable ? 'Relationship book source unavailable' : `of ${contacts.length} in the book`} muted={contactsUnavailable} /><Stat label="Dual-role orgs" value={contactsUnavailable ? 'Unavailable' : dualRole.length} note={contactsUnavailable ? 'Relationship book source unavailable' : dualRole.length ? 'Multiple recorded contact types' : 'No dual-role grouping recorded'} muted={contactsUnavailable || !dualRole.length} /><Stat label="Unmapped people" value={contactsUnavailable ? 'Unavailable' : contacts.length - mapped.length} note={contactsUnavailable ? 'Relationship book source unavailable' : contacts.length - mapped.length ? 'No organization on file' : 'All people mapped'} muted={contactsUnavailable || contacts.length - mapped.length > 0} /></div>
+      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Organizations</h2></div><span>People counts read from the relationship book</span></div>{contactsUnavailable ? <div className="fn-rel-empty"><AlertCircle size={18} /><div><strong>Organization collection unavailable.</strong><p>The project relationship-book source could not be read, so FN3 does not present an empty collection as fact.</p></div></div> : <OrganizationTable groups={groups} />}<p className="fn-rel-note">Organizations are a lens over stored people, not a second address book. FN3 does not infer membership from email domains, landing pages, source labels, or similar names.</p></section>
+      <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Organization intelligence</h2></div><span>Partially unavailable</span></div><strong>{groups.length ? 'Profiles and history are not recorded for these groups.' : 'No contact has an organization set yet.'}</strong><p>Set a contact's organization in Relationships and it is grouped here. Profiles, organization history, duplicate review, and merge actions need organization records of their own; this collection does not create or merge them.</p></section>
+    </>}
+  </section>{!embedded && <OrganizationRail project={project} contacts={contacts} groups={groups} dormant={dormant} errors={errors} />}</div></main>;
+}
+
+// The empty state used to name whichever chip was active — "No funds
+// organizations are recorded" — which turned one true sentence about an absent
+// column into four false ones about this founder's book. With no chips there is
+// one message, and it is the one that was always true.
+export function OrganizationTable({ groups }) {
+  if (!groups.length) return <div className="fn-rel-empty"><UsersRound size={18} /><div><strong>No explicit organizations are recorded.</strong><p>People without an organization remain in the relationship book and are not placed into an inferred row.</p></div></div>;
+  return <div className="fn-rel-table-wrap"><table><thead><tr><th>Organization</th><th>People</th><th>Strongest tie</th><th>Freshest contact</th><th>Recorded types</th></tr></thead><tbody>{groups.map((group) => <tr key={group.name} data-testid={`row-network-organization-${group.name}`}><td><strong>{group.name}</strong><small>{group.people.length} relationship book record{group.people.length === 1 ? '' : 's'}</small></td><td>{group.people.length}</td><td>{strongest(group.people)}</td><td>{freshest(group.people)}</td><td>{group.types.length ? group.types.map((type) => text(type).replace(/[_-]/g, ' ')).join(' + ') : 'Not recorded'}</td></tr>)}</tbody></table></div>;
+}
+function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
+function OrganizationRail({ project, contacts, groups, dormant, errors }) {
+  return <WorkerRail
+    workspace="Network"
+    className="fn-rel-rail"
+    stance="Read-only organization lens"
+    note="This view does not add organizations, merge duplicates, save profiles, export contacts, or write history."
+    coverage={[project ? `${groups.length} explicit organization${groups.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={errors.includes('relationship contacts') ? 'Contact source unavailable.' : `${contacts.length} people · ${dormant.length} dormant group${dormant.length === 1 ? '' : 's'}.`}
+    unavailable={[['Organization profiles', 'No explicit profile or history source is connected.'], ['Duplicate merging', 'Names are not normalized or merged automatically.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
+function OrganizationSkeleton() { return <div className="fn-rel-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }
+function NoProject({ error }) { return <div className="fn-rel-no-project"><UsersRound size={22} /><h2>{error ? 'Startup source unavailable' : 'No startup is available'}</h2><p>Organizations are scoped to an authenticated startup and its stored relationship book.</p><Link to="/network">Back to Network</Link></div>; }

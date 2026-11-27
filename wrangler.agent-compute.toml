@@ -1,0 +1,56 @@
+# D4557: deployment is preview-only and separately gated. No production binding.
+name = "studioos-agent-compute-disabled"
+main = "agent-compute/worker.ts"
+compatibility_date = "2026-11-12"
+workers_dev = false
+preview_urls = false
+
+[vars]
+COMPUTE_ENABLED = "off"
+COMPUTE_SCHEDULING_POLICY = "durable_object"
+
+[observability]
+enabled = true
+[observability.traces]
+enabled = true
+
+[env.preview]
+name = "studioos-agent-compute-preview"
+workers_dev = false
+preview_urls = false
+
+[env.preview.vars]
+COMPUTE_ENABLED = "off"
+COMPUTE_SCHEDULING_POLICY = "durable_object"
+
+[[env.preview.services]]
+binding = "BROKER"
+service = "studioos-preview"
+
+[[env.preview.durable_objects.bindings]]
+name = "COMPUTE_PYTHON"
+class_name = "PythonComputeContainer"
+[[env.preview.durable_objects.bindings]]
+name = "COMPUTE_DOCUMENTS"
+class_name = "DocumentComputeContainer"
+
+[[env.preview.migrations]]
+tag = "v1-agent-compute"
+new_sqlite_classes = ["PythonComputeContainer", "DocumentComputeContainer"]
+
+# Owner answer B (15 November): separate reviewed, disabled preview applications.
+# Named images select the runtime filesystem; resource sizes are selected in code.
+# The owner-run preview/resource gate still precedes application creation.
+[[env.preview.containers]]
+class_name = "PythonComputeContainer"
+scheduling_policy = "durable_object"
+[env.preview.containers.images.runtime]
+dockerfile = "./agent-compute/Dockerfile"
+build_context = "./agent-compute"
+
+[[env.preview.containers]]
+class_name = "DocumentComputeContainer"
+scheduling_policy = "durable_object"
+[env.preview.containers.images.runtime]
+dockerfile = "./agent-compute/Dockerfile"
+build_context = "./agent-compute"

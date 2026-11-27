@@ -1,0 +1,750 @@
+Got enough context. Here's the full set of prompts.
+
+---
+
+## Replit Prompt V — Bird's-eye view
+
+```
+We're shipping five interlocking workstreams. Read this first.
+
+  1. INVESTOR PAYWALL & ROI    (Prompt W)
+     A 3-tier subscription for investor accounts with concrete ROI per
+     tier (deal flow volume, DD depth, co-invest rights, analytics).
+     Mirrors the founder paywall structure but scoped to investor needs.
+
+  2. VENTURE PARTNER DEAL ENGINE  (Prompt X)
+     Admin sends a partnership invitation by email → recipient walks a
+     chatbot that profiles them and proposes a deal structure (equity,
+     services, deal-sourcing, capital). Recipient picks a deal, signs
+     the partner agreement, and gets a one-time referral code that
+     unlocks the full Founder + Investor experience for free for the
+     agreed term. End-to-end audit trail.
+
+  3. TRUST CENTER + ROLE-BASED LEGAL FLOWS  (Prompt Y)
+     Per-role obligations:
+       Investors        → KYC + Accreditation + KYB (if entity) + NDAs
+                          (platform + per-Founder when introduced)
+       Founders          → NDA only (no KYC for spin-out lab)
+       Mentors           → Mutual NDA Axal + Founder
+       Partners          → KYB always; KYC + Accreditation only when the
+                           deal carries capital (LP, co-invest, GP-stake)
+     Founder ↔ Investor introductions automatically generate a
+     three-way NDA (Founder + Investor + Axal as intermediary) before
+     any private data is exposed.
+
+  4. FIX ADMIN CONSOLE > CONTRACTS  (Prompt Z)
+     Same root cause as previously identified — the documents table is
+     not the source of truth for sent/signed contracts; the e-sign
+     envelope table is. Re-confirm the fix and bolt-on the new
+     contract types created by Prompts W, X and Y.
+
+  5. MARKET INTELLIGENCE — MORE SOURCES  (Prompt AA)
+     Add 14 new external + internal data sources that help founders
+     pick what sector to build in and help investors size markets.
+     Aggregator architecture so adding sources later is one file.
+
+Order:
+  Phase 1 (legal foundation)            : Y, then Z
+  Phase 2 (monetisation + acquisition)  : W and X in parallel
+  Phase 3 (insight)                      : AA
+```
+
+---
+
+## Replit Prompt W — Investor paywall + ROI tiers
+
+```
+Objective
+  A 3-tier subscription system for investor accounts. Each tier delivers
+  measurable ROI in deal flow, DD depth, co-invest rights, and analytics.
+  Free tier exists so investors can try the network; paid tiers unlock
+  the high-value mechanics that justify the price.
+
+Tiers and what each gets
+  INVESTOR FREE — $0/mo
+    - Browse Public Directory of founders + projects (read-only summaries)
+    - 5 saved/watchlist projects
+    - Read-only Market Intelligence (no investor-signal exports)
+    - Personal portfolio tracking up to 3 holdings (manual entry only)
+    - In-app messages, no calendar booking with founders
+  INVESTOR PROFESSIONAL — $149/mo (or $1,490/yr)
+    - Unlimited watchlist + saved searches with email digests
+    - Full Market Intelligence (all sources, exports, sector heatmaps)
+    - Pipeline + Deals modules (kanban, tasks, notes)
+    - Direct calendar booking with founders + mentors
+    - Read-access to Founder DD reports the founder explicitly shares
+    - Carta integration (Studio-tier import of own portfolio)
+    - 25 introductions / quarter (Axal makes the warm intro)
+    - Deal-room access to ≤ 5 active rounds at a time
+  INVESTOR INSTITUTIONAL — $599/mo (or $5,990/yr) (or invoice)
+    - Everything in Professional, plus:
+    - Co-invest rights flag on Axal-led deals (right of first look)
+    - Affinity integration (sync entire pipeline)
+    - Unlimited deal-room access
+    - Quarterly cohort + benchmark reports (PDF, Axal-VC branded)
+    - Custom DD section commissioning (kick off Prompt-D cases)
+    - LP reporting templates + capital-call workflow
+    - Multi-seat (up to 5 colleagues on the same plan)
+    - Dedicated account-manager Slack channel + monthly office hours
+    - SLA: response within 1 business day
+  Free trials: 14 days of Professional on signup. Institutional via sales call.
+  Promotions: annual = 17% off, accelerator partners get 50% off Professional
+    for 6 months via referral code (uses Prompt X infra).
+
+Schema (extends users table from earlier paywall prompt; add investor block)
+  ALTER TABLE users ADD COLUMN investor_tier TEXT DEFAULT 'free'
+    CHECK(investor_tier IN ('free','professional','institutional','custom'));
+  ALTER TABLE users ADD COLUMN investor_seat_count INTEGER DEFAULT 1;
+  ALTER TABLE users ADD COLUMN investor_quota_intros_quarter INTEGER DEFAULT 0;
+  ALTER TABLE users ADD COLUMN investor_quota_intros_used    INTEGER DEFAULT 0;
+  ALTER TABLE users ADD COLUMN investor_dealroom_max         INTEGER DEFAULT 0;
+  CREATE TABLE IF NOT EXISTS investor_seats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    primary_user_id INTEGER NOT NULL,
+    seat_email TEXT NOT NULL,
+    seat_user_id INTEGER,
+    invited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    accepted_at DATETIME,
+    UNIQUE(primary_user_id, seat_email)
+  );
+
+Worker enforcement (cloudflare-worker/src/middleware/requireInvestorTier.ts)
+  export const requireInvestorTier = (min: 'free'|'professional'|'institutional')
+    Apply to investor-only routes:
+      Professional: pipeline/*, deals/*, calendar booking with founder,
+                    market-intel exports, mentions: introductions/*
+      Institutional: dealroom unlimited (drop the cap), carta sync write,
+                     /co-invest/*, /lp-reporting/*, /benchmarks/*
+  Quota checks:
+      POST /api/introductions/request → decrement intros quota; 402 if
+      hit cap with `code: 'quota_intros_exhausted'`.
+  Dealroom cap:
+      Joining a 6th deal-room as a Professional → 402 + upgrade CTA.
+
+Stripe wiring
+  Reuse Prompt 4 plumbing. Add prices:
+    STRIPE_PRICE_INVESTOR_PRO_MONTHLY, STRIPE_PRICE_INVESTOR_PRO_YEARLY,
+    STRIPE_PRICE_INVESTOR_INST_MONTHLY, STRIPE_PRICE_INVESTOR_INST_YEARLY
+  Webhook handler updates users.investor_tier + quota fields.
+  Institutional plan supports Stripe invoice billing (no card required).
+
+Frontend
+  - SettingsPage > Billing (investor): show current tier, ROI table,
+    seat-management for Institutional.
+  - Sidebar lock-pills on items above tier (uses earlier sidebar work).
+  - "Why upgrade?" comparison page at /pricing/investor with the ROI
+    table above plus a toggle Monthly/Annual.
+  - Trial banner: "14-day Professional trial — 9 days left" with upgrade
+    CTA on dashboard for any free investor in trial.
+  - Quota bars (intros used / quarter, deal rooms used / cap) on the
+    investor portal home.
+
+Acceptance
+  - New investor signs up → 14-day Professional trial active.
+  - At day 15 → tier downgrades to free; locked features show paywall.
+  - Subscribing via Stripe checkout updates tier within 5 seconds.
+  - Institutional buyer can invite 4 seat colleagues; each accepts +
+    inherits Institutional access.
+  - Quotas enforced server-side; UI shows live counts.
+  - Free investor cannot export Market Intelligence (paywall modal).
+```
+
+---
+
+## Replit Prompt X — Venture Partner deal engine (chatbot + admin invite + one-time code)
+
+```
+Objective
+  Axal admins meet potential venture partners offline. After the meeting,
+  the admin sends an invitation by email. The recipient lands on a guided
+  chatbot that profiles them and proposes a deal structure. The recipient
+  picks one (equity / services / deal-sourcing / co-invest), reviews the
+  partner agreement, and signs (e-sign). On signature they receive a
+  one-time referral code that unlocks the full Founder + Investor
+  platform for free for the agreed term. Every step is auditable.
+
+Deal taxonomy
+  EQUITY_FOR_PLATFORM
+    Partner gives Axal X% equity in their existing fund/firm in exchange
+    for full platform access for N seats for T months.
+    Terms captured: equity_pct, vesting_months, valuation_basis.
+  SERVICES_FOR_ACCESS
+    Partner provides defined services (legal, recruiting, marketing,
+    technical advisory) at agreed rate-card discount in exchange for
+    platform access.
+    Terms captured: services_scope, deliverables, sla, discount_pct.
+  DEAL_SOURCING_REVSHARE
+    Partner sources qualified founders/investors. Axal pays a finder fee
+    on closed engagements; partner gets free platform access while
+    sourcing remains active (≥ 1 qualified intro / 60 days).
+    Terms captured: revshare_pct, payout_event, exclusivity, term_months.
+  CAPITAL_PARTNERSHIP
+    Partner commits LP capital to an Axal vehicle or co-invests on
+    Axal-led rounds. Free Institutional Investor tier for the LP term.
+    Triggers KYC/Accreditation/KYB obligations from Prompt Y.
+  CUSTOM
+    Free-text deal terms; admin must approve before signature flow.
+
+Flow
+  1. Admin > Partners > "Invite Partner"
+       Form: name, email, target deal type(s), notes from meeting,
+             expiry (default 14 days).
+       Generates a unique invitation_token + one-time partner_referral_code
+       (UPPER 12 chars).
+       Sends email from noreply@axal.vc using template
+       `partner_invitation_v1` with magic link
+       https://app.axal.vc/partners/onboard?token=...
+  2. Recipient lands on /partners/onboard
+       Loads invitation, gates everything behind a quick "Accept invitation
+       to continue" gesture.
+  3. Partner profiling chatbot (re-uses chatbot shell)
+       6–10 questions adapted to the deal types pre-selected by admin:
+         - Firm name, role, AUM (if any), website
+         - Sectors of interest, geography, stage
+         - Services you can offer (multi-select)
+         - Capital you could deploy (range)
+         - Source of deal flow (network, accelerator, conference)
+         - Conflicts of interest disclosure
+         - Preferred term length
+         - Preferred consideration (equity / services / revshare /
+           capital / mix)
+       Result → a normalised partner_profile record.
+  4. Deal proposal screen
+       The chatbot proposes 1–3 deal structures with concrete terms,
+       computed from the profile + admin's pre-selected types. Each
+       proposal shows:
+         - Deal type, term length, what they get, what we get
+         - Sample contract excerpt
+         - "Pick this" button
+  5. Partner picks one → contract draft assembled from template +
+       merge fields (uses Profile data from earlier prompt; corporate
+       block required for KYB-eligible deals).
+  6. E-sign the partner agreement (via existing e-sign system, doc_type
+       in {'partner_equity','partner_services','partner_revshare',
+       'partner_capital','partner_custom'}).
+  7. On signature:
+       - users record auto-created (role='partner') with linked
+         partner_profile.
+       - One-time partner_referral_code activated for this user.
+       - Free access tier granted: 'investor_institutional' AND
+         'founder_studio' for the deal's term_months.
+       - Email + in-app notification confirming.
+       - DD case auto-opened (Prompt D) on the new partner with
+         appropriate sections (KYB always; KYC+Accreditation if
+         CAPITAL_PARTNERSHIP).
+  8. The single-use referral code can be shared by the partner with
+       their network (founders/investors they bring). Each redemption
+       grants free access at the agreed nested tier (configured by
+       admin) and counts toward DEAL_SOURCING_REVSHARE attribution.
+
+Schema
+  CREATE TABLE partner_invitations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invitation_token_hash TEXT UNIQUE NOT NULL,
+    referral_code TEXT UNIQUE NOT NULL,        -- one-time
+    sent_by_admin_id INTEGER NOT NULL,
+    recipient_email TEXT NOT NULL,
+    recipient_name TEXT,
+    target_deal_types TEXT NOT NULL,           -- JSON array
+    notes TEXT,
+    status TEXT NOT NULL CHECK(status IN
+      ('sent','viewed','profiled','proposed','signed','expired','revoked')),
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    accepted_at DATETIME
+  );
+  CREATE TABLE partner_profiles (
+    user_id INTEGER PRIMARY KEY,
+    invitation_id INTEGER,
+    firm_name TEXT,
+    firm_website TEXT,
+    role_at_firm TEXT,
+    aum_usd REAL,
+    sectors_json TEXT,
+    geos_json TEXT,
+    stages_json TEXT,
+    services_offered_json TEXT,
+    capital_capacity_min_usd REAL,
+    capital_capacity_max_usd REAL,
+    deal_source_channels_json TEXT,
+    conflicts_json TEXT,
+    preferred_term_months INTEGER,
+    preferred_consideration_json TEXT,
+    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE partner_deals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    invitation_id INTEGER,
+    deal_type TEXT NOT NULL,
+    terms_json TEXT NOT NULL,
+    contract_envelope_uuid TEXT,
+    granted_tier_founder TEXT,
+    granted_tier_investor TEXT,
+    granted_seats INTEGER DEFAULT 1,
+    starts_at DATETIME,
+    ends_at DATETIME,
+    status TEXT NOT NULL CHECK(status IN
+      ('proposed','signed','active','expired','terminated')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE partner_referral_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_user_id INTEGER NOT NULL,
+    redeemer_user_id INTEGER NOT NULL,
+    redeemer_role TEXT NOT NULL,
+    granted_tier TEXT NOT NULL,
+    granted_until DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+Worker routes (cloudflare-worker/src/routes/partners.ts +
+                cloudflare-worker/src/routes/partner_onboarding.ts)
+  Admin
+    POST   /api/admin/partners/invitations               create + email
+    GET    /api/admin/partners/invitations               list with filters
+    POST   /api/admin/partners/invitations/:id/resend
+    POST   /api/admin/partners/invitations/:id/revoke
+    GET    /api/admin/partners/deals                     active partner deals
+    POST   /api/admin/partners/deals/:id/terminate
+  Public (token-gated)
+    GET    /api/partner-onboard/:token                   fetch invitation
+    POST   /api/partner-onboard/:token/profile           upsert partner_profiles
+    POST   /api/partner-onboard/:token/propose           server returns proposals
+    POST   /api/partner-onboard/:token/select { proposal_id }
+    POST   /api/partner-onboard/:token/finalize          starts e-sign envelope
+    GET    /api/partner-onboard/:token/status
+
+Email (template `partner_invitation_v1`, from noreply@axal.vc)
+  Subject: "You're invited to partner with Axal VC"
+  Body: greeting, single CTA "Start partner onboarding", expiry note,
+        contact for questions.
+
+Frontend
+  - frontend/src/pages/admin/PartnerInvitations.jsx — invitation form,
+    list, status filters.
+  - frontend/src/pages/PartnerOnboardPage.jsx — token-gated wizard
+    (chatbot → proposals → review → sign).
+  - frontend/src/pages/PartnerPortal.jsx — for signed partners, show
+    their deal terms, granted tiers, referral code, redemption count,
+    next milestones.
+  - Existing PartnersPage.jsx remains a directory.
+
+Acceptance
+  - Admin sends invite → recipient receives the email from
+    noreply@axal.vc within 30s.
+  - Magic link opens chatbot; profile saved; proposals returned.
+  - Picking a proposal generates a draft contract; signing it activates
+    the partner record and grants the agreed tiers.
+  - Referral code becomes redeemable on registration; each redemption
+    logs a row in partner_referral_redemptions.
+  - Expired or revoked invitations cannot be used.
+  - All steps appear in admin_audit_log + activity_logs.
+  - DD case auto-opened on the new partner with the right sections.
+```
+
+---
+
+## Replit Prompt Y — Trust Center + role-based legal strategy (act-as-lawyer)
+
+```
+Objective
+  Make Trust Center the single legal hub. Per role, only require what's
+  legally necessary for the activity that role is doing on the platform.
+  Whenever a Founder is introduced to an Investor, automatically issue a
+  three-way NDA (Founder + Investor + Axal as intermediary) before any
+  private project data is exposed.
+
+Legal strategy by role  (drafted as a venture-and-securities lawyer)
+
+  FOUNDER (incl. Spin-Out Lab)
+    Required:
+      - Platform Terms of Service (click-through at signup)
+      - Privacy Policy acknowledgment
+      - Founder NDA — Axal-as-recipient (protects ideas/code/data
+        Founder uploads). Mutual where Axal shares its diligence
+        artefacts back.
+      - IP Background Schedule (lightweight self-disclosure form for
+        any pre-existing IP brought in)
+    NOT required for the basic platform:
+      - KYC, KYB, Accreditation
+    Triggered later (only if/when relevant):
+      - KYC: incorporation flow, capital movement, payouts
+      - KYB: incorporation flow
+
+  INVESTOR
+    Required at signup, before any deal-room access:
+      - Platform ToS + Privacy
+      - Investor NDA with Axal (covers private deal data, founder data,
+        Axal's IP — no use, no disclosure, no reverse-engineering)
+      - KYC (individual identity verification via Sumsub)
+      - Accreditation Verification:
+            US     → Reg D 506(c) accredited-investor verification
+                     (income/net-worth/holding letters or third-party
+                     attestation)
+            EU/UK  → Professional client / sophisticated investor
+                     declaration
+            CA     → NI 45-106 accredited-investor certificate
+            APAC   → equivalent professional/sophisticated declarations
+      - KYB (if investing through an entity): registration cert, UBOs
+        ≥ 25%, board resolution authorising signatory, sanctions/PEP
+        screen
+    Per-introduction:
+      - Three-way Mutual NDA (Founder + Investor + Axal as intermediary,
+        Axal restricted-data-handler) — issued + signed BEFORE founder
+        data is unlocked
+
+  MENTOR
+    Required:
+      - Platform ToS + Privacy
+      - Mentor Mutual NDA with Axal (for Axal IP + Founder data accessed
+        during mentorship)
+      - Engagement-letter style disclaimer (no fiduciary duty, no
+        liability for advice, indemnity)
+    Per-introduction (Founder ↔ Mentor):
+      - Founder–Mentor NDA short-form (auto-issued when first session
+        booked) — Axal as intermediary
+
+  PARTNER
+    Required at signature of partner deal (Prompt X):
+      - Platform ToS + Privacy
+      - Partner Mutual NDA + Confidentiality + Non-Solicit
+      - KYB always (registration, UBOs, sanctions/PEP)
+      - Conflicts of Interest disclosure
+    Conditional on deal type:
+      EQUITY_FOR_PLATFORM           → KYB + corporate authority docs;
+                                       NO KYC needed for individuals
+                                       unless they are signatories
+      SERVICES_FOR_ACCESS           → KYB only; service contract w/ SLA;
+                                       insurance certificate (E&O / PI)
+      DEAL_SOURCING_REVSHARE        → KYB + finder/intro agreement;
+                                       check finder's-fee licensing rules
+                                       per jurisdiction (US: regulated)
+      CAPITAL_PARTNERSHIP           → KYB + KYC of beneficial owners +
+                                       Accreditation (LP qualification)
+                                       + AML enhanced due diligence
+
+  ADMIN / OPERATOR (internal staff)
+    - Employment / contractor agreement on file (out-of-band)
+    - Data Access Acknowledgment (in-app, periodic re-acknowledgment
+      every 12 months)
+
+Three-way Founder ↔ Investor Mutual NDA (auto-issued)
+  Trigger: any of
+    - Investor requests intro to a Founder
+    - Investor opens a Founder's data room
+    - Axal admin pushes a Founder to an Investor's pipeline
+  Behaviour:
+    - System checks if a valid signed NDA already exists for this
+      Founder–Investor pair (TTL 12 months). If yes → unlock data.
+    - If no → issue a new envelope using template
+      `nda_3way_founder_investor_axal_v1`. Recipients: Founder signer,
+      Investor signer, Axal counter-signer. Status surfaced on both
+      portals as "NDA pending".
+    - Until all parties sign, Founder data shown to Investor is
+      restricted to: name, sector, stage, headline, public-deck slides
+      flagged as public. Everything else (cap table, financials, code,
+      customer list) is masked.
+    - Once fully signed, data unlocked for the Investor seat.
+
+Trust Center page (frontend/src/pages/TrustCenterPage.jsx)
+  Tabs:
+    Overview       — your role's obligations + completion ring
+    Identity (KYC) — only shown if role requires it
+    Entity (KYB)    — only shown if role requires it
+    Accreditation  — only shown if Investor or capital-Partner
+    Agreements      — list of NDAs and contracts (sent / pending / signed)
+                      includes per-partner Founder–Investor NDAs
+    Sanctions      — automated AML/PEP/Sanctions check status (admin
+                      view shows results; user view shows pass/fail only)
+  Each tab provides clear next-action buttons. Completion ring drives a
+  "Trust score" 0-100 visible on the user profile (admin/partner views).
+
+Schema
+  CREATE TABLE legal_obligations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    obligation_key TEXT NOT NULL,        -- 'tos','privacy','nda_platform',
+                                         -- 'kyc','kyb','accreditation',
+                                         -- 'aml_pep','partner_specific'
+    required INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK(status IN ('pending','in_review','satisfied','waived','expired')),
+    expires_at DATETIME,
+    evidence_envelope_uuid TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, obligation_key)
+  );
+  CREATE TABLE pairwise_ndas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    party_a_user_id INTEGER NOT NULL,    -- Founder
+    party_b_user_id INTEGER NOT NULL,    -- Investor or Mentor
+    intermediary TEXT NOT NULL DEFAULT 'axal',
+    nda_envelope_uuid TEXT NOT NULL,
+    status TEXT NOT NULL,                -- 'pending','signed','expired','revoked'
+    valid_until DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(party_a_user_id, party_b_user_id)
+  );
+
+Worker (cloudflare-worker/src/routes/trust.ts)
+  GET    /api/trust/me                         summary + obligations
+  GET    /api/trust/agreements                 lists signed + pending NDAs
+  POST   /api/trust/intro/request              { founder_user_id } → if
+                                                no valid NDA, issues a
+                                                3-way envelope and returns
+                                                its uuid
+  GET    /api/trust/intro/status?founder=...   nda status for current pair
+  POST   /api/trust/obligation/:key/start
+  GET    /api/trust/sanctions                  admin only; per-user list
+  Cron: nightly resync of legal_obligations.status from KYC/KYB providers
+  + envelope statuses; expire NDAs at TTL.
+
+Templates (legal-reviewable copy committed to repo
+           cloudflare-worker/src/templates/legal/)
+  - founder_nda_v1.md
+  - investor_nda_axal_v1.md
+  - mentor_nda_axal_v1.md
+  - mentor_engagement_disclaimer_v1.md
+  - partner_nda_nonsolicit_v1.md
+  - nda_3way_founder_investor_axal_v1.md
+  - finders_fee_intro_agreement_v1.md
+  - data_access_acknowledgment_admin_v1.md
+  - ip_background_schedule_v1.md
+  Each template has merge-fields populated from the corporate/personal
+  profile (Prompt U). Mark templates "Subject to legal review before
+  production use" until counsel signs off.
+
+Cross-system effects
+  - Investor portal: any Founder card displays a small lock 🔒 with
+    "NDA required to unlock — request intro" if no signed pairwise NDA.
+  - Founder portal: when an Investor requests intro, Founder gets a
+    notification + signing CTA.
+  - Admin Trust Center dashboard: bulk view of obligation completion
+    by user, with filters by role, country, deal type. Export CSV.
+
+Acceptance
+  - Founder onboarding requires only ToS + Privacy + Founder NDA. No
+    KYC unless they choose to incorporate.
+  - Investor onboarding gates data-room access on KYC + Accreditation
+    + Investor NDA + (KYB if entity).
+  - Mentor onboarding: ToS + Privacy + Mentor NDA + disclaimer.
+  - Partner onboarding (Prompt X) layers KYB + correct conditional
+    requirements per deal type.
+  - Founder ↔ Investor introduction:
+      first time → 3-way NDA issued, all parties sign, then data
+      unlocks.
+      next time within 12 months → data unlocks immediately.
+  - Trust Center page shows accurate per-role obligations and lets
+    user act on each one.
+  - Sanctions/PEP run on KYB/KYC submission; results in DD case.
+  - All legal templates use merge-fields from corporate profile.
+```
+
+---
+
+## Replit Prompt Z — Admin Console > Contracts (final fix + new templates wiring)
+
+```
+Objective
+  Earlier audit found Admin > Contracts shows nothing because the admin
+  view reads `documents` while real contracts live in `esign_envelopes`.
+  Confirm the union fix from earlier prompt is in production AND extend
+  it to surface every new envelope type added by Prompts W, X, and Y:
+
+  New doc_type values to recognise:
+    investor_nda_axal
+    mentor_nda_axal
+    mentor_engagement_disclaimer
+    partner_nda_nonsolicit
+    partner_equity
+    partner_services
+    partner_revshare
+    partner_capital
+    partner_custom
+    finders_fee_intro_agreement
+    nda_3way_founder_investor_axal
+    ip_background_schedule
+    data_access_acknowledgment_admin
+    investor_subscription_pro
+    investor_subscription_inst
+
+Tasks
+  1. Verify cloudflare-worker/src/routes/admin-contracts.ts unions
+     `documents` ∪ `esign_envelopes` in list, stats, detail, download,
+     resend, void.
+  2. Add the new doc_type strings to the friendly-label map and to the
+     filter dropdown in AdminPage.jsx ContractsPanel.
+  3. Add filter chips: by party role (Founder / Investor / Mentor /
+     Partner / Axal), by deal_type for partner contracts, by
+     pairwise_ndas relation.
+  4. Per-row actions:
+       Download (gated through Worker, never raw R2 URL)
+       Resend (only if status in ('sent','viewed'))
+       Void (admin reason captured; mirrored to dd_audit_log)
+       Open in DD (deep-link to dd_findings if related)
+  5. Add a "Pairwise NDAs" tab that surfaces the pairwise_ndas table from
+     Prompt Y (Founder ↔ Investor pairs, status, valid_until, last
+     activity).
+  6. Add a "Partner Deals" tab that surfaces partner_deals from Prompt X
+     (deal type, term, granted tiers, status, redemptions).
+  7. Backfill: if any envelopes already exist with the new doc_type values
+     pre-deploy, ensure the listing renders them (no migration required
+     since we're reading by string).
+  8. Add an admin-only "Create envelope" wizard for ad-hoc one-offs
+     (pick template → pick recipient(s) → fill merge-fields → send).
+     Reuses the templates from Prompt Y.
+
+Acceptance
+  - Sent / Pending / Signed / Voided tabs are populated as soon as the
+    e-sign route writes a row.
+  - All new doc_types render with friendly labels and correct filter
+    behaviour.
+  - Pairwise NDAs tab shows currently-valid Founder–Investor NDAs.
+  - Partner Deals tab shows active partner agreements.
+  - Download produces the actual signed PDF via gated worker URL.
+  - Voiding a pending NDA notifies the recipient and updates DD.
+```
+
+---
+
+## Replit Prompt AA — Market Intelligence: more data sources
+
+```
+Objective
+  Founders need help picking what to build. Investors need to size markets.
+  Add 14 new internal + external data sources to Market Intelligence with a
+  shared aggregator pattern so adding source #15+ is one file.
+
+Architecture
+  cloudflare-worker/src/services/market_intel/
+    sources/
+      gartner.ts            (manual upload of analyst PDFs → embeddings)
+      sec_edgar.ts           (Form D, 10-K snippets)
+      pitchbook.ts           (paid; behind feature flag)
+      cb_insights.ts         (paid; behind feature flag)
+      crunchbase.ts          (Prompt O reuse)
+      similarweb.ts          (sector traffic share)
+      semrush.ts             (search demand by keyword)
+      google_trends.ts       (trend slope per keyword)
+      reddit.ts              (subreddit volume + sentiment per topic)
+      hackernews.ts          (Show HN + Ask HN volume per topic)
+      producthunt.ts         (launches, upvotes, makers count per category)
+      github_trending.ts     (trending repos per language/topic)
+      world_bank.ts           (macro indicators per country/sector)
+      oecd.ts                 (GDP, ICT spend, R&D intensity)
+      eurostat.ts             (EU sector breakdown)
+      bls.ts                  (US labour stats per industry)
+      patent_uspto.ts         (filings count per class per year)
+      patent_epo.ts           (EU equivalent)
+      news_gdelt.ts           (global news volume + tone per topic)
+      newsapi.ts              (curated business news per sector)
+      arxiv.ts                (research-paper volume per topic — useful
+                               for AI/biotech sectors)
+      paperswithcode.ts      (SOTA model launches per task)
+      builtwith.ts            (tech-adoption share by stack/sector)
+      aws_marketplace.ts      (listing growth as a vendor-density proxy)
+      glassdoor_jobs.ts      (job-posting volume by sector)
+      linkedin_jobs.ts        (Talent demand)
+      indeed.ts              (Job-posting trends)
+      ahrefs.ts              (Backlink + content velocity per topic)
+      stack_exchange.ts      (question volume per tag)
+      shopify_partners.ts    (commerce vertical signals)
+      apple_appstore.ts      (top-grossing categories + new entries)
+      google_play.ts         (same)
+    aggregator.ts            (normalises into common schema)
+    scoring.ts               (per-source weight + recency decay)
+    cache.ts                 (Cloudflare Cache API + KV TTLs)
+
+  Common normalised row:
+    {
+      ts                ISO datetime
+      source            string (key)
+      sector             string                (taxonomy from sectors.json)
+      sub_sector         string | null
+      geo                ISO country | 'global'
+      metric_key         string  ('demand_index','funding_volume_usd',
+                                   'search_volume','job_postings',
+                                   'patent_filings','news_mentions','tone',
+                                   'launches','reviews_avg','avg_acv','...'
+                                  )
+      value              number
+      window             '1d'|'7d'|'30d'|'90d'|'1y'
+      raw_url            optional citation
+      confidence         0..1
+    }
+  All rows persisted in market_intel_rows (D1) with idx on (sector, ts)
+  for fast queries.
+
+Cron
+  Each connector runs on its own cadence (hourly/daily/weekly), writing
+  rows. A nightly aggregator computes per-sector composite indexes
+  (demand_score, supply_score, capital_score, talent_score,
+  research_score, sentiment_score) and writes market_intel_indexes.
+
+User-facing surface (frontend/src/pages/MarketIntelPage.jsx)
+  New tabs / panels:
+    Sector Compass
+      - Picks 3-5 "rising sectors" for the founder based on their
+        profile + the composite indexes (high demand, low supply,
+        rising capital, growing talent pool).
+      - Each sector card shows mini sparkline per index + confidence.
+    Founder Lens
+      - Drill into a sector: who's funded recently, top searches, jobs
+        velocity, patent + research output, key public datasets.
+    Investor Lens
+      - Capital deployment trends, average ticket per stage, top
+        active investors per sector (from Crunchbase + EDGAR).
+    Geography Lens
+      - World map heat by sector × index.
+    Citations & Methodology
+      - Every datapoint cites its source url and ingest timestamp.
+    Custom Watchlist
+      - Saved searches with weekly digest email (uses Prompt R digest).
+
+Tier gating
+  Free founder/investor → Sector Compass overview only (composite
+                          indexes, no underlying detail).
+  Growth tier → Founder Lens + Geography Lens + 5 saved watchlists.
+  Studio / Investor Professional → full detail + CSV export + alerts.
+  Investor Institutional → quarterly Axal-VC branded sector report PDF
+                            (auto-generated).
+
+Privacy + cost controls
+  - Paid sources (PitchBook, CB Insights, SimilarWeb, Semrush, Ahrefs,
+    NewsAPI) behind feature flags + per-environment rate limits.
+  - Quota tracker per integration; 429s degrade gracefully.
+  - Cache layer: identical queries served from Cloudflare Cache API for
+    up to 6 hours; KV holds last computed indexes for 24 hours.
+
+Acceptance
+  - All connectors implemented as stubs with the common normaliser
+    interface; LIVE flags toggle per provider.
+  - Daily cron populates market_intel_rows; indexes computed.
+  - Sector Compass returns 3+ recommended sectors for a founder profile
+    with reasons.
+  - Investor Lens returns real capital-deployment numbers from EDGAR +
+    Crunchbase.
+  - Tier gating enforced server-side.
+  - Citations link out to the original source.
+  - Quarterly PDF report renders for Institutional investors.
+```
+
+---
+
+## Order
+
+```
+Phase 1 (legal foundation)            : Y → Z
+Phase 2 (monetisation + acquisition)  : W and X in parallel after Y merges
+                                         (Y supplies the templates X needs
+                                          for partner agreements; W has no
+                                          legal blocker but waits on Y so
+                                          Investor NDA + Accreditation
+                                          flows are real)
+Phase 3 (insight)                      : AA (independent; can start any time
+                                              after the integrations base
+                                              from earlier prompt H)
+```
+
+Each prompt is self-contained. Want me to draft the actual NDA templates (placeholder language flagged for legal review), the chatbot script for the partner profiling flow, or the sector composite-index formulas next?

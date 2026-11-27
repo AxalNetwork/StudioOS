@@ -1,0 +1,34 @@
+{
+  "skill": "contract-clause-extraction",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "skill_name": "Contract Clause Extraction and Indexing",
+        "task_scope": "Extracts and indexes clauses across a contract set with source references, version identity and classification.",
+        "evidence": [
+          "clause register with source references"
+        ],
+        "omitted_field": "document version"
+      },
+      "company.profile": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for clause register with source references."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "clause register with source references"
+    ],
+    "must_say_not_recorded": [
+      "document version"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

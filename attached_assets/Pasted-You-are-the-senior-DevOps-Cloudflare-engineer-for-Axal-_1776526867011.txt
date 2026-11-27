@@ -1,0 +1,57 @@
+You are the senior DevOps + Cloudflare engineer for Axal StudioOS. The full platform is already built in this Replit (FastAPI routers, async job queue, D1 ORM, AI Workers in cloudflare-worker/ai-workers/, Partner Dashboard, Pipeline Board, etc.).
+
+The GitHub repo now contains a cloudflare-worker/ folder and cloudflare.toml, but is missing proper wrangler.toml with full bindings and KV configuration.
+
+Perform a complete audit and implement production-ready Cloudflare configuration:
+
+1. **Audit & Fix Existing Config**
+   - Check current cloudflare.toml, wrangler.toml (if exists), and all files in cloudflare-worker/.
+   - Identify any missing or incorrect bindings for Workers, D1, KV, Queues, and AI.
+
+2. **Create / Update wrangler.toml**
+   - Create a complete, production-grade wrangler.toml in the root with:
+     - name = "axal-studioos"
+     - compatibility_date = "2026-04-01"
+     - main = "backend/main.py" (or correct entrypoint)
+     - Full [[d1_databases]] binding (name = "axal_d1", database_id = "your-d1-id-here")
+     - [[kv_namespaces]] binding (name = "axal_kv" for sessions, rate-limiting, caching)
+     - [[queues]] binding (name = "studioos-job-queue" for async jobs)
+     - [ai] section with default models for scoring, traction review, equity allocation
+     - Environment variables section (production + preview)
+     - Observability, logging, and security headers
+
+3. **KV Namespace Configuration**
+   - Create a dedicated KV namespace for:
+     - User sessions / auth tokens
+     - Rate limiting counters
+     - Simple caching (dashboard data, match scores)
+   - Add helper functions in backend/db.py or a new cloudflare-kv.js to read/write KV from Workers.
+
+4. **Workers Configuration**
+   - Ensure all Cloudflare Workers (especially ai-workers/*.js and any email/job workers) are properly bound and invocable from the FastAPI backend.
+   - Update deploy-workers.sh and any package.json scripts for one-click deployment.
+
+5. **Other Cloudflare Products to Improve the Platform**
+   - Recommend and implement the following where they add clear value:
+     - **Cloudflare Queues** (replace D1-polling job queue with true async queues for higher throughput)
+     - **R2** (for storing generated PDFs, legal docs, avatar images)
+     - **Durable Objects** (for real-time features: live Pipeline Board updates, chat in onboarding modal)
+     - **Turnstile** (bot protection on public register / referral links)
+     - **Pages** (host the static frontend/dashboard with custom domain)
+     - **Web Analytics + Observability** (automatic metrics for the platform)
+   - Add the relevant bindings to wrangler.toml and example usage code.
+
+6. **Production Polish**
+   - Create .env.example with all required Cloudflare secrets and placeholders.
+   - Add a clear PRODUCTION.md with step-by-step Cloudflare setup checklist (D1 creation, KV binding, Queue creation, etc.).
+   - Update README.md with deployment section using wrangler.
+
+Build this step-by-step:
+1. First audit existing configs and create/update wrangler.toml with D1, KV, Queues, AI bindings.
+2. Then implement KV helpers and update Workers to use them.
+3. Then add the recommended extra Cloudflare products (Queues → R2 → Durable Objects → Turnstile) with code examples.
+4. Finally create .env.example, PRODUCTION.md, and update deployment scripts.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

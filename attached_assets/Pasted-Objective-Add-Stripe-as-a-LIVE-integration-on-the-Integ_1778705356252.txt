@@ -1,0 +1,83 @@
+Objective
+  Add Stripe as a LIVE integration on the Integrations page. Pulls
+  MRR, ARR, paying customers, churn, charge volume into the Financial
+  Model + Metrics pages automatically and feeds the scoring anti-cheat
+  layer.
+
+Auth
+  Stripe Connect — Standard accounts (founder is a Stripe customer
+  whose account we read).
+  Endpoints:
+    GET  /api/integrations/stripe/start
+        → returns Stripe OAuth URL:
+          https://connect.stripe.com/oauth/authorize?response_type=code
+          &client_id=env.STRIPE_CLIENT_ID
+          &scope=read_only
+          &redirect_uri=https://axal.vc/api/integrations/stripe/callback
+          &state=<HMAC>
+    GET  /api/integrations/stripe/callback?code=&state=
+        → POST https://connect.stripe.com/oauth/token
+           { client_secret: env.STRIPE_SECRET, code,
+             grant_type: 'authorization_code' }
+        → persist stripe_user_id + access_token (encrypted) in
+          integrations table with provider='stripe'.
+    POST /api/integrations/stripe/disconnect
+
+  Secrets:
+    STRIPE_CLIENT_ID            (Connect platform's client_id)
+    STRIPE_SECRET                (already set; for OAuth exchange)
+    STRIPE_WEBHOOK_SECRET        (already set; webhook signature)
+
+Sync (cron every 30 min, plus on-demand)
+  cloudflare-worker/src/services/integrations/stripe.ts
+    fetchMrrArr(integration):
+      // Stripe Sigma is paid; instead use Stripe Billing API:
+      List subscriptions (status='active'), aggregate item.price.
+      MRR = sum(items.price.unit_amount * quantity) / 100
+            normalised per month (handle yearly = /12).
+      ARR = MRR * 12.
+    fetchCustomersAndChurn(integration):
+      Customers count + 30d churn from
+      https://api.stripe.com/v1/customers and
+      /v1/subscriptions?status=canceled.
+    fetchGrossVolume(integration, period):
+      /v1/charges with date range; subtract refunds + disputes.
+
+  Each sync writes/updates:
+    - financial_models with source='stripe' for {mrr, arr, paying_customers, monthly_churn_pct}
+    - score_evidence row tying the figure to this Stripe account
+      (so the scoring engine treats it as verified)
+
+Webhooks
+  /api/integrations/stripe/webhook
+    Verify Stripe-Signature with constant-time HMAC.
+    Handle: charge.succeeded, customer.subscription.created/
+            updated/deleted, invoice.paid, invoice.payment_failed,
+            charge.refunded, charge.disputed.created.
+    Each event updates the latest financial_models row + writes an
+    audit entry.
+
+Frontend
+  IntegrationsPage adds a Stripe card (LIVE, Growth tier required).
+  Financial Model + Metrics pages show:
+    - "Synced from Stripe · 5 min ago" badge on Stripe-sourced fields
+    - Stripe-sourced values are read-only with a tooltip:
+      "Edit in Stripe; mirrored here automatically"
+    - Founder can disable the integration to regain manual control;
+      pre-existing Stripe values flip to source='manual' on disconnect
+
+Scoring & anti-cheat
+  When Stripe is connected, the scoring engine (Prompt T from earlier)
+  computes evidence_confidence using the Stripe value as ground truth.
+  Discrepancy > 20% between typed MRR and Stripe MRR flags a
+  score_flag for admin review.
+
+Acceptance
+  - Founder connects Stripe via OAuth; tokens stored encrypted.
+  - First sync within 60s populates MRR / ARR / paying customers /
+    churn on Financial Model.
+  - Subsequent webhook events update values within seconds.
+  - Stripe-sourced fields show source badge; cannot be hand-edited.
+  - Scoring engine flags large self-report vs Stripe deltas.
+  - Free-tier user sees the Stripe card locked behind Growth-tier
+    paywall.

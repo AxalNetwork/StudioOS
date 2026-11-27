@@ -1,0 +1,113 @@
+Objective
+  Pitch Deck Builder is too basic. Founders need a real deck builder
+  that auto-fills from their project + financials + cap-table data and
+  exports an Axal-VC-branded PDF (or removes the branding behind a
+  paywall).
+
+Architecture decision (do NOT over-engineer)
+  Don't use an external deck library (Pitch.com, Slidebean) — they
+  introduce account dependencies. Don't build a full slide editor —
+  too much surface area for a v1.
+
+  Strategy: render decks as TailwindCSS-styled HTML in the browser,
+  export to PDF via Cloudflare Browser Rendering (already in
+  wrangler.toml from earlier prompts). One slide = one full-page
+  React component bound to project data. Editing happens inline; AI
+  fills the gaps.
+
+Templates (deck.methods.ts — JSON specs)
+  Twelve named methods, each is a list of slide specs:
+
+    yc_seed                10 slides — Problem, Solution, Traction,
+                                        Market, Product, Business
+                                        Model, Team, Why Now, Ask,
+                                        Contact
+    sequoia_classic        12 slides — Hook, Problem, Solution, Why
+                                        Now, Market, Competition,
+                                        Product, Model, Traction,
+                                        Team, Financials, Ask
+    kawasaki_10_20_30      10 slides — exactly Kawasaki's order
+    minimal_seed            6 slides — Problem, Solution, Early
+                                        traction, Team, Ask, Contact
+    series_a_growth        15 slides — Problem, Solution, Product,
+                                        Traction (metrics-heavy),
+                                        Unit Economics, GTM, Cohort
+                                        Retention, Team, Competition,
+                                        Market, Roadmap, Hiring Plan,
+                                        Financials, Ask, Appendix
+    series_b_diligence     22 slides + appendix
+                                       Scale, KPIs, Customers, Ops,
+                                       Financials, Legal, Risks,
+                                       Appendix
+    demo_day                12 slides — heavy on product screenshots
+                                        and live demo
+    sales_commercial       18 slides — customer-facing
+    partnership_bd          12 slides — partner-focused
+    one_pager_teaser        1 slide — irresistible hook + ask
+    investor_appendix       short deck + 30-page appendix structure
+    narrative_brand         15 slides — story-led, brand-driven
+
+  Each spec entry: { id, key, label, prompt_hint, fields_from_project,
+                     fields_from_financials, fields_from_captable,
+                     ai_fill_hint, optional }
+
+Sector × stage recommendations
+  scripts/deck/recommendDeck.ts returns the best template for:
+    AI infra + pre-seed       → yc_seed OR kawasaki
+    AI app + seed              → sequoia_classic
+    Fintech + Series A         → series_a_growth
+    Climate + Series B+        → series_b_diligence
+    Consumer + brand-led        → narrative_brand
+    DevTools + Demo Day         → demo_day
+    B2B SaaS + sales-cycle      → sales_commercial
+    Enterprise BD               → partnership_bd
+    Cold email outreach         → one_pager_teaser
+    Top-tier raise              → investor_appendix
+  Mapping editable by admin.
+
+Auto-fill engine
+  cloudflare-worker/src/services/decks/autofill.ts
+    For each slide spec field:
+      1. Pull from platform data (projects.*, financials.*, captable_*,
+         metrics_snapshots.*, roadmap_okrs.*, discovery_interviews.*).
+      2. If empty, ask Personal Advisor to draft the bullet from
+         related answers (uses the advisor's Workers AI binding from
+         Prompt CG).
+      3. If still empty, leave a clearly-marked placeholder
+         "[Founder, fill in]".
+    Returns a full deck JSON.
+
+Editor (frontend/src/pages/PitchDeckPage.jsx — rewrite)
+  Layout: left rail (slide thumbnails), centre (full slide editor),
+  right rail (template settings + "Apply method").
+  Inline text editing per field. Drag-to-reorder slides. Insert/delete
+  slide.
+  Live preview of brand kit (uses projects.brand_palette + tagline).
+
+Export
+  Endpoint:
+    POST /api/decks/:id/export { format: 'pdf'|'pptx'|'png' }
+      pdf  → renders the editor route in Cloudflare Browser
+              Rendering, saves to R2 (gated URL).
+      pptx → uses pptxgenjs server-side to build a .pptx from the
+              deck JSON. Useful for investors who want native
+              PowerPoint.
+      png  → first-slide thumbnail for social sharing.
+
+Branding + paywall
+  Footer on every slide:
+    Free tier:    "Built with Axal VC · axal.vc"  (cannot remove)
+    Growth tier:  removed automatically
+    Studio tier:  also unlocks custom brand-watermark upload
+  Premium templates (series_b_diligence, investor_appendix,
+  narrative_brand) require Growth tier. Free tier sees them with a
+  lock pill and "Upgrade to unlock template" CTA.
+
+Acceptance
+  - Founder picks a method on a project that has populated data →
+    deck renders fully auto-filled (≥ 80% of fields).
+  - Editing a field updates the live preview.
+  - Free-tier export shows the Axal footer; Growth-tier export does
+    not.
+  - PDF + PPTX exports round-trip with the same content.
+  - Locked methods on free tier show a paywall, not an empty editor.

@@ -1,0 +1,19 @@
+{
+  "name": "studioos-workflow-failures",
+  "main": "workflow-failure-dispatch.mjs",
+  "compatibility_date": "2026-11-12",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": { "REPOSITORY_ID": "1191713997" },
+  "queues": {
+    "producers": [{ "binding": "FAILURES", "queue": "studioos-workflow-failures" }],
+    "consumers": [{
+      "queue": "studioos-workflow-failures", "max_batch_size": 20, "max_batch_timeout": 5,
+      "max_retries": 6, "retry_delay": 60, "dead_letter_queue": "studioos-workflow-failures-dead"
+    }]
+  },
+  "ratelimits": [{
+    "name": "INGRESS_LIMIT", "namespace_id": "6387",
+    "simple": { "limit": 240, "period": 60 }
+  }]
+}

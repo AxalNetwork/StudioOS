@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:40px 44px 32px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .fr{width:1080px;min-width:1080px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden}
+    .mono{font-family:'Roboto Mono',monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .c{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .row:hover{background:#fbfaff}
+    .btn{display:inline-block;text-align:center;font-size:12.5px;font-weight:700;padding:7px 15px;border-radius:8px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;cursor:pointer;white-space:nowrap}
+    .btn:hover{background:#6d28d9;border-color:#6d28d9}
+    .btn2{display:inline-block;text-align:center;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:8px;background:#fff;color:#4a4459;border:1px solid #e8e6ee;cursor:pointer;white-space:nowrap}
+    .amber{font-size:9.5px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#fcd34d;color:#92400e;white-space:nowrap}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:1080px}
+  </style>
+</helmet>
+
+<!-- ══════════ N1 · PANEL ══════════ -->
+<section class="ab" id="n1">
+  <div class="ab-hd"><a class="ab-id" href="#n1">N1</a><span class="ab-nm">NotifPanel · component</span><span class="ab-sub">380px · anchored to the shell bell · three tabs, grouped by day</span></div>
+
+  <div style="display:flex;gap:30px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="width:420px;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;padding:18px 20px 28px">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;padding-bottom:16px">
+          <span class="mono" style="font-size:11px;color:#6b6577">ines@meridianrobotics.nl</span>
+          <div style="position:relative;width:30px;height:30px;display:flex;align-items:center;justify-content:center">
+            <span style="width:19px;height:19px;display:block;color:#241f38" dangerouslySetInnerHTML="{{ bellIcon }}"></span>
+            <span class="mono" style="position:absolute;top:-3px;right:-4px;min-width:17px;height:17px;box-sizing:border-box;padding:0 4px;border-radius:99px;background:#7c3aed;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #f4f3f7">{{ unread }}</span>
+          </div>
+        </div>
+
+        <div style="width:380px;margin-left:auto;background:#fff;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 12px 34px rgba(36,31,56,.14);overflow:hidden">
+          <div style="padding:15px 16px 0">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="font-size:15px;font-weight:800;letter-spacing:-.015em">Notifications</span>
+              <span style="font-size:11.5px;font-weight:600;color:#6d28d9;cursor:pointer">Mark all read</span>
+            </div>
+            <div style="display:flex;gap:5px;margin-top:13px">
+              <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+                <span style="{{ t.style }}">{{ t.label }}<sc-if value="{{ t.n }}"><span class="mono" style="{{ t.nStyle }}">{{ t.n }}</span></sc-if></span>
+              </sc-for>
+            </div>
+          </div>
+
+          <sc-for list="{{ panelGroups }}" as="g" hint-placeholder-count="2">
+            <div>
+              <div style="padding:14px 16px 7px;background:#fbfaff;border-top:1px solid #f0eef5;border-bottom:1px solid #f0eef5;margin-top:12px">
+                <span class="lbl">{{ g.day }}</span>
+              </div>
+              <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="3">
+                <div class="row" style="{{ i.rowStyle }}">
+                  <span style="{{ i.dot }}"></span>
+                  <span style="{{ i.iconWrap }}" dangerouslySetInnerHTML="{{ i.icon }}"></span>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:12.5px;font-weight:{{ i.weight }};line-height:1.45">{{ i.title }}</div>
+                    <div style="display:flex;align-items:baseline;gap:7px;margin-top:5px">
+                      <span class="mono" style="font-size:10px;color:#6b6577">{{ i.source }}</span>
+                      <span style="font-size:10px;color:#d3cfdc">·</span>
+                      <span class="mono" style="font-size:10px;color:#6b6577">{{ i.ago }}</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-top:1px solid #e8e6ee;background:#fbfaff">
+            <span style="font-size:12.5px;font-weight:700;color:#6d28d9;cursor:pointer">See all</span>
+            <span style="width:16px;height:16px;display:block;color:#6b6577;cursor:pointer" dangerouslySetInnerHTML="{{ gearIcon }}"></span>
+          </div>
+        </div>
+      </div>
+      <div class="cap" style="max-width:420px">{{ n1Cap }}</div>
+    </div>
+
+    <div style="flex:1;min-width:330px;display:grid;gap:14px">
+      <div class="c" style="padding:18px 20px">
+        <div class="lbl">Type vocabulary</div>
+        <div style="font-size:12px;color:#4a4459;margin-top:9px;line-height:1.6">{{ typeNote }}</div>
+        <div style="display:grid;gap:9px;margin-top:13px">
+          <sc-for list="{{ typeLegend }}" as="t" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:11px">
+              <span style="{{ t.iconWrap }}" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:12.5px;font-weight:700">{{ t.name }}</div>
+                <div style="font-size:11px;color:#6b6577;margin-top:3px;line-height:1.45">{{ t.note }}</div>
+              </div>
+              <span class="mono" style="font-size:10.5px;color:#6b6577;flex:none">{{ t.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="c" style="padding:18px 20px">
+        <div class="lbl">Read state</div>
+        <div style="display:grid;gap:10px;margin-top:12px">
+          <sc-for list="{{ readRules }}" as="r" hint-placeholder-count="3">
+            <div style="border-left:2px solid #7c3aed;padding-left:11px">
+              <div style="font-size:12.5px;font-weight:700">{{ r.rule }}</div>
+              <div style="font-size:11.5px;color:#4a4459;margin-top:4px;line-height:1.55">{{ r.why }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ N2 · FULL PAGE ══════════ -->
+<section class="ab" id="n2">
+  <div class="ab-hd"><a class="ab-id" href="#n2">N2</a><span class="ab-nm">Notifications · full page</span><span class="ab-sub">type filters · action-needed inline · preferences rail</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        <span class="lbl" style="margin-left:4px">Founder · Meridian Robotics</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577">{{ personaNote }}</span>
+    </div>
+
+    <div style="padding:28px 32px 34px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2">Notifications</h1>
+          <div style="font-size:13.5px;color:#6b6577;margin-top:6px;line-height:1.55">{{ pageLede }}</div>
+        </div>
+        <span class="btn2" style="flex:none">Mark all read</span>
+      </div>
+
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:20px">
+        <sc-for list="{{ filters }}" as="f" hint-placeholder-count="7">
+          <span style="{{ f.style }}">{{ f.label }}<span class="mono" style="{{ f.nStyle }}">{{ f.n }}</span></span>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 306px;gap:16px;margin-top:18px;align-items:start">
+        <div style="display:grid;gap:16px">
+          <div class="c" style="overflow:hidden">
+            <div style="padding:15px 18px;background:#fffdf5;border-bottom:1px solid #fcd34d;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span class="amber">ACTION NEEDED</span>
+                <span style="font-size:12.5px;color:#78350f;line-height:1.5">{{ actionNote }}</span>
+              </div>
+            </div>
+            <sc-for list="{{ actionItems }}" as="i" hint-placeholder-count="3">
+              <div class="row" style="display:flex;align-items:flex-start;gap:13px;padding:16px 18px;border-top:1px solid #f0eef5">
+                <span style="{{ i.dot }}"></span>
+                <span style="{{ i.iconWrap }}" dangerouslySetInnerHTML="{{ i.icon }}"></span>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:13.5px;font-weight:700;line-height:1.4">{{ i.title }}</span>
+                    <sc-if value="{{ i.badge }}"><span class="amber">{{ i.badge }}</span></sc-if>
+                  </div>
+                  <div style="font-size:12px;color:#4a4459;margin-top:6px;line-height:1.55">{{ i.body }}</div>
+                  <div style="display:flex;align-items:baseline;gap:7px;margin-top:7px">
+                    <span class="mono" style="font-size:10.5px;color:#6b6577">{{ i.source }}</span>
+                    <span style="font-size:10px;color:#d3cfdc">·</span>
+                    <span class="mono" style="font-size:10.5px;color:#6b6577">{{ i.ago }}</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;flex:none">
+                  <span class="btn">{{ i.cta }}</span>
+                  <span class="btn2">{{ i.alt }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div class="c" style="overflow:hidden">
+            <div style="padding:13px 18px;background:#fbfaff;border-bottom:1px solid #f0eef5"><span class="lbl">Nothing waiting on you</span></div>
+            <sc-for list="{{ restItems }}" as="i" hint-placeholder-count="5">
+              <div class="row" style="display:flex;align-items:flex-start;gap:13px;padding:14px 18px;border-top:1px solid #f0eef5">
+                <span style="{{ i.dot }}"></span>
+                <span style="{{ i.iconWrap }}" dangerouslySetInnerHTML="{{ i.icon }}"></span>
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:13px;font-weight:{{ i.weight }};line-height:1.45">{{ i.title }}</div>
+                  <div style="display:flex;align-items:baseline;gap:7px;margin-top:5px">
+                    <span class="mono" style="font-size:10.5px;color:#6b6577">{{ i.source }}</span>
+                    <span style="font-size:10px;color:#d3cfdc">·</span>
+                    <span class="mono" style="font-size:10.5px;color:#6b6577">{{ i.ago }}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div class="c" style="padding:34px 22px;text-align:center">
+            <div style="display:flex;justify-content:center">
+              <span style="width:52px;height:52px;border-radius:15px;background:#f4f0fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;padding:13px;box-sizing:border-box" dangerouslySetInnerHTML="{{ caughtIcon }}"></span>
+            </div>
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em;margin-top:14px">You're caught up</div>
+            <div style="font-size:12.5px;color:#6b6577;margin-top:7px;line-height:1.6;max-width:380px;margin-left:auto;margin-right:auto">{{ emptyBody }}</div>
+            <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:13px">{{ emptyFoot }}</div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:14px">
+          <div class="c" style="padding:19px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span class="lbl">Preferences</span>
+              <span style="font-size:11.5px;font-weight:700;color:#6d28d9;cursor:pointer">Account →</span>
+            </div>
+            <div style="font-size:12px;color:#4a4459;margin-top:9px;line-height:1.6">{{ prefNote }}</div>
+            <div style="display:grid;gap:8px;margin-top:13px">
+              <sc-for list="{{ prefs }}" as="p" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eef5;background:#fbfaff;border-radius:9px">
+                  <span style="font-size:12px;font-weight:600">{{ p.type }}</span>
+                  <span style="{{ p.pill }}">{{ p.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div class="mono" style="font-size:10px;color:#6b6577;margin-top:11px;line-height:1.6">{{ prefFoot }}</div>
+          </div>
+
+          <div class="c" style="padding:19px 20px">
+            <span class="lbl">Digest frequency</span>
+            <div style="display:grid;gap:9px;margin-top:12px">
+              <sc-for list="{{ digest }}" as="d" hint-placeholder-count="3">
+                <div style="{{ d.rowStyle }}">
+                  <span style="{{ d.radio }}"><sc-if value="{{ d.on }}"><span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:block"></span></sc-if></span>
+                  <div style="min-width:0">
+                    <div style="font-size:13px;font-weight:{{ d.weight }}">{{ d.name }}</div>
+                    <div style="font-size:11px;color:#6b6577;margin-top:4px;line-height:1.5">{{ d.note }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="mono" style="font-size:10px;color:#6b6577;margin-top:12px;padding-top:11px;border-top:1px solid #f0eef5;line-height:1.6">{{ digestFoot }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ n2Cap }}</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', HAIR = '#e8e6ee', MUT = '#6b6577';
+    const I = {
+      bell:  this.ic('<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10.5 19a1.7 1.7 0 0 0 3 0"/>'),
+      gear:  this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'),
+      pen:   this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/><path d="M9 14.5h6M9 17.5h4"/>'),
+      coin:  this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      deal:  this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      msg:   this.ic('<path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/>'),
+      cal:   this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      cog2:  this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>'),
+      check: this.ic('<path d="M20 7 10.5 17 4.5 11"/>')
+    };
+
+    // ══ ONE notification record. Tab counts, filter counts, unread badge, groups and the
+    // preferences rail all derive from it — a badge cannot disagree with the list. ══
+    const TYPES = {
+      Signatures: { icon:I.pen,  tint:VT,        ink:VD,       pref:'Real-time · email + in-app' },
+      Capital:    { icon:I.coin, tint:'#eef0ff', ink:'#4338ca', pref:'Real-time · email + in-app' },
+      'Deal flow':{ icon:I.deal, tint:'#eefbf5', ink:'#047857', pref:'Daily digest' },
+      Messages:   { icon:I.msg,  tint:'#f4f3f7', ink:'#4a4459', pref:'Real-time · in-app only' },
+      Events:     { icon:I.cal,  tint:'#fff6e9', ink:'#92400e', pref:'Daily digest' },
+      System:     { icon:I.cog2, tint:'#f4f3f7', ink:MUT,       pref:'Weekly digest' }
+    };
+
+    const N = [
+      { title:'Signature requested — SAFE, Meridian Robotics', type:'Signatures', src:'Send for Signature',
+        ago:'14m', day:'Today', unread:true, act:true, cta:'Sign', alt:'Review terms', badge:'EXPIRES IN 6 DAYS',
+        body:'Latitude Seed countersigned yesterday. The link expires 7 days from issue, after which the envelope voids and has to be reissued.' },
+      { title:'Capital call №3 issued — Fund II', type:'Capital', src:'Fund Administration',
+        ago:'52m', day:'Today', unread:true, act:true, cta:'Review', alt:'Download notice', badge:'DUE 9 SEP',
+        body:'€412,000 called against your commitment. Wire details are on the notice; the platform records receipt but does not move money.' },
+      { title:'New DD request assigned', type:'Deal flow', src:'Due Diligence',
+        ago:'2h', day:'Today', unread:true,
+        body:'Kelp Bio, technical section. Four items outstanding.' },
+      { title:'Demo Day RSVP closes Friday', type:'Events', src:'Events',
+        ago:'3h', day:'Today', unread:true, act:true, cta:'RSVP', alt:'See agenda', badge:'2 DAYS LEFT',
+        body:'28 Sep, Amsterdam. Two seats held under your name; unclaimed seats release to the waitlist Friday 18:00.' },
+      { title:'Office hours confirmed with Priya Nair, Thu 14:00', type:'Events', src:'Office Hours',
+        ago:'5h', day:'Today', unread:true },
+      { title:'Priya Nair replied in your pricing thread', type:'Messages', src:'Messages',
+        ago:'6h', day:'Today', unread:false },
+      { title:'Term sheet viewed by Latitude Seed', type:'Deal flow', src:'Round Manager',
+        ago:'Yesterday 16:20', day:'Yesterday', unread:false },
+      { title:'Cap table synced to Carta', type:'Capital', src:'Cap Table',
+        ago:'Yesterday 11:04', day:'Yesterday', unread:false },
+      { title:'Q3 LP report issued — Fund II', type:'Capital', src:'Fund Administration',
+        ago:'Yesterday 09:30', day:'Yesterday', unread:false },
+      { title:'Two new sign-in locations on your account', type:'System', src:'Security',
+        ago:'Mon 08:12', day:'Yesterday', unread:false }
+    ].map(n => Object.assign({}, n, TYPES[n.type], { mentions: n.type === 'Messages' }));
+
+    const unread = N.filter(n => n.unread).length;
+    const actions = N.filter(n => n.act);
+    const mentions = N.filter(n => n.mentions);
+
+    const iconWrap = (t) => 'width:30px;height:30px;border-radius:9px;background:'+t.tint+';color:'+t.ink
+      + ';display:flex;align-items:center;justify-content:center;padding:7px;box-sizing:border-box;flex:none';
+    const dot = (on) => 'width:6px;height:6px;border-radius:50%;flex:none;margin-top:12px;background:' + (on ? V : 'transparent');
+    const mapItem = (n) => ({
+      title:n.title, source:n.src, ago:n.ago, icon:n.icon, iconWrap:iconWrap(n),
+      weight: n.unread ? '700' : '500', dot: dot(n.unread),
+      body:n.body || null, cta:n.cta || null, alt:n.alt || null, badge:n.badge || null,
+      rowStyle:'display:flex;align-items:flex-start;gap:11px;padding:13px 16px;border-top:1px solid #f0eef5;cursor:pointer'
+    });
+
+    const tab = (label, n, on) => ({
+      label, n: n ? String(n) : null,
+      style:'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:' + (on ? '700' : '600')
+        + ';padding:7px 12px;border-radius:99px;cursor:pointer;border:'
+        + (on ? '1px solid '+V+';background:'+VT+';color:'+VD : '1px solid '+HAIR+';background:#fff;color:#4a4459'),
+      nStyle:'font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;background:'
+        + (on ? '#fff' : '#f4f3f7') + ';color:' + (on ? VD : MUT)
+    });
+
+    const filter = (label, n, on) => ({
+      label, n:String(n),
+      style:'display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:' + (on ? '700' : '600')
+        + ';padding:8px 14px;border-radius:99px;cursor:pointer;border:'
+        + (on ? '1px solid '+V+';background:'+VT+';color:'+VD : '1px solid '+HAIR+';background:#fff;color:#4a4459'),
+      nStyle:'font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;background:'
+        + (on ? '#fff' : '#f4f3f7') + ';color:' + (on ? VD : MUT)
+    });
+
+    const DAYS = ['Today','Yesterday'];
+    const radio = (on) => 'width:19px;height:19px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:#fff;border:'
+      + (on ? '1.5px solid '+V : '1.5px solid '+HAIR);
+
+    return {
+      bellIcon: I.bell, gearIcon: I.gear, caughtIcon: I.check,
+      unread: String(unread),
+
+      tabs: [tab('All', N.length, true), tab('Action needed', actions.length, false), tab('Mentions', mentions.length, false)],
+      // No slice: the panel renders every record, so the badge count and the violet dots are
+      // the same set rather than a promise the list cannot keep.
+      panelGroups: DAYS.map(day => ({ day, items: N.filter(n => n.day === day).map(mapItem) })),
+      n1Cap: 'The badge reads ' + unread + ' because ' + unread + ' items carry an unread flag — count, dot and list are one record, so the bell cannot promise something the panel does not contain.',
+
+      typeNote: 'Six types, fixed. A notification that does not fit one of them is a surface that has not decided what it is telling you.',
+      typeLegend: Object.keys(TYPES).map(k => ({
+        name:k, icon:TYPES[k].icon, iconWrap:iconWrap(TYPES[k]),
+        count: N.filter(n => n.type === k).length + ' now',
+        note: k === 'Signatures' ? 'Envelope state. Always actionable, always time-bound.'
+          : k === 'Capital' ? 'Calls, distributions, cap-table and report events.'
+          : k === 'Deal flow' ? 'Diligence, term sheets, investor activity.'
+          : k === 'Messages' ? 'Direct replies and thread mentions.'
+          : k === 'Events' ? 'Office hours, Demo Day, RSVPs and deadlines.'
+          : 'Security, sync and platform notices.'
+      })),
+
+      readRules: [
+        { rule:'Opening the panel does not mark anything read', why:'A glance is not an acknowledgement. Reading happens when you open the item or press its action.' },
+        { rule:'Action-needed items stay unread until acted on', why:'Marking a signature request read while it sits unsigned would be a lie the badge tells on your behalf.' },
+        { rule:'Mark all read leaves the action list intact', why:'It clears the dot, not the obligation — those three items still appear under Action needed tomorrow.' }
+      ],
+
+      personaNote:'Founder view · investor and advisor licences filter differently',
+      pageLede: unread + ' unread, ' + actions.length + ' of them waiting on you. Everything else is a record of something that already happened.',
+      filters: [
+        filter('All', N.length, true)
+      ].concat(Object.keys(TYPES).map(k => filter(k, N.filter(n => n.type === k).length, false))),
+
+      actionNote: actions.length + ' items have a deadline attached. Each one is dated, and each one voids or lapses if it passes.',
+      actionItems: actions.map(mapItem),
+      restItems: N.filter(n => !n.act).map(mapItem),
+
+      emptyBody:'No unread notifications and nothing waiting on you. Items stay searchable for 12 months — this list emptying does not mean anything was deleted.',
+      emptyFoot:'Shown here alongside the populated states for review. In the product it replaces the list entirely.',
+
+      prefNote:'Set once in Account, applied everywhere. Signatures and Capital cannot be muted — they carry legal and financial deadlines.',
+      prefs: Object.keys(TYPES).map(k => {
+        const locked = (k === 'Signatures' || k === 'Capital');
+        return { type:k, state:TYPES[k].pref,
+          pill:'font-size:9.5px;font-weight:700;font-family:\'Roboto Mono\',monospace;letter-spacing:.04em;padding:3px 8px;border-radius:99px;white-space:nowrap;'
+            + (locked ? 'background:'+VT+';color:'+VD+';border:1px solid #ddd0fb' : 'background:#f4f3f7;color:'+MUT+';border:1px solid '+HAIR) };
+      }),
+      prefFoot:'Two types are locked in violet. You can change how they reach you, not whether they do.',
+
+      digest: [
+        ['Real-time','Every notification as it happens. Signatures and Capital always arrive this way regardless.', false],
+        ['Daily digest','One email at 08:00 with everything from the previous day. Deadline items still break through.', true],
+        ['Weekly digest','Monday mornings. Suitable if you check the platform daily anyway.', false]
+      ].map(d => ({ name:d[0], note:d[1], on:d[2], weight:d[2] ? '700' : '600', radio:radio(d[2]),
+        rowStyle:'display:flex;align-items:flex-start;gap:11px;padding:12px 13px;border-radius:11px;cursor:pointer;border:'
+          + (d[2] ? '1.5px solid '+V+';background:'+VT : '1px solid '+HAIR+';background:#fff') })),
+      digestFoot:'Digest frequency governs batching, never suppression. A capital call due in 48 hours reaches you on a weekly setting.',
+
+      n2Cap:'Every count on this page — badge, three tab counts, seven filter counts, the lede and the action banner — derives from one ten-item record, so no chip can claim a number the list cannot produce. The design position worth naming: digest frequency batches, it never suppresses, and two types are explicitly unmutable because a missed 83(b) window or a voided signature envelope is not a preference.'
+    };
+  }
+}
+</script>
+</body>
+</html>

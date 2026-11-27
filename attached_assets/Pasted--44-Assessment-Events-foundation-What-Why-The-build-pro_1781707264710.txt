@@ -1,0 +1,22 @@
+#44 - Assessment + Events foundation
+What & Why
+The build prompts for the Gamified Assessment and Event systems assume two design specs and three D1 migrations already exist on a branch that is not in this repo. They are not here (main tops out at migration 106). This task authors that missing foundation from scratch — the two design docs plus migrations 107/108/109 — so every later phase has a real spec and schema to build against. No feature/route/UI code in this task.
+The full prompt set (the source of truth for requirements) lives at attached_assets/Pasted--Replit-Build-Prompts-Gamified-Assessment-Event-Systems_1781686304809.txt. Read it in full first.
+Done looks like
+* design/GAMIFIED_ASSESSMENT_SYSTEM.md exists with numbered sections the later prompts cite: §2 tracks, §4 scoring, §7 API, §9 player UI. It defines the six tracks (founder_origin_v1, operators_path_v1, thesis_lab_v1, partner_playbook_v1, mentor_compass_v1, coachs_lens_v1), the six mechanics (dilemma, card_sort, sjt, speed, allocation, reflection), the scoring model (value vector −2..+2, skill vector 0..5, confidence 0..1, contradiction/latency/rank logic), archetype centroids, XP/badges, and how results sign with SCORING_HMAC_SECRET.
+* design/EVENT_SYSTEM.md exists with the sections later prompts cite: §1 visibility/status/admin_published, §2 invitations, §3 capacity/waitlist, §5–§8 admin/reminders/comp/API, §9–§10 public + host UI. It defines the publish gate (public listing requires visibility='public' AND status='published'AND admin_published=1) and the comp-eligibility engine (official/KYB partners, invested LPs, etc.).
+* Migration 107_assessment_engine.sql — authoring schema: games, chapters, items (mechanic, options_json, measures_json, loads, display_order), archetypes (per-track centroid), badges. Additive-only, IF NOT EXISTS.
+* Migration 108_assessment_play.sql — runtime schema: sessions, responses (value + latency), results (vectors + integrity_hash + archetype), user_xp (user_id PRIMARY KEY), user_badges (idempotent). Plus an INSERT OR IGNORE seed of the reference game founder_origin_v1(chapters/items/archetypes/badges) so A1 can be exercised and A4 can replicate the pattern.
+* Migration 109_events_core.sql — events (host, type, schedule+tz, location_kind, capacity, waitlist, approval_required, visibility, status, admin_published, audience_rules_json, price_cents, slug, cover), event_invitations (token, source auto_partner/auto_lp/manual, status), event_registrations (registered/waitlisted/confirmed/attended + payment), event_checkins (code), and any agenda/speaker table the spec needs.
+* Each migration is idempotent (running twice is a no-op) and never ALTER TABLE users — all new user-attached state lives in side tables keyed by user_id.
+Out of scope
+* No services, routes, api.js methods, UI, or ensure*Schema helpers (those belong to A1/E1).
+* No seed content for the other five tracks (that is A4 / migration 110).
+* Applying migrations to prod D1 (manual ops step, noted for the user).
+Steps
+1. Read the prompts and existing taxonomy — absorb the attached prompt file and the canonical taxonomy/notification/Stripe patterns it says to reuse, so the schema slugs line up with value_dimensions/skill_categories/skills and results can UPSERT into user_values/user_skills.
+2. Author design/GAMIFIED_ASSESSMENT_SYSTEM.md — write the full spec with the cited section numbers, covering tracks, mechanics, scoring math, archetypes, XP/badges, integrity signing, and player UX.
+3. Author design/EVENT_SYSTEM.md — write the full spec with cited section numbers covering visibility/status/publish-gate, invitations, capacity/waitlist, comp-eligibility, reminders, public + host surfaces, and the API.
+4. Write migrations 107, 108, 109 — additive-only, IF NOT EXISTS/INSERT OR IGNORE, matching the table inventories above; include the founder_origin_v1 reference seed in 108. Confirm each is idempotent by reading the SQL for additive-only safety.
+5. Note the prod apply command in the task summary for the manual ops checklist (do not run it against prod).
+Relevant files

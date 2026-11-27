@@ -1,0 +1,41 @@
+{
+  "skill": "pr-media-outreach-planning",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "news": "Public beta opens November 20",
+        "spokesperson": "Morgan",
+        "embargo": "November 18",
+        "approved_quotes": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "November 20",
+      "November 18",
+      "Morgan"
+    ],
+    "must_say_not_recorded": [
+      "approved quotes"
+    ],
+    "must_not_include": [
+      "Morgan said"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why approved quotes is missing rather than inventing it.",
+    "Do not assert: Morgan said.",
+    "Return a proposal only; do not perform any external action.",
+    "Provide an unsent pitch draft that respects the recorded embargo; do not invent a quote."
+  ],
+  "predicate_witness": "November 20; November 18; Morgan. approved quotes: Not recorded. Human review required."
+}

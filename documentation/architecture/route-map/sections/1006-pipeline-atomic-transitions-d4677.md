@@ -1,0 +1,13 @@
+### Pipeline: atomic, current and evidence-backed transitions (D4677, #4677)
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/quotes/:id/accept` | the need's founder, or an admin | One D1 batch: claim the quote (only while it is `submitted`, the need is `open`/`in_review` and no quote on the need is accepted), reject the rivals, fill the need, create the engagement from the quote and its need. An engagement failure fails the request and changes nothing. A retry of a quote already accepted is 200 with the same quote, and repairs a missing engagement. A second quote on a decided need is 409 `need_already_decided`. |
+| `POST /api/pipeline/decision-gate/review` | admin or partner | The new gate, the superseding of every older pending gate (`status = 'superseded'`) and the move into the `decision_gate` stage are one batch (`openGateReview`). |
+| `PATCH /api/pipeline/decision-gate/decide` | admin or partner | The decision, the stage change and the project status are one batch that matches only the deal's latest, still-pending gate. An obsolete gate is 409 `gate_superseded` (with `latest_gate_id`); a decided one is 409. `iterate` records the iterate stage as completed history and reopens `mvp_dev`. |
+| `GET /api/pipeline/active` | any signed-in role | A rejected or archived project, or one in stage `spun_out`, is off the board. `?include_closed=1` returns them too. |
+| `POST /api/legalcap/spinout/execute`, `/subsidiary/spinout` | admin or partner | No `force`. Without a passed gate: 412, unless an admin sends `override { kind: "no_passed_gate", reason }` (10 to 500 characters), recorded as a `spinout_events` row. |
+| `POST /api/legalcap/spinout/ip-transfer` | admin or partner | Generates the IP licence as a draft (`generated`) and answers `awaiting: "signature"`. With `signed { signed_by_name, signed_on }` (a past or present date) the licence becomes `signed`, the transfer complete and the subsidiary `ip_transferred`, in one batch. |
+| `POST /api/legalcap/spinout/stripe-atlas` | admin or partner | Without `confirmation` it records a request and stays at `equity_allocated`. With `confirmation { atlas_id, ein, incorporation_date }` (EIN as `12-3456789`) it records the incorporation. No EIN is generated. |
+| `POST /api/legalcap/spinout/go-independent` | admin or partner | No `force`. Needs `incorporated` with the Atlas id, EIN and date recorded (412 otherwise). The subsidiary, the project (stage `spun_out`) and the stage history change in one batch. |
+| `POST /api/legalcap/spinout/iterate` | admin or partner | One batch for the project, its stage history and its status; 409 once the company is incorporated or independent. A failure is a failure, not `ok`. |

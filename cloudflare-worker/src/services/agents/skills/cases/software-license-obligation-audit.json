@@ -1,0 +1,34 @@
+{
+  "skill": "software-license-obligation-audit",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "synthetic_fixture": true,
+        "skill_name": "Software Licensing Obligation Audit",
+        "task_scope": "Audits commercial, hosted and open-source software licence obligations including use, disclosure, renewal and audit rights.",
+        "evidence": [
+          "software licence obligation register"
+        ],
+        "omitted_field": "redistribution trigger"
+      },
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for software licence obligation register."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "software licence obligation register"
+    ],
+    "must_say_not_recorded": [
+      "redistribution trigger"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

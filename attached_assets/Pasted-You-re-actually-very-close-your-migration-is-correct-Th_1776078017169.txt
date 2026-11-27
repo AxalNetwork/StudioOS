@@ -1,0 +1,139 @@
+You’re actually **very close** — your migration is correct. The issue now is just about **executing it cleanly inside Cloudflare’s expected workflow**.
+
+Here’s exactly what you need to do (no fluff):
+
+---
+
+# ✅ 1. Fix your deploy command (critical)
+
+Right now your build fails because Wrangler runs in the wrong directory.
+
+👉 In Cloudflare Pages settings:
+
+### Build command
+
+```bash
+cd cloudflare-worker && npm install
+```
+
+### Deploy command
+
+```bash
+cd cloudflare-worker && npm run deploy
+```
+
+---
+
+# ✅ 2. Verify your `package.json` (inside `cloudflare-worker/`)
+
+Make sure you actually have:
+
+```json
+{
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create your-db-name",
+    "db:schema:remote": "wrangler d1 execute your-db-name --remote --file=./schema.sql"
+  }
+}
+```
+
+---
+
+# ✅ 3. Run D1 setup locally (ONE TIME ONLY)
+
+From your local machine:
+
+```bash
+cd cloudflare-worker
+npm run db:create
+```
+
+👉 This will output something like:
+
+```
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxx"
+```
+
+---
+
+# ✅ 4. Update `wrangler.toml`
+
+Replace this:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "your-db-name"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+```
+
+👉 With the real ID you just got.
+
+---
+
+# ✅ 5. Push schema to Cloudflare
+
+```bash
+npm run db:schema:remote
+```
+
+---
+
+# ✅ 6. Deploy
+
+```bash
+npm run deploy
+```
+
+---
+
+# 🚨 7. Fix the Vite error (if it still appears)
+
+If you still see:
+
+> Could not find Vite config file to modify
+
+👉 Add this to `wrangler.toml`:
+
+```toml
+main = "src/index.ts"  # or your actual entry file
+```
+
+This prevents Wrangler from trying to guess (and incorrectly assuming Vite).
+
+---
+
+# 🧠 What you’ve already done right
+
+Your migration is actually solid:
+
+* ✅ Postgres → SQLite conversions ✔
+* ✅ Removed Hyperdrive ✔
+* ✅ Query placeholders fixed ✔
+* ✅ LATERAL joins replaced ✔
+* ✅ D1 binding wired ✔
+
+👉 This is exactly how a proper D1 migration should look.
+
+---
+
+# ⚡ Final checklist
+
+Before pushing:
+
+* [ ] `wrangler.toml` has correct `database_id`
+* [ ] `main` is defined
+* [ ] deploy command runs inside `cloudflare-worker`
+* [ ] schema applied remotely
+* [ ] no Vite config required
+
+---
+
+If you want, next step I can help you optimize this for:
+
+* multi-env (dev / prod D1)
+* migrations versioning (not just schema.sql overwrite)
+* or turning this into a reusable infra template for Axal projects
+
+Just say 👍

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eef0f2;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#334155;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f8f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:184px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:0 0 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .terr{background:#334155;color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+    .inner{padding:18px 22px 0}
+    .num{font-variant-numeric:tabular-nums}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:14.5px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:12px;padding:8px 0;color:#3f3a49}
+    .vm{font-size:11.5px;font-weight:700;color:#334155;cursor:pointer}
+    .prop{background:#f6f8fa;border:1px solid #cbd5e1;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#334155;background:#e6ebf0;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #334155;background:#334155;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .lock{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px}
+  </style>
+</helmet>
+
+<!-- ══════════ U1 · SUPPORT HUB ══════════ -->
+<section class="ab" id="u1">
+  <div class="ab-hd"><a class="ab-id" href="#u1">U1</a><span class="ab-nm">Subsidiary · Support</span><span class="ab-sub">steel · a help desk, not a security console</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">One row, and deliberately not two. Security alerts for the territory surface on Home and as row actions in Accounts rather than as their own destination — a licensee is not a security engineer, and a full security surface at the tenant tier widens the attack surface it claims to defend. What lives here is the work an operator actually does daily: a queue, threads, and a way out to HQ.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <span style="font-size:12.5px;font-weight:700">Axal VC France</span>
+          <span class="num" style="font-size:11px;opacity:.72">FR · BE · LU</span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.72">{{ openN }} open · {{ breachedN }} past SLA</span>
+      </div>
+      <div class="inner">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Support</h1>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ hubSub }}</div>
+          </div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap"><span class="acc">New ticket</span><span class="gho">Canned replies</span></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-top:15px">
+          <sc-for list="{{ strip }}" as="s" hint-placeholder-count="5">
+            <div style="{{ s.cardStyle }}">
+              <div class="lbl" style="font-size:9px">{{ s.label }}</div>
+              <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:5px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+              <div class="num" style="font-size:10.5px;color:{{ s.ink }};margin-top:5px;font-weight:600">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Ticket inbox</span><span class="zs">WORK BOARD · same SLA chip grammar as Approvals</span></div>
+          <div style="background:#fbfbfc;border:1px solid #e2e1e8;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="width:14px;height:14px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+            <span style="font-size:12.5px;color:#615c6e;flex:1">Searching Axal VC France tickets</span>
+            <span class="lock">Territory-scoped</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:11px">
+            <sc-for list="{{ lanes }}" as="l" hint-placeholder-count="5">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:7px;margin-bottom:9px">
+                  <span style="font-size:11px;font-weight:800;line-height:1.25">{{ l.name }}</span>
+                  <span class="num" style="font-size:10.5px;font-weight:700;color:{{ l.ink }}">{{ l.n }}</span>
+                </div>
+                <div style="display:grid;gap:9px">
+                  <sc-for list="{{ l.cards }}" as="t" hint-placeholder-count="2">
+                    <div style="{{ t.cardStyle }}">
+                      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                        <span style="{{ t.prioStyle }}">{{ t.prio }}</span>
+                        <span class="mono" style="font-size:9px;color:#615c6e">{{ t.id }}</span>
+                      </div>
+                      <div style="font-size:11.5px;font-weight:700;margin-top:6px;line-height:1.35">{{ t.subject }}</div>
+                      <div style="font-size:10px;color:#615c6e;margin-top:5px;line-height:1.4">{{ t.who }}</div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-top:8px;padding-top:7px;border-top:1px solid #f4f3f7">
+                        <span style="{{ t.slaStyle }}">{{ t.age }}</span>
+                        <sc-if value="{{ t.tag }}"><span class="lock" style="font-size:8px">{{ t.tag }}</span></sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ l.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:9px;padding:12px;text-align:center;font-size:10px;color:#615c6e">Clear</div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ laneNote }}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Chat threads</span><span class="zs">Live conversations · routed by tenant</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ threads }}" as="t" hint-placeholder-count="4">
+                <div style="{{ t.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;gap:11px">
+                    <div style="width:30px;height:30px;border-radius:9px;background:{{ t.avBg }};color:{{ t.avInk }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none">{{ t.init }}</div>
+                    <div style="min-width:0;flex:1">
+                      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                        <span style="font-size:12.5px;font-weight:700">{{ t.who }}</span>
+                        <span style="{{ t.licStyle }}">{{ t.lic }}</span>
+                      </div>
+                      <div style="font-size:11px;color:#3f3a49;margin-top:5px;line-height:1.5">{{ t.last }}</div>
+                      <div class="num" style="font-size:10px;color:#615c6e;margin-top:5px">{{ t.meta }}</div>
+                    </div>
+                    <span style="{{ t.pill }}">{{ t.state }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ threadNote }}</div>
+          </div>
+
+          <div class="c" style="padding:16px 18px;border-color:#cbd5e1">
+            <div class="zh"><span class="zt">Escalate to HQ</span><span class="zs">Becomes an engineering ticket</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ escalated }}" as="e" hint-placeholder-count="3">
+                <div style="{{ e.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                    <div style="min-width:0">
+                      <div style="font-size:12px;font-weight:700;line-height:1.35">{{ e.subject }}</div>
+                      <div class="mono" style="font-size:10px;color:#615c6e;margin-top:5px">{{ e.link }}</div>
+                    </div>
+                    <span style="{{ e.pill }}">{{ e.state }}</span>
+                  </div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.5">{{ e.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ escNote }}</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Canned replies</span><span class="zs">Used, not just written</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ canned }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <div style="min-width:0">
+                    <div style="font-size:12px;font-weight:700">{{ c.name }}</div>
+                    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ c.body }}</div>
+                  </div>
+                  <span class="num" style="font-size:10.5px;color:#615c6e;flex:none;font-weight:600">{{ c.used }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ cannedNote }}</div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">CSAT</span><span class="zs">Rated tickets only</span></div>
+            <div style="display:flex;align-items:baseline;gap:12px">
+              <span class="num" style="font-size:28px;font-weight:800;letter-spacing:-.025em">{{ csat }}</span>
+              <span class="num" style="font-size:12px;color:#615c6e">{{ csatBase }}</span>
+            </div>
+            <div style="display:grid;gap:7px;margin-top:13px">
+              <sc-for list="{{ csatRows }}" as="r" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-size:11px;font-weight:600">{{ r.label }}</span><span class="num" style="font-size:11px;font-weight:700;color:{{ r.ink }}">{{ r.n }}</span></div>
+                  <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ r.pct }}%;background:{{ r.ink }};border-radius:999px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.6">{{ csatNote }}</div>
+          </div>
+        </div>
+
+        <div class="prop" style="margin-top:14px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+            <span class="propb">Proposal · triage</span>
+            <span class="num" style="font-size:10.5px;color:#334155;margin-left:auto">{{ triageCost }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#1e293b;line-height:1.7">{{ triageBody }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <span class="acc">Accept triage</span><span class="gho">{{ draftLabel }}</span><span class="dis">Discard</span>
+          </div>
+          <div style="font-size:10.5px;color:#615c6e;margin-top:9px;line-height:1.55">Forge drafts and groups. Sending a reply, closing a ticket and escalating are all human clicks — and an escalation writes an engineering ticket under your name, not the model's.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="subsidiary" page="Support" hint-size="100%,880px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ U2 · SECURITY PLACEMENT ══════════ -->
+<section class="ab" id="u2">
+  <div class="ab-hd"><a class="ab-id" href="#u2">U2</a><span class="ab-nm">Security alerts — placed, not housed</span><span class="ab-sub">Home zone and Accounts row action</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Two surfaces instead of a row. The argument is not that security is unimportant at the tenant tier — it is that the operator's job is to act on a named user, and both places where that action belongs already exist. A dedicated console would add a third place to look and a fourth thing to secure.</div>
+
+  <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">On Home · a zone beside the others</div>
+      <div style="background:#fffbfb;border:1px solid #fecaca;border-radius:11px;padding:14px 16px;margin-top:12px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <span class="zt" style="font-size:13.5px;color:#991b1b">Security</span>
+          <span class="num" style="font-size:11px;color:#b91c1c;font-weight:700">{{ secN }} needing action</span>
+        </div>
+        <div style="display:grid;gap:9px;margin-top:11px">
+          <sc-for list="{{ security }}" as="s" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid {{ s.edge }};border-radius:9px;padding:11px 12px">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:700;color:{{ s.ink }}">{{ s.what }}</div>
+                  <div style="font-size:10.5px;color:#3f3a49;margin-top:5px;line-height:1.5">{{ s.body }}</div>
+                </div>
+                <span style="{{ s.pill }}">{{ s.sev }}</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px">
+                <span class="num" style="font-size:10px;color:#615c6e">{{ s.when }}</span>
+                <span style="font-size:10.5px;font-weight:700;color:{{ s.ink }};cursor:pointer">{{ s.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ secHomeNote }}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">In Accounts · the row already exists</div>
+      <div style="border:1px solid #ececf1;border-radius:11px;overflow:hidden;margin-top:12px">
+        <div style="display:grid;grid-template-columns:1.15fr .8fr .5fr .95fr;gap:11px;background:#fbfbfc;border-bottom:1px solid #ececf1;padding:9px 13px">
+          <span class="th" style="padding:0">Member</span><span class="th" style="padding:0">Licence</span><span class="th" style="padding:0">Seat</span><span class="th" style="padding:0">State</span>
+        </div>
+        <sc-for list="{{ accRows }}" as="a" hint-placeholder-count="3">
+          <div style="{{ a.rowStyle }}">
+            <span style="font-size:11.5px;font-weight:600">{{ a.who }}</span>
+            <span style="font-size:11.5px;color:#3f3a49">{{ a.lic }}</span>
+            <span class="num" style="font-size:11.5px;color:#615c6e">{{ a.seat }}</span>
+            <span><span style="{{ a.pill }}">{{ a.state }}</span></span>
+            <sc-if value="{{ a.actions }}">
+              <div style="grid-column:1 / -1;display:flex;gap:9px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid #f4f3f7">
+                <sc-for list="{{ a.actions }}" as="x" hint-placeholder-count="3"><span style="{{ x.style }}">{{ x.label }}</span></sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ secAccNote }}</div>
+      <div style="background:#f6f8fa;border:1px solid #cbd5e1;border-radius:10px;padding:12px 14px;margin-top:12px">
+        <div style="font-size:11.5px;font-weight:700;color:#1e293b">What stays at HQ</div>
+        <div style="font-size:11px;color:#3f3a49;margin-top:6px;line-height:1.6">{{ hqOnlyNote }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      acc:this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/>'),
+      app:this.ic('<path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/>'),
+      prog:this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      comm:this.ic('<path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/>'),
+      con:this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      sup:this.ic('<circle cx="12" cy="12" r="9"/><path d="M9.2 9.5a2.9 2.9 0 1 1 3.6 3.4v1.4"/><path d="M12 17.5h.01"/>'),
+      ins:this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>'),
+      cog:this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
+      globe:this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>'),
+      srch:this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')
+    };
+    const ST = '#334155', STT = '#f6f8fa', STE = '#cbd5e1';
+    const nav = [['Home',I.home],['Accounts',I.acc],['Approvals',I.app],['Programs',I.prog],
+                 ['Community',I.comm],['Contracts',I.con],['Support',I.sup],['Insights',I.ins],['Settings',I.cog]]
+      .map(([label, icon]) => ({ label, icon,
+        style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+          + (label === 'Support' ? 'font-weight:700;color:' + ST + ';background:' + STT + ';box-shadow:inset 2px 0 0 ' + ST
+                                 : 'font-weight:600;color:#4a4553') }));
+
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    // Same SLA grammar as Approvals: green <24h, amber <72h, red beyond.
+    const sla = (h) => h < 24 ? ['#ecfdf5','#047857','#a7f3d0'] : (h < 72 ? ['#fffbeb','#92400e','#fde68a'] : ['#fef2f2','#b91c1c','#fecaca']);
+    const slaStyle = (h) => { const c = sla(h);
+      return 'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap'; };
+    const PRIO = { P1:['#fef2f2','#b91c1c','#fecaca'], P2:['#fffbeb','#92400e','#fde68a'], P3:['#f4f4f6','#615c6e','#e4e4e8'] };
+    const prioStyle = (p) => { const c = PRIO[p];
+      return 'font-size:8.5px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:3px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const LIC = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Investor:['#f5f5ff','#3730a3','#c7d2fe'],
+                  Advisor:['#f2fdf7','#047857','#a7f3d0'], Partner:['#fffbf2','#b45309','#fde68a'] };
+    const licStyle = (l) => { const c = LIC[l] || LIC.Founder;
+      return 'font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const pill = (t) => {
+      const M = { Open:['#f6f8fa','#334155','#cbd5e1'], Active:['#ecfdf5','#047857','#a7f3d0'],
+                  Waiting:['#fffbeb','#92400e','#fde68a'], Resolved:['#ecfdf5','#047857','#a7f3d0'],
+                  Suspended:['#fef2f2','#b91c1c','#fecaca'], Triaged:['#f6f8fa','#334155','#cbd5e1'],
+                  'In progress':['#fffbeb','#92400e','#fde68a'], Shipped:['#ecfdf5','#047857','#a7f3d0'] };
+      const c = M[t] || M.Open;
+      return 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap;flex:none';
+    };
+
+    // ══ ONE ticket record. Lanes, the strip, the triage proposal and the CSAT base all
+    // derive from it — a tile cannot disagree with the lane it filters to. ══
+    const LANES = ['New','Triaged','Waiting on user','Escalated','Resolved'];
+    const TICKETS = [
+      // A 500 on a download is Data & exports in the HQ taxonomy, not Billing — the mis-tag
+      // was what inflated the billing group and made the shared-cause claim untrue.
+      { lane:'New', id:'FR-2291', prio:'P1', hrs:4, subject:'Cannot export cap table — 500 on download', who:'Guillaume Lauzier · Founder', mentions:['data'] },
+      { lane:'New', id:'FR-2290', prio:'P3', hrs:19, subject:'How do I add a second company?', who:'Amara Osei · Founder' },
+      { lane:'Triaged', id:'FR-2287', prio:'P2', hrs:31, subject:'Invoice shows the wrong VAT rate for BE', who:'Studio Vireo · Partner', mentions:['billing'] },
+      { lane:'Triaged', id:'FR-2284', prio:'P2', hrs:52, subject:'Advisor payout held after Stripe re-verification', who:'P. Raghunathan · Advisor', mentions:['billing'] },
+      { lane:'Waiting on user', id:'FR-2279', prio:'P3', hrs:44, subject:'Awaiting KYC document re-upload', who:'Aurélie Chen · Investor' },
+      { lane:'Escalated', id:'FR-2276', prio:'P1', hrs:96, subject:'Data room grants not applying for two investors', who:'Novacraft SAS · Founder', tag:'ENG-4192' },
+      { lane:'Resolved', id:'FR-2271', prio:'P2', hrs:8, subject:'Cohort invite email not received', who:'Hugo Peeters · Founder' }
+    ];
+    const open = TICKETS.filter(t => t.lane !== 'Resolved');
+    const breached = open.filter(t => t.hrs >= 72);
+    const oldest = open.slice().sort((a, b) => b.hrs - a.hrs)[0];
+    const p1 = open.filter(t => t.prio === 'P1');
+    const billing = open.filter(t => t.mentions && t.mentions.indexOf('billing') >= 0);
+    // The grouping clause is derived from what the tickets actually share, not asserted.
+    const stripeTix = billing.filter(t => /stripe/i.test(t.subject));
+    // Named for what it is, so it cannot be shadowed by the escalation-rail key of renderVals.
+    const escalatedTix = TICKETS.filter(t => t.lane === 'Escalated');
+    const RESOLVED_Q = 74;   // quarterly resolved count, declared rather than an offset from rated
+
+    // CSAT from rated tickets only — the base is stated because a 4.6 from nine ratings is
+    // a different claim from a 4.6 from ninety.
+    // Security alerts declared with the rest of the data so the Home-zone count derives.
+    const SEC_ALERTS = [
+      { sev:'Action needed', what:'Unusual sign-in · Marc Delacroix',
+        body:'Four failed attempts then a success from a new device in a different country, 03:12 CET.',
+        when:'6h ago', action:'Suspend and notify →', tone:'bad' },
+      { sev:'Action needed', what:'Sanctions screening hit · pending review',
+        body:'A new Investor application matched an OFAC name at 0.91 similarity. The account is already blocked from activation.',
+        when:'1d ago', action:'Open in Approvals →', tone:'bad' },
+      { sev:'Informational', what:'Password reset volume normal',
+        body:'Nine resets this week against a nine-week average of eleven. Shown so the absence of a signal is legible too.',
+        when:'this week', action:'Dismiss', tone:'plain' }
+    ];
+    const secActionable = SEC_ALERTS.filter(s => s.sev === 'Action needed').length;
+
+    const RATINGS = [{ label:'Satisfied', n:38, ink:'#047857' }, { label:'Neutral', n:9, ink:'#b45309' }, { label:'Unsatisfied', n:4, ink:'#b91c1c' }];
+    const rated = RATINGS.reduce((a, r) => a + r.n, 0);
+    const ratedMax = Math.max.apply(null, RATINGS.map(r => r.n));
+    const csatPct = Math.round(RATINGS[0].n / rated * 100);
+    // Oldest ACTIONABLE ticket: escalated items belong to engineering's clock, not this desk's.
+    // Sorted before taking the head — an unsorted concat returns declaration order, not age.
+    const actionable = open.filter(t => t.lane !== 'Escalated').sort((a, b) => b.hrs - a.hrs);
+    const oldestActionable = actionable[0];
+    const nWord = ['no','one','two','three','four','five','six','seven','eight','nine'];
+
+    return {
+      globeIcon:I.globe, searchIcon:I.srch, nav,
+      openN:String(open.length), breachedN:String(breached.length),
+      hubSub: open.length + ' open, ' + breached.length + ' past SLA, oldest ' + oldest.hrs
+        + ' hours. ' + p1.length + ' at P1.',
+
+      strip: [
+        { label:'Open', value:String(open.length), note:'oldest ' + oldest.hrs + 'h', tone: breached.length ? 'prog' : 'plain' },
+        { label:'Past SLA', value:String(breached.length), note: breached.length ? breached.map(b => b.id).join(', ') : 'none', tone: breached.length ? 'bad' : 'ok' },
+        // Note counts p1 BY LANE, so re-prioritising or moving a ticket rewrites the note
+      // instead of stranding it — the same rule every other strip entry already follows.
+      { label:'P1', value:String(p1.length),
+        note:LANES.map(l => { const n = p1.filter(t => t.lane === l).length;
+          return n ? n + ' ' + l.toLowerCase() : null; }).filter(Boolean).join(', '),
+        tone:'bad' },
+        { label:'Escalated to HQ', value:String(escalatedTix.length), note:'synced to engineering', tone:'plain' },
+        { label:'CSAT', value:csatPct + '%', note:rated + ' rated this quarter', tone:'ok' }
+      ].map(s => {
+        const M = { ok:['#ecfdf5','#047857','#a7f3d0'], prog:['#fffbeb','#92400e','#fde68a'],
+                    bad:['#fef2f2','#b91c1c','#fecaca'], plain:['#fff','#615c6e','#ececf1'] };
+        const c = M[s.tone];
+        return { label:s.label, value:s.value, note:s.note, ink: s.tone === 'plain' ? '#18181b' : c[1],
+          cardStyle:'border:1px solid ' + c[2] + ';background:' + c[0] + ';border-radius:11px;padding:13px 14px;cursor:pointer' };
+      }),
+
+      lanes: LANES.map(name => {
+        const cards = TICKETS.filter(t => t.lane === name).sort((a, b) => b.hrs - a.hrs);
+        const w = cards.length ? Math.max.apply(null, cards.map(c => c.hrs)) : 0;
+        return { name, n:String(cards.length), empty:cards.length === 0,
+          ink: name === 'Resolved' ? '#615c6e' : (w >= 72 ? '#b91c1c' : (w >= 24 ? '#b45309' : '#615c6e')),
+          cards:cards.map(t => ({ id:t.id, prio:t.prio, prioStyle:prioStyle(t.prio), subject:t.subject,
+            who:t.who, age:t.hrs + 'h', slaStyle:slaStyle(t.hrs), tag:t.tag || null,
+            cardStyle:'border:1px solid ' + (t.hrs >= 72 && t.lane !== 'Resolved' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:11px 12px' })) };
+      }),
+      laneNote: 'Lanes are status; the chip is age against the same 24/72-hour bands Approvals uses, so an operator moving between the two pages is reading one grammar rather than two. '
+        + oldest.id + ' is the oldest at ' + oldest.hrs + ' hours and it is already escalated — which is the state where SLA age stops being the subsidiary\u2019s to fix.',
+
+      threads: [
+        { init:'GL', who:'Guillaume Lauzier', lic:'Founder', state:'Active',
+          last:'"It fails on the download step, not the generate step — the file never starts."', meta:'FR-2291 · 4 messages · 12m ago' },
+        { init:'SV', who:'Studio Vireo', lic:'Partner', state:'Waiting',
+          last:'You: "Can you confirm the invoice number and the VAT line as it appears?"', meta:'FR-2287 · 6 messages · 3h ago' },
+        { init:'AC', who:'Aurélie Chen', lic:'Investor', state:'Waiting',
+          last:'You: "The passport scan expired — a fresh upload will clear it."', meta:'FR-2279 · 2 messages · 1d ago' },
+        { init:'PR', who:'P. Raghunathan', lic:'Advisor', state:'Active',
+          last:'"Stripe says verified on their side. Payout still shows held here."', meta:'FR-2284 · 9 messages · 2h ago' }
+      ].map(t => ({ init:t.init, who:t.who, lic:t.lic, licStyle:licStyle(t.lic), last:t.last, meta:t.meta,
+        state:t.state, pill:pill(t.state),
+        avBg: (LIC[t.lic] || LIC.Founder)[0], avInk:(LIC[t.lic] || LIC.Founder)[1],
+        rowStyle:'border:1px solid #f0eff4;background:#fbfbfc;border-radius:10px;padding:12px 13px' })),
+      threadNote: 'Threads and tickets are the same object seen two ways — the ticket is the state, the thread is the conversation that produced it. Routing is tenant-aware, so a Belgian founder\u2019s message arrives here and nowhere else.',
+
+      escalated: [
+        { subject:'Data room grants not applying for two investors', link:'FR-2276 → ENG-4192 · synced', state:'In progress',
+          note:'Reproduced by HQ engineering. Two comments since escalation; both mirrored back into the ticket.' },
+        { subject:'Cohort emails landing in Outlook junk', link:'FR-2264 → ENG-4171 · synced', state:'Shipped',
+          note:'Fixed in the Aug 21 release. Ticket closed automatically when the engineering issue closed.' },
+        { subject:'Advisor payout held after re-verification', link:'FR-2284 · not yet escalated', state:'Triaged',
+          note:'Candidate — a Stripe state the subsidiary cannot inspect is exactly what the escalation rail is for.' }
+      ].map(e => Object.assign({}, e, { pill:pill(e.state),
+        rowStyle:'border:1px solid ' + (e.state === 'In progress' ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px' })),
+      escNote: 'Escalating writes a GitHub-synced engineering ticket and keeps the two in step: comments mirror back, and closing the issue closes the ticket. The sync already existed as an internal tool — making it the escalation rail means the subsidiary never has to ask what happened next.',
+
+      canned: [
+        { name:'KYC document expired', body:'Explains which document, why it lapsed, and what format the re-upload needs.', used:'used 31×' },
+        { name:'VAT rate by territory', body:'The BE/LU/FR split and which invoice line carries it.', used:'used 18×' },
+        { name:'Seat reassignment', body:'What happens to the previous holder\u2019s data and what does not transfer.', used:'used 12×' },
+        { name:'Escalation acknowledgement', body:'Sets the expectation that engineering, not support, now holds the clock.', used:'used 9×' }
+      ],
+      cannedNote: 'Ordered by use rather than alphabetically, because the fourth-most-used reply is the one worth rewriting and the twentieth is not worth keeping.',
+
+      csat: csatPct + '%',
+      csatBase: rated + ' rated of ' + RESOLVED_Q + ' resolved',
+      csatRows: RATINGS.map(r => ({ label:r.label, n:String(r.n), ink:r.ink,
+        pct:String(Math.round(r.n / ratedMax * 100)) })),
+      csatNote: 'The base is stated because ' + csatPct + '% from ' + rated
+        + ' ratings is a different claim from the same figure across ten. Unrated resolutions are excluded rather than counted as satisfied.',
+
+      // Same tokens, same model the rail recommends for this surface (Granite 4.0 H Micro,
+      // $0.017 / $0.112) — the rail prices the run before it happens, this card IS that run.
+      triageCost: '≈ ' + c4(run(7400, 980, 0.017, 0.112)),
+      draftLabel: 'Draft the ' + nWord[billing.length] + ' replies',
+      triageBody: nWord[billing.length].charAt(0).toUpperCase() + nWord[billing.length].slice(1) + ' of the '
+        + open.length + ' open tickets mention billing — ' + billing.map(b => b.id).join(', ')
+        + ' — both money-facing, both from non-Founder licences, and only '
+        + nWord[stripeTix.length] + ' of them (' + stripeTix.map(t => t.id).join(', ')
+        + ') is the Stripe re-verification that cleared on Stripe\u2019s side but not here. '
+        + oldest.id + ' at ' + oldest.hrs + ' hours is already with engineering, so the oldest item you can actually move is '
+        + oldestActionable.id + ' at ' + oldestActionable.hrs + ' hours. '
+        // "for all two" is not English — this form reads correctly at any count.
+        + (billing.length === 1 ? 'Reply drafted, not sent.'
+            : (billing.length === 2 ? 'Both replies drafted, neither sent.'
+                : 'All ' + nWord[billing.length] + ' replies drafted, none sent.')),
+
+      // ══ U2 · security placement ══
+      secN:String(secActionable),
+      security: SEC_ALERTS.map(s => {
+        const M = { bad:['#fecaca','#b91c1c','#fef2f2'], plain:['#f0eff4','#615c6e','#f4f4f6'] };
+        const c = M[s.tone];
+        return { what:s.what, body:s.body, sev:s.sev, when:s.when, action:s.action, edge:c[0], ink:c[1],
+          pill:'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[2]+';color:'+c[1]+';border:1px solid '+c[0]+';white-space:nowrap;flex:none' };
+      }),
+      secHomeNote: nWord[secActionable].charAt(0).toUpperCase() + nWord[secActionable].slice(1)
+        + ' alerts need a decision and ' + nWord[SEC_ALERTS.length - secActionable] + ' exists to say nothing is happening. A zone that only ever appears when something is wrong teaches the operator to read its absence as coverage, which it is not.',
+
+      // Account states are Active / Awaiting HQ / Suspended — the vocabulary Accounts uses,
+      // NOT this page's ticket pill() map. Seat carried too, so the row matches the one it
+      // claims to already be.
+      accRows: [
+        { who:'Marc Delacroix', lic:'Founder', seat:'F-018', state:'Suspended', open:true,
+          actions:[['Restore access','plain'],['Force password reset','plain'],['Escalate to HQ security','danger']] },
+        { who:'Aurélie Chen', lic:'Investor', seat:'—', state:'Awaiting HQ' },
+        { who:'Studio Vireo', lic:'Partner', seat:'P-006', state:'Active' }
+      ].map(a => {
+        const AST = { Active:['#ecfdf5','#047857','#a7f3d0'], 'Awaiting HQ':['#fffbeb','#92400e','#fde68a'],
+                      Suspended:['#fef2f2','#b91c1c','#fecaca'] };
+        const c = AST[a.state];
+        return { who:a.who, lic:a.lic, seat:a.seat, state:a.state,
+        pill:'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap',
+        actions: a.actions ? a.actions.map(([label, tone]) => ({ label,
+          style:'font-size:10.5px;font-weight:700;cursor:pointer;color:' + (tone === 'danger' ? '#b91c1c' : '#334155') })) : null,
+        rowStyle:'display:grid;grid-template-columns:1.15fr .8fr .5fr .95fr;gap:11px;align-items:center;padding:11px 13px;border-top:1px solid #f4f3f7;'
+          + (a.open ? 'background:#fffbfb;' : '') }; }),
+      secAccNote: 'The action belongs on the person, and the person already has a row. Suspending Marc from Accounts is the same operation a dedicated console would offer, minus a second place to remember.',
+      hqOnlyNote: 'Investigation stays at HQ: session forensics, device history, cross-tenant correlation and anything that would require reading another territory\u2019s data. The subsidiary can suspend, reset and escalate — three verbs, all about one user, none of which need a security console to perform.'
+    };
+  }
+}
+</script>
+</body>
+</html>

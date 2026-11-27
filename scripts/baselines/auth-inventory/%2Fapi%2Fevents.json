@@ -1,0 +1,7 @@
+{
+  "GET /api/events/:id/cover/:filename": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

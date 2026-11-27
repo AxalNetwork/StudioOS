@@ -1,0 +1,74 @@
+Objective
+  Every advisor answer writes to the correct platform table and column.
+  Re-uses the persona-aware question bank and the page_target field on
+  each question. No answer is "just text in the chat" — every answer
+  produces a visible platform change.
+
+Server map (cloudflare-worker/src/services/advisor/writeRouter.ts)
+  Map question.page_target → handler:
+    'projects.problem_statement'   → upsertProjectField(user, 'problem_statement', value)
+    'projects.solution'             → upsertProjectField(user, 'solution', value)
+    'projects.tam_usd'              → upsertProjectField + evidence check
+    'projects.sector'                → upsertProjectField
+    'discovery_interviews.+'         → createDiscoveryInterview row
+    'roadmap_okrs.+'                 → createRoadmapOkr row (auto-numbered)
+    'roadmap_okrs.last.key_results'  → patchLatestOkr (key_results)
+    'pipeline_stages.+'              → upsertPipelineStage
+    'studioops.cadence'              → upsertStudioOpsConfig
+    'projects.tagline'               → upsertProjectField (brand)
+    'projects.brand_voice'           → upsertProjectField
+    'projects.brand_palette_json'    → upsertProjectField (JSON)
+    'deck_slides.problem'            → upsertDeckSlide('problem')
+    'deck_slides.solution'           → upsertDeckSlide
+    'deck_slides.traction'           → upsertDeckSlide
+    'deck_slides.team'                → upsertDeckSlide
+    'deck_slides.ask'                 → upsertDeckSlide
+    'financials.mrr_usd'             → upsertFinancial w/ evidence-required check
+    'financials.arr_usd'             → upsertFinancial w/ plausibility check
+    'financials.monthly_burn_usd'    → upsertFinancial w/ evidence-required
+    'financials.cash_in_bank_usd'    → upsertFinancial w/ evidence-required
+    'metrics_snapshots.dau'          → createMetricSnapshot
+    'corporate_profiles.*'            → upsertCorporateProfile (PII encrypted)
+    'captable_holders.+'             → upsertCaptableHolder
+    'rounds.target_amount_usd'       → upsertRound
+    'investor_profiles.*'             → upsertInvestorProfile
+    'partner_profiles.*'              → upsertPartnerProfile
+    'mentor_profiles.*'               → upsertMentorProfile
+    'cofounder_preferences.*'         → upsertCofounderPrefs
+    'mentor_requests.*'               → createMentorRequest
+
+  Each handler:
+    - Re-checks auth + IDOR + tier just like the page's own PUT does.
+    - Validates with the same Zod schema the page uses.
+    - For evidence-required fields, refuses unless an evidence row
+      exists (Stripe/Plaid integration token OR a file upload). Returns
+      { needs_evidence: true, integration_hint, upload_hint } so the
+      advisor can ask for it.
+    - Persists in a transaction.
+    - Inserts an activity_logs row tagged source='advisor'.
+    - Emits an event to Durable Object channels:
+        page-fill:{user_id}:{page}    — page hydrates the new value live
+        advisor-progress:{user_id}     — progress widget re-renders
+
+Mirror client (frontend/src/lib/advisor/router.js)
+  Same map, used for optimistic UI. On 4xx from server, roll back the
+  optimistic state and surface the error inline in the advisor card
+  with a "Open the page" CTA.
+
+Page hydration
+  Each page that owns a target column hydrates from the database on
+  mount and subscribes to page-fill:{user_id}:{page}. New values
+  surfaced with a sparkle ✨ icon and "Filled by Personal Advisor"
+  tooltip; hovering shows the source advisor turn.
+
+Acceptance
+  - Existing founder running the BUILD bank ends with: populated
+    Project row, 3+ Customer Discovery interviews, 3+ OKRs, brand
+    basics, deck outline, financials seed (with evidence flags), all
+    visible on the corresponding pages.
+  - Investor running thesis bank: investor_profiles populated, 1+
+    watchlist items seeded.
+  - Operating-partner partner bank: partner_profiles populated, draft
+    partner_deals proposed.
+  - Sparkle icons appear on advisor-filled fields.
+  - Field-level errors surface inline; no generic toasts.

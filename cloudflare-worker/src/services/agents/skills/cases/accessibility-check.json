@@ -1,0 +1,35 @@
+{
+  "skill": "accessibility-check",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "screen": "Patient intake",
+        "colours": {
+          "text": "#9CA3AF",
+          "background": "#FFFFFF"
+        }
+      },
+      "github.repos": {
+        "components": [
+          {
+            "file": "IntakeForm.jsx",
+            "inputs_without_label": 2
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "IntakeForm.jsx",
+      "4.5:1"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "WCAG certified"
+    ]
+  }
+}

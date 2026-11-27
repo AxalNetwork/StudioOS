@@ -1,0 +1,171 @@
+/**
+ * D708 (#1773) — `/api/admin/bank-accounts`: each Axal entity's bank
+ * accounts, for the Super Admin only, on HQ only.
+ *
+ *   GET  /              every account, masked; `coverage`, the resolver's
+ *                       answer per payment purpose; `fund_i`, the fund that
+ *                       carries the `spinout-fund-i` slug, or null; and
+ *                       `refusals` (#1856), the resolver's own sentence for
+ *                       each refusal the console explains, read from nothing
+ *   POST /              add one account                       (201, masked)
+ *   PATCH /:uid         the label and the purposes, nothing else
+ *   POST /:uid/retire   retire it, with a reason
+ *   POST /:uid/reveal   one full number, recorded first, `Cache-Control: no-store`
+ *
+ * WHO. A read needs `requireSuperAdmin`, which refuses on a branch. Each write
+ * and the reveal first refuse an admin without the elevation with 403
+ * `super_admin_required`, before any TOTP or step-up demand, so a plain Admin
+ * is never asked for a code it cannot use; then `requireSuperAdminWriteBar`
+ * (TOTP, a fresh step-up, the elevation). This is inline until #1779's
+ * `assertAdminAct` and its row for these acts are on `main`.
+ *
+ * Each write is audited with the uid, the entity and the last four, never the
+ * number. Mounted before the `/api/admin` catch-all, under the recovery
+ * cool-off and the fail-closed `bank_accounts` rate-limit bucket.
+ */
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { Env, User } from '../types';
+import { requireAdmin, requireSuperAdmin, requireSuperAdminWriteBar, isSuperAdmin } from '../auth';
+import { branchOf, HQ_ONLY } from '../util/branch';
+import { logAdminAction } from '../services/adminAudit';
+import { auditRegistryRead, registryMercury, absentMercury } from '../services/mercury/registry';
+import { requireMercuryReader, AUDIT_UNAVAILABLE } from '../services/mercury/access';
+import { Funds } from '../models/funds';
+import { bankAccountHistory, historyFilters, BankHistoryError } from '../services/bankAccountHistory';
+import {
+  BankAccountError, createAccount, listAccountsForConsole, updateAccount, retireAccount, revealAccount,
+} from '../services/entityBankAccounts';
+import { PAYMENT_PURPOSES, FUND_I_SLUG, NOTICE_REFUSALS, payInstructionsFor, refusalMessage, type PaymentPurpose } from '../services/payInstructions';
+
+const r = new Hono<{ Bindings: Env }>();
+
+/** Decision 5: the elevation is checked first, so a plain Admin gets this and never a TOTP or step-up demand. */
+async function superAdminWriter(c: Context<{ Bindings: Env }>): Promise<User | Response> {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  if (!isSuperAdmin(user as any)) return c.json({ code: 'super_admin_required', detail: 'Super admin required' }, 403);
+  return requireSuperAdminWriteBar(c);
+}
+
+/** A refusal from the service: its code and our sentence, never what was typed. */
+function refused(c: Context<{ Bindings: Env }>, e: unknown) {
+  if (e instanceof BankAccountError) {
+    return c.json({ code: e.code, error: e.code, detail: e.sentence, message: e.sentence }, e.status as any);
+  }
+  throw e;
+}
+
+const body = async (c: Context<{ Bindings: Env }>): Promise<Record<string, unknown>> => {
+  const b = await c.req.json().catch(() => ({}));
+  return b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+};
+
+const audit = (c: Context<{ Bindings: Env }>, actor: User, action: string, account: { uid: string; entity_key: string; account_last4: string }, extra: Record<string, unknown> = {}) =>
+  logAdminAction(c.env, Number(actor.id), String(actor.email || ''), action, {
+    account_uid: account.uid, entity_key: account.entity_key, account_last4: account.account_last4, ...extra,
+  });
+
+/** D1182: audit must persist before any history store is read. */
+r.get('/history', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  c.header('Cache-Control','no-store');
+  try {
+    const filters = historyFilters(c.req.query());
+    try {
+      const logged = await c.env.DB.prepare(
+        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, ?, ?)`,
+      ).bind(actor.id,'bank_accounts_history_read','bank_accounts',JSON.stringify({filtered:!!(filters.q||filters.kind||filters.entity||filters.actor||filters.from||filters.until)})).run();
+      if (!logged.success || logged.meta?.changes !== 1) throw new Error('audit_unavailable');
+    } catch { return c.json({code:'audit_unavailable',message:'The history read could not be recorded. Try again.'},503); }
+    return c.json(await bankAccountHistory(c.env,filters));
+  } catch (e) {
+    if (e instanceof BankHistoryError) return c.json({code:e.code,message:e.status===400?'Choose valid history filters.':'History could not be read. Try again.'},e.status as any);
+    return c.json({code:'history_unreadable',message:'History could not be read. Try again.'},503);
+  }
+});
+
+r.get('/', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  const mercuryReader = await requireMercuryReader(c);
+  if (mercuryReader instanceof Response) return mercuryReader;
+  c.header('Cache-Control', 'no-store');
+  if (!await auditRegistryRead(c.env, Number(actor.id))) return c.json(AUDIT_UNAVAILABLE, 503);
+  const [accounts, fundI] = await Promise.all([listAccountsForConsole(c.env), Funds.bySlug(c.env, FUND_I_SLUG)]);
+  const coverage = [];
+  const resolved = new Map<PaymentPurpose, Awaited<ReturnType<typeof payInstructionsFor>>>();
+  for (const [purpose, def] of Object.entries(PAYMENT_PURPOSES)) {
+    let pay: Awaited<ReturnType<typeof payInstructionsFor>>;
+    try { pay = await payInstructionsFor(c.env, def.payee, purpose as PaymentPurpose); }
+    catch { pay = { ok: false, code: 'account_unreadable', message: 'Payment instructions could not be read. Try again.' }; }
+    resolved.set(purpose as PaymentPurpose, pay);
+    coverage.push(pay.ok
+      ? { purpose, label: def.label, payee: def.payee, ok: true, account_uid: pay.instructions.uid, account_masked: pay.instructions.account_masked }
+      : { purpose, label: def.label, payee: def.payee, ok: false, code: pay.code, message: pay.message });
+  }
+  const refusals = NOTICE_REFUSALS.map(({ code, payee, purpose }) => ({ code, message: refusalMessage(code, payee, purpose) }));
+  let mercury;
+  try { mercury = await registryMercury(c.env, accounts); }
+  catch { mercury = accounts.map(() => absentMercury('unreadable')); }
+  const enriched = accounts.map((account, i) => ({
+    ...account, mercury: mercury[i],
+    notice_preview: account.status === 'retired' ? [] : account.purposes.map(purpose => {
+      const pay = resolved.get(purpose)!;
+      return pay.ok && pay.instructions.uid !== account.uid
+        ? { ok: false, code: 'account_not_selected', message: 'A notice does not print this account for this purpose.' }
+        : pay;
+    }),
+    notice_preview_reason: account.status === 'retired' ? 'account_retired' : !account.purposes.length ? 'no_notice_purpose' : null,
+  }));
+  return c.json({ accounts: enriched, coverage, fund_i: fundI ? { id: Number(fundI.id), name: fundI.name } : null, refusals });
+});
+
+r.post('/', async (c) => {
+  const mercuryReader = await requireMercuryReader(c);
+  if (mercuryReader instanceof Response) return mercuryReader;
+  const actor = await superAdminWriter(c);
+  if (actor instanceof Response) return actor;
+  try {
+    const account = await createAccount(c.env, await body(c), Number(actor.id));
+    await audit(c, actor, 'bank_account_added', account, { account_kind: account.account_kind, purposes: account.purposes });
+    return c.json({ account }, 201);
+  } catch (e) { return refused(c, e); }
+});
+
+r.patch('/:uid', async (c) => {
+  const actor = await superAdminWriter(c);
+  if (actor instanceof Response) return actor;
+  try {
+    const b = await body(c);
+    const account = await updateAccount(c.env, c.req.param('uid'), b);
+    await audit(c, actor, 'bank_account_updated', account, { fields: Object.keys(b), purposes: account.purposes });
+    return c.json({ account });
+  } catch (e) { return refused(c, e); }
+});
+
+r.post('/:uid/retire', async (c) => {
+  const actor = await superAdminWriter(c);
+  if (actor instanceof Response) return actor;
+  try {
+    const account = await retireAccount(c.env, c.req.param('uid'), (await body(c)).reason);
+    await audit(c, actor, 'bank_account_retired', account);
+    return c.json({ account });
+  } catch (e) { return refused(c, e); }
+});
+
+r.post('/:uid/reveal', async (c) => {
+  const actor = await superAdminWriter(c);
+  if (actor instanceof Response) return actor;
+  try {
+    const account = await revealAccount(c.env, c.req.param('uid'), Number(actor.id), (await body(c)).reason);
+    // The ledger row is the gate (decision 6); this audit line carries the last four only.
+    await audit(c, actor, 'bank_account_revealed', account);
+    c.header('Cache-Control', 'no-store');
+    return c.json({ account });
+  } catch (e) {
+    c.header('Cache-Control', 'no-store');
+    return refused(c, e);
+  }
+});
+
+export default r;

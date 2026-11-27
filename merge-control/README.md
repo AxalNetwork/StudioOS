@@ -1,0 +1,27 @@
+# Merge Control
+
+Independent GitHub App webhook Worker for issue leases and cancelling orphaned
+merge-queue runs (D5618). No studioos imports, D1, KV, assets or deploy token.
+The owner performs the initial deployment in D5618; the kill switch defaults on.
+
+| Path | Purpose |
+| --- | --- |
+| `src/` | Webhook ingress, App authentication, repository Durable Object and pure policy in `src/lib/`. |
+| `test/` | Node/SQLite policy, restart and ingress tests; runtime adapter is test-only. |
+| `env.d.ts` | Wrangler-generated bindings; regenerate with the dedicated config. |
+| `tsconfig.json` | Independent typecheck with the installed Worker types. |
+| `contract/` | Pure contracts the studioos Worker also reads (D5624). |
+
+`npm run test:merge-control` runs focused tests and typechecking inside the drift
+suite. The deployed entrypoint is `src/index.ts`. Owner routes use a dedicated
+Bearer token: GET /status, POST /switch {on}, POST /claims
+{issue, operation, holder, fence?, ttlSeconds?}. Leases last at most 24 hours.
+Save the returned fence and present it on renew/release. If the service cannot
+be reached, use the claim ref CLI from #5617 and record the fallback in STATUS.
+Ref mirrors are observation only; they never replace a live server lease.
+
+D5620: `src/policy.ts` bundles the classifier `scripts/merge-policy.mjs` uses,
+from `src/lib/classify.mjs`. The deploy job injects the commit as
+`policy_version` with `--define`; a build without it fails at startup.
+GET /status reports it. `src/policyCheck.ts` evaluates a compare and fails
+closed. D5990: `src/repoControl.ts` posts its result as the `merge-control/policy` check run on pull_request (opened, synchronize, reopened) and merge_group checks_requested heads, once per SHA and `policy_version`, with one append-only `policy` audit row per decision. Nothing posts while the kill switch is on; the App's `checks: write` grant and `pull_request` subscription are #5618 owner steps. What the check means for a pull request, and what to do with `action_required`, is in [`MERGE_CONTROL_POLICY.md`](../documentation/operations/MERGE_CONTROL_POLICY.md).

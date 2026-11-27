@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',ui-monospace,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:284px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums;font-family:'Roboto Mono',ui-monospace,monospace}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .prop{background:#faf7ff;border:1px solid #d8c9ff;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:#f2ecff;border:1px solid #d8c9ff;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #6d28d9;background:#6d28d9;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .rec{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .vm{font-size:11.5px;font-weight:700;color:#6d28d9}
+    .cap{font-size:12px;line-height:1.65;color:rgba(24,24,27,.6);margin-top:14px;max-width:1440px}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="4">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ b.href }}">{{ b.tag }}</a><span class="ab-nm">{{ b.name }}</span><span class="ab-sub">{{ b.sub }}</span></div>
+
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px">
+      <div style="width:322px;flex:none;background:#fff;border:1px solid #ececf1;border-radius:12px;padding:15px 17px">
+        <div class="lbl" style="margin-bottom:9px">Compressed · on the workspace</div>
+        <div style="font-size:13px;font-weight:800">{{ b.zone }}</div>
+        <div style="display:grid;gap:6px;margin-top:10px">
+          <sc-for list="{{ b.comp }}" as="c" hint-placeholder-count="3">
+            <div style="display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding-bottom:5px;border-bottom:1px solid #f6f5f9">
+              <span style="color:#3f3a49">{{ c.k }}</span><span class="num" style="font-weight:700">{{ c.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="vm" style="margin-top:11px">{{ b.vm }}</div>
+      </div>
+      <div style="flex:1;min-width:280px;padding-top:4px">
+        <div class="ab-sub" style="max-width:560px">{{ b.why }}</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+
+      <div class="main">
+        <div class="crumb"><span style="color:#6d28d9;font-weight:700">Validate</span><span>‹</span><span style="font-weight:700;color:#18181b">{{ b.zone }}</span></div>
+        <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">{{ b.zone }}</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ b.lede }}</div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <sc-for list="{{ b.views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+          <span class="zs" style="margin-left:4px">·</span>
+          <sc-for list="{{ b.tools }}" as="t" hint-placeholder-count="2"><span class="vm" style="cursor:pointer">{{ t }}</span></sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ b.stats }}" as="s" hint-placeholder-count="4">
+            <div class="c" style="padding:13px 15px">
+              <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+              <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- INTERVIEWS · COLLECTION -->
+        <sc-if value="{{ b.isInt }}">
+          <div class="c" style="padding:17px 19px;margin-top:14px">
+            <div class="zh"><span class="zt">The library</span><span class="zs">Consent state and deck-eligibility · only here</span></div>
+            <div style="display:grid;gap:10px">
+              <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="6">
+                <div style="{{ r.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                    <div style="min-width:0;flex:1">
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ r.who }}</span>
+                        <span class="tag">{{ r.role }}</span>
+                        <span style="{{ r.fitPill }}">{{ r.fit }}</span>
+                        <sc-if value="{{ r.rec }}"><span class="rec"><span style="width:5px;height:5px;border-radius:50%;background:#dc2626;flex:none"></span>{{ r.rec }}</span></sc-if>
+                      </div>
+                      <div class="num" style="font-size:11px;color:#615c6e;margin-top:6px">{{ r.meta }}</div>
+                      <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.6;font-style:italic">“{{ r.quote }}”</div>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">
+                        <sc-for list="{{ r.pains }}" as="p" hint-placeholder-count="2"><span style="{{ p.style }}">{{ p.label }}</span></sc-for>
+                      </div>
+                    </div>
+                    <div style="width:122px;flex:none;text-align:right">
+                      <span style="{{ r.deckPill }}">{{ r.deck }}</span>
+                      <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.5">{{ r.deckWhy }}</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ b.note }}</div>
+          </div>
+        </sc-if>
+
+        <!-- PAIN MAP · ANALYTICS -->
+        <sc-if value="{{ b.isPain }}">
+          <div class="c" style="padding:17px 19px;margin-top:14px">
+            <div class="zh"><span class="zt">Ranked by mentions, split by severity</span><span class="zs">Severity concentration · only here</span></div>
+            <div style="display:grid;gap:13px">
+              <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                    <div style="min-width:0;flex:1">
+                      <span style="font-size:13.5px;font-weight:700">{{ r.name }}</span>
+                      <sc-if value="{{ r.anchor }}"><span style="{{ r.anchorStyle }}">{{ r.anchor }}</span></sc-if>
+                    </div>
+                    <span class="num" style="font-size:12.5px;font-weight:700;color:{{ r.ink }}">{{ r.count }}</span>
+                  </div>
+                  <div style="display:flex;height:9px;border-radius:999px;overflow:hidden;margin-top:7px;background:#f0eff4">
+                    <sc-for list="{{ r.segs }}" as="s" hint-placeholder-count="3"><div style="{{ s.style }}"></div></sc-for>
+                  </div>
+                  <div style="font-size:11px;color:#615c6e;margin-top:6px;line-height:1.5">{{ r.read }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:15px;padding-top:13px;border-top:1px solid #f4f3f7">
+              <sc-for list="{{ b.legend }}" as="l" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};flex:none"></span>
+                  <span style="font-size:11px;color:#3f3a49">{{ l.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ b.note }}</div>
+          </div>
+        </sc-if>
+
+        <!-- HYPOTHESES · WORK BOARD -->
+        <sc-if value="{{ b.isHyp }}">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:15px">
+            <sc-for list="{{ b.lanes }}" as="ln" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px">
+                  <span style="font-size:12px;font-weight:800">{{ ln.name }}</span>
+                  <span class="num" style="font-size:11px;color:#615c6e;font-weight:700">{{ ln.count }}</span>
+                </div>
+                <div style="display:grid;gap:9px">
+                  <sc-for list="{{ ln.cards }}" as="c" hint-placeholder-count="2">
+                    <div style="{{ c.cardStyle }}">
+                      <div style="font-size:12px;font-weight:700;line-height:1.45">{{ c.claim }}</div>
+                      <div class="num" style="font-size:10.5px;color:{{ c.evInk }};margin-top:8px;font-weight:700">{{ c.ev }}</div>
+                      <div style="font-size:10.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ c.gate }}</div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ ln.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:10px;padding:14px;text-align:center;font-size:11px;color:#615c6e">Nothing here</div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="prop" style="margin-top:15px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · drafted from recurring pains</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ b.cost }}</span></div>
+            <div style="font-size:12px;color:#3f2a5c;line-height:1.65">{{ b.draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Add to {{ b.draftLane }}</span><span class="gho">Edit the claim</span><span class="dis">Discard</span></div>
+          </div>
+        </sc-if>
+
+        <!-- VERDICT · LEDGER -->
+        <sc-if value="{{ b.isVer }}">
+          <div class="c" style="padding:17px 19px;margin-top:14px">
+            <div class="zh"><span class="zt">Every verdict, with its receipts</span><span class="zs">Evidence must reconcile to the library</span></div>
+            <div style="display:grid;grid-template-columns:1.7fr .6fr .6fr .75fr 1.25fr;gap:11px">
+              <span class="th">Hypothesis</span><span class="th">For</span><span class="th">Against</span><span class="th">Verdict</span><span class="th">Bar</span>
+            </div>
+            <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="4">
+              <div style="{{ r.rowStyle }}">
+                <span class="td" style="border-top:none;padding:10px 0;font-weight:600">{{ r.claim }}</span>
+                <span class="td num" style="border-top:none;padding:10px 0;color:#047857;font-weight:700">{{ r.for }}</span>
+                <span class="td num" style="border-top:none;padding:10px 0;color:#b91c1c;font-weight:700">{{ r.against }}</span>
+                <span class="td" style="border-top:none;padding:10px 0"><span style="{{ r.pill }}">{{ r.verdict }}</span></span>
+                <span class="td" style="border-top:none;padding:10px 0;font-size:11px">{{ r.bar }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ b.note }}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+            <div class="c" style="padding:17px 19px">
+              <div class="zh"><span class="zt">Receipts · H1</span><span class="zs">Which interview said what</span></div>
+              <div style="display:grid;gap:8px">
+                <sc-for list="{{ b.receipts }}" as="r" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                    <span class="num" style="font-size:10.5px;font-weight:700;color:#6d28d9;flex:none">{{ r.n }}</span>
+                    <div style="min-width:0">
+                      <div style="font-size:11.5px;font-weight:700">{{ r.who }}</div>
+                      <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.55">{{ r.said }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div class="prop">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · summary, written from evidence</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ b.cost }}</span></div>
+              <div style="font-size:12px;color:#3f2a5c;line-height:1.65">{{ b.draft }}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Accept summary</span><span class="gho">See all receipts</span><span class="dis">Discard</span></div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div class="rail">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span class="lbl">Worker AI</span><span style="font-size:11px;color:#615c6e">›</span>
+        </div>
+        <div style="background:#fbfbfc;border:1px dashed #d8c9ff;border-radius:9px;padding:10px 11px;margin-top:13px">
+          <div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#6d28d9">Inherited from Validate</div>
+          <div style="font-size:11.5px;color:#3f3a49;margin-top:6px;line-height:1.55">Mode and model are chosen on the workspace, not re-picked here.</div>
+        </div>
+        <div style="border:1px solid #d8c9ff;background:#faf7ff;border-radius:9px;padding:10px 11px;margin-top:9px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font-size:12px;font-weight:800;color:#6d28d9">AI fills the blanks</span>
+            <span style="width:24px;height:14px;border-radius:999px;background:#7c3aed;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+          </div>
+          <div style="font-size:10.5px;color:#6d28d9;margin-top:4px;line-height:1.45">Proposals stay accept / edit / discard at this depth.</div>
+        </div>
+        <div style="border:1px solid #d8c9ff;background:#faf7ff;border-radius:9px;padding:10px 11px;margin-top:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+            <span style="font-size:12px;font-weight:800">{{ railModel }}</span>
+            <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#6d28d9;background:#fff;border:1px solid #d8c9ff;border-radius:3px;padding:2px 5px;flex:none">INHERITED</span>
+          </div>
+          <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:4px;word-break:break-all">{{ railId }}</div>
+          <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:7px;padding-top:7px;border-top:1px solid #d8c9ff">{{ railPrice }}</div>
+        </div>
+        <div class="lbl" style="margin-top:16px">Batch on this page</div>
+        <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+          <div style="font-size:11.5px;font-weight:700">{{ b.batch }}</div>
+          <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ b.batchNote }}</div>
+          <div class="num" style="font-size:10.5px;font-weight:700;color:#6d28d9;margin-top:8px">{{ b.batchCost }}</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+          <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+          <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ b.safety }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const V = '#6d28d9', VF = '#7c3aed';
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      val:   this.ic('<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>'),
+      build: this.ic('<path d="M3 8 12 3l9 5v8l-9 5-9-5Z"/><path d="M3 8l9 5 9-5"/>'),
+      raise: this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      grow:  this.ic('<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      trust: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>')
+    };
+    const nav = [['Home',I.home],['Validate',I.val],['Build',I.build],['Raise',I.raise],['Grow',I.grow],
+                 ['Network',I.net],['Research',I.res],['Trust',I.trust],['Company Settings',I.cog]]
+      .map(([label, icon]) => ({ label, icon,
+        style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+          + (label === 'Validate' ? 'font-weight:700;color:' + V + ';background:#f7f4ff;box-shadow:inset 2px 0 0 ' + VF
+                                  : 'font-weight:600;color:#4a4553') }));
+
+    // ══ THE interview record. Every pain count, hypothesis tally, verdict and deck-eligibility
+    // on all four pages derives from it — there is no second copy of the evidence. ══
+    const PAINS = {
+      async:  'Async handoffs lose decision context',
+      truth:  'No single source of truth for decisions',
+      handoff:'Lives outside where the team already talks',
+      price:  'Price sensitivity above $200 a seat',
+      disc:   'Discovery takes 3× longer than planned'
+    };
+    const INT = [
+      { who:'Sarah Tolliver', role:'Head of Engineering', co:'Verwood', date:'Jul 2', mins:42,
+        fit:'Strong', rec:true, pains:[['async','need'],['truth','good']],
+        quote:'Current tools do not handle async handoffs at all — we rebuild context every morning.' },
+      { who:'Marcus Reyes', role:'VP Product', co:'Halverton', date:'Jul 3', mins:38,
+        fit:'Strong', rec:true, pains:[['async','need'],['price','good']],
+        quote:'Above two hundred a seat I need a procurement case, and right now I do not have one.' },
+      { who:'Diana Kowalski', role:'Engineering Manager', co:'Novacraft', date:'Jul 4', mins:51,
+        fit:'Strong', rec:true, pains:[['async','need'],['truth','need'],['handoff','need']],
+        quote:'Slack is non-negotiable. If it does not live where we talk, it does not exist.' },
+      { who:'James Whitfield', role:'CTO', co:'Kelp Bio', date:'Jul 5', mins:29,
+        fit:'Partial', rec:false, pains:[['disc','good'],['async','nice']],
+        quote:'Discovery takes three times longer than we plan for. Every single time.' },
+      { who:'Priya Mehta', role:'Head of Operations', co:'Aperture', date:'Jul 6', mins:47,
+        fit:'Strong', rec:true, pains:[['truth','need'],['async','need']],
+        quote:'There is no single source of truth for what a team decided, or why.' },
+      { who:'Tobias Lindqvist', role:'Founder', co:'Marrow Studio', date:'Jul 9', mins:33,
+        fit:'Not ICP', rec:false, pains:[['price','nice']],
+        quote:'We are four people in one room. We would just use a doc.' }
+    ];
+    const ICP = INT.filter(i => i.fit !== 'Not ICP');
+    const strong = INT.filter(i => i.fit === 'Strong');
+    // Deck-eligibility DERIVES from consent: no recording, no quotable quote.
+    const deckOk = INT.filter(i => i.rec);
+    const MIN_INT = 5;
+
+    const mentions = (k) => ICP.filter(i => i.pains.some(p => p[0] === k));
+    const sev = (k, s) => ICP.filter(i => i.pains.some(p => p[0] === k && p[1] === s)).length;
+    const PAIN_ROWS = Object.keys(PAINS).map(k => ({
+      key:k, name:PAINS[k], n:mentions(k).length,
+      need:sev(k,'need'), good:sev(k,'good'), nice:sev(k,'nice')
+    })).sort((a, b) => b.n - a.n || b.need - a.need);
+    const ANCHOR_MIN = 3;   // a pain anchors the deck at 3+ ICP mentions, majority need-to-have
+    const anchors = PAIN_ROWS.filter(p => p.n >= ANCHOR_MIN && p.need / p.n > 0.5);
+
+    // ══ Hypotheses: evidence counted from INT, verdict derived from the bar. ══
+    const HYP = [
+      { id:'H1', claim:'Distributed engineering teams lose decision context across async handoffs',
+        forKeys:['async'], againstKeys:[] },
+      { id:'H2', claim:'Teams will pay above $200 a seat once context loss is priced',
+        forKeys:[], againstKeys:['price'] },
+      { id:'H3', claim:'Slack is a requirement, not an integration nice-to-have',
+        forKeys:['handoff'], againstKeys:[] },
+      { id:'H4', claim:'Discovery time is the wedge, not context loss',
+        forKeys:['disc'], againstKeys:[] }
+    ].map(h => {
+      // Support counts ICP interviews only — a non-buyer confirming your problem proves nothing.
+      // Objections count ALL interviews: someone telling you the price is wrong is a data point
+      // whether or not you wanted them as a customer. The asymmetry is deliberate.
+      const f = ICP.filter(i => h.forKeys.some(k => i.pains.some(p => p[0] === k))).length;
+      const a = INT.filter(i => h.againstKeys.some(k => i.pains.some(p => p[0] === k))).length;
+      const verdict = f >= MIN_INT ? 'Validated' : (a > f && a >= 2 ? 'Invalidated' : 'Unproven');
+      return Object.assign({}, h, { f, a, verdict,
+        bar: verdict === 'Validated' ? f + ' of ' + MIN_INT + ' ICP interviews · bar met'
+          : (verdict === 'Invalidated' ? a + ' contradict, ' + f + ' support · bar cannot be met'
+              : (MIN_INT - f) + ' more ICP interviews needed') });
+    });
+    // ══ Every prose claim about the board derives from HYP, so none can outlive the evidence. ══
+    const nW = ['no','one','two','three','four','five','six','seven'];
+    const byV = (v) => HYP.filter(h => h.verdict === v);
+    const nVal = byV('Validated').length, nInv = byV('Invalidated').length, nUnp = byV('Unproven').length;
+    const h2 = HYP.filter(h => h.id === 'H2')[0];
+    const h1 = HYP.filter(h => h.id === 'H1')[0];
+    const mix = [['validated', nVal], ['invalidated', nInv], ['unproven', nUnp]]
+      .filter(x => x[1]).map(x => x[1] + ' ' + x[0]).join(', ');
+    const plural = (n, w) => nW[n] + ' ' + w + (n === 1 ? '' : 's');
+    const thinIds = byV('Unproven').map(h => h.id);
+    // Each unproven claim's OWN shortfall — the sentence is about H3 and H4, so it reads H3 and H4.
+    const shorts = byV('Unproven').map(h => MIN_INT - h.f);
+    const evenShort = shorts.length > 0 && shorts.every(s => s === shorts[0]);
+    const shortPhrase = evenShort
+      ? 'each need ' + nW[shorts[0]] + ' more ICP interviews'
+      : byV('Unproven').map(h => h.id + ' needs ' + nW[MIN_INT - h.f]).join(' and ') + ' more';
+    // Lane names describe EVIDENCE state; verdicts are the roll-up. The first lane means f=0,
+    // which is not the same thing as an Unproven verdict — so it does not borrow the word.
+    const LANES = ['No evidence','Testing','Validated','Invalidated'];
+    // The proposed claim is routed by the same rule as every existing one, so its stated
+    // destination and its CTA cannot name a lane the board does not have.
+    const DRAFT_KEY = 'truth';
+    const laneOf = (h) => h.verdict === 'Validated' ? 'Validated'
+      : (h.verdict === 'Invalidated' ? 'Invalidated' : (h.f >= 1 ? 'Testing' : 'No evidence'));
+    const draftLane = laneOf({ verdict:'Unproven', a:0,
+      f:ICP.filter(i => i.pains.some(p => p[0] === DRAFT_KEY)).length });
+
+    const pill = (t) => {
+      const M = { Strong:['#ecfdf5','#047857','#a7f3d0'], Partial:['#fffbeb','#92400e','#fde68a'],
+                  'Not ICP':['#f4f4f6','#615c6e','#e4e4e8'],
+                  Validated:['#ecfdf5','#047857','#a7f3d0'], Unproven:['#f4f4f6','#615c6e','#e4e4e8'],
+                  Testing:['#faf7ff','#6d28d9','#d8c9ff'], Invalidated:['#fef2f2','#b91c1c','#fecaca'],
+                  'Deck-eligible':['#ecfdf5','#047857','#a7f3d0'], 'Not quotable':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M.Unproven;
+      return 'font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap;display:inline-block';
+    };
+    const seg = (on) => 'font-size:11.5px;font-weight:' + (on ? '700' : '600')
+      + ';padding:6px 12px;border-radius:8px;cursor:pointer;'
+      + (on ? 'background:#faf7ff;color:' + V + ';border:1px solid #d8c9ff' : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
+    const views = (l) => l.map((x, i) => ({ label:x, style:seg(i === 0) }));
+    const painChip = (k, s) => {
+      const C = { need:['#fef2f2','#b91c1c','#fecaca'], good:['#fffbeb','#92400e','#fde68a'], nice:['#f4f4f6','#615c6e','#e4e4e8'] }[s];
+      return { label:PAINS[k] + ' · ' + s,
+        style:'font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;background:'+C[0]+';color:'+C[1]+';border:1px solid '+C[2] };
+    };
+    const SEG_COL = { need:'#ef4444', good:'#f59e0b', nice:'#d4d4d8' };
+
+    return {
+      nav,
+      railModel:'Llama 3.3 70B Fast',
+      railId:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      railPrice:'$0.293 / M in · $2.253 / M out',
+
+      boards: [
+        // ── V1 · INTERVIEWS ──
+        { id:'v1', href:'#v1', tag:'V1', name:'Interviews — COLLECTION', sub:'violet · /validate/interviews',
+          zone:'Interview library', isInt:true,
+          comp:[{ k:'Logged', v:String(INT.length) }, { k:'ICP-qualifying', v:String(ICP.length) }, { k:'Deck-eligible quotes', v:String(deckOk.length) }],
+          vm:'View more · ' + INT.length + ' interviews →',
+          why:'The compressed zone counts interviews. Depth adds the two facts a count cannot carry: whether each conversation was recorded with consent, and therefore whether anything said in it can be quoted. Deck-eligibility is not a flag someone sets — it derives from consent, which is why two of these six have nothing quotable in them.',
+          lede:'Every interview with its transcript state, tagged pains, and whether its quote can leave this page.',
+          views: views(['All','Deck-eligible','Strong fit','Not ICP']),
+          tools:['Log an interview','Export transcripts'],
+          stats:[
+            { label:'Logged', value:String(INT.length), note:ICP.length + ' ICP-qualifying', ink:'#18181b' },
+            { label:'Minimum bar', value:ICP.length + ' of ' + MIN_INT, note: ICP.length >= MIN_INT ? 'met' : (MIN_INT - ICP.length) + ' short', ink: ICP.length >= MIN_INT ? '#047857' : '#b45309' },
+            { label:'Recorded', value:String(deckOk.length), note:'with consent on file', ink:'#18181b' },
+            { label:'Strong fit', value:String(strong.length), note:'of ' + INT.length + ' interviewed', ink:'#047857' }
+          ],
+          rows: INT.map(i => ({
+            who:i.who, role:i.role, fit:i.fit, fitPill:pill(i.fit),
+            rec: i.rec ? 'Recorded with consent' : null,
+            meta:i.co + ' · ' + i.date + ' · ' + i.mins + ' min',
+            quote:i.quote,
+            pains:i.pains.map(([k, s]) => painChip(k, s)),
+            deck: i.rec ? 'Deck-eligible' : 'Not quotable',
+            deckPill: pill(i.rec ? 'Deck-eligible' : 'Not quotable'),
+            deckWhy: i.rec ? 'Consent covers publication' : 'No recording, so nothing to attribute',
+            rowStyle:'border:1px solid ' + (i.rec ? '#ececf1;background:#fbfbfc' : '#e4e4e8;background:#f8f8fa') + ';border-radius:11px;padding:14px 16px'
+          })),
+          note:'Two interviews carry no quote because neither was recorded. That is not a gap to fill later — a quote without consent cannot appear on a Problem slide, so the library states it here rather than letting the deck discover it.',
+          batch:'Tag pains across ' + INT.length + ' transcripts', batchNote:'Each tag lands as its own proposal.',
+          batchCost:INT.length + ' × the per-transcript rate',
+          safety:'Transcripts stay internal. Screening applies when a quote is pulled into an investor-facing deck.',
+          cap:'A COLLECTION rather than a FEED, because an interview is an artifact with state rather than an event in a stream. The state that matters is consent, and it gates one thing: whether the quote is usable. Sorting by recency would bury that.' },
+
+        // ── V2 · PAIN MAP ──
+        { id:'v2', href:'#v2', tag:'V2', name:'Pain map — ANALYTICS', sub:'violet · /validate/pain-map',
+          zone:'Pain map', isPain:true,
+          comp:[{ k:'Distinct pains', v:String(PAIN_ROWS.length) }, { k:'Top pain', v:PAIN_ROWS[0].n + ' of ' + ICP.length }, { k:'Deck anchors', v:String(anchors.length) }],
+          vm:'View more · ' + PAIN_ROWS.length + ' pains ranked →',
+          why:'The compressed zone shows which pain came up most. Depth adds severity, which is the only thing that separates a complaint from a purchase: five mentions where four called it blocking is a different market from five where four called it pleasant.',
+          lede:'Ranked by ICP mentions, split by how severely each was described.',
+          views: views(['ICP only','All interviews','Need-to-have','By recency']),
+          tools:['Send to Problem slide','Export map'],
+          stats:[
+            { label:'Distinct pains', value:String(PAIN_ROWS.length), note:'across ' + ICP.length + ' ICP interviews', ink:'#18181b' },
+            { label:'Top pain', value:PAIN_ROWS[0].n + ' of ' + ICP.length, note:PAIN_ROWS[0].need + ' called it blocking', ink:'#b91c1c' },
+            { label:'Deck anchors', value:String(anchors.length), note:ANCHOR_MIN + '+ mentions, majority blocking', ink:'#047857' },
+            { label:'Single-mention', value:String(PAIN_ROWS.filter(p => p.n === 1).length), note:'too thin to rank', ink:'#615c6e' }
+          ],
+          rows: PAIN_ROWS.map(p => {
+            const isAnchor = anchors.some(a => a.key === p.key);
+            const segs = ['need','good','nice'].filter(s => p[s] > 0).map(s => ({
+              style:'width:' + (p[s] / ICP.length * 100) + '%;background:' + SEG_COL[s] }));
+            return { name:p.name, count:p.n + ' of ' + ICP.length, ink: p.need > p.n / 2 ? '#b91c1c' : '#615c6e',
+              anchor: isAnchor ? 'ANCHORS THE DECK' : null,
+              anchorStyle:'margin-left:8px;font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:4px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;white-space:nowrap',
+              segs,
+              read: p.n === 1 ? 'One mention. Recorded, not ranked — a single voice is an anecdote.'
+                : p.need + ' called it blocking, ' + (p.good + p.nice) + ' did not'
+                  + (isAnchor ? ' — enough concentration to carry the Problem slide.' : '. Not enough concentration to anchor anything yet.') };
+          }),
+          legend:[{ color:SEG_COL.need, label:'Need-to-have · blocking' }, { color:SEG_COL.good, label:'Good-to-have' }, { color:SEG_COL.nice, label:'Nice-to-have' }],
+          note:'Bars are drawn against all ' + ICP.length + ' ICP interviews rather than against each pain\u2019s own mentions, so a tall bar means broad and a short one means narrow. Scaling each to its own total would make a single blocking mention look identical to five.',
+          batch:'Re-cluster pains across ' + ICP.length + ' interviews', batchNote:'Proposes merges where two tags describe one pain.',
+          batchCost:'1 × the per-clustering rate',
+          safety:'The map is internal. Screening applies when a pain is pushed to the Problem slide.',
+          cap:'ANALYTICS rather than a list, because the finding is a distribution: the top pain is broad and blocking, the price pain is neither, and the two single-mention pains are recorded so they are not re-discovered next month as if new. The anchor threshold is stated on the page — 3+ mentions with a blocking majority — so nobody has to guess why one pain is badged and another is not.' },
+
+        // ── V3 · HYPOTHESES ──
+        { id:'v3', href:'#v3', tag:'V3', name:'Hypotheses — WORK BOARD', sub:'violet · /validate/hypotheses',
+          zone:'Hypotheses', isHyp:true,
+          comp:[{ k:'Open', v:String(HYP.filter(h => h.verdict === 'Unproven').length) }, { k:'Validated', v:String(HYP.filter(h => h.verdict === 'Validated').length) }, { k:'Invalidated', v:String(HYP.filter(h => h.verdict === 'Invalidated').length) }],
+          vm:'View more · ' + HYP.length + ' hypotheses →',
+          why:'The compressed zone counts hypotheses by state. Depth shows what each one is waiting for, which is the only actionable part: '
+            + thinIds.join(' and ') + ' ' + shortPhrase + ', and '
+            + h2.id + ' needs a different claim rather than more evidence — the evidence it has already went the other way.',
+          lede:'Each claim in the lane its own evidence puts it in — not the lane you dragged it to.',
+          views: views(['All','Blocking the verdict','Recently moved','Retired']),
+          tools:['New hypothesis','Link to a pain'],
+          stats:[
+            { label:'Hypotheses', value:String(HYP.length), note:mix, ink:'#18181b' },
+            { label:'Awaiting evidence', value:String(nUnp), note: nUnp ? thinIds.join(' and ') + ' · need more ICP interviews' : 'nothing waiting', ink: nUnp ? '#b45309' : '#047857' },
+            { label:'Bar per claim', value:String(MIN_INT), note:'ICP interviews to validate', ink:'#18181b' },
+            { label:'Contradicted', value:String(nInv), note: nInv ? byV('Invalidated').map(h => h.id).join(', ') + ' · evidence went the other way' : 'nothing contradicted yet', ink: nInv ? '#b91c1c' : '#615c6e' }
+          ],
+          lanes: LANES.map(name => {
+            const cards = HYP.filter(h => laneOf(h) === name);
+            return { name, count:String(cards.length), empty:cards.length === 0,
+              cards:cards.map(h => ({
+                claim:h.id + ' · ' + h.claim,
+                ev:h.f + ' support · ' + h.a + ' contradict',
+                evInk: h.a > h.f ? '#b91c1c' : (h.f >= MIN_INT ? '#047857' : '#b45309'),
+                gate:h.bar,
+                cardStyle:'border:1px solid ' + (h.verdict === 'Invalidated' ? '#fecaca;background:#fffbfb'
+                  : (h.verdict === 'Validated' ? '#a7f3d0;background:#f7fffb' : '#f0eff4;background:#fbfbfc')) + ';border-radius:10px;padding:12px 13px'
+              })) };
+          }),
+          cost:'≈ $0.0068',
+          draftLane: draftLane,
+          draft:'“' + PAINS[DRAFT_KEY] + '” came up in ' + mentions(DRAFT_KEY).length + ' of ' + ICP.length
+            + ' ICP interviews and ' + sev(DRAFT_KEY,'need') + ' called it blocking, but no hypothesis claims it. Drafted as one — and its '
+            + nW[mentions(DRAFT_KEY).length] + ' supporting interviews put it straight into ' + draftLane
+            + ' rather than at the start of the board, because the gap here is a missing claim rather than a missing interview.',
+          batch:'Re-check ' + HYP.length + ' verdicts against the library', batchNote:'Flags claims whose lane no longer matches their evidence.',
+          batchCost:HYP.length + ' × the per-claim rate',
+          safety:'Hypotheses are internal. Screening applies when one becomes an investor-facing claim.',
+          cap:'A WORK BOARD whose lanes the founder cannot drag. Every card sits where its evidence count puts it, which is the point: the failure mode of a hypothesis board is a founder moving a card to Validated because they believe it. '
+            + h2.id + ' is in ' + laneOf(h2) + ' on ' + nW[h2.a] + ' contradicting interviews and ' + nW[h2.f]
+            + ' support, and it stays there until an interview says otherwise. The lanes name evidence states rather than verdicts, which is why the first one is “No evidence” and not “Unproven” — a claim with one supporting interview is unproven but it is not untested, and collapsing those two into one word is how a board starts lying about where the work is. Note also the asymmetry in how ' + h2.id + ' got there: support is counted from ICP interviews only, objections from all of them — a non-buyer agreeing with your problem proves nothing, while a non-buyer telling you the price is wrong is still someone telling you the price is wrong.' },
+
+        // ── V4 · VERDICT ──
+        { id:'v4', href:'#v4', tag:'V4', name:'Verdict — LEDGER', sub:'violet · /validate/verdict',
+          zone:'Validation summary', isVer:true,
+          comp:[{ k:'Verdict', v:HYP.filter(h => h.verdict === 'Validated').length + ' of ' + HYP.length + ' validated' }, { k:'Evidence base', v:ICP.length + ' ICP interviews' }, { k:'Deck-ready', v: anchors.length && deckOk.length ? 'Yes' : 'No' }],
+          vm:'View more · full reconciliation →',
+          why:'The compressed zone states the verdict. Depth is where it has to survive being checked: every count in this table resolves to named interviews in the library, and the summary below is generated from those rows rather than written over them.',
+          lede:'The living verdict, and the receipts behind every number in it.',
+          views: views(['Current','As of last week','Changed this month','Retired claims']),
+          tools:['Export summary','Send to Problem slide'],
+          stats:[
+            { label:'Validated', value:String(HYP.filter(h => h.verdict === 'Validated').length), note:'of ' + HYP.length + ' claims', ink:'#047857' },
+            { label:'Evidence base', value:String(ICP.length), note:'ICP interviews · bar is ' + MIN_INT, ink:'#18181b' },
+            { label:'Quotable', value:String(deckOk.length), note:'consent on file', ink:'#18181b' },
+            { label:'Deck anchors', value:String(anchors.length), note:'pains cleared the threshold', ink:'#047857' }
+          ],
+          rows: HYP.map(h => ({
+            claim:h.id + ' · ' + h.claim, for:String(h.f), against:String(h.a),
+            verdict:h.verdict, pill:pill(h.verdict), bar:h.bar,
+            rowStyle:'display:grid;grid-template-columns:1.7fr .6fr .6fr .75fr 1.25fr;gap:11px;align-items:center;border-bottom:1px solid #f6f5f9;'
+              + (h.verdict === 'Invalidated' ? 'background:#fffbfb;' : (h.verdict === 'Validated' ? 'background:#f7fffb;' : ''))
+          })),
+          note:'Every figure in both columns is a set of named interviews, not a tally someone typed. ' + h1.id + '\u2019s ' + h1.f
+            + ' resolves to the ' + h1.f + ' ICP interviews below; if one of them were deleted from the library, this row would drop to '
+            + (h1.f - 1) + ' and the verdict would fail its own bar the same afternoon. Against counts every interview rather than ICP-only, which is why '
+            + h2.id + ' reads ' + h2.a + ' — an objection from outside the ICP is still an objection.',
+          receipts: mentions('async').map((i, n) => ({ n:String(n + 1), who:i.who + ' · ' + i.co,
+            said:'Tagged “' + PAINS.async + '” at ' + i.pains.filter(p => p[0] === 'async')[0][1] + '-to-have'
+              + (i.rec ? ' · quotable' : ' · not recorded, so not quotable') })),
+          cost:'≈ $0.0091',
+          draft:h1.id + ' is validated on ' + h1.f + ' of ' + ICP.length + ' ICP interviews, ' + sev('async','need')
+            + ' of them blocking. ' + h2.id + ' is contradicted: the only ' + nW[h2.a]
+            + ' price mentions both argue against it, one of them from outside the ICP. '
+            + thinIds.join(' and ') + ' each rest on a single interview, which is an anecdote rather than a finding. The honest summary is '
+            + plural(nVal, 'validated problem') + ', ' + plural(nInv, 'dead claim') + ', and '
+            + plural(nUnp, 'question') + ' still open.',
+          batch:'Regenerate the summary from ' + ICP.length + ' interviews', batchNote:'Rewrites only the prose; the counts are computed either way.',
+          batchCost:'1 × the per-summary rate',
+          safety:'The summary is what reaches investors, so it is screened before it can leave this page.',
+          cap:'A LEDGER, because a verdict that cannot be reconciled is an opinion. Two things make this one honest: the counts derive from the library rather than from a field someone edits, and the generated summary says “one validated problem, one dead claim, two open questions” instead of leading with the win. A validation page that only reports validations is the one artefact in the workspace guaranteed to mislead.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}
+    .jm-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .jm-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#8b8798}
+    .jm-seg{transition:transform .12s}.jm-seg:hover{transform:scaleY(1.35)}
+    @media (max-width:900px){.jm-2{grid-template-columns:1fr!important}.jm-hide{display:none!important}}
+  </style>
+</helmet>
+
+<div style="max-width:980px;margin:0 auto;padding:52px 30px 110px">
+
+  <!-- HEADER -->
+  <div class="jm-lbl" style="color:#6d28d9;margin-bottom:14px">Founder Profile Product Audit · Journey Map</div>
+  <h1 style="margin:0;font-size:38px;line-height:1.1;font-weight:900;letter-spacing:-.035em;max-width:640px">What actually happens, start to finish</h1>
+  <div style="font-size:15px;color:#4a4553;line-height:1.7;margin-top:16px;max-width:680px">Reconstructed directly from the code paths. This journey shares its top half almost exactly with the investor journey documented in the companion audit — the same manual-admin choke point gates every role identically.</div>
+
+  <!-- HEALTH STRIP -->
+  <div style="background:#fff;border:1px solid #e8e6ee;border-radius:16px;padding:22px 26px;margin-top:32px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <span class="jm-lbl">Journey health · 10 steps in sequence</span>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <sc-for list="{{ tally }}" as="t" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="width:9px;height:9px;border-radius:3px;background:{{ t.tone }};flex:none"></span>
+            <span style="font-size:12px;font-weight:700">{{ t.n }}</span>
+            <span style="font-size:11.5px;color:#8b8798">{{ t.k }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;margin-top:16px">
+      <sc-for list="{{ strip }}" as="sg" hint-placeholder-count="10">
+        <div class="jm-seg" title="{{ sg.title }}" style="flex:1;height:10px;border-radius:4px;background:{{ sg.tone }};cursor:default"></div>
+      </sc-for>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px">
+      <span class="jm-lbl" style="font-size:9px">Arrival</span>
+      <span class="jm-lbl" style="font-size:9px">Formation</span>
+    </div>
+    <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-top:14px;padding-top:13px;border-top:1px solid #f0eff3">The pattern is an inversion: everything before the workspace is broken or cosmetic, the workspace itself is genuinely strong, and the journey then breaks again at the exact moment the founder tries to convert execution into a company.</div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div style="margin-top:36px;display:flex;flex-direction:column;gap:0">
+    <sc-for list="{{ phases }}" as="ph" hint-placeholder-count="6">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;padding:26px 0 14px">
+          <span class="jm-mono" style="font-size:11px;font-weight:700;color:#6d28d9;flex:none">{{ ph.n }}</span>
+          <span class="jm-lbl" style="color:#3f3b47">{{ ph.label }}</span>
+          <div style="flex:1;height:1px;background:#e8e6ee"></div>
+        </div>
+        <sc-for list="{{ ph.steps }}" as="s" hint-placeholder-count="2">
+          <div style="display:flex;gap:0">
+            <!-- rail -->
+            <div class="jm-hide" style="flex:none;width:44px;display:flex;flex-direction:column;align-items:center">
+              <div style="width:14px;height:14px;border-radius:50%;background:{{ s.tone }};border:3px solid #F8F8FA;box-shadow:0 0 0 1.5px {{ s.tone }};flex:none;margin-top:26px"></div>
+              <div style="width:1.5px;flex:1;background:#e4e2ea"></div>
+            </div>
+            <!-- card -->
+            <div style="flex:1;min-width:0;background:#fff;border:1px solid #e8e6ee;border-left:3px solid {{ s.tone }};border-radius:14px;padding:20px 24px;margin-bottom:14px">
+              <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:baseline;gap:10px">
+                    <span class="jm-mono" style="font-size:11px;font-weight:700;color:#a8a4b4;flex:none">{{ s.n }}</span>
+                    <div style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;line-height:1.35">{{ s.t }}</div>
+                  </div>
+                </div>
+                <span style="{{ s.chip }}">{{ s.status }}</span>
+              </div>
+              <div style="font-size:13.5px;color:#4a4553;line-height:1.7;margin-top:10px;padding-left:26px">{{ s.body }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- LEGEND -->
+  <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:18px 24px;margin-top:22px">
+    <div class="jm-lbl" style="margin-bottom:12px">Reading the statuses</div>
+    <div class="jm-2" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 24px">
+      <sc-for list="{{ legend }}" as="lg" hint-placeholder-count="3">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="width:9px;height:9px;border-radius:3px;background:{{ lg.tone }};flex:none;margin-top:4px"></span>
+          <div style="min-width:0">
+            <div style="font-size:12.5px;font-weight:700">{{ lg.k }}</div>
+            <div style="font-size:11.5px;color:#71717a;line-height:1.55;margin-top:2px">{{ lg.d }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:980}}">
+class Component extends DCLogic {
+  renderVals() {
+    const GREEN = '#15803d', AMBER = '#b45309', RED = '#b91c1c';
+    const chip = (tone,bg,bd) => 'display:inline-block;flex:none;padding:4px 12px;border-radius:99px;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;background:'+bg+';color:'+tone+';border:1px solid '+bd+';white-space:nowrap';
+    const CHIP = {
+      g: chip(GREEN,'rgba(21,128,61,.08)','rgba(21,128,61,.22)'),
+      a: chip(AMBER,'rgba(180,83,9,.08)','rgba(180,83,9,.22)'),
+      r: chip(RED,'rgba(185,28,28,.08)','rgba(185,28,28,.25)'),
+    };
+    const TONE = { g:GREEN, a:AMBER, r:RED };
+
+    const STEPS = [
+      { sev:'a', status:'Unverifiable', t:'A founder arrives, reads a specific promise',
+        body:'/for-founders promises 5 free monthly scoring runs and Pro-gated investor intros — both false against the code. The landing page\u2019s founder lane never links to this page anyway; the orphaned /lp/founder template, if ever found, contradicts the platform\u2019s own program length.' },
+      { sev:'a', status:'Cosmetic', t:'They register with a founder lane selected',
+        body:'Tailored copy exists ("We\u2019ll score your venture within 72 hours") but the lane is never applied — every signup, classic or Google OAuth, is created as role=\u2019exploring\u2019. The 72-hour promise has no code behind it at all.' },
+      { sev:'a', status:'Manual-only', t:'They land in the identical manual holding pen as an investor',
+        body:'The same shared 2-step admin queue (binding agreement \u2192 role assignment) is the only path to role=\u2019founder\u2019, with a role-blind holding screen that shows the same message regardless of intent.' },
+      { sev:'g', status:'Well built', t:'Once approved: a genuinely strong onboarding wizard',
+        body:'Five real steps, server-persisted and resumable, gathering venture stage, problem, solution, and needs — mechanically on par with the investor wizard.' },
+      { sev:'a', status:'Write-only', t:'\u2026whose answers are never used',
+        body:'The wizard\u2019s data is saved and never read again. The very next screen, Founder Portal, asks the identical three questions from a blank form.' },
+      { sev:'g', status:'Well built', t:'The Dashboard loads, and if enrolled, so does the Lab',
+        body:'An active Spin-Out Lab founder reaches a genuinely strong week-by-week workspace with real progress tracking and 14 carefully engineered tools.' },
+      { sev:'a', status:'Misdirected', t:'But the landing page itself doesn\u2019t lead with that',
+        body:'/studio opens on a personal skills-profile widget, not venture progress. The one working "what\u2019s next" signal — Command Center\u2019s Overview tab — sits one click away and is never linked to from here.' },
+      { sev:'a', status:'Fragmented', t:'Trying to find capital, talent, or advisors means guessing which door is real',
+        body:'3-4 nav destinations exist for each of these jobs. Most are mocked, wrong-persona, or structurally unreachable. Only Raise, Team Building, Advisory, and Wellbeing are the real ones — and nothing in the nav distinguishes them from their decorative neighbors.' },
+      { sev:'g', status:'Well built', t:'Inside the Lab, execution is genuinely well supported',
+        body:'Discovery, Market, Roadmap, Revenue, Use of Funds, Cap Table and the Pitch Deck builder all work, share data honestly, and never fabricate a number.' },
+      { sev:'r', status:'Broken', t:'\u2026until the founder tries to formalize the company with a co-founder',
+        body:'The Co-founder Agreement generator — a Week-4 deliverable — 404s on production, on both the Lab tool and the general legal page. It\u2019s a real, built feature that simply cannot run where it matters.' },
+    ].map((s,i) => Object.assign({}, s, {
+      n: String(i+1).padStart(2,'0'),
+      tone: TONE[s.sev], chip: CHIP[s.sev],
+    }));
+
+    const PHASES = [
+      { n:'01', label:'Arrival & registration', idx:[0,1] },
+      { n:'02', label:'The gate', idx:[2] },
+      { n:'03', label:'Onboarding', idx:[3,4] },
+      { n:'04', label:'The workspace', idx:[5,6] },
+      { n:'05', label:'Finding capital, talent & advisors', idx:[7] },
+      { n:'06', label:'Execution & formation', idx:[8,9] },
+    ];
+    const phases = PHASES.map(p => ({ n:p.n, label:p.label, steps:p.idx.map(i => STEPS[i]) }));
+
+    const strip = STEPS.map(s => ({ tone:s.tone, title:s.n + ' · ' + s.status + ' — ' + s.t }));
+    const nOf = (sev) => STEPS.filter(s => s.sev===sev).length;
+    const tally = [
+      { k:'well built', n:String(nOf('g')), tone:GREEN },
+      { k:'defective', n:String(nOf('a')), tone:AMBER },
+      { k:'broken', n:String(nOf('r')), tone:RED },
+    ];
+
+    const legend = [
+      { k:'Well built', tone:GREEN, d:'Works as designed, persists data honestly, and holds up against the code paths.' },
+      { k:'Defective', tone:AMBER, d:'Exists but misleads, dead-ends, or discards its own output — unverifiable, cosmetic, manual-only, write-only, misdirected, or fragmented.' },
+      { k:'Broken', tone:RED, d:'A built feature that fails outright in production at the moment it is needed.' },
+    ];
+
+    return { phases, strip, tally, legend };
+  }
+}
+</script>
+</body>
+</html>

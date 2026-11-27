@@ -1,0 +1,5 @@
+{
+  "cols.join(', ') @ services/onboardingProjection.ts": 1,
+  "cols.map(() => '?').join(', ') @ services/onboardingProjection.ts": 1,
+  "set @ services/onboardingProjection.ts": 1
+}

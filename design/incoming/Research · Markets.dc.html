@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Markets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#6d28d9;text-decoration:none}
+a:hover{color:#4c1d95;text-decoration:underline}
+:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.f-d{font-family:'Space Grotesk','Inter',system-ui,sans-serif}
+.f-m{font-family:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.eye{font-family:Inter,system-ui,sans-serif;font-size:11px;line-height:1.3;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b6577}
+.h2{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:21px;line-height:1.25;font-weight:600;letter-spacing:-.015em;color:#18181b}
+.h3{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:16px;line-height:1.3;font-weight:600;letter-spacing:-.01em;color:#18181b}
+.sub{margin:0;font-size:14px;line-height:1.55;color:#6b6577;max-width:760px}
+.cap{margin:0;font-size:12px;line-height:1.5;color:#6b6577}
+.cap .f-m{font-size:11.5px;color:#3f3a49}
+.card{background:#ffffff;border:1px solid #ececf1;border-radius:12px;box-sizing:border-box}
+.nr{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;background:#f4f3f7;color:#3f3a49;border:1px solid #e7e5ee;font-size:12px;font-weight:600;line-height:1;white-space:nowrap}
+.chip-v{background:#f4f0fe;color:#6d28d9;border-color:#ddd0fb}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:9px;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box}
+.btn-g{background:#ffffff;color:#18181b;border:1px solid #e2e1e8}
+a.btn:hover{text-decoration:none}
+.lnk{font-size:14px;font-weight:600;color:#6d28d9}
+.inp,.sel{box-sizing:border-box;width:100%;min-height:44px;border:1px solid #e2e1e8;border-radius:9px;background:#ffffff;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:500;color:#18181b}
+.inp{padding:0 14px}
+.inp::placeholder{color:#6b6577}
+.sel{appearance:none;-webkit-appearance:none;padding:0 38px 0 12px;cursor:pointer}
+.lbl{display:block;margin:0 0 6px;font-size:12.5px;font-weight:600;line-height:1.3;color:#3f3a49}
+.tog{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border:1px solid #e2e1e8;border-radius:999px;background:#ffffff;font-size:13px;font-weight:600;color:#3f3a49;cursor:pointer;box-sizing:border-box}
+.tog input{width:16px;height:16px;margin:0;accent-color:#7c3aed}
+.tab{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:0;border-radius:9px;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;cursor:pointer;background:transparent;color:#3f3a49}
+.th{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b6577}
+.trow{border-bottom:1px solid #f1f0f4}
+.trow:hover{background:#faf8ff}
+.ghost{background:#e6e2ef}
+summary{list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+details[open] .chev{transform:rotate(180deg)}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:760px){
+.r-topnav{order:3;flex-basis:100% !important}
+.h1{font-size:28px !important}
+}
+</style>
+</helmet>
+<div style="background:#f4f3f7;color:#18181b;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased">
+
+<header style="background:#ffffff;border-bottom:1px solid #ececf1">
+<div style="max-width:1240px;margin:0 auto;padding:10px clamp(16px,4vw,32px);display:flex;flex-wrap:wrap;align-items:center;gap:6px 28px">
+<a href="Main.dc.html" data-route="/research" style="display:flex;align-items:center;gap:10px;min-height:44px;color:#18181b;text-decoration:none">
+<img src="/_blob/4d1a19f3daba48c312b4e17b9df70aea" alt="" width="24" height="24" style="display:block;width:24px;height:24px;object-fit:contain">
+<span class="f-d" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">StudioOS</span>
+<span style="font-size:14px;font-weight:500;color:#6b6577">Research</span>
+</a>
+<nav aria-label="Research sections" class="r-topnav" style="display:flex;gap:4px;flex:1 1 auto;min-width:0;overflow-x:auto">
+<a href="Main.dc.html" data-route="/research" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Overview</a>
+<a href="Companies.dc.html" data-route="/research/companies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Companies</a>
+<a href="Markets.dc.html" data-route="/research/markets" aria-current="page" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#6d28d9;background:#f4f0fe;box-shadow:inset 0 0 0 1px #ddd0fb">Markets</a>
+<a href="Geography.dc.html" data-route="/research/geographies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Geographies</a>
+<a href="Funds.dc.html" data-route="/research/funds" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Funds</a>
+</nav>
+<a href="#" data-route="/login" class="btn btn-g" style="margin-left:auto">Sign in</a>
+</div>
+</header>
+
+<main style="max-width:1240px;margin:0 auto;padding:28px clamp(16px,4vw,32px) 64px;display:flex;flex-direction:column;gap:28px">
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<nav aria-label="Breadcrumb"><ol style="display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;font-size:13px;color:#6b6577"><li><a href="Main.dc.html" data-route="/research">Research</a></li><li aria-hidden="true">/</li><li aria-current="page" style="color:#18181b;font-weight:600">Markets</li></ol></nav>
+<h1 class="f-d h1" style="margin:0;font-size:34px;line-height:1.15;font-weight:600;letter-spacing:-0.025em">Markets</h1>
+<p class="sub" style="font-size:15px;color:#3f3a49">82 markets from the Axal sector taxonomy, 21 listed companies, and six indexes for each of 12 tracked sectors.</p>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px">
+
+<div style="flex:999 1 620px;min-width:0;display:flex;flex-direction:column;gap:12px">
+<div role="tablist" aria-label="Kind of company" style="display:flex;flex-wrap:wrap;gap:4px;padding:4px;background:#ffffff;border:1px solid #ececf1;border-radius:12px">
+<button type="button" role="tab" id="mk-tab-private" class="tab" aria-selected="{{ tabPrivate.sel }}" aria-controls="mk-panel" onClick="{{ tabPrivate.go }}" style="{{ tabPrivate.style }}">Private<span class="f-m" style="font-size:12.5px;font-weight:500">82 markets</span></button>
+<button type="button" role="tab" id="mk-tab-public" class="tab" aria-selected="{{ tabPublic.sel }}" aria-controls="mk-panel" onClick="{{ tabPublic.go }}" style="{{ tabPublic.style }}">Public<span class="f-m" style="font-size:12.5px;font-weight:500">21 listed</span></button>
+<button type="button" role="tab" id="mk-tab-gov" class="tab" aria-selected="{{ tabGov.sel }}" aria-controls="mk-panel" onClick="{{ tabGov.go }}" style="{{ tabGov.style }}">Government<span class="nr">Not recorded</span></button>
+</div>
+
+<div id="mk-panel" role="tabpanel" aria-label="{{ panelLabel }}">
+
+<sc-if value="{{ isPrivate }}" hint-placeholder-val="{{ true }}">
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px">
+<div style="flex:1 1 280px;min-width:0">
+<label for="mk-q" class="lbl">Search markets</label>
+<div style="position:relative">
+<span aria-hidden="true" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
+<input id="mk-q" class="inp" type="search" placeholder="Market name" style="padding-left:42px">
+</div>
+</div>
+<div style="flex:0 1 250px;min-width:200px">
+<label for="mk-sort" class="lbl">Sort markets by</label>
+<div style="position:relative">
+<select id="mk-sort" class="sel"><option>Company count, highest first</option><option>Company count, lowest first</option><option>Name, A to Z</option></select>
+<span aria-hidden="true" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577;pointer-events:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+</div>
+</div>
+<button type="button" class="tog" aria-pressed="true" style="background:#f4f0fe;border-color:#ddd0fb;color:#6d28d9"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>Group by tracked sector</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px;padding:10px 0 4px;border-top:1px solid #f1f0f4">
+<p style="margin:0;font-size:14px;color:#18181b"><span class="f-m" style="font-weight:600">82</span> markets holding <span class="f-m" style="font-weight:600">60,829</span> companies, as the taxonomy source counts them</p>
+<p class="cap"><span class="f-m">research_market_directory</span> · Axal sector taxonomy · as of 2026-09-30 · counts are not market size and are not independently verified</p>
+</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ openGroups }}" as="g" hint-placeholder-count="2">
+<details open style="border-bottom:1px solid #f1f0f4">
+<summary style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;min-height:52px;padding:4px 2px">
+<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6577" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+<span class="h3" style="font-size:15px">{{ g.name }}</span>
+<span class="cap"><span class="f-m" style="color:#18181b">[n]</span> markets · <span class="f-m" style="color:#18181b">[n]</span> companies</span>
+<a href="Sector.dc.html" data-route="/research/markets/{{ g.slug }}" class="lnk" style="margin-left:auto;font-size:13.5px">Open sector →</a>
+</summary>
+<div style="display:flex;flex-direction:column;gap:2px;padding:0 2px 12px 30px">
+<sc-for list="{{ marketRows }}" as="m" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr) 64px;align-items:center;gap:14px;min-height:38px">
+<span style="font-size:13.5px;color:#3f3a49">[Market name]</span>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ m.w }}"></span>
+<span class="f-m" style="font-size:12.5px;color:#18181b;text-align:right">[count]</span>
+</div>
+</sc-for>
+</div>
+</details>
+</sc-for>
+<sc-for list="{{ closedGroups }}" as="g" hint-placeholder-count="10">
+<details style="border-bottom:1px solid #f1f0f4">
+<summary style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;min-height:52px;padding:4px 2px">
+<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6577" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+<span class="h3" style="font-size:15px">{{ g.name }}</span>
+<span class="cap"><span class="f-m" style="color:#18181b">[n]</span> markets · <span class="f-m" style="color:#18181b">[n]</span> companies</span>
+<a href="Sector.dc.html" data-route="/research/markets/{{ g.slug }}" class="lnk" style="margin-left:auto;font-size:13.5px">Open sector →</a>
+</summary>
+<div style="display:flex;flex-direction:column;gap:2px;padding:0 2px 12px 30px">
+<sc-for list="{{ marketRows }}" as="m" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr) 64px;align-items:center;gap:14px;min-height:38px">
+<span style="font-size:13.5px;color:#3f3a49">[Market name]</span>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ m.w }}"></span>
+<span class="f-m" style="font-size:12.5px;color:#18181b;text-align:right">[count]</span>
+</div>
+</sc-for>
+</div>
+</details>
+</sc-for>
+<details>
+<summary style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;min-height:52px;padding:4px 2px">
+<svg class="chev" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6577" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+<span class="h3" style="font-size:15px">Not mapped to a tracked sector</span>
+<span class="cap"><span class="f-m" style="color:#18181b">[n]</span> markets · no index applies</span>
+</summary>
+<div style="display:flex;flex-direction:column;gap:2px;padding:0 2px 12px 30px">
+<sc-for list="{{ marketRows }}" as="m" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr) 64px;align-items:center;gap:14px;min-height:38px">
+<span style="font-size:13.5px;color:#3f3a49">[Market name]</span>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ m.w }}"></span>
+<span class="f-m" style="font-size:12.5px;color:#18181b;text-align:right">[count]</span>
+</div>
+</sc-for>
+</div>
+</details>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPublic }}" hint-placeholder-val="{{ false }}">
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 class="h3">Listed companies</h2>
+<p class="cap" style="margin-top:2px">Only these 21 are known to be listed. The company directory does not record listing status.</p>
+</div>
+<div style="overflow-x:auto">
+<div role="table" aria-label="Listed companies" style="min-width:720px">
+<div role="row" style="display:grid;grid-template-columns:80px minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:14px;padding:10px 4px;border-bottom:1px solid #ececf1">
+<span role="columnheader" class="th">Symbol</span><span role="columnheader" class="th">Company</span><span role="columnheader" class="th">Exchange</span><span role="columnheader" class="th">Country</span><span role="columnheader" class="th">Market cap</span><span role="columnheader" class="th">Employees</span>
+</div>
+<sc-for list="{{ listed }}" as="l" hint-placeholder-count="21">
+<div role="row" class="trow" style="display:grid;grid-template-columns:80px minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:center;min-height:48px;padding:0 4px">
+<span role="cell" class="f-m" style="font-weight:600;color:#18181b">[SYM]</span><span role="cell" style="color:#18181b;font-weight:600">[Company name]</span><span role="cell">[Exchange]</span><span role="cell">[Country]</span><span role="cell">[cap band]</span><span role="cell" class="f-m">[band]</span>
+</div>
+</sc-for>
+</div>
+</div>
+<p class="cap"><span class="f-m">signal_companies</span> · 21 listed companies · bands as the source sets them · as of [updated_at]</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ isGov }}" hint-placeholder-val="{{ false }}">
+<div class="card" style="padding:28px 24px;display:flex;flex-direction:column;align-items:flex-start;gap:12px">
+<span class="nr" style="min-height:30px;padding:0 12px;font-size:13px">Not recorded</span>
+<h2 class="h3" style="font-size:18px">Government-owned companies</h2>
+<p style="margin:0;font-size:14px;color:#3f3a49;max-width:620px">No source lists government-owned companies yet, so StudioOS cannot count or name them. The directory and the listed companies do not record who owns a company.</p>
+</div>
+</sc-if>
+
+</div>
+</div>
+
+<div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:12px">
+
+<section aria-labelledby="mk-geo" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 id="mk-geo" class="h3">Where the directory’s companies are based</h2>
+<p class="cap" style="margin-top:2px">300 companies in 49 countries. The taxonomy’s 60,829 companies carry no location, so this reads the company directory.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ countryBars }}" as="b" hint-placeholder-count="12">
+<div style="display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr) 40px;align-items:center;gap:10px;min-height:24px">
+<a href="Geography.dc.html" style="font-size:13px;color:#3f3a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.label }}</a>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ b.w }}"></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</sc-for>
+</div>
+<a href="Geography.dc.html" data-route="/research/geographies" class="lnk" style="font-size:13.5px">37 more countries →</a>
+<p class="cap"><span class="f-m">research_company_directory</span> · as of 2026-09-30</p>
+</section>
+
+<section aria-labelledby="mk-move" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div>
+<h2 id="mk-move" class="h3">Top movers this month</h2>
+<p class="cap" style="margin-top:2px">Largest changes across 12 sectors and six dimensions, against last month. October is month to date.</p>
+</div>
+<div class="eye">Rising</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ movers }}" as="v" hint-placeholder-count="4">
+<a href="Sector.dc.html" class="trow" style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;color:#18181b;text-decoration:none"><span><span style="font-weight:600">[Sector]</span><span style="color:#6b6577"> · [dimension]</span></span><span class="f-m" style="font-size:13px">▲ [Δ%]</span></a>
+</sc-for>
+</div>
+<div class="eye" style="margin-top:4px">Falling</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ movers }}" as="v" hint-placeholder-count="4">
+<a href="Sector.dc.html" class="trow" style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;color:#18181b;text-decoration:none"><span><span style="font-weight:600">[Sector]</span><span style="color:#6b6577"> · [dimension]</span></span><span class="f-m" style="font-size:13px">▼ [Δ%]</span></a>
+</sc-for>
+</div>
+<p class="cap"><span class="f-m">market_intel_indexes</span> · global · [period_key] against [previous period_key]</p>
+</section>
+
+<section aria-labelledby="mk-sig" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+<h2 id="mk-sig" class="h3">Latest signals</h2>
+<a href="#" data-route="/signals" class="lnk" style="font-size:13.5px">All 10 →</a>
+</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ signals }}" as="s" hint-placeholder-count="3">
+<a href="#" data-route="/signals/[id]" class="trow" style="display:flex;flex-direction:column;gap:4px;padding:10px 0;color:#18181b;text-decoration:none">
+<span style="font-weight:600">[Signal title]</span>
+<span class="cap">[Sector] · [Region] · confidence [level] · updated [date]</span>
+</a>
+</sc-for>
+</div>
+<p class="cap"><span class="f-m">signals</span> · as of [updated_at]</p>
+</section>
+
+</div>
+</div>
+
+</main>
+
+<footer style="border-top:1px solid #e7e5ee;background:#ffffff">
+<div style="max-width:1240px;margin:0 auto;padding:24px clamp(16px,4vw,32px) 32px">
+<p class="cap" style="max-width:820px">Markets come from the Axal sector taxonomy; their company counts are the taxonomy source’s own and are not market size. Indexes come from about 35 public sources and are worldwide only. What no source holds reads “Not recorded”.</p>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1950}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const tab = st.tab || 'private';
+    const SECTORS = ['AI Infrastructure', 'Agentic B2B', 'Autonomous Robotics', 'Bio-Automation',
+      'Climate Intelligence', 'Cybersecurity', 'Data / Analytics', 'DevTools', 'Enterprise AI',
+      'Fintech / DeFi', 'Quantum Infrastructure', 'Vertical SaaS'];
+    const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const groups = SECTORS.map((name) => ({ name, slug: slug(name) }));
+    // Sorted lists get a descending placeholder staircase: shape only, no values.
+    const ranked = (n, label) => Array.from({ length: n }, (_, i) => ({ label, w: Math.round(100 - i * 72 / (n - 1)) + '%' }));
+    const tabOf = (key) => ({
+      sel: tab === key ? 'true' : 'false',
+      style: tab === key ? 'background:#f4f0fe;color:#6d28d9;box-shadow:inset 0 0 0 1px #ddd0fb' : '',
+      go: () => this.setState({ tab: key })
+    });
+    return {
+      tabPrivate: tabOf('private'), tabPublic: tabOf('public'), tabGov: tabOf('government'),
+      isPrivate: tab === 'private', isPublic: tab === 'public', isGov: tab === 'government',
+      panelLabel: tab === 'private' ? 'Private markets' : (tab === 'public' ? 'Listed companies' : 'Government-owned companies'),
+      openGroups: groups.slice(0, 2),
+      closedGroups: groups.slice(2),
+      marketRows: [{ w: '100%' }, { w: '64%' }, { w: '38%' }],
+      countryBars: ranked(12, '[Country]'),
+      listed: Array.from({ length: 21 }, (_, i) => ({ i })),
+      movers: [1, 2, 3, 4].map((k) => ({ k })),
+      signals: [1, 2, 3].map((k) => ({ k }))
+    };
+  }
+}
+</script>
+</body>
+</html>

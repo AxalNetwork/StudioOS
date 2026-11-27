@@ -1,0 +1,13 @@
+{
+  "$id": "deckInvestorLinks",
+  "title": "GET /api/decks/:id/investor-links (D1565, #3812)",
+  "description": "The reply the deck v2 adapter's `investorLinks` method passes through: the deck, its version and its per-investor links, newest first, at most 200 (`routes/deck_investor_links.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "version", "links"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "links": { "type": "array", "maxItems": 200, "items": { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer", "minimum": 1 } } } }
+  }
+}

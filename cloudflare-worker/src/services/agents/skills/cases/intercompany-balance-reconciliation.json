@@ -1,0 +1,70 @@
+{
+  "skill": "intercompany-balance-reconciliation",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "record_id": "GROUP-01",
+        "selected_entities": [
+          "Synthetic A",
+          "Synthetic B"
+        ],
+        "reporting_currency": "USD"
+      },
+      "grow.records": {
+        "record_id": "IC-Q3",
+        "cutoff": "2026-09-30",
+        "sign_convention": "positive receivables and positive payables",
+        "balances": [
+          {
+            "transaction_id": "IC-101",
+            "entity": "Synthetic A",
+            "counterparty": "Synthetic B",
+            "currency": "USD",
+            "side": "receivable",
+            "amount_cents": 1200000
+          },
+          {
+            "transaction_id": "IC-101",
+            "entity": "Synthetic B",
+            "counterparty": "Synthetic A",
+            "currency": "USD",
+            "side": "payable",
+            "amount_cents": 1000000
+          },
+          {
+            "transaction_id": "IC-102",
+            "entity": "Synthetic A",
+            "counterparty": "Synthetic B",
+            "currency": "EUR",
+            "side": "receivable",
+            "amount_cents": 500000
+          }
+        ],
+        "fx_rate": null,
+        "missing_counterparty_ledger_for": [
+          "IC-102"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "IC-101",
+      "USD 2,000.00",
+      "IC-102",
+      "EUR"
+    ],
+    "must_say_not_recorded": [
+      "FX rate",
+      "IC-102"
+    ],
+    "must_not_include": [
+      "I posted the journal",
+      "All balances are fully reconciled",
+      "USD 7,000.00 total"
+    ]
+  }
+}

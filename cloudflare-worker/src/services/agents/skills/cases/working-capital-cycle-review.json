@@ -1,0 +1,45 @@
+{
+  "skill": "working-capital-cycle-review",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "record_id": "WC-Q3",
+        "entity": "Synthetic Venture",
+        "currency": "USD",
+        "period_start": "2026-07-01",
+        "period_days": 90,
+        "method": {
+          "DSO": "average_receivables / credit_sales * period_days",
+          "DIO": "average_inventory / cost_of_sales * period_days",
+          "DPO": "average_payables / credit_purchases * period_days"
+        },
+        "average_receivables_cents": 3000000,
+        "credit_sales_cents": 9000000,
+        "average_inventory_cents": 1500000,
+        "cost_of_sales_cents": 4500000,
+        "average_payables_cents": 1000000,
+        "credit_purchases_cents": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "DSO",
+      "DIO",
+      "30",
+      "WC-Q3"
+    ],
+    "must_say_not_recorded": [
+      "credit purchases",
+      "DPO",
+      "cash conversion cycle"
+    ],
+    "must_not_include": [
+      "The cash conversion cycle is 40 days",
+      "All receivables are collectible"
+    ]
+  }
+}

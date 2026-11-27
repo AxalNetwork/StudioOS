@@ -1,0 +1,191 @@
+/**
+ * D632 (#1390) — a draft variant is renamed and edited in place, the main cap
+ * table stays one per company, and every write records its actor.
+ *
+ * Run:
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/captable_variant_edit_d632.test.ts
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { SignJWT } from 'jose';
+import captable from '../src/routes/captable.ts';
+import { d1Over } from './_d1_sqlite.mjs';
+
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+const MAIN = { founders: [{ name: 'Ada', shares: 8_000_000 }], option_pool_pct: 10 };
+const DRAFT = {
+  founders: [{ name: 'Ada', shares: 6_000_000 }, { name: 'Grace', shares: 4_000_000 }],
+  option_pool_pct: 12,
+  safes: [{ name: 'Angel', amount: 250_000, cap: 8_000_000, discount: 0.2 }],
+  rounds: [{ name: 'Seed', pre_money: 6_000_000, investment: 1_500_000 }],
+  exit_value: 40_000_000,
+};
+
+function freshDb() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT NOT NULL, founder_id INTEGER, subscription_tier TEXT DEFAULT 'studio', is_active INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER);
+    CREATE TABLE cap_table_scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, owner_user_id INTEGER NOT NULL,
+      project_id INTEGER, name TEXT NOT NULL, inputs_json TEXT NOT NULL, result_json TEXT, computed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      is_variant INTEGER NOT NULL DEFAULT 0);
+    CREATE UNIQUE INDEX one_main ON cap_table_scenarios(project_id) WHERE project_id IS NOT NULL AND is_variant = 0;
+    CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER,
+      action TEXT NOT NULL, details TEXT, actor TEXT);
+  `);
+  db.prepare(`INSERT INTO users (id, email, name, role, founder_id) VALUES (1, 'owner@example.invalid', 'Owner', 'founder', 7)`).run();
+  db.prepare(`INSERT INTO projects (id, founder_id) VALUES (1, 7)`).run();
+  return db;
+}
+
+async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
+  const tok = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await captable.request(path, {
+    method,
+    headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+  return { status: res.status, body: await res.json().catch(() => null) as any };
+}
+
+const logs = (db: DatabaseSync) => db.prepare('SELECT project_id, user_id, action, details, actor FROM activity_logs ORDER BY id').all() as any[];
+
+/**
+ * D691 (#1699) — a saved entry carries the key the Raise list reads as its id,
+ * and the scenario keeps the highest key it issued. Set both aside to compare
+ * what was stored with what was posted; `keysOf` pins them.
+ */
+const withoutKeys = (inputs: any) => {
+  const { entry_key_seq: _seq, ...rest } = inputs;
+  for (const list of ['founders', 'safes', 'rounds']) {
+    if (Array.isArray(rest[list])) rest[list] = rest[list].map(({ key: _key, ...e }: any) => e);
+  }
+  return rest;
+};
+const keysOf = (inputs: any) => ({
+  founders: (inputs.founders || []).map((e: any) => e.key),
+  safes: (inputs.safes || []).map((e: any) => e.key),
+  rounds: (inputs.rounds || []).map((e: any) => e.key),
+  seq: inputs.entry_key_seq,
+});
+
+test('D632: a variant is renamed and edited in place; the main table is untouched', async () => {
+  const db = freshDb();
+  const main = await call(db, 'POST', '/scenarios', { name: 'Main', project_id: 1, inputs: MAIN });
+  assert.equal(main.status, 200);
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  assert.equal(made.status, 200);
+
+  const edited = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Bigger seed', inputs: DRAFT, project_id: 1, expected_revision: made.body.revision });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.uid, made.body.uid, 'the same row, edited in place');
+  assert.equal(edited.body.name, 'Bigger seed');
+  assert.equal(edited.body.is_variant, 1);
+  assert.deepEqual(withoutKeys(edited.body.inputs), DRAFT);
+  assert.deepEqual(keysOf(edited.body.inputs), { founders: ['e-1', 'e-2'], safes: ['e-3'], rounds: ['e-4'], seq: 4 });
+  assert.equal(edited.body.result.rounds.length, 1, 'the edit is simulated again');
+
+  const cmp = await call(db, 'GET', '/scenarios/by-project/1/compare');
+  assert.equal(cmp.body.canonical.uid, main.body.uid);
+  assert.deepEqual(withoutKeys(cmp.body.canonical.inputs), MAIN, 'the main cap table did not move');
+  assert.deepEqual(keysOf(cmp.body.canonical.inputs), { founders: ['e-1'], safes: [], rounds: [], seq: 1 });
+  assert.deepEqual(cmp.body.variants.map((v: any) => v.name), ['Bigger seed']);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM cap_table_scenarios WHERE is_variant = 0').get() as any).n, 1);
+});
+
+test('D632: every variant write records its actor and project', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  const one = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft B', inputs: DRAFT, expected_revision: made.body.revision });
+  await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft B', inputs: MAIN, expected_revision: one.body.revision });
+  await call(db, 'DELETE', `/scenarios/${made.body.uid}`);
+  const rows = logs(db);
+  assert.deepEqual(rows.map((r) => r.action), [
+    'captable_variant_created', 'captable_scenario_updated', 'captable_scenario_updated', 'captable_scenario_deleted',
+  ]);
+  for (const r of rows) {
+    assert.equal(r.user_id, 1);
+    assert.equal(r.project_id, 1);
+    assert.match(r.actor, /^[0-9a-f]{16,}$/);
+    const d = JSON.parse(r.details);
+    assert.equal(d.scenario_uid, made.body.uid);
+    assert.equal(d.is_variant, 1);
+  }
+  assert.equal(JSON.parse(rows[1].details).renamed_from, 'Draft A', 'a rename says what it was');
+  assert.equal('renamed_from' in JSON.parse(rows[2].details), false, 'an edit without a rename does not claim one');
+});
+
+test('D632: an invalid edit is refused as sentences and changes nothing', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  const bad = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Draft A', inputs: { founders: [] }, expected_revision: made.body.revision });
+  assert.equal(bad.status, 400);
+  assert.deepEqual(bad.body.detail.errors, ['At least one founder is required.']);
+  const after = await call(db, 'GET', `/scenarios/${made.body.uid}`);
+  assert.deepEqual(after.body.inputs, MAIN);
+  assert.equal(logs(db).filter((r) => r.action === 'captable_scenario_updated').length, 0);
+});
+
+test('D632: a failed log line never undoes the edit', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  db.exec('DROP TABLE activity_logs');
+  const edited = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Renamed', inputs: MAIN, expected_revision: made.body.revision });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.name, 'Renamed');
+});
+
+// D5069 — two tabs read revision N; the first save wins and the second is refused.
+test('D5069: a PUT names the revision it read; a second tab with the old one gets 409 and changes nothing', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  const tabA = (await call(db, 'GET', `/scenarios/${made.body.uid}`)).body;
+  const tabB = (await call(db, 'GET', `/scenarios/${made.body.uid}`)).body;
+  assert.equal(tabA.revision, tabB.revision);
+  const none = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'No revision', inputs: DRAFT });
+  assert.equal(none.status, 400);
+  assert.equal(none.body.error, 'expected_revision_required');
+  const a = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Tab A', inputs: DRAFT, expected_revision: tabA.revision });
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.notEqual(a.body.revision, tabA.revision, 'the save is a new revision, even in the same millisecond');
+  const b = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Tab B', inputs: MAIN, expected_revision: tabB.revision });
+  assert.equal(b.status, 409);
+  assert.equal(b.body.error, 'changed_since_open');
+  assert.equal(b.body.current_revision, a.body.revision);
+  const after = (await call(db, 'GET', `/scenarios/${made.body.uid}`)).body;
+  assert.equal(after.name, 'Tab A');
+  assert.deepEqual(withoutKeys(after.inputs), DRAFT);
+  assert.equal(logs(db).filter((r) => r.action === 'captable_scenario_updated').length, 1, 'the refused save logs nothing');
+  // Reload latest, then save again from it.
+  const again = await call(db, 'PUT', `/scenarios/${made.body.uid}`, { name: 'Tab B', inputs: MAIN, expected_revision: after.revision });
+  assert.equal(again.status, 200);
+});
+
+test('D5069: a save that loses the race between its check and its UPDATE is a 409 too', async () => {
+  const db = freshDb();
+  const made = await call(db, 'POST', '/scenarios/by-project/1/variants', { name: 'Draft A', inputs: MAIN });
+  const rev = made.body.revision;
+  const tok = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const inner = d1Over(db);
+  let raced = false;
+  const DB = new Proxy(inner as any, { get: (t, k) => {
+    if (k !== 'prepare') return typeof t[k] === 'function' ? t[k].bind(t) : t[k];
+    return (sql: string) => {
+      if (!raced && /^\s*UPDATE cap_table_scenarios/.test(sql)) { raced = true; db.prepare("UPDATE cap_table_scenarios SET name = 'Other tab', updated_at = '2099-01-01T00:00:00.000Z' WHERE uid = ?").run(made.body.uid); }
+      return t.prepare(sql);
+    };
+  } });
+  const res = await captable.request(`/scenarios/${made.body.uid}`, { method: 'PUT',
+    headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Mine', inputs: DRAFT, expected_revision: rev }) }, { JWT_SECRET, ENVIRONMENT: 'development', DB } as any);
+  assert.equal(raced, true);
+  assert.equal(res.status, 409);
+  assert.equal(((await res.json()) as any).current_revision, '2099-01-01T00:00:00.000Z');
+  assert.equal((db.prepare('SELECT name FROM cap_table_scenarios WHERE uid = ?').get(made.body.uid) as any).name, 'Other tab');
+});

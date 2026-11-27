@@ -1,0 +1,5 @@
+{
+  "limit @ services/referralSubmissions.ts": 1,
+  "sets.join(', ') @ services/referralSubmissions.ts": 1,
+  "where.join(' AND ') @ services/referralSubmissions.ts": 1
+}

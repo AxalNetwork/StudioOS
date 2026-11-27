@@ -1,0 +1,4 @@
+{
+  "python": { "version": "3.12.14", "builder": "python:3.12.14-trixie@sha256:4d1caded1f729ae443eb803f26ffde7b61e696aeaef62f099abb6dd6b14257c7" },
+  "zlib": { "version": "1.4", "url": "https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz", "sha256": "02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584" }
+}

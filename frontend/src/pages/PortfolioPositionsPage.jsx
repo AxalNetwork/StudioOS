@@ -1,0 +1,419 @@
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
+import { useAuth } from '../hooks/useAuthSync';
+import { api } from '../lib/api';
+import { formatMinor } from '../lib/money';
+import Sheet from '../ui/Sheet.jsx';
+import WriteFlow from './portfolio/WriteFlow.jsx';
+import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
+import MarkRequestQueue from './portfolio/MarkRequestQueue.jsx';
+import RightsAdmin from './portfolio/RightsAdmin.jsx';
+import { markRequestsApi } from '../lib/api/markRequests';
+import { answeringLine, answeredWords } from './portfolio/markRequestModel';
+import { BasisProposal } from './portfolio/MarkDrafts.jsx';
+
+const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
+const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
+
+export default function PortfolioPositionsPage({ embedded = false }) {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  const [detail, setDetail] = useState(null); // { project, rounds, cap_table_snapshot }
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [prefillName, setPrefillName] = useState('');
+  // D6889 part 2 (#7938): the closing line Record position came from. The saved
+  // position stores its uid as `closing_line_uid`, so the line then reads In Portfolio.
+  const [fromLine, setFromLine] = useState(null); // { uid, label, amount_cents, currency, return_to }
+  const [form, setForm] = useState({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+  // D464 — the governed write path, offered where the book is read: a mark and
+  // a distribution are admin writes (the routes refuse anyone else), and the
+  // detail drawer already reads both histories back. D4817 part 7 (PF-07):
+  // each goes Prepare → Review → Confirm → Receipt in `WriteFlow`.
+  const [flow, setFlow] = useState(null); // { kind: 'mark' | 'distribution', n }
+  // D6909 part 3 (PRM22 B/C): the queue row Record a mark was opened from, and
+  // whether saving the mark answered it ('answered' | 'failed' | null).
+  const [answering, setAnswering] = useState(null);
+  const [answerOutcome, setAnswerOutcome] = useState(null);
+  // D6909 part 4 (PRM22): Eadwyn's accepted basis, source and day, seeding the mark's Prepare.
+  const [seed, setSeed] = useState(null);
+  const [closeAsked, setCloseAsked] = useState(false);
+  // D6205 part 2: investors' requests for the company the sheet is about, read
+  // on their own so a failed read says so instead of hiding the sheet. The mark
+  // the write flow just stored is the one a Resolve starts on.
+  const [requests, setRequests] = useState({ state: 'loading', items: [] });
+  const [justRecorded, setJustRecorded] = useState(null);
+  // D6909 part 2 (PRM22): every open request across companies, oldest first, above the register.
+  const [queue, setQueue] = useState({ state: 'loading', items: [] });
+  const [queueNote, setQueueNote] = useState(null);
+
+  // Task #83 — when we arrive from an IC "invest" decision the startup + round
+  // are handed over via router state; prefill the form and open it so the admin
+  // only has to fill the economics. Runs once on the incoming navigation.
+  useEffect(() => {
+    const p = location.state?.prefill;
+    if (!p || !isAdmin) return;
+    setForm((f) => ({
+      ...f,
+      project_id: p.project_id != null ? String(p.project_id) : f.project_id,
+      round_name: p.round_name || f.round_name,
+      invested_amount: p.invested_amount ? String(p.invested_amount) : f.invested_amount,
+      position_date: p.position_date ? String(p.position_date) : f.position_date,
+    }));
+    setPrefillName(p.startup_name || '');
+    setFromLine(p.closing_line_uid ? {
+      uid: String(p.closing_line_uid), label: p.line_label || null, amount_cents: p.amount_cents ?? null,
+      currency: p.currency || null, return_to: typeof p.return_to === 'string' && p.return_to.startsWith('/') ? p.return_to : null,
+    } : null);
+    setCreating(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  const load = () => {
+    setLoading(true);
+    api.positionsList()
+      .then((res) => setItems(Array.isArray(res?.items) ? res.items : []))
+      .catch((e) => setErr(e.message || 'Failed to load'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const loadQueue = () => {
+    if (!isAdmin) return;
+    setQueue((cur) => ({ state: 'loading', items: cur.items }));
+    markRequestsApi.queue().then(
+      (res) => setQueue(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }),
+      () => setQueue({ state: 'unreadable', items: [] }),
+    );
+  };
+  useEffect(loadQueue, [isAdmin]);
+  // Decline: the queue is read again either way, so a request answered meanwhile leaves it.
+  const declineFromQueue = async (row, note) => {
+    try { await markRequestsApi.answer(row.uid, { state: 'declined', note }); }
+    finally { loadQueue(); }
+  };
+  const evidenceFromQueue = async (row) => {
+    setQueueNote(null);
+    try {
+      const { blob, filename } = await markRequestsApi.downloadEvidence(row.uid);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename || 'evidence'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setQueueNote(e?.message || 'The evidence file could not be downloaded.'); }
+  };
+
+  const loadRequests = (projectUid) => {
+    if (!isAdmin || !projectUid) return;
+    setRequests((cur) => ({ state: 'loading', items: cur.items }));
+    markRequestsApi.list({ projectUid }).then(
+      (res) => setRequests(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }),
+      () => setRequests({ state: 'unreadable', items: [] }),
+    );
+  };
+
+  const openDetail = async (projectUid, { keepRecorded = false } = {}) => {
+    if (!projectUid) return;
+    setErr(null);
+    if (!keepRecorded) setJustRecorded(null);
+    loadRequests(projectUid);
+    try { setDetail(await api.positionsByProject(projectUid)); }
+    catch (e) { setErr(e.message || 'Failed to load company'); }
+  };
+
+  const onCreate = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr(null);
+    try {
+      await api.positionCreate({
+        project_id: Number(form.project_id), round_name: form.round_name,
+        invested_amount: form.invested_amount || undefined, shares: form.shares || undefined,
+        price_per_share: form.price_per_share || undefined, ownership_pct: form.ownership_pct || undefined,
+        position_date: form.position_date || undefined,
+        closing_line_uid: fromLine?.uid || undefined,
+      });
+      setCreating(false);
+      setForm({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+      const back = fromLine?.return_to;
+      setFromLine(null);
+      // Back to the closing, where the line now reads In Portfolio.
+      if (back) { navigate(back); return; }
+      load();
+    } catch (e2) { setErr(e2.message || 'Failed to record'); }
+    finally { setBusy(false); }
+  };
+
+  // The writes and the re-read the flow checks against; the routes are the
+  // ones the forms called before PF-07.
+  const saveMark = (body) => api.positionMarkCreate(detail.project.uid, { ...body });
+  const saveDist = (body) => api.positionDistributionCreate(detail.project.uid, { ...body });
+  const rereadDetail = () => api.positionsByProject(detail.project.uid);
+  // The histories behind the flow refresh once the Worker has the record.
+  const onFlowSaved = () => { if (detail?.project?.uid) openDetail(detail.project.uid, { keepRecorded: true }); };
+  const onMarkSaved = async (stored) => {
+    if (stored?.uid) setJustRecorded(String(stored.uid));
+    // Opened from a queue row: the new mark answers that request. A failed answer keeps
+    // the mark (it is saved) and says so; Resolve… on the sheet's list still offers it.
+    if (answering && stored?.uid) {
+      try { await markRequestsApi.answer(answering.uid, { state: 'resolved', markUid: String(stored.uid), note: null }); setAnswerOutcome('answered'); }
+      catch { setAnswerOutcome('failed'); }
+      loadQueue();
+    }
+    onFlowSaved();
+  };
+  // Record a mark… on a queue row: the company's sheet, with the mark's flow already open.
+  const recordFromQueue = async (row) => {
+    setAnswering(row); setAnswerOutcome(null); setSeed(null);
+    await openDetail(row.projectUid);
+    setFlow((cur) => ({ kind: 'mark', n: (cur?.n || 0) + 1 }));
+  };
+  // D6205 part 2: HQ answers a request; the list is read again either way, so
+  // a request answered meanwhile shows as answered rather than as a failure.
+  const answerRequest = async (req, answer) => {
+    try { await markRequestsApi.answer(req.uid, answer); }
+    finally { loadRequests(detail?.project?.uid); loadQueue(); }
+  };
+  const openFlow = (kind) => { setAnswering(null); setAnswerOutcome(null); setSeed(null); setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 })); };
+  // The page's clock, read when a draft opens: the flow's model reads none.
+  const today = () => new Date().toISOString().slice(0, 10);
+  const closeSheet = () => { if (flow) setCloseAsked(true); else setDetail(null); };
+  const closeAnswered = (closed) => { setCloseAsked(false); if (closed) setDetail(null); };
+
+  const field = (key, placeholder, extra = {}) => (
+    <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} {...extra}
+      className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+  );
+
+  return (
+    <div className={embedded ? '' : 'max-w-5xl mx-auto'}>
+      <div className="flex items-center justify-between mb-6">
+        {!embedded && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <PieChart size={22} /> Cap Table &amp; Ownership
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Ownership and dilution across rounds for each portfolio company.
+          </p>
+        </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800" title="Refresh"><RefreshCw size={16} /></button>
+          {isAdmin && (
+            <button onClick={() => { if (creating) setFromLine(null); setCreating((v) => !v); }} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm">
+              {creating ? <X size={14} /> : <Plus size={14} />} {creating ? 'Cancel' : 'Record Round'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
+
+      {isAdmin && creating && (
+        <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          {fromLine && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-800 dark:text-violet-200 text-xs" data-testid="position-from-line">
+              Recording the position for the closing line <strong>{fromLine.label || 'Not recorded'}</strong>
+              {fromLine.amount_cents != null && fromLine.currency && formatMinor(fromLine.amount_cents, fromLine.currency) ? <> · received {formatMinor(fromLine.amount_cents, fromLine.currency)}</> : null}.
+              {fromLine.currency && fromLine.currency !== 'USD' ? ' This form records dollars, so the amount is left for you to fill.' : ''} Saving links the position to this line.
+            </div>
+          )}
+          {prefillName && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs">
+              Prefilled from the IC decision for <strong>{prefillName}</strong>. Fill in the economics to record the position.
+            </div>
+          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {field('project_id', 'Startup ID', { required: true, inputMode: 'numeric' })}
+            {field('round_name', 'Round (e.g. Seed)', { required: true })}
+            {field('invested_amount', 'Invested $', { inputMode: 'decimal' })}
+            {field('ownership_pct', 'Ownership %', { inputMode: 'decimal' })}
+            {field('shares', 'Shares', { inputMode: 'decimal' })}
+            {field('price_per_share', 'Price / share', { inputMode: 'decimal' })}
+            {field('position_date', 'Date (YYYY-MM-DD)')}
+          </div>
+          <button disabled={busy} className="mt-3 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm">
+            {busy ? 'Saving…' : 'Record'}
+          </button>
+        </form>
+      )}
+
+      {isAdmin ? (
+        <>
+          <MarkRequestQueue read={queue} today={today()} onRetry={loadQueue} onRecord={recordFromQueue}
+            onDecline={declineFromQueue} onEvidence={evidenceFromQueue} />
+          {queueNote ? <p role="alert" className="-mt-4 mb-4 text-sm text-rose-700 dark:text-rose-300" data-testid="mark-queue-evidence-error">{queueNote}</p> : null}
+        </>
+      ) : null}
+      {loading ? (
+        <div className="text-gray-500 text-center py-16">Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="text-gray-500 text-center py-16">No positions recorded yet.</div>
+      ) : (
+        <div className="overflow-x-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                <th className="px-4 py-3">Company</th>
+                <th className="px-4 py-3">Total invested</th>
+                <th className="px-4 py-3">Rounds</th>
+                <th className="px-4 py-3">Latest ownership</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.project_id} className="border-b border-gray-50 dark:border-gray-800/50">
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{it.project?.name || `Startup ${it.project_id}`}</td>
+                  <td className="px-4 py-3">{fmtMoney(it.total_invested)}</td>
+                  <td className="px-4 py-3">{it.rounds}</td>
+                  <td className="px-4 py-3">{fmtPct(it.latest_ownership_pct)} {it.latest_round ? <span className="text-gray-400">({it.latest_round})</span> : null}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => openDetail(it.project?.uid)} className="text-violet-600 hover:underline text-xs">View dilution</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {detail && (
+        <Sheet label={detail.project?.name || "Position"} title={detail.project?.name || "Position"} width={520} testId="portfolio-position-sheet" onClose={closeSheet}>
+          <div className="p-6">
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Dilution by round</h3>
+            {(detail.rounds || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-4">No rounds recorded.</div>
+            ) : (
+              <table className="w-full text-sm mb-6">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Round</th><th className="py-2">Invested</th><th className="py-2">Ownership</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.rounds.map((r) => (
+                    <tr key={r.uid} className="border-b border-gray-50 dark:border-gray-800/50">
+                      <td className="py-2">{r.round_name}</td>
+                      <td className="py-2">{fmtMoney(r.invested_amount)}</td>
+                      <td className="py-2">{fmtPct(r.ownership_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Current cap table</h3>
+            {(detail.cap_table_snapshot || []).length === 0 ? (
+              <div className="text-sm text-gray-500">No cap-table snapshot (connect Carta or add holders).</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Holder</th><th className="py-2">Type</th><th className="py-2">Ownership</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.cap_table_snapshot.map((h, i) => (
+                    <tr key={i} className="border-b border-gray-50 dark:border-gray-800/50">
+                      <td className="py-2">{h.name}</td>
+                      <td className="py-2">{h.security_type || '—'}</td>
+                      <td className="py-2">{fmtPct(h.ownership_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* D464 — the marks and distributions the detail read already
+                returns, with the governed write path offered beside them. */}
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 mt-6">Marks</h3>
+            {(detail.marks || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-2">No mark is recorded — the position carries at cost.</div>
+            ) : (
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">As of</th><th className="py-2">FMV</th><th className="py-2">Basis</th><th className="py-2">Event</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.marks.map((m) => (
+                    <tr key={m.uid} className="border-b border-gray-50 dark:border-gray-800/50" data-testid={`row-mark-${m.uid}`}>
+                      <td className="py-2">{m.as_of_date}</td>
+                      <td className="py-2">{fmtMoney(m.fmv)}</td>
+                      <td className="py-2">{m.basis ? m.basis.replace(/_/g, ' ') : '—'}</td>
+                      <td className="py-2">{m.event || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              flow?.kind === 'mark' ? (
+                <>
+                {answering ? <BasisProposal key={`basis-${answering.uid}`} requestUid={answering.uid} requester={answering.requester} company={answering.company}
+                  onAccept={(next) => { setSeed(next); setFlow((cur) => ({ kind: 'mark', n: (cur?.n || 0) + 1 })); }} /> : null}
+                <WriteFlow key={`mark-${flow.n}`} kind="mark" detail={detail} today={today()} save={saveMark} reread={rereadDetail}
+                  onSaved={onMarkSaved} onClose={() => { setFlow(null); setAnswering(null); setAnswerOutcome(null); setSeed(null); }} closeAsked={closeAsked} onCloseAnswered={closeAnswered}
+                  context={answeringLine(answering)} receiptNote={answeredWords(answerOutcome, answering)} seed={seed} />
+                </>
+              ) : (
+                <button type="button" onClick={() => openFlow('mark')} disabled={Boolean(flow)} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Record a mark
+                </button>
+              )
+            )}
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 mt-6">Distributions</h3>
+            {(detail.distributions || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-2">No distribution is recorded.</div>
+            ) : (
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Date</th><th className="py-2">Amount</th><th className="py-2">Kind</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.distributions.map((d) => (
+                    <tr key={d.uid} className="border-b border-gray-50 dark:border-gray-800/50" data-testid={`row-distribution-${d.uid}`}>
+                      <td className="py-2">{d.distribution_date}</td>
+                      <td className="py-2">{fmtMoney(d.amount)}</td>
+                      <td className="py-2">{d.kind ? d.kind.replace(/_/g, ' ') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              flow?.kind === 'distribution' ? (
+                <WriteFlow key={`distribution-${flow.n}`} kind="distribution" detail={detail} today={today()} save={saveDist} reread={rereadDetail}
+                  onSaved={onFlowSaved} onClose={() => setFlow(null)} closeAsked={closeAsked} onCloseAnswered={closeAnswered} />
+              ) : (
+                <button type="button" onClick={() => openFlow('distribution')} disabled={Boolean(flow)} data-testid="button-dist-open" className="px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Record a distribution
+                </button>
+              )
+            )}
+
+            {isAdmin && (
+              <MarkRequestsAdmin companyName={detail.project?.name || 'this company'} read={requests} marks={detail.marks || []}
+                justRecorded={justRecorded} onAnswer={answerRequest} onRetry={() => loadRequests(detail.project?.uid)} />
+            )}
+            {/* D6868 (#6868): investors' rights from the signed documents, and their requests to record one. */}
+            {isAdmin && detail.project?.uid ? <RightsAdmin key={detail.project.uid} projectUid={detail.project.uid} companyName={detail.project?.name || 'this company'} /> : null}
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}

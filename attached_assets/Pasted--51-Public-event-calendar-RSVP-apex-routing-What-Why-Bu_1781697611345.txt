@@ -1,0 +1,30 @@
+#51 - Public event calendar + RSVP + apex routing
+What & Why
+Build the public, no-auth event surface over routes/events_public.ts from E1, per design/EVENT_SYSTEM.md §9–§10, and add the apex routing so the SPA (not Jekyll) serves these paths. Lets anonymous visitors browse, register, and RSVP.
+Done looks like
+* /events → PublicEventsPage: calendar/list of published public events, filters (type/date), "Add to calendar" (.ics), register CTA.
+* /events/:slug → EventDetailPage: detail + registration form (capacity/approval aware; Turnstile).
+* /invite/:token → InviteRsvpPage: accept/decline + add-to-calendar.
+* An "Events" link in the public landing nav.
+* Apex routing: BOTH exact + /* patterns for axal.vc/events and axal.vc/invite added to wrangler.toml — mirrored into BOTH the top-level [[routes]] block AND [[env.production.routes]] (per the replit.md apex-routing invariant), since the live deploy binds the top-level block. The PR notes that routes only take effect on npm run deploy (manual ops step).
+* The public feed verifiably excludes non-public/non-published events.
+* An anonymous visitor can browse /events, open one, register from the landing page, and RSVP via an /invite/:token link. npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* Admin moderation/analytics/reminders/tickets (E4).
+* New backend routes — consume E1's public endpoints only.
+* Running npm run deploy (manual ops step).
+Steps
+1. Public pages — build PublicEventsPage, EventDetailPage (Turnstile registration), and InviteRsvpPage, all no-auth.
+2. Landing nav — add the public "Events" link.
+3. Apex routing — add exact + /* patterns for /eventsand /invite to BOTH wrangler.toml route blocks; note the deploy-only ops step in the PR.
+4. Verify + green gates — confirm the feed excludes non-public/non-published events; dark: variants; run drift + tsc; update both changelogs.
+Relevant files
+* frontend/src/App.jsx
+* frontend/src/pages/ContactPage.jsx
+* frontend/src/lib/api.js
+* wrangler.toml:54-118
+* scripts/check-dark-mode.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#50 - Event host management UI

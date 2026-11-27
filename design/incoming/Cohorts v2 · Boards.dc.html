@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cohorts v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Advisor · Cohorts · v2 · #4813</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Cohorts — a cohort mentorship workspace</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/cohorts becomes a command centre: Needs your attention (each item with a reason, a date, a state and one action), a four-week progress grid where Not assessed and Not open are never zero, the next seven days and recorded activity. A persistent cohort selector carries Spring 2027 · Week 2 of 4 across Overview, Founders, Guidance, This week, Calendar and Outcomes. Founders get a Board and Table with explicit states and a detail panel that separates the live status from the deadline snapshot. Guidance can always be created; its composer shows every save state and rejects an invalid week. Calendar offers week and agenda views with overlaps explained, Outcomes is scoped to the cohort with programme outcomes kept separate, and Eadwyn leads with advisor tasks, its drafts visibly marked. Each part is tagged Supported today, Workflow fix or New backend capability.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Fictional data only: founders, ventures and dates are sample · advisor shell from shellConfig.js</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Cohorts v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['C1', 'Overview / Command center', 'Needs your attention first, then the four-week progress grid (Passed, In progress, Grace, Failed, Paused, Not assessed, Not open — words and shapes, not colours), the next 7 days and recorded activity (activity feed: new backend). Ask Eadwyn is open with advisor prompts and a draft marked “not published”.', [F('CH01', false, 1350)]],
+      ['C2', 'Founders / Board', 'Board columns: Needs attention, On track, Not assessed, Paused. Each card shows its status, venture, week (current or held), progress, the reason it needs attention, the next deadline, the last activity and Open. A failed or grace founder stays in Needs attention whatever the percentage.', [F('CH02', false, 1000)]],
+      ['C3', 'Founders / Table', 'A semantic table with a caption and the brief’s columns; Not assessed is never 0%.', [F('CH03', false, 860)]],
+      ['C4', 'Founder detail', 'A side panel with six tabs, the four-week milestone timeline, and the live status shown apart from the deadline snapshot (backend required). It shows only evidence the founder shared, and data that isn’t shared says so.', [F('CH04', false, 900)]],
+      ['C5', 'Guidance / Feed', 'New guidance is always available. Filters cover All, Published, Draft, Retired and Needs response; each item shows its cohort, week, date, acknowledgements and questions. The side panel lists what exists today versus what needs new backend support.', [F('CH05', false, 960)]],
+      ['C6', 'Guidance / Composer', 'Title, cohort, optional week, rich-text body, preview, Save draft and Publish, with every save state (unsaved, saving, saved, published, conflict, not saved, publish failed). An invalid week is an error (today it is silently stored as general guidance: workflow fix).', [C('CH06', false, 1300, 640)]],
+      ['C7', 'This week / Action center', 'The week, its date range and timezone, days remaining, completion and attention. Founder responsibilities are read-only and from the Lab, kept apart from your own actions and this week’s sessions.', [F('CH07', false, 1000)]],
+      ['C8', 'Calendar / Week', 'Week view with milestones, deadlines, sessions and group sessions (one event, participants inside), plus view and filter controls. An overlap is outlined, marked ▲ and explained in words.', [F('CH08', false, 860)]],
+      ['C9', 'Calendar / Agenda', 'A · The next 14 days with time, cohort, type, participants, conflict and action. B · Partial data: sessions loaded but cohort dates didn’t, so the board renders what loaded and explains what is missing.', [F('CH09', false, 820), F('CH09b', false, 740)]],
+      ['C10', 'Outcomes', 'Option A, cohort outcomes, with Programme outcomes as a separate scope. Each metric shows its definition, source and reporting time. A Chart/Table switch, and the public graduate list is never used as a total.', [F('CH10', false, 900)]],
+      ['C11', 'Empty, loading, error and partial states', 'All 16 states from the brief. Zero, no access, not implemented, failed and not assessed each read differently and offer their own next action.', [C('CH11', false, 1400, 800)]],
+      ['C12', 'Mobile overview', '390px: cohort selector, compact tabs, attention cards with 44px actions.', [P('CH12', false)]],
+      ['C13', 'Mobile founders', 'Founder cards with status, week, progress, reason, next deadline and Open founder (full-screen detail).', [P('CH13', false)]],
+      ['C14', 'Mobile guidance', 'A full-screen composer with a visible save state; leaving with unsaved text asks first.', [P('CH14', false)]],
+      ['C15', 'Mobile calendar', 'Agenda first, compact navigation, filters and conflict labels — no squeezed month grid.', [P('CH15', false)]],
+      ['C16', 'Dark mode overview', 'The existing StudioOS dark palette (#0B1220 / #111827 / #A78BFA). States keep their words and shapes.', [F('CH16', false, 1300)]],
+      ['C17', 'Tablet 834', 'The Overview reflowed for 834px, with the rail collapsed.', [D('CH17', false, 834, 1500, 16)]],
+      ['C18', 'Super Admin preview', 'The workspace structure renders with safe empty states and no invented founders, plus Impersonate advisor.', [F('CH18', false, 820)]],
+      ['C19', 'Capability map, roadmap and handoff', 'Every UI part classified as Supported today, Requires existing workflow fix or Requires new backend capability, with the implementation order and accessibility notes.', [W('CH19')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

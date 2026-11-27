@@ -1,0 +1,17 @@
+{
+  "DELETE /api/items/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/items": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "POST /api/items": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,301 @@
+Objective
+  Wellbeing today: check-ins + static resources. Need: experts
+  directory, completed coach/therapist profiles, weighted matching,
+  Stripe-paid bookings, sessions visible on the Calendar page,
+  Google + Outlook sync, two-side notifications.
+
+Schema (new)
+  cloudflare-worker/sql/migrations/00xx_wellbeing_experts.sql:
+
+    CREATE TABLE experts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER UNIQUE,             -- nullable for non-platform experts
+      slug TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      title TEXT,
+      headline TEXT,
+      bio TEXT,
+      categories_json TEXT NOT NULL,       -- e.g. ['executive_coach',
+                                          --       'burnout_recovery_specialist']
+      specialisations_json TEXT,           -- free-text tags
+      sectors_json TEXT,                   -- founder sectors helped
+      languages_json TEXT,
+      timezones_json TEXT,
+      countries_json TEXT,
+      modalities_json TEXT,                -- ['video','voice','in_person']
+      photo_r2_key TEXT,
+      accreditations TEXT,                 -- e.g. 'ICF PCC, MA Counselling'
+      years_experience INTEGER,
+      pricing_model TEXT,                  -- 'pro_bono','equity','cash',
+                                          -- 'sliding','mixed'
+      currency TEXT DEFAULT 'USD',
+      first_session_free INTEGER DEFAULT 0,
+      verified INTEGER DEFAULT 0,
+      profile_completion_pct INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE expert_services (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expert_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      duration_min INTEGER NOT NULL,
+      price_usd_cents INTEGER NOT NULL,
+      modality TEXT,                       -- 'video','voice','in_person'
+      stripe_price_id TEXT,                -- pre-created Stripe Price
+      active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE expert_availability (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expert_id INTEGER NOT NULL,
+      day_of_week INTEGER NOT NULL,        -- 0..6
+      start_time TEXT NOT NULL,            -- 'HH:MM'
+      end_time TEXT NOT NULL,
+      timezone TEXT NOT NULL,
+      effective_from DATE,
+      effective_to DATE
+    );
+
+    CREATE TABLE expert_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expert_id INTEGER NOT NULL,
+      rated_by_user_id INTEGER NOT NULL,
+      score INTEGER NOT NULL,              -- 1..5
+      review_text TEXT,
+      category_match_pct INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(expert_id, rated_by_user_id)
+    );
+
+    CREATE TABLE expert_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expert_id INTEGER NOT NULL,
+      service_id INTEGER NOT NULL,
+      booked_by_user_id INTEGER NOT NULL,
+      scheduled_start DATETIME NOT NULL,
+      duration_min INTEGER NOT NULL,
+      meeting_url TEXT,
+      status TEXT NOT NULL,                -- 'pending_payment','confirmed',
+                                          -- 'completed','cancelled',
+                                          -- 'refunded'
+      stripe_payment_intent_id TEXT,
+      stripe_checkout_session_id TEXT,
+      amount_paid_usd_cents INTEGER,
+      booker_note TEXT,
+      expert_note TEXT,
+      calendar_event_id INTEGER,            -- FK to calendar_events
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      cancelled_at DATETIME,
+      cancellation_reason TEXT
+    );
+    CREATE INDEX idx_bookings_user ON expert_bookings(booked_by_user_id, scheduled_start);
+    CREATE INDEX idx_bookings_expert ON expert_bookings(expert_id, scheduled_start);
+
+Expert categories taxonomy
+  cloudflare-worker/src/data/expert_categories.ts — single source.
+  Include:
+    Advisory: startup_advisor, sector_advisor, technical_advisor,
+              gtm_advisor, sales_advisor, marketing_advisor,
+              product_advisor, operations_advisor, finance_advisor,
+              fractional_cfo, legal_advisor, hr_people_advisor,
+              strategy_advisor, ma_advisor, ir_communications,
+              board_advisor, compliance_advisor, pricing_advisor,
+              international_expansion
+    Mentorship: peer_founder_mentor, domain_expert, career_mentor,
+                fundraising_mentor, scaling_mentor
+    Mental/emotional: executive_coach, performance_coach, life_coach,
+                psychotherapist, clinical_psychologist, counsellor,
+                couples_therapist, family_therapist, trauma_specialist,
+                grief_counsellor, burnout_recovery_specialist,
+                addiction_counsellor, sobriety_recovery_coach,
+                sport_psychologist
+    Physical: nutritionist, registered_dietitian, fitness_trainer,
+              movement_coach, yoga_instructor, meditation_instructor,
+              breathwork_practitioner, somatic_therapist,
+              posture_specialist, massage_therapist, chiropractor,
+              physiotherapist
+    Clinical/functional: sleep_specialist, functional_medicine_doctor,
+              integrative_health_coach, neurofeedback_practitioner,
+              nutritional_psychiatrist, hormone_specialist
+    Lifestyle: stress_management_coach, productivity_coach,
+              time_management_coach, financial_wellness_coach,
+              relationship_coach, parenting_coach, spiritual_advisor
+    Cross-cutting: diversity_inclusion_advisor, immigration_advisor,
+              personal_tax_advisor, estate_planning_advisor
+  An expert can hold multiple categories.
+
+Profile completion logic
+  experts.profile_completion_pct recomputed on every save:
+    photo_r2_key                 +10
+    headline + bio               +10
+    accreditations               +5
+    ≥3 categories                +10
+    ≥1 specialisation            +5
+    ≥1 language                  +5
+    ≥1 modality                  +5
+    ≥1 active expert_services    +15
+    ≥1 expert_availability row   +15
+    timezone + countries         +5
+    pricing_model + currency     +5
+    verified by admin            +10
+  Experts surface in "Experts matched to you" only when
+  profile_completion_pct ≥ 70 AND verified = 1.
+
+Matching algorithm
+  cloudflare-worker/src/services/wellbeing/match.ts:
+
+    composite =
+        0.30 * categorical_overlap(founder_needs, expert.categories)
+      + 0.20 * bayes_rating(expert.ratings, prior_mean=4.2, prior_n=3)
+      + 0.10 * (expert.languages ∩ founder.languages ? 1 : 0)
+      + 0.10 * tz_proximity(expert.timezones, founder.tz)
+      + 0.10 * has_availability_in_next_14d(expert)
+      + 0.10 * sector_overlap(expert.sectors, founder.sector)
+      + 0.10 * price_compatibility(expert.services,
+                                     founder.budget_band)
+
+  founder_needs derived from:
+    - wellbeing_checkins.tags_json (last 30d, weighted by recency)
+    - advisor_answers tagged sentiment_eligible (mentions of stress,
+      sleep, focus, co-founder conflict, burnout, fundraising, etc.)
+    - explicit Settings > Wellbeing > Goals (new toggle group)
+
+  Endpoint:
+    GET /api/wellbeing/experts/match?limit=6
+      → { experts: [{ expert, score, reasons[] }] }
+    Reasons surface in the UI: "matched on burnout_recovery,
+    English, available this week".
+
+Worker routes (cloudflare-worker/src/routes/wellbeing.ts — extend)
+  Already has check-in CRUD. Add:
+    GET    /api/wellbeing/experts                public (verified+complete)
+                                                 ?category=&language=&q=
+    GET    /api/wellbeing/experts/:slug          public profile
+    GET    /api/wellbeing/experts/:slug/articles cross-link from Prompt ME
+    GET    /api/wellbeing/experts/match?limit=
+    POST   /api/wellbeing/experts/:slug/rate     { score, review_text }
+    POST   /api/wellbeing/experts/:slug/book     { service_id, start_at }
+        → returns { booking_id, stripe_checkout_url }
+    POST   /api/wellbeing/bookings/:id/cancel    { reason }
+    GET    /api/wellbeing/bookings/mine           founder side
+    GET    /api/wellbeing/bookings/expert-side    coach side
+    POST   /api/integrations/stripe/webhook      already exists — add
+                                                  checkout.session.completed
+                                                  handler for booking flow
+
+  Expert-side (coach editing own profile):
+    GET    /api/experts/me
+    PUT    /api/experts/me
+    POST   /api/experts/me/photo
+    POST   /api/experts/me/services
+    PUT    /api/experts/me/services/:id
+    POST   /api/experts/me/availability
+    DELETE /api/experts/me/availability/:id
+
+Stripe booking flow
+  POST /api/wellbeing/experts/:slug/book server-side steps:
+    1. Validate the requested start_at falls inside the expert's
+       availability for the day-of-week + timezone.
+    2. Create expert_bookings row with status='pending_payment'.
+    3. Create Stripe Checkout Session using
+       expert_services.stripe_price_id with line_item quantity 1.
+       success_url and cancel_url back to /wellbeing.
+       metadata = { booking_id, expert_id, user_id }.
+    4. Return stripe_checkout_url.
+  On webhook checkout.session.completed:
+    1. Look up booking by metadata.booking_id.
+    2. Update status='confirmed', stripe_payment_intent_id,
+       amount_paid.
+    3. Create the platform calendar event (insert into
+       calendar_events; the page already reads this — see existing
+       /api/calendar/events route). source='wellbeing_booking',
+       counterparty_user_id = expert.user_id (when present).
+    4. Mirror to founder's connected Google or Outlook calendar via
+       the existing onAxalSessionCreated() hook in
+       cloudflare-worker/src/services/calendar/sync.ts. Also mirror
+       to expert's calendar if the expert is a platform user with a
+       connected calendar.
+    5. Generate meeting_url. If no external conference tool is
+       connected, mint a Google Meet URL via the existing Google
+       Calendar event insertion (Google auto-creates meet links
+       when conferenceData is requested). Persist on the booking
+       row.
+    6. Send notifications BOTH ways:
+         founder: "Your session with <expert> is confirmed for
+                   <local time>. Meeting link in your calendar."
+         expert:   "New booking from <founder> — <service> on
+                   <local time>."
+       Both in-app + email; if the expert has Slack connected, push
+       there too (uses existing Slack integration).
+    7. Write activity_logs entry.
+
+Profile page
+  frontend/src/pages/ExpertProfilePage.jsx (public):
+    - photo, name, title, headline
+    - categories chips, specialisations
+    - rating badge (Bayesian-adjusted) + count
+    - languages, timezones, modalities
+    - "About" (bio + accreditations + years of experience)
+    - "Services" tab: list of expert_services with name,
+      duration, price, "Book consultation" button per service
+    - "Availability" mini-calendar (next 14 days)
+    - "Reviews" tab: rating distribution + recent reviews
+    - "Articles" tab: cross-fetch from /api/articles/by-author/
+      :expert.user_id (Prompt ME)
+    Sticky right rail: "Book consultation" CTA opens a service
+    picker → Stripe Checkout.
+
+Coach-side editor
+  frontend/src/pages/ExpertProfileEditorPage.jsx:
+    - profile fields, categories, languages, etc.
+    - services CRUD: name, duration, price, modality
+    - availability editor: weekday × hour grid with timezone
+    - photo upload
+    - Stripe Connect onboarding (re-use Prompt II Stripe Connect
+      flow): payouts go to the coach's connected account; Axal
+      takes a configurable application fee (default 15%).
+
+Wellbeing page UX (frontend/src/pages/WellbeingPage.jsx)
+  Top: today's check-in (existing).
+  Middle: "Experts matched to you" — 6 cards with photo, name,
+  category, top match reasons, rating, "View profile" + "Book
+  consultation" buttons.
+  Bottom: filters + full directory + recent bookings.
+  Empty state: "Complete a check-in or set your wellbeing goals
+  to surface matched experts."
+
+Calendar integration
+  Confirmed-status bookings always insert a calendar_events row so
+  CalendarPage.jsx's existing query picks them up. The
+  "Nothing on your calendar yet." string disappears the moment a
+  booking confirms. Sync happens via the existing calendar/sync.ts
+  service; no new sync code required — just the right hook on
+  booking confirmation.
+
+Privacy + safety
+  - Wellbeing check-in data is encrypted at column level (existing
+    Prompt B / HF column cipher) and NEVER reaches experts.
+  - Experts see only what the founder explicitly shares at booking
+    time (booker_note).
+  - Reviews moderated: admin can hide a review with reason; expert
+    can flag.
+  - Bookings cancellable up to 24h before with full refund (Stripe
+    refund). Inside 24h → 50% refund, configurable per expert in
+    expert_services.cancellation_policy_json (future iteration).
+  - Coach payouts only after Stripe Connect verified + first
+    booking completed.
+
+Acceptance
+  - Coach can complete profile to ≥ 70%; appears in match results.
+  - Founder sees 6 matched experts after a check-in.
+  - Founder books a service: Stripe Checkout → payment → webhook →
+    booking 'confirmed' → calendar event created on /calendar →
+    mirrored to Google / Outlook → notifications fire on both sides.
+  - Cancellation refund path tested.
+  - "Nothing on your calendar yet." disappears for users with at
+    least one confirmed booking.
+  - Sensitive wellbeing check-in data never appears in expert-side
+    queries.

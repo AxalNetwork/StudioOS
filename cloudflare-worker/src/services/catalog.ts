@@ -1,0 +1,1101 @@
+/**
+ * Task — Stripe-backed Product Catalog.
+ *
+ * Single source of truth for SKUs across the payments overhaul. Stripe
+ * Products + Prices are the authority; this service:
+ *   1. Lists the live catalog from Stripe (via the shared `stripeCall`
+ *      wrapper) with a short-lived (~60s) KV cache.
+ *   2. Mirrors that catalog into the D1 `stripe_products` table
+ *      (migration 097) so reads are cheap and survive Stripe outages.
+ *   3. Exposes a price lookup helper (price-for-product-and-interval).
+ *
+ * No `STRIPE_PRICE_*` env vars are read here — the catalog path is purely
+ * Stripe-driven. Callers that still need a specific tier resolve it by
+ * product/price metadata via the read endpoint, not hardcoded ids.
+ */
+import type { Env } from '../types';
+import { paidInvestorTier } from './investorTiers';
+import { stripeCall } from '../routes/billing';
+import { bindingKey } from '../util/schemaBootstrap';
+
+// D755 §3: `token_pack` names a token pack's product. Which prices are packs is
+// D1's `ai_token_packs`, never this kind or any other Stripe metadata; the kind
+// only lets kind lists tell packs apart. Packs are made on HQ, never through the
+// generic catalog writes (routes/catalog.ts refuses them).
+export type ProductKind = 'subscription' | 'incorporation' | 'session' | 'alacarte' | 'token_pack';
+
+export const PRODUCT_KINDS: ReadonlySet<ProductKind> = new Set<ProductKind>([
+  'subscription',
+  'incorporation',
+  'session',
+  'alacarte',
+  'token_pack',
+]);
+
+export function isProductKind(v: unknown): v is ProductKind {
+  return typeof v === 'string' && PRODUCT_KINDS.has(v as ProductKind);
+}
+
+// ---------------------------------------------------------------------------
+// Audience categories — who a product is "for". Independent of `kind`
+// (a product can be both incorporation + legal services, e.g.).
+// ---------------------------------------------------------------------------
+export type AudienceCategory =
+  | 'founders'
+  | 'investors_lps'
+  | 'service_partners'
+  | 'advisors'
+  | 'legal_services';
+
+export const AUDIENCE_CATEGORIES: ReadonlyArray<{ value: AudienceCategory; label: string }> = [
+  { value: 'founders', label: 'For Founders' },
+  { value: 'investors_lps', label: 'For Investors / LPs' },
+  { value: 'service_partners', label: 'For Service Partners' },
+  { value: 'advisors', label: 'For Advisors' },
+  { value: 'legal_services', label: 'Legal Services' },
+];
+
+const AUDIENCE_SET: ReadonlySet<string> = new Set(AUDIENCE_CATEGORIES.map((a) => a.value));
+
+export function isAudienceCategory(v: unknown): v is AudienceCategory {
+  return typeof v === 'string' && AUDIENCE_SET.has(v);
+}
+
+/**
+ * Resolve a product's audience categories. Priority:
+ *   1. Explicit `metadata.audience` — comma-separated category slugs, set by
+ *      an admin. Unknown slugs are dropped rather than rejected, so a typo
+ *      degrades to "uncategorised" instead of breaking the read.
+ *   2. Heuristic fallback from `kind` + tier/plan metadata + a keyword scan
+ *      of the product name, so existing catalog entries (created before this
+ *      taxonomy existed) still land somewhere sensible without a manual edit.
+ * A product may belong to more than one category (e.g. incorporation is
+ * both founders + legal_services).
+ */
+export function deriveCategories(
+  name: string,
+  kind: ProductKind,
+  metadata: Record<string, string>,
+): AudienceCategory[] {
+  if (metadata.audience) {
+    const explicit = metadata.audience
+      .split(',')
+      .map((s) => s.trim())
+      .filter(isAudienceCategory);
+    if (explicit.length > 0) return [...new Set(explicit)];
+  }
+
+  const cats = new Set<AudienceCategory>();
+  const n = name.toLowerCase();
+
+  if (kind === 'incorporation') {
+    cats.add('founders');
+    cats.add('legal_services');
+  }
+  if (kind === 'subscription') {
+    if (metadata.tier === 'growth' || metadata.tier === 'studio') cats.add('founders');
+    if (paidInvestorTier(metadata.investor_tier)) {
+      cats.add('investors_lps');
+    }
+    if (metadata.plan === 'mi_pro') cats.add('investors_lps');
+  }
+
+  // Keyword fallback — covers alacarte/session products and anything the
+  // structured metadata above didn't already classify. Tokenize on
+  // non-alphanumerics so plurals/punctuation ("LP's", "Founders,") and
+  // standalone abbreviations ("LP") match without false-positiving on
+  // substrings inside unrelated words.
+  const tokens = new Set(n.split(/[^a-z0-9]+/).filter(Boolean));
+  if (tokens.has('founder') || tokens.has('founders')) cats.add('founders');
+  if (
+    tokens.has('investor') ||
+    tokens.has('investors') ||
+    tokens.has('lp') ||
+    tokens.has('lps')
+  ) {
+    cats.add('investors_lps');
+  }
+  if (tokens.has('advisor') || tokens.has('advisors')) cats.add('advisors');
+  if (tokens.has('partner') || tokens.has('partners')) cats.add('service_partners');
+  if (
+    n.includes('registered agent') ||
+    tokens.has('legal') ||
+    tokens.has('incorporation')
+  ) {
+    cats.add('legal_services');
+  }
+
+  return [...cats];
+}
+
+// ---------------------------------------------------------------------------
+// Normalised shapes (what we mirror + return to the API).
+// ---------------------------------------------------------------------------
+export interface CatalogPrice {
+  id: string;
+  currency: string;
+  unit_amount: number | null;     // smallest currency unit (cents); null for metered/free
+  interval: string | null;        // 'month' | 'year' | ... ; null for one-time
+  interval_count: number | null;
+  nickname: string | null;
+  type: string;                   // 'recurring' | 'one_time'
+  active: boolean;
+}
+
+export interface CatalogProduct {
+  id: string;
+  name: string;
+  kind: ProductKind;
+  active: boolean;
+  metadata: Record<string, string>;
+  categories: AudienceCategory[];
+  prices: CatalogPrice[];
+  synced_at: string;
+  /** NULL/absent is unrecorded, never inferred from today's key. */
+  livemode?: boolean | null;
+}
+
+// ---------------------------------------------------------------------------
+// Raw Stripe shapes (only the fields we read).
+// ---------------------------------------------------------------------------
+interface StripeListResponse<T> {
+  data: T[];
+  has_more: boolean;
+}
+interface StripeProductRaw {
+  id: string;
+  name: string;
+  active: boolean;
+  livemode: boolean;
+  metadata?: Record<string, string>;
+}
+interface StripePriceRaw {
+  id: string;
+  product: string;
+  active: boolean;
+  currency: string;
+  unit_amount: number | null;
+  nickname: string | null;
+  type: string;
+  recurring: { interval: string; interval_count: number } | null;
+}
+
+const KV_KEY = 'cache:catalog:live';
+export const catalogCacheKey = (env: Env): string => `${KV_KEY}:${stripeMode(env)}`;
+const KV_TTL_SECONDS = 60;
+export const CATALOG_MODE_SYNC_WINDOW_MS = 10 * 60 * 1000;
+let modeSyncAttempts = new WeakMap<object, Map<string, number>>();
+/** Tests may model a fresh isolate without changing a tracked module. */
+export function resetCatalogModeSyncWindow(): void { modeSyncAttempts = new WeakMap(); }
+
+// ---------------------------------------------------------------------------
+// Schema bootstrap (idempotent; mirrors migration 097).
+// ---------------------------------------------------------------------------
+const SCHEMA_READY = new WeakMap<object, boolean>();
+export async function ensureCatalogSchema(env: Env): Promise<void> {
+  if (SCHEMA_READY.get(bindingKey(env))) return;
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS stripe_products (' +
+        'id TEXT PRIMARY KEY, ' +
+        'name TEXT NOT NULL, ' +
+        "kind TEXT NOT NULL DEFAULT 'alacarte', " +
+        'active INTEGER NOT NULL DEFAULT 1, ' +
+        "metadata_json TEXT NOT NULL DEFAULT '{}', " +
+        "prices_json TEXT NOT NULL DEFAULT '[]', " +
+        "synced_at TEXT NOT NULL DEFAULT (datetime('now')), " +
+        'livemode INTEGER' +
+        ')',
+    );
+    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_stripe_products_kind ON stripe_products(kind)');
+    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_stripe_products_active ON stripe_products(active)');
+    SCHEMA_READY.set(bindingKey(env), true);
+  } catch (e) {
+    console.warn('[catalog] ensureCatalogSchema failed:', (e as Error).message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stripe fetch (paginated) → normalised catalog.
+// ---------------------------------------------------------------------------
+async function listAll<T>(env: Env, path: string): Promise<T[]> {
+  const out: T[] = [];
+  let startingAfter: string | undefined;
+  // Guard against runaway pagination; 10 pages * 100 = 1000 records is ample.
+  for (let page = 0; page < 10; page++) {
+    const query: Record<string, string> = { limit: '100' };
+    if (startingAfter) query.starting_after = startingAfter;
+    const res = await stripeCall<StripeListResponse<T & { id: string }>>(env, path, query, {
+      method: 'GET',
+    });
+    out.push(...res.data);
+    if (!res.has_more || res.data.length === 0) break;
+    startingAfter = res.data[res.data.length - 1].id;
+  }
+  return out;
+}
+
+/**
+ * Derive a product kind. Honours an explicit `metadata.kind` when valid;
+ * otherwise infers: recurring prices → subscription, else alacarte.
+ */
+function deriveKind(metadata: Record<string, string>, prices: CatalogPrice[]): ProductKind {
+  if (isProductKind(metadata.kind)) return metadata.kind;
+  return prices.some((p) => p.type === 'recurring') ? 'subscription' : 'alacarte';
+}
+
+/** One Stripe price as the mirror stores it. */
+function normalisePrice(p: StripePriceRaw): CatalogPrice {
+  return {
+    id: p.id,
+    currency: p.currency,
+    unit_amount: p.unit_amount,
+    interval: p.recurring?.interval ?? null,
+    interval_count: p.recurring?.interval_count ?? null,
+    nickname: p.nickname,
+    type: p.type,
+    active: p.active,
+  };
+}
+
+/** Fetch the live catalog from Stripe (no caching). Returns [] if Stripe unconfigured. */
+export async function fetchStripeCatalog(env: Env): Promise<CatalogProduct[]> {
+  if (!env.STRIPE_SECRET_KEY) return [];
+  const [products, prices] = await Promise.all([
+    listAll<StripeProductRaw>(env, '/products'),
+    listAll<StripePriceRaw>(env, '/prices'),
+  ]);
+
+  const pricesByProduct = new Map<string, CatalogPrice[]>();
+  for (const p of prices) {
+    const norm = normalisePrice(p);
+    const arr = pricesByProduct.get(p.product) ?? [];
+    arr.push(norm);
+    pricesByProduct.set(p.product, arr);
+  }
+
+  const now = new Date().toISOString();
+  return products.map((prod) => {
+    const metadata = prod.metadata ?? {};
+    const productPrices = pricesByProduct.get(prod.id) ?? [];
+    const kind = deriveKind(metadata, productPrices);
+    return {
+      id: prod.id,
+      name: prod.name,
+      kind,
+      active: prod.active,
+      metadata,
+      categories: deriveCategories(prod.name, kind, metadata),
+      prices: productPrices,
+      synced_at: now,
+      livemode: typeof prod.livemode === 'boolean' ? prod.livemode : null,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// KV-cached live catalog (~60s).
+// ---------------------------------------------------------------------------
+export async function getLiveCatalog(
+  env: Env,
+  opts?: { forceRefresh?: boolean },
+): Promise<CatalogProduct[]> {
+  if (stripeMode(env) === 'unconfigured') return [];
+  if (!opts?.forceRefresh) {
+    try {
+      const raw = await env.RATE_LIMITS.get(catalogCacheKey(env));
+      if (raw) {
+        const cached = JSON.parse(raw) as CatalogProduct[];
+        if (Array.isArray(cached) && cached.every(p => p.livemode === (stripeMode(env) === 'live'))) return cached;
+      }
+    } catch {
+      /* cache miss / parse error → fall through to live fetch */
+    }
+  }
+  const fresh = (await fetchStripeCatalog(env)).filter(p => p.livemode === (stripeMode(env) === 'live'));
+  try {
+    await env.RATE_LIMITS.put(catalogCacheKey(env), JSON.stringify(fresh), { expirationTtl: KV_TTL_SECONDS });
+  } catch {
+    /* best-effort cache write */
+  }
+  return fresh;
+}
+
+// ---------------------------------------------------------------------------
+// D1 mirror.
+// ---------------------------------------------------------------------------
+interface CatalogRow {
+  id: string;
+  name: string;
+  kind: string;
+  active: number;
+  metadata_json: string;
+  prices_json: string;
+  synced_at: string;
+  livemode: number | null;
+}
+
+function rowToProduct(row: CatalogRow): CatalogProduct {
+  let metadata: Record<string, string> = {};
+  let prices: CatalogPrice[] = [];
+  try {
+    metadata = JSON.parse(row.metadata_json) as Record<string, string>;
+  } catch {
+    /* corrupt row → empty metadata */
+  }
+  try {
+    prices = JSON.parse(row.prices_json) as CatalogPrice[];
+  } catch {
+    /* corrupt row → empty prices */
+  }
+  const kind = isProductKind(row.kind) ? row.kind : 'alacarte';
+  return {
+    id: row.id,
+    name: row.name,
+    kind,
+    active: row.active === 1,
+    metadata,
+    categories: deriveCategories(row.name, kind, metadata),
+    prices,
+    synced_at: row.synced_at,
+    livemode: row.livemode === 1 ? true : row.livemode === 0 ? false : null,
+  };
+}
+
+/** One product's mirror row, written the one way both `syncCatalog` and `fetchAndMirrorPrice` write it. */
+async function upsertCatalogRow(env: Env, p: CatalogProduct): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json, synced_at, livemode)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       kind = excluded.kind,
+       active = excluded.active,
+       metadata_json = excluded.metadata_json,
+       prices_json = excluded.prices_json,
+       synced_at = excluded.synced_at,
+       livemode = excluded.livemode`,
+  )
+    .bind(
+      p.id,
+      p.name,
+      p.kind,
+      p.active ? 1 : 0,
+      JSON.stringify(p.metadata),
+      JSON.stringify(p.prices),
+      p.synced_at,
+      p.livemode === true ? 1 : p.livemode === false ? 0 : null,
+    )
+    .run();
+}
+
+/**
+ * D750 (#1841) — one price the mirror lacks, read from Stripe and written into
+ * the mirror as `syncCatalog` writes it, its product's other mirrored prices
+ * kept. A read only (`GET /v1/prices/:id`, product expanded): nothing in Stripe
+ * is created or changed.
+ *
+ * `missing` when Stripe does not know the price; `mode_mismatch` when Stripe
+ * knows it in the other mode than `STRIPE_SECRET_KEY`'s (its 404 says "a
+ * similar object exists in test mode", or the price's `livemode` disagrees).
+ * Any other failure throws, so the caller answers "could not be read".
+ */
+export async function fetchAndMirrorPrice(
+  env: Env,
+  priceId: string,
+): Promise<
+  | { state: 'mirrored'; product: CatalogProduct; price: CatalogPrice }
+  | { state: 'missing' | 'mode_mismatch' }
+> {
+  if (!env.STRIPE_SECRET_KEY) return { state: 'missing' };
+  let raw: Omit<StripePriceRaw, 'product'> & { livemode?: boolean; product: string | StripeProductRaw };
+  try {
+    raw = await stripeCall(env, `/prices/${encodeURIComponent(priceId)}`, { 'expand[]': 'product' }, { method: 'GET' });
+  } catch (e) {
+    const status = (e as { status?: unknown }).status;
+    if (status === 404) {
+      return /similar object exists in (test|live) mode/i.test(String((e as Error).message)) ? { state: 'mode_mismatch' } : { state: 'missing' };
+    }
+    throw e;
+  }
+  const prod = raw && typeof raw.product === 'object' ? raw.product : null;
+  if (!raw || raw.id !== priceId || !prod || typeof prod.id !== 'string') throw new Error('stripe price unreadable');
+  const live = stripeMode(env) === 'live';
+  if (raw.livemode !== live || prod.livemode !== live) return { state: 'mode_mismatch' };
+  const price = normalisePrice({ ...raw, product: prod.id });
+  await ensureCatalogSchema(env);
+  const existing = await env.DB.prepare('SELECT * FROM stripe_products WHERE id = ? AND livemode = ?').bind(prod.id, live ? 1 : 0).first<CatalogRow>();
+  const kept = existing ? rowToProduct(existing).prices.filter((p) => p.id !== price.id) : [];
+  const prices = [...kept, price];
+  const metadata = prod.metadata ?? {};
+  const kind = deriveKind(metadata, prices);
+  const product: CatalogProduct = {
+    id: prod.id, name: prod.name, kind, active: prod.active, metadata,
+    categories: deriveCategories(prod.name, kind, metadata), prices, synced_at: new Date().toISOString(),
+    livemode: prod.livemode,
+  };
+  await upsertCatalogRow(env, product);
+  return { state: 'mirrored', product, price };
+}
+
+/**
+ * Re-pull from Stripe and repopulate the D1 mirror cleanly + idempotently:
+ * upsert every current product, then delete mirror rows no longer in Stripe.
+ * Returns the number of products mirrored.
+ */
+export async function syncCatalog(env: Env): Promise<{ synced: number }> {
+  await ensureCatalogSchema(env);
+  const catalog = await getLiveCatalog(env, { forceRefresh: true });
+
+  for (const p of catalog) await upsertCatalogRow(env, p);
+  // A successful empty fetch must still remove old-mode and unrecorded rows.
+  if (stripeMode(env) !== 'unconfigured') {
+    await env.DB.prepare('DELETE FROM stripe_products WHERE livemode IS NULL OR livemode <> ?')
+      .bind(stripeMode(env) === 'live' ? 1 : 0).run();
+  }
+
+  // Drop rows that no longer exist in Stripe so the mirror stays clean.
+  const ids = catalog.map((p) => p.id);
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    await env.DB.prepare(`DELETE FROM stripe_products WHERE id NOT IN (${placeholders})`)
+      .bind(...ids)
+      .run();
+  } else {
+    // Stripe returned nothing (or is unconfigured) — leave the mirror intact
+    // rather than wiping it, so a transient empty fetch can't nuke the catalog.
+  }
+
+  return { synced: catalog.length };
+}
+
+/**
+ * D4856 (#4856): THE ONE MODE RULE of the mirror. A row belongs to the catalogue
+ * when its Stripe `livemode` equals the stamp of the key this deployment runs
+ * on (1 live, 0 test); no key has no stamp, so no row belongs. `getCatalog`
+ * binds this stamp in SQL; `catalogRowScope` is the same rule for a row already
+ * in hand (the HQ summary), and a test holds the two to the same rows.
+ */
+export function catalogModeStamp(mode: StripeMode): 1 | 0 | null {
+  return mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0;
+}
+
+/**
+ * Where a mirrored row sits against the current mode: `current` (the
+ * catalogue), `other` (stamped for the other mode, or there is no key), or
+ * `unknown` (null or unrecognised `livemode`, which is never folded into either).
+ */
+export function catalogRowScope(livemode: unknown, mode: StripeMode): 'current' | 'other' | 'unknown' {
+  const n = livemode === null || livemode === undefined || livemode === '' ? NaN : Number(livemode);
+  if (n !== 0 && n !== 1) return 'unknown';
+  return n === catalogModeStamp(mode) ? 'current' : 'other';
+}
+
+/**
+ * Read the mirrored catalog from D1, optionally filtered by kind. Self-heals:
+ * if the mirror is empty and Stripe is configured, runs a sync first.
+ */
+export async function getCatalog(
+  env: Env,
+  kind?: ProductKind,
+  audience?: AudienceCategory,
+  opts?: { sync?: boolean },
+): Promise<CatalogProduct[]> {
+  await ensureCatalogSchema(env);
+
+  const mode = stripeMode(env);
+  const stamp = catalogModeStamp(mode);
+  const countRow = opts?.sync === false ? null : await env.DB.prepare(
+    'SELECT COUNT(*) AS n, SUM(CASE WHEN livemode IS NULL OR livemode <> ? THEN 1 ELSE 0 END) AS mismatched FROM stripe_products',
+  ).bind(stamp).first<{ n: number; mismatched: number | null }>();
+  const scope = bindingKey(env);
+  const attempts = modeSyncAttempts.get(scope) ?? new Map<string, number>();
+  const last = attempts.get(mode);
+  const needsSync = (countRow?.n ?? 0) === 0 || Number(countRow?.mismatched) > 0;
+  const due = last === undefined || Date.now() - last >= CATALOG_MODE_SYNC_WINDOW_MS;
+  if (opts?.sync !== false && mode !== 'unconfigured' && needsSync && due) {
+    attempts.set(mode, Date.now());
+    modeSyncAttempts.set(scope, attempts);
+    try {
+      await syncCatalog(env);
+    } catch (e) {
+      console.warn('[catalog] lazy sync failed');
+    }
+  }
+
+  const stmt = kind
+    ? env.DB.prepare(
+        'SELECT * FROM stripe_products WHERE kind = ? AND livemode = ? ORDER BY name COLLATE NOCASE ASC',
+      ).bind(kind, stamp)
+    : env.DB.prepare('SELECT * FROM stripe_products WHERE livemode = ? ORDER BY name COLLATE NOCASE ASC').bind(stamp);
+  const res = await stmt.all<CatalogRow>();
+  const products = (res.results ?? []).map(rowToProduct);
+  // Category derivation depends on name/kind/metadata, not a stored column,
+  // so the audience filter is applied in-memory after the row → product map.
+  return audience ? products.filter((p) => p.categories.includes(audience)) : products;
+}
+
+/**
+ * Lookup helper: the price for a given product + recurring interval (e.g.
+ * 'month' | 'year'). Pass `interval: null` to match a one-time price. Reads
+ * the mirror (falling back to a sync on an empty mirror via getCatalog).
+ */
+export async function priceForProductAndInterval(
+  env: Env,
+  productId: string,
+  interval: string | null,
+): Promise<CatalogPrice | null> {
+  const products = await getCatalog(env);
+  const product = products.find((p) => p.id === productId);
+  if (!product) return null;
+  const match = product.prices.find(
+    (pr) => pr.active && (interval === null ? pr.interval === null : pr.interval === interval),
+  );
+  return match ?? null;
+}
+
+/**
+ * Lookup a single price by its Stripe price id across the mirrored catalog.
+ * Returns the normalised `CatalogPrice` (carrying `type`/`interval`/
+ * `unit_amount`/`currency`) so callers can branch one-time vs recurring and
+ * read the amount without a second Stripe round-trip. Returns `null` when the
+ * id isn't present in the mirror.
+ */
+export async function findCatalogPriceById(
+  env: Env,
+  priceId: string,
+): Promise<CatalogPrice | null> {
+  const products = await getCatalog(env);
+  for (const product of products) {
+    const match = product.prices.find((pr) => pr.id === priceId);
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
+ * Lookup the product (carrying `kind` + `metadata`) that owns a given Stripe
+ * price id, alongside the matched price. Used by the à la carte purchase path
+ * to read `metadata.feature_key` / `metadata.unlock_days` and assert the SKU is
+ * actually an `alacarte` product. Returns `null` when the price isn't mirrored.
+ */
+export async function findCatalogProductByPriceId(
+  env: Env,
+  priceId: string,
+  opts?: { sync?: boolean },
+): Promise<{ product: CatalogProduct; price: CatalogPrice } | null> {
+  const products = await getCatalog(env, undefined, undefined, opts);
+  for (const product of products) {
+    const price = product.prices.find((pr) => pr.id === priceId);
+    if (price) return { product, price };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Stripe mode detection.
+// ---------------------------------------------------------------------------
+
+export type StripeMode = 'test' | 'live' | 'unconfigured';
+
+/** Infer Test vs Live from the STRIPE_SECRET_KEY prefix. Never returns the key itself. */
+export function stripeMode(env: Env): StripeMode {
+  const key = env.STRIPE_SECRET_KEY;
+  if (!key) return 'unconfigured';
+  if (key.startsWith('sk_live_') || key.startsWith('rk_live_')) return 'live';
+  return 'test';
+}
+
+// ---------------------------------------------------------------------------
+// Publishable key store (KV-backed runtime config).
+// ---------------------------------------------------------------------------
+
+const PK_KV_KEY = 'config:stripe:pk';
+
+/**
+ * Read the Stripe publishable key at runtime. Priority:
+ *   1. KV (admin-set via PUT /api/admin/stripe/config)
+ *   2. STRIPE_PUBLISHABLE_KEY env var (if deployed with it)
+ *   3. null (unconfigured)
+ */
+export async function getPublishableKey(env: Env): Promise<string | null> {
+  try {
+    const kv = await env.RATE_LIMITS.get(PK_KV_KEY);
+    if (kv) return kv;
+  } catch {
+    /* fall through on KV miss / error */
+  }
+  const envKey = (env as unknown as Record<string, string | undefined>).STRIPE_PUBLISHABLE_KEY;
+  return envKey || null;
+}
+
+/** Persist the publishable key in KV so the runtime config endpoint serves it immediately. */
+export async function setPublishableKey(env: Env, key: string): Promise<void> {
+  await env.RATE_LIMITS.put(PK_KV_KEY, key);
+}
+
+/**
+ * The one mask for a publishable key (D213): the first eight characters, which
+ * carry the mode (`pk_live_` / `pk_test_`), and the last four. A publishable key
+ * is public by design — checkout serves it whole — so this is about a screen
+ * not printing a long token, not about keeping a secret. The Payments console
+ * (`routes/admin_stripe.ts`) and HQ · Platform both call this, so the two
+ * cannot mask the same key two ways.
+ */
+export function maskPublishableKey(pk: string | null): string | null {
+  if (!pk) return null;
+  return pk.length >= 12 ? `${pk.slice(0, 8)}••••${pk.slice(-4)}` : `${pk.slice(0, 4)}••••`;
+}
+
+/**
+ * Test or live, read off the publishable key's own prefix — never off the
+ * secret key, which a summary has no reason to touch. `unknown` for a key
+ * with neither prefix, rather than a guess.
+ */
+export function publishableKeyMode(pk: string | null): 'live' | 'test' | 'unknown' | null {
+  if (!pk) return null;
+  if (pk.startsWith('pk_live_')) return 'live';
+  if (pk.startsWith('pk_test_')) return 'test';
+  return 'unknown';
+}
+
+// ---------------------------------------------------------------------------
+// D213 — the mirror, summarised for HQ · Platform without touching Stripe.
+// ---------------------------------------------------------------------------
+
+/**
+ * D4858 (#4858): WHAT THE CATALOGUE RECORDS ABOUT ITS OWN SYNCS, said once, here, beside the code that does it.
+ *
+ * HQ · Platform used to carry its own sentence about this, and it went stale: it said a failed sync leaves no
+ * record after D1011 made `POST /api/admin/catalog/sync` write `catalog_sync_failed`, which Payments' change log
+ * shows. Every screen that speaks about catalogue syncs now reads these facts, and `CATALOG_SYNC_BASIS` is built
+ * from them, so the two cannot drift apart again. `catalog_capability_4858.test.ts` holds these actions equal to
+ * what `routes/catalog.ts` writes and `paymentsChangeLog.ts` reads.
+ */
+export const CATALOG_SYNC_CAPABILITY = {
+  /** Nothing schedules a sync: it runs when an admin asks, after an edit, and when a read finds the mirror empty. */
+  sync_mode: 'on_demand' as const,
+  scheduled: false,
+  /** A manual sync is audited whichever way it goes. */
+  failed_syncs_recorded: true,
+  recorded_actions: { succeeded: 'catalog_sync', failed: 'catalog_sync_failed' } as const,
+  /** Where the outcomes are read back: the Payments change log, over `admin_audit_log`. */
+  recorded_in: 'admin_audit_log',
+  source: 'Payments catalogue: the stripe_products mirror and the Payments change log',
+} as const;
+
+/** Said beside the last-written time, because nothing about it is scheduled. Built from the facts above. */
+export const CATALOG_SYNC_BASIS =
+  'Nothing schedules a sync of this mirror. It is rewritten when an admin syncs it or edits a '
+  + 'product from the Payments catalog console, and when a read finds it empty. '
+  + (CATALOG_SYNC_CAPABILITY.failed_syncs_recorded
+    ? 'A manual sync is recorded in the Payments change log whether it succeeds or fails. '
+    : 'Only a manual sync that succeeded is recorded. ')
+  + 'A re-sync after an edit is recorded as that edit, and a sync started by an empty read is not recorded.';
+
+/** The last manual sync of each outcome, from the Payments change log. `history_readable: false` when it could not be read. */
+export type CatalogSyncHistory = {
+  mode: typeof CATALOG_SYNC_CAPABILITY.sync_mode;
+  failed_syncs_recorded: boolean;
+  history_readable: boolean;
+  last_succeeded_at: string | null;
+  last_failed_at: string | null;
+  source: string;
+};
+
+/**
+ * Reads the latest `catalog_sync` and `catalog_sync_failed` rows. Never creates the audit table: a database without
+ * it says the history could not be read, and both times stay null (Not recorded), never "never failed".
+ */
+export async function readCatalogSyncHistory(env: Env): Promise<CatalogSyncHistory> {
+  const { succeeded, failed } = CATALOG_SYNC_CAPABILITY.recorded_actions;
+  const base = {
+    mode: CATALOG_SYNC_CAPABILITY.sync_mode,
+    failed_syncs_recorded: CATALOG_SYNC_CAPABILITY.failed_syncs_recorded,
+    source: CATALOG_SYNC_CAPABILITY.source,
+  };
+  try {
+    const res = await env.DB.prepare(
+      `SELECT action, MAX(datetime(exported_at)) AS at FROM admin_audit_log WHERE action IN (?, ?) GROUP BY action`,
+    ).bind(succeeded, failed).all<{ action: string; at: string | null }>();
+    const at = new Map((res.results || []).map((r) => [r.action, r.at || null]));
+    return { ...base, history_readable: true, last_succeeded_at: at.get(succeeded) ?? null, last_failed_at: at.get(failed) ?? null };
+  } catch {
+    return { ...base, history_readable: false, last_succeeded_at: null, last_failed_at: null };
+  }
+}
+
+/** The latest recorded manual sync's outcome; `not_recorded` when none is, or the history could not be read. */
+export function catalogSyncStateOf(h: CatalogSyncHistory): 'succeeded' | 'failed' | 'not_recorded' {
+  if (!h.history_readable) return 'not_recorded';
+  const ok = h.last_succeeded_at;
+  const bad = h.last_failed_at;
+  if (!ok && !bad) return 'not_recorded';
+  if (!ok) return 'failed';
+  if (!bad) return 'succeeded';
+  // Both are `datetime()` stamps, one format, so they compare as strings.
+  return bad > ok ? 'failed' : 'succeeded';
+}
+
+export type CatalogMirrorSummary =
+  | {
+      available: true;
+      /** D4856: the key's mode, the one `getCatalog` scopes by. */
+      stripe_mode: StripeMode;
+      /** D4856: products and prices are CURRENT-MODE rows only: the catalogue anyone can buy from. */
+      products: { all: number; active: number };
+      prices: { all: number; active: number; active_under_inactive_products: number };
+      /** D4856: rows stamped for the other mode, and rows with no recognisable stamp; neither is in the counts above. */
+      other_mode: { mode: 'live' | 'test' | null; products: number };
+      unknown_mode: { products: number };
+      /** D4858: the latest recorded manual sync's outcome; `not_recorded` when none is or the history is unreadable. */
+      sync_state: 'succeeded' | 'failed' | 'not_recorded';
+      /** D4858: the catalogue's own sync facts and the last manual sync of each outcome. */
+      sync: CatalogSyncHistory;
+      /** D4703: true when every current-mode row's price list parsed, so the counts are the whole current catalogue. */
+      complete: boolean;
+      /** D4703: when this summary was read; `last_written_at` is when the mirror last changed. */
+      read_at: string;
+      /** Rows whose price list does not parse: counted here, never as zero prices. */
+      unreadable_price_rows: number;
+      /** Latest write to a current-mode row; null when there is none (read as Not recorded). */
+      last_written_at: string | null;
+      sync_basis: string;
+    }
+  | { available: false; reason: string };
+
+/**
+ * Counts over `stripe_products`, read directly.
+ *
+ * NEVER THROUGH `getCatalog`, which calls Stripe when the mirror is empty — a
+ * page load must not reach Stripe (the rule `routes/admin_revenue.ts` states).
+ * And no `ensureCatalogSchema`: a database without the table answers
+ * unreadable rather than being altered by a read.
+ *
+ * THE LAST WRITE IS NORMALISED BEFORE IT IS COMPARED. `synced_at` is written
+ * as an ISO string by `syncCatalog` and as `datetime('now')` by the column
+ * default, and compared raw an ISO stamp sorts above a SQL one from later the
+ * same day (`'T'` > `' '`). `datetime()` makes them one format first.
+ *
+ * D4856: ONLY CURRENT-MODE ROWS ARE COUNTED as products and prices, by the same
+ * rule `getCatalog` reads with (`catalogRowScope`); other-mode and unknown-mode
+ * rows are counted apart and never folded in.
+ *
+ * Counted in JS rather than with `json_each`: the table is one row per product,
+ * and a table-valued function in SQL would be new to this codebase for one count.
+ */
+export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorSummary> {
+  type Row = { active: number; prices_json: string | null; synced: string | null; livemode: unknown };
+  let rows: Row[];
+  let sync: CatalogSyncHistory;
+  try {
+    const [res, history] = await Promise.all([
+      env.DB.prepare(
+        `SELECT active, prices_json, datetime(synced_at) AS synced, livemode FROM stripe_products`,
+      ).all<Row>(),
+      readCatalogSyncHistory(env),
+    ]);
+    rows = res.results || [];
+    sync = history;
+  } catch {
+    return { available: false, reason: 'The catalog mirror could not be read on this database.' };
+  }
+  let productsActive = 0;
+  let pricesAll = 0;
+  let pricesActive = 0;
+  let pricesActiveOrphaned = 0;
+  let unreadable = 0;
+  let last: string | null = null;
+  let current = 0;
+  let other = 0;
+  let unknownMode = 0;
+  const mode = stripeMode(env);
+  for (const row of rows) {
+    const scope = catalogRowScope(row.livemode, mode);
+    if (scope === 'other') { other += 1; continue; }
+    if (scope === 'unknown') { unknownMode += 1; continue; }
+    current += 1;
+    if (Number(row.active) === 1) productsActive += 1;
+    if (row.synced && (last === null || row.synced > last)) last = row.synced;
+    let prices: unknown;
+    try {
+      prices = JSON.parse(String(row.prices_json ?? ''));
+    } catch {
+      prices = null;
+    }
+    if (!Array.isArray(prices)) {
+      unreadable += 1;
+      continue;
+    }
+    pricesAll += prices.length;
+    for (const price of prices as CatalogPrice[]) {
+      if (!price || price.active !== true) continue;
+      pricesActive += 1;
+      // D4703: an active price under an archived product cannot be bought, and
+      // counting it with the rest made the active total read larger than the
+      // catalogue anyone can buy from.
+      if (Number(row.active) !== 1) pricesActiveOrphaned += 1;
+    }
+  }
+  return {
+    available: true,
+    stripe_mode: mode,
+    products: { all: current, active: productsActive },
+    other_mode: { mode: mode === 'unconfigured' ? null : mode === 'live' ? 'test' : 'live', products: other },
+    unknown_mode: { products: unknownMode },
+    sync_state: catalogSyncStateOf(sync),
+    sync,
+    prices: { all: pricesAll, active: pricesActive, active_under_inactive_products: pricesActiveOrphaned },
+    unreadable_price_rows: unreadable,
+    complete: unreadable === 0,
+    read_at: new Date().toISOString(),
+    last_written_at: last,
+    sync_basis: CATALOG_SYNC_BASIS,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Metadata taxonomy validation.
+// ---------------------------------------------------------------------------
+
+/** D1009: a written reason shared by catalogue and checkout-key mutations. */
+export function paymentChangeReason(body: unknown): string | null {
+  const value = body && typeof body === 'object' ? (body as Record<string, unknown>).reason : null;
+  if (typeof value !== 'string') return null;
+  const reason = value.trim();
+  return reason.length > 0 && reason.length <= 500 ? reason : null;
+}
+
+/**
+ * Validate the required metadata keys for a product kind.
+ * Returns an array of human-readable error strings (empty = valid).
+ *
+ * Taxonomy (from the product catalog spec):
+ *   subscription  → plan=mi_pro OR tier=growth|studio OR investor_tier=professional|institutional OR plan_group=advisor|partner
+ *   incorporation → kind=incorporation
+ *   session       → kind=session
+ *   alacarte      → kind=alacarte + feature_key (non-empty) + unlock_days (positive integer)
+ */
+export function validateProductMetadata(
+  kind: ProductKind,
+  metadata: Record<string, string>,
+): string[] {
+  const errs: string[] = [];
+  if (kind === 'subscription') {
+    const hasPlan = metadata.plan === 'mi_pro';
+    const hasTier = metadata.tier === 'growth' || metadata.tier === 'studio';
+    const hasInv = paidInvestorTier(metadata.investor_tier) !== null;
+    const hasGroup = metadata.plan_group === 'advisor' || metadata.plan_group === 'partner';
+    if (!hasPlan && !hasTier && !hasInv && !hasGroup) {
+      errs.push(
+        'subscription requires metadata.plan=mi_pro, metadata.tier=growth|studio, ' +
+          'metadata.investor_tier=plus|professional|institutional, or metadata.plan_group=advisor|partner',
+      );
+    }
+  } else if (kind === 'incorporation') {
+    if (metadata.kind !== 'incorporation')
+      errs.push('incorporation products require metadata.kind=incorporation');
+  } else if (kind === 'session') {
+    if (metadata.kind !== 'session')
+      errs.push('session products require metadata.kind=session');
+  } else if (kind === 'alacarte') {
+    if (metadata.kind !== 'alacarte')
+      errs.push('alacarte products require metadata.kind=alacarte');
+    if (!metadata.feature_key?.trim())
+      errs.push('alacarte products require metadata.feature_key (non-empty)');
+    const days = Number(metadata.unlock_days);
+    if (!Number.isInteger(days) || days <= 0)
+      errs.push('alacarte products require metadata.unlock_days (positive integer string)');
+  }
+  return errs;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog write helpers — each mutation re-syncs the D1 mirror.
+// ---------------------------------------------------------------------------
+
+export interface CreateProductBody {
+  name: string;
+  kind: ProductKind;
+  metadata: Record<string, string>;
+  description?: string;
+}
+
+export interface UpdateProductBody {
+  name?: string;
+  metadata?: Record<string, string>;
+  description?: string;
+}
+
+export interface CreatePriceBody {
+  currency: string;
+  unit_amount: number; // smallest currency unit (e.g. cents)
+  type: 'recurring' | 'one_time';
+  interval?: 'month' | 'year' | 'week' | 'day'; // required when type=recurring
+  interval_count?: number;
+  nickname?: string;
+}
+
+/** Flatten a metadata object into Stripe's nested form-encoding (`metadata[key]=value`). */
+function metadataParams(meta: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(meta)) out[`metadata[${k}]`] = v;
+  return out;
+}
+
+interface StripeProductRawResp {
+  id: string;
+  name: string;
+  active: boolean;
+  metadata: Record<string, string>;
+}
+
+/**
+ * Create a Stripe Product, then re-sync the D1 mirror. `idempotencyKey` (D755)
+ * is sent as Stripe's Idempotency-Key, so a retried create returns the same
+ * product; existing callers pass none.
+ */
+export async function createProduct(env: Env, body: CreateProductBody, opts: { idempotencyKey?: string } = {}): Promise<CatalogProduct> {
+  const form: Record<string, string> = {
+    name: body.name.trim(),
+    ...metadataParams(body.metadata),
+  };
+  if (body.description) form.description = body.description;
+
+  const prod = await stripeCall<StripeProductRawResp>(env, '/products', form, { idempotencyKey: opts.idempotencyKey });
+  await syncCatalog(env);
+
+  // Return the freshly synced mirror row (carries derived prices = [] initially).
+  const all = await getCatalog(env);
+  return (
+    all.find((p) => p.id === prod.id) ?? {
+      id: prod.id,
+      name: prod.name,
+      kind: body.kind,
+      active: prod.active,
+      metadata: prod.metadata ?? body.metadata,
+      categories: deriveCategories(prod.name, body.kind, prod.metadata ?? body.metadata),
+      prices: [],
+      synced_at: new Date().toISOString(),
+    }
+  );
+}
+
+/** Update a Stripe Product's name / metadata / description, then re-sync. */
+export async function updateProduct(env: Env, id: string, body: UpdateProductBody): Promise<void> {
+  const form: Record<string, string> = {};
+  if (body.name) form.name = body.name.trim();
+  if (body.description) form.description = body.description;
+  if (body.metadata) Object.assign(form, metadataParams(body.metadata));
+  if (Object.keys(form).length === 0) return; // nothing to update
+  await stripeCall(env, `/products/${encodeURIComponent(id)}`, form);
+  await syncCatalog(env);
+}
+
+/** Set a Stripe Product to `active=false` (Stripe doesn't support hard deletion). */
+export async function archiveProduct(env: Env, id: string): Promise<void> {
+  await stripeCall(env, `/products/${encodeURIComponent(id)}`, { active: 'false' });
+  await syncCatalog(env);
+}
+
+/** Create a Stripe Price on an existing Product, then re-sync. `idempotencyKey` as for createProduct. */
+export async function createPrice(
+  env: Env,
+  productId: string,
+  body: CreatePriceBody,
+  opts: { idempotencyKey?: string } = {},
+): Promise<CatalogPrice> {
+  const form: Record<string, string> = {
+    product: productId,
+    currency: body.currency.toLowerCase(),
+    unit_amount: String(body.unit_amount),
+  };
+  if (body.nickname) form.nickname = body.nickname;
+  if (body.type === 'recurring') {
+    form['recurring[interval]'] = body.interval ?? 'month';
+    if (body.interval_count && body.interval_count > 1)
+      form['recurring[interval_count]'] = String(body.interval_count);
+  }
+
+  interface StripePriceResp {
+    id: string;
+    currency: string;
+    unit_amount: number | null;
+    type: string;
+    recurring: { interval: string; interval_count: number } | null;
+    nickname: string | null;
+    active: boolean;
+  }
+  const price = await stripeCall<StripePriceResp>(env, '/prices', form, { idempotencyKey: opts.idempotencyKey });
+  await syncCatalog(env);
+  return {
+    id: price.id,
+    currency: price.currency,
+    unit_amount: price.unit_amount,
+    interval: price.recurring?.interval ?? null,
+    interval_count: price.recurring?.interval_count ?? null,
+    nickname: price.nickname,
+    type: price.type,
+    active: price.active,
+  };
+}
+
+/**
+ * Update a Stripe Price's mutable fields (nickname, metadata).
+ * Amount, currency, and interval are immutable on Stripe Prices — only nickname
+ * and metadata can be changed post-creation.  Re-syncs D1 mirror after the call.
+ */
+export async function updatePrice(
+  env: Env,
+  priceId: string,
+  body: { nickname?: string; metadata?: Record<string, string> },
+): Promise<void> {
+  const form: Record<string, string> = {};
+  if (body.nickname !== undefined) form.nickname = body.nickname;
+  if (body.metadata) Object.assign(form, metadataParams(body.metadata));
+  if (Object.keys(form).length === 0) return; // nothing to update
+  await stripeCall(env, `/prices/${encodeURIComponent(priceId)}`, form);
+  await syncCatalog(env);
+}
+
+/** Set a Stripe Price to `active=false` (Stripe Prices cannot be hard-deleted). */
+export async function archivePrice(env: Env, priceId: string): Promise<void> {
+  await stripeCall(env, `/prices/${encodeURIComponent(priceId)}`, { active: 'false' });
+  await syncCatalog(env);
+}
+
+/**
+ * Plan-keyed price lookup. Resolves the active product whose Stripe metadata
+ * carries `metaKey === metaValue`, then returns its price for the requested
+ * recurring `interval` ('month' | 'year' | ...). This is how the subscription
+ * checkout routes map their plan/tier strings onto a SKU without any hardcoded
+ * `STRIPE_PRICE_*` env var — the catalog (mirrored from Stripe) is the source
+ * of truth.
+ *
+ * `interval`:
+ *   - a string ('month' | 'year') → match that recurring interval exactly
+ *   - `null`                       → match a one-time price
+ *   - omitted (`undefined`)        → match the product's single recurring price
+ *     (used by single-price tiers whose plan key doesn't encode an interval)
+ *
+ * Returns `null` when no product/price matches (callers treat that the same as
+ * an unconfigured price: they fall back to the dev-upgrade path).
+ */
+export async function priceForPlanMetadata(
+  env: Env,
+  metaKey: string,
+  metaValue: string,
+  interval?: string | null,
+): Promise<CatalogPrice | null> {
+  const products = await getCatalog(env);
+  const product = products.find((p) => p.active && p.metadata[metaKey] === metaValue);
+  if (!product) return null;
+  const active = product.prices.filter((pr) => pr.active);
+  if (interval === undefined) {
+    return active.find((pr) => pr.type === 'recurring') ?? active[0] ?? null;
+  }
+  return (
+    active.find((pr) => (interval === null ? pr.interval === null : pr.interval === interval)) ??
+    null
+  );
+}

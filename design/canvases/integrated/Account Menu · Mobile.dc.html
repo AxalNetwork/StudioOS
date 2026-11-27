@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeecf1;font-family:Inter,system-ui,sans-serif;color:#18181b}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="padding:44px 48px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font-size:18px;font-weight:800;letter-spacing:-.015em">Account menu · mobile</span><span style="font-size:12.5px;color:rgba(24,24,27,.55)">Each page opens from the avatar sheet at the top right. Back returns to the page you came from.</span></div>
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="2"><div style="display:flex;gap:36px;align-items:flex-start;padding:10px 0 26px">
+    <sc-for list="{{ r }}" as="b" hint-placeholder-count="5"><div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:10px;flex:none"><div style="display:flex;align-items:center;gap:8px"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</span><span style="font-size:14px;font-weight:800">{{ b.t }}</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:rgba(24,24,27,.55)">{{ b.route }}</span></div><div style="position:relative;width:390px;height:844px;flex:none;border:10px solid #18181b;border-radius:40px;overflow:hidden;background:#fff"><dc-import name="Account Mobile Page" page="{{ b.page }}" hint-size="370px,824px"></dc-import></div></div></sc-for>
+  </div></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const L = [['account', 'Account', '/account'], ['usage', 'Usage', '/account/usage'], ['connectors', 'Connectors', '/account/connectors'], ['trust', 'Trust Center', '/trust'], ['perks', 'Perks', '/perks'], ['calendar', 'Calendar', '/calendar'], ['events', 'Events', '/events'], ['learning', 'Learning', '/learning'], ['help', 'Help Center', '/help'], ['pricing', 'Plans & Pricing', '/pricing']];
+    const bs = L.map(([page, t, route], i) => ({ id: 'A' + (i + 1) + 'm', page, t, route }));
+    return { rows: [bs.slice(0, 5), bs.slice(5)] };
+  }
+}
+</script>
+</body></html>

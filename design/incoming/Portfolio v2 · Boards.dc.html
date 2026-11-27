@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Portfolio · v2 · #4817 (2 of 3; audit #4816, handoff #4818)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Portfolio — one institutional investment operating workspace</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The decision order is Performance → Needs attention → Companies → Reporting → Value-add. One local navigation (Overview · Positions · Reports · Performance · Value-add) replaces reaching destinations through the Eadwyn rail. Every metric carries its basis, as-of date and gross context, and a missing or unreadable value never reads as zero. Health has five states (Healthy, Watch, Attention, Not enough evidence, Unreadable) and is never Healthy by default. Each company opens one workspace (Overview · Financials · Reports · Support · Activity). Marks and distributions go Prepare → Review → Confirm → Receipt with the company named throughout. The shell follows #3704: no licence switcher, the sidebar is the union of held licences, and Portfolio sits in the Account menu beside “Companies &amp; projects”. Parts the product doesn’t do yet carry a ◇ Backend required tag.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: 7 Nov 2026 · Investor (sample firm Harbor Capital) · companies, figures and people are sample data; live visual QA waits for #4849</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Portfolio v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PF-01', 'Portfolio Overview', 'A · The first viewport answers worth, performance, attention and which company to open next. NAV leads with mark coverage, the multiples carry their definitions, and a basis strip states gross, as-of, the mark rule and the at-cost rule pending #4644. Needs attention is an evidence-backed queue with one action per company. Reporting and Value-add summaries follow, then a dense company table where the name is the link. B · Needs attention in full with a Health filter applied, and the Account menu open: Portfolio · Companies & projects · Licences (#3704, #4473). C · Partial source failure: IRR Unavailable with a reason, the rest current.', [F('PF01', 'A · Overview', 1700), F('PF01b', 'B · Needs attention state + Account menu', 1250), F('PF01c', 'C · IRR unavailable', 1700)]],
+      ['PF-02', 'Positions', 'A · The authoritative investment register: invested, ownership, latest FMV, multiple, mark date and basis, reporting and health, plus mark coverage, stale marks and unreadable sources as separate counts. No mark recorded reads as such; the total says the unmarked position is included at cost. B · Mark history for one company, with what “stale” means.', [F('PF02', 'A · Register'), F('PF02b', 'B · Mark history', 900)]],
+      ['PF-03', 'Performance', 'TVPI, DPI, RVPI, IRR, NAV, paid-in and distributed, each with its definition. NAV at each quarter-end is drawn only where it was read, never interpolated, with a Table view of the same figures and a methodology panel that follows what the Worker computes today.', [F('PF03', 'A · Chart', 1000), F('PF03b', 'B · Table view', 1000)]],
+      ['PF-04', 'Reports', 'A · Obligations first: Company · Due · Received · Status · Missing · Last chase, answering who owes what. B · Report detail: the founder submission with KPI values, the required KPI set, what is missing, the health implication, the update as written, and its history. Chase delivery is described as attempted, not guaranteed.', [F('PF04', 'A · Obligations', 820), F('PF04b', 'B · Report detail', 1000)]],
+      ['PF-05', 'Value-add', 'Open commitments, delivered this quarter, introductions made, overdue commitments and companies with no recorded support. Each row has an owner, state and dates. The ledger records Promised and Delivered; In progress, Cancelled, due dates and meeting outcomes are backend required.', [F('PF05', false, 820)]],
+      ['PF-06', 'Company workspace', 'One coherent workspace per company, with identity, six key facts and tabs. A · Overview: why Attention, next actions, recent activity. B · Financials: investment history, return, and valuation marks with source and recorder. C · Reports: obligations, chase history, latest submission as written. D · Support: items with owner, state, dates, linked meeting and history. E · Activity: one meaningful timeline (backend required).', [F('PF06a', 'A · Overview', 980), F('PF06b', 'B · Financials', 1000), F('PF06c', 'C · Reports', 900), F('PF06d', 'D · Support', 820), F('PF06e', 'E · Activity', 820)]],
+      ['PF-07', 'Financial actions', 'The company and position stay named in every step. A · Prepare: a draft that asks before discarding. B · Review: the exact effect on FMV, MOIC, NAV and TVPI, with a button that names the act. C · Conflict: someone recorded a mark meanwhile; nothing saved, the draft kept (backend required). D · Receipt with an audit link. E · A distribution whose save failed, with the entries kept.', [C('PF07a', 'A · Prepare', 640, 520), C('PF07b', 'B · Review', 640, 500), C('PF07c', 'C · Conflict', 640, 360), C('PF07d', 'D · Receipt', 640, 360), C('PF07e', 'E · Save failed', 640, 520)]],
+      ['PF-08', 'Admin Investor preview', 'One persistent banner, “Previewing Investor · private investor data withheld”, with Back to HQ. Private blocks show a compact Private in preview chip instead of repeated explanations, and the local navigation drops its counts.', [F('PF08', false, 900)]],
+      ['PF-09', 'States', 'Seventeen states, each saying what happened and what to do next: empty, loading, partial source failure, Not recorded, Unreadable, stale, valid zero, partially available metrics, no obligation, read-only, permission denied, private in preview, save conflict, export failure, no mark recorded, overdue reporting and no support recorded.', [C('PF09', false, 1400, 960)]],
+      ['PF-10', 'Tablet and phone', 'A · Tablet 834: the full local navigation, a compact KPI row, attention, and a five-column table whose other fields open in a sheet. B · Phone overview: compact KPIs, attention with a full-width action, record cards. C · Phone positions with Search / Filters (1) / Sort and a full-width filter sheet. D · Phone review of a mark, with the company named at the top.', [D('PF10a', 'A · Tablet 834', 834, 1112, 16), P('PF10b', 'B · Phone overview'), P('PF10c', 'C · Phone filters'), P('PF10d', 'D · Phone mark review')]],
+      ['PF-11', 'Reusable patterns', 'Financial metric, attention item, reporting obligation, health status, freshness and provenance, partial failure, preview privacy, financial confirmation and activity timeline.', [C('PF11', false, 1400, 580)]],
+      ['PF-12', 'Navigation, backend fit, metadata and accessibility', "The #3704 shell and the Portfolio / Companies naming, each board mapped to today's Worker routes with what is frontend-only and what needs backend work, route-aware document titles, and accessibility notes (targets WCAG 2.2 AA; not claimed from screenshots).", [W('PF12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

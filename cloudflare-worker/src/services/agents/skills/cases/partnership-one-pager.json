@@ -1,0 +1,32 @@
+{
+  "skill": "partnership-one-pager",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "network.relationships": [
+        {
+          "name": "Dentrix Labs",
+          "contact": "Marco Alvarez",
+          "strength": "warm"
+        }
+      ],
+      "grow.records": {
+        "shared_customers": [
+          "Northgate Dental"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Dentrix Labs",
+      "Northgate Dental"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "exclusive"
+    ]
+  }
+}

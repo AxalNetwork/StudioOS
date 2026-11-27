@@ -1,0 +1,276 @@
+Here’s an updated Replit prompt that includes both the template mapping and the 4‑step Brand Kit & Landing flow.
+
+```text
+You are helping me build a small TypeScript utility inside this Repl that will power the “Brand Kit & Landing” flow in my main app (Axal Founder Portal).
+
+High-level product context
+Founders already fill out a rich “About Your Startup” profile elsewhere in the product (startup name, sector, problem, solution, why now, TAM/SAM, etc.). From that, they can use a Brand Kit & Landing tool to generate a public landing page + waitlist and a small brand kit (logo, colors, typography, copy) they can reuse in decks and outreach.
+
+I have a set of prebuilt templates (each as a .zip/folder) that represent different communication surfaces, e.g.:
+
+- Capital Ready Kit.zip
+- Pilot Partner Page.zip
+- Proof Builder.zip
+- Co-Founder Builder.zip
+- Partner Hub.zip
+- Partner Pipeline Pro.zip
+- Co-Founder Canvas.zip
+- Co-founder Connect.zip
+- Builder's Launchpad.zip
+- Capital Storyteller.zip
+- Advisor Connect.zip
+- Mentor Connect.zip
+- Mentor Connect Page.zip
+- Co-Founder Quest.zip
+- Distribution Deck.zip
+- Seed Stage Spark.zip
+- (and more I will add)
+
+Goal for this Repl
+Create a small, well-typed library that:
+1) Maps every template to an audience and goal.
+2) Drives a 4-step “Brand Kit & Landing” wizard:
+
+   Step 1 — Pick project & audience
+   Step 2 — Pick a recommended template
+   Step 3 — Tune your landing page (brand kit + copy)
+   Step 4 — Share your page (public + private URLs)
+
+The wizard UI itself is in my main app; this Repl provides the data + helper functions.
+
+---
+
+Part 1 — Data model for templates
+
+Create `src/templates.ts` with:
+
+```ts
+export type Audience =
+  | 'customer'
+  | 'investor'
+  | 'partner'
+  | 'advisor'
+  | 'mentor'
+  | 'cofounder';
+
+export type AssetType =
+  | 'landing'
+  | 'deck'
+  | 'memo'
+  | 'doc'
+  | 'email_plus_landing';
+
+export interface TemplateConfig {
+  id: string;              // machine id, e.g. "capital-ready-kit"
+  label: string;           // human label, e.g. "Capital Ready Kit"
+  audience: Audience;      // who this template is primarily for
+  assetType: AssetType;    // landing vs deck vs memo vs doc etc.
+  primaryGoal: string;     // normalized goal, e.g. "request_intro", "start_pilot", "join_waitlist"
+  defaultCtaLabel: string; // e.g. "Request intro", "Start pilot"
+  defaultSlug: string;     // e.g. "capital-story"
+  recommended?: boolean;   // whether we show this as a recommended template for that audience
+  notes?: string;          // free-form notes about usage
+}
+```
+
+Then export an array:
+
+```ts
+export const TEMPLATES: TemplateConfig[] = [ /* fill in */ ];
+```
+
+Populate `TEMPLATES` with a first-pass mapping for all the templates listed above. Use reasonable defaults and comments. Rough guidance:
+
+- Investor-facing:
+  - Capital Ready Kit, Capital Storyteller, Seed Stage Spark, Distribution Deck
+  - audience: 'investor'
+  - assetType: 'deck' or 'memo'
+  - primaryGoal: "request_intro"
+  - defaultCtaLabel: "Request intro"
+- Partner-facing:
+  - Pilot Partner Page, Partner Hub, Partner Pipeline Pro
+  - audience: 'partner'
+  - assetType: 'landing' or 'deck'
+  - primaryGoal: "start_pilot" or "explore_partnership"
+- Co-founder-facing:
+  - Co-Founder Builder, Co-Founder Canvas, Co-Founder Connect, Co-Founder Quest
+  - audience: 'cofounder'
+  - assetType: 'landing' or 'memo'
+  - primaryGoal: "talk_about_joining" / "apply"
+- Advisor / Mentor:
+  - Advisor Connect, Mentor Connect, Mentor Connect Page
+  - audience: 'advisor' or 'mentor'
+  - assetType: 'landing' or 'memo'
+  - primaryGoal: "offer_guidance" / "become_advisor"
+- Customer / Proof:
+  - Proof Builder, Builder's Launchpad, etc.
+  - audience: 'customer'
+  - assetType: 'landing'
+  - primaryGoal: "join_waitlist" / "start_trial"
+
+Use kebab-case ids and slugs, e.g. "capital-ready-kit", "pilot-partner-page".
+
+Also export helper functions:
+
+```ts
+export function getTemplateById(id: string): TemplateConfig | undefined;
+export function getTemplatesByAudience(audience: Audience): TemplateConfig[];
+export function inferDefaultsFromTemplate(id: string): {
+  audience: Audience;
+  primaryGoal: string;
+  defaultCtaLabel: string;
+} | undefined;
+```
+
+`inferDefaultsFromTemplate` should just read from `TEMPLATES`.
+
+---
+
+Part 2 — Representing the 4-step Brand Kit & Landing flow
+
+Create `src/flow.ts` that encodes the wizard steps and how they use the template mapping.
+
+We already have a separate `Project` model in the main app; here, just model the shape we need:
+
+```ts
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  sector: string;
+  oneLiner: string;
+  // any other fields we need to seed copy, e.g. problem/solution/whyNow if useful
+}
+
+export type PageGoal =
+  | 'join_waitlist'
+  | 'request_intro'
+  | 'start_pilot'
+  | 'book_call'
+  | 'apply'
+  | 'offer_guidance';
+```
+
+Define a minimal representation of state for the wizard:
+
+```ts
+export interface BrandKitState {
+  step: 1 | 2 | 3 | 4;
+
+  // Step 1
+  projectId?: string;
+  audience?: Audience;
+  goal?: PageGoal;
+
+  // Step 2
+  selectedTemplateId?: string;
+
+  // Step 3
+  // these are the fields the UI will bind to:
+  brandName?: string;
+  headline?: string;
+  subheadline?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  typography?: string;
+  ctaLabel?: string;
+
+  // Step 4
+  publicUrl?: string;
+  privatePreviewUrl?: string;
+}
+```
+
+Implement pure helper functions for each step (no I/O, no network):
+
+```ts
+// Step 1 — given a project and (optionally) a preferred audience,
+// propose a default goal.
+export function suggestAudienceAndGoal(
+  project: ProjectSummary,
+  preferredAudience?: Audience
+): { audience: Audience; goal: PageGoal };
+
+// Step 2 — given an audience, recommend templates sorted by relevance.
+export function getRecommendedTemplatesForAudience(
+  audience: Audience
+): TemplateConfig[];
+
+// Step 3 — given project, template, and current state,
+// generate initial suggestions for brand/copy fields.
+export function generateInitialBrandKit(
+  project: ProjectSummary,
+  template: TemplateConfig,
+  goal: PageGoal
+): Pick<
+  BrandKitState,
+  'brandName' | 'headline' | 'subheadline' | 'ctaLabel'
+>;
+```
+
+For `generateInitialBrandKit`, you can stub simple rules like:
+
+- brandName := project.name
+- headline := templated string using project.oneLiner and audience/goal
+- subheadline := “{problem/solution style text}” for now
+- ctaLabel := template.defaultCtaLabel
+
+I’ll later replace the internals with calls to my own AI/copy layer — I mostly need the wiring and placeholders.
+
+In comments, document the 4-step flow:
+
+```ts
+/**
+ * Brand Kit & Landing — 4-step flow
+ *
+ * Step 1 — Pick project & audience
+ *   - User selects a ProjectSummary (we already know startup details).
+ *   - We use suggestAudienceAndGoal(...) to prefill audience + goal.
+ *
+ * Step 2 — Pick a template
+ *   - We show getRecommendedTemplatesForAudience(audience).
+ *   - When user selects one, we store selectedTemplateId.
+ *
+ * Step 3 — Tune your landing page
+ *   - We call generateInitialBrandKit(project, template, goal)
+ *     to seed brandName, headline, subheadline, ctaLabel, and
+ *     we’ll also hook in color/typography suggestions from elsewhere.
+ *   - User edits these fields; we keep them in BrandKitState.
+ *
+ * Step 4 — Share your page
+ *   - The main app will publish the landing page using BrandKitState
+ *     and the chosen template, then fill publicUrl + privatePreviewUrl.
+ *   - This library doesn’t call any APIs; it just provides structure.
+ */
+```
+
+---
+
+Part 3 — Small demo
+
+Create `src/demo.ts` that:
+
+1) Defines a fake `ProjectSummary`.
+2) Runs through the pure functions:
+   - calls `suggestAudienceAndGoal`
+   - lists recommended templates for that audience
+   - picks the first template and calls `generateInitialBrandKit`
+3) Logs the intermediate objects so I can see that the mappings and flow wiring are correct.
+
+Use `npm run dev` or `ts-node src/demo.ts` style script so I can run it quickly.
+
+---
+
+Constraints
+
+- TypeScript only, no frameworks.
+- No network calls — this is just data + pure functions.
+- Keep files small and focused: `templates.ts`, `flow.ts`, `demo.ts`.
+- After implementing, print out the `TEMPLATES` mapping and a sample run of the flow so I can edit IDs, audiences, and goals before integrating into the main app.
+```
+
+You can paste this into Replit as the project brief or into an AI agent there, then import your template zips and start wiring the mappings and flow.
+
+Sources
+[1] Screenshot-2026-06-20-at-9.57.27-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/2961cdf3-cedd-4dca-8a98-5c640b0190df/Screenshot-2026-06-20-at-9.57.27-PM.jpeg?[expired signed-URL credentials removed; the link expired 2026-06-20]
+[2] Screenshot-2026-06-20-at-9.57.34-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/73a931b4-a589-4f20-80d4-ba5b911503c8/Screenshot-2026-06-20-at-9.57.34-PM.jpeg?[expired signed-URL credentials removed; the link expired 2026-06-20]
+[3] Screenshot-2026-06-20-at-9.57.58-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/232528a0-44bd-45f8-a15f-0d1de52273d8/Screenshot-2026-06-20-at-9.57.58-PM.jpeg?[expired signed-URL credentials removed; the link expired 2026-06-20]

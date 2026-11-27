@@ -1,0 +1,34 @@
+{
+  "skill": "usability-test-protocol-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Usability Test Protocol Design",
+        "task_scope": "Designs a rigorous usability study protocol with neutral moderation, screening, consent, task order and observation rubric.",
+        "evidence": [
+          "neutral moderator protocol"
+        ],
+        "omitted_field": "participant consent"
+      },
+      "build.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for neutral moderator protocol."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "neutral moderator protocol"
+    ],
+    "must_say_not_recorded": [
+      "participant consent"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

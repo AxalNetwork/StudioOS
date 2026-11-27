@@ -1,0 +1,178 @@
+/**
+ * Task #40 — "Profiling completion" scope.
+ *
+ * The Profile & Fit "Profiling completion" card must measure ONLY the
+ * conversational fit.* profiling bank per persona (Skills / Work values / Axal
+ * Fit & values), NOT the whole persona dashboard bank. These unit tests pin the
+ * pure helpers in services/advisor/questionBank.ts so a future bank edit can't
+ * silently reintroduce the "denominator = whole bank" bug.
+ *
+ * Run via the strip-types loader (see package.json test:drift):
+ *   node --experimental-strip-types --no-warnings \
+ *     --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/advisor.profiling.test.ts
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  profilingBankFor,
+  profilingSectionsForBank,
+  profilingSectionForQuestion,
+  FIT_ID_RE,
+  bankFor,
+  type Persona,
+} from '../src/services/advisor/questionBank.ts';
+
+// Expected fit.* PROFILING-CARD bank sizes per persona. Each persona's card
+// measures ONE fit bank — its rubric + Axal values PLUS (Task #45) Skills,
+// Work-values, and Archetype-trait questions so the four profiling modules have
+// enough signal. D577 delivers coach separately. Each card is scoped to its
+// current persona's bank, keeping effort comparable.
+const EXPECTED: Record<string, number> = {
+  founder: 97, // Profiling v2 Session 9 (D319): +8 pick-ones, +8 reverse-keyed, +8 skills, +9 values, +6 Axal situations
+  investor: 82, // D386 investor bank v2
+  partner: 83, // D491 partner bank
+  advisor: 85, // Session 12 advisor bank; the coach bank is not on the completion card
+};
+
+// Every persona's profiling bank must offer all four modules with enough
+// questions to satisfy each module's confidence floor (Task #45).
+const EXPECTED_SECTIONS: Record<string, Record<string, number>> = {
+  founder:  { skills: 15, work_values: 14, archetype: 45, axal_fit: 23 },
+  investor: { skills: 8, work_values: 10, archetype: 43, axal_fit: 21 }, // D386
+  partner:  { skills: 8, work_values: 9, archetype: 45, axal_fit: 21 },
+  advisor:   { skills: 13, work_values: 8, archetype: 41, axal_fit: 23 },
+};
+
+test('profilingBankFor returns the fit.* bank sized per persona', () => {
+  for (const [persona, size] of Object.entries(EXPECTED)) {
+    const bank = profilingBankFor(persona as Persona);
+    assert.equal(bank.length, size, `${persona} profiling bank size`);
+    // Every question in a profiling bank is a fit.* question.
+    for (const q of bank) {
+      assert.ok(FIT_ID_RE.test(q.id), `${q.id} should be a fit.* id`);
+    }
+  }
+});
+
+test('admin / unknown personas have no profiling bank (not applicable)', () => {
+  assert.equal(profilingBankFor('admin' as Persona).length, 0);
+  assert.equal(profilingBankFor('unknown' as Persona).length, 0);
+});
+
+test('profiling bank is far smaller than the full working bank', () => {
+  // The bug counted the whole persona bank as the denominator; the profiling
+  // bank must be a strict, much smaller subset.
+  for (const persona of Object.keys(EXPECTED)) {
+    const full = bankFor(persona as Persona).length;
+    const prof = profilingBankFor(persona as Persona).length;
+    assert.ok(prof < full, `${persona}: profiling (${prof}) < full (${full})`);
+  }
+});
+
+test('sections partition the bank exactly (no overlap, no loss)', () => {
+  for (const persona of Object.keys(EXPECTED)) {
+    const bank = profilingBankFor(persona as Persona);
+    const sections = profilingSectionsForBank(bank);
+    const ids = sections.flatMap((s) => s.ids);
+    // No duplicates across sections.
+    assert.equal(new Set(ids).size, ids.length, `${persona}: sections overlap`);
+    // Union equals the whole bank.
+    assert.equal(ids.length, bank.length, `${persona}: sections drop questions`);
+    // Section keys are stable and labelled.
+    for (const s of sections) {
+      assert.ok(s.ids.length > 0, `${persona}: empty section leaked`);
+      assert.ok(typeof s.label === 'string' && s.label.length > 0);
+    }
+  }
+});
+
+test('section assignment follows archetype → skill → value → axal_fit priority', () => {
+  const founder = profilingBankFor('founder' as Persona);
+  const byId = new Map(founder.map((q) => [q.id, q]));
+  // An archetype-trait row → Archetype (wins over everything).
+  assert.equal(profilingSectionForQuestion(byId.get('fit.founder.arch_builder')!), 'archetype');
+  // exec_ship_rate carries rubric_category AND skill_axis → Skills wins.
+  assert.equal(profilingSectionForQuestion(byId.get('fit.founder.exec_ship_rate')!), 'skills');
+  // values_mission carries rubric_category AND value_dim (no skill_axis) → Work values.
+  assert.equal(profilingSectionForQuestion(byId.get('fit.founder.values_mission')!), 'work_values');
+  // vision_north_star is rubric-only → Axal Fit & values.
+  assert.equal(profilingSectionForQuestion(byId.get('fit.founder.vision_north_star')!), 'axal_fit');
+  // An Axal value row → Axal Fit & values.
+  assert.equal(profilingSectionForQuestion(byId.get('fit.founder.axal_integrity')!), 'axal_fit');
+});
+
+test('every persona offers all four modules at their expected sizes (Task #45)', () => {
+  for (const [persona, expected] of Object.entries(EXPECTED_SECTIONS)) {
+    const bank = profilingBankFor(persona as Persona);
+    const sections = profilingSectionsForBank(bank);
+    const byKey = Object.fromEntries(sections.map((s) => [s.key, s.ids.length]));
+    for (const [key, count] of Object.entries(expected)) {
+      assert.equal(byKey[key], count, `${persona}.${key} section size`);
+    }
+    // The Archetype module is present for every persona (was missing before).
+    assert.ok((byKey.archetype ?? 0) >= 3, `${persona} must offer ≥3 archetype questions`);
+  }
+});
+
+test('archetype module has five probes per trait, role flavour, and illustration sex', () => {
+  const founder = profilingBankFor('founder' as Persona);
+  const traits = founder.filter((q) => q.measures?.archetype_trait);
+  const byTrait = {};
+  for (const q of traits) {
+    const t = q.measures.archetype_trait;
+    byTrait[t] = (byTrait[t] || 0) + 1;
+  }
+  for (const t of ['builder', 'visionary', 'connector', 'operator']) {
+    assert.ok(byTrait[t] >= 7, `founder must offer ≥7 ${t} probes (5 shared + 2 role), got ${byTrait[t]}`);
+  }
+  const illustration = founder.find((q) => q.id === 'fit.founder.arch_illustration');
+  assert.ok(illustration, 'founder bank must ask illustration sex');
+  assert.equal(illustration.input_kind, 'select');
+  assert.ok(illustration.measures.archetype_presentation);
+  assert.ok(illustration.options.includes('A man'));
+  assert.ok(illustration.options.includes('A woman'));
+});
+
+test('archetype bank is the full trait + role + illustration set for every persona', () => {
+  const shared = [
+    'arch_builder', 'arch_builder_fix', 'arch_builder_craft', 'arch_builder_ship', 'arch_builder_first',
+    'arch_visionary', 'arch_visionary_pull', 'arch_visionary_bet', 'arch_visionary_horizon', 'arch_visionary_story',
+    'arch_connector', 'arch_connector_doors', 'arch_connector_first_call', 'arch_connector_rooms', 'arch_connector_trust',
+    'arch_operator', 'arch_operator_cadence', 'arch_operator_gap', 'arch_operator_owners', 'arch_operator_repeat',
+    'arch_illustration',
+  ];
+  const role = {
+    founder: ['arch_fo_independent', 'arch_fo_playbook', 'arch_fo_breakout', 'arch_fo_raise',
+      'arch_fo_mission_pull', 'arch_fo_conviction', 'arch_fo_systems', 'arch_fo_quality'],
+    investor: ['arch_inv_sleeves', 'arch_inv_product', 'arch_inv_thesis', 'arch_inv_lead',
+      'arch_inv_doors', 'arch_inv_reputation', 'arch_inv_process', 'arch_inv_diligence'],
+    partner: ['arch_pt_trenches', 'arch_pt_hours', 'arch_pt_momentum', 'arch_pt_scale',
+      'arch_pt_people', 'arch_pt_broker', 'arch_pt_machinery', 'arch_pt_process_leave'],
+    advisor: ['arch_mt_craft', 'arch_mt_demo', 'arch_mt_perspective', 'arch_mt_altitude',
+      'arch_mt_beside', 'arch_mt_relationship', 'arch_mt_honest', 'arch_mt_cadence'],
+  };
+  for (const persona of Object.keys(role)) {
+    const bank = profilingBankFor(persona as Persona);
+    const ids = new Set(bank.map((q) => q.id));
+    for (const key of [...shared, ...role[persona]]) {
+      assert.ok(ids.has(`fit.${persona}.${key}`), `${persona} missing ${key}`);
+    }
+  }
+});
+
+test('D577 advisor completion and conversation exclude coach questions', () => {
+  // The card counts ONLY the advisor's primary fit bank — no coach questions —
+  // so a advisor reaches "Profiling complete" with the same effort as other
+  // personas instead of ~double (was 34).
+  const card = profilingBankFor('advisor' as Persona);
+  assert.equal(card.length, 85);
+  assert.ok(card.some((q) => q.id.startsWith('fit.advisor.')), 'card must contain the advisor fit bank');
+  assert.ok(card.every((q) => !q.id.startsWith('fit.coach.')), 'coach questions must NOT count toward the advisor card');
+
+  // D577 separates delivery while retaining both banks in the registry.
+  const convo = bankFor('advisor' as Persona);
+  assert.ok(convo.every((q) => !q.id.startsWith('fit.coach.')), 'coach bank belongs to its own conversation');
+  assert.ok(convo.some((q) => q.id.startsWith('fit.advisor.')), 'advisor bank must still be delivered in the advisor conversation');
+});

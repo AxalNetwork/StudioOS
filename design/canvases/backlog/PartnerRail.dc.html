@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI · {{ page }}</span>
+    <span style="font-size:11px;color:#615c6e">›</span>
+  </div>
+
+  <div style="display:grid;gap:6px;margin-top:13px">
+    <div style="border:1px solid #e2e1e8;border-radius:9px;padding:9px 11px">
+      <div style="font-size:12px;font-weight:700">Manual</div>
+      <div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.45">{{ manualNote }}</div>
+    </div>
+    <div style="border:1px solid #b45309;background:#fffbf2;border-radius:9px;padding:9px 11px;box-shadow:0 0 0 2px rgba(217,119,6,.08)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:12px;font-weight:800;color:#92400e">AI fills the blanks</span>
+        <span style="width:24px;height:14px;border-radius:999px;background:#d97706;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+      </div>
+      <div style="font-size:10.5px;color:#92400e;margin-top:4px;line-height:1.45">{{ modeNote }}</div>
+    </div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:15px">Model · this page</div>
+  <div style="margin-top:9px">
+    <sc-for list="{{ models }}" as="m" hint-placeholder-count="4">
+      <div style="{{ m.rowStyle }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+          <span style="{{ m.nameStyle }}">{{ m.name }}</span>
+          <sc-if value="{{ m.recommended }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span></sc-if>
+          <sc-if value="{{ m.inline }}"><span class="num" style="font-size:10.5px;color:#615c6e;flex:none">{{ m.inline }}</span></sc-if>
+        </div>
+        <sc-if value="{{ m.recommended }}">
+          <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ m.id }}</div>
+        </sc-if>
+        <div style="font-size:10.5px;color:{{ m.whyInk }};margin-top:5px;line-height:1.5">{{ m.why }}</div>
+        <sc-if value="{{ m.recommended }}">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">
+            <sc-for list="{{ m.tags }}" as="t" hint-placeholder-count="2">
+              <span style="font-size:9.5px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:3px;padding:2px 5px">{{ t }}</span>
+            </sc-for>
+          </div>
+          <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:8px;padding-top:7px;border-top:1px solid #fde68a">{{ m.price }}</div>
+          <sc-if value="{{ m.cached }}"><div class="num" style="font-size:10.5px;color:#047857;font-weight:600;margin-top:3px">{{ m.cached }}</div></sc-if>
+          <div class="num" style="font-size:11px;font-weight:700;color:#047857;margin-top:6px">{{ m.est }}</div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="font-size:10px;color:#615c6e;margin-top:3px;line-height:1.5">Remembered per page. Switching changes nothing already accepted.</div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:15px">Batch on this page</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="font-size:11.5px;font-weight:700">{{ batchOp }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ batchNote }}</div>
+    <div class="num" style="font-size:10.5px;font-weight:700;color:#92400e;margin-top:8px">{{ batchCost }}</div>
+    <div style="font-size:10px;color:#615c6e;margin-top:7px;line-height:1.5">Estimated before it runs. Every item lands as its own proposal.</div>
+  </div>
+
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ pct }}%;background:#d97706;border-radius:999px"></div></div>
+    <div class="num" style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5">{{ receipt }}</div>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+    <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ safety }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Home&quot;,&quot;Pipeline&quot;,&quot;Delivery&quot;,&quot;Offers&quot;,&quot;Network&quot;,&quot;Research&quot;],&quot;default&quot;:&quot;Home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const page = this.props.page || 'Home';
+    const c4 = (n) => '$' + n.toFixed(4);
+    const tok = (n) => n.toLocaleString('en-US');
+    // ONE arithmetic for the before-estimate and the after-receipt.
+    const RUN = {
+      Home:     { tin:16800, tout:1240, pin:0.293, pout:2.253, label:'operating brief across 7 engagements', unit:'per daily brief', spend:'$2.60' },
+      Pipeline: { tin:9400,  tout:2100, pin:0.351, pout:0.555, label:'proposal from a posted need', unit:'per proposal', spend:'$3.10' },
+      Delivery: { tin:22400, tout:1680, pin:0.293, pout:2.253, label:'weekly status report, Verwood', unit:'per status report', spend:'$7.80' },
+      Offers:   { tin:4200,  tout:1900, pin:0.200, pout:0.300, label:'catalog entry rewrite', unit:'per catalog entry', spend:'$1.20' },
+      Network:  { tin:2600,  tout:470,  pin:0.351, pout:0.555, label:'double opt-in intro draft', unit:'per intro', spend:'$0.50' },
+      Research: { tin:58000, tout:1300, pin:0.440, pout:1.320, cachedIn:0.014, label:'first pass over a client history', unit:'first question', spend:'$4.40' }
+    };
+    const R = RUN[page] || RUN.Home;
+    const cost = R.tin / 1e6 * R.pin + R.tout / 1e6 * R.pout;
+    const cachedCost = R.cachedIn ? (R.tin / 1e6 * R.cachedIn + R.tout / 1e6 * R.pout) : null;
+    const estText = cachedCost
+      ? '≈ ' + c4(cost) + ' ' + R.unit + ' · ' + c4(cachedCost) + ' each after'
+      : '≈ ' + c4(cost) + ' ' + R.unit;
+
+    const L33  = { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', price:'$0.293 / M in · $2.253 / M out', inline:'$0.293 / $2.253' };
+    const MIST = { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct', price:'$0.351 / M in · $0.555 / M out', inline:'$0.351 / $0.555' };
+    const OSS20 = { name:'GPT-OSS 20B', id:'@cf/openai/gpt-oss-20b', price:'$0.200 / M in · $0.300 / M out', inline:'$0.200 / $0.300' };
+    const FLASH = { name:'DeepSeek V4 Flash', id:'@cf/deepseek-ai/deepseek-v4-flash-0731', price:'$0.440 / M in · $1.320 / M out', inline:'$0.440 / $1.320' };
+
+    const MENUS = {
+      Home: { manual:'Board, calendar and capacity work alone. No tokens.',
+        mode:'Composes the operating brief, triages new leads, ranks activity by what needs a decision.',
+        op:'Triage 6 new leads', note:'Capability match and a first read on fit.', cost:'6 × the per-lead rate',
+        safety:'Nothing here is outbound. Screening applies when a brief item becomes a reply.',
+        models:[
+          { ...L33, recommended:true, why:'Synthesis across every engagement — seven clients, every thread, in one read.',
+            tags:['Best for: synthesis','Long context'], runEst:true },
+          { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro', inline:'$0.017 / $0.112',
+            why:'Near-free triage of leads and activity. Sorts what arrived; the 70B reads it.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Relevance ranking behind the brief\u2019s ordering.' }
+        ] },
+      Pipeline: { manual:'Proposals, terms and the retainer book are all editable by hand.',
+        mode:'Drafts proposals from a posted need, narrates win/loss patterns, flags renewal risk.',
+        op:'Draft 3 proposals from matched needs', note:'From the catalog and comparable past wins.', cost:'3 × the per-proposal rate',
+        safety:'Proposals leave for a founder — every one screened before it sends.',
+        models:[
+          { ...MIST, recommended:true, why:'Polished proposals from a posted need. A proposal is read by someone deciding whether to trust you, so tone is the deliverable.',
+            tags:['Best for: proposals','Tone'], runEst:true },
+          { ...OSS20, why:'Outreach and follow-ups at volume, where commodity cost beats polish.' },
+          { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', inline:'$0.293 / $2.253',
+            why:'Win/loss and forecast narration across the whole pipeline.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Need-to-capability matching on the needs board.' }
+        ] },
+      Delivery: { manual:'Milestones, allocation and status reports are all hand-editable.',
+        mode:'Drafts client-ready status reports, detects scope drift against the SOW, assembles milestone summaries.',
+        op:'Draft 4 weekly status reports', note:'One per active engagement, from real activity.', cost:'4 × the per-report rate',
+        safety:'Status reports and change orders go to clients — all screened before send.',
+        models:[
+          { ...L33, recommended:true, why:'Client-ready status reports and milestone summaries. Reads the engagement\u2019s whole activity and writes something you would put your name on.',
+            tags:['Best for: client reports','Long context'], runEst:true },
+          { name:'Whisper Large v3 Turbo', id:'@cf/openai/whisper-large-v3-turbo', inline:'$0.0005 / audio min',
+            why:'Client calls become searchable transcripts — recording state explicit to both sides.' },
+          { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro', inline:'$0.017 / $0.112',
+            why:'Near-free progress triage across every engagement at once.' }
+        ] },
+      Offers: { manual:'Catalog, deals and case studies are all editable directly.',
+        mode:'Drafts catalog copy from delivered work, writes case studies from real artifacts, narrates deal performance.',
+        op:'Rewrite 5 catalog entries', note:'From what you actually delivered, not a template.', cost:'5 × the per-entry rate',
+        safety:'Everything here is public-facing — catalog, deals and case studies are screened before publish.',
+        models:[
+          { ...OSS20, recommended:true, why:'Catalog and deal copy at volume — commodity cost for text you rewrite often.',
+            tags:['Best for: catalog copy','High volume'], runEst:true },
+          { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', inline:'$0.293 / $2.253',
+            why:'Case studies in the firm\u2019s voice, drawn from a completed engagement.' },
+          { name:'FLUX 1 Schnell', id:'@cf/black-forest-labs/flux-1-schnell', inline:'$0.0000528 / tile',
+            why:'Instant catalog imagery.' }
+        ] },
+      Network: { manual:'The book, intros and org profiles all work by hand.',
+        mode:'Drafts double opt-in intros from both sides\u2019 context, flags cold ties, matches clients to each other.',
+        op:'Draft 3 re-engagement lines', note:'From the last real exchange, not "checking in".', cost:'3 × the per-line rate',
+        safety:'Intros land in someone else\u2019s inbox — always screened first.',
+        models:[
+          { ...MIST, recommended:true, why:'Warm, context-aware intro drafting. An intro spends the firm\u2019s reputation, so it should read like a person wrote it.',
+            tags:['Best for: intro drafting','Tone'], runEst:true },
+          { name:'Gemma 4 26B', id:'@cf/google/gemma-4-26b-a4b-it', inline:'$0.100 / $0.300', why:'Cheap relationship summaries across a long thread.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Who-needs-our-services matching against the book.' }
+        ] },
+      Research: { manual:'Profiles and the library are readable and searchable without AI.',
+        mode:'Turns a question into a sourced brief; makes a client\u2019s whole document history queryable.',
+        op:'Ask 20 questions of one SOW set', note:'First pass full price, 19 cached.', cost:'$0.0272 + 19 × $0.0025',
+        safety:'Research stays internal until a pull is attached to a proposal.',
+        models:[
+          { ...FLASH, recommended:true, why:'Interrogate long documents cheaply — the first pass reads the file, every question after is cached.',
+            cached:'Cached input $0.014 / M — 11× cheaper on follow-ups', tags:['Best for: client prep','Cached input'], runEst:true },
+          { name:'GPT-OSS 120B', id:'@cf/openai/gpt-oss-120b', inline:'$0.350 / $0.750', why:'Broad market context for a proposal.' },
+          { name:'Moondream 3.1 9B', id:'@cf/moondream/moondream3.1-9B-A2B', inline:'$0.300 / $1.000', why:'Reads charts and figures inside PDFs.' },
+          { name:'Qwen3 Embedding 0.6B', id:'@cf/qwen/qwen3-embedding-0.6b', inline:'$0.012 in', why:'Semantic search across SOWs and playbooks.' }
+        ] }
+    };
+    const M = MENUS[page] || MENUS.Home;
+    const TOTAL = 19.60, PLAN = 40.00;
+
+    return {
+      page, manualNote:M.manual, modeNote:M.mode, safety:M.safety,
+      batchOp:M.op, batchNote:M.note, batchCost:M.cost,
+      receipt:'Last run · ' + R.label + ' · ' + tok(R.tin) + ' in / ' + tok(R.tout) + ' out · ' + c4(cost),
+      spend:'$' + TOTAL.toFixed(2), plan:'$' + PLAN.toFixed(2),
+      pct:String(Math.round(TOTAL / PLAN * 100)),
+      models: M.models.map(m => ({
+        name:m.name, id:m.id, why:m.why, price:m.price, cached:m.cached || null,
+        est: m.runEst ? estText : null, tags:m.tags || [], recommended:!!m.recommended,
+        inline: m.recommended ? null : (m.inline || null),
+        nameStyle:'font-size:' + (m.recommended ? '12px;font-weight:800' : '11.5px;font-weight:700') + ';letter-spacing:-.01em;min-width:0',
+        whyInk: m.recommended ? '#4a4553' : '#615c6e',
+        rowStyle:'border-radius:9px;padding:10px 11px;margin-bottom:7px;'
+          + (m.recommended ? 'border:1px solid #b45309;background:#fffbf2;box-shadow:0 0 0 2px rgba(217,119,6,.08)'
+                           : 'border:1px solid #ececf1;background:#fff')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

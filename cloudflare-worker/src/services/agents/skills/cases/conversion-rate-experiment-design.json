@@ -1,0 +1,34 @@
+{
+  "skill": "conversion-rate-experiment-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Conversion Rate Optimization Experiment Design",
+        "task_scope": "Designs controlled conversion experiments with falsifiable hypotheses, control, variant, primary metric and guardrails.",
+        "evidence": [
+          "control and variant definition"
+        ],
+        "omitted_field": "baseline conversion rate"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for control and variant definition."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "control and variant definition"
+    ],
+    "must_say_not_recorded": [
+      "baseline conversion rate"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

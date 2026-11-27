@@ -1,0 +1,26 @@
+{
+  "GET /api/admin/workgraph/drafting-assets": {
+    "kind": "filter"
+  },
+  "GET /api/admin/workgraph/drafting/:assetUid": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting-assets": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting-assets/:assetUid/adopt": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting-assets/:assetUid/freeze": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting/:assetUid/candidates": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting/:assetUid/clauses/:clauseId/lease": {
+    "kind": "target"
+  },
+  "POST /api/admin/workgraph/drafting/:assetUid/confirm-publication": {
+    "kind": "target"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "$id": "deckTemplateImport",
+  "title": "POST /api/decks/templates/import (D1572, #3819)",
+  "description": "The reply the deck v2 adapter's `pptxImport` method passes through: pd30's mapping report for a .pptx template, stored nowhere. The file's name, the palette roles and every colour found in its theme, its two fonts each with the OFL font used (a stand-in when `fallback`), and each layout either placed on whole cells of the 12 × 6 grid with its areas, or not placed with its reason and the sentence for it; and the counts (`routes/deck_layouts.ts`, `services/decks/pptxTemplate.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "source_name", "palette", "colours", "fonts", "layouts", "counts"],
+  "properties": {
+    "project_id": { "type": "integer", "minimum": 1 },
+    "source_name": { "type": ["string", "null"] },
+    "palette": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "ground": { "$ref": "#/$defs/hex" }, "ink": { "$ref": "#/$defs/hex" }, "accent": { "$ref": "#/$defs/hex" },
+        "secondary": { "$ref": "#/$defs/hex" }, "highlight": { "$ref": "#/$defs/hex" }
+      }
+    },
+    "colours": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": false, "required": ["role", "hex"], "properties": { "role": { "type": "string" }, "hex": { "$ref": "#/$defs/hex" } } }
+    },
+    "fonts": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["role", "found", "use", "fallback"],
+        "properties": {
+          "role": { "enum": ["display", "body"] },
+          "found": { "type": ["string", "null"] },
+          "use": { "type": "string" },
+          "fallback": { "type": "boolean" }
+        }
+      }
+    },
+    "layouts": {
+      "type": "array", "maxItems": 60,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "placed"],
+        "properties": {
+          "name": { "type": "string" },
+          "placed": { "type": "boolean" },
+          "areas": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["kind", "c1", "c2", "r1", "r2"],
+              "properties": {
+                "kind": { "enum": ["heading", "text", "image", "chart", "table", "graphic"] },
+                "c1": { "type": "integer", "minimum": 1, "maximum": 12 },
+                "c2": { "type": "integer", "minimum": 1, "maximum": 12 },
+                "r1": { "type": "integer", "minimum": 1, "maximum": 6 },
+                "r2": { "type": "integer", "minimum": 1, "maximum": 6 }
+              }
+            }
+          },
+          "reason": { "enum": ["between_columns", "between_rows", "overlap", "empty"] },
+          "why": { "type": "string" }
+        }
+      }
+    },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["found", "placed", "not_placed"],
+      "properties": {
+        "found": { "type": "integer", "minimum": 0 },
+        "placed": { "type": "integer", "minimum": 0 },
+        "not_placed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": { "hex": { "type": "string" } }
+}

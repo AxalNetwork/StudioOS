@@ -1,0 +1,34 @@
+{
+  "skill": "influencer-partner-evaluation",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "Influencer Partnership Evaluation",
+        "task_scope": "Evaluates influencer partners for audience fit, authenticity, content quality, disclosure risk and commercial contribution.",
+        "evidence": [
+          "audience fit and authenticity"
+        ],
+        "omitted_field": "verified audience demographics"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for audience fit and authenticity."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "audience fit and authenticity"
+    ],
+    "must_say_not_recorded": [
+      "verified audience demographics"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

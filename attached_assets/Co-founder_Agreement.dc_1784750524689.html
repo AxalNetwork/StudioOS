@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .ca-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .ca-root.ca-embedded .ca-topbar{display:none!important}
+    .ca-embed-header{display:none;font-size:13px;color:#71717a;margin:0 0 14px}
+    .ca-root.ca-embedded .ca-embed-header{display:none}
+    .ca-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .ca-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .ca-qa:hover{border-color:#ececf1;background:#fff}
+    .ca-clause:hover{background:#faf9fc}
+    @media (max-width:1080px){.ca-2{grid-template-columns:1fr!important}.ca-drawer{width:100%!important}}
+  
+    .ca-root.ca-embedded .ca-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="ca-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="ca-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <div class="ca-embed-header">Draft, negotiate, and execute the founding agreement — or document a solo-founder path.</div>
+
+  <!-- TOP BAR -->
+  <div class="ca-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icHandshake }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Co-founder Agreement</h1>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Draft, negotiate, and execute the founding agreement — or document a solo-founder path.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="text-align:right"><div class="ca-mono" style="font-size:12px;font-weight:600;color:#7c3aed">4 of 6 modules</div><div style="width:120px;height:5px;background:#f0f0f3;border-radius:999px;overflow:hidden;margin-top:4px"><div style="height:100%;width:66%;background:#7c3aed;border-radius:999px"></div></div></div>
+      <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;padding:5px 11px;border-radius:999px">Unlocked · Wk 4</span>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div style="display:flex;gap:4px;padding:10px 0 18px;flex-wrap:wrap;align-items:center">
+    <button class="ca-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <button class="ca-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export</button>
+    <button class="ca-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button class="ca-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#7c3aed;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span>Preview as investor</button>
+    <div style="margin-left:auto;display:flex;gap:4px;background:#f4f4f5;border-radius:9px;padding:3px">
+      <button onClick="{{ setMulti }}" style="font-size:11.5px;font-weight:600;padding:7px 13px;border-radius:7px;border:none;cursor:pointer;{{ multiStyle }}">Multi-founder agreement</button>
+      <button onClick="{{ setSolo }}" style="font-size:11.5px;font-weight:600;padding:7px 13px;border-radius:7px;border:none;cursor:pointer;{{ soloStyle }}">Solo-founder declaration</button>
+    </div>
+  </div>
+
+  <!-- MULTI-FOUNDER PATH -->
+  <sc-if value="{{ isMulti }}">
+    <!-- SUMMARY BANNER -->
+    <div class="ca-card" style="padding:20px 22px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:14px;min-width:0">
+          <span style="width:42px;height:42px;flex:none;border-radius:11px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;padding:10px" dangerouslySetInnerHTML="{{ icFile }}"></span>
+          <div style="min-width:0">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed">Agreement path · Multi-founder</div>
+            <div style="font-size:15.5px;font-weight:700;color:#1A202C;margin-top:3px">Guillaume L. &amp; Maya R. · {{ statusLabel }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:22px">
+          <div style="text-align:center"><div class="ca-mono" style="font-size:22px;font-weight:600;color:#dc2626">{{ unresolvedCount }}</div><div style="font-size:10px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em">Unresolved</div></div>
+          <div style="text-align:center"><div class="ca-mono" style="font-size:22px;font-weight:600;color:#16a34a">{{ signedCount }}/2</div><div style="font-size:10px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em">Signed</div></div>
+          <button onClick="{{ scrollExec }}" style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Open execution console</button>
+        </div>
+      </div>
+      <sc-if value="{{ hasBlocker }}">
+        <div style="display:flex;align-items:flex-start;gap:9px;margin-top:14px;padding-top:14px;border-top:1px solid #f0f0f3;font-size:12.5px;color:#b45309;line-height:1.45"><span style="width:15px;height:15px;flex:none;margin-top:1px;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span><b>Blocker:</b>&nbsp;{{ blockerText }}</div>
+      </sc-if>
+    </div>
+
+    <!-- CRITICAL TERMS SNAPSHOT -->
+    <div class="ca-card" style="padding:22px;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Critical terms snapshot</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px" class="ca-2">
+        <sc-for list="{{ snapshot }}" as="s" hint-placeholder-count="4">
+          <div style="border:1px solid {{ s.border }};background:{{ s.bg }};border-radius:12px;padding:13px">
+            <div style="font-size:10.5px;color:#71717a;text-transform:uppercase;letter-spacing:.04em">{{ s.label }}</div>
+            <div class="ca-mono" style="font-size:15px;font-weight:600;color:#1A202C;margin-top:4px">{{ s.value }}</div>
+            <div style="font-size:10.5px;font-weight:600;margin-top:5px;color:{{ s.statusColor }}">{{ s.status }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- CLAUSE BUILDER -->
+    <div class="ca-card" style="padding:0;overflow:hidden;margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Clause-by-clause agreement builder</div>
+          <div style="font-size:12px;color:#71717a;margin-top:3px">Prefilled from Cap Table, Incorporate, and Co-founder Match — review, negotiate, accept.</div>
+        </div>
+        <button onClick="{{ toggleExplain }}" style="font-size:11.5px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;border-radius:8px;padding:7px 13px;cursor:pointer">{{ explainLabel }}</button>
+      </div>
+      <sc-for list="{{ clauses }}" as="c" hint-placeholder-count="10">
+        <div class="ca-clause" onClick="{{ c.open }}" style="padding:15px 22px;border-top:1px solid #f4f4f5;cursor:pointer;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center">
+          <div style="min-width:0">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:700;color:#1A202C">{{ c.label }}</span><sc-if value="{{ c.critical }}"><span style="font-size:9.5px;font-weight:700;color:#7c3aed;background:#f5f3ff;padding:2px 7px;border-radius:999px">CRITICAL</span></sc-if></div>
+            <div style="font-size:12.5px;color:#52525b;margin-top:5px">{{ c.value }}</div>
+            <sc-if value="{{ showExplain }}"><div style="font-size:11.5px;color:#a1a1aa;margin-top:5px;line-height:1.4;font-style:italic">{{ c.explain }}</div></sc-if>
+          </div>
+          <span style="font-size:10.5px;color:#a1a1aa;white-space:nowrap">{{ c.source }}</span>
+          <span style="font-size:10.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;{{ c.statusStyle }}">{{ c.status }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- ROLES / IP / DISPUTE -->
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px;margin-bottom:20px" class="ca-2">
+      <!-- ROLE MATRIX -->
+      <div class="ca-card" style="padding:22px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Role &amp; responsibility matrix</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;min-width:420px">
+            <thead><tr style="border-bottom:1px solid #f0f0f3">
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Domain</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Accountable</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Supporting</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Approval</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ raci }}" as="r" hint-placeholder-count="8">
+                <tr style="border-bottom:1px solid #f8f8fa">
+                  <td style="padding:9px 10px;font-size:12.5px;font-weight:600;color:#1A202C">{{ r.domain }}</td>
+                  <td style="padding:9px 10px"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px;{{ r.aColor }}">{{ r.accountable }}</span></td>
+                  <td style="padding:9px 10px;font-size:11.5px;color:#71717a">{{ r.supporting }}</td>
+                  <td style="padding:9px 10px;font-size:11.5px;color:#71717a">{{ r.approval }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <sc-if value="{{ conflictNote }}"><div style="font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 12px;margin-top:14px;line-height:1.45">{{ conflictNote }}</div></sc-if>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <!-- IP COVERAGE -->
+        <div class="ca-card" style="padding:22px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">IP assignment rider</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ ipItems }}" as="i" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span style="font-size:12.5px;color:#3f3f46">{{ i.label }}</span>
+                <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;{{ i.style }}">{{ i.status }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#71717a;margin-top:12px;line-height:1.45">University tech-transfer disclosure not required — no sponsored research on this project.</div>
+        </div>
+
+        <!-- DISPUTE RESOLUTION -->
+        <div class="ca-card" style="padding:22px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Dispute resolution</div>
+          <div style="display:flex;gap:4px;background:#f4f4f5;border-radius:8px;padding:3px;margin-bottom:12px">
+            <button onClick="{{ setMediation }}" style="flex:1;font-size:11.5px;font-weight:600;padding:7px 0;border-radius:6px;border:none;cursor:pointer;{{ mediationStyle }}">Mediation first</button>
+            <button onClick="{{ setArbitration }}" style="flex:1;font-size:11.5px;font-weight:600;padding:7px 0;border-radius:6px;border:none;cursor:pointer;{{ arbitrationStyle }}">Binding arbitration</button>
+          </div>
+          <div style="font-size:12px;color:#52525b;line-height:1.5">{{ disputeExplain }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXECUTION CONSOLE -->
+    <div class="ca-card" style="padding:24px" id="ca-exec">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Execution console</div>
+          <div style="font-size:12px;color:#71717a;margin-top:3px">Agreement v{{ version }} · signature gates until critical clauses are accepted</div>
+        </div>
+        <span style="font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:999px;{{ execReadyStyle }}">{{ execReadyLabel }}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+        <sc-for list="{{ signers }}" as="s" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;background:#faf9fc;border:1px solid #f0f0f3;border-radius:11px">
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:8px;background:{{ s.avatarBg }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ s.initials }}</span><div><div style="font-size:13px;font-weight:600">{{ s.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ s.role }}</div></div></div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;{{ s.statusStyle }}">{{ s.status }}</span><button onClick="{{ s.action }}" style="font-size:11.5px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;border-radius:7px;padding:6px 12px;cursor:pointer">{{ s.actionLabel }}</button></div>
+          </div>
+        </sc-for>
+      </div>
+      <button style="width:100%;font-size:13px;font-weight:600;color:#fff;background:{{ finalizeColor }};border:none;border-radius:9px;padding:12px;cursor:{{ finalizeCursor }}" disabled="{{ !execReady }}">{{ finalizeLabel }}</button>
+      <div style="font-size:11px;color:#a1a1aa;margin-top:10px;text-align:center">On full execution: locks v{{ version }}, stores the executed copy, and syncs to Cap Table and prior Compliance items.</div>
+    </div>
+  </sc-if>
+
+  <!-- SOLO PATH -->
+  <sc-if value="{{ !isMulti }}">
+    <div class="ca-card" style="padding:24px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+        <span style="width:42px;height:42px;flex:none;border-radius:11px;background:#52525b;color:#fff;display:flex;align-items:center;justify-content:center;padding:10px" dangerouslySetInnerHTML="{{ icSolo }}"></span>
+        <div><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#71717a">Agreement path · Solo founder</div><div style="font-size:15.5px;font-weight:700;color:#1A202C;margin-top:3px">Guillaume L. — sole founder declaration</div></div>
+      </div>
+      <div style="font-size:13px;color:#3f3f46;line-height:1.6;margin-bottom:20px">Documented following the Week 3 Co-founder Match decision to proceed solo. This declaration confirms sole ownership, binds all IP to the entity, and confirms no co-founder rights are granted — clearing the path to Cap Table and Compliance.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+        <sc-for list="{{ soloItems }}" as="s" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;background:#faf9fc;border:1px solid #f0f0f3;border-radius:11px">
+            <span style="width:18px;height:18px;flex:none;color:{{ s.color }};display:flex" dangerouslySetInnerHTML="{{ s.icon }}"></span>
+            <span style="font-size:13px;color:#1A202C;flex:1">{{ s.label }}</span>
+            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;{{ s.style }}">{{ s.status }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <button style="width:100%;font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:9px;padding:12px;cursor:pointer">Execute solo-founder declaration →</button>
+      <div style="font-size:11px;color:#a1a1aa;margin-top:10px;text-align:center">Syncs to Cap Table (100% founder ownership) and satisfies Week 4 module completion.</div>
+    </div>
+  </sc-if>
+</div>
+
+<!-- CLAUSE DRAWER -->
+<sc-if value="{{ drawerOpen }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(24,24,27,.34);z-index:60;backdrop-filter:blur(2px)"></div>
+  <div class="ca-drawer" style="position:fixed;top:0;right:0;bottom:0;width:520px;background:#fff;z-index:61;box-shadow:-8px 0 40px rgba(24,24,27,.14);overflow-y:auto">
+    <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #f0f0f3;padding:20px 24px;z-index:2">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-size:16px;font-weight:800">{{ sel.label }}</div><div style="font-size:12px;color:#a1a1aa;margin-top:2px">{{ sel.source }} · updated {{ sel.updated }}</div></div>
+        <button onClick="{{ closeDrawer }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <span style="display:inline-block;margin-top:12px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;{{ sel.statusStyle }}">{{ sel.status }}</span>
+    </div>
+    <div style="padding:22px 24px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:9px">Current term</div>
+      <div style="font-size:13.5px;color:#1A202C;background:#faf9fc;border:1px solid #f0f0f3;border-radius:11px;padding:14px;line-height:1.55;margin-bottom:18px">{{ sel.value }}</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:9px">Plain-English explanation</div>
+      <div style="font-size:12.5px;color:#52525b;line-height:1.55;margin-bottom:18px">{{ sel.explain }}</div>
+      <sc-if value="{{ sel.hasNote }}">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:9px">Negotiation note</div>
+        <div style="font-size:12.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;line-height:1.5;margin-bottom:18px">{{ sel.note }}</div>
+      </sc-if>
+      <div style="display:flex;gap:10px">
+        <button onClick="{{ closeDrawer }}" style="flex:1;font-size:12.5px;font-weight:600;color:#52525b;background:#f4f4f5;border:none;border-radius:9px;padding:11px;cursor:pointer">Needs alignment</button>
+        <button onClick="{{ closeDrawer }}" style="flex:1;font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:9px;padding:11px;cursor:pointer">Accept term</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { path:'multi', drawerKey:null, drawerOpen:false, showExplain:false, dispute:'mediation' };
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+
+  clauseData(){
+    return [
+      { key:'equity', label:'Equity split', value:'Guillaume L. 52.9% · Maya R. 47.1% common stock, pre-pool', source:'from Cap Table', status:'Accepted', critical:true,
+        explain:'Reflects share counts already issued in Cap Table. Changing this here will flag Cap Table out of date.' },
+      { key:'vesting', label:'Vesting schedule', value:'4-year vest, 1-year cliff for both founders, standard monthly thereafter', source:'from Cap Table', status:'Accepted', critical:true,
+        explain:'Standard founder vesting. Protects the company if a founder departs early.' },
+      { key:'ip', label:'IP assignment', value:'All prior and future IP related to the business assigned to the entity', source:'from Startups', status:'Accepted', critical:true,
+        explain:'Ensures the company — not either founder personally — owns the technology and work product.' },
+      { key:'roles', label:'Founder roles & authority', value:'Guillaume: CEO, product & technology. Maya: CTO, engineering & infrastructure.', source:'from Startups', status:'Needs review', critical:false,
+        explain:'Defines day-to-day authority. Reserved matters (fundraising, hiring execs, entity changes) require both founders.' },
+      { key:'comp', label:'Compensation', value:'No cash compensation until post-seed close; deferred comp schedule proposed', source:'auto-filled default', status:'Unresolved', critical:false, note:'Maya has proposed a modest interim stipend starting Week 8 — not yet agreed by Guillaume.',
+        explain:'Clarifies whether founders draw salary pre-raise. Left unresolved risks disputes once cash exists.' },
+      { key:'departure', label:'Departure & repurchase', value:'Good leaver: unvested shares return to pool. Bad leaver: company may repurchase vested shares at par.', source:'auto-filled default', status:'Accepted', critical:true,
+        explain:'Standard leaver mechanics. Protects the company\u2019s cap table if a founder leaves on bad terms.' },
+      { key:'confidentiality', label:'Confidentiality', value:'Mutual confidentiality for all company information, surviving termination', source:'auto-filled default', status:'Accepted', critical:false,
+        explain:'Standard mutual NDA-style clause binding both founders indefinitely for sensitive company information.' },
+      { key:'covenants', label:'Restrictive covenants', value:'12-month non-solicit of employees and customers post-departure; no non-compete', source:'auto-filled default', status:'Needs review', critical:false,
+        explain:'Non-competes are unenforceable in some states — this draft uses a narrower non-solicit instead.' },
+      { key:'amend', label:'Amendment mechanics', value:'Requires unanimous written consent of all founder-parties', source:'auto-filled default', status:'Accepted', critical:false,
+        explain:'Prevents one founder from unilaterally changing the agreement later.' },
+      { key:'exec', label:'Governing law & execution', value:'Governed by Delaware law; executed via e-signature upon incorporation', source:'from Incorporate', status:'Needs review', critical:true, note:'Depends on Incorporate — entity formation must complete before this clause can be marked accepted.',
+        explain:'Ties execution to your incorporation status; Delaware law matches your chosen entity jurisdiction.' },
+    ];
+  }
+
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state;
+    const isMulti = st.path==='multi';
+
+    const statusStyle=(s)=>{
+      if(s==='Accepted'||s==='Signed') return 'color:#166534;background:#dcfce7';
+      if(s==='Needs review') return 'color:#b45309;background:#fffbeb';
+      if(s==='Unresolved') return 'color:#b91c1c;background:#fef2f2';
+      return 'color:#71717a;background:#f4f4f5';
+    };
+    const raw=this.clauseData();
+    const clauses=raw.map(c=>({ ...c, statusStyle:statusStyle(c.status), open:()=>this.setState({drawerOpen:true,drawerKey:c.key}) }));
+    const unresolvedCount=raw.filter(c=>c.status==='Unresolved'||c.status==='Needs review').length;
+    const criticalUnresolved=raw.filter(c=>c.critical && c.status!=='Accepted' && c.status!=='Signed');
+    const hasBlocker = criticalUnresolved.length>0;
+    const blockerText = hasBlocker ? `"${criticalUnresolved[0].label}" is critical and marked "${criticalUnresolved[0].status}" — resolve before signature.` : '';
+
+    const snapshot=[
+      { label:'Equity split', value:'52.9 / 47.1', status:'Accepted', statusColor:'#166534', border:'#ececf1', bg:'#fff' },
+      { label:'Vesting', value:'4yr / 1yr cliff', status:'Accepted', statusColor:'#166534', border:'#ececf1', bg:'#fff' },
+      { label:'Compensation', value:'Deferred', status:'Unresolved', statusColor:'#b91c1c', border:'#fecaca', bg:'#fef2f2' },
+      { label:'Execution', value:'Delaware · e-sign', status:'Needs review', statusColor:'#b45309', border:'#fde68a', bg:'#fffbeb' },
+    ];
+
+    const raciRaw=[
+      ['Product','Guillaume','Maya','Guillaume'],['Engineering','Maya','Guillaume','Maya'],['GTM','Maya','Guillaume','Both'],
+      ['Fundraising','Guillaume','Maya','Both'],['Finance','Guillaume','Maya','Both'],['Operations','Maya','Guillaume','Maya'],
+      ['Legal / compliance','Guillaume','Maya','Both'],['Hiring','Both','—','Both'],['Investor updates','Guillaume','Maya','Guillaume'],
+    ];
+    const raciColor=(name)=> name==='Guillaume'?'color:#4f46e5;background:#eef2ff':name==='Maya'?'color:#0891b2;background:#ecfeff':'color:#71717a;background:#f4f4f5';
+    const raci=raciRaw.map(([domain,acc,sup,appr])=>({domain,accountable:acc,supporting:sup,approval:appr,aColor:raciColor(acc)}));
+    const conflictNote='GTM shows dual accountability (Maya leads, Guillaume approves) — reflected in the agreement\u2019s reserved-matters language.';
+
+    const ipItems=[
+      { label:'Prior inventions disclosed', status:'Complete', style:statusStyle('Accepted') },
+      { label:'Future inventions assignment', status:'Complete', style:statusStyle('Accepted') },
+      { label:'Work-product ownership', status:'Complete', style:statusStyle('Accepted') },
+      { label:'Open-source dependency review', status:'Needs review', style:statusStyle('Needs review') },
+    ];
+
+    const disputeExplain = st.dispute==='mediation'
+      ? 'Founders must attempt non-binding mediation before any arbitration or litigation — preserves the relationship and is faster to invoke.'
+      : 'Disputes go directly to binding arbitration under AAA commercial rules — faster resolution, but skips a reconciliation step.';
+
+    const signersRaw=[
+      { name:'Guillaume L.', role:'CEO · Founder', initials:'GL', avatarBg:'#4f46e5', status:'Signed' },
+      { name:'Maya R.', role:'CTO · Founder', initials:'MR', avatarBg:'#0891b2', status:'Awaiting signature' },
+    ];
+    const signers=signersRaw.map(s=>({ ...s, statusStyle:statusStyle(s.status==='Signed'?'Signed':'Needs review'),
+      actionLabel: s.status==='Signed'?'View copy':'Send reminder', action:()=>{} }));
+    const signedCount=signersRaw.filter(s=>s.status==='Signed').length;
+
+    const execReady = !hasBlocker && signedCount===2;
+    const execReadyLabel = hasBlocker ? 'Blocked — critical clauses unresolved' : signedCount<2 ? 'Ready for signature' : 'Fully executed';
+    const execReadyStyle = hasBlocker ? statusStyle('Unresolved') : signedCount<2 ? statusStyle('Needs review') : statusStyle('Accepted');
+    const finalizeLabel = hasBlocker ? 'Resolve critical clauses to continue' : signedCount<2 ? 'Send for signature' : 'Agreement fully executed';
+    const finalizeColor = execReady ? '#7c3aed' : '#d4d4d8';
+    const finalizeCursor = execReady ? 'pointer' : 'not-allowed';
+
+    const chk=ic('<polyline points="20 6 9 17 4 12"/>',2.4);
+    const soloItems=[
+      { label:'Sole founder status confirmed', status:'Confirmed', color:'#16a34a', icon:chk, style:statusStyle('Accepted') },
+      { label:'IP assigned to entity', status:'Confirmed', color:'#16a34a', icon:chk, style:statusStyle('Accepted') },
+      { label:'Co-founder rights — not applicable', status:'N/A', color:'#71717a', icon:chk, style:statusStyle('Accepted') },
+      { label:'Ready for Cap Table & Compliance', status:'Pending execution', color:'#d97706', icon:ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',2), style:statusStyle('Needs review') },
+    ];
+
+    const sel0 = raw.find(c=>c.key===st.drawerKey) || raw[0];
+    const sel = { ...sel0, statusStyle:statusStyle(sel0.status), updated:'Jul 20, 2026', hasNote: !!sel0.note };
+
+    return {
+      embeddedClass: this.props.embedded ? 'ca-embedded' : '',
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icHandshake:ic('<path d="M11 17l-1.7-1.7a2.5 2.5 0 0 0-3.5 0l-.6.6L2 12.7 8.7 6l3 3"/><path d="M13 15l2 2a2 2 0 0 0 3-3l-3.5-3.5"/><path d="M16 14l1.5 1.5a2 2 0 0 0 3-3L14 6l-3 3"/>'),
+      icCheck:chk, icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
+      icFile:ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'),
+      icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
+      icSolo:ic('<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 0 1 12 0v2"/>'),
+      isMulti, statusLabel: hasBlocker?'Drafting — critical terms unresolved':'Ready for review',
+      unresolvedCount, signedCount, hasBlocker, blockerText,
+      snapshot, clauses,
+      showExplain:st.showExplain, explainLabel: st.showExplain?'Hide plain-English':'Show plain-English',
+      toggleExplain:()=>this.setState({showExplain:!st.showExplain}),
+      raci, conflictNote, ipItems,
+      mediationStyle: st.dispute==='mediation'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      arbitrationStyle: st.dispute==='arbitration'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      setMediation:()=>this.setState({dispute:'mediation'}), setArbitration:()=>this.setState({dispute:'arbitration'}),
+      disputeExplain,
+      version:'1.3', execReady, execReadyLabel, execReadyStyle, finalizeLabel, finalizeColor, finalizeCursor,
+      signers,
+      soloItems,
+      multiStyle: isMulti?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      soloStyle: !isMulti?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      setMulti:()=>this.setState({path:'multi'}), setSolo:()=>this.setState({path:'solo'}),
+      drawerOpen:st.drawerOpen, sel, closeDrawer:()=>this.setState({drawerOpen:false}),
+      scrollExec:()=>{ const el=document.getElementById('ca-exec'); if(el) window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-20,behavior:'smooth'}); },
+      back:(e)=>{e.preventDefault(); try{window.parent&&window.parent.postMessage({type:'ca-back'},'*');}catch(x){}},
+    };
+  }
+}
+</script>
+</body>
+</html>

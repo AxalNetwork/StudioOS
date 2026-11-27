@@ -1,0 +1,34 @@
+{
+  "skill": "pipeline-health-diagnostics",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Pipeline Health Diagnostics",
+        "task_scope": "Diagnoses pipeline stage aging, coverage, concentration and progression fragility rather than producing a weekly deal review.",
+        "evidence": [
+          "stage aging and pipeline coverage"
+        ],
+        "omitted_field": "quarterly target"
+      },
+      "raise.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for stage aging and pipeline coverage."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "stage aging and pipeline coverage"
+    ],
+    "must_say_not_recorded": [
+      "quarterly target"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

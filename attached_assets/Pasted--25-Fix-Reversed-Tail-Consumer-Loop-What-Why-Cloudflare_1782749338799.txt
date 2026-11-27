@@ -1,0 +1,33 @@
+#25 - Fix Reversed Tail-Consumer Loop
+What & Why
+Cloudflare Observability is showing a steady flood of errors (~1,900 in a short window) on the production studioos worker:
+Handler does not export a tail() function.
+Root cause: the live studioos-tail worker is wired to forward its own tail/trace events to studioos (the reverse of the intended direction). studioos is the log producer — it only exports fetch() and scheduled(), no tail() — so every tail batch routed to it throws. Because each thrown error is itself logged and produces another tail event, the loop is self-amplifying, which explains the steady high error volume.
+The correct topology is one-directional: studioos (producer) → studioos-tail (consumer, archives to the studioos-logs R2 bucket). The repo already declares this correctly in the root wrangler.toml. The bad reverse binding exists only in the live environment — either a stale binding from an earlier studioos-tail deploy that was never re-pushed, or one added by hand in the Cloudflare dashboard.
+Done looks like
+* The "Handler does not export a tail() function." error stops appearing in Cloudflare Observability for the studioos worker.
+* Tail/trace events flow only one way: studioos → studioos-tail → studioos-logs R2 bucket (new .ndjson objects continue to land in R2).
+* The misleading repo reference to a non-existent dashboard doc is removed/corrected so this can't recur or confuse a future operator.
+Out of scope
+* Any change to what gets logged or how logs are scrubbed/redacted.
+* Changes to the R2 retention/lifecycle policy.
+* The unrelated existing tail-worker tasks (Dependabot deps, CI build-breakage guard) — leave those as-is.
+* Adding a no-op tail() to studioos (rejected: it would silently swallow the misrouted events and mask the misconfiguration rather than fix the wiring).
+Steps
+1. Stop the reverse binding (operator action, needs Cloudflare access). Remove the tail-consumer binding that points studioos-tail → studioos. Two paths, do whichever applies:
+    * If it came from a stale deploy: re-deploy studioos-tail from the current (clean) config so the live tail-consumer list is reconciled to empty.
+    * If it was added in the Cloudflare dashboard: remove studioos from the studioos-tail worker's tail/trace-event consumers in the dashboard. Requires a CLOUDFLARE_API_TOKEN with Workers:edit + the account ID, or dashboard access. This is the step that actually stops the errors; it cannot be done from the repo alone.
+2. Verify the correct direction is intact. Confirm the root wrangler.toml still declares studioos → studioos-tail in BOTH the top-level [[tail_consumers]] block and [[env.production.tail_consumers]] (they must stay in lockstep, like the routes blocks). No change expected here — just confirm.
+3. Repo cleanup to prevent recurrence. In cloudflare-worker-tail/wrangler.toml, fix the header comment that references a non-existent docs/CLOUDFLARE_DASHBOARD_TASKS.md and instructs an operator to manually bind a tail consumer. Make it explicit that the producer→consumer wiring is owned entirely by the root wrangler.toml and that no dashboard tail-consumer step is required (a manual dashboard binding is what most likely caused this incident). Keep the existing warning against adding [[tail_consumers]] to this consumer's config.
+4. Confirm resolution. After the operator action, watch Cloudflare Observability for the studioos worker and confirm the "Handler does not export a tail() function." error rate drops to zero, and that new objects keep landing in the studioos-logs R2 bucket (proving the forward path still works).
+5. Changelog. This is an ops/reliability fix with no user-facing behavior change, so no CHANGELOG-user.md entry is needed; add a technical CHANGELOG.md line noting the reversed tail-consumer binding fix.
+Notes for the executor
+* Do NOT "fix" this by adding a tail() export to the main studioos worker — that masks the misconfiguration. The fix is removing the reverse binding.
+* The deploy of studioos-tail is manual today (cd cloudflare-worker-tail && npx wrangler deploy); there is no CI job that deploys it. If you lack Cloudflare credentials in the environment, surface that clearly and hand step 1 back to the user as an operator action — the repo cleanup (step 3) can still be completed independently.
+Relevant files
+* cloudflare-worker-tail/wrangler.toml
+* cloudflare-worker-tail/src/index.ts
+* wrangler.toml:545-553
+* wrangler.toml:861-869
+* cloudflare-worker/src/index.ts:890-915
+* package.json:12

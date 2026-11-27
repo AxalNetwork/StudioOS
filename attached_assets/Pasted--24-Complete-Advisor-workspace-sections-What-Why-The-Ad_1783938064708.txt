@@ -1,0 +1,54 @@
+#24 - Complete Advisor workspace sections
+What & Why
+The Advisor profile's four workspaces (Network, Advisory, Growth, Research) already exist in the sidebar, but their sub-sections were built with investor-flavored vocabulary and don't fully match the intended advisor information architecture. Several sub-sections are missing and one workspace page (Growth → Partnerships) is only a placeholder. This task fills every gap so each workspace matches the target outline, using the same demo-data-driven UI kit the existing pages use (in-page sub-tabs / filter chips, stat cards, row cards, slide-over detail panels) so new sections look and behave identically to current ones.
+Note: sub-sections are rendered as in-page tabs/filters driven by data constants — no new routes or sidebar entries are required. Each workspace has its own data file, so the four areas can be built without conflicting with each other.
+Done looks like
+* Network (already complete): Introductions, Relationships, Organizations — no change needed.
+* Advisory
+    * Opportunities pipeline shows all stages: Leads, Discovery Calls, Qualified Opportunities, Proposals, Negotiations, Won, Lost.
+    * Clients detail exposes Client List, Company Profiles, Contacts, Health Score, and Engagement Timeline (profile/health/timeline already present; add a Contacts section).
+    * Delivery covers Consulting Sessions, Action Plans, Meeting Notes/Decisions/Action Items/Follow-ups/Recordings (within session detail), and Deliverables (Reports, Strategy Decks, Financial Models, Research, Templates, Playbooks). Projects, Retainers, Advisory Boards, Fractional Roles, and Workshops remain in the existing Engagements tab.
+    * Contracts (already complete): Proposals, Statements of Work, Advisory Agreements, NDAs, Invoices, Renewals.
+* Growth
+    * Partnerships is a real page (not a placeholder) with modules: Strategic Partners, Technology Partners, Resellers, Distribution.
+    * Talent, Customers, Capital, Experts (already complete).
+* Research re-categorized to the advisor vocabulary:
+    * Market: Industries, Sectors, Trends, Geography, Macro Analysis.
+    * Companies: Startup Database, Enterprise Database, Competitors, Customers, Partners.
+    * AI Research: AI Search, AI Analyst, SWOT Analysis, Market Maps, Company Reports.
+    * Documents: Research Papers, PDFs, Frameworks, Templates, Playbooks.
+    * News: Industry News, Client News, Funding, M&A, Regulations.
+* Every new sub-section renders realistic demo content in the existing visual style; the app builds and the four workspaces navigate cleanly.
+Out of scope
+* Wiring any of these to live backend/API data (covered by separate live-data tasks).
+* New sidebar top-level items, new URL routes, or auth/role changes.
+* Network workspace changes (already matches the spec).
+* Analytics dashboards and an AI assistant for Growth (tracked separately).
+Steps
+1. Advisory — Opportunities & Clients: Add the Qualified Opportunities and Negotiations pipeline stages with demo opportunities, and add a Contacts section to the client detail panel.
+2. Advisory — Delivery: Add Consulting Sessions and Action Plans sub-sections alongside the existing Sessions and Deliverables, keeping meeting notes/decisions/action items/follow-ups/recordings within session detail.
+3. Growth — Partnerships: Replace the placeholder with a real page modeled on the other Growth pages, with Strategic Partners, Technology Partners, Resellers, and Distribution modules and demo data.
+4. Research — recategorize: Update Market, Companies, AI Research, Documents, and News to the advisor sub-sections listed above (replacing the investor-flavored categories), with matching demo data.
+5. Verify: Build the frontend and click through all four workspaces to confirm every sub-section renders correctly in light/dark mode.
+Relevant files
+* frontend/src/sidebarConfig.js:441-467
+* frontend/src/components/WorkspaceTabs.jsx
+* frontend/src/pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx
+* frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx
+* frontend/src/pages/advisor/advisory/ClientsPage.jsx
+* frontend/src/pages/advisor/advisory/EngagementsPage.jsx
+* frontend/src/pages/advisor/advisory/DeliveryPage.jsx
+* frontend/src/pages/advisor/advisory/ContractsPage.jsx
+* frontend/src/pages/advisor/advisory/kit.jsx
+* frontend/src/data/advisor/advisory.js
+* frontend/src/pages/advisor/research/MarketPage.jsx
+* frontend/src/pages/advisor/research/CompaniesPage.jsx
+* frontend/src/pages/advisor/research/DocumentsPage.jsx
+* frontend/src/pages/advisor/research/AIResearchPage.jsx
+* frontend/src/pages/advisor/research/NewsPage.jsx
+* frontend/src/data/advisor/research.js
+* frontend/src/pages/growth/GrowthWorkspace.jsx
+* frontend/src/pages/growth/PartnershipsPage.jsx
+* frontend/src/pages/growth/kit.jsx
+* frontend/src/data/growth.js
+* frontend/src/pages/advisor/network/kit.jsx

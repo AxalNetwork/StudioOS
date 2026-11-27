@@ -1,0 +1,282 @@
+# Axal VC — Investor Sidebar Audit & Lifecycle Regroup
+
+## Context
+
+The investor side of axal.vc has grown to **28 sidebar items across 7 groups**
+(`frontend/src/sidebarConfig.js`, `SIDEBAR_GROUPS.investor`, lines 255–300).
+The grouping (Home / Pipeline / Intelligence / Portfolio / Network / Legal &
+Compliance / Account) does not follow how investors actually work, several
+features show the same underlying data in multiple places, and one item
+(Investor Portal) is a second front-end for the whole app. The user wants the
+investor navigation re-architected around the **investment lifecycle**
+(Sourcing → Diligence → Commit → Support), made minimal, with every feature
+having exactly one home.
+
+**Chosen scope:** deliver the audit **and** rewrite `sidebarConfig.js` into the
+new lifecycle groups using existing pages (no new/merged pages built in this
+pass — page-level merges are recorded as follow-ups).
+
+---
+
+## 1. Current problems
+
+1. **Grouping isn't lifecycle-based.** Home / Pipeline / Intelligence /
+   Portfolio / Network / Legal & Compliance / Account is a feature dump, not a
+   workflow. 28 items in 7 accordions is cognitive overload.
+2. **Duplicate deal surfaces.** Deal Flow (`/deals`), Pipeline Board
+   (`/pipeline`), Watchlist (`/watchlist`), AI Matches (`/matches`) and
+   Projects (`/projects`) are five views of the **same deal universe** with no
+   canonical "one home." Deal Flow vs Pipeline Board is literally list-vs-board
+   of the same records.
+3. **A parallel portal.** "Investor Portal" (`/partner-portal`) re-exposes
+   dashboard, deal flow, scoring, portfolio and capital — a second way to reach
+   everything already in the sidebar. Pure duplication.
+4. **Fund-finance sprawl.** Capital, Funds, Liquidity & Exits, Portfolio
+   Health, Reserve Allocation, Exit Waterfall = **six** separate items for what
+   is one financial workspace.
+5. **Compliance bucket conflates four jobs.** "Legal & Compliance" mixes deal
+   diligence (Due Diligence), investor self-KYC (Identity Verification),
+   account security (Trust Center) and deal legals (Legal & Capital) — four
+   unrelated jobs-to-be-done in one drawer.
+6. **Score/risk data scattered.** Scoring surfaces in Scoring, Portfolio
+   Health, Risk Matrix, Pipeline and Deals; risk surfaces in Risk Matrix,
+   Portfolio Health and Trust — no canonical owner, so numbers can disagree.
+7. **Mislabeled Home.** "Discover" (`/play`, gamified assessments) sits in the
+   Home group; it's education, not a daily investor surface.
+8. **Missing core workflows.** No IC/investment-decision record, no LP
+   reporting, no portfolio-company update inbox, no portfolio cap-table /
+   ownership view (see §3).
+9. **Cloned-from-partner residue.** The investor nav mirrors the partner nav;
+   items only meaningful to partners were carried over or left as URL-only
+   orphans.
+
+---
+
+## 2. Recommended sidebar structure
+
+Six groups: **Home**, **Sourcing**, **Diligence**, **Commit**, **Support**,
+**More**. Home + Sourcing open by default (existing `defaultOpenGroups`
+behavior); More is a collapsed overflow drawer. Every feature below has exactly
+one home; cross-stage needs are met by **read-only badges/deep-links inside
+pages**, not by repeating the item in the sidebar.
+
+### Home
+- **Dashboard** (`/dashboard`) — the single overview/home.
+- *Removed here:* "Investor Portal" (`/partner-portal`) — fold into Dashboard
+  (redirect `/partner-portal` → `/dashboard`). *Removed:* "Discover" (moved to
+  More).
+
+### Sourcing — find & capture deals
+- **Deal Flow** (`/deals`) — **primary home for all deal records.**
+- **Pipeline Board** (`/pipeline`) — board view of the *same* deals.
+  *Merge (follow-up):* collapse into Deal Flow as a list/board toggle so there
+  is one deal surface.
+- **AI Matches** (`/matches`) — inbound/discovery, co-invest, referral quality.
+- **Watchlist & Journal** (`/watchlist`) — personal tracked subset + conviction
+  journal + anti-portfolio. Primary home for conviction tracking (starts at
+  sourcing).
+- *Removed:* "Projects" (`/projects`) — redundant with Deal Flow for investors;
+  keep it founder-side only.
+
+### Diligence — validate founder, market & risk
+- **Scoring Engine** (`/scoring`) — quantitative framework; **owns Deal Memo
+  generation** (no separate item).
+- **Due Diligence** (`/admin/due-diligence`) — structured case/checklist
+  tracker; IC-prep material.
+- **Market Intelligence** (`/market-intel`) — market/macro validation.
+- **Risk Matrix** (`/portfolio/risk-matrix`) — **primary home for risk.**
+  It literally answers "validate risk," so it lives in Diligence even though it
+  renders across the portfolio; Portfolio Health (Support) shows a *read-only*
+  risk badge that deep-links here.
+
+### Commit — decide & close
+- **Legal & Capital** (`/legal-capital`) — term sheets, deal legals, e-sign
+  entry (E-Sign `/esign/:token` is an emailed link, not a nav item).
+- **Capital & Investment** (`/capital`) — the deployment action (write the
+  check / capital call). Primary home for capital deployment.
+- *Add (follow-up):* an **Investment Decision / IC record** unifying pipeline
+  votes + deal memo + terms + outcome (see §3).
+
+### Support — help the company after the check
+- **Portfolio Health** (`/portfolio/health`) — **primary portfolio monitoring**;
+  surfaces read-only score + risk badges that deep-link to Scoring / Risk
+  Matrix.
+- **Funds** (`/funds`) — fund-level performance.
+- **Reserve Allocation** (`/portfolio/reserves`) — follow-on planning.
+- **Exit Waterfall** (`/portfolio/waterfall`) — return/exit modeling.
+- **Liquidity & Exits** (`/liquidity`) — secondaries / exits.
+- *Merge (follow-up):* Funds + Reserve Allocation + Exit Waterfall + Liquidity
+  (+ Capital from Commit) → one **"Fund & Capital"** workspace with tabs. Five
+  finance items is the biggest source of clutter.
+
+### More — secondary, education, account, self-compliance (collapsed)
+- **Trust & Identity** (`/trust`) — account security + trust score; **absorb
+  KYC** (`/kyc`) as its identity step (Trust Center already computes trust from
+  identity verification). Ensure Trust Center links to `/kyc`.
+- **Find a Mentor** (`/mentors`) · **Partners** (`/partners`) · **Calendar**
+  (`/calendar`) · **Events** (`/my/events`) — network/relationship, low daily
+  use for investors.
+- **Integrations** (`/integrations`) · **Discover** (`/play`) · **Articles**
+  (`/articles/draft`) · **Documentation** (`/docs`) — tooling & education.
+- **Activity Log** (`/activity`) · **Support** (`/tickets`) · **My Profile**
+  (`/profile`) · **Settings** (`/settings`) — account (kept pinned at bottom).
+
+---
+
+## 3. Features to add (missing but needed)
+
+| Add | Home | Why |
+| --- | ---- | --- |
+| **Investment Decision / IC record** | Commit | Today the decision is smeared across Pipeline votes, Scoring deal-memo and Watchlist decision fields. Investors need one per-deal object: memo + vote + terms + outcome. |
+| **LP Reporting / quarterly LP updates** | Support | Capital *calls* exist but there's no way to report back to LPs (statements, quarterly updates). Core for anyone running a fund. |
+| **Portfolio-company update inbox** | Support | Portfolio Health is *computed*; there is no feed of founder-submitted KPIs/monthly updates flowing to the investor. |
+| **Portfolio cap-table / ownership view** | Support | Reserves & waterfall exist, but no ownership %/dilution-across-rounds per company (founders have `/build/captable`; investors have nothing equivalent). |
+
+Lower priority / optional: a real notification center (beyond Activity Log) and
+a global deal/company command-palette search.
+
+---
+
+## 4. Features to remove / demote
+
+- **Investor Portal** (`/partner-portal`) — duplicate portal → merge into
+  Dashboard, redirect the route.
+- **Projects** (`/projects`) — investor-redundant with Deal Flow → drop from
+  investor nav.
+- **Pipeline Board** as a separate *page* → merge into Deal Flow (list/board
+  toggle). Stays in Sourcing until merged.
+- **KYC / Identity Verification** as a separate item → merge into Trust Center.
+- **Discover, Articles, Docs, Calendar, Events, Find a Mentor, Partners,
+  Integrations** → demote from top-level groups into **More**.
+- Confirm partner/admin-only routes (Relationships, Network Effects, Portfolio
+  Coverage, Demand Insights, Compliance Calendar) are **not** in the investor
+  nav — they were never investor-scoped and should stay out.
+
+---
+
+## 5. Merge map
+
+| Current feature (route) | Proposed destination | Action | Reason |
+| --- | --- | --- | --- |
+| Dashboard (`/dashboard`) | Home | Keep | Single overview. |
+| Investor Portal (`/partner-portal`) | Dashboard | **Remove** | Parallel portal duplicating the whole nav. |
+| Discover (`/play`) | More | Move | Education, not a daily surface. |
+| Projects (`/projects`) | — | **Remove** (investor) | Redundant with Deal Flow. |
+| Pipeline Board (`/pipeline`) | Sourcing → Deal Flow | **Merge** | Board view of the same deals. |
+| Deal Flow (`/deals`) | Sourcing | Keep (primary) | Canonical deal home. |
+| AI Matches (`/matches`) | Sourcing | Keep | Inbound/discovery. |
+| Watchlist & Journal (`/watchlist`) | Sourcing | Keep | Conviction tracking. |
+| Scoring Engine (`/scoring`) | Diligence | Keep (primary) | Owns Deal Memo too. |
+| Due Diligence (`/admin/due-diligence`) | Diligence | Keep | Checklist/IC prep. |
+| Market Intelligence (`/market-intel`) | Diligence | Keep | Market validation. |
+| Risk Matrix (`/portfolio/risk-matrix`) | Diligence | Move | "Validate risk"; Health shows read-only badge. |
+| Legal & Capital (`/legal-capital`) | Commit | Keep | Deal legals/e-sign. |
+| Capital & Investment (`/capital`) | Commit | Keep | Capital deployment. |
+| Portfolio Health (`/portfolio/health`) | Support | Keep (primary) | Portfolio monitoring hub. |
+| Funds (`/funds`) | Support | Merge → Fund & Capital | Fund performance. |
+| Reserve Allocation (`/portfolio/reserves`) | Support | Merge → Fund & Capital | Follow-on planning. |
+| Exit Waterfall (`/portfolio/waterfall`) | Support | Merge → Fund & Capital | Return modeling. |
+| Liquidity & Exits (`/liquidity`) | Support | Merge → Fund & Capital | Secondaries/exits. |
+| KYC / Identity (`/kyc`) | More → Trust Center | **Merge** | Trust already uses identity verification. |
+| Trust Center (`/trust`) | More | Keep (primary) | Account security + trust. |
+| Find a Mentor (`/mentors`) | More | Move | Low investor daily use. |
+| Partners (`/partners`) | More | Move | Directory, niche. |
+| Calendar / Events (`/calendar`,`/my/events`) | More | Move | Secondary. |
+| Integrations (`/integrations`) | More | Move | Tooling. |
+| Articles / Docs / Activity / Support / Profile / Settings | More | Move | Account/education. |
+
+---
+
+## 6. Final recommendation
+
+Adopt the **four-stage lifecycle sidebar — Sourcing → Diligence → Commit →
+Support, plus Home and a collapsed More** — cutting the investor nav from **28
+items / 7 groups to ~15 primary items / 6 groups**. It mirrors exactly how an
+investor moves a deal from inbox to check to board seat, gives every feature a
+single home, and pushes account/education/self-compliance into More so the
+daily surface stays clean. The two highest-leverage follow-ups after the
+regroup are (a) collapsing the six fund-finance pages into one **Fund &
+Capital** workspace and (b) merging Deal Flow + Pipeline Board into one deal
+surface — together they remove the last of the duplication this audit found.
+
+---
+
+## Implementation (this pass): regroup `sidebarConfig.js`
+
+**File:** `frontend/src/sidebarConfig.js` — replace the `investor: [ … ]` array
+(lines 255–300) with the six lifecycle groups below. All icons used are already
+imported (lines 18–25); no new imports needed. Tier gates
+(`requiredInvestorTier: 'professional'`) are preserved on Deal Flow and Pipeline
+Board. No route or API changes — every `to` points at an existing
+investor-guarded route.
+
+```js
+investor: [
+  { key: 'home', label: 'Home', items: [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  ]},
+  { key: 'sourcing', label: 'Sourcing', items: [
+    { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
+    { to: '/pipeline', icon: Layers, label: 'Pipeline Board', requiredInvestorTier: 'professional' },
+    { to: '/matches', icon: Sparkles, label: 'AI Matches' },
+    { to: '/watchlist', icon: Bookmark, label: 'Watchlist & Journal' },
+  ]},
+  { key: 'diligence', label: 'Diligence', items: [
+    { to: '/scoring', icon: Target, label: 'Scoring Engine' },
+    { to: '/admin/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
+    { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
+    { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
+  ]},
+  { key: 'commit', label: 'Commit', items: [
+    { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
+    { to: '/capital', icon: DollarSign, label: 'Capital & Investment' },
+  ]},
+  { key: 'support', label: 'Support', items: [
+    { to: '/portfolio/health', icon: Heart, label: 'Portfolio Health' },
+    { to: '/funds', icon: TrendingUp, label: 'Funds' },
+    { to: '/portfolio/reserves', icon: Layers, label: 'Reserve Allocation' },
+    { to: '/portfolio/waterfall', icon: TrendingUp, label: 'Exit Waterfall' },
+    { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits' },
+  ]},
+  { key: 'more', label: 'More', items: [
+    { to: '/trust', icon: Lock, label: 'Trust & Identity' },
+    { to: '/mentors', icon: UserCircle, label: 'Find a Mentor' },
+    { to: '/partners', icon: Users, label: 'Partners' },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
+    { to: '/my/events', icon: Ticket, label: 'Events' },
+    { to: '/integrations', icon: Plug, label: 'Integrations' },
+    { to: '/play', icon: Gamepad2, label: 'Discover' },
+    { to: '/articles/draft', icon: FileText, label: 'Articles' },
+    { to: '/activity', icon: Activity, label: 'Activity Log' },
+    { to: '/docs', icon: BookOpen, label: 'Documentation' },
+    { to: '/tickets', icon: Ticket, label: 'Support' },
+    { to: '/profile', icon: UserCircle, label: 'My Profile' },
+    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
+  ]},
+],
+```
+
+**Notes / small follow-ups bundled with the regroup:**
+- Update the file-header convention comment (lines 11–16): the trailing group is
+  now **More** (still carries Activity/Docs/Settings) rather than "Account".
+- `defaultOpenGroups()` needs no change — it opens Home + the first content
+  group (now **Sourcing**). More stays collapsed because it isn't the first
+  content group.
+- Dropping `/kyc`, `/projects`, `/partner-portal` from the nav does **not**
+  delete the pages; they remain reachable by URL. Optional: redirect
+  `/partner-portal` → `/dashboard` and ensure Trust Center surfaces the `/kyc`
+  flow.
+
+## Verification
+
+1. **Grep for sidebar tests / snapshots** that assert investor group keys or
+   item counts (search `sidebarConfig`, `SIDEBAR_GROUPS`, `investor` under
+   `frontend/`), and update any that pin the old groups.
+2. **Build + lint the frontend:** `cd frontend && npm run build` (and lint if
+   configured) — confirms no missing icon import / syntax error.
+3. **Run the drift smoke test:** `npm run test:drift` — should stay green (no
+   new `/api/*` calls or worker routes were added).
+4. **Manual check as an investor:** load the app, confirm the sidebar shows
+   Home / Sourcing / Diligence / Commit / Support / More in order; Home +
+   Sourcing open by default, More collapsed; Deal Flow & Pipeline Board show
+   the lock/paywall for a free-tier investor; every link resolves (no 404).

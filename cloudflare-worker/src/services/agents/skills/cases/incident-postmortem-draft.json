@@ -1,0 +1,40 @@
+{
+  "skill": "incident-postmortem-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "vercel.deployments": [
+        {
+          "ref": "main",
+          "state": "error",
+          "at": "2026-10-30T14:02Z"
+        },
+        {
+          "ref": "main",
+          "state": "ready",
+          "at": "2026-10-30T14:41Z"
+        }
+      ],
+      "build.records": {
+        "incident": {
+          "detected": "2026-10-30T14:05Z",
+          "note": "Migration locked the bookings table"
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "14:02",
+      "Migration locked the bookings table"
+    ],
+    "must_say_not_recorded": [
+      "customers affected"
+    ],
+    "must_not_include": [
+      "fault of"
+    ]
+  }
+}

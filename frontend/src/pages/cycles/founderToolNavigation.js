@@ -1,0 +1,67 @@
+import { hasTier } from '../../sidebarConfig.js';
+import { MODULES } from './modules.js';
+import { cycleOf } from './cycleModel.js';
+
+/** #1539: module doors and editor returns share one project-aware map. */
+export const FOUNDER_TOOLS = [
+  { path: '/build/brand', cycle: 'grow', module: 'distribution', label: 'Open landing-page builder', door: true, roles: ['admin', 'founder'] },
+  { path: '/grow/launch', cycle: 'grow', module: 'distribution', label: 'Open launch calendar', door: true, roles: ['admin', 'founder'] },
+  // D6038 (#6038, BD11): on Company creation these two are supporting tools beside Add another filing, under the
+  // filings, not doors above the page's work; `supporting` is the short name that row draws.
+  { path: '/legal', cycle: 'build', module: 'company-creation', label: 'Open legal documents', supporting: 'Legal documents', door: true, roles: ['admin', 'founder'] },
+  { path: '/legal/send', cycle: 'build', module: 'company-creation', label: 'Open e-signature', supporting: 'E-signature', door: true, roles: ['admin', 'founder', 'partner', 'investor', 'advisor'] },
+  // D1194 (#3128): Investor match is Capital relationships › Match; the old addresses only forward.
+  { path: '/raise/capital-relationships/match', cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },
+  { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
+  { path: '/execution', cycle: 'build', module: 'product-roadmap' },
+  // #6109: Team expansion's door to where headcount and the hiring plan are edited.
+  { path: '/build/team', cycle: 'grow', module: 'team-expansion', label: 'Open team roster and hiring plan', door: true, roles: ['admin', 'founder'] },
+  { path: '/grow/partner-network/co-marketing', aliases: ['/comarketing'], cycle: 'grow', module: 'partner-network', label: 'Open co-marketing', door: true, roles: ['admin', 'founder'] },
+  // D1180 (#3107) and D1194 (#3128): the capital workspace is gone. The model
+  // forwards to Use of funds › Forecast, and the pipeline to Capital relationships.
+  { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },
+];
+
+export const MODULE_LINK_CLASS = 'inline-block text-[12px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300';
+
+/** Editor-only mode/tab/filter parameters do not belong to the destination module. */
+export function projectSearch(search = '') {
+  const params = new URLSearchParams(search);
+  const project = params.get('project_id') || params.get('project');
+  return project && /^[1-9]\d*$/.test(project) ? '?project_id=' + project : '';
+}
+
+/** A door's own `query` comes ahead of the venture. (D696's files-tool door, `mode=workspace`, retired with D1109.) */
+function doorHref(tool, search) {
+  const venture = projectSearch(search);
+  if (!tool.query) return tool.path + venture;
+  return tool.path + '?' + tool.query + (venture ? '&' + venture.slice(1) : '');
+}
+
+export function moduleToolLinks(cycle, slug, user, search = '') {
+  if (!['admin', 'founder'].includes(user?.role)) return [];
+  return FOUNDER_TOOLS.filter((tool) => tool.door && tool.cycle === cycle && tool.module === slug
+    && tool.roles.includes(user.role) && hasTier(user, tool.requiredTier))
+    .map((tool) => ({ label: tool.label, href: doorHref(tool, search), ...(tool.supporting ? { supporting: tool.supporting } : {}) }));
+}
+
+/**
+ * D6118 (#6118, GR-09): Partner network's module page is Partnerships, at /grow/partnerships;
+ * /grow/partner-network only forwards there. A link back to the module names the page itself.
+ */
+export const MODULE_PAGES = Object.freeze({
+  'grow/partner-network': { href: '/grow/partnerships', name: 'Partnerships' },
+});
+
+export function editorModuleLink(pathname, search = '', user) {
+  if (!['admin', 'founder'].includes(user?.role)) return null;
+  const tool = FOUNDER_TOOLS.filter((item) => [item.path, ...(item.aliases || [])]
+    .some((path) => pathname === path || pathname.startsWith(path + '/')))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+  if (!tool) return null;
+  const module = MODULES[tool.cycle].find((item) => item.slug === tool.module);
+  // D6118: a module whose page lives at another address names that page, not a forward.
+  const page = MODULE_PAGES[tool.cycle + '/' + tool.module];
+  return { href: (page?.href || '/' + tool.cycle + '/' + tool.module) + projectSearch(search),
+    label: '← ' + cycleOf(tool.cycle).name + ' › ' + (page?.name || module.name) };
+}

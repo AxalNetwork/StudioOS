@@ -1,0 +1,34 @@
+{
+  "skill": "job-post-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "team.roster": {
+        "role": {
+          "title": "Founding engineer",
+          "level": "senior",
+          "team": "Product",
+          "location": "Remote (EU)"
+        }
+      },
+      "company.profile": {
+        "about": "Fixture Robotics automates site inspections."
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Founding engineer",
+      "Remote (EU)"
+    ],
+    "must_say_not_recorded": [
+      "Salary"
+    ],
+    "must_not_include": [
+      "\u20ac",
+      "$"
+    ]
+  }
+}

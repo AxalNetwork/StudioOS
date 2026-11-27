@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Learning on Cloudflare Stream</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Learning</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Extends the existing Learning canvas board by board: the home, the new Exercises and Exams tabs, the course and Stream lesson player, webinars, exercises, exams, My learning, programmes, the studio’s Stream upload, captions and chapters, and the states. Learning has no AIRail, no Ask and no Eadwyn panel (owner).</p>
+</header>
+<section style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">LR1</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Page canvas · Learning home, 1440, default state</h2></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10);background:#f4f3f7"><dc-import name="Learning Stream Page" v="lr1" hint-size="1440px,1380px"></dc-import></div>
+</section>
+<div style="display:grid;grid-template-columns:repeat(3,max-content);gap:84px 56px;align-items:start">
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.cap }}</h2>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:900px;font-size:13.5px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="{{ b.fs }}">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Learning Stream Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,900px` }; };
+    const B = (id, t, fr, row, note) => ({ id, cap: id + ' · ' + t, fr, note: note || '', fs: row ? 'display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap' : 'display:flex;flex-direction:column;gap:28px' });
+    return { boards: [
+      B('LR1', 'Learning home', [F('lr1', 'Default', 1440), F('lr1e', 'Nothing in progress', 1440)], 0, 'Recommended for you is a dashed future block that waits on #3724.'),
+      B('LR2', 'Exercises and Exams tabs', [F('lr2a', 'Exercises', 1440), F('lr2b', 'Exams', 1440), F('lr2c', 'Empty', 1440)]),
+      B('LR3', 'Course page', [F('lr3', 'Started · 37%', 1440), F('lr3b', 'Not started · no required lesson · no resources', 1440)], 0, 'No instructor or prerequisites: neither is stored. Certificates: pending owner J.'),
+      B('LR4', 'Lesson player on Stream', [F('lr4', '', 1440), F('lr4b', 'Plain transcript · no transcript · saving', 1440)]),
+      B('LR6', 'Video states in the player', [F('lr6', '', 1440)]),
+      B('LR7', 'Videos library', [F('lr7', '', 1440)], 0, 'Search reaches transcripts. No profile filter: there is none.'),
+      B('LR8', 'Reading / item page', [F('lr8', '', 1440), F('lr8b', 'No text yet', 1440)]),
+      B('LR9', 'Webinar page', [F('lr9a', '(a) Upcoming, registered', 1440), F('lr9b', '(b) Ended, with a recording', 1440), F('lr9c', '(c) Cancelled', 1440)], 0, 'No live player, chat, Q&A or polls: webinars join through the external link (pending owner E).'),
+      B('LR10', 'Exercise', [F('lr10', 'Needs work · Resubmit', 1440), F('lr10b', 'Trigger inset (owner call) · Not submitted · Accepted', 1440)]),
+      B('LR11', 'Exam', [F('lr11a', '(a) Before', 1440), F('lr11b', '(b) Question', 1440), F('lr11c', '(c) Review before submit', 1440), F('lr11d', '(d) Result, with the timeout banner', 1440)]),
+      B('LR12', 'My learning', [F('lr12', '', 1440), F('lr12e', 'Every section empty', 1440)]),
+      B('LR13', 'My programme page', [F('lr13', 'By invitation · Continue', 1440), F('lr13b', 'Open to join · Join', 1440)]),
+      B('LR14', 'Studio: Stream upload', [F('lr14', 'The video file field, every state', 1440)], 0, 'Field triggers on blank Title, Summary and Topic. The transcript fills from the video’s source.'),
+      B('LR15', 'Studio: thumbnail, captions and chapters', [F('lr15', '', 1440)], 0, ''),
+      B('LR16', 'Studio content table with Copy to Stream', [F('lr16', '', 1440)]),
+      B('LR17', 'Studio: video analytics', [F('lr17', 'In the right Sheet · pending owner', 1440)]),
+      B('LR18', 'Access, gate and admin states', [F('lr18a', '(a) Coming soon', 1440), F('lr18b', '(b) Read-only admin access', 1440), F('lr18c', '(c) Refused · (d) Missing · (e) No plan lock', 1440)]),
+      B('LR19', 'Shared states', [F('lr19a', 'Loading skeleton', 1440), F('lr19b', 'Could not be read · empty · Not recorded beside a value', 1440), F('lr19f', 'Offline', 1440)]),
+      B('LR20', 'Phone', [F('lr20a', 'Home', 390), F('lr20b', 'Lesson player', 390), F('lr20d', 'Exam question', 390), F('lr20e', 'Studio upload', 390)], 1),
+      B('LR21', 'Tablet', [F('lr21', 'Lesson player · tablet', 768), F('lr21b', 'Course outline, one column', 768)], 1),
+      B('LR22', 'Dark', [F('lr1-d', 'Home', 1440), F('lr5-d', 'Lesson player with chapters and transcript', 1440), F('lr15-d', 'Studio upload with captions', 1440)])
+    ] };
+  }
+}
+</script>
+</body></html>

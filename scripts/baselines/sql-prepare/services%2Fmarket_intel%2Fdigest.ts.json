@@ -1,0 +1,6 @@
+{
+  "liveIndexSql() @ services/market_intel/digest.ts": 1,
+  "liveRowSql() @ services/market_intel/digest.ts": 1,
+  "placeholders @ services/market_intel/digest.ts": 1,
+  "sectorPlaceholders @ services/market_intel/digest.ts": 1
+}

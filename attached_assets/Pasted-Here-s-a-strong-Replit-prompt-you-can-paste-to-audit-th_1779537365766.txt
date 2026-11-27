@@ -1,0 +1,126 @@
+Here’s a strong **Replit prompt** you can paste to audit the platform for bugs, errors, vulnerabilities, performance issues, and page-level efficiency.
+
+## Replit prompt
+
+**Prompt:**
+
+> Act as a senior full-stack engineer, security auditor, and performance specialist.
+>
+> Perform a **full platform audit** of this application. Do **not** make any changes yet. First, inspect the entire codebase and report findings only.
+>
+> Audit goals:
+> 1. Find bugs, runtime errors, broken flows, and edge cases.
+> 2. Find security vulnerabilities and data exposure risks.
+> 3. Find performance issues that slow page load or make the app inefficient.
+> 4. Review every page/component for correctness, accessibility, and UI consistency.
+> 5. Identify unnecessary code, duplication, and fragile patterns.
+>
+> Scope:
+> - Frontend routes/pages/components
+> - Backend/API endpoints
+> - Authentication and session handling
+> - Authorization and role checks
+> - Database queries and data access
+> - Environment variables and secrets
+> - File uploads/downloads
+> - External API calls and webhooks
+> - Caching, hydration, and rendering performance
+> - Console errors, network errors, and failed states
+>
+> For each issue, provide:
+> - Title
+> - Severity: Critical / High / Medium / Low
+> - Category: Security / Bug / Performance / UX / Accessibility / Maintainability
+> - File path(s)
+> - Exact line(s) if possible
+> - Why it is a problem
+> - Recommended fix
+>
+> Security audit checklist:
+> - Hardcoded secrets, tokens, API keys, credentials
+> - Missing authentication on protected endpoints
+> - Missing authorization / privilege escalation risks
+> - SQL injection / NoSQL injection / unsafe queries
+> - XSS / unsafe HTML rendering
+> - CSRF protection for state-changing actions
+> - Unsafe file upload handling
+> - Insecure direct object references
+> - Open redirects
+> - Rate limiting / brute-force protection
+> - Sensitive data in logs
+> - Weak CORS or overly permissive headers
+>
+> Performance audit checklist:
+> - Slow initial load
+> - Large bundles
+> - Repeated re-renders
+> - N+1 requests or duplicated API calls
+> - Inefficient database queries
+> - Missing pagination / lazy loading
+> - Unnecessary blocking work on page load
+> - Images not optimized
+> - Uncached expensive operations
+> - Unused dependencies
+>
+> Page-by-page audit:
+> - Inspect each page and route individually.
+> - Verify it loads without console errors.
+> - Verify mobile and desktop layout.
+> - Verify empty states, loading states, and error states.
+> - Verify all interactive elements work.
+> - Verify forms validate correctly.
+>
+> Output format:
+> 1. Executive summary
+> 2. Highest-risk issues first
+> 3. Detailed findings table
+> 4. Page-by-page notes
+> 5. Performance recommendations
+> 6. Security recommendations
+> 7. A prioritized fix plan with the top 10 fixes
+>
+> Important rules:
+> - Do not modify code yet.
+> - Do not give vague suggestions.
+> - Be specific and cite exact code locations.
+> - If something cannot be verified, say so clearly.
+> - Prefer the most likely root cause, not just symptoms.
+>
+> After the report, wait for my approval before making any changes.
+
+## Better workflow
+
+If you want the best results, run it in **3 passes**:
+1. **Security audit**
+2. **Performance audit**
+3. **Page-by-page UI / bug audit**
+
+That gets better findings than one giant sweep.
+
+## Shorter version
+
+If you want a more compact prompt:
+
+> Audit this entire Replit app for security vulnerabilities, bugs, performance bottlenecks, console errors, broken flows, and page-level inefficiencies. Inspect every route, component, API endpoint, auth flow, database query, and environment variable. Do not change code. Report findings with severity, file path, exact line numbers if possible, root cause, and recommended fix. Prioritize critical security issues and any page that fails to load quickly or correctly on desktop/mobile.
+
+If you want, I can also turn this into:
+- a **Claude prompt**,
+- a **Replit Agent prompt**,
+- or a **two-step audit prompt** that first reports issues and then fixes them one by one.
+
+Sources
+[1] How to Run a 5-Minute Security Audit on Your Replit App (2026) https://rafter.so/blog/replit-security-audit
+[2] Effective prompting with Replit AI https://docs.replit.com/learn/effective-prompting
+[3] Cleaning The Site : r/replit - Reddit https://www.reddit.com/r/replit/comments/1rdmwai/cleaning_the_site/
+[4] Security Audit Checklist | Free AI Prompt Template - Appaca https://www.appaca.ai/resources/prompt-library/software/security-audit-checklist
+[5] Wanted: Replit app security guide - Tips & Tricks https://replit.discourse.group/t/wanted-replit-app-security-guide/4007
+[6] 🛠️ I built a "Deep Audit" prompt to find hidden bugs and SEO/Performance issues https://www.reddit.com/r/Base44/comments/1seyo7f/i_built_a_deep_audit_prompt_to_find_hidden_bugs/
+[7] Debugging AI-built code with prompt issues - Facebook https://www.facebook.com/groups/vibecodinglife/posts/1918794745375720/
+[8] Security Audit Checklist for Web Application - CoPilot - Neura Market https://www.neura.market/directories/copilot/prompts/security-audit-checklist-for-web-application-copilot
+[9] Prompt used to do a security and performance audit of a vibe coded ... https://www.reddit.com/r/vibecoding/comments/1qxotap/prompt_used_to_do_a_security_and_performance/
+[10] Build apps and sites with AI - Replit https://replit.com/?stack=Build&prompt=EIVwlgNgJgBAhjAZiCEC0BnALnAxgaxgFkA1ABSQHsAnGAIhLhSwEEBzAUwDss6A6AFACyAJQDyAEQCqAYQAqAgOJgAbhxgsAkvE48MGstry4OGfQHcwWABaUQWGBwAeAB0oYwXNvBgevEdQwOXGoOLEEWGBCOKG4sMDgIGBdqSicATxgbOAcPLH0AIzDzDm4NI118+C5YZywOai5Eg00MPg1K-VxEpMZmdjiYSxssjgBbFwgc9RU4agSCgP0ACg4+Nj4AGhgAbx3FTTkACSlgAH05MQBpAFEAOQBfB4BKbbgarOt1FLTMzwArYJVULNaKxHgJCD6ILUNTUTBgWLtORfHSDLgcOG+Ur6GgwazvKBLGDUODmbHRfLtMQYtC4CBgAjwFw-WZJFwNZINMZgMxgShcXy4Sgc7bIVDwEBQKxZUmQbaebDvByhFSUbrxAVvD5MLCUMY5Rkkyg4TVcQQCOQsESKG5yGBSADKNxEjoEWhgNy8nlK8y8MDkHDgYww2wkmLELn0XrYPoa+ikfm8HoGem2jpw1CwICjMBEIC4XE8ycqRoA6jR8IgIJRzBghDIxCIbjAAGI3FhyKTNx0wZYFcDQeASyiIT6mDjPAQARnaMlC4PizVmzCGVmsji4IXSLjN8BVpiwAgATO0yKkMpuoG5PA5sg4AUDocFQlUYXCEbEBABmZHjSbTDAszzHAiyBOkPBwE4VC0HAlRoIg8zcESmQsIYUQ9PWAAsZ7cryHgCsyrLNFAcAYNYBSUHMsDDBuAocHSDJMqqlD4BwAgAKztCwUoyjW3ijo4cKZGCcSQvAuAmGY1SwGh2jdKgQhyDcMhHDAjpWjIVxKJQ2xkO4WBsKEjoAIoADLbEcZHWGAMg0C4MB9BADiOhIVzbGIPEjKeAAM2wiDEvJCM2JlSJozZEPcchumgDowpKNhiRq-KCqsBqQAA9C4ZEYOYNCwB4bBcDmMkwPxnhTrFEg5KBZGBLgXwGp8OS+DmbhZvoPRIEG2ahJ1lFqAIsU9nI4otMa9imDBQkNJkiA9SAoRDTAMgBO82xjJQsSNA62i0T4pHUIQwo1rQGANeM7Gxa2KAQJkfVuFwHhqH2m0FJADGIGA1DYJVMBmVR0r+kq9SdR8BRkUaDSpLQBI1AyXjLV6KjfQKYyDMBCzEogeJBJSKxyTAbHpKGMASMAUQChiuBmn9kRBDEQrzLuMC48GkzqKROC+JQ45ETAvIwCAGCgQErOCl9P0qgWQjAE6mh3Dcjq9o2dzKQAGgoRD0fEABehoCgAXG2oTjGAIBjJacycA4RAiCIxsACTHj5VxoNOPmu7Lg6wIllMTAE9RDJWxZEUxBvmjA578vMevqMgW5mokViZJQWIoxgIDNG4DLkXwQA
+[11] Project Security Center - Replit Docs https://docs.replit.com/core-concepts/security/project-security-center
+[12] 7 Best Application Security Tools for the AI Era (2026) - Endor Labs https://www.endorlabs.com/learn/best-application-security-tools
+[13] Replit's AI Agent isn't just failing — it's faking it. (Tested, repeated ... https://www.reddit.com/r/replit/comments/1l0i0ow/replits_ai_agent_isnt_just_failing_its_faking_it/
+[14] Comment “SECURE” and I will send you a free security prompt ... https://www.instagram.com/reel/DYHCOw8otFo/
+[15] Claude code security audit prompt - Facebook https://www.facebook.com/groups/aiworldopen/posts/1346613360606551/

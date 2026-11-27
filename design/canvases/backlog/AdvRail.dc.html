@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI · {{ page }}</span>
+    <span style="font-size:11px;color:#a8a4b4">›</span>
+  </div>
+
+  <div style="display:grid;gap:6px;margin-top:14px">
+    <div style="border:1px solid #e2e1e8;border-radius:9px;padding:9px 11px">
+      <div style="font-size:12px;font-weight:700">Manual</div>
+      <div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.45">Calendar, ledger and deliverables work alone. No tokens.</div>
+    </div>
+    <div style="border:1px solid #047857;background:#f2fdf7;border-radius:9px;padding:9px 11px;box-shadow:0 0 0 2px rgba(5,150,105,.08)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:12px;font-weight:800;color:#065f46">AI fills the blanks</span>
+        <span style="width:24px;height:14px;border-radius:999px;background:#059669;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+      </div>
+      <div style="font-size:10.5px;color:#065f46;margin-top:4px;line-height:1.45">{{ modeNote }}</div>
+    </div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Model · this page</div>
+  <div style="margin-top:9px">
+    <sc-for list="{{ models }}" as="m" hint-placeholder-count="4">
+      <div style="{{ m.rowStyle }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+          <span style="{{ m.nameStyle }}">{{ m.name }}</span>
+          <sc-if value="{{ m.recommended }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#065f46;background:#d9f7e7;border:1px solid #a7f3d0;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span></sc-if>
+          <sc-if value="{{ m.priceInline }}"><span style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;flex:none">{{ m.priceInline }}</span></sc-if>
+        </div>
+        <sc-if value="{{ m.recommended }}">
+          <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ m.id }}</div>
+        </sc-if>
+        <div style="font-size:10.5px;color:{{ m.whyInk }};margin-top:5px;line-height:1.5">{{ m.why }}</div>
+        <sc-if value="{{ m.recommended }}">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">
+            <sc-for list="{{ m.tags }}" as="t" hint-placeholder-count="2">
+              <span style="font-size:9.5px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:3px;padding:2px 5px">{{ t }}</span>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:8px;padding-top:7px;border-top:1px solid #f0eff4">{{ m.price }}</div>
+          <sc-if value="{{ m.cached }}"><div style="font-size:10.5px;color:#047857;font-variant-numeric:tabular-nums;margin-top:3px">{{ m.cached }}</div></sc-if>
+          <div style="font-size:11px;font-weight:700;color:#047857;font-variant-numeric:tabular-nums;margin-top:6px">{{ m.est }}</div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="font-size:10px;color:#615c6e;margin-top:3px;line-height:1.5">Remembered per page. Switching changes nothing already accepted.</div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Usage</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ spendPct }}%;background:#059669;border-radius:999px"></div></div>
+    <div style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:9px;line-height:1.5">This page this month · <strong>{{ pageSpend }}</strong></div>
+    <div style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:7px;padding-top:7px;border-top:1px solid #f4f3f7;line-height:1.5">{{ receipt }}</div>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+    <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ safetyNote }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Home&quot;,&quot;Practice&quot;,&quot;Expertise&quot;,&quot;Network&quot;,&quot;Research&quot;],&quot;default&quot;:&quot;Home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const page = this.props.page || 'Home';
+
+    // ONE arithmetic for the before-estimate and the after-receipt.
+    const c4 = (n) => '$' + n.toFixed(4);
+    const tok = (n) => n.toLocaleString('en-US');
+    const RUN = {
+      Home:      { tin:14200, tout:1180, pin:0.293, pout:2.253, label:'practice brief across 9 clients', unit:'per daily brief', spend:'$2.04' },
+      Practice:  { tin:26400, tout:1620, pin:0.293, pout:2.253, label:'session prep for Meridian Labs', unit:'per session prep', spend:'$8.61' },
+      Expertise: { tin:31000, tout:2400, pin:0.293, pout:2.253, label:'article drafted from 9 transcripts', unit:'per long-form draft', spend:'$3.47' },
+      Network:   { tin:2400,  tout:440,  pin:0.351, pout:0.555, label:'double opt-in intro draft', unit:'per intro email', spend:'$0.38' },
+      Research:  { tin:58000, tout:1300, pin:0.440, pout:1.320, cachedIn:0.014, label:'first pass over a client history', unit:'first question', spend:'$4.10' }
+    };
+    const R = RUN[page] || RUN.Home;
+    const runCost = R.tin / 1e6 * R.pin + R.tout / 1e6 * R.pout;
+    const cachedCost = R.cachedIn ? (R.tin / 1e6 * R.cachedIn + R.tout / 1e6 * R.pout) : null;
+
+    const L33 = { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', price:'$0.293 / M in · $2.253 / M out', inline:'$0.293 / $2.253' };
+    const MIST = { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct', price:'$0.351 / M in · $0.555 / M out', inline:'$0.351 / $0.555' };
+    const FLASH = { name:'DeepSeek V4 Flash', id:'@cf/deepseek-ai/deepseek-v4-flash-0731', price:'$0.440 / M in · $1.320 / M out', inline:'$0.440 / $1.320' };
+
+    const MENUS = {
+      Home: { mode:'Composes the practice brief, triages inbound requests, ranks client activity by what needs an answer.',
+        safety:'Nothing here is outbound. Screening applies when you send a reply from a brief item.',
+        models:[
+          { ...L33, recommended:true, why:'Synthesis across your whole practice — nine clients, every thread, in one read.',
+            tags:['Best for: synthesis','Long context'], runEst:true },
+          { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro', inline:'$0.017 / $0.112',
+            why:'Near-free triage of requests and activity. Sorts what arrived; the 70B reads it.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Relevance ranking behind the brief\u2019s ordering.' }
+        ] },
+      Practice: { mode:'Assembles session prep, turns recordings into transcripts and follow-ups, drafts engagement proposals.',
+        safety:'Deliverables, follow-ups and proposals all leave for a client — every one screened before it sends.',
+        models:[
+          { ...L33, recommended:true, why:'Session prep and client deliverables. Reads a client\u2019s whole history and writes something you would sign your name to.',
+            tags:['Best for: prep & deliverables','Long context'], runEst:true },
+          { name:'Whisper Large v3 Turbo', id:'@cf/openai/whisper-large-v3-turbo', inline:'$0.0005 / audio min',
+            why:'Every session becomes a searchable transcript — a 60-minute call is $0.030.' },
+          { name:'Llama 3.1 8B Fast', id:'@cf/meta/llama-3.1-8b-instruct-fp8-fast', inline:'$0.045 / $0.384',
+            why:'Fast follow-ups and summaries. Cheap enough to run after every call.' },
+          { ...MIST, why:'Polished proposals and contract cover notes, where tone is the deliverable.' }
+        ] },
+      Expertise: { mode:'Drafts service descriptions in your own words, turns recurring session themes into articles, suggests positioning.',
+        safety:'Everything on this page is public-facing — profile copy, services and articles are all screened before publish.',
+        models:[
+          { ...L33, recommended:true, why:'Long-form articles and playbooks in your voice, drawn from how you actually explain things in sessions.',
+            tags:['Best for: long-form','Voice matching'], runEst:true },
+          { name:'GPT-OSS 20B', id:'@cf/openai/gpt-oss-20b', inline:'$0.200 / $0.300',
+            why:'Service descriptions at volume — commodity cost for copy you rewrite often.' },
+          { name:'FLUX 1 Schnell', id:'@cf/black-forest-labs/flux-1-schnell', inline:'$0.0000528 / tile',
+            why:'Instant cover imagery for articles and playbooks.' }
+        ] },
+      Network: { mode:'Drafts double opt-in intros from both sides\u2019 context, flags cold ties, matches your book to what you publish.',
+        safety:'Intros leave your practice and land in someone else\u2019s inbox — always screened first.',
+        models:[
+          { ...MIST, recommended:true, why:'Warm, context-aware intro drafting. An intro spends your reputation, so it should read like you wrote it.',
+            tags:['Best for: intro drafting','Tone'], runEst:true },
+          { name:'Gemma 4 26B', id:'@cf/google/gemma-4-26b-a4b-it', inline:'$0.100 / $0.300', why:'Cheap relationship summaries across a long thread.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Who-needs-my-expertise matching against your book.' }
+        ] },
+      Research: { mode:'Turns a question into a sourced brief; makes a client\u2019s whole document history queryable.',
+        safety:'Research stays private. Screening applies when a pull is attached to a client engagement.',
+        models:[
+          { ...FLASH, recommended:true, why:'Interrogate long documents cheaply. Prep against a client\u2019s whole history for the price of one careful read.',
+            tags:['Best for: client prep','Cached input'], cached:'Cached input $0.014 / M — 31× cheaper on follow-ups', runEst:true },
+          { name:'GPT-OSS 120B', id:'@cf/openai/gpt-oss-120b', inline:'$0.350 / $0.750', why:'Broad market and thesis work where breadth beats recall.' },
+          { name:'Moondream 3.1 9B', id:'@cf/moondream/moondream3.1-9B-A2B', inline:'$0.300 / $1.000', why:'Reads charts and figures inside PDFs.' },
+          { name:'Qwen3 Embedding 0.6B', id:'@cf/qwen/qwen3-embedding-0.6b', inline:'$0.012 in', why:'Semantic search across your library and playbooks.' }
+        ] }
+    };
+
+    const M = MENUS[page] || MENUS.Home;
+    const TOTAL = 18.60, PLAN = 40.00;
+    const estText = cachedCost
+      ? '≈ ' + c4(runCost) + ' ' + R.unit + ' · ' + c4(cachedCost) + ' each after'
+      : '≈ ' + c4(runCost) + ' ' + R.unit;
+
+    return {
+      page, modeNote: M.mode, safetyNote: M.safety,
+      receipt: 'Last run · ' + R.label + ' · ' + tok(R.tin) + ' in / ' + tok(R.tout) + ' out · ' + c4(runCost),
+      spend: '$' + TOTAL.toFixed(2), plan: '$' + PLAN.toFixed(2),
+      spendPct: String(Math.round(TOTAL / PLAN * 100)),
+      pageSpend: R.spend,
+      models: M.models.map(m => ({
+        name:m.name, id:m.id, why:m.why, price:m.price, cached:m.cached || null,
+        est: m.runEst ? estText : null, tags:m.tags || [], recommended:!!m.recommended,
+        priceInline: m.recommended ? null : (m.inline || null),
+        nameStyle:'font-size:' + (m.recommended ? '12px;font-weight:800' : '11.5px;font-weight:700') + ';letter-spacing:-.01em;min-width:0',
+        whyInk: m.recommended ? '#4a4553' : '#615c6e',
+        rowStyle:'border-radius:9px;padding:10px 11px;margin-bottom:7px;'
+          + (m.recommended ? 'border:1px solid #047857;background:#f2fdf7;box-shadow:0 0 0 2px rgba(5,150,105,.08)'
+                           : 'border:1px solid #ececf1;background:#fff')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

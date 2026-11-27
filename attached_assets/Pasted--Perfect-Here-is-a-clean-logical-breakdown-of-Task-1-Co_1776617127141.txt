@@ -1,0 +1,88 @@
+**✅ Perfect.** Here is a clean, logical breakdown of **Task 1: Company Profile System** into small, sequential steps.
+
+Each step is self-contained and can be prompted individually to Replit Agent. This avoids overwhelming the AI and ensures everything is built correctly.
+
+### Task 1 Breakdown: Company Profile System
+
+**Step 1: Database Schema**  
+Create the `company_profiles` table + relationship to users (multiple admins/founders per company).
+
+**Step 2: Backend API Layer**  
+Add endpoints to create, read, update, and manage company profiles.
+
+**Step 3: User-to-Company Linking**  
+Implement many-to-many relationship so multiple users can be linked as admins/founders to one company.
+
+**Step 4: Frontend Company Profile Page**  
+Build `/company-profile.html` with all the fields shown in your requirements.
+
+**Step 5: Sidebar & Navigation Integration**  
+Add “Company Profile” link in the sidebar for relevant roles.
+
+**Step 6: Polish & Role-Based Access**  
+Add logo upload (R2), form validation, and visibility rules.
+
+---
+
+### Recommended Order
+
+Start with **Step 1** (Database). Then proceed one step at a time.
+
+Here is the **ready-to-copy prompt for Step 1** (the most important first step):
+
+**Paste this into Replit Agent:**
+
+```
+You are the senior database engineer for Axal StudioOS. Create the foundation for a dedicated **Company Profile System** for existing profitable/operational private companies.
+
+Exact requirements:
+
+1. **New D1 Table**
+   - Create table `company_profiles` with these columns:
+     - id (PK)
+     - company_name (text)
+     - stage (text: 'Seed', 'Series A', 'Series B', 'Profitable', 'Growth', etc.)
+     - revenue_range (text: '$0-1M', '$1-5M', '$5-20M', '$20M+')
+     - employee_count (integer)
+     - current_products (text or json)
+     - international_presence (json array of countries)
+     - expansion_goals (json)
+     - logo_url (text - R2 key)
+     - website (text)
+     - linkedin_url (text)
+     - description (text)
+     - created_at, updated_at
+
+2. **Relationship**
+   - Create junction table `user_company_links`:
+     - id (PK)
+     - user_id (FK to users.id)
+     - company_id (FK to company_profiles.id)
+     - role_in_company (text: 'Founder', 'Admin', 'Advisor')
+     - is_primary_admin (boolean)
+
+3. **Migration**
+   - Make the migration idempotent (only create tables if they don't exist).
+   - Add indexes on frequently queried fields.
+
+Build this step-by-step:
+1. First create the two new D1 tables with proper foreign keys and indexes.
+2. Then run the migration.
+
+After each step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Would you like me to prepare the **Step 2 prompt** (Backend API) right now so you can continue immediately after Step 1 is done?  
+
+Or do you want me to give you all 6 steps as separate prompts at once?
+
+Just reply with your preference:
+- “Give me Step 2 prompt”  
+- “Give me all steps as separate prompts”  
+- Or any adjustment you want.
+
+Let me know how you want to proceed.

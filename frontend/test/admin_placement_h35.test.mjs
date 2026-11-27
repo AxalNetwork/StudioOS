@@ -1,0 +1,259 @@
+/**
+ * The H35 placement map answers for every legacy admin console (D283).
+ *
+ * `frontend/src/lib/adminPlacement.js` says where each old sidebar row, each
+ * Admin Console tab and the parked X row now lives. This guard holds it to
+ * three things it cannot be trusted to say about itself: that it covers the
+ * whole legacy set and nothing outside it, that every route it names is
+ * registered, and that its `hqOnly` flags restate App.jsx rather than a
+ * belief about App.jsx.
+ *
+ * THE LEGACY ROWS ARE PINNED HERE, NOT READ FROM `SIDEBAR_GROUPS`. D286
+ * replaces `SIDEBAR_GROUPS.admin` with S20's eight rows, and the map has to
+ * keep answering for the fifty that were there before — reading the live
+ * array would make this guard shrink its own question the day the sidebar
+ * changes. Fifty routes, copied once, is the question.
+ *
+ * The tabs ARE read live, from the redirect map that retired the Admin
+ * Console (`ADMIN_TAB_MOVES`, D938): a tab added there is a new console with
+ * no placement, which is exactly what this guard should name. Integration
+ * keys and GitHub Sync are in that map only to forward; they left the
+ * console for HQ's own row before the map was drawn.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  ADMIN_PLACEMENT, UNPLACED, TIERS, FORMS, HQ_ROWS, ADMIN_ROWS, TOP_BAR,
+  X_PARKED_REASON, placedOn, routePath,
+} from '../src/lib/adminPlacement.js';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
+import { ADMIN_TAB_MOVES } from '../src/pages/admin/LegacyContractsRedirect.jsx';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
+const APP = readRoutesSource();
+const CONSOLE_PAGES = read('frontend/src/pages/admin/ConsolePages.jsx');
+const SIDEBAR_RAW = read('frontend/src/sidebarConfig.js');
+
+/* ------------------------------------------------------------------ *
+ * The question: the fifty rows, the tabs, and X
+ * ------------------------------------------------------------------ */
+
+const LEGACY_ROWS = [
+  // home
+  '/studio', '/email',
+  // admin
+  '/admin', '/admin/due-diligence', '/admin/events',
+  '/admin/jobs', '/admin/circles', '/admin/advisor-cohorts', '/admin/exploring',
+  '/admin/lp-applications', '/monitoring', '/admin/telegram', '/admin/articles',
+  '/admin/publications', '/admin/partners', '/admin/refer-earn', '/admin/team',
+  '/admin/my-licence', '/admin/trash',
+  // studio. '/scoring' and '/portfolio/risk-matrix' stood here: the owner
+  // removed both pages on 2026-10-20, so there is no console left to place.
+  // '/advisory' stood here: the owner removed it (#2341).
+  '/pipeline',
+  // '/market-intel' and '/signals' stood here. D670 retired both pages; they
+  // only redirect to /research now, so there is no console left to place.
+  // '/matches' (AI Matches) stood here. The page was deleted, not moved, so
+  // there is no console left to place and no route an exception could name.
+  '/deals',
+  // capital. '/capital', '/liquidity', '/portfolio/reserves' and '/watchlist'
+  // stood here, removed with their pages by the owner on 2026-10-20.
+  // '/portfolio/coverage' stood here, removed with its page by the owner on
+  // 2026-10-21 (#2337); the address only forwards to /delivery/health now.
+  // '/legal-capital' stood here too: the owner removed it (#2354); its address
+  // only forwards to /raise/legal now.
+  '/portfolio/health',
+  // '/compliance' stood here; D1384 (#3692) moved it into Calendar's
+  // Compliance layer, and the address only forwards to /calendar?layer=compliance.
+  '/portfolio/waterfall', '/incorporate',
+  // network
+  // '/services' and '/needs' stood here, removed with their pages by the owner
+  // on 2026-10-21 (#2338); both addresses only forward now.
+  '/network', '/my/jobs', '/partner/insights',
+  '/partner/office-hours', '/comarketing',
+  // more
+  '/incorporate/cofounder-agreement', '/spinout-lab/83b', '/perks',
+];
+
+/** The tab values, read out of the redirect map itself rather than assumed. */
+const LEFT_FOR_HQ = ['integration-keys', 'github'];
+const TABS = Object.keys(ADMIN_TAB_MOVES).filter((t) => !LEFT_FOR_HQ.includes(t));
+
+/** The parked row is present in the text and commented out — the reachability guard's own reading. */
+const X_ROW_PARKED = SIDEBAR_RAW.split('\n').some((l) => /^\s*\/\/\s*\{\s*to: '\/admin\/x'/.test(l));
+
+/* ------------------------------------------------------------------ *
+ * App.jsx, read for the two facts the map restates
+ * ------------------------------------------------------------------ */
+
+/** path → whether its element is wrapped in `hqOnly(`. */
+const ROUTES = new Map();
+for (const seg of APP.split('<Route').slice(1)) {
+  const p = /^\s*path="([^"]+)"/.exec(seg);
+  if (!p) continue;
+  const line = seg.slice(0, seg.indexOf('\n'));
+  ROUTES.set(p[1], /\bhqOnly\(/.test(line));
+}
+
+const KEYS = ADMIN_PLACEMENT.map((e) => e.key);
+const byKey = (k) => ADMIN_PLACEMENT.find((e) => e.key === k);
+const entryFor = (legacyRoute) => byKey(legacyRoute) || UNPLACED.find((u) => u.key === legacyRoute);
+
+/* ------------------------------------------------------------------ *
+ * Tests
+ * ------------------------------------------------------------------ */
+
+test('the question is the size it was measured at', () => {
+  // Fifty live rows on the day the map was drawn, fourteen tabs, one parked
+  // row. A shorter list here means the guard is asking less than it did —
+  // with recorded exceptions: /matches, the AI Matching Engine, was deleted
+  // outright, and D670 retired /market-intel and /signals, which is the one
+  // way a legacy console leaves the question. The owner's removals of
+  // 2026-10-20 took six more (Scoring, Risk Matrix, Capital, Liquidity,
+  // Reserves, Watchlist), deleted with their pages, and #2324 took Network
+  // Effects (#2297 §3), whose address now redirects to /network. On 2026-10-21
+  // the owner removed Advisory (#2341), Portfolio Coverage, Service Catalogue,
+  // Needs Board (#2337, #2338), and the Assessment editor (direct request),
+  // and /legal-capital (#2354, #2297 §3) forwards to /raise/legal. D1384
+  // (#3692) moved /compliance into Calendar's Compliance layer.
+  assert.equal(LEGACY_ROWS.length, 32);
+  assert.ok(!ADMIN_PLACEMENT.some((row) => row.key === '/admin/best-fit'), 'retired Best-Fit has no placement');
+  assert.equal(new Set(LEGACY_ROWS).size, 32, 'a legacy route is listed twice');
+  // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
+  // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
+  // D708's Bank accounts and D815's Product testing joined.
+  assert.ok(TABS.length >= 14, `the redirect map holds ${TABS.length} tabs; the map was drawn for 14`);
+  assert.ok(X_ROW_PARKED, 'the commented-out /admin/x row is gone from sidebarConfig.js');
+  assert.ok(ROUTES.size >= 300, `App.jsx parsed to ${ROUTES.size} routes — the route reader is broken`);
+  // The floor, so an empty map cannot pass: rows + tabs + X, minus the
+  // recorded exceptions.
+  const expected = LEGACY_ROWS.length + TABS.length + 1 - UNPLACED.length;
+  assert.equal(ADMIN_PLACEMENT.length, expected,
+    `the map holds ${ADMIN_PLACEMENT.length} entries; the question has ${expected}`);
+});
+
+test('every legacy row, every tab and X has exactly one placement, or a recorded reason for none', () => {
+  // The exception list is pinned by value: a new exception is a decision, and
+  // a decision is written here, not appended in the module.
+  assert.deepEqual(UNPLACED.map((u) => u.key), ['/admin']);
+  for (const u of UNPLACED) {
+    assert.ok(u.why && u.why.length > 20, `${u.key} is unplaced without a reason`);
+    assert.ok(!byKey(u.key), `${u.key} is both placed and on the exception list`);
+  }
+  const missing = [];
+  for (const route of LEGACY_ROWS) if (!entryFor(route)) missing.push(route);
+  for (const value of TABS) if (!byKey(`tab:${value}`)) missing.push(`/admin?tab=${value}`);
+  if (!byKey('/admin/x')) missing.push('/admin/x');
+  assert.deepEqual(missing, [], 'these legacy consoles have no placement on the map and no recorded exception');
+});
+
+test('nothing is placed twice, and nothing outside the legacy set is placed at all', () => {
+  const dup = KEYS.filter((k, i) => KEYS.indexOf(k) !== i);
+  assert.deepEqual(dup, [], 'these keys appear more than once');
+  const routes = ADMIN_PLACEMENT.map((e) => e.route);
+  const dupRoute = routes.filter((r, i) => routes.indexOf(r) !== i);
+  assert.deepEqual(dupRoute, [], 'these routes are placed under two keys');
+  const universe = new Set([...LEGACY_ROWS, '/admin/x', ...TABS.map((t) => `tab:${t}`)]);
+  const stray = KEYS.filter((k) => !universe.has(k));
+  assert.deepEqual(stray, [], 'these entries answer for a console that was never a legacy row or tab');
+  for (const e of ADMIN_PLACEMENT) {
+    const seen = new Set([`${e.tier}·${e.row}`]);
+    for (const a of e.also || []) {
+      const at = `${a.tier}·${a.row}`;
+      assert.ok(!seen.has(at), `${e.key} is placed on ${at} twice`);
+      seen.add(at);
+    }
+  }
+});
+
+test('every placed route is registered in App.jsx, and every tab opens the page its old address forwards to', () => {
+  const unregistered = [];
+  for (const e of [...ADMIN_PLACEMENT, ...UNPLACED]) {
+    if (!ROUTES.has(routePath(e.route))) unregistered.push(`${e.key} → ${e.route}`);
+  }
+  assert.deepEqual(unregistered, [], 'these placements open a route App.jsx does not register');
+  // D938: no placement deep-links an /admin tab any more; each tab's route is
+  // the address `/admin?tab=<value>` forwards to.
+  const stale = ADMIN_PLACEMENT.filter((e) => /^\/admin\?/.test(e.route)).map((e) => e.key);
+  assert.deepEqual(stale, [], 'these placements still open the retired console');
+  for (const e of ADMIN_PLACEMENT.filter((x) => x.kind === 'tab')) {
+    // A forward may open one tab of the page (Advisors & Partners' Deck roster, D972).
+    const to = ADMIN_TAB_MOVES[e.tabValue].to;
+    assert.ok(to === e.route || to.startsWith(`${e.route}/`), `${e.key} opens ${e.route} and its old address forwards to ${to}`);
+  }
+});
+
+test('hqOnly restates App.jsx: derived from the hqOnly( wrappers, never believed', () => {
+  const disagree = [];
+  for (const e of [...ADMIN_PLACEMENT, ...UNPLACED]) {
+    const derived = ROUTES.get(routePath(e.route));
+    if (e.hqOnly !== derived) disagree.push(`${e.key}: map says ${e.hqOnly}, App.jsx says ${derived}`);
+  }
+  assert.deepEqual(disagree, [], 'these hqOnly flags disagree with the route table');
+  // The derivation itself has teeth: the elevation-only routes read as such.
+  assert.equal(ROUTES.get('/admin/licences'), true);
+  assert.equal(ROUTES.get('/admin/x'), true);
+  assert.equal(ROUTES.get('/monitoring'), false, '/monitoring is guard([admin]) with no elevation — H35 places it on HQ · Platform regardless');
+});
+
+test('every placement names a real tier, a real row of that tier, and a real form', () => {
+  const rowsOf = { HQ: [...HQ_ROWS, TOP_BAR], Admin: [...ADMIN_ROWS, TOP_BAR] };
+  const check = (key, p) => {
+    assert.ok(TIERS.includes(p.tier), `${key}: tier ${p.tier}`);
+    if (p.tier === 'HQ' || p.tier === 'Admin') {
+      assert.ok(rowsOf[p.tier].includes(p.row), `${key}: ${p.tier} has no row ${p.row}`);
+      assert.ok(FORMS.includes(p.form) && p.form !== 'palette', `${key}: form ${p.form} on a shell row`);
+      if (p.form === 'top bar') assert.equal(p.row, TOP_BAR, `${key}: a top-bar placement sits on the top bar, not a row`);
+      else assert.notEqual(p.row, TOP_BAR, `${key}: the top bar takes buttons, not a ${p.form}`);
+    }
+    // D563 retired the launcher; its pages are indexed by the palette only.
+    if (p.tier === 'palette') assert.deepEqual([p.row, p.form], [null, 'palette'], `${key}: a palette-only entry has no row`);
+    if (p.tier === 'parked') assert.deepEqual([p.row, p.form], [null, null], `${key}: a parked entry is nowhere`);
+  };
+  for (const e of ADMIN_PLACEMENT) {
+    check(e.key, e);
+    for (const a of e.also || []) {
+      check(`${e.key} (also)`, a);
+      assert.ok(a.tier === 'HQ' || a.tier === 'Admin', `${e.key}: a second placement is on a shell`);
+    }
+    if (e.tier === 'palette') assert.ok(e.group, `${e.key}: a palette-only entry names its group`);
+  }
+  // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
+  // and D670 retired Market Intelligence and Signals.
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 13, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, #2324 Network Effects, #2341 Advisory, #2337 and #2338 three more, #2354 Legal & Capital, and D1384 moved the Compliance Calendar into Calendar');
+});
+
+test('the three decided placements hold: Wellbeing, X, Trash', () => {
+  // The coordinator's decision, quoted: "Wellbeing goes to Admin · Community."
+  const wellbeing = byKey('tab:wellbeing');
+  assert.ok(wellbeing, 'Wellbeing has no placement');
+  assert.deepEqual([wellbeing.tier, wellbeing.row], ['Admin', 'Community']);
+  assert.ok(placedOn('Admin', 'Community').some((e) => e.key === 'tab:wellbeing'));
+
+  // X is parked, in H35's words, and its row stays commented out.
+  const x = byKey('/admin/x');
+  assert.deepEqual([x.tier, x.row, x.form, x.how], ['parked', null, null, X_PARKED_REASON]);
+  assert.ok(!ADMIN_PLACEMENT.some((e) => e.tier !== 'parked' && e.route === '/admin/x'), 'X has been given a home');
+
+  // "The Trash proposal is not adopted: /admin/trash gets a literal door on
+  // the Admin Console." Not HQ · Security. Since D938 the door is an item of
+  // All accounts' More menu, a literal `to` the reachability walk reads.
+  const trash = byKey('/admin/trash');
+  assert.equal(trash.tier, 'Admin', 'Trash is placed on the Admin shell, not on HQ · Security');
+  assert.ok(!(trash.also || []).some((a) => a.row === 'Security'), 'the Security proposal crept back in as a second placement');
+  const accounts = CONSOLE_PAGES.slice(CONSOLE_PAGES.indexOf('export function AllAccountsPage('), CONSOLE_PAGES.indexOf('export function KycPage('));
+  assert.ok(/<HeaderMenuItem to="\/admin\/trash"/.test(accounts),
+    'All accounts\' More menu no longer carries a literal <HeaderMenuItem to="/admin/trash">; the door is gone');
+});
+
+test('Email is a top-bar button on both shells', () => {
+  const m = byKey('/email');
+  assert.deepEqual([m.tier, m.row, m.form], ['Admin', TOP_BAR, 'top bar']);
+  assert.ok((m.also || []).some((a) => a.tier === 'HQ' && a.row === TOP_BAR && a.form === 'top bar'));
+});

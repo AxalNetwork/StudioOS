@@ -1,0 +1,12 @@
+{
+  "GET /api/imports/angellist/template.csv": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/imports/portfolio/template.csv": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

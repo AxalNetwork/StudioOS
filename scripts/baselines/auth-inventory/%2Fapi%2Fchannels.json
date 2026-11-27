@@ -1,0 +1,29 @@
+{
+  "GET /api/channels/whatsapp/webhook": {
+    "review": "no_gate_found",
+    "kind": "webhook",
+    "state": "unreviewed"
+  },
+  "POST /api/channels/telegram/webhook": {
+    "review": "no_gate_found",
+    "kind": "webhook",
+    "state": "unreviewed"
+  },
+  "POST /api/channels/whatsapp/captures/:uid/consent": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/channels/whatsapp/link/:uid/confirm": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_cross_tenant_d4570.test.ts",
+    "note": "Scoped in its service by the caller's id; a member who is not a party is refused 404 and nothing changes."
+  },
+  "POST /api/channels/zoom/webhook": {
+    "review": "no_gate_found",
+    "kind": "webhook",
+    "state": "unreviewed"
+  }
+}

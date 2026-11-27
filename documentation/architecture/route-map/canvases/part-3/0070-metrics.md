@@ -1,0 +1,8 @@
+| Metrics | founder | `/build/kpi` (#2336: `/build/metrics` (retired D2319) forwards here; `MetricsPage` is deleted, with its hand entry, Stripe import and D463 card) | `/build/kpi` → `FounderBuildKpi` | {backend} | UPGRADE | Shipped page is one tab: snapshot entry form + history table + Stripe import + runway summary. Canvas adds three more: **Investor update** composer (narrative, recipients, send-test-to-myself, send log), **Board pack** builder (pages, quarter summary, "what the board should decide this meeting"), **Cadence** (reporting rhythm, reminders, consistency score, overdue flag), plus cohort benchmarking and variance/sensitivity on the KPI board. No worker endpoints exist for packs, cadence reminders or a send log. |
+
+backend:
+- `email.ts`
+- `financials.ts`
+- `metrics.ts`
+- `portfolio_updates.ts`
+- `progress.ts`

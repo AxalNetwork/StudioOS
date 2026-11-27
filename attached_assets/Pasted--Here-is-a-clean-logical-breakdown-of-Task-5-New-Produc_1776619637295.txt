@@ -1,0 +1,75 @@
+**✅ Here is a clean, logical breakdown of Task 5: New Product / Product Extension Studio**
+
+This feature allows **existing profitable companies** to use your Studio Ops and Pipeline Board to build new products or features **without** creating a new legal entity (much faster and lighter than a full spin-out).
+
+### Task 5 Breakdown: New Product / Product Extension Studio
+
+**Step 1: Database Schema**  
+Add support for a new “Product Extension” track type (no new company/entity required).
+
+**Step 2: Backend Logic**  
+Define the rules, stages, and decision gates specifically for Product Extension projects.
+
+**Step 3: Update Pipeline Board**  
+Make the existing Pipeline Board support the new “Product Extension” track alongside Spin-Out and Growth Sprint.
+
+**Step 4: Studio Ops Adaptation**  
+Reuse and extend Studio Ops workflows for product development (faster, no incorporation steps).
+
+**Step 5: Frontend Interface**  
+Build the UI for creating and managing Product Extension projects (with clear “Faster Path” messaging).
+
+**Step 6: Integration & Polish**  
+Connect everything to existing company profiles, voting, partner matching, and notifications.
+
+---
+
+### Ready-to-copy prompt for **Step 1** (Database Schema)
+
+This is the foundational step. Start here.
+
+**Paste this into Replit Agent:**
+
+```
+You are the senior database engineer for Axal StudioOS. Add support for a new **New Product / Product Extension Studio** track for existing companies (faster path, no new legal entity required).
+
+Exact requirements for Step 1:
+
+1. **Extend existing tables**
+   - Add column `track_type` to the `deals` / `projects` table with new value: 'product_extension'
+
+2. **New table for Product Extensions**
+   - Create `product_extensions` table:
+     - id (PK)
+     - deal_id (FK to deals.id)
+     - parent_company_id (FK to company_profiles.id)
+     - new_product_name (text)
+     - product_description (text)
+     - target_markets (json array)
+     - existing_product_link (text, optional)
+     - development_goals (json)
+     - created_at, updated_at
+
+3. **Migration**
+   - Make the migration idempotent (only create if not exists).
+   - Add indexes on track_type and parent_company_id.
+
+Build this step-by-step:
+1. First extend the deals/projects table with the new track_type value.
+2. Then create the product_extensions table.
+3. Finally run the migration.
+
+After each step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Would you like me to prepare **Step 2 prompt** (Backend Logic) right now, or do you want to complete Step 1 first and then continue?
+
+Just reply with:
+- “Give me Step 2 prompt”  
+- or “Continue with Step 1 first”
+
+I’m ready whenever you are.

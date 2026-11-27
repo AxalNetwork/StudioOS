@@ -1,0 +1,55 @@
+#28 - RAISE Workspaces Refactor
+What & Why
+The founder sidebar's RAISE section currently lists 10 separate items (Pitch Deck, Pitch Deck Reviewer, Financial Model, Cap Table, Raise Pipeline, Legal & Capital, Incorporate, Co-Founder Agreement, Compliance Calendar, 83(b) Tracker). This is a pure information-architecture + UI-routing refactor to collapse those into three focused workspaces — Pitch, Capital, and Legal Engine — that compose the existing pages without changing any business logic, data fetching, or schemas.
+This follows the pattern already established by ExecutionPage.jsx (Task #14), which merged Projects/Pipeline/Roadmap into a single /execution workspace by reusing each page via an embedded prop that suppresses its own duplicate title. Reuse that same approach here.
+Done looks like
+* Under RAISE in the founder sidebar there are exactly three items: Pitch (/raise/pitch), Capital (/raise/capital), Legal Engine (/raise/legal-engine), with icons consistent with the previous entries.
+* Pitch workspace: one route exposing two modes — "Edit Deck" (existing Pitch Deck editor) and "Review" (existing Pitch Deck Reviewer, with its AI review/checklist/scoring intact) — as tabs. Old founder deep links to the deck and reviewer land on the right sub-tab.
+* Capital workspace: one route with three tabs/sub-routes — Financial Model (default), Cap Table, Raise Pipeline — each reusing its existing page component. URL supports sub-selection (e.g. /raise/capital/model, /raise/capital/cap-table, /raise/capital/pipeline).
+* Legal Engine workspace: a dashboard-style page with a jurisdiction header ("Change jurisdiction" control wired to existing state if present, otherwise stubbed with TODOs) and four cards — Incorporation, Founders & Agreements, Compliance & Filings Calendar, Equity Elections (83(b) + equivalents). Each card shows a short summary + status pill and opens/embeds the existing detail component.
+* Equity Elections keeps all existing US 83(b) behavior, but is structured (type/enum + TODOs) so other election types (UK s.431, AU ESS, etc.) can plug in later — not implemented now.
+* Old routes keep working: founder-exclusive legacy paths redirect to the new workspace + correct sub-tab; the current /raise (Raise Pipeline) redirects into the Capital pipeline tab.
+* All existing features, props, hooks, API calls, and data behave exactly as before.
+Out of scope
+* Any change to business logic, data fetching, API endpoints, or schemas.
+* Implementing non-US equity election types (UK s.431, AU ESS) — only the extensible structure + TODOs.
+* Changing the investor/partner "Capital & Legal" sidebar group or their standalone pages.
+* Backend / Cloudflare Worker changes.
+Steps
+1. Add the three workspace routes — Introduce /raise/pitch, /raise/capital (+ its sub-routes), and /raise/legal-engine in the router, each guarded for the same roles/tiers as the pages they compose. Follow the existing lazy-import + guard(...) conventions.
+2. Pitch workspace — Build a Pitch page that renders the existing Pitch Deck editor and Pitch Deck Reviewer as "Edit Deck" / "Review" tabs, reusing both components via an embedded-style prop so a single workspace title governs. Preserve all their props/hooks/API calls unchanged. Deep-link the active tab from the URL. Respect the existing growth tier gate on the deck editor.
+3. Capital workspace — Build a Capital page that mounts Financial Model, Cap Table, and Raise Pipeline in a shared tabbed/horizontal-nav layout, reusing each page component in embedded mode. Financial Model is the default tab. Support sub-route selection for each tab.
+4. Legal Engine workspace — Build the dashboard-style page: jurisdiction header + "Change jurisdiction" control (wire to existing store if one exists, else stub with TODOs), and the four cards. Each card reuses the existing detail component (Incorporate, Co-Founder Agreement, Compliance Calendar, 83(b)) and derives a Not Set Up / In Progress / Complete status pill from existing data where available (heuristic/placeholder with TODOs otherwise), reusing existing badge components where possible.
+5. Equity Elections abstraction — In the Equity Elections card, keep the current 83(b) tracker logic intact but introduce a lightweight election-type structure (type/enum) with TODO comments marking where UK/AU/etc. would plug in. No new jurisdictions implemented.
+6. Adapt reused pages for embedding — Where a composed page doesn't already accept an embedded prop (the deck, reviewer, financials, cap table, pipeline, and legal detail pages), add one that suppresses only its own duplicate page title/explainer — mirroring how ProjectsPage/PipelinePage/RoadmapPage already do it. Do not change any other behavior.
+7. Slim the founder sidebar — Replace the 10 founder RAISE items with the three new entries, reusing existing icons. Leave the investor/partner "Capital & Legal" group and all other roles untouched.
+8. Redirects & dead-route cleanup — Add redirects so founder-exclusive legacy routes (Pitch Deck, Pitch Deck Reviewer) resolve to /raise/pitch with the right tab, and the current /raise (Raise Pipeline) resolves into the Capital pipeline tab. IMPORTANT: routes shared with investor/partner personas (Financial Model, Cap Table, Legal & Capital) must keep working as standalone pages for those personas — do not hard-redirect shared routes; only remove them from the founder sidebar. No dead routes should remain.
+9. Tests — Add Playwright e2e coverage (the only test runner in this repo) for: the three new routes render, tab/card navigation within each workspace, and the redirect behavior from old founder routes. Keep them consistent with the existing frontend/tests setup.
+10. Changelogs — Per the repo rule, add a line to BOTH CHANGELOG.md (technical) and frontend/public/CHANGELOG-user.md (plain-English) describing the slimmer RAISE navigation.
+Architectural constraints
+* Reuse the embedded-prop composition pattern from ExecutionPage.jsx; do not fork or rewrite the underlying pages.
+* Keep prod (Worker/D1) and dev (FastAPI) untouched — this is frontend-only.
+* Preserve all requiredTier gates (growth on Pitch Deck; studio on Legal & Capital, Co-Founder Agreement, 83(b)).
+* Follow existing dark-mode conventions (dark: variants) on any new wrapper markup.
+Relevant files
+* frontend/src/sidebarConfig.js:189-200
+* frontend/src/App.jsx:1226-1234,1291,1360,1369
+* frontend/src/pages/ExecutionPage.jsx
+* frontend/src/pages/PitchDeckPage.jsx
+* frontend/src/pages/DeckReviewerPage.jsx
+* frontend/src/pages/FinancialsPage.jsx
+* frontend/src/pages/CapTablePage.jsx
+* frontend/src/pages/RaisePipelinePage.jsx
+* frontend/src/pages/LegalPage.jsx
+* frontend/src/pages/LegalCapitalPage.jsx
+* frontend/src/pages/IncorporatePage.jsx
+* frontend/src/pages/CofounderAgreementPage.jsx
+* frontend/src/pages/CompliancePage.jsx
+* frontend/src/pages/Section83bPage.jsx
+* frontend/src/pages/ProjectsPage.jsx:23
+* frontend/src/pages/PipelinePage.jsx:16
+* frontend/src/pages/RoadmapPage.jsx:26
+* frontend/src/components/PageExplainer.jsx
+* frontend/src/components/IncorporationStatusBadge.jsx
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

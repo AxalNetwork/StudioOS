@@ -1,0 +1,356 @@
+/**
+ * D4592 (#4592, R2-05) — fair eligible-work discovery extends D1528's agent
+ * sweep. The caller is every five minutes (`UTC minute % 5 === 1`), not every
+ * minute. A durable KV keyset cursor visits ready work in agent-id order;
+ * resetting or losing it safely starts at the lowest id because this query
+ * filters unready work before it applies its bound. Admission still belongs
+ * to the scope runtime, which rechecks every safety and spending gate.
+ *
+ * D1528 (#3847, E3 of #3742) — the agent sweep, from the five-minute
+ * dispatcher in `index.ts`: on `now.getUTCMinutes() % 5 === 1`, under the
+ * existing `cron:queue:lease`, whenever team agents are on (D4387: the cap
+ * resume below; before it, only while the engine was enabled), and NOT gated
+ * on `hqCadences` (each deployment sweeps its own rows). No new cron line.
+ *
+ * It has two independent bounded lanes, in this order:
+ *   1. at most `RESEND_MAX` (20) runs still `admitted` 5 minutes after
+ *      admission, whose queue message was lost or never sent, are sent again
+ *      (a redelivery is a no-op);
+ *   2. at most `SWEEP_MAX` (60) new runs, from a bounded keyset scan of
+ *      genuinely ready work (D7074: one task per free lane of an agent, so
+ *      an agent with sub-agents is offered as many as it has lanes free). A per-scope candidate cap means one busy scope
+ *      cannot consume every inspection in a rotation: 4 for a fixed team; for an elastic team under HQ's
+ *      ceiling, what admission would let it start, at most 30 (D7077 part 2). With AGENT_AUTONOMY
+ *      `self_start` and the engine `on`, each candidate is offered through
+ *      its scope's object. With `manual` (the default) this step admits
+ *      nothing.
+ * Halted, it does neither.
+ *
+ * D4387 (#4387, E8): before either, and before the halt and engine checks,
+ * it resumes the agents paused at their monthly cap in an earlier UTC month
+ * (`resumeCapPauses`, at most 60 a sweep). That is a status change and admits
+ * no run, so it is safe while halted or off; holding it back would leave a
+ * cap-paused agent stuck for a month after the engine came back, and the
+ * sponsor's own run (`agentRun`) does not need the engine at all. `index.ts`
+ * therefore calls this sweep whenever team agents are on, and the engine's
+ * own steps still stop at the checks below. A failed resume read is logged
+ * and the sweep goes on. It never resumes any other pause reason.
+ *
+ * D1530 (#3849, E5): `sweepAgentDuties`, called from the same block, claims
+ * the duties that are due (claim before act, `services/agents/duties.ts`).
+ * Each claim makes a task for its agent and tells the sponsor; with
+ * `self_start` and the engine `on` it also asks the scope's object to admit
+ * that task. Halted or off, it claims nothing, so a due duty waits for the
+ * engine rather than being skipped.
+ */
+import type { Env } from '../types';
+import type { AgentRow } from '../services/agents/teams';
+import { scopeOfRow } from './engine';
+import { ELASTIC_RUNS_MAX, capacityCeilings, lanesOffered } from './capacity';
+import { autonomy, engineMode, haltedAll, type AgentRuntime } from './runtime';
+import { enqueueAgentRun, recordRepairMetrics, repairExhaustedRun } from './agentQueue';
+import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agents/duties';
+import { notify } from '../services/notify';
+import { purgeExpired } from '../services/agents/memory';
+import { resumeCapPauses } from '../services/agents/sponsor';
+import { pruneModelBuckets } from './modelBudget';
+
+/**
+ * D7077 (#7077): the sweep's bounds stay named here. Raising the global ones waits on #5573's
+ * benchmark (sizing). D7077 part 2: the per-scope bound follows an elastic team's ceiling
+ * (`DISCOVERY_ELASTIC_SCOPE_MAX` below); a fixed team keeps `DISCOVERY_PER_SCOPE_MAX`.
+ */
+export const SWEEP_MAX = 60;
+/** Resends are repair traffic; they never spend the new-work admission budget. */
+export const RESEND_MAX = 20;
+/** Bound database and runtime work even when every candidate is refused at admission. */
+export const DISCOVERY_SCAN_MAX = 120;
+/** One saturated scope never crowds all other scopes out of a scan. A fixed team's bound, as before. */
+export const DISCOVERY_PER_SCOPE_MAX = 4;
+/**
+ * D7077 part 2 — an elastic team (D7074) is offered what admission would let it start: its parallel
+ * limit (`parallelLimit`: its own `elastic_max_runs`, else HQ's ceiling, never above HQ's) less the
+ * runs it has live. Never more than this, half of `SWEEP_MAX`, so one elastic team takes at most half
+ * a sweep's admissions and a quarter of its inspections, and every other scope is still reached.
+ */
+export const DISCOVERY_ELASTIC_SCOPE_MAX = SWEEP_MAX / 2;
+export const RESEND_AFTER_MIN = 5;
+const READY_CURSOR_KEY = 'agents:sweep:ready-cursor:v1';
+
+export type SweepDeps = { enqueue: (env: Env, runUid: string) => Promise<void>; runtime: () => Promise<AgentRuntime> };
+
+type ReadyCandidate = AgentRow & { task_id: number; task_created_at: string };
+/**
+ * `scanned` says whether discovery ran this sweep. A sweep that stops at the halt, the engine
+ * being off or paused, or manual autonomy records `eligible` 0 without having looked, so the
+ * platform capacity read (D4559 part 3) trusts the eligible count and age only from a scan.
+ */
+type SweepStats = { examined: number; eligible: number; refused: number; oldestEligibleAgeSeconds: number | null; cursorReset: boolean; scanned: boolean };
+
+/** A malformed or unavailable cursor is equivalent to cursor loss: start a complete rotation safely at zero. */
+async function readyCursor(env: Env): Promise<number> {
+  try {
+    const raw = await env.RATE_LIMITS.get(READY_CURSOR_KEY);
+    return raw && /^\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : 0;
+  } catch {
+    console.warn('[agents] sweep_cursor_unreadable');
+    return 0;
+  }
+}
+
+async function saveReadyCursor(env: Env, agentId: number) {
+  try { await env.RATE_LIMITS.put(READY_CURSOR_KEY, String(agentId)); }
+  catch { console.warn('[agents] sweep_cursor_unwritable'); }
+}
+
+/**
+ * Ready tasks per agent, already ready by the same dependency rule `isReady`
+ * enforces later: one for each lane the agent has free. D7074: an agent holds
+ * `lanes_per_agent` live runs (its scope's setting, never above `lanesCeiling`,
+ * HQ's), so an agent with a run live is still a candidate while a lane is
+ * free. With one lane, which is every scope until HQ offers sub-agents, this is
+ * one task for an agent with no live run, as before. This is discovery only:
+ * `AgentRuntime.admit` repeats every authorization, halt, scope-cap, financial
+ * and single-flight check.
+ *
+ * D7077 part 2: each scope's bound (`scope_bound`) is read in this one
+ * statement. A fixed team, and an elastic team while HQ offers no elastic
+ * ceiling (`elasticCeiling` null, every database until HQ sets one), keeps
+ * `DISCOVERY_PER_SCOPE_MAX`. An elastic team under a ceiling gets
+ * `parallelLimit` less its live runs, at most `DISCOVERY_ELASTIC_SCOPE_MAX`.
+ * `scope_live` is empty while no ceiling is offered, so the common path adds
+ * no work. The ceiling is read here, never copied into a team's row (D7074).
+ */
+async function readyAfter(env: Env, afterAgentId: number, lanesCeiling: number, elasticCeiling: number | null): Promise<ReadyCandidate[]> {
+  const rows = await env.DB.prepare(
+    `WITH bounds AS (
+       SELECT ? AS elastic_ceiling, ? AS elastic_runs_max, ? AS elastic_scope_max, ? AS fixed_scope_max
+     ), scope_live AS (
+       SELECT la.scope_kind, IFNULL(la.company_id, 0) AS company_key, IFNULL(la.project_id, 0) AS project_key, COUNT(*) AS n
+       FROM agent_task_runs lr
+       JOIN team_agents la ON la.id = lr.agent_id
+       WHERE (SELECT elastic_ceiling FROM bounds) IS NOT NULL AND lr.status IN ('admitted', 'running')
+       GROUP BY la.scope_kind, IFNULL(la.company_id, 0), IFNULL(la.project_id, 0)
+     ), agent_room AS (
+       SELECT a.*,
+         MIN(IFNULL(s.lanes_per_agent, 1), ?) AS lanes,
+         (SELECT COUNT(*) FROM agent_task_runs r WHERE r.agent_id = a.id AND r.status IN ('admitted', 'running')) AS live,
+         CASE WHEN s.capacity_mode = 'elastic' AND b.elastic_ceiling IS NOT NULL
+           THEN MAX(0, MIN(b.elastic_scope_max,
+             MAX(1, MIN(IFNULL(CASE WHEN typeof(s.elastic_max_runs) = 'integer' AND s.elastic_max_runs BETWEEN 1 AND b.elastic_runs_max
+                                    THEN s.elastic_max_runs END, b.elastic_ceiling), b.elastic_ceiling))
+             - IFNULL(sl.n, 0)))
+           ELSE b.fixed_scope_max END AS scope_bound
+       FROM team_agents a
+       CROSS JOIN bounds b
+       LEFT JOIN agent_scope_settings s ON s.scope_kind = a.scope_kind
+         AND IFNULL(s.company_id, 0) = IFNULL(a.company_id, 0) AND IFNULL(s.project_id, 0) = IFNULL(a.project_id, 0)
+       LEFT JOIN scope_live sl ON sl.scope_kind = a.scope_kind
+         AND sl.company_key = IFNULL(a.company_id, 0) AND sl.project_key = IFNULL(a.project_id, 0)
+       WHERE a.status = 'active' AND a.id > ?
+     ), task_ranked AS (
+       SELECT a.*, t.id AS task_id, t.created_at AS task_created_at,
+         ROW_NUMBER() OVER (PARTITION BY a.id ORDER BY t.priority DESC, t.id) AS task_rank
+       FROM agent_room a
+       JOIN scope_tasks t ON t.assignee_kind = 'agent' AND t.assignee_agent_id = a.id
+       WHERE a.live < a.lanes
+         AND t.status = 'open' AND (t.board_column IS NULL OR t.board_column = 'ready')
+         AND NOT EXISTS (
+           SELECT 1 FROM scope_task_deps d
+           JOIN scope_tasks dep ON dep.id = d.depends_on_task_id
+           WHERE d.task_id = t.id AND dep.status <> 'done'
+         )
+     ), per_lane AS (
+       SELECT * FROM task_ranked WHERE task_rank <= lanes - live
+     ), fairly_scoped AS (
+       SELECT *, ROW_NUMBER() OVER (
+         PARTITION BY scope_kind, IFNULL(company_id, 0), IFNULL(project_id, 0)
+         ORDER BY id, task_rank
+       ) AS scope_rank
+       FROM per_lane
+     )
+     SELECT * FROM fairly_scoped WHERE scope_rank <= scope_bound ORDER BY id, task_rank LIMIT ?`,
+  ).bind(elasticCeiling, ELASTIC_RUNS_MAX, DISCOVERY_ELASTIC_SCOPE_MAX, DISCOVERY_PER_SCOPE_MAX,
+    Math.max(1, lanesCeiling), afterAgentId, DISCOVERY_SCAN_MAX).all<ReadyCandidate>();
+  return rows.results ?? [];
+}
+
+/**
+ * Resume after the cursor, wrapping only after it reaches the end. A lost KV
+ * value merely begins a new rotation; because readiness is in SQL, a prefix
+ * of blocked agents cannot hide ready work beyond it.
+ */
+async function readyCandidates(env: Env): Promise<{ candidates: ReadyCandidate[]; wrapped: boolean }> {
+  const cursor = await readyCursor(env);
+  // D7074: sub-agent lanes exist only under HQ's two ceilings; without them every agent has one lane.
+  const ceilings = await capacityCeilings(env);
+  const lanes = lanesOffered(ceilings) ? Number(ceilings.lanes) : 1;
+  // D7077 part 2: an elastic team's bound exists only under HQ's elastic ceiling; withdrawn, every team reads as fixed.
+  const elastic = ceilings.elastic_runs;
+  const later = await readyAfter(env, cursor, lanes, elastic);
+  if (later.length || cursor === 0) return { candidates: later, wrapped: false };
+  return { candidates: await readyAfter(env, 0, lanes, elastic), wrapped: true };
+}
+
+async function recordSweepMetrics(env: Env, now: Date, out: { resent: number; admitted: number; cap_resumed: number }, stats: SweepStats) {
+  const values: Array<[string, number]> = [
+    ['agent_sweep_candidates_examined', stats.examined],
+    ['agent_sweep_eligible', stats.eligible],
+    ['agent_sweep_admitted', out.admitted],
+    ['agent_sweep_refused', stats.refused],
+    ['agent_sweep_resent', out.resent],
+  ];
+  if (stats.oldestEligibleAgeSeconds != null) values.push(['agent_sweep_oldest_eligible_age_seconds', stats.oldestEligibleAgeSeconds]);
+  // D7077: the oldest ready task beside the oldest pending decision, read every sweep (not only
+  // from a scan), so a backlog of work and a backlog of people's decisions can be told apart.
+  const backlog = await oldestBacklog(env, now);
+  if (backlog.readyTask != null) values.push(['agent_oldest_ready_task_age_seconds', backlog.readyTask]);
+  if (backlog.pendingDecision != null) values.push(['agent_oldest_pending_decision_age_seconds', backlog.pendingDecision]);
+  // Low-cardinality labels only: no tenant, task, agent, prompt or output is telemetry.
+  const labels = JSON.stringify({ cadence_minutes: 5, cursor_reset: stats.cursorReset, scanned: stats.scanned });
+  try {
+    await env.DB.batch(values.map(([name, value]) => env.DB.prepare(
+      'INSERT INTO system_metrics (timestamp, metric_name, value, labels) VALUES (?, ?, ?, ?)',
+    ).bind(now.toISOString().slice(0, 19).replace('T', ' '), name, value, labels)));
+  } catch { console.warn('[agents] sweep_metrics_unreadable'); }
+}
+
+/**
+ * D7077 — the oldest ready task (open, on the ready column, its agent active, every dependency done)
+ * and the oldest run waiting for a person's decision, as ages in seconds. Null when there is none or
+ * the read fails: no figure is recorded rather than a zero.
+ */
+async function oldestBacklog(env: Env, now: Date): Promise<{ readyTask: number | null; pendingDecision: number | null }> {
+  try {
+    const r = await env.DB.prepare(
+      `SELECT
+         (SELECT MIN(t.created_at) FROM scope_tasks t
+            JOIN team_agents a ON a.id = t.assignee_agent_id
+           WHERE t.assignee_kind = 'agent' AND a.status = 'active'
+             AND t.status = 'open' AND (t.board_column IS NULL OR t.board_column = 'ready')
+             AND NOT EXISTS (
+               SELECT 1 FROM scope_task_deps d JOIN scope_tasks dep ON dep.id = d.depends_on_task_id
+                WHERE d.task_id = t.id AND dep.status <> 'done')) AS ready_task,
+         (SELECT MIN(updated_at) FROM agent_task_runs WHERE status = 'waiting_decision') AS pending_decision`,
+    ).first<{ ready_task: string | null; pending_decision: string | null }>();
+    const age = (v: string | null | undefined) => {
+      const ms = v ? sqlTime(v) : null;
+      return ms == null ? null : Math.max(0, Math.floor((now.getTime() - ms) / 1000));
+    };
+    return { readyTask: age(r?.ready_task), pendingDecision: age(r?.pending_decision) };
+  } catch {
+    console.warn('[agents] sweep_backlog_unreadable');
+    return { readyTask: null, pendingDecision: null };
+  }
+}
+
+const sqlTime = (value: string): number | null => {
+  const ms = Date.parse(`${value.replace(' ', 'T').replace(/Z$/, '')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+/** D4593 (#4593) — at most this many stranded runs are repaired in one sweep. */
+export const REPAIR_MAX = 20;
+
+/**
+ * The durable owner of an exhausted agent message's repair. A run the agent DLQ ended `failed`
+ * (`queue_exhausted`) whose task is still `in_progress` is the one state a lost or dropped DLQ message
+ * can leave behind; `repairExhaustedRun` reopens the task only from `in_progress` and never beside a
+ * newer attempt or live run, so this and the DLQ consumer can race harmlessly. It changes state only:
+ * it admits, starts, refunds and charges nothing, so it runs even when the engine is off or halted.
+ * Reports pending count and age as low-cardinality metrics.
+ */
+export async function sweepStrandedRuns(env: Env, now: Date): Promise<{ repaired: number; pending: number }> {
+  const out = { repaired: 0, pending: 0 };
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT r.uid AS uid, r.ended_at AS ended_at FROM agent_task_runs r
+         JOIN scope_tasks t ON t.id = r.task_id
+        WHERE r.status = 'failed' AND r.refusal = 'queue_exhausted' AND t.status = 'in_progress'
+          AND NOT EXISTS (SELECT 1 FROM agent_task_runs n WHERE n.task_id = r.task_id AND n.id <> r.id
+                            AND (n.attempt > r.attempt OR n.status IN ('admitted', 'running', 'waiting_decision')))
+        ORDER BY r.id LIMIT ?`,
+    ).bind(REPAIR_MAX).all<{ uid: string; ended_at: string | null }>()).results ?? [];
+    const ends = rows.map((r) => (r.ended_at ? sqlTime(r.ended_at) : null)).filter((v): v is number => v != null);
+    let ambiguous = 0;
+    for (const r of rows) {
+      try { if ((await repairExhaustedRun(env, r.uid)) === 'repaired') out.repaired += 1; }
+      catch { ambiguous += 1; console.warn('[agents] repair_failed'); }
+    }
+    out.pending = ambiguous;
+    await recordRepairMetrics(env, [
+      ['agent_repair_pending', rows.length],
+      ['agent_repair_repaired', out.repaired],
+      ['agent_repair_ambiguous', ambiguous],
+      ...(ends.length ? [['agent_repair_oldest_age_seconds', Math.max(0, Math.floor((now.getTime() - Math.min(...ends)) / 1000))] as [string, number]] : []),
+    ]);
+  } catch { console.warn('[agents] repair_sweep_unreadable'); }
+  return out;
+}
+
+export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>): Promise<{ resent: number; admitted: number; cap_resumed: number }> {
+  const out = { resent: 0, admitted: 0, cap_resumed: 0 };
+  const stats: SweepStats = { examined: 0, eligible: 0, refused: 0, oldestEligibleAgeSeconds: null, cursorReset: false, scanned: false };
+  const finish = async () => { await recordSweepMetrics(env, now, out, stats); return out; };
+  try { out.cap_resumed = await resumeCapPauses(env, now); } catch { console.warn('[agents] cap_resume_failed'); }
+  await sweepStrandedRuns(env, now);
+  await pruneModelBuckets(env, now);
+  if (await haltedAll(env)) return finish();
+  const mode = await engineMode(env);
+  if (mode === 'off') return finish();
+  const enqueue = deps?.enqueue ?? enqueueAgentRun;
+  const before = new Date(now.getTime() - RESEND_AFTER_MIN * 60_000).toISOString().slice(0, 19).replace('T', ' ');
+  const stale = (await env.DB.prepare(
+    "SELECT uid FROM agent_task_runs WHERE status = 'admitted' AND created_at <= ? ORDER BY id LIMIT ?",
+  ).bind(before, RESEND_MAX).all<{ uid: string }>()).results ?? [];
+  for (const r of stale) {
+    try { await enqueue(env, r.uid); out.resent += 1; } catch { console.warn('[agents] sweep_enqueue_failed'); }
+  }
+  if (autonomy(env) === 'manual' || mode !== 'on') return finish();
+  let budget = SWEEP_MAX;
+  const rt = deps?.runtime ? await deps.runtime() : await (await import('./runtime')).agentRuntime(env);
+  const discovery = await readyCandidates(env);
+  const candidates = discovery.candidates;
+  stats.scanned = true;
+  stats.cursorReset = discovery.wrapped;
+  stats.eligible = candidates.length;
+  const ages = candidates.map((c) => sqlTime(c.task_created_at)).filter((v): v is number => v != null);
+  if (ages.length) stats.oldestEligibleAgeSeconds = Math.max(0, Math.floor((now.getTime() - Math.min(...ages)) / 1000));
+  let lastExamined: number | null = null;
+  for (const a of candidates) {
+    if (budget <= 0) break;
+    stats.examined += 1;
+    lastExamined = a.id;
+    const r = await rt.admit(scopeOfRow(a), { agentId: a.id, taskId: a.task_id, by: null, source: 'sweep' });
+    if (r.ok) out.admitted += 1;
+    else stats.refused += 1;
+    if (r.ok) budget -= 1;
+  }
+  if (lastExamined != null) await saveReadyCursor(env, lastExamined);
+  return finish();
+}
+
+/** Claim the due duties. Off or halted: nothing is claimed. */
+export async function sweepAgentDuties(env: Env, now: Date, deps?: Partial<DutyDeps> & { runtime?: () => Promise<AgentRuntime> }) {
+  // The retention (Q6 A) applies even while halted: it only forgets.
+  try { await purgeExpired(env, now); } catch { console.warn('[agents] purge_failed'); }
+  try { await (await import('../services/agents/computeBridge')).sweepComputeObjects(env); } catch { console.warn('[agents] compute_purge_failed'); }
+  if (await haltedAll(env)) return null;
+  const mode = await engineMode(env);
+  if (mode === 'off') return null;
+  const selfStart = autonomy(env) === 'self_start' && mode === 'on';
+  const rt = async () => (deps?.runtime ? deps.runtime() : (await import('./runtime')).agentRuntime(env));
+  return sweepDuties(env, now, {
+    tokensLeft: deps?.tokensLeft ?? defaultTokensLeft,
+    admit: deps?.admit !== undefined ? deps.admit : selfStart
+      ? async (_env, a, task) => { await (await rt()).admit(scopeOfRow(a), { agentId: a.id, taskId: task.id, by: null, source: 'duty' }); }
+      : null,
+    tell: deps?.tell ?? (async (e, a, task) => {
+      await notify(e, {
+        userId: a.sponsor_user_id, type: 'agent_duty', channels: ['in_app'], category: 'proactive_nudges', link: null,
+        title: 'A duty made a task',
+        body: `A duty made a task: "${task.title.slice(0, 120)}". Press Start when you want the agent to draft it.`,
+      });
+    }),
+  });
+}

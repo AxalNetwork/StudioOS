@@ -1,0 +1,38 @@
+#45 - Assessment engine backend (worker)
+What & Why
+Implement the gamified-assessment engine in the Cloudflare Worker per design/GAMIFIED_ASSESSMENT_SYSTEM.md §4 (scoring) and §7 (API), on top of migrations 107/108. This is prod-first (Worker on D1); a FastAPI port is optional dev-only parity, never the source of truth. Frontend gets a matching assessment namespace in api.js (routes only, no UI) so the API-drift guard passes.
+Done looks like
+* services/assessmentSchema.ts with ensureAssessmentSchema(env) doing CREATE TABLE IF NOT EXISTS for all 107+108 tables (shape only, no seed), exporting ASSESSMENT_TRACKS + MECHANICS consts. Mirrors the existing ensure*Schema cold-path self-heal pattern.
+* services/assessmentScoring.ts — pure scoring: responses + item loads → { valueVector, skillVector, confidence, flags }, with contradiction checks (same dimension via ≥2 mechanics lower confidence), latency weighting for speed, card_sort rank scaling, sjt seniority_hint → self_level. signResult HMACs via SCORING_HMAC_SECRET reusing the existing integrity helper. assignArchetype(track, vectors) → nearest centroid, deterministic.
+* routes/assessment.ts (auth'd): GET /games, POST /sessions, GET /sessions/:id, GET /sessions/:id/next, POST /sessions/:id/respond, POST /sessions/:id/complete, GET /results/me, GET /results/:userId (consent-gated), POST /results/publish, GET /badges/me. On /complete: compute → persist assessment_results(+integrity_hash) → UPSERT user_values & user_skills (and the investor profile table for the investor/LP track) → bump user_xp + insert user_badges (idempotent) → award archetype badge.
+* routes/admin_assessment.ts (admin, per-route requireAdmin): CRUD + version + publish for games/chapters/items/archetypes/badges; preview; analytics (completion %, chapter drop-off, archetype distribution, axis coverage); admin re-score.
+* Both routers mounted in index.ts: /api/assessmentauth'd, /api/admin/assessment BEFORE the catch-all /api/admin. ensureAssessmentSchema() called lazily on first hit.
+* assessment namespace in frontend/src/lib/api.js, one method per route above, 1:1 with routes.
+* cloudflare-worker/test/assessment.scoring.test.ts: a full founder_origin_v1 playthrough resolves all 5 founder spectrums in [−2,2]; contradiction lowers confidence; integrity hash verifies; archetype assignment is deterministic.
+* npm run test:drift and cd cloudflare-worker && npx tsc --noEmit both green. CHANGELOG + CHANGELOG-user updated.
+Out of scope
+* All player/admin UI (A2/A3).
+* Matching wiring and the other five tracks' content (A4).
+Steps
+1. Schema bootstrap + consts — write assessmentSchema.ts (ensureAssessmentSchema, ASSESSMENT_TRACKS, MECHANICS) following the ensureTelegramSchema/skillsTaxonomySchemapattern.
+2. Scoring module — write assessmentScoring.ts (pure functions + signResult + assignArchetype), reusing the existing HMAC/integrity helper.
+3. Auth'd routes — write routes/assessment.ts for all §7 endpoints; implement /complete persistence + canonical UPSERTs + XP/badge awards (idempotent).
+4. Admin routes — write routes/admin_assessment.ts(CRUD/version/publish/preview/analytics/re-score), requireAdmin per route.
+5. Mount + lazy ensure — add both app.route(...) lines in index.ts, admin one before the /api/admin catch-all; lazy-call ensureAssessmentSchema.
+6. api.js namespace — add the assessment methods, 1:1 with routes (drift guard).
+7. Tests + green gates — add the scoring test; run drift + tsc; update both changelogs.
+Relevant files
+* cloudflare-worker/src/index.ts:535,541,560
+* cloudflare-worker/src/auth.ts:404-440
+* cloudflare-worker/src/db.ts:11
+* cloudflare-worker/src/services/scoreIntegrity.ts:127-170
+* cloudflare-worker/src/services/telegramSchema.ts
+* cloudflare-worker/src/services/skillsTaxonomySchema.ts
+* cloudflare-worker/src/routes/admin_telegram.ts
+* cloudflare-worker/src/routes/admin_x.ts
+* cloudflare-worker/src/routes/scoring.ts
+* frontend/src/lib/api.js
+* scripts/check-api-drift.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies

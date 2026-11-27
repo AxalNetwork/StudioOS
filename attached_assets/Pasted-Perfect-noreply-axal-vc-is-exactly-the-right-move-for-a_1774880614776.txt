@@ -1,0 +1,213 @@
+Perfect — `noreply@axal.vc` is exactly the right move for a **clean, institutional-grade setup**. Let’s lock this in properly so you don’t run into deliverability or Google issues later.
+
+---
+
+# 🧠 FINAL SETUP — `noreply@axal.vc` (Google Workspace + Gmail API)
+
+## ✅ 1. Create the Email (Google Workspace)
+
+In Google Workspace:
+
+* Go to Admin → Users
+* Create:
+
+```bash
+noreply@axal.vc
+```
+
+### 🔒 Recommended settings:
+
+* Disable login (optional, more secure)
+* Or keep access limited to you
+
+---
+
+## ⚠️ 2. Important: Sender Identity Must Match
+
+Your API **MUST use the same email**:
+
+```bash
+GMAIL_SENDER_EMAIL=noreply@axal.vc
+```
+
+If mismatch:
+❌ Gmail API will reject or flag emails
+
+---
+
+# 📬 3. Domain Deliverability Setup (CRITICAL)
+
+Without this → your emails go to spam.
+
+---
+
+## 🛡️ SPF Record
+
+Add to your DNS:
+
+```bash
+v=spf1 include:_spf.google.com ~all
+```
+
+---
+
+## 🔐 DKIM (VERY IMPORTANT)
+
+In Google Admin:
+
+* Apps → Google Workspace → Gmail
+* Go to:
+
+  * “Authenticate Email”
+
+Generate DKIM key → add DNS record
+
+Then:
+👉 Click **Start Authentication**
+
+---
+
+## 🧾 DMARC (Trust Layer)
+
+Add DNS:
+
+```bash
+v=DMARC1; p=quarantine; rua=mailto:admin@axal.vc
+```
+
+Later you can upgrade to:
+
+```bash
+p=reject
+```
+
+---
+
+# ☁️ 4. Gmail API Must Use This Identity
+
+When generating your OAuth token:
+
+👉 In OAuth 2.0 Playground
+
+Make sure:
+
+* You are logged in as:
+
+```bash
+noreply@axal.vc
+```
+
+❗ If you use another account:
+→ emails will send from the wrong identity
+
+---
+
+# 🔑 5. Replit Secrets (FINAL)
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://developers.google.com/oauthplayground
+GOOGLE_REFRESH_TOKEN=...
+GMAIL_SENDER_EMAIL=noreply@axal.vc
+```
+
+---
+
+# 🧪 6. Test Checklist
+
+Before going live:
+
+### ✅ Test 1
+
+* Register user → receive email
+
+### ✅ Test 2
+
+* Check spam vs inbox
+
+### ✅ Test 3
+
+* Open email → verify link works
+
+---
+
+# 🚨 Common Mistakes (Avoid These)
+
+## ❌ Using personal Gmail for OAuth
+
+→ Must use:
+
+```bash
+noreply@axal.vc
+```
+
+---
+
+## ❌ Missing DKIM
+
+→ Emails go to spam even if API works
+
+---
+
+## ❌ Wrong “from” field
+
+Must be:
+
+```js
+from: `"Axal" <noreply@axal.vc>`
+```
+
+---
+
+# 🧠 PRO SETUP (You should do this next)
+
+## 1. Add Multiple Sending Identities
+
+Later:
+
+* [deals@axal.vc](mailto:deals@axal.vc) → deal alerts
+* [partners@axal.vc](mailto:partners@axal.vc) → onboarding
+* [investors@axal.vc](mailto:investors@axal.vc) → updates
+
+---
+
+## 2. Warm Up the Domain (VERY IMPORTANT)
+
+First 7–14 days:
+
+* Send low volume
+* Gradually increase
+* Avoid spam triggers
+
+---
+
+## 3. Email Structure (Axal Style)
+
+Every email should have:
+
+* Clean minimal design
+* Clear CTA
+* No spammy words
+* Consistent branding
+
+---
+
+# ⚡ Strategic Insight
+
+By using:
+
+👉 `noreply@axal.vc` + Gmail API
+
+You’re building:
+
+* A **trusted communication layer**
+* A **deal distribution channel**
+* A **private market signal system**
+
+---
+
+If you want next, I can:
+
+* Design **Axal’s email templates (ultra clean VC aesthetic)**
+* Or plug this directly into your **deal alert + notification engine**

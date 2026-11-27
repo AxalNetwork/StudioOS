@@ -1,0 +1,40 @@
+Personal Advisor is broken: it loops on the same questions, doesn't track
+progress, doesn't inject answers into platform pages, doesn't feed
+Market Intelligence. Rebuild it with:
+
+  - One Workers AI model: @cf/meta/llama-3.3-70b-instruct-fp8-fast.
+    No LLM switching. No Anthropic. No GitHub Models in production.
+  - A dedicated AI binding + AI Gateway slug ("advisor-ongoing") so
+    advisor spend, latency, rate-limits, and cache are tracked
+    separately from sign-up onboarding.
+  - A deterministic state machine that picks the next question by
+    priority + persona + Spin-Out-Lab week + tier, never repeats a
+    question whose answer is already on file, and never asks for
+    something the user can't unlock.
+  - A progress widget on the right rail with three buckets: Proposed,
+    Pending (with %), Completed. Ordered by priority for the user's
+    stage.
+  - A write-router that injects every advisor answer into the correct
+    platform page/column (Projects, Pipeline, Roadmap, Cap Table,
+    Financials, Brand, Deck, Investor profile, Partner profile,
+    Mentor profile, Settings).
+  - A Market Intelligence extractor that tags eligible answers for
+    sentiment, TALC, demand/supply, founder-investor fit, partner
+    pulse, capital velocity — and a new "Platform Personas" MI section
+    showing the composition of platform users.
+
+Eight PRs:
+
+  CB  Conversation state machine (no repeats, priority queue, persona/
+       week/tier gating)
+  CC  Progress widget (Proposed / Pending / Completed, priority-ordered)
+  CD  Write-router (advisor answer → page injection)
+  CE  Market Intelligence extractor (advisor data → MI signals)
+  CF  Platform Personas section on MI
+  CG  Dedicated Workers AI binding + AI Gateway for advisor
+  CH  Question-bank expansion (build on existing
+       frontend/src/lib/advisor/questionBank.ts)
+  CI  Eval harness + production rollout gate
+
+Order: CG (binding) and CH (bank) can start in parallel. CB depends on
+both. CD/CE/CF land after CB merges. CI is the final gate.

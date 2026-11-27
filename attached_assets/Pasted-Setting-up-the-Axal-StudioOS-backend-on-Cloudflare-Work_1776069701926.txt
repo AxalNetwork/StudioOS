@@ -1,0 +1,51 @@
+Setting up the Axal StudioOS backend on Cloudflare Workers via Replit is a great choice. Because StudioOS is built with Hono, it is natively designed for edge environments like Cloudflare, but getting the Replit environment to play nicely with Cloudflare's `wrangler` CLI takes a few specific configurations.
+
+Here is the exact prompt you can feed into the Replit AI Agent, followed by a checklist of the manual steps you will likely need to handle yourself (like authentication).
+
+### 1. The Replit Agent Prompt
+
+Copy and paste this directly into the Replit AI chat once you have imported the `AxalNetwork/StudioOS` repository:
+
+> "I have just imported the StudioOS repository from Axal Network, which is a Hono-based backend designed for Cloudflare Workers. I need your help configuring this Replit environment for local development and eventual deployment to Cloudflare. 
+> 
+> Please execute or guide me through the following:
+> 1. **Environment Setup:** Ensure the `replit.nix` file includes `nodejs_20` (or the latest LTS) and `nodePackages.wrangler`.
+> 2. **Dependencies:** Run `npm install` to install all required packages.
+> 3. **Run Command:** Update the `.replit` file so the 'Run' button executes the local Cloudflare dev server. It should run `npm run dev` or the equivalent `wrangler dev` command found in the `package.json`.
+> 4. **Wrangler Configuration:** Check the `wrangler.toml` file. Ensure the `name`, `main` (entry point, usually `src/index.ts`), and `compatibility_date` are correctly set up.
+> 5. **Secrets & Bindings:** Scan the codebase for required environment variables (like API keys for OpenAI, Axal, etc.) and database bindings (like Cloudflare D1 or KV). Give me a list of the exact keys I need to add to the Replit Secrets tool."
+
+---
+
+### 2. Manual Checkpoints (Your Reality Check)
+
+While the Replit AI is excellent at configuring files, there are a few things it cannot do for you because they require your personal Cloudflare account credentials. 
+
+Once the AI finishes its tasks, you will need to handle these steps in the Replit Shell:
+
+**Step 1: Authenticate with Cloudflare**
+You need to authorize `wrangler` to deploy to your account. Run this in the Shell:
+```bash
+npx wrangler login
+```
+*Note: This will output a URL. Click it, log into your Cloudflare account in your browser, and authorize the connection. Replit will intercept the token.*
+
+**Step 2: Sync Your Secrets**
+The Replit Agent will tell you which secrets you need (e.g., `OPENAI_API_KEY`). Adding them to Replit's "Secrets" tool allows them to work locally, but you *must* also push them to Cloudflare for production. For each secret, run:
+```bash
+npx wrangler secret put YOUR_SECRET_NAME
+```
+*(Wrangler will prompt you to paste the value).*
+
+**Step 3: Provision Storage (If Required)**
+Agent orchestrators like StudioOS typically require a database to store agent states or user data. If the `wrangler.toml` includes a `[[d1_databases]]` or `[[kv_namespaces]]` block, you must create those resources in Cloudflare first:
+```bash
+npx wrangler d1 create studio-os-db
+```
+*(Wrangler will output a `database_id`. Update your `wrangler.toml` with this ID).*
+
+**Step 4: Deploy**
+When the local dev server is running perfectly and your secrets are synced, deploy the backend to your live `*.workers.dev` subdomain:
+```bash
+npx wrangler deploy
+```

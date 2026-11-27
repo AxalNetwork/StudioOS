@@ -1,0 +1,51 @@
+# D5618: independent control plane. Never bind studioos D1, KV, assets or deploy credentials.
+name = "studioos-merge-control"
+main = "merge-control/src/index.ts"
+compatibility_date = "2026-11-11"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[vars]
+REPOSITORY = "AxalNetwork/StudioOS"
+# D7909: prepared pilot only. Deployment and runtime provisioning remain owner-gated.
+CAPACITY_ENABLED = "false"
+CAPACITY_PUBLICATION = "pilot"
+CAPACITY_AUDIENCE = "studioos-ci-capacity"
+CAPACITY_CONFIG = ""
+
+[observability]
+enabled = true
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+
+[[durable_objects.bindings]]
+name = "REPO_CONTROL"
+class_name = "RepoControl"
+
+[[durable_objects.bindings]]
+name = "CAPACITY_CONTROL"
+class_name = "CapacityControl"
+
+[[migrations]]
+tag = "v1-repo-control"
+new_sqlite_classes = ["RepoControl"]
+
+[[migrations]]
+tag = "v2-capacity-control"
+new_sqlite_classes = ["CapacityControl"]
+
+[[queues.producers]]
+binding = "EVENTS"
+queue = "studioos-merge-control-events"
+
+[[queues.consumers]]
+queue = "studioos-merge-control-events"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "studioos-merge-control-dlq"
+
+[triggers]
+crons = ["*/5 * * * *"]

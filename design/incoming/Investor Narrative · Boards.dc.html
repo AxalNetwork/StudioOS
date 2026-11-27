@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Raise · Investor narrative</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor narrative</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:780px;line-height:1.55">The founder writes the story investors hear: positioning, the story section by section, and every claim tied to the record behind it, checked against the deck and the metrics, one version per kind of investor.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Narrative Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const boards = [
+      ['NAR1', 'Home · Founder · desktop 1440', 'Four tiles, then versions by audience and the versions table. On the right: what needs the founder, the objections investors raised, and Mercury figures only the founder sees.', [D('NAR1')]],
+      ['NAR2', 'Story · Founder · desktop 1440', 'Traction open for writing: two figures bound to Stripe, one typed figure in Mismatch, one sentence not backed. Call for Capital is the action every Raise page carries; Save version is this view’s own primary.', [D('NAR2')]],
+      ['NAR3', 'Insert a figure · popover over Story', 'Figures grouped by area, each with its source, date and grade. Churn is not recorded, so its row says where to add it.', [D('NAR3')]],
+      ['NAR4', 'Positioning · Founder · desktop 1440', 'The core positioning, each field marked with where it came from. The right card shows which fields v4 uses and which are adjusted for seed funds.', [D('NAR4')]],
+      ['NAR5', 'Positioning proposal · lightbox', 'What Eadwyn proposes sits on lavender until accepted. It lists what it read and drops any line that carries a number.', [D('NAR5')]],
+      ['NAR6', 'Claims · Founder · desktop 1440', 'Every claim in v4 with its state, best source and grade, needs-you first. The bar splits claims by best source; the dashed segment has no record.', [D('NAR6')]],
+      ['NAR7', 'Claim · lightbox · Not backed and Mismatch', 'Not backed: records from the Evidence pack that could back it. Mismatch: both figures with their sources, neither presumed right.', [D('NAR7', 'Not backed'), D('NAR7b', 'Mismatch')]],
+      ['NAR8', 'Check · Founder · desktop 1440', 'Each figure against Pitch deck v6 and the metrics. A figure stated in one place only is Not compared; with nothing compared the summary reads “Nothing compared yet.”', [D('NAR8')]],
+      ['NAR9', 'Phrase the fix · lightbox over Check', 'Eadwyn’s wording carries no number. The figures under it come from the check, and accepting changes the narrative only.', [D('NAR9')]],
+      ['NAR10', 'Objections · right panel on Story', 'Objections investors raised, counted from Capital relationships, each answered in a section or opened in Ask Eadwyn.', [D('NAR10')]],
+      ['NAR11', 'New version · dialog', 'Audience, what to start from and what to check against. The dialog states what it creates; v4 does not change.', [D('NAR11')]],
+      ['NAR12', 'Versions and compare · desktop 1440', 'v3 and v4 side by side, section by section, changed sentences outlined and claim states on both sides. A version a deck reads cannot be deleted.', [D('NAR12')]],
+      ['NAR13', 'Admin and Super Admin · read only', 'Story read only in the Admin shell for [Studio Lisbon] and in the HQ shell: no toolbar, no Save, a notes thread the founder sees, and the logged reason for the read.', [D('NAR13', 'Admin · [Studio Lisbon]'), D('NAR13hq', 'Super Admin · HQ')]],
+      ['NAR14', 'No permission · two panels', 'Investors, advisors, operating partners and explorers do not open the narrative; nor does a founder of another venture.', [D('NAR14a', 'Other profiles', 700, 440), D('NAR14b', 'Another venture', 700, 440)]],
+      ['NAR15', 'Empty · three crops', 'No version, no positioning, and no records to back a claim, each with the action that starts it.', [D('NAR15a', 'No version', 460, 400), D('NAR15b', 'No positioning', 460, 400), D('NAR15c', 'No records', 460, 400)]],
+      ['NAR16', 'Loading · desktop 1440', 'Header and tabs at once; tiles, versions and the table as grey skeletons.', [D('NAR16')]],
+      ['NAR17', 'Errors and limits · four crops', 'An unreadable source, AI assistance off, a run the AI tokens cannot cover, and a failed save that keeps the text.', [D('NAR17a', 'Source unreadable', 700, 330), D('NAR17b', 'AI assistance off', 700, 330), D('NAR17c', 'Out of AI tokens', 700, 330), D('NAR17d', 'Save failed', 700, 330)]],
+      ['NAR18', 'Moved notice · header and first block', 'Arriving from /raise/pitch/positioning: one dismissible line under the title, with Positioning open.', [D('NAR18', false, 1440, 780)]],
+      ['NAR19', 'Phone · 390 wide · four frames', 'The Raise header with the module rail as one select and the tool tabs scrolling sideways: Home, a Story section, the claim on its own page, and positioning lines to accept or discard.', [D('NAR19a', 'Home', 390, 844, 28), D('NAR19b', 'Story', 390, 844, 28), D('NAR19c', 'Claim sheet', 390, 844, 28), D('NAR19d', 'Positioning', 390, 844, 28)]],
+      ['NAR20', 'Story · dark · desktop 1440', 'Story in the dark theme, with the claims panel and the Mismatch lightbox open.', [D('NAR20')]],
+      ['NAR21', 'Components · sheet at 2x', 'Inline bound-figure chip (normal, stale, missing), the five claim states, section dots, the five source chips and the grade ramp, light and dark.', [D('NAR21', 'Light', 1840), D('NAR21d', 'Dark', 1840)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,567 @@
+/**
+ * Task #20 — Phase B · Prompt 6 — Settings expansion (tabbed).
+ *
+ * Concrete row type + read/write helpers for the `user_settings` table
+ * created in `cloudflare-worker/sql/migrations/002_user_settings.sql`.
+ *
+ * The settings router (routes/settings.ts) and the notify service
+ * (services/notify.ts) both depend on this — keeping it in services/
+ * avoids a circular import between routes/settings and services/notify.
+ */
+import type { Env } from '../types';
+import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
+import { bindingKey } from '../util/schemaBootstrap';
+
+export type Theme = 'light' | 'dark' | 'system';
+export type Density = 'comfy' | 'compact';
+export type SidebarDefault = 'expanded' | 'collapsed';
+export type Visibility = 'public' | 'network' | 'private';
+export type DigestFrequency = 'off' | 'daily' | 'weekly';
+
+export interface UserSettingsRow {
+  user_id: number;
+  timezone: string;
+  locale: string;
+  pronouns: string | null;
+  /** Illustration sex for the archetype sprite: 'm' | 'f' | 'both' | null. */
+  archetype_sex: string | null;
+  profile_slug: string | null;
+  visibility: Visibility;
+  /**
+   * D702 (migration 467) — when the member last chose a visibility. NULL means
+   * they never chose, so a stored 'network' (the default) still reads as Public.
+   * Absent on a DB without 467 and on a member with no row: read as NULL.
+   */
+  visibility_chosen_at?: string | null;
+  show_in_directory: number;
+  discoverable: number;
+  // Task #19 — explicit "Include me in matching" consent. Defaults OFF; a user
+  // is never returned as a match candidate until this is 1.
+  matching_opt_in: number;
+  digest_frequency: DigestFrequency;
+  notif_categories_email: string;
+  notif_categories_inapp: string;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  quiet_hours_tz: string | null;
+  theme: Theme;
+  density: Density;
+  sidebar_default: SidebarDefault;
+  feature_flags: string;
+  // Task #15 — JSON array of pageKey strings the user has dismissed.
+  dismissed_explainers: string;
+  /** D4615 — write counters for the privacy and notification groups; 0 before the first save. */
+  privacy_revision?: number;
+  notifications_revision?: number;
+  updated_at: string;
+}
+
+const DEFAULT_ROW = {
+  timezone: 'UTC',
+  locale: 'en',
+  pronouns: null as string | null,
+  archetype_sex: null as string | null,
+  profile_slug: null as string | null,
+  visibility: 'network' as Visibility,
+  visibility_chosen_at: null as string | null,
+  show_in_directory: 1,
+  discoverable: 1,
+  matching_opt_in: 0,
+  digest_frequency: 'weekly' as DigestFrequency,
+  notif_categories_email: '{}',
+  notif_categories_inapp: '{}',
+  quiet_hours_start: null as string | null,
+  quiet_hours_end: null as string | null,
+  quiet_hours_tz: 'UTC' as string | null,
+  theme: 'system' as Theme,
+  density: 'comfy' as Density,
+  sidebar_default: 'expanded' as SidebarDefault,
+  feature_flags: '{}',
+  dismissed_explainers: '[]',
+  privacy_revision: 0,
+  notifications_revision: 0,
+};
+
+const MIGRATED = new WeakMap<object, boolean>();
+export async function ensureUserSettings(env: Env): Promise<void> {
+  if (MIGRATED.get(bindingKey(env))) return;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS user_settings (
+        user_id INTEGER PRIMARY KEY,
+        timezone TEXT DEFAULT 'UTC',
+        locale TEXT DEFAULT 'en',
+        pronouns TEXT,
+        archetype_sex TEXT,
+        profile_slug TEXT UNIQUE,
+        visibility TEXT DEFAULT 'network' CHECK (visibility IN ('public','network','private')),
+        visibility_chosen_at TEXT,
+        show_in_directory INTEGER DEFAULT 1,
+        discoverable INTEGER DEFAULT 1,
+        matching_opt_in INTEGER DEFAULT 0,
+        digest_frequency TEXT DEFAULT 'weekly',
+        notif_categories_email TEXT DEFAULT '{}',
+        notif_categories_inapp TEXT DEFAULT '{}',
+        quiet_hours_start TEXT,
+        quiet_hours_end TEXT,
+        quiet_hours_tz TEXT DEFAULT 'UTC',
+        theme TEXT DEFAULT 'system',
+        density TEXT DEFAULT 'comfy',
+        sidebar_default TEXT DEFAULT 'expanded',
+        feature_flags TEXT DEFAULT '{}',
+        dismissed_explainers TEXT NOT NULL DEFAULT '[]',
+        validate_working_lang TEXT,
+        privacy_revision INTEGER NOT NULL DEFAULT 0,
+        notifications_revision INTEGER NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+    ).run();
+    try {
+      await env.DB.prepare(
+        `CREATE INDEX IF NOT EXISTS idx_user_settings_slug ON user_settings(profile_slug) WHERE profile_slug IS NOT NULL`,
+      ).run();
+    } catch {}
+    // D857 (#2502) — migration 527's working language for Validate (idempotent ALTER).
+    try {
+      await env.DB.prepare('ALTER TABLE user_settings ADD COLUMN validate_working_lang TEXT').run();
+    } catch {}
+    // Task #15 — additive column for existing rows (idempotent ALTER).
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN dismissed_explainers TEXT NOT NULL DEFAULT '[]'`,
+      ).run();
+    } catch {}
+    // Task #19 — explicit matching consent (additive, defaults OFF).
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN matching_opt_in INTEGER DEFAULT 0`,
+      ).run();
+    } catch {}
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN archetype_sex TEXT`,
+      ).run();
+    } catch {}
+    // D702 — migration 467's column, declared here too so a DB this function
+    // created carries the same shape (check-schema-pair-drift).
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE user_settings ADD COLUMN visibility_chosen_at TEXT`,
+      ).run();
+    } catch {}
+    // D4615 — the revision counters come from migration 202611090835 (on an existing table) and from the CREATE
+    // above (on a fresh one); no blind runtime ADD COLUMN (check-runtime-ddl).
+    MIGRATED.set(bindingKey(env), true);
+  } catch (e) {
+    console.error('[user_settings] migration failed', e);
+  }
+}
+
+export async function getUserSettings(env: Env, userId: number): Promise<UserSettingsRow> {
+  await ensureUserSettings(env);
+  const row = await env.DB.prepare(`SELECT * FROM user_settings WHERE user_id = ?`)
+    .bind(userId).first<UserSettingsRow>();
+  if (row) return row;
+  return {
+    user_id: userId,
+    ...DEFAULT_ROW,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * D702 — what the profile visibility MEANS, from what is stored.
+ *
+ *   private, any            → private  (served only to the member themself)
+ *   network, chosen         → network  (signed-in members only)
+ *   network, never chosen   → public   (as every profile was served before D702)
+ *   public,  any            → public
+ *
+ * A member who picked "Network only" before D702 cannot be told apart from the
+ * default, so they read Public until they choose again.
+ */
+export type EffectiveVisibility = 'public' | 'network' | 'private';
+export function effectiveVisibility(
+  stored: string | null | undefined, chosenAt: string | null | undefined,
+): EffectiveVisibility {
+  const v = String(stored || 'network');
+  if (v === 'private') return 'private';
+  if (v === 'public') return 'public';
+  return chosenAt ? 'network' : 'public';
+}
+
+/** True when a member with this effective visibility is served to `viewerId` (null = signed out). */
+export function visibleToViewer(
+  vis: EffectiveVisibility, ownerUserId: number, viewerId: number | null | undefined,
+): boolean {
+  if (vis === 'public') return true;
+  if (vis === 'network') return viewerId != null;
+  return viewerId != null && Number(viewerId) === Number(ownerUserId);
+}
+
+/**
+ * The effective visibility of many members in one read. A member with no row,
+ * or a DB without migration 467, reads as never chosen.
+ */
+export async function effectiveVisibilityFor(
+  env: Env, userIds: number[],
+): Promise<Map<number, EffectiveVisibility>> {
+  const out = new Map<number, EffectiveVisibility>();
+  const ids = [...new Set(userIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  for (const id of ids) out.set(id, 'public');
+  if (ids.length === 0) return out;
+  await ensureUserSettings(env);
+  let rows: Array<{ user_id: number; visibility: string | null; visibility_chosen_at?: string | null }> = [];
+  try {
+    rows = (await env.DB.prepare(
+      `SELECT user_id, visibility, visibility_chosen_at FROM user_settings
+        WHERE user_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(ids)).all<any>()).results || [];
+  } catch (e) {
+    if (!/no such column/i.test(String((e as Error)?.message || e))) throw e;
+    rows = (await env.DB.prepare(
+      `SELECT user_id, visibility FROM user_settings WHERE user_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(ids)).all<any>()).results || [];
+  }
+  for (const r of rows) out.set(Number(r.user_id), effectiveVisibility(r.visibility, r.visibility_chosen_at ?? null));
+  return out;
+}
+
+export interface UserSettingsPatch {
+  timezone?: string;
+  locale?: string;
+  pronouns?: string | null;
+  archetype_sex?: string | null;
+  profile_slug?: string | null;
+  visibility?: Visibility;
+  show_in_directory?: boolean | number;
+  discoverable?: boolean | number;
+  matching_opt_in?: boolean | number;
+  digest_frequency?: DigestFrequency;
+  notif_categories_email?: Record<string, boolean>;
+  notif_categories_inapp?: Record<string, boolean>;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  quiet_hours_tz?: string | null;
+  theme?: Theme;
+  density?: Density;
+  sidebar_default?: SidebarDefault;
+  feature_flags?: Record<string, boolean>;
+}
+
+const ALLOWED_LOCALES = new Set(['en', 'fr', 'es', 'pt']);
+// AE-1: slug is 3–32 chars, lowercase alphanumeric + hyphen.
+const SLUG_RE = /^[a-z0-9-]{3,32}$/;
+const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function asInt(v: unknown): number {
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'number') return v ? 1 : 0;
+  return v ? 1 : 0;
+}
+
+export class SettingsValidationError extends Error {
+  status: number;
+  /** Task #14 — field-level error so the UI can inline the message
+   * next to the offending input instead of a toast. */
+  field: string | null;
+  constructor(message: string, status = 400, field: string | null = null) {
+    super(message);
+    this.status = status;
+    this.field = field;
+  }
+}
+
+// Task #14 — IANA tz validation. `Intl.supportedValuesOf('timeZone')`
+// is the spec'd way; fall back to a runtime probe (DateTimeFormat
+// throws on unknown zones) for older runtimes that lack it.
+let _tzSet: Set<string> | null = null;
+export function isValidTimeZone(tz: string): boolean {
+  if (!tz) return false;
+  if (!_tzSet) {
+    try {
+      const list = (Intl as any).supportedValuesOf?.('timeZone') as string[] | undefined;
+      if (Array.isArray(list)) _tzSet = new Set(list);
+    } catch {}
+  }
+  if (_tzSet) return _tzSet.has(tz);
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: tz });
+    return true;
+  } catch { return false; }
+}
+
+/** Returns the column/value pairs that should be UPDATEd. Validates inputs. */
+function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
+  const updates: Array<[string, unknown]> = [];
+  const push = (col: string, val: unknown) => updates.push([col, val]);
+
+  if (patch.timezone !== undefined) {
+    const tz = String(patch.timezone || '').slice(0, 64).trim();
+    if (!tz) throw new SettingsValidationError('timezone cannot be empty', 400, 'timezone');
+    // AE-1: enforce IANA-valid timezones (Intl.supportedValuesOf when
+    // available, runtime probe otherwise). Same helper /quiet_hours_tz
+    // already uses below — silently accepting "Mars/Olympus" here would
+    // poison digest scheduling and quiet-hour computations.
+    if (!isValidTimeZone(tz)) {
+      throw new SettingsValidationError(
+        'Pick a valid IANA timezone (e.g. America/New_York).',
+        400,
+        'timezone',
+      );
+    }
+    push('timezone', tz);
+  }
+  if (patch.locale !== undefined) {
+    const loc = String(patch.locale || '').toLowerCase().slice(0, 8);
+    if (!ALLOWED_LOCALES.has(loc)) {
+      throw new SettingsValidationError(
+        `locale must be one of ${[...ALLOWED_LOCALES].join(', ')}`,
+        400,
+        'locale',
+      );
+    }
+    push('locale', loc);
+  }
+  if (patch.pronouns !== undefined) {
+    const v = patch.pronouns == null ? null : String(patch.pronouns).slice(0, 32);
+    push('pronouns', v && v.trim() ? v.trim() : null);
+  }
+  if (patch.archetype_sex !== undefined) {
+    if (patch.archetype_sex == null || patch.archetype_sex === '') {
+      push('archetype_sex', null);
+    } else {
+      const v = String(patch.archetype_sex).trim().toLowerCase();
+      const mapped = v === 'male' ? 'm' : v === 'female' ? 'f' : v;
+      if (!['m', 'f', 'both'].includes(mapped)) {
+        throw new SettingsValidationError(
+          'archetype_sex must be m, f, or both',
+          400,
+          'archetype_sex',
+        );
+      }
+      push('archetype_sex', mapped);
+    }
+  }
+  if (patch.profile_slug !== undefined) {
+    if (patch.profile_slug == null || patch.profile_slug === '') {
+      push('profile_slug', null);
+    } else {
+      const slug = String(patch.profile_slug).toLowerCase().trim();
+      if (!SLUG_RE.test(slug)) {
+        throw new SettingsValidationError(
+          'profile_slug must be 3-32 chars, lowercase alphanumeric or hyphen',
+          400,
+          'profile_slug',
+        );
+      }
+      push('profile_slug', slug);
+    }
+  }
+  if (patch.visibility !== undefined) {
+    if (!['public', 'network', 'private'].includes(patch.visibility)) {
+      throw new SettingsValidationError('visibility must be public|network|private', 400, 'visibility');
+    }
+    push('visibility', patch.visibility);
+    // D702 — any write of `visibility` is a choice, from /account or from the
+    // Visibility page, so the effective value stops defaulting to Public.
+    push('visibility_chosen_at', new Date().toISOString().replace('T', ' ').slice(0, 19));
+  }
+  if (patch.show_in_directory !== undefined) push('show_in_directory', asInt(patch.show_in_directory));
+  if (patch.discoverable !== undefined) push('discoverable', asInt(patch.discoverable));
+  if (patch.matching_opt_in !== undefined) push('matching_opt_in', asInt(patch.matching_opt_in));
+  if (patch.digest_frequency !== undefined) {
+    if (!['off', 'daily', 'weekly'].includes(patch.digest_frequency)) {
+      throw new SettingsValidationError(
+        'Digest frequency must be Off, Daily, or Weekly.',
+        400,
+        'digest_frequency',
+      );
+    }
+    push('digest_frequency', patch.digest_frequency);
+  }
+  if (patch.notif_categories_email !== undefined) {
+    push('notif_categories_email', JSON.stringify(patch.notif_categories_email || {}).slice(0, 4000));
+  }
+  if (patch.notif_categories_inapp !== undefined) {
+    push('notif_categories_inapp', JSON.stringify(patch.notif_categories_inapp || {}).slice(0, 4000));
+  }
+  if (patch.quiet_hours_start !== undefined) {
+    const v = patch.quiet_hours_start;
+    if (v != null && v !== '' && !HHMM_RE.test(String(v))) {
+      throw new SettingsValidationError(
+        'Use 24-hour HH:MM (for example 22:00).',
+        400,
+        'quiet_hours_start',
+      );
+    }
+    push('quiet_hours_start', v == null || v === '' ? null : String(v));
+  }
+  if (patch.quiet_hours_end !== undefined) {
+    const v = patch.quiet_hours_end;
+    if (v != null && v !== '' && !HHMM_RE.test(String(v))) {
+      throw new SettingsValidationError(
+        'Use 24-hour HH:MM (for example 07:00).',
+        400,
+        'quiet_hours_end',
+      );
+    }
+    push('quiet_hours_end', v == null || v === '' ? null : String(v));
+  }
+  if (patch.quiet_hours_tz !== undefined) {
+    const raw = patch.quiet_hours_tz == null ? null : String(patch.quiet_hours_tz).slice(0, 64).trim();
+    if (raw) {
+      if (!isValidTimeZone(raw)) {
+        throw new SettingsValidationError(
+          'Pick a valid IANA timezone (e.g. Europe/London).',
+          400,
+          'quiet_hours_tz',
+        );
+      }
+      push('quiet_hours_tz', raw);
+    } else {
+      push('quiet_hours_tz', null);
+    }
+  }
+  if (patch.theme !== undefined) {
+    if (!['light', 'dark', 'system'].includes(patch.theme)) {
+      throw new SettingsValidationError('theme must be light|dark|system', 400, 'theme');
+    }
+    push('theme', patch.theme);
+  }
+  if (patch.density !== undefined) {
+    if (!['comfy', 'compact'].includes(patch.density)) {
+      throw new SettingsValidationError('density must be comfy|compact', 400, 'density');
+    }
+    push('density', patch.density);
+  }
+  if (patch.sidebar_default !== undefined) {
+    if (!['expanded', 'collapsed'].includes(patch.sidebar_default)) {
+      throw new SettingsValidationError('sidebar_default must be expanded|collapsed', 400, 'sidebar_default');
+    }
+    push('sidebar_default', patch.sidebar_default);
+  }
+  if (patch.feature_flags !== undefined) {
+    push('feature_flags', JSON.stringify(patch.feature_flags || {}).slice(0, 4000));
+  }
+
+  return updates;
+}
+
+/**
+ * Upsert user_settings row with the given partial. Throws
+ * SettingsValidationError on bad input (caller maps to HTTP status) and
+ * a plain Error('profile_slug already in use') on UNIQUE conflict.
+ */
+/** D4615 — a save that read revision `expected` lost to a newer one; nothing was written. */
+export class SettingsConflictError extends Error {
+  readonly current: UserSettingsRow;
+  readonly group: SettingsGroup;
+  constructor(group: SettingsGroup, current: UserSettingsRow) {
+    super('These settings changed since you opened them, so nothing was saved.');
+    this.group = group;
+    this.current = current;
+  }
+}
+
+/** D4615 — the preference groups that carry a revision. */
+export type SettingsGroup = 'privacy' | 'notifications';
+
+/** The revision a body names, or null when it names none (a legacy client: the write is still field-level). */
+export function expectedRevisionOf(raw: unknown): number | null | 'invalid' {
+  if (raw === undefined || raw === null) return null;
+  return typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0 ? raw : 'invalid';
+}
+
+// Written out, never assembled: the bump for each group, with and without the revision the writer read.
+const BUMP: Record<SettingsGroup, { any: string; expected: string }> = {
+  privacy: {
+    any: 'UPDATE user_settings SET privacy_revision = privacy_revision + 1 WHERE user_id = ?',
+    expected: 'UPDATE user_settings SET privacy_revision = privacy_revision + 1 WHERE user_id = ? AND privacy_revision = ?',
+  },
+  notifications: {
+    any: 'UPDATE user_settings SET notifications_revision = notifications_revision + 1 WHERE user_id = ?',
+    expected: 'UPDATE user_settings SET notifications_revision = notifications_revision + 1 WHERE user_id = ? AND notifications_revision = ?',
+  },
+};
+
+export async function upsertUserSettings(
+  env: Env, userId: number, patch: UserSettingsPatch,
+  guard: { group: SettingsGroup; expected: number | null } | null = null,
+): Promise<UserSettingsRow> {
+  await ensureUserSettings(env);
+  const updates = buildUpdates(patch);
+  if (updates.length === 0) return getUserSettings(env, userId);
+
+  // Slug uniqueness pre-check (avoids leaking SQLite error messages).
+  const slugUpdate = updates.find(([col]) => col === 'profile_slug');
+  if (slugUpdate && slugUpdate[1] != null) {
+    const taken = await env.DB.prepare(
+      `SELECT user_id FROM user_settings WHERE profile_slug = ? AND user_id != ?`,
+    ).bind(slugUpdate[1], userId).first<{ user_id: number }>();
+    // AE-1: surface uniqueness conflicts as field-level 400s so the
+    // Settings UI can render the error inline next to the slug input,
+    // matching the envelope used for shape/format failures above.
+    if (taken) throw new SettingsValidationError('profile_slug already in use', 400, 'profile_slug');
+  }
+
+  // INSERT OR IGNORE then UPDATE — D1 lacks ON CONFLICT … DO UPDATE for
+  // arbitrary partial updates without listing every column. The two-step
+  // pattern is what other ensureSchema/upsert routes in this worker use.
+  await env.DB.prepare(`INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)`)
+    .bind(userId).run();
+
+  const setSql = updates.map(([col]) => `${col} = ?`).join(', ');
+  const params = updates.map(([, v]) => v);
+  const write = env.DB.prepare(
+    `UPDATE user_settings SET ${setSql}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+  ).bind(...params, userId);
+  if (!guard) {
+    await write.run();
+    return getUserSettings(env, userId);
+  }
+  // D4615 — the group's revision moves by one with every write to it. When the writer named the revision it read,
+  // the bump is the deciding statement: a stale revision changes no row, the guard fails, and the batch rolls back.
+  const bump = guard.expected === null
+    ? env.DB.prepare(BUMP[guard.group].any).bind(userId)
+    : env.DB.prepare(BUMP[guard.group].expected).bind(userId, guard.expected);
+  const run = await runDecision(env, [bump, decisionGuard(env), write, clearGuard(env)]);
+  if (run.lost) throw new SettingsConflictError(guard.group, await getUserSettings(env, userId));
+  return getUserSettings(env, userId);
+}
+
+/**
+ * Returns true if `now` (UTC) falls inside the user's quiet hours window
+ * (interpreted in their `quiet_hours_tz`). Caller checks this before
+ * sending push/realtime notifications.
+ *
+ * Handles wraparound (e.g. start=22:00, end=07:00).
+ */
+export function isInQuietHours(row: Pick<UserSettingsRow, 'quiet_hours_start' | 'quiet_hours_end' | 'quiet_hours_tz'>, now: Date = new Date()): boolean {
+  const start = row.quiet_hours_start;
+  const end = row.quiet_hours_end;
+  if (!start || !end || !HHMM_RE.test(start) || !HHMM_RE.test(end)) return false;
+  if (start === end) return false;
+  const tz = row.quiet_hours_tz || 'UTC';
+  // Compute "now" as HH:MM in the user's timezone via Intl.DateTimeFormat.
+  let localHM: string;
+  try {
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+    const parts = fmt.formatToParts(now);
+    const h = parts.find(p => p.type === 'hour')?.value || '00';
+    const m = parts.find(p => p.type === 'minute')?.value || '00';
+    localHM = `${h}:${m}`;
+  } catch {
+    // Bad tz — fall back to UTC rather than silently never quieting.
+    const h = String(now.getUTCHours()).padStart(2, '0');
+    const m = String(now.getUTCMinutes()).padStart(2, '0');
+    localHM = `${h}:${m}`;
+  }
+  if (start < end) {
+    return localHM >= start && localHM < end;
+  }
+  // Wraparound (e.g. 22:00 -> 07:00).
+  return localHM >= start || localHM < end;
+}

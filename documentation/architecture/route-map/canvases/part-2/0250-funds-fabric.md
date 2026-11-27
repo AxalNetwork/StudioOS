@@ -1,0 +1,6 @@
+| Funds · Fabric | super-admin | `/admin/fabric` (new); fund console reuses `/funds` | — | {backend} | NEW | 10 artboards defining a multi-tenant HQ/subsidiary fund fabric: entity graph with tinted tenancy hulls (explicitly "not a permission check over a shared graph: a different query"), entity dossier with filings calendar, fund console in two modes (HQ working-GP vs read-only cross-tenant Oversight with FX normalisation and the brand-licence share), subsidiary variant showing the HQ share as its own waterfall tier, LP record with payment-reliability history, launch-a-fund, capital-call flow, jurisdiction packs, honesty states. Today `/legal` renders a flat entity list. |
+
+backend:
+- `compliance.ts`
+- `funds.ts`
+- `legal.ts` (entities CRUD: `entity_type IN (holding_company, project, subsidiary, vc_fund)`, `parent_id`, `jurisdiction`)

@@ -1,0 +1,41 @@
+{
+  "skill": "newsletter-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "shipped": [
+          "Recall reminders"
+        ]
+      },
+      "grow.records": {
+        "stories": [
+          {
+            "customer": "Northgate Dental",
+            "named": true,
+            "text": "Filled 40 cancelled slots in October"
+          }
+        ],
+        "events": [
+          {
+            "name": "Clinic ops webinar"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Recall reminders",
+      "Northgate Dental"
+    ],
+    "must_say_not_recorded": [
+      "webinar date"
+    ],
+    "must_not_include": [
+      "record-breaking"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "skill": "channel-partner-strategy",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "partner": "Cedar Network",
+        "motion": "Referral",
+        "audience_overlap": "SMB finance teams",
+        "fee_terms": null
+      },
+      "network.relationships": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Cedar Network",
+      "Referral",
+      "pilot"
+    ],
+    "must_say_not_recorded": [
+      "fee terms"
+    ],
+    "must_not_include": [
+      "exclusive partnership granted"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why fee terms is missing rather than inventing it.",
+    "Do not assert: exclusive partnership granted.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Cedar Network; Referral; pilot. fee terms: Not recorded. Human review required."
+}

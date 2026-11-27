@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Team › Agents</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Skills for AI agents</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Named, versioned SKILL.md recipes by role, on the same eight-category taxonomy and SkillRadar as people. Agents propose; a named person accepts. SK0 to SK9.</p>
+</header>
+<div style="display:grid;grid-template-columns:repeat(3,max-content);gap:84px 56px;align-items:start">
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.cap }}</h2>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:900px;font-size:13.5px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="{{ b.fs }}">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Agent Skills Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const HT = { sk0: 940, sk1: 1120, sk2: 1240, sk3: 800, sk4: 860, sk4v: 1220, sk5: 800, sk6: 800, sk7: 800, sk8: 760, sk9: 433, sk9b: 860, ph1: 844, ph2: 844, tab: 760 };
+    const W = { sk3: 1180, sk4: 700, sk4v: 700, sk5: 600, sk6: 700, sk7: 1180, sk9: 1400, sk9b: 700, ph1: 390, ph2: 390, tab: 768 };
+    const F = (v, cap) => { const d = /-d$/.test(v); const k = v.replace(/-d$/, ''); const w = W[k] || 1440; return { v, cap: cap || '', wst: `width:${w}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${HT[k] || 800}px` }; };
+    const B = (id, t, fr, row, note) => ({ id, cap: id + ' · ' + t, fr, note: note || '', fs: row ? 'display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;max-width:1600px' : 'display:flex;flex-direction:column;gap:28px' });
+    return { boards: [
+      B('SK0', 'Roles', [F('sk0')], 0, 'Team › Agents › Skills. Three figures up top, then a tile per role with its skills and agents; a role with no agents offers Add one.'),
+      B('SK1', 'Role’s skill directory', [F('sk1')], 0, '“Used by [N] agents” is the install count. New skill is for editors only.'),
+      B('SK2', 'Skill page', [F('sk2')], 0, 'The rendered SKILL.md, its tags, versions and the agents you can see using it.'),
+      B('SK3', 'Assign to agents', [F('sk3', 'Pick agents · after Save')]),
+      B('SK4', 'Agent profile › Skills and Values', [F('sk4', 'Skills · the list clips at the sheet’s height'), F('sk4v', 'Full height · Values card below the skills')], 1, 'The radar is computed from the agent’s skills. Pinned versions show Update to v3. Values are set by the company on the /studio value scale.'),
+      B('SK5', 'Add skills to this agent', [F('sk5')], 0, 'Only its role’s skills. Tools are checked against the agent’s approved tools; the radar previews the change.'),
+      B('SK6', 'Add an agent › Skills step', [F('sk6')]),
+      B('SK7', 'New skill', [F('sk7', 'Write · Paste a SKILL.md')], 0, 'Tools are read only. A pasted SKILL.md lands as a draft.'),
+      B('SK8', 'Team coverage', [F('sk8')], 0, 'A gap covered only by agents still reads as a people gap.'),
+      B('SK9', 'States', [F('sk9'), F('sk9b', 'An agent with no skills · radar reads Not recorded'), F('ph1', 'Phone · directory'), F('ph2', 'Phone · full-height sheet'), F('tab', 'Tablet'), F('sk1-d', 'Dark · SK1'), F('sk4-d', 'Dark · SK4')])
+    ] };
+  }
+}
+</script>
+</body></html>

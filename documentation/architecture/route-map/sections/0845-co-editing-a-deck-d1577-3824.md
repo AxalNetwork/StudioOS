@@ -1,0 +1,11 @@
+### Co-editing a deck (D1577, #3824)
+
+`routes/deck_coedit.ts`, mounted at `/api/decks` right after `deck_draft.ts`, before `decks`. Rules in `services/decks/coedit.ts`; the room is the `DeckPresence` Durable Object (`durable-objects/deck-presence.ts`), one per venture's deck, bound as `DECK_PRESENCE` in all three `wrangler.toml` tables after the owner approved D1577's monthly cost (decision L). Client: `lib/api/deckCoedit.js` (`deckCoeditApi`), presence read through `deckV2Adapter.presence` (a `SWAPPED` row; 503 `presence_off` reads as "Coming later"). Suggest mode waits on its store's migration number (Q1 on #3824).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `PATCH /api/decks/:id/cards/:uid/areas/:area` `{ base, next }` | the deck's writers (`projectOwned` write) | One area (a block id, or `__title`) applied onto the card's working copy as the server holds it now, under its `rev`, retried when another area's save moved the rev first: `{ ok, deck_id, card_uid, area, rev, saved, card? }`. 409 `area_conflict` `{ rev, server }` when that area changed since `base` (nothing written); 409 `no_working_copy`, `card_busy`; 400 `invalid_card_uid`, `invalid_area`, `area_required`, `SLIDE_MODEL`. |
+| `POST /api/decks/:id/restore-card` `{ card_uid }` | the deck's writers | The card from version `:id` replaces the same card in the current version, as a new version; every other card and their order stay. The new version (`rowToDeck`) with `restored: { card_uid, from_version, placed, index }`; a card the current version dropped goes back at its old place. 404 `card_not_in_version`; 409 `card_unchanged`; 400 `invalid_card_uid`; 409 `deck_version_conflict` from `insertVersion`. Audited `deck_card_restored`. |
+| `GET /api/decks/:id/presence` | the deck's readers | `{ deck_id, editors: [{ user_id, name, colour, card, area, cursor }] }`. 503 `presence_off` on a Worker without the binding. |
+| `GET /api/decks/:id/presence/ws` (Upgrade: websocket) | the deck's writers (`bearer.<jwt>` subprotocol, as `/api/pipeline/ws`) | The editors' socket: frames `area`, `edit`, `cursor` (at most 5 a second), `ping`; the room answers `hello`, `presence` and `locked` ("[Name] is editing this area. Wait or ask [Name]."). 426 without the upgrade; 503 `presence_off` without the binding; 409 `room_full` past 12 editors. |
+

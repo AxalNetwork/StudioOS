@@ -1,0 +1,42 @@
+{
+  "skill": "customer-expansion-opportunity",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "account": "West Dock",
+        "request": "Two additional workspaces",
+        "open_issue": "Export outage",
+        "approved_offer_price": null
+      },
+      "validate.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "West Dock",
+      "Two additional workspaces",
+      "Export outage"
+    ],
+    "must_say_not_recorded": [
+      "approved offer price"
+    ],
+    "must_not_include": [
+      "offer sent"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why approved offer price is missing rather than inventing it.",
+    "Do not assert: offer sent.",
+    "Return a proposal only; do not perform any external action.",
+    "Include an offer draft with price explicitly unresolved; prioritize the export outage.",
+    "Do not commit to a discount, delivery date or sending action."
+  ],
+  "predicate_witness": "West Dock; Two additional workspaces; Export outage. approved offer price: Not recorded. Human review required."
+}

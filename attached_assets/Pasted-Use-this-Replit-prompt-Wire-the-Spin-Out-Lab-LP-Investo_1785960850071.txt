@@ -1,0 +1,100 @@
+Use this Replit prompt:
+
+> Wire the **Spin-Out Lab · LP & Investor Workspace** to a real backend deployed on **Cloudflare Workers + D1 (or Cloudflare's preferred DB)**, replacing all static/mock data with live data that stays perfectly in sync with the **Founder-side Spin-Out Lab** (Studio, Week 1–4 program tracker, graduation status, incorporation status, etc). 
+>
+> ### Context
+> This is a two-sided platform:
+> - **Founder side**: Spin-Out Lab program tracker (Week 1–4: Idea & Customer, Solution & Roadmap, Validate & Team, Incorporate & Capital), with startup status, graduation state, incorporation/cap-table/83(b) status, and program milestones.
+> - **LP/Investor side**: LP & Investor Workspace showing fund raise progress, access state (Invited → Applied → Approved → Committed), key terms, and program-derived metrics (graduates to date, % incorporated on time, $ raised by alumni post-program). 
+>
+> These two sides currently render **the same underlying facts** (graduate count, incorporation %, alumni follow-on capital, fund raise numbers) but are not wired to a shared source of truth. The goal is to make the LP/Investor Workspace pull **live, derived data** from the same backend that powers the Founder-side Spin-Out Lab, instead of hardcoded numbers like `37`, `86%`, `$8.6M`, `$6.8M of $20M`. 
+>
+> ### Build requirements
+>
+> 1. **Cloudflare backend**
+> - Set up Cloudflare Workers as the API layer.
+> - Use Cloudflare D1 (SQLite-compatible) as the primary database, or Cloudflare KV only for caching/derived aggregates — not source of truth.
+> - Define schemas for: `startups`, `program_weeks`, `program_progress`, `incorporation_status`, `fund`, `lp_investors`, `lp_access_state`, `commitments`, `fund_raise_progress`. 
+>
+> 2. **Founder-side data model**
+> - Each startup has: current week (1–4), per-week milestone completion, graduation status, incorporation status, 83(b) filed status, cap-table clean status, revenue/customer discovery proof, graduation date.
+> - Persist milestone completion per startup so "graduates to date" and "% incorporated on time" can be computed live from real records, not hardcoded. 
+>
+> 3. **LP/Investor-side data model**
+> - Each LP has: access state (`invited`, `applied`, `approved`, `committed_100k`, `committed_250k+`), commitment amount, soft-circle amount, approval date.
+> - Fund-level aggregates: target fund size, hard cap, minimum close, capacity remaining, soft-circled total, accepted LP count, median commitment, first close date. 
+>
+> 4. **Derived / computed metrics (must be LIVE, not static)**
+> Compute these server-side from real founder-side records and expose via API:
+> - `graduatesToDate` = count of startups with `graduated = true`
+> - `incorporatedOnTimePercent` = % of graduated startups with `incorporated = true` within program deadline
+> - `alumniFollowOnRaised` = sum of `capital_raised_post_program` across graduated startups
+> - `fundRaiseProgress` = sum of all `committed` LP amounts
+> - `softCircled` = sum of all `soft_circled` LP amounts
+> - `acceptedLPsCount` = count of LPs with `access_state = approved` or beyond
+> - `medianCommitment` = median of committed LP amounts
+> - `capacityRemaining` = `hardCap - committedTotal` 
+>
+> 5. **API endpoints**
+> Create REST endpoints on the Worker:
+> - `GET /api/spinout-lab/founder/:startupId` — full founder program state
+> - `PATCH /api/spinout-lab/founder/:startupId/progress` — update milestone/week progress
+> - `POST /api/spinout-lab/founder/:startupId/graduate` — mark graduation + incorporation status
+> - `GET /api/spinout-lab/metrics` — all derived metrics (graduates, incorporation %, alumni capital raised)
+> - `GET /api/fund/:fundId/overview` — fund raise progress, capacity, soft-circled, accepted LPs, median commitment
+> - `GET /api/lp/:lpId/access-state` — LP-specific access state and workspace gating
+> - `POST /api/lp/:lpId/commit` — record a new commitment and update fund aggregates
+> - `GET /api/lp/:lpId/workspace` — combined payload for the LP & Investor Workspace UI (access state + fund overview + key terms) 
+>
+> 6. **Frontend wiring**
+> - Replace all hardcoded numbers in the **LP & Investor Workspace** UI (raise progress, soft-circled, accepted LPs, median commitment, capacity remaining, graduates to date, incorporation %, alumni capital raised) with live fetches from the endpoints above.
+> - Replace hardcoded numbers in the **Founder-side Spin-Out Lab** tracker (week status, unlocked weeks, milestone checkmarks) with live fetches tied to the authenticated startup's real progress record.
+> - Ensure both sides read from the **same underlying tables**, so when a founder completes a milestone or graduates, the LP Workspace metrics update automatically on next fetch/revalidation.
+> - Add loading skeletons and empty states for every metric while data is fetching.
+> - Add optimistic UI updates for LP commitment submission and founder milestone completion. 
+>
+> 7. **Sync correctness rules**
+> - Founder marking a milestone complete must immediately affect derived metrics on next read (no manual recompute step required elsewhere — compute on read or via a scheduled Cloudflare Cron Trigger that recalculates aggregates every few minutes and caches in KV for fast reads).
+> - LP committing capital must immediately update fund raise progress, capacity remaining, and accepted LP count.
+> - Access state transitions (`invited → applied → approved → committed`) must be enforced server-side, not just visually in the UI — block "Commit capital" actions unless `access_state = approved` or later. 
+>
+> 8. **Auth & security**
+> - Add role-based access: `founder`, `lp_investor`, `admin`.
+> - LPs should only see their own access state and commitment data plus fund-level aggregates — never other LPs' individual data.
+> - Founders should only see/update their own startup's program data.
+> - Verify auth on every Worker route (JWT or session token via Cloudflare Access or custom auth). 
+>
+> 9. **Deployment**
+> - Include `wrangler.toml` with D1 binding, KV binding (if used), and Cron Trigger config.
+> - Include `.dev.vars.example` for local secrets.
+> - Include D1 migration files for all tables.
+> - Include a seed script with realistic sample data (startups at various weeks, some graduated/incorporated, LPs at various access states) so the UI is immediately testable with live data instead of placeholders.
+> - Include a README explaining the data flow: Founder progress → derived metrics → LP Workspace display. 
+>
+> 10. **Project structure**
+> - `src/index.ts` — Worker entry/router
+> - `src/routes/founder.ts`
+> - `src/routes/lp.ts`
+> - `src/routes/fund.ts`
+> - `src/routes/metrics.ts`
+> - `src/db/schema.sql`
+> - `src/db/seed.sql`
+> - `src/services/metrics.ts` — derived metric calculations
+> - `src/services/auth.ts`
+> - `src/lib/cache.ts` — KV caching layer for aggregates
+> - `wrangler.toml`
+> - `README.md` 
+>
+> ### Acceptance criteria
+> - No hardcoded numbers remain in either the Founder Spin-Out Lab tracker or the LP & Investor Workspace — every number is fetched from the API.
+> - Marking a startup as graduated/incorporated on the founder side updates LP-facing metrics (graduates to date, incorporation %, alumni capital) without manual intervention.
+> - LP committing capital updates fund raise progress and capacity remaining live.
+> - Access-state gating (Approved required before "Commit capital") is enforced server-side.
+> - All endpoints are authenticated and role-scoped.
+> - Seed data makes the UI demonstrably "live" immediately after deploy. 
+>
+> Generate the full working codebase, schema, seed data, Wrangler config, and a short explanation of how founder actions propagate into LP-facing metrics.
+
+Sources
+[1] Screenshot-2026-08-05-at-8.59.53-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/af163cf9-a3fe-4f36-82fa-3b0441aa8280/Screenshot-2026-08-05-at-8.59.53-PM.jpeg
+[2] Screenshot-2026-08-05-at-9.01.54-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/c62a73ae-2e2e-4431-9850-0b01037c49e4/Screenshot-2026-08-05-at-9.01.54-PM.jpeg

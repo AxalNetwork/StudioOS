@@ -1,0 +1,692 @@
+import React, { useEffect, useState } from 'react';
+import { CONFIDENTIAL, CONFIDENTIAL_HELP, keepSettings, settingsOf, withConfidential } from './complianceModel';
+import Sheet from '../../../ui/Sheet.jsx';
+import { BrandingCard } from './StudioActions';
+import CheckPanel from './CheckPanel';
+import VersionCompare from './VersionCompare';
+import { Versions, useDeckChecks } from './DeckVersions';
+import { comparePair } from './compareModel';
+import { APPLY } from './deckV2Model';
+import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
+import { SLIDE_SIZES, STRUCTURES, aspectOf, placeOf, withAspect } from './gridModel';
+import { applyStructure, movedLine, recommendedLine } from './structureModel';
+import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
+import { brandLocks as brandLocksAdapter, deckActions as deckActionsAdapter, figures as figuresAdapter, remix as remixAdapter, replaceImages as replaceImagesAdapter, shown, stagePlan as stagePlanAdapter } from './deckV2Adapter';
+import { deckImagesApi } from '../../../lib/api/deckImages';
+import { railPressHeaders } from '../../../lib/railPage';
+import { aiTokens, refusalOf } from './newDeckModel';
+import { STAGES, replaceLabel, replaceNote, reorderLabel, reorderNote } from './deckActionsModel';
+import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
+import { movedNotice } from './deckReflow';
+import { deckBrandKitApi } from '../../../lib/api/deckBrandKit';
+import { deckBrandLocksApi } from '../../../lib/api/deckBrandLocks';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { ADMINS_ONLY, LOCKS_FAILED, LOCK_ROWS, lockFor } from './brandTemplateModel';
+
+/**
+ * D1604 (#3716, pd13) — the sheets the editor's ⋯ opens, each one v1 surface
+ * kept and moved behind ⋯ (plan §0, "v1 features with no v2 board are kept"):
+ *
+ *   ThemeSheet       Theme (from your brand kit, Neutral light, Neutral dark),
+ *                    Apply to all cards, and the audience (D898's Design tab)
+ *   SizeSheet        This deck › Slide size: 16:9 (1920 × 1080) or 4:3
+ *                    (1440 × 1080), the theme's `aspect` (D1499). The 12 × 6
+ *                    grid and its margins stay, so every block keeps its
+ *                    cells and none moves to the notes.
+ *   StructureSheet   This card › Structure: the layouts on main (`LAYOUTS`
+ *                    via `GET /api/decks/model`), each behind the dialog that
+ *                    says what leaves the card. The 17 structures are #3749.
+ *   BackgroundSheet  This card › Background: a colour, or an image through
+ *                    the image lightbox (D903)
+ *   BrandKitSheet    the kit the card draws on, and the studio's Branding
+ *                    card (plan, footer, watermark)
+ *   VersionsSheet    PD15: every version, Compare, and Restore behind its
+ *                    dialog (`POST /api/decks/:id/restore`)
+ *   SourcesSheet     D896's Sources panel, with the slide's own evidence
+ *   CheckSheet       D900's Check panel ("Check claims · Free checks"),
+ *                    headed by D1523's figure counts (pd25: "▤ Linked n ·
+ *                    ✎ Stated n · ! Uncited n") and the Stated and Uncited
+ *                    figures, each with "Go to card ›" (`deckV2Adapter.figures`)
+ *   RemixSheet       This card › Remix this slide (pd5, D1553): four layouts
+ *                    from The Grid's structures, each keeping every block, and
+ *                    "Remove a block · the rest reflows inside the grid". Free:
+ *                    `POST /api/decks/:id/remix` runs no model, so it works
+ *                    with AI paused. Use this layout applies at once, one edit
+ *                    with its own Undo.
+ *
+ *   StageSheet       This deck › Stage and Reorder for stage (pd13, pd23,
+ *                    D1561): the stage chips, the plan's order with its why
+ *                    lines and missing-proof warnings, and "Order for [Seed] ·
+ *                    one undo step", which saves the order as one new version.
+ *                    Free: no model. Held while the editor has unsaved edits.
+ *
+ *   ReplaceImagesSheet  Whole deck · uses AI › Replace all images (pd13,
+ *                    D1561): one quote for every image area of the deck, the
+ *                    areas left out and why, and one press that draws them all
+ *                    under one hold. The images are proposals, kept card by card.
+ *
+ * A theme or a layout runs no model: it is applied at once, one edit like any
+ * other, and nothing is saved until a version is.
+ */
+
+const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
+const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
+const EYE = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
+const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
+const INK = 'text-axal-ink dark:text-gray-100';
+const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const HELD = 'Nothing is saved until you save a version.';
+
+function Frame({ title, testId, onClose, children, width = 520 }) {
+  return (
+    <Sheet label={title} title={title} eyebrow="More deck actions" width={width} onClose={onClose} testId={testId}>
+      <div className="flex flex-col gap-3">{children}</div>
+    </Sheet>
+  );
+}
+
+export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onAudience, onApplyAll, onClose }) {
+  const kitData = kit.status === 'ok' ? kit.data?.kit : null;
+  return (
+    <Frame title="Theme" testId="pitch-sheet-theme" onClose={onClose}>
+      {kit.status === 'error' ? <span className={MUTED} role="status">{KIT_FAILED}</span> : null}
+      <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Theme" data-testid="pitch-editor-design">
+        {model.themes.map((k) => (
+          <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${(theme?.kind || 'brand') === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
+            <input type="radio" name="theme" checked={(theme?.kind || 'brand') === k} disabled={readOnly}
+              onChange={() => onTheme(keepSettings(withAspect(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null }, theme?.aspect), theme))} data-testid={`pitch-theme-${k}`} />
+            <span className="flex flex-col">
+              <span className="font-bold">{THEME_LABELS[k]}{k === 'brand' && kitData?.name ? ` · ${kitData.name}` : ''}</span>
+              {k === 'brand' && kit.status === 'ok' && !kitData ? <span className={MUTED}>{NO_KIT}</span> : null}
+            </span>
+          </label>
+        ))}
+      </div>
+      {!readOnly ? <button type="button" className={GHOST} onClick={onApplyAll} data-testid="pitch-editor-apply-all">{APPLY} to all cards</button> : null}
+      {/* D1546 (pd3's chrome strip): Confidential, on by default, in the corner of every card in Present, share and every export. */}
+      <label className={`flex min-h-[44px] items-center gap-2 text-[12.5px] ${INK}`}>
+        <input type="checkbox" checked={settingsOf(theme).confidential} disabled={readOnly}
+          onChange={(e) => onTheme(withConfidential(theme, e.target.checked))} data-testid="pitch-theme-confidential" />
+        <span className="flex flex-col"><span className="font-bold">{CONFIDENTIAL}</span><span className={MUTED}>{CONFIDENTIAL_HELP}</span></span>
+      </label>
+      {/* D1571 (#3818): the deck's language — right to left for Arabic and Hebrew, CJK measured per character. Not in the header. */}
+      <span className={EYE}>Language</span>
+      <select className={FIELD} value={langOf(theme).split('-')[0]} disabled={readOnly} aria-label="Language of the deck"
+        onChange={(e) => onTheme(withLanguage(theme, e.target.value))} data-testid="pitch-theme-language">
+        {LANGUAGES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.label}</option>)}
+      </select>
+      <span className={MUTED} data-testid="pitch-theme-language-line">{languageLine(theme)}</span>
+      <span className={EYE}>Audience</span>
+      <select className={FIELD} value={audience || ''} disabled={readOnly} onChange={(e) => onAudience(e.target.value || null)} data-testid="pitch-editor-audience-select">
+        <option value="">{NOT_RECORDED}</option>
+        {model.audiences.map((a) => <option key={a} value={a}>{AUDIENCE_LABELS[a] || a}</option>)}
+      </select>
+      <span className={MUTED}>{HELD}</span>
+    </Frame>
+  );
+}
+
+/** The two slide sizes, in the words the sheet shows. */
+export const SIZE_LABELS = Object.freeze({ '16:9': 'Widescreen 16:9', '4:3': 'Standard 4:3' });
+
+/**
+ * D1554 (#3801): choosing a size runs the reflow on the draft (`onSize`); what
+ * no longer fits moves to the speaker notes, and pd3c's amber notice says how
+ * many blocks moved, with one Undo back to the cards and size before.
+ */
+export function SizeSheet({ theme, readOnly, onSize, moved, onUndo, onClose }) {
+  const now = aspectOf(theme?.aspect);
+  return (
+    <Frame title="Slide size" testId="pitch-sheet-size" onClose={onClose}>
+      <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Slide size">
+        {Object.keys(SLIDE_SIZES).map((k) => (
+          <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${now === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
+            <input type="radio" name="slide-size" checked={now === k} disabled={readOnly}
+              onChange={() => onSize(k)} data-testid={`pitch-size-${k.replace(':', 'x')}`} />
+            <span className="flex flex-col">
+              <span className="font-bold">{SIZE_LABELS[k]}</span>
+              <span className={MUTED}>{SLIDE_SIZES[k].width} × {SLIDE_SIZES[k].height}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {moved ? (
+        <div role="status" className="flex items-center gap-2 rounded-[9px] border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-size-moved">
+          <span className="flex-1">{movedNotice(moved)}</span>
+          <button type="button" className="min-h-[44px] font-bold underline" onClick={onUndo} data-testid="pitch-size-undo">Undo</button>
+        </div>
+      ) : null}
+      <span className={MUTED}>Every card keeps its 12 × 6 grid and its margins, so each block keeps its cells; only the columns narrow. Words that no longer fit move to the card&apos;s speaker notes.</span>
+      <span className={MUTED}>{HELD}</span>
+    </Frame>
+  );
+}
+
+/** One structure's tile: its areas drawn on a mini slide, its name and its use (pd10). */
+function StructureTile({ s, current, disabled, onPick, onPreview }) {
+  const seed = recommendedLine(s);
+  return (
+    <button type="button" disabled={disabled} aria-pressed={current}
+      onClick={() => onPick(s)} onMouseEnter={() => onPreview(s)} onFocus={() => onPreview(s)}
+      className={`flex flex-col items-stretch gap-1 rounded-[9px] border p-1.5 text-left ${current ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-950/40' : 'border-axal-hairline hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800'} ${INK}`}
+      data-testid={`pitch-structure-${s.id}`}>
+      <span className="relative block aspect-[16/9] w-full rounded-[4px] bg-axal-ground dark:bg-gray-800" aria-hidden="true">
+        {s.background === 'image' ? <span className="absolute inset-0 rounded-[4px] bg-violet-200/50 dark:bg-violet-900/40" /> : null}
+        {s.areas.map((a) => <span key={a.id} className="rounded-[2px] border border-axal-violet/40 bg-white/80 dark:border-violet-500/50 dark:bg-gray-900/80" style={placeOf(a)} />)}
+      </span>
+      <span className="text-[11.5px] font-bold leading-tight">{s.label}</span>
+      <span className="text-[10.5px] leading-tight text-axal-muted dark:text-gray-400">{s.use}</span>
+      {seed ? <span className="text-[10px] font-bold uppercase tracking-[.05em] text-axal-violet dark:text-violet-300">{seed}</span> : null}
+    </button>
+  );
+}
+
+/**
+ * ⋯ › This card › Structure. D1513 (#3765, pd10): the 17 structures, each
+ * with its mini, name and use, and "Recommended for Seed" where the plan says
+ * so. Hovering or focusing one says what would move ("[1] block moves to the
+ * notes"); choosing it applies it as one edit (`applyStructure`). The 12
+ * presets that fill a card kind by kind stay below, behind their own dialog.
+ */
+export function StructureSheet({ model, card, index, readOnly, onLayout, onStructure, onClose }) {
+  const [preview, setPreview] = useState(null);
+  const result = preview && card ? applyStructure(card, preview) : null;
+  const pick = (s) => {
+    const r = applyStructure(card, s);
+    if (!r.error) onStructure?.(r);
+  };
+  return (
+    <Frame title={`Structure · card ${index + 1}`} testId="pitch-sheet-structure" onClose={onClose}>
+      <span className={EYE}>Structures</span>
+      <span className={MUTED}>A structure divides the card into areas. The card&apos;s blocks take them in reading order; anything with no area moves to the speaker notes, never away.</span>
+      <div className="grid grid-cols-3 gap-1.5 max-sm:grid-cols-2" role="group" aria-label="Structures">
+        {STRUCTURES.map((s) => (
+          <StructureTile key={s.id} s={s} current={card?.structure === s.id} disabled={readOnly || !card} onPick={pick} onPreview={setPreview} />
+        ))}
+      </div>
+      <span className={MUTED} role="status" aria-live="polite" data-testid="pitch-structure-preview">
+        {result ? (result.error ? result.error : `${preview.label}: ${movedLine(result.count)}${result.count ? ` (${result.moved.map((m) => m.kind).join(', ')})` : ''}.`) : 'Point at a structure to see what moves.'}
+      </span>
+      <span className={EYE}>Presets</span>
+      <span className={MUTED}>The layouts on The Grid. The card&apos;s words move with them, kind by kind; a dialog names anything that has no place.</span>
+      <div className="grid grid-cols-3 gap-1.5">
+        {model.layouts.map((l) => (
+          <button key={l.id} type="button" disabled={readOnly || !card}
+            className={`flex aspect-[16/10] items-center justify-center rounded-[7px] border p-1 text-center text-[11px] font-semibold leading-tight ${card?.layout === l.id ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-300' : `border-axal-hairline dark:border-gray-700 ${INK}`}`}
+            onClick={() => onLayout(l)} data-testid={`pitch-editor-layout-${l.id}`}>{l.label}</button>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+export function BackgroundSheet({ card, index, readOnly, onBackground, onImage, onClose }) {
+  return (
+    <Frame title={`Background · card ${index + 1}`} testId="pitch-sheet-background" onClose={onClose}>
+      <div className="flex items-center gap-2">
+        <input type="color" aria-label="Card background colour" disabled={readOnly || !card}
+          value={card?.background?.color || '#ffffff'} onChange={(e) => onBackground({ color: e.target.value, image_url: null })} />
+        <span className={MUTED}>{card?.background?.color || card?.background?.image_url ? 'Its own background' : 'None: the theme shows'}</span>
+        {card?.background && !readOnly ? <button type="button" className="text-[12px] font-bold text-axal-violet underline dark:text-violet-300" onClick={() => onBackground(null)}>Clear</button> : null}
+      </div>
+      {!readOnly ? <button type="button" className={GHOST} onClick={onImage} data-testid="pitch-sheet-background-image">Choose an image…</button> : null}
+      <span className={MUTED}>{HELD}</span>
+    </Frame>
+  );
+}
+
+export function BrandKitSheet({ projectId, deckId = null, kit, readOnly, dirty = false, onApplied, onClose }) {
+  const kitData = kit.status === 'ok' ? kit.data?.kit : null;
+  return (
+    <Frame title="Brand kit" testId="pitch-sheet-brand" onClose={onClose}>
+      {kit.status === 'error' ? <span className={MUTED} role="status">{KIT_FAILED} <button type="button" className="font-bold underline" onClick={kit.retry}>Try again</button></span> : null}
+      {kit.status === 'ok' && !kitData ? <span className={MUTED}>{NO_KIT}</span> : null}
+      {kitData ? (
+        <span className={`text-[12.5px] ${INK}`} data-testid="pitch-sheet-brand-kit">
+          <b>{kitData.name || 'Your brand kit'}</b>
+          {' · '}{[kitData.palette?.ink, kitData.palette?.accent, kitData.palette?.bg].filter(Boolean).join(' · ') || 'No palette recorded'}
+          {kitData.fonts ? ` · ${kitData.fonts}` : ''}
+          {kitData.voice?.length ? ` · ${kitData.voice.join(', ')}` : ''}
+        </span>
+      ) : null}
+      {kit.status === 'ok' && projectId != null ? (
+        <DeckKitFields projectId={projectId} deckId={deckId} kit={kit} readOnly={readOnly} dirty={dirty} onApplied={onApplied} />
+      ) : null}
+      {projectId != null ? <BrandingCard projectId={projectId} readOnly={readOnly} /> : null}
+    </Frame>
+  );
+}
+
+/** D1562 (#3809, pd7): what the deck's own kit adds to the landing page's: palette roles, the font pair, the image style, the references. */
+export const KIT_ROLES = Object.freeze([['ground', 'Background'], ['ink', 'Text'], ['accent', 'Accent'], ['secondary', 'Secondary'], ['highlight', 'Highlight']]);
+export const IMAGE_STYLE_LABELS = Object.freeze({ photo: 'Photo', illustration: 'Illustration', screenshot: 'Screenshot' });
+export const APPLY_BRAND_LINE = 'One undo step';
+export const APPLY_BRAND_DIRTY = 'Save your changes first, then apply the brand.';
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+/** The kit as the form holds it, from the read: a palette role left empty is not recorded, never black. */
+export function kitDraftOf(deck) {
+  return {
+    display: deck?.fonts?.display || '', body: deck?.fonts?.body || '',
+    palette: Object.fromEntries(KIT_ROLES.map(([role]) => [role, deck?.palette?.[role] || ''])),
+    image_style: deck?.image_style || '', references: Array.isArray(deck?.references) ? deck.references : [], logo_uid: deck?.logo_uid || null,
+  };
+}
+
+/** The body the writer takes: only what is set; a font pair only when both are chosen. */
+export function kitBodyOf(d) {
+  const palette = Object.fromEntries(Object.entries(d.palette).filter(([, v]) => HEX_RE.test(String(v || '').trim())).map(([k, v]) => [k, String(v).trim().toLowerCase()]));
+  return {
+    ...(d.display && d.body ? { fonts: { display: d.display, body: d.body } } : {}),
+    palette, image_style: d.image_style || null, references: d.references, logo_uid: d.logo_uid,
+  };
+}
+
+/**
+ * D1572 (#3819, pd31): the kit's three lock switches. "Only the venture’s
+ * admins can lock": a member who cannot sees the switches, set as they are,
+ * and that line. A locked part shows "Locked by [name]".
+ */
+export function BrandLocks({ projectId, locks, onChanged }) {
+  const [busy, setBusy] = useState(null);
+  const [line, setLine] = useState('');
+  if (locks == null) return null;
+  if (locks.unreadable) return <span className={MUTED} role="status" data-testid="pitch-brand-locks-error">{LOCKS_FAILED}</span>;
+  if (locks.available !== true) return null;
+  const canLock = locks.value?.can_lock === true;
+  const toggle = async (part, locked) => {
+    setBusy(part); setLine('');
+    try { await deckBrandLocksApi.setLock(projectId, part, locked); onChanged?.(); }
+    catch (e) { setLine(userFacingRaiseError(e, { fallback: 'The lock could not be changed. Nothing changed.', scope: 'raise:pitch:brand-lock' })); }
+    finally { setBusy(null); }
+  };
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="pitch-brand-locks">
+      <span className={EYE}>Locks</span>
+      {LOCK_ROWS.map(({ part, label }) => {
+        const { locked, tag } = lockFor(locks, part);
+        return (
+          <div key={part} className="flex items-center justify-between gap-2">
+            <span className={`text-[12.5px] ${INK}`}>{label}{tag ? <span className={`ml-2 ${MUTED}`} data-testid={`pitch-brand-lock-tag-${part}`}>{tag}</span> : null}</span>
+            <button type="button" role="switch" aria-checked={locked} aria-label={`Lock ${label.toLowerCase()}`} disabled={!canLock || busy != null}
+              title={canLock ? undefined : ADMINS_ONLY} className={GHOST} data-testid={`pitch-brand-lock-${part}`} onClick={() => toggle(part, !locked)}>
+              {busy === part ? '…' : locked ? 'Locked' : 'Lock'}
+            </button>
+          </div>
+        );
+      })}
+      <span className={MUTED}>{ADMINS_ONLY}</span>
+      {line ? <span className={MUTED} role="status">{line}</span> : null}
+    </div>
+  );
+}
+
+function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
+  const fonts = kit.data?.font_options || [];
+  const [draft, setDraft] = useState(() => kitDraftOf(kit.data?.kit?.deck));
+  const [busy, setBusy] = useState(null);
+  const [line, setLine] = useState('');
+  // D1572: the kit's locks; a locked part's fields cannot be edited here, and the Worker refuses a change anyway.
+  const [locks, setLocks] = useState(null);
+  const [lockTick, setLockTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    brandLocksAdapter(projectId).then((a) => { if (live) setLocks(a); });
+    return () => { live = false; };
+  }, [projectId, lockTick]);
+  const paletteLock = lockFor(locks, 'palette');
+  const fontsLock = lockFor(locks, 'fonts');
+  const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  const save = async () => {
+    setBusy('save'); setLine('');
+    try { await deckBrandKitApi.save(projectId, kitBodyOf(draft)); setLine('Brand kit saved.'); kit.retry?.(); }
+    catch (e) { setLine(userFacingRaiseError(e, { fallback: 'The brand kit could not be saved. Nothing was changed.', scope: 'raise:pitch:brand-kit' })); }
+    finally { setBusy(null); }
+  };
+  const apply = async () => {
+    setBusy('apply'); setLine('');
+    try {
+      const r = await deckBrandKitApi.applyBrand(deckId);
+      setLine(r?.adjustments?.length ? r.adjustments.join(' ') : 'Brand applied to every card.');
+      onApplied?.(r);
+    } catch (e) { setLine(userFacingRaiseError(e, { fallback: 'The brand could not be applied. Nothing was changed.', scope: 'raise:pitch:brand-apply' })); }
+    finally { setBusy(null); }
+  };
+  const swatch = (c) => (HEX_RE.test(c) ? { background: c } : undefined);
+  return (
+    <div className="flex flex-col gap-2" data-testid="pitch-sheet-brand-deck">
+      <span className={EYE}>Palette{paletteLock.tag ? ` · ${paletteLock.tag}` : ''}</span>
+      <div className="grid grid-cols-5 gap-2">
+        {KIT_ROLES.map(([role, label]) => (
+          <label key={role} className={`flex flex-col gap-1 ${MUTED}`}>
+            <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full border border-axal-hairline dark:border-gray-700" style={swatch(draft.palette[role])} aria-hidden="true" />{label}</span>
+            <input className={FIELD} value={draft.palette[role]} placeholder="#rrggbb" disabled={readOnly || paletteLock.locked} aria-label={`${label} colour`} data-testid={`pitch-brand-palette-${role}`}
+              onChange={(e) => set({ palette: { ...draft.palette, [role]: e.target.value } })} />
+          </label>
+        ))}
+      </div>
+      <span className={EYE}>Fonts{fontsLock.tag ? ` · ${fontsLock.tag}` : ''}</span>
+      <div className="grid grid-cols-2 gap-2">
+        {[['display', 'Headings'], ['body', 'Text']].map(([key, label]) => (
+          <label key={key} className={`flex flex-col gap-1 ${MUTED}`}>{label}
+            <select className={FIELD} value={draft[key]} disabled={readOnly || fontsLock.locked} data-testid={`pitch-brand-font-${key}`} onChange={(e) => set({ [key]: e.target.value })}>
+              <option value="">Not set</option>
+              {fonts.map((f) => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
+      <span className={MUTED}>Google Fonts under the open font licence.</span>
+      <span className={EYE}>Image style</span>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Image style">
+        {Object.entries(IMAGE_STYLE_LABELS).map(([id, label]) => (
+          <button key={id} type="button" role="radio" aria-checked={draft.image_style === id} disabled={readOnly} className={GHOST}
+            data-testid={`pitch-brand-style-${id}`} onClick={() => set({ image_style: draft.image_style === id ? '' : id })}>{label}</button>
+        ))}
+      </div>
+      <span className={MUTED}>{draft.references.length ? `${draft.references.length} reference ${draft.references.length === 1 ? 'image' : 'images'}` : 'No reference images yet. Keep images in the image library to use them here.'}</span>
+      <BrandLocks projectId={projectId} locks={locks} onChanged={() => setLockTick((t) => t + 1)} />
+      {!readOnly ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={save} data-testid="pitch-brand-save">{busy === 'save' ? 'Saving…' : 'Save brand kit'}</button>
+          {deckId != null ? (
+            <button type="button" className={GHOST} disabled={Boolean(busy) || dirty} onClick={apply} data-testid="pitch-brand-apply">{busy === 'apply' ? 'Applying…' : 'Apply brand'}</button>
+          ) : null}
+          <span className={MUTED}>{dirty ? APPLY_BRAND_DIRTY : APPLY_BRAND_LINE}</span>
+        </div>
+      ) : null}
+      {line ? <span className={MUTED} role="status" data-testid="pitch-brand-line">{line}</span> : null}
+    </div>
+  );
+}
+
+export function VersionsSheet({ projectId, versions, readOnly, dirty, phone, compare, onCompare, onRestored, onClose }) {
+  const checks = useDeckChecks(projectId, versions.length);
+  const pair = compare ? comparePair(versions, compare) : null;
+  return (
+    <Frame title="Versions" testId="pitch-sheet-versions" onClose={onClose} width={760}>
+      <Versions versions={versions} phone={phone} onCompare={onCompare} checks={checks} />
+      {dirty && !readOnly ? <span className={MUTED} role="status" data-testid="pitch-sheet-versions-dirty">Save your changes first, then restore a version.</span> : null}
+      {pair ? (
+        <VersionCompare key={`${pair.older.id}-${pair.newer.id}`} older={pair.older} newer={pair.newer} versions={versions} readOnly={readOnly || dirty}
+          onClose={() => onCompare(null)} onRestored={onRestored} />
+      ) : null}
+    </Frame>
+  );
+}
+
+export function SourcesSheet({ onClose, children }) {
+  return <Frame title="Sources and coverage" testId="pitch-sheet-sources" onClose={onClose} width={560}>{children}</Frame>;
+}
+
+/**
+ * D1523 (#3775, pd25): where the figures on the saved version come from. It
+ * reads the saved version, so an unsaved edit shows after Save; a read that
+ * fails says so and never counts 0.
+ */
+export function FigureCounts({ deckId, onGoToCard }) {
+  const [answer, setAnswer] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setAnswer(null);
+    figuresAdapter(deckId).then((a) => { if (live) setAnswer(a); });
+    return () => { live = false; };
+  }, [deckId]);
+  if (!answer) return <span className={MUTED} role="status" data-testid="pitch-figures-loading">Reading where each figure comes from…</span>;
+  if (!answer.available) return <span className={MUTED} role="status" data-testid="pitch-figures-off">{shown(answer)}</span>;
+  const review = toReview(answer.value?.figures);
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="pitch-figures">
+      <span className={EYE}>Figures on the saved version</span>
+      <span className={`text-[12.5px] font-bold ${INK}`} data-testid="pitch-figures-counts">{checkCounts(answer.value?.counts)}</span>
+      {review.length ? (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-figures-review">
+          {review.map((f) => (
+            <li key={f.key} className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-axal-hairline px-2.5 py-1.5 dark:border-gray-700" data-testid={`pitch-figures-row-${f.key}`}>
+              <span className="flex flex-col">
+                <span className={`text-[12.5px] ${INK}`}><b>{f.chip}</b> · card {f.card + 1} · {f.title}</span>
+                <span className={MUTED}>{f.line}</span>
+              </span>
+              {onGoToCard ? <button type="button" className={GHOST} onClick={() => onGoToCard(f.card)} data-testid={`pitch-figures-go-${f.key}`}>{GO_TO_CARD}</button> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+export function CheckSheet({ deck, projectId, readOnly, dirty, onReplaced, onGoToCard, onClose }) {
+  return (
+    <Frame title="Check claims" testId="pitch-sheet-check" onClose={onClose} width={560}>
+      <FigureCounts key={`figures-${deck.id}-${deck.updated_at ?? ''}`} deckId={deck.id} onGoToCard={onGoToCard} />
+      <CheckPanel key={deck.id} deck={deck} projectId={projectId} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} onGoToCard={onGoToCard} />
+    </Frame>
+  );
+}
+
+export const REMIX_TITLE = 'Remix this slide · 4 layouts, no AI charge';
+export const REMIX_FREE = 'Free · no AI charge';
+export const REMIX_NONE = 'No other layout holds every block on this card. Remove a block to see more.';
+
+/** A block as the sheet names it: a metric by its label, words by their first words, else its kind. */
+export function remixBlockName(b) {
+  if (b?.kind === 'metric' && b.label) return String(b.label);
+  if (b?.kind === 'text' && b.text) return String(b.text).split(/\s+/).slice(0, 5).join(' ');
+  return blockKindName(b?.kind);
+}
+const blockKindName = (k) => ({ chart: 'Chart', graphic: 'Diagram', image: 'Image', video: 'Video', audio: 'Audio', link: 'Link', metric: 'Figure', text: 'Words' }[k] || 'Block');
+
+function MiniLayout({ card, testId }) {
+  const areas = Array.isArray(card?.areas) ? card.areas : [];
+  return (
+    <div className="grid aspect-[16/9] w-full gap-[2px] rounded-[6px] border border-axal-hairline bg-axal-ground p-[3px] dark:border-gray-700 dark:bg-gray-950"
+      style={{ gridTemplateColumns: 'repeat(12, 1fr)', gridTemplateRows: 'repeat(6, 1fr)' }} aria-hidden="true" data-testid={testId}>
+      {areas.map((a) => (
+        <span key={a.id} className="rounded-[3px] bg-axal-lavender dark:bg-violet-950/50" style={{ gridColumn: `${a.c1} / ${a.c2 + 1}`, gridRow: `${a.r1} / ${a.r2 + 1}` }} />
+      ))}
+    </div>
+  );
+}
+
+export function RemixSheet({ deckId, card, index, readOnly, onApply, onClose }) {
+  const [state, setState] = useState({ status: 'loading', answer: null });
+  const [undo, setUndo] = useState(null);
+  const [asked, setAsked] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setState({ status: 'loading', answer: null });
+    remixAdapter(deckId, card).then((answer) => { if (live) setState({ status: answer.available ? 'ok' : 'off', answer }); });
+    return () => { live = false; };
+    // The card on screen is the input: a new card (or an applied layout) asks again.
+  }, [deckId, card, asked]);
+  const apply = (next, label) => {
+    if (readOnly || !onApply) return;
+    const back = onApply(next);
+    setUndo({ label, back });
+  };
+  const remove = async (block) => {
+    if (readOnly) return;
+    const answer = await remixAdapter(deckId, card, { remove: block.id });
+    if (answer.available) apply(answer.value.card, `Removed ${remixBlockName(block)}`);
+    else setState({ status: 'off', answer });
+  };
+  const options = state.answer?.available ? state.answer.value.options || [] : [];
+  const blocks = Array.isArray(card?.blocks) ? card.blocks : [];
+  return (
+    <Frame title={`${REMIX_TITLE} · card ${index + 1}`} testId="pitch-sheet-remix" onClose={onClose} width={620}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-remix-free">{REMIX_FREE}</span>
+        <span className={MUTED}>Every layout keeps every block and what it says; only where it sits changes.</span>
+      </div>
+      {undo ? (
+        <div className="flex items-center justify-between gap-2 rounded-[9px] border border-axal-hairline px-3 py-2 dark:border-gray-700" role="status" data-testid="pitch-remix-applied">
+          <span className={`text-[12.5px] ${INK}`}>{undo.label}. {HELD}</span>
+          <button type="button" className={GHOST} onClick={() => { undo.back?.(); setUndo(null); setAsked((n) => n + 1); }} data-testid="pitch-remix-undo">Undo</button>
+        </div>
+      ) : null}
+      {state.status === 'loading' ? <span className={MUTED} role="status">Reading the layouts that fit this card…</span> : null}
+      {state.status === 'off' ? <span className={MUTED} role="status" data-testid="pitch-remix-off">{shown(state.answer)}</span> : null}
+      {state.status === 'ok' && !options.length ? <span className={MUTED} data-testid="pitch-remix-none">{REMIX_NONE}</span> : null}
+      {options.length ? (
+        <div className="grid grid-cols-2 gap-2" data-testid="pitch-remix-options">
+          {options.map((o) => (
+            <div key={o.structure} className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-2 dark:border-gray-700" data-testid={`pitch-remix-option-${o.structure}`}>
+              <MiniLayout card={o.card} testId={`pitch-remix-preview-${o.structure}`} />
+              <span className={`text-[12.5px] font-bold ${INK}`}>{o.label}</span>
+              <span className={MUTED}>{o.line}</span>
+              <button type="button" className={GHOST} disabled={readOnly} onClick={() => apply(o.card, `Now ${o.label}`)} data-testid={`pitch-remix-use-${o.structure}`}>Use this layout</button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {blocks.length > 1 ? (
+        <div className="flex flex-col gap-1.5" data-testid="pitch-remix-remove">
+          <span className={EYE}>Remove a block · the rest reflows inside the grid</span>
+          <div className="flex flex-wrap gap-1.5">
+            {blocks.map((b) => (
+              <button key={b.id} type="button" className={GHOST} disabled={readOnly} onClick={() => remove(b)} data-testid={`pitch-remix-remove-${b.id}`}>
+                Remove {remixBlockName(b)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </Frame>
+  );
+}
+
+export const STAGE_TITLE = 'Stage';
+export const STAGE_DIRTY = 'Save your changes first: the new order is saved as its own version.';
+
+/** pd23: the deck's stage plan and Reorder for stage, one new version (one undo step). */
+export function StageSheet({ deckId, readOnly, dirty, onReordered, onClose }) {
+  const [stage, setStage] = useState(null);
+  const [plan, setPlan] = useState({ status: 'loading' });
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setPlan({ status: 'loading' });
+    stagePlanAdapter(deckId, stage ? { stage } : {}).then((r) => {
+      if (!live) return;
+      if (r.available) { setPlan({ status: 'ok', data: r.value }); if (!stage && r.value?.stage) setStage(r.value.stage); }
+      else setPlan({ status: 'error', reason: r.reason });
+    });
+    return () => { live = false; };
+  }, [deckId, stage]);
+  const data = plan.status === 'ok' ? plan.data : null;
+  const order = Array.isArray(data?.order) ? data.order : [];
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+  const reorder = async () => {
+    setBusy(true); setError(null); setNote(null);
+    const r = await deckActionsAdapter(deckId, { stage: data?.stage ?? stage });
+    setBusy(false);
+    if (!r.available) { setError(r.reason || 'The deck could not be reordered. Nothing was saved.'); return; }
+    setNote(reorderNote(r.value));
+    if (r.value?.deck) onReordered?.(r.value);
+  };
+  return (
+    <Frame title={STAGE_TITLE} testId="pitch-sheet-stage" onClose={onClose} width={560}>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stage" data-testid="pitch-stage-chips">
+        {STAGES.map((s) => (
+          <button key={s.id} type="button" aria-pressed={(data?.stage ?? stage) === s.id} onClick={() => setStage(s.id)} data-testid={`pitch-stage-${s.id}`}
+            className={`min-h-[30px] rounded-full border px-2.5 text-[11.5px] font-semibold ${(data?.stage ?? stage) === s.id ? 'border-axal-violet text-axal-violet dark:border-violet-400 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      {plan.status === 'loading' ? <span className={MUTED} role="status" data-testid="pitch-stage-loading">Reading the order for this stage…</span> : null}
+      {plan.status === 'error' ? <span className={MUTED} role="alert" data-testid="pitch-stage-error">{`The stage plan could not be read: ${plan.reason}`}</span> : null}
+      {data ? (
+        <>
+          <span className={EYE}>{`The ${data.stage_label} order`}</span>
+          <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5" data-testid="pitch-stage-order">
+            {order.map((row) => (
+              <li key={row.card} className={`text-[12.5px] ${INK}`} data-testid={`pitch-stage-row-${row.card}`}>
+                <span className="font-bold">{row.title}</span>
+                {row.in_deck == null ? <span className={`${MUTED} ml-1.5`}>· Not in this deck</span> : null}
+                {row.why ? <span className={`${MUTED} block`}>{row.why}</span> : null}
+              </li>
+            ))}
+          </ol>
+          {warnings.length ? (
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="pitch-stage-warnings">
+              {warnings.map((w) => <li key={`${w.card}-${w.code}`} className={MUTED}>{w.message}</li>)}
+            </ul>
+          ) : null}
+          {readOnly ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={GHOST} onClick={reorder} disabled={busy || dirty} title={dirty ? STAGE_DIRTY : undefined} data-testid="pitch-stage-reorder">
+                {busy ? 'Ordering…' : reorderLabel(data.stage)}
+              </button>
+              <span className={MUTED}>Free · no AI charge</span>
+            </div>
+          )}
+          {dirty && !readOnly ? <span className={MUTED} data-testid="pitch-stage-dirty">{STAGE_DIRTY}</span> : null}
+        </>
+      ) : null}
+      {note ? <span className={MUTED} role="status" data-testid="pitch-stage-note">{note}</span> : null}
+      {error ? <span className={MUTED} role="alert" data-testid="pitch-stage-reorder-error">{error}</span> : null}
+    </Frame>
+  );
+}
+
+export const REPLACE_TITLE = 'Replace all images';
+export const REPLACE_LINE = 'One quote for every image area. Each image is checked before it is shown; one that fails is drawn once more or left out, and never charged.';
+
+/** pd13: Replace all images, one quote and one hold for the whole deck. */
+export function ReplaceImagesSheet({ deckId, readOnly, onDone, onClose }) {
+  const [quote, setQuote] = useState({ status: 'loading' });
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [key] = useState(() => (globalThis.crypto?.randomUUID?.() || `replace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`));
+  useEffect(() => {
+    let live = true;
+    replaceImagesAdapter(deckId, {}).then((r) => {
+      if (!live) return;
+      setQuote(r.available ? { status: 'ok', data: r.value } : { status: 'error', reason: r.reason });
+    });
+    return () => { live = false; };
+  }, [deckId]);
+  const q = quote.status === 'ok' ? quote.data : null;
+  const leftOut = Array.isArray(q?.left_out) ? q.left_out : [];
+  const canPress = !readOnly && !busy && !result && q?.ai === true && q.count > 0 && q.balance?.ok !== false;
+  const press = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await deckImagesApi.replaceAll(deckId, {}, { ...railPressHeaders('deck:image'), 'Idempotency-Key': key });
+      setResult(r);
+      onDone?.(r);
+    } catch (e) { setError(refusalOf(e)?.message || 'The images could not be drawn. Nothing was charged.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Frame title={REPLACE_TITLE} testId="pitch-sheet-replace-images" onClose={onClose}>
+      <span className={MUTED}>{REPLACE_LINE}</span>
+      {quote.status === 'loading' ? <span className={MUTED} role="status" data-testid="pitch-replace-loading">Pricing every image area…</span> : null}
+      {quote.status === 'error' ? <span className={MUTED} role="alert" data-testid="pitch-replace-error">{`The images could not be priced: ${quote.reason}`}</span> : null}
+      {q && q.ai === false ? <span className={MUTED} data-testid="pitch-replace-off">{q.message}</span> : null}
+      {q && q.ai === true ? (
+        <>
+          <span className={`text-[12.5px] font-bold ${INK}`} data-testid="pitch-replace-quote">{`${q.count} image area${q.count === 1 ? '' : 's'} · holds up to ${aiTokens(q.hold_microusd) || 'Not recorded'}`}</span>
+          {leftOut.length ? (
+            <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-replace-left-out">
+              {leftOut.map((x) => <li key={`${x.card}-${x.block}`} className={MUTED}>{`Card ${x.card + 1}: left out. ${x.message}`}</li>)}
+            </ul>
+          ) : null}
+          {q.balance?.ok === false ? <span className={MUTED} role="alert" data-testid="pitch-replace-balance">{q.balance.message}</span> : null}
+          {readOnly ? null : (
+            <button type="button" className={GHOST} onClick={press} disabled={!canPress} data-testid="pitch-replace-press">
+              {busy ? 'Drawing…' : replaceLabel(q)}
+            </button>
+          )}
+        </>
+      ) : null}
+      {result ? <span className={MUTED} role="status" data-testid="pitch-replace-result">{replaceNote(result)}</span> : null}
+      {error ? <span className={MUTED} role="alert" data-testid="pitch-replace-press-error">{error}</span> : null}
+    </Frame>
+  );
+}

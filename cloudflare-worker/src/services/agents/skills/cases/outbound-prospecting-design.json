@@ -1,0 +1,34 @@
+{
+  "skill": "outbound-prospecting-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Outbound Prospecting Strategy",
+        "task_scope": "Designs account and contact prospecting by segment, observable trigger event, relevant buyer role and relationship route.",
+        "evidence": [
+          "trigger-based account prioritization"
+        ],
+        "omitted_field": "contact role"
+      },
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for trigger-based account prioritization."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "trigger-based account prioritization"
+    ],
+    "must_say_not_recorded": [
+      "contact role"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

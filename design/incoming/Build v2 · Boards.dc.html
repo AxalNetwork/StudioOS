@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · UX V2 · #4846</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Build — a founder execution cockpit, evidence attached</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Build is organised around shipping rather than records. The navigation is Overview · Plan · Progress · Tools above the six modules. The overview opens on one next action, then a status strip, material blockers, a Build Plan preview and compact module cards. Plan proposals read What, Why and Decision; Eadwyn wording sits in a subordinate block and never accepts the item, and evidence chips open the evidence chain. Progress summarises Planned, Building and Shipped / learned over the authoritative six stages. Built and Tested stay distinct, and nothing unknown counts as incomplete. Send to… is four steps whose context freezes while preparing. A saved filing with a failed proof upload gets its own partial-success pattern. Six missing-data states carry different visual weight.</p>
+    <p style="margin:0;font:700 12px 'Roboto Mono',monospace;color:#7c3aed">Revised 9 Nov 2026 for the 8 Nov authenticated audit · new boards BD18–BD24; BD1, BD7, BD8, BD11, BD12 and BD17 changed</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · founder workspace · venture “Northline”, people, dates and counts are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BD-0', 'Audit, journey and information hierarchy', 'The severity-ranked findings, marked source or live, with today’s and the proposed journey and the Overview · Plan · Progress · Tools hierarchy.', [W('BU00')]],
+      ['BD1', 'Build Overview · desktop', 'One next action owns the page: the Next card is the only primary button (the header CTA is gone), then a status strip with sources, Needs attention limited to material blockers, a Build Plan preview and compact module cards whose copy matches the modules (“1 has no evidence link”, “3 working · accounting failing”). Build sections live in the sidebar only.', [F('BU01', false, 1500)]],
+      ['BD2', 'Build Overview · phone', 'Venture context, the Overview · Plan · Progress · Tools tabs, the next action at 48px, then attention and the plan.', [P('BU02', false)]],
+      ['BD3', 'Build Plan', 'What Validate proved, then each proposal as What / Why / Decision with interactive evidence chips and its destination. Eadwyn wording is a subordinate Suggested wording block. Accepted items collapse to rows whose Open targets the exact record.', [F('BU03', false, 1250)]],
+      ['BD4', 'Evidence sheet', 'The chain from Validate to the plan item: each node with its source kind, a date only where recorded, and Open record.', [F('BU04', false, 1000)]],
+      ['BD5', 'Progress', 'The founder summary (Planned · Building · Shipped / learned) over the six detailed stages. An item with stages Not recorded is not counted as incomplete, and Learned (a test) is not Built.', [F('BU05', false, 900)]],
+      ['BD6', 'Progress item trail', 'Each stage names its source. Not recorded (no tool reports it) and Could not be read (with Try again) look different.', [F('BU06', false, 900)]],
+      ['BD7', 'Solution design', 'Founder-outcome subtitle and one dominant action (Link evidence to “Dark mode”). The evidence filter names its link kind (Pain linked, Hypothesis linked, No evidence link), so a hypothesis-linked row no longer looks unlinked (#5067). Six features show no search or sort.', [F('BU07', false, 980)]],
+      ['BD8', 'Prototype / MVP', 'Core work first: must-haves with test, state, owner, due, GitHub and Vercel. Below it, a Sources region where From Vercel and From Lovable report per must-have, each isolated (#5064). Build in Lovable lives inside From Lovable, never in the page header.', [F('BU08', false, 900)]],
+      ['BD9', 'Product roadmap', 'Now · Next · Later · Done with KPI, owner, target and release, Shipped this month with its source, and a link to the Work board rather than a duplicate.', [F('BU09', false, 800)]],
+      ['BD10', 'Founding team', 'Founder cards with Not recorded for missing role, equity, vesting or agreement; GitHub contribution as supporting evidence only.', [F('BU10', false, 700)]],
+      ['BD11', 'Company creation', 'The nearest-deadline filing is the one primary action (83(b), due in 8 days). Add another filing, Legal documents and E-signature sit together as supporting tools. Partial success keeps the filing and retries only the upload, as a secondary action.', [F('BU11', false, 900)]],
+      ['BD12', 'Tools', 'Build › Tools is the one list of tools that feed Build, each with what it feeds, last good sync and one truthful action (Reconnect, Manage or Connect). Company systems moved to Operating systems › Systems, which links here.', [F('BU12', false, 1000)]],
+      ['BD13', 'Send to…', 'A · Choose work: nothing preselected. B · Destination, explaining exactly what each provider prepares. C · Review the exact content with the privacy check. D · Open externally, with provider, items and repository frozen.', [C('BU13a', 'A · Choose work', 760, 440), C('BU13b', 'B · Destination', 760, 440), C('BU13c', 'C · Review', 760, 440), C('BU13d', 'D · Open externally', 760, 500)]],
+      ['BD14', 'Responsive and system states', 'A · Fifteen states, each saying what happened and what to do. B · Tablet 768. C · Dark mode.', [C('BU14', 'A · States', 1400, 840), D('BU14t', 'B · Tablet 768', 768, 1180, 16), F('BU14d', 'C · Dark', 1500)]],
+      ['BD14m', 'Phone parity', 'A · Progress with Search, Filters (N) and Sort, filters in a full-width sheet. B · Build Plan reachable in one tap. C · The vertical evidence trail.', [P('BU10b', 'A · Progress filters'), P('BU10c', 'B · Plan'), P('BU10d', 'C · Trail')]],
+      ['BD15', 'Auth interruption, return to Build', 'Desktop and phone. “Sign in to continue to Build” with the return destination and venture shown. The sign-in sits in a main landmark with a Build page title, and the cookie choice never covers sign-in, passkey, recovery or Apply. Targets are 44px.', [D('BU15', 'A · Desktop', 1280, 870, 12), P('BU15m', 'B · Phone')]],
+      ['BD16', 'Accessibility and interaction specification', 'Native radio chips with arrow keys, links with aria-current, sheet focus handling, status announcements, the six missing states and auth rules.', [W('BU16')]],
+      ['BD17', 'Developer handoff', 'Each change mapped to the capability it preserves, its backend dependency (#4600–#4603, and #5064–#5068 for the 8 Nov audit) and how to verify it.', [W('BU17')]],
+      ['BD18', 'Progressive complexity · Solution design at 0, 2 and 24 features', 'A · Zero: one guided first action, module-specific Ask, no list controls or connector states. B · A few records: the list and its one Add, nothing else. C · 24 records: search, the evidence-link filter, sort and paging appear (#5076).', [F('BU18a', 'A · 0 features', 820), C('BU18b', 'B · 2 features', 640, 420), C('BU18c', 'C · 24 features', 640, 430)]],
+      ['BD19', 'Empty modules · Prototype / MVP and Company creation', 'A · MVP before any must-have: one action, Sources quiet until there is something to report. B · Company creation before formation: Start formation, supporting tools beside it.', [F('BU19a', 'A · MVP, no must-haves', 820), F('BU19b', 'B · Company creation, not formed', 760)]],
+      ['BD20', 'Operating systems · Systems · Cadence · Tools ↗', 'A · One prerequisite, Link company, and no system rows until it is done (#5078). B · Systems where one state drives subtitle and action: Connected → Manage, Failing or Disconnected → Reconnect, Not connected → Connect; Workspace reports no sync it never records (#5065). C · Cadence, the one home of the Monday plan, review, retro and annotations. Tools ↗ opens Build › Tools.', [F('BU20a', 'A · Company not linked yet', 700), F('BU20b', 'B · Systems', 760), F('BU20c', 'C · Cadence', 820)]],
+      ['BD21', 'Eadwyn by module', 'A · The rail open on Solution design: module suggestions that never auto-run, the answer with its action, and AI settings (model, allowance, billing link) folded at the bottom, never in the page. B · Suggested asks per module (#5077).', [F('BU21a', 'A · Rail with AI settings', 1000), W('BU21b', 'B · Suggestions by module')]],
+      ['BD22', 'Founder preview safety', 'A persistent banner says whose view this is and that saves are written as Super Admin; every write asks first, naming who it will be recorded under.', [F('BU22', false, 760)]],
+      ['BD23', 'Navigation, copy and dominant actions', 'Before and after navigation (one module switcher: the sidebar), module subtitles rewritten as founder outcomes, and the one dominant action per module in empty and in-progress states (#5076, #5068).', [W('BU23')]],
+      ['BD24', 'Phone · empty module and company not linked', 'A · Solution design at zero on phone, with Ask folded. B · Operating systems before a company is linked.', [P('BU24a', 'A · Empty module'), P('BU24b', 'B · Company not linked')]],
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

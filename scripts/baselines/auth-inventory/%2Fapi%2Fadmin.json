@@ -1,0 +1,7 @@
+{
+  "GET /api/admin/event-syndication/oauth/:channel/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Public+Sans:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span><span style="font-size:13px;font-weight:700">{{ v.company }}</span><span style="display:flex;align-items:center"><span role="img" aria-label="Studio" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.studioI }}"></span><span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span></span></div></sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><nav aria-label="Raise modules" style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="9"><a href="{{ g.href }}" style="{{ g.s }}">{{ g.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.msel }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Raise modules" style="{{ v.mselS }}"><span style="{{ v.eyeS }}">Module</span><b style="flex:1;text-align:left">{{ v.title }}</b><span aria-hidden="true">▾</span></button></sc-if><sc-if value="{{ v.moved }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.movedS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1">{{ v.moved }}</span><button type="button" style="{{ v.dismissS }}">Dismiss</button></div></sc-if><sc-if value="{{ v.tbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.tbarS }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ v.tbarChips }}" as="g" hint-placeholder-count="4"><span title="{{ g.tip }}" style="{{ g.s }}">{{ g.t }}</span></sc-for></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><sc-if value="{{ v.tbarNote }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tbarNoteS }}">{{ v.tbarNote }}</span></sc-if><sc-for list="{{ v.tbarBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a aria-current="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  <sc-if value="{{ v.pnav }}" hint-placeholder-val="{{ false }}"><nav aria-label="Cycles" style="{{ v.pnavS }}"><sc-for list="{{ v.pnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}"><span aria-hidden="true" style="{{ pn.ds }}"></span>{{ pn.t }}</a></sc-for></nav></sc-if></main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railX }}">›</button></div><p style="{{ v.railP }}">{{ v.rail.line }}</p><button type="button" style="{{ v.railB }}">{{ v.rail.btn }}</button><sc-for list="{{ v.rail.items }}" as="ri" hint-placeholder-count="3"><div style="{{ v.railI }}"><span style="{{ v.eyeS }}">{{ ri.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ ri.t }}</span></div></sc-for></aside></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;STG1&quot;,&quot;options&quot;:[&quot;STG1&quot;,&quot;STG2a&quot;,&quot;STG2b&quot;,&quot;STG3&quot;,&quot;STG4a&quot;,&quot;STG4b&quot;,&quot;STG4c&quot;,&quot;STG5&quot;,&quot;STG6&quot;,&quot;STG7&quot;,&quot;STG8&quot;,&quot;STG9a&quot;,&quot;STG9b&quot;,&quot;STG10a&quot;,&quot;STG10b&quot;,&quot;STG11&quot;,&quot;STG12&quot;,&quot;STG13a&quot;,&quot;STG13b&quot;,&quot;STG14a&quot;,&quot;STG14b&quot;,&quot;STG15a&quot;,&quot;STG15b&quot;,&quot;STG15c&quot;,&quot;STG16&quot;,&quot;STG17a&quot;,&quot;STG17b&quot;,&quot;STG18a&quot;,&quot;STG18b&quot;,&quot;STG18c&quot;,&quot;STG19&quot;,&quot;STG20&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'STG1';
+    const dark = B === 'STG16', phone = /^STG1[59]/.test(B);
+    const crop = ['STG2a', 'STG2b', 'STG4a', 'STG4b', 'STG4c', 'STG13a', 'STG13b', 'STG14b', 'STG17a', 'STG17b', 'STG18a', 'STG18b', 'STG18c'].indexOf(B) >= 0;
+    const pub = ['STG14b', 'STG18a', 'STG18b', 'STG18c', 'STG19'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    if (pub) Object.assign(c, { bg: '#faf9fc', ink: '#141118', vi: '#6d28d9', vt: '#6d28d9' });
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = pub ? "'Public Sans',system-ui,sans-serif" : "'Space Grotesk',system-ui,sans-serif", HF = "font-family:'Bricolage Grotesque',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid ' + (pub ? '#6d28d9' : '#7c3aed') + ';background:' + (pub ? '#6d28d9' : '#7c3aed') + ';color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    const NS1 = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink, PCOL = 'display:flex;flex-direction:column;gap:14px;min-width:0', MS = 'font:600 12px ' + MO + ';color:' + c.mu;
+    const PILL = 'display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.6;white-space:nowrap;';
+    const NEWP = { t: 'New', s: PILL + 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE };
+    const btn44 = BTN + 'min-height:44px;padding:0 14px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.vt;
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    const ERR = (t, tone, btns) => R({ rs: NOTE(tone || 'r'), lead: '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'a' ? c.amT : c.neg), t, ts: 'font-size:13px;font-weight:700;line-height:1.5;color:' + (tone === 'a' ? c.amT : c.neg), btns: btns || false });
+    const NOTICE = (tone, t, btns) => K({ cs: PLAIN, rows: [ERR(t, tone, btns)] });
+    const KN = ['Data room', 'Documents', 'Recordings', 'Decks and exports', 'Brand', 'Other'], KC = [S[0], S[1], S[2], S[3], S[4], 'H'];
+    const HT2 = (col) => 'repeating-linear-gradient(45deg,' + col + ' 0 1.5px,' + c.card + ' 1.5px 5px)';
+    const fmt = (mb) => mb <= 0 ? '0 B' : mb >= 1048576 ? String(+(mb / 1048576).toFixed(1)) + ' TB' : mb >= 1024 ? String(+(mb / 1024).toFixed(mb >= 102400 ? 0 : 1)) + ' GB' : Math.round(mb) + ' MB';
+    const B2 = (mb) => mb <= 0 ? '0 B' : '[' + fmt(mb) + ']';
+    const swK = (i) => KC[i] === 'H' ? 'width:12px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px solid #6b6577;background:' + HT2('#6b6577') : dotSw(KC[i]);
+    const DASHSW = 'width:14px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px dashed ' + c.mu;
+    const AMSW = 'width:12px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;background:#fcd34d;border:1px solid #92400e';
+    const REDSW = 'width:12px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px solid ' + c.neg + ';background:' + HT2(c.neg);
+    const KSW = (i) => KC[i] === 'H' ? 'padding-left:18px;background:' + HT2('#6b6577') + ' no-repeat 0 50% / 11px 11px' : 'padding-left:16px;background:radial-gradient(circle at 5px 50%,' + KC[i] + ' 0 4px,transparent 4.5px)';
+    const meter = (o) => { const W = phone ? 360 : 1000, H = o.over ? 56 : 44, y = 20, bh = 16, sp = o.over ? Math.round(W * .64) : W, used = sum(o.k), tot = o.over ? used : o.allow, X = (mb) => +(mb / tot * sp).toFixed(1), tx = (f) => +(f * sp).toFixed(1), id = 'mh' + B, full = o.st === 'full';
+      let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" aria-hidden="true" style="display:block"><defs><pattern id="' + id + '" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="' + c.card + '"/><line x1="0" y1="0" x2="0" y2="6" stroke="#6b6577" stroke-width="2"/></pattern><pattern id="' + id + 'r" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="' + c.negBg + '"/><line x1="0" y1="0" x2="0" y2="6" stroke="' + c.neg + '" stroke-width="2"/></pattern></defs>';
+      s += '<rect x="1" y="' + (y + 1) + '" width="' + (sp - 2) + '" height="' + (bh - 2) + '" rx="4" fill="' + c.raised + '" stroke="' + c.hair + '"/>';
+      let acc = 0; o.k.forEach((mb, i) => { if (!mb) return; const x = X(acc), w = Math.max(1.5, X(acc + mb) - x - .8); s += '<rect x="' + x + '" y="' + y + '" width="' + w.toFixed(1) + '" height="' + bh + '" fill="' + (KC[i] === 'H' ? 'url(#' + id + ')' : KC[i]) + '"' + (KC[i] === 'H' ? ' stroke="#6b6577" stroke-width=".8"' : '') + '><title>' + KN[i] + ' · ' + fmt(mb) + '</title></rect>'; acc += mb; });
+      if (o.st === 'warn') { const x0 = tx(.8); s += '<rect x="' + x0 + '" y="' + y + '" width="' + Math.max(1, X(used) - x0).toFixed(1) + '" height="' + bh + '" fill="#fcd34d" stroke="#92400e"><title>Past 80% of your plan</title></rect>'; }
+      if (full) s += '<rect x="1" y="' + (y + 1) + '" width="' + (sp - 2) + '" height="' + (bh - 2) + '" rx="4" fill="none" stroke="' + c.neg + '" stroke-width="2.5"/>';
+      if (o.ns && !o.over) s += '<rect x="' + (X(used) + 3) + '" y="' + (y + 1) + '" width="16" height="' + (bh - 2) + '" rx="2" fill="none" stroke="' + c.mu + '" stroke-width="1.2" stroke-dasharray="3 2"><title>' + o.ns + ' files · size not recorded yet</title></rect>';
+      if (o.over) { const bx = sp + (W - sp) / 2; s += '<rect x="' + (sp + 2) + '" y="' + y + '" width="' + (W - sp - 3) + '" height="' + bh + '" rx="3" fill="url(#' + id + 'r)" stroke="' + c.neg + '" stroke-width="1.2"><title>Over your plan · ' + o.over + '</title></rect><path d="M' + (bx - 7) + ' ' + (y - 3) + 'l8 ' + (bh + 6) + 'M' + (bx + 3) + ' ' + (y - 3) + 'l8 ' + (bh + 6) + '" stroke="' + c.card + '" stroke-width="4"/><text x="' + (sp - 4) + '" y="' + (y + bh + 15) + '" text-anchor="end" font-family="Roboto Mono,monospace" font-size="10.5" fill="' + c.mu + '">End of your plan · ' + B2(o.allow) + '</text><text x="' + (sp + 8) + '" y="' + (y + bh + 15) + '" font-family="Roboto Mono,monospace" font-size="10.5" font-weight="700" fill="' + c.neg + '">' + o.over + ' over · not to scale</text>'; }
+      [.8, .95].forEach(f => { const x = tx(f); s += '<line x1="' + x + '" x2="' + x + '" y1="' + (y - 4) + '" y2="' + (y + bh + 4) + '" stroke="' + c.ink + '" stroke-width="1.2"/><text x="' + x + '" y="' + (y - 8) + '" text-anchor="middle" font-family="Roboto Mono,monospace" font-size="10.5" fill="' + c.mu + '">' + Math.round(f * 100) + '%</text>'; });
+      const pct = Math.min(100, Math.round(used / o.allow * 100));
+      return { __html: '<div role="progressbar" aria-label="Storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-valuetext="' + fmt(used) + ' of ' + fmt(o.allow) + ' used">' + s + '</svg></div>' }; };
+    const kleg = (o) => KN.map((n, i) => o.k[i] ? { t: n + ' ' + B2(o.k[i]), sw: swK(i) } : null).filter(Boolean).concat(o.ns ? [{ t: 'Size not recorded yet · [' + o.ns + '] files', sw: DASHSW }] : []).concat(o.st === 'warn' ? [{ t: 'Past 80%', sw: AMSW }] : []).concat(o.over ? [{ t: 'Over your plan', sw: REDSW }] : []);
+    const card1 = (o) => { const used = sum(o.k), left = o.allow - used, low = o.plan === 'Free' || /Basic/.test(o.plan); return K({ title: 'Your storage', tags: [pl('◆', o.plan, low ? 'n' : 'v')].concat(o.lab ? [pl(o.st === 'warn' ? '◔' : '!', o.lab, o.st === 'warn' ? 'a' : 'r')] : []), rows: [R({ rs: 'display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;padding:0', t: B2(used) + ' of ' + B2(o.allow) + (o.suffix || ''), ts: 'font:700 ' + (phone ? 22 : 30) + 'px ' + MO + ';letter-spacing:-.02em;line-height:1.25', v: o.over ? o.over + ' over' : left > 0 ? B2(left) + ' left' : 'None left', vs: 'font:700 13px ' + MO + ';color:' + (o.over || left <= 0 ? c.neg : c.mu) })], svg: meter(o), legend: kleg(o), btns: o.noCmp ? false : [{ t: 'Compare plans', s: btnG }], foot: (o.foot || ('Your plan includes ' + fmt(o.allow) + '. Files you upload to your companies count toward your storage.')) + (o.ns ? ' [' + o.ns + '] files were stored before sizes were recorded. They are being measured.' : '') }); };
+    const kindBars = (k) => { const mx = Math.max.apply(null, k.concat([1])); return K({ title: 'By kind', tog: TOG(), sum: 'Storage by kind: ' + KN.map((n, i) => n + ' ' + (k[i] ? fmt(k[i]) : 'none')).join(', ') + '.', bgs: 'display:grid;grid-template-columns:' + (phone ? '96px' : '136px') + ' minmax(0,1fr) ' + (phone ? '62px' : '72px') + ';gap:10px;align-items:center;font-size:12.5px', bars: KN.map((n, i) => { const w = (k[i] / mx * 100).toFixed(1) + '%'; return k[i] ? BAR(n, B2(k[i]), w, { fs: KC[i] === 'H' ? 'display:block;height:100%;border-radius:999px;box-sizing:border-box;width:' + w + ';background:' + HT2('#6b6577') + ';border:1px solid #6b6577' : FILL(w, KC[i]) }) : BAR(n, 'None', '0%', { fs: 'display:none', vs: 'font:600 12px ' + MO + ';color:' + c.mu }); }), foot: 'Bar lengths compare the kinds with each other. 1 GB = 1,024 MB.' }); };
+    const kindT = (k, fl, un) => { const known = un !== undefined, used = sum(k), BX = { ts: 'font-family:' + MO + ';font-weight:800' }; const rows = KN.map((n, i) => i === un ? [CL(n, { ts: 'font-weight:700;' + KSW(i) }), CL('Could not be read', { ts: 'font-weight:700;color:' + c.neg }), CL('Try again', LK), CL('—', MU)] : [CL(n, { ts: 'font-weight:700;' + KSW(i) }), CL(fl[i] ? '[' + fl[i].toLocaleString('en-US') + ']' : 'None', fl[i] ? MN : MU), CL(k[i] ? B2(k[i]) : 'None', k[i] ? MN : MU), known || !k[i] ? CL('—', MU) : CL((k[i] / used * 100).toFixed(1) + '%', MN)]); rows.push(known ? [CL('In total', BD), CL('—', MU), CL('Total not shown', { ts: 'font-weight:700;color:' + c.amT }), CL('—', MU)] : [CL('In total', BD), CL('[' + sum(fl).toLocaleString('en-US') + ']', BX), CL(B2(used), BX), CL(used ? '100%' : '—', BX)]); return TB({ title: 'By kind · as a table', pager: false, gc: '1.6fr .7fr .9fr 1fr', cols: ['Kind', 'Files', 'Size', 'Share of used'], rows, foot: known ? 'Shares are not shown while one kind cannot be read.' : false }); };
+    const pbar = (p) => ({ t: '', s: 'display:block;width:' + (phone ? 80 : 130) + 'px;height:6px;border-radius:999px;background:linear-gradient(90deg,' + c.vi + ' ' + p.toFixed(1) + '%,' + c.hair + ' ' + p.toFixed(1) + '%)' });
+    const COMP = [['[Acme Robotics]', 248, 2560, 1, [['[Acme Field]', 140, 1536], ['[Acme Labs]', 92, 819], ['Company files, not in a venture', 16, 205]]], ['[Bluefern Health]', 88, 563, 0, [['[Bluefern Clinic App]', 72, 470], ['Company files, not in a venture', 16, 93]]], ['Not tied to a company', 40, 154, 0]];
+    const PCT = { ts: 'font:600 11.5px ' + MO + ';color:' + c.mu };
+    const compT = (list, f) => { const used = sum(list.map(x => x[2])), rows = []; list.forEach(([n, fl, mb, act, vs], idx) => { const open = vs && idx === 0; rows.push([CL((vs ? (open ? '▾ ' : '▸ ') : '') + n, { ts: 'font-weight:700', pill: act ? pl('●', 'Active', 'v') : false }), CL('[' + fl.toLocaleString('en-US') + ']', MN), CL(B2(mb * f), MN), CL(Math.round(mb / used * 100) + '%', Object.assign({ pill: pbar(mb / used * 100) }, PCT))]); if (open) vs.forEach(([vn, vf, vmb]) => rows.push([CL('└ ' + vn, { ts: 'padding-left:20px' }), CL('[' + vf + ']', MN), CL(B2(vmb * f), MN), CL(Math.round(vmb / used * 100) + '%', Object.assign({ pill: pbar(vmb / used * 100) }, PCT))])); }); return TB({ title: 'By company', pager: false, gc: '2fr .7fr .8fr 1.3fr', cols: ['Company', 'Files', 'Size', 'Share of used'], rows, foot: list.some(x => x[4]) ? 'A row with ventures opens to show them.' : false }); };
+    const compNote = () => K({ cs: PLAIN, rows: [INFOROW('This counts every company at once. Switching company in the sidebar does not change it.')] });
+    const LF0 = [['[Customer interview 14.webm]', 2, '[Acme Field]', 418, '[14 Oct]', 'the interview'], ['[Customer interview 12.webm]', 2, '[Acme Field]', 352, '[2 Oct]', 'the interview'], ['[Data room export Q3.zip]', 0, '[Acme Robotics]', 310, '[30 Sep]', 'the data room folder'], ['[Product demo walkthrough.mp4]', 0, '[Acme Labs]', 246, '[21 Sep]', 'the data room folder'], ['[Series A deck v7.pdf]', 3, '[Acme Robotics]', 96, '[12 Oct]', 'the deck review'], ['[Market sizing.xlsx]', 1, '[Acme Field]', 72, '[9 Oct]', 'the research library'], ['[Board minutes Q3.pdf]', 1, '[Acme Robotics]', 48, '[6 Oct]', 'the Grow minutes'], ['[Clinic pilot recording.webm]', 2, '[Bluefern Health]', 44, '[3 Oct]', 'the interview'], ['[Pricing study.pdf]', 1, '[Bluefern Health]', 31, '[28 Sep]', 'the research library'], ['[Series A deck v6.pdf]', 3, '[Acme Robotics]', 24, '[20 Sep]', 'the deck review, as an earlier version']];
+    const LFLP = [['[Seed deck review · Northwind Labs.pdf]', 3, 'Personal', 92, '[11 Oct]', 'the deck review'], ['[Climate research notes.pdf]', 1, 'Personal', 64, '[4 Oct]', 'the research library'], ['[Term sheet questions.pdf]', 5, 'Personal', 12, '[1 Oct]', 'the message it came with'], ['[Sector map 2026.xlsx]', 1, 'Personal', 9, '[22 Sep]', 'the research library']];
+    const lfT = (list, count) => TB({ title: 'Largest files', tbar: { search: false, chips: [tag('Kind ▾'), tag('Company ▾'), tag('Sort: Size ▾')] }, gc: '2.1fr 1.1fr 1.1fr .7fr .7fr .55fr', cols: ['Name', 'Kind', 'Company', 'Size', 'Added', ''], rows: list.map(x => [CL(x[0], { ts: 'font-weight:700;line-height:1.35', sub: 'Opens ' + x[5] }), CL(KN[x[1]], { ts: KSW(x[1]) }), x[2], CL(B2(x[3]), MN), CL(x[4], MN), CL('Open ›', LK)]), count, foot: 'Open takes you to where the file lives.' });
+    const countsK = () => K({ eye: 'WHAT COUNTS', title: 'Counts', rows: ['Every file you upload', 'Its earlier versions', 'Exports kept on StudioOS'].map(bul) });
+    const notK = () => K({ eye: 'WHAT COUNTS', title: 'Does not count', rows: ['Identity documents', 'Signed legal copies', 'Fund documents', 'Anything Axal VC publishes'].map(bul), foot: '1 GB = 1,024 MB.' });
+    const SECS = ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', '>Overview', '>Cost', '>Limits', '>Storage', 'Connectors', 'Following', 'Developer', '§More', 'Onboarding', 'Appearance', 'Activity Log'];
+    const secK = () => K({ cs: PLAIN, rows: SECS.map(x => { const sub = x[0] === '>', ey = x[0] === '§', t = sub || ey ? x.slice(1) : x, on = t === 'Storage'; return ey ? R({ rs: 'display:flex;padding:12px 10px 4px', eye: t.toUpperCase(), t: '' }) : R({ rs: 'display:flex;align-items:center;min-height:32px;padding:0 10px 0 ' + (sub ? 24 : 10) + 'px;border-radius:8px;box-sizing:border-box' + (on ? ';background:' + c.lav + ';border:1px solid ' + c.lavE : ''), t, ts: 'font-size:13px;font-weight:' + (on || t === 'Usage' ? 800 : 600) + ';color:' + (on ? c.vt : sub ? c.mu : c.ink) }); }), rowsS: 'display:flex;flex-direction:column;gap:1px' });
+    const paneHead = () => K({ cs: PLAIN, title: 'Storage', hs: 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em', note: 'What your files take up, what your plan allows, and where they are.' });
+    const ACC = (rws) => { grid = 'display:grid;grid-template-columns:200px repeat(2,minmax(0,1fr));gap:14px 20px;align-items:start'; const out = [{ s: 'grid-column:1;grid-row:1 / span ' + (rws.length + 1) + ';' + PCOL, blocks: [secK()] }, { s: 'grid-column:2 / span 2;grid-row:1;' + PCOL, blocks: [paneHead()] }]; rws.forEach((r, i) => { if (r.length === 1) out.push({ s: 'grid-column:2 / span 2;grid-row:' + (i + 2) + ';' + PCOL, blocks: r[0] }); else { out.push({ s: 'grid-column:2;grid-row:' + (i + 2) + ';' + PCOL, blocks: r[0] }); out.push({ s: 'grid-column:3;grid-row:' + (i + 2) + ';' + PCOL, blocks: r[1] }); } }); return out; };
+    const ALW = [['$20 a month', 10, 'Individual founders and investors getting started'], ['$50 a month', 50, 'Active founders and investors managing multiple projects'], ['$100 a month', 100, 'Power users with substantial research and documentation'], ['$150 a month', 250, 'Professional investors and intensive company-building workflows'], ['LP Access', 10, 'Verified Axal VC fund investors; fund documents excluded']];
+    const upK = (rows) => K({ title: 'More room as you grow', rows: rows.map(([p, gb, best]) => R({ t: p + ' · ' + gb + ' GB', ts: 'font:700 13px ' + MO, sub: best })), btns: [{ t: 'Compare plans', s: btnP }] });
+    const K0 = [1382, 512, 1024, 246, 24, 89], F0 = [64, 210, 18, 31, 6, 47];
+    const scale = (k, f, target) => { const a = k.map(v => Math.round(v * f)); if (target) a[0] += target - sum(a); return a; };
+    const fullRows = (o) => { const f = o.f || 1, k = scale(K0, f, o.target), r = []; if (o.notice) r.push([[o.notice]]); r.push([[card1({ k, allow: 10240, plan: 'Validate + Build', ns: o.ns === undefined ? 12 : o.ns, st: o.st, lab: o.lab, over: o.over, noCmp: o.noCmp })]]); const lf = [[lfT(LF0, '1–10 of [376]')]]; if (o.lfFirst) r.push(lf); r.push([[kindBars(k)], [kindT(k, F0)]]); r.push([[compNote(), compT(COMP, f)]]); if (!o.lfFirst) r.push(lf); r.push([[countsK()], [notK()]]); if (o.tail) r.push([o.tail]); return r; };
+    const PH = (t, h) => K({ cs: 'display:flex;align-items:center;justify-content:center;min-height:' + (h || 120) + 'px;border-radius:12px;background:' + c.raised + ';border:1px dashed ' + c.mu, note: t, ns: 'margin:0;font:600 11px ' + MO + ';color:' + c.mu + ';text-align:center' });
+    const compPh = () => { const rows = []; COMP.forEach(([n, fl, mb, act, vs], i) => { rows.push(R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid ' + c.hair, t: (vs ? (i === 0 ? '▾ ' : '▸ ') : '') + n, ts: 'font-size:14px;font-weight:700;min-height:24px', st: act ? pl('●', 'Active', 'v') : false, sub: '[' + fl + '] files · ' + B2(mb), ss: 'font:500 12px ' + MO + ';color:' + c.mu, bar: { trs: 'display:block;width:100%;height:6px;border-radius:999px;background:' + c.raised + ';overflow:hidden', fs: FILL((mb / 3277 * 100).toFixed(1) + '%'), t: Math.round(mb / 3277 * 100) + '%', w: false } })); if (i === 0) vs.forEach(([vn, vf, vmb]) => rows.push(R({ rs: 'display:flex;gap:9px;align-items:center;min-height:36px;padding:0 0 0 20px', t: '└ ' + vn, ts: 'font-size:13px;font-weight:600', v: B2(vmb), vs: MS }))); }); return K({ title: 'By company', note: 'Counts every company at once. Switching company does not change it.', rows }); };
+    const lfPh = () => K({ title: 'Largest files', meta: '1–6 of [376]', ms: MS, rows: LF0.slice(0, 6).map(x => R({ rs: 'display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid ' + c.hair, t: x[0], ts: 'font-size:13.5px;font-weight:700;line-height:1.35', sub: KN[x[1]] + ' · ' + x[2] + ' · ' + fmt(x[3]) + ' · added ' + x[4], ss: 'font-size:12px;color:' + c.mu, act: 'Open ›', as: btn44 })), btns: [{ t: 'Show more', s: btn44 }] });
+    const PLN = [['Free', [18, 38, 22, 8, 3, 7]], ['$20', [120, 98, 132, 34, 6, 22]], ['$50', [0, 0, 0, 0, 0, 0]], ['$100', [196, 92, 128, 46, 4, 20]], ['$150', [62, 570, 20, 90, 4, 44]], ['LP Access', [0, 41, 0, 6, 1, 11]]];
+    const plSvg = () => { const W = 560, H = 280, L = 48, T = 26, Bm = 30, iw = W - L - 6, ih = H - T - Bm, step = iw / PLN.length, bw = step * .56, ym = 800, Y = (v) => +(T + ih - v / ym * ih).toFixed(1), id = 'ph' + B;
+      let s = svgOpen(W, H, 'Stored by plan, in GB: Free 96, the $20 plans 412, Investor Plus none, Raise + Grow 486, Investor Pro 790, LP Access 59. Documents are most of Investor Pro; data rooms and recordings lead the founder plans.') + '<defs><pattern id="' + id + '" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="' + c.card + '"/><line x1="0" y1="0" x2="0" y2="6" stroke="#6b6577" stroke-width="2"/></pattern></defs>';
+      for (let v = 0; v <= ym; v += 200) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 7) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="12" font-size="11" fill="' + c.mu + '">GB</text>';
+      PLN.forEach(([p, k], i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1); let acc = 0; k.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(.8, Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + (KC[j] === 'H' ? 'url(#' + id + ')' : KC[j]) + '" stroke="' + c.card + '" stroke-width=".8"><title>' + p + ' · ' + KN[j] + ' ' + v + ' GB</title></rect>'; acc += v; }); s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + (acc ? c.ink : c.mu) + '">' + (acc ? '[' + acc + ' GB]' : 'None') + '</text><text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 9) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + p + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const STN = ['Under 80%', '80% or more', '95% or more', 'Full', 'Over their plan'];
+    const PST = [['Free', [760, 30, 12, 8, 2]], ['$20', [186, 16, 6, 3, 3]], ['$50', 0], ['$100', [52, 7, 3, 1, 1]], ['$150', [55, 3, 2, 0, 0]], ['LP Access', [54, 0, 0, 0, 0]]];
+    const stSvg = () => { const W = 560, rh = 36, L = 78, Rr = 56, iw = W - L - Rr; let s = svgOpen(W, PST.length * rh + 4, 'Members by storage state, per plan. Most members on every plan are under 80%; 12 are full and 6 are over their plan. Investor Plus has no members.', 'Space Grotesk,sans-serif');
+      PST.forEach(([p, a], i) => { const y = i * rh + 6; s += '<text x="0" y="' + (y + 13) + '" font-size="12" fill="' + c.ink + '">' + p + '</text>'; if (!a) { s += '<text x="' + L + '" y="' + (y + 13) + '" font-size="11.5" fill="' + c.mu + '">No members · not offered yet</text>'; return; } const tot = sum(a); let acc = 0; a.forEach((v, j) => { if (!v) return; const x = L + acc / tot * iw, w = Math.max(2, v / tot * iw - 1); s += '<rect x="' + x.toFixed(1) + '" y="' + (y + 2) + '" width="' + w.toFixed(1) + '" height="16" fill="' + S[j] + '"><title>' + p + ' · ' + STN[j] + ' · ' + v + ' members</title></rect>'; acc += v; }); s += '<text x="' + (L + iw + 8) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">[' + tot + ']</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hqTiles = () => TL([['Total stored', '[1.8 TB]', 'across [1,204] members with files'], ['Members with files', '[1,204]', 'staff accounts not counted'], ['Near the limit', '[79]', 'at 80% or more of their plan'], ['Storage full', '[12]', 'new uploads paused'], ['Over their plan', '[6]', 'after a plan change'], ['Size not recorded', '[318] files', 'being measured · not in the total', false, false, false, c.mu]], 3);
+    const PLR = [['Free', 'Founder Free, Investor Basic, Advisor Basic, Partner Basic, Explorer', '1 GB', 812, '96 GB', '84 MB', 42, 8, 2], ['$20 a month', 'Validate + Build, Advisor Pro, Operating Partner Pro', '10 GB', 214, '412 GB', '1.4 GB', 22, 3, 3], ['$50 a month', 'Investor Plus · not offered yet', '50 GB', 0, 0, 0, 0, 0, 0], ['$100 a month', 'Raise + Grow', '100 GB', 64, '486 GB', '5.6 GB', 10, 1, 1], ['$150 a month', 'Investor Pro', '250 GB', 60, '790 GB', '13 GB', 5, 0, 0], ['LP Access', 'Personal storage · fund documents excluded', '10 GB', 54, '59 GB', '922 MB', 0, 0, 0]];
+    const planT = () => TB({ title: 'By plan', tbar: { search: false, chips: [tag('Sort: Used in total ▾')] }, pager: false, gc: '2.2fr .8fr .8fr 1fr .9fr .8fr .6fr .8fr', cols: ['Plan', 'Allowance', 'Members', 'Used in total', 'Median used', 'Near the limit', 'Full', 'Over their plan'], rows: PLR.map(r => [CL(r[0], { ts: 'font-weight:700', sub: r[1] }), CL(r[2], MN), CL('[' + r[3].toLocaleString('en-US') + ']', MN), r[4] ? CL('[' + r[4] + ']', MN) : CL('0 B', MN), r[5] ? CL('[' + r[5] + ']', MN) : CL('—', { ts: 'color:' + c.mu, tip: 'No members on this plan' }), CL('[' + r[6] + ']', MN), CL('[' + r[7] + ']', MN), CL('[' + r[8] + ']', MN)]), foot: 'Totals only. A member’s files are theirs; HQ sees sums. No member or file is named here.' });
+    const BESTF = 'Exploring Axal and basic documents', BEST20 = 'Individual founders and investors getting started', BEST50 = 'Active founders and investors managing multiple projects', BEST100 = 'Power users with substantial research and documentation', BEST150 = 'Professional investors and intensive company-building workflows';
+    const PTABS = (cur) => K({ cs: PLAIN, tags: ['Founder', 'Investor', 'Advisors', 'Operating Partners', 'Models'].map(t => tag(t, t === cur)) });
+    const prT = (o) => { const n = o.cols.length, emp = () => Array(n - 1).fill(''), rows = [], g = []; (o.groups || []).forEach(x => { g.push(rows.length); rows.push([CL(x, { ts: 'font-weight:800' })].concat(emp())); rows.push([CL('Rows as today', MU)].concat(emp())); }); if (o.only) rows.push([CL(o.only, MU)].concat(emp())); g.push(rows.length); rows.push([CL('Storage', { ts: 'font-weight:800', pill: NEWP })].concat(emp())); rows.push([CL('Storage', BD)].concat(o.st.map(x => CL(x, { ts: 'font-family:' + MO + ';font-weight:700;line-height:1.4' })))); if (o.best) rows.push([CL('Best suited for', BD)].concat(o.best.map(x => CL(x, { ts: 'font-size:13px;line-height:1.45;color:' + c.mu })))); const t = TB({ title: o.title || 'Compare plans', pager: false, gc: (phone ? '1fr' : '1.2fr') + ' repeat(' + (n - 1) + ',minmax(0,1fr))', cols: o.cols, rows, foot: o.foot || false }); g.forEach(i => { if (t.rows[i]) t.rows[i].s += ';background:#faf9fc'; }); return t; };
+    const lpK = () => K({ eye: 'LP ACCESS', title: 'LP Access', note: '[The LP band’s text, as today]', ns: NS1, rows: [R({ t: '10 GB personal storage.', ts: 'font-size:14px;font-weight:700', st: NEWP }), R({ t: 'Fund documents are excluded.', ts: 'font-size:13px;color:' + c.mu })] });
+    let shell = pub ? 'pub' : 'founder', head = true, crumb = '', crumbHref = '#', title = 'Account', hpills = false, hbtns = [], hlines = [{ t: 'Your profile, plan, usage and connections.' }], TABL = [], tabCur = '', tabsL = 'Account', grid = G6, cols = [], minH = 900, lit = '', grp = '';
+    const PG = (b) => [{ s: STACK, blocks: b }];
+    const CEN = ';max-width:560px;margin:80px auto 0;width:100%';
+    if (B === 'STG1') cols = ACC(fullRows({}));
+    else if (B === 'STG3') cols = ACC(fullRows({ f: 10240 / 3277, target: 10240, st: 'full', lab: 'Storage full', ns: 0, noCmp: 1, notice: NOTICE('r', 'Storage full. New uploads are paused. Everything you stored stays, and you can still open and download it.', [{ t: 'Compare plans', s: btnP }, { t: 'See largest files', s: btnG }]), tail: [K({ cs: PLAIN, rows: [INFOROW('A recording already in progress finishes and is kept. A new one cannot start.')] })] }));
+    else if (B === 'STG5') cols = ACC(fullRows({ f: 63488 / 3277, target: 63488, st: 'over', lab: 'Over your plan', over: '[52 GB]', ns: 0, noCmp: 1, lfFirst: 1, notice: NOTICE('r', 'Your plan changed to [Validate + Build] on [1 Nov]. You are using [62 GB] of [10 GB]. Nothing was deleted. New uploads resume once you are under [10 GB].', [{ t: 'Compare plans', s: btnS }]) }));
+    else if (B === 'STG16') cols = ACC(fullRows({ f: 3, st: 'warn', lab: 'Almost full', noCmp: 1, notice: NOTICE('a', 'Your storage is almost full. At 100%, new uploads pause.', [{ t: 'Compare plans', s: btnS }, { t: 'See largest files', s: btnG }]) }));
+    else if (B === 'STG6') { const k = [210, 186, 168, 52, 6, 18]; cols = ACC([[[card1({ k, allow: 1024, plan: 'Free', noCmp: 1 })]], [[upK(ALW)]], [[kindBars(k)], [kindT(k, [22, 48, 3, 9, 2, 14])]], [[countsK()], [notK()]], [[K({ cs: PLAIN, rows: [INFOROW('An Explorer account sees the same page, with Explorer accounts on the pill.', 'n')] })]]]); }
+    else if (B === 'STG7') { shell = 'investor'; grp = 'Personal ▾'; const k = [0, 742, 0, 236, 12, 136]; cols = ACC([[[card1({ k, allow: 10240, plan: 'LP Access', suffix: ' personal storage', foot: 'LP Access includes 10 GB of personal storage. Files you upload count toward it.' }), K({ cs: PLAIN, rows: [INFOROW('Fund documents don’t count. Statements, notices and reports from your funds are kept by the fund, not in your storage.')] })]], [[kindBars(k)], [kindT(k, [0, 96, 0, 14, 3, 41])]], [[compT([['Personal', 154, 1126, 0]], 1)]], [[lfT(LFLP, '1–4 of [154]')]], [[countsK()], [notK()]], [[K({ cs: PLAIN, rows: [INFOROW('With an Investor plan too, the larger allowance applies.', 'n')] })]]]); }
+    else if (B === 'STG8') { shell = 'investor'; grp = '[Harbor Street Capital] ▾'; const k = [0, 31744, 0, 4710, 0, 2458]; cols = ACC([[[card1({ k, allow: 256000, plan: 'Investor Pro' })]], [[kindBars(k)], [kindT(k, [0, 1840, 0, 212, 0, 386])]], [[compNote(), compT([['[Harbor Street Capital]', 2210, 36045, 1], ['Not tied to a company', 228, 2867, 0]], 1)]]]); }
+    else if (B === 'STG9a') { shell = 'advisor'; grp = '[Saltwater Advisory] ▾'; const k = [0, 140, 0, 38, 4, 38]; cols = ACC([[[card1({ k, allow: 1024, plan: 'Advisor Basic', noCmp: 1 })]], [[upK([['Advisor Pro', 10, '$20 a month · Individual founders and investors getting started']])]], [[kindBars(k)], [kindT(k, [0, 31, 0, 6, 2, 19])]]]); }
+    else if (B === 'STG9b') { shell = 'partner'; grp = '[Cobalt Studio Services] ▾'; const k = [0, 1120, 412, 690, 18, 218]; cols = ACC([[[card1({ k, allow: 10240, plan: 'Operating Partner Pro' })]], [[kindBars(k)], [kindT(k, [0, 128, 9, 44, 5, 62])]]]); }
+    else if (B === 'STG10a' || B === 'STG10b') { const hq = B === 'STG10b'; shell = hq ? 'hq' : 'admin'; cols = ACC([[[K({ title: 'Your storage', tags: [pl('◇', 'Staff account', 'n')], rows: [R({ rs: 'display:flex;padding:0', t: '[4.6 GB] used', ts: 'font:700 30px ' + MO + ';letter-spacing:-.02em' })], btns: hq ? [{ t: 'See platform storage ›', s: btnS }] : false, foot: 'Staff accounts have no storage allowance. Uploads are never paused for space.' })]]]); }
+    else if (B === 'STG11') cols = ACC([[[card1({ k: [0, 0, 0, 0, 0, 0], allow: 10240, plan: 'Validate + Build' })]], [[CENTER('○', 'No files yet.', 'Files you upload anywhere in StudioOS appear here.', [{ t: 'Open the data room', s: btnS }]), K({ cs: PLAIN, rows: [INFOROW('An investor sees Open your research library. Other profiles see no button.', 'n')] })]]]);
+    else if (B === 'STG12') { const rk = (t, n) => K({ title: t, meta: 'Reading…', ms: MS, rows: Array.from({ length: n }, (x, i) => R({ rs: 'display:block;height:12px;width:' + (90 - i * 12) + '%;border-radius:6px;background:' + c.raised + ';margin:7px 0', t: '' })) }); cols = ACC([[[rk('Your storage', 3)]], [[rk('By kind', 5)], [rk('By kind · as a table', 5)]], [[rk('By company', 4)]], [[rk('Largest files', 6)]]]); }
+    else if (B === 'STG14a') { shell = 'admin'; head = false; cols = [col([CENTER('⊘', 'Platform storage is for HQ.', 'You opened /admin/platform/storage. Studio admins see their own storage in Account.', [{ t: 'Your own storage ›', s: btnP }], CEN)])]; }
+    else if (B === 'STG20') { shell = 'hq'; lit = 'Platform'; crumb = 'Platform › Storage'; crumbHref = '/admin/platform'; title = 'Storage'; hpills = [pl('⌂', 'HQ only', 'n')]; hlines = [{ t: 'How much members store, by plan and by kind. Totals only.' }]; tabsL = 'Platform'; TABL = ['Overview', 'Switches', 'Topology', 'AI allowances', 'AI usage', 'Storage', 'Payments', 'Bank accounts', 'Product testing', 'Promo codes', 'Monitoring', 'Telegram']; tabCur = 'Storage'; cols = [col([hqTiles()]), col([K({ title: 'Stored by plan', tog: TOG(), legend: KN.map((n, i) => ({ t: n, sw: swK(i) })), svg: plSvg() })], 3), col([K({ title: 'Members by state, per plan', tog: TOG(), legend: STN.map((t, i) => ({ t, sw: dotSw(S[i]) })), svg: stSvg(), foot: 'Members on each plan, by how much of their allowance they use.' })], 3), col([planT()])]; }
+    else if (crop) { head = false; grid = STACK; const k25 = scale(K0, 2.5, 8192), k3 = scale(K0, 3);
+      if (B === 'STG2a') cols = PG([NOTICE('a', 'You have used 80% of your storage. Uploads keep working.', [{ t: 'See largest files', s: btnG }]), card1({ k: k25, allow: 10240, plan: 'Validate + Build', ns: 12, st: 'warn', lab: 'Near your limit' })]);
+      else if (B === 'STG2b') cols = PG([NOTICE('a', 'Your storage is almost full. At 100%, new uploads pause.', [{ t: 'Compare plans', s: btnS }, { t: 'See largest files', s: btnG }]), card1({ k: k3, allow: 10240, plan: 'Validate + Build', ns: 12, st: 'warn', lab: 'Almost full', noCmp: 1 })]);
+      else if (B === 'STG4a') cols = [dlgCol(dlg('Upload to the data room', 'Files land in [Acme Robotics]’s room with the gate you set.', [K({ cs: SEC, rows: [R({ t: '[Market sizing appendix.xlsx]', ts: 'font-size:13px;font-weight:700', sub: '24 MB', ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, st: pl('✕', 'Not added', 'r') }), ERR('This file needs [24 MB]. You have [3 MB] left on your plan.', 'r', [{ t: 'Open Storage', s: btnSm }, { t: 'Compare plans', s: btnG }])], rowsS: 'display:flex;flex-direction:column;gap:9px' })], [{ t: 'Close', s: btnS }]))];
+      else if (B === 'STG4b') cols = PG([K({ title: 'Message to [Name]', rows: [field(false, 'Write a message…', { ts: FIE + ';min-height:60px' }), R({ rs: 'display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:8px 10px;margin-top:8px;border-radius:9px;border:1.5px solid ' + c.neg + ';background:' + c.negBg, lead: '▤', ls: 'flex:none;color:' + c.neg, t: '[Pricing study.pdf] · 24 MB', ts: 'font-size:12.5px;font-weight:700', sub: 'Needs [24 MB]. [3 MB] left on your plan.', ss: 'font-size:12px;font-weight:600;color:' + c.neg, btns: [{ t: 'Open Storage', s: btnSm }, { t: 'Compare plans', s: btnG }] })], btns: [{ t: 'Send without the file', s: btnS }] })]);
+      else if (B === 'STG4c') cols = PG([K({ eye: 'VALIDATE › CUSTOMER RESEARCH', title: 'Record a session', rows: [ERR('Storage full. You can’t start a recording until you free up space or change plan.', 'r', [{ t: 'Open Storage', s: btnSm }, { t: 'Compare plans', s: btnG }])], foot: 'Start returns once there is room. A recording already in progress finishes and is kept.' })]);
+      else if (B === 'STG13a') cols = PG([K({ title: 'Your storage', rows: [ERR('Your storage could not be read. That is not the same as having none.', 'r', [{ t: 'Try again', s: btnS }])] })]);
+      else if (B === 'STG13b') cols = PG([K({ title: 'Your storage', tags: [pl('◆', 'Validate + Build', 'v')], rows: [R({ rs: 'display:flex;padding:0', t: 'Total not shown', ts: 'font:700 24px ' + MO + ';color:' + c.mu }), ERR('Total not shown: [Recordings] could not be read, so a total would be wrong.', 'a', [{ t: 'Try again', s: btnS }])], rowsS: 'display:flex;flex-direction:column;gap:9px' }), kindT(K0, F0, 2)]);
+      else if (B === 'STG14b') cols = PG([K({ cs: CARD + ';max-width:440px;width:100%;margin:20px auto;padding:28px;box-sizing:border-box', eye: 'AXAL VC', title: 'Sign in', hs: 'margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em', note: 'Sign in to see your storage.', ns: NS1, rows: [field('EMAIL', 'name@example.com', { ts: FIE }), field('PASSWORD', '••••••••', { ts: FIE })], btns: [{ t: 'Sign in', s: btnP }, { t: 'Continue with Google', s: btnS }], foot: 'After you sign in, you come back to Account › Usage › Storage.' })]);
+      else if (B === 'STG17a') { grid = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start'; cols = [{ s: PCOL, blocks: [PH('AI allowance · drawn on its own canvas')] }, { s: PCOL, blocks: [PH('AI tokens · drawn on its own canvas')] }, { s: PCOL, blocks: [K({ title: 'Storage', rows: [R({ rs: 'display:flex;flex-direction:column;gap:8px;padding:0', t: '[3.2 GB] of [10 GB]', ts: 'font:700 18px ' + MO, bar: { trs: 'display:block;width:100%;height:6px;border-radius:999px;background:' + c.raised + ';border:1px solid ' + c.hair + ';overflow:hidden', fs: FILL('32%'), t: '32% used', w: false } })], btns: [{ t: 'Open storage →', s: btnG }] })] }]; }
+      else if (B === 'STG17b') cols = PG([K({ eye: 'USAGE › COST', title: 'Allowance, top-ups, held runs and last run', hs: 'margin:0;font-size:14px;font-weight:800', meta: '▾', rows: [['Allowance', '[$5.00] a month · resets [1 Nov]'], ['Top-ups', 'AI tokens you bought · [$12.40] left'], ['Held runs', '[0]'], ['Last run', '[21 Oct, 09:40]']].map(([t, v2]) => R({ t, ts: 'font-size:13px;font-weight:700', v: v2, vs: 'font:600 12px ' + MO + ';color:' + c.mu })), foot: 'Storage no longer sits in this list. It has its own page, Usage › Storage.' })]);
+      else if (B === 'STG18a') cols = PG([PTABS('Founder'), PH('Plan cards and the Monthly / Yearly switch · as today', 90), prT({ cols: ['', 'Free', 'Validate + Build', 'Raise + Grow'], groups: ['Validate', 'Build', 'Raise', 'Grow'], st: ['1 GB', '10 GB', '100 GB'], best: [BESTF, BEST20, BEST100], foot: 'Existing rows are shortened here. Only the Storage group is new.' })]);
+      else if (B === 'STG18b') cols = PG([PTABS('Investor'), prT({ cols: ['', 'Investor Basic', 'Investor Plus', 'Investor Pro', 'Institutional'], only: 'Every existing group and row, as today', st: ['1 GB', '50 GB', '250 GB', '[Institutional, per owner question 2]'], best: [BESTF, BEST50, BEST150, '[Per owner question 2]'] }), lpK()]);
+      else if (B === 'STG18c') cols = PG([PTABS('Advisors'), prT({ cols: ['', 'Advisor Basic', 'Advisor Pro', 'Advisory Firm'], only: 'Every existing group and row, as today', st: ['1 GB', '10 GB', '[Advisory Firm, per owner question 2]'], foot: 'Advisors and Operating Partners have no Best suited for row.' })]); }
+    else if (phone) { grid = STACK;
+      if (B === 'STG19') { head = false; cols = PG([K({ cs: PLAIN, title: 'Pricing', hs: 'margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em' }), PTABS('Investor'), PH('Plan cards · as today', 80), K({ cs: PLAIN, title: 'Compare plans', hs: 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em', tags: ['Investor Basic', 'Investor Plus', 'Investor Pro', 'Institutional'].map(t => tag(t, t === 'Investor Pro')) }), prT({ cols: ['', 'Investor Pro'], title: 'Investor Pro', only: 'Every existing group and row, as today', st: ['250 GB'], best: [BEST150] }), lpK()]); }
+      else { crumb = '‹ Usage'; crumbHref = '/account/usage'; title = 'Storage'; hlines = [{ t: 'What your files take up, what your plan allows, and where they are.' }];
+        if (B === 'STG15a') cols = PG([card1({ k: K0, allow: 10240, plan: 'Validate + Build', ns: 12 }), countsK(), notK()]);
+        else if (B === 'STG15b') cols = PG([kindBars(K0), compPh()]);
+        else cols = PG([lfPh()]); } }
+    if (pub) cols.forEach(cl => (cl.blocks || []).forEach(k => { if (k && typeof k.hs === 'string' && k.hs.indexOf('Bricolage') < 0) k.hs += ';' + HF; }));
+    const SIDES = { founder: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], investor: ['Studio', 'Spin-Out Lab', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust'], advisor: ['Studio', 'Spin-Out Lab', 'Practice', 'Cohorts', 'Expertise', 'Network', 'Research'], partner: ['Studio', 'Spin-Out Lab', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'], admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'], pub: [] };
+    const signed = shell !== 'pub', adm = shell === 'admin' || shell === 'hq';
+    const rows = SIDES[shell].map(t => ({ t, href: (adm ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === lit ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const studioI = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const BADGE = { admin: ['[Studio Lisbon]', '#334155'], hq: ['HQ', '#881337'] }[shell];
+    const GRP = grp || { founder: '[Acme Robotics] ▾', admin: 'Admin', hq: 'HQ' }[shell] || '', SWITCH = !!grp || shell === 'founder';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr);min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : pub ? '#faf9fc' : '#e6e4eb'),
+      side: isShell && signed, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed',
+      group: GRP, groupS: SWITCH ? 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink : 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell && signed, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: BADGE ? BADGE[0] : '', badgeS: BADGE ? 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + BADGE[1] : 'display:none',
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone && signed, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 14px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;color:' + c.ink, company: shell === 'founder' ? '[Acme Robotics]' : 'Axal VC', studioI,
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + ';text-decoration:none' + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25' + (pub ? ';' + HF : ''), hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope: false, scopeTip: '', scopeS: '', gate: false, gateS: '', msel: false, mselS: '', moved: false, movedS: '', infoS: INFO, dismissS: btnG,
+      tbar: false, tbarS: '', tbarChips: [], tbarBtns: [], tbarNote: false, tbarNoteS: '',
+      tabsL, tabs: TABL.length ? TABL.map(t => ({ t, href: '/admin/platform/' + t.toLowerCase().replace(/ /g, '-'), n: false, sel: t === tabCur ? 'page' : 'false', ns: '', s: 'display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabCur ? c.vi : 'transparent') + ';color:' + (t === tabCur ? c.ink : c.mu) + ';font-weight:' + (t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:20px;border-bottom:1px solid ' + c.hair + ';overflow-x:auto',
+      period: false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar: false, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      pnav: phone && signed ? ['Validate', 'Build', 'Raise', 'Grow', 'More'].map(t => ({ t, href: t === 'More' ? '#' : '/' + t.toLowerCase(), s: 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:60px;min-height:48px;font-size:11px;text-decoration:none;font-weight:600;color:' + c.mu, ds: 'width:18px;height:18px;border-radius:5px;box-sizing:border-box;border:1.5px solid ' + c.mu })) : false,
+      pnavS: 'display:flex;justify-content:space-around;border-top:1px solid ' + c.hair + ';background:' + c.card + ';padding:2px 0 4px;flex:none',
+      spine: false, spineTip: '', spineS: '', eadS: '', spineT: '', rail: false, railS: '', railX: '', railP: '', railB: '', railI: '',
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '',
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

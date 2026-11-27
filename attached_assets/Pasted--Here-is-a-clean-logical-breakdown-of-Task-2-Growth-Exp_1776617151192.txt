@@ -1,0 +1,84 @@
+**✅ Here is a clean, logical breakdown of Task 2: Growth & Expansion Engine**
+
+This creates a **parallel track** to your existing 30-Day Spin-Out Engine, specifically designed for **existing profitable/operational companies** that want to expand, launch new products, or go international.
+
+### Task 2 Breakdown (Growth & Expansion Engine)
+
+**Step 1: Database Schema**  
+Add support for multiple pipeline tracks (Spin-Out vs Growth Sprint) and new stages focused on revenue/expansion.
+
+**Step 2: Backend Logic for Growth Track**  
+Create the rules, stages, and decision gates for the “Expansion Studio” / “30-Day Growth Sprint”.
+
+**Step 3: Update Pipeline Board**  
+Make the existing Pipeline Board support both tracks (Spin-Out and Growth) with different columns and metrics.
+
+**Step 4: Studio Ops Adaptation**  
+Extend Studio Ops workflows to support Growth Sprint tasks (market entry, localization, partner onboarding, etc.).
+
+**Step 5: Frontend Growth Sprint Page**  
+Create a dedicated view / tab for the Growth track with appropriate UI.
+
+**Step 6: Integration & Polish**  
+Connect everything to partner matching, voting, Market Intelligence, and notifications.
+
+---
+
+### Ready-to-copy prompt for **Step 1** (Database Schema)
+
+This is the foundational step. Start here.
+
+**Paste this into Replit Agent:**
+
+```
+You are the senior database engineer for Axal StudioOS. Add support for a parallel **Growth & Expansion Engine** (for existing profitable companies) alongside the current Spin-Out track.
+
+Exact requirements for Step 1:
+
+1. **Extend existing tables**
+   - Add column `track_type` to `deals` / `projects` table (values: 'spin_out', 'growth_sprint')
+
+2. **New table for Growth-specific data**
+   - Create `growth_sprints` table:
+     - id (PK)
+     - deal_id (FK to deals.id)
+     - current_revenue (decimal)
+     - target_revenue (decimal)
+     - expansion_markets (json array of countries)
+     - new_product_ideas (json)
+     - partner_needs (json)
+     - created_at, updated_at
+
+3. **New stages for Growth track**
+   - Add to `project_stages` or create a flexible stage system that supports:
+     - Market Entry
+     - Product Localization / Adaptation
+     - Partner Onboarding
+     - Scaling Capital
+     - International Launch
+     - Revenue Growth Review
+
+4. **Migration**
+   - Make migration idempotent.
+   - Add indexes on track_type and revenue fields.
+
+Build this step-by-step:
+1. First extend the deals table with track_type.
+2. Then create the growth_sprints table.
+3. Then update project_stages to support the new Growth stages.
+4. Finally run the migration.
+
+After each step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Would you like me to prepare **Step 2 prompt** (Backend Logic for Growth Track) right now, or do you want to complete Step 1 first and then continue?
+
+Just reply with:
+- “Give me Step 2 prompt”  
+- or “Continue with Step 1 first”
+
+I’m ready whenever you are.

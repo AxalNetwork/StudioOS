@@ -1,0 +1,310 @@
+/**
+ * Spin-Out Lab — pure-logic tests + route-flow smoke test.
+ *
+ * Pure-logic tests cover the milestone catalog and the `weekMet` /
+ * `unlockedFeaturesThrough` helpers. The smoke test drives the full
+ * happy-path flow start → milestone (×4) → auto-advance → milestone
+ * (week-2 set) → … → week-4 milestone (auto-exit) against a mocked D1
+ * sql() helper, exercising the same exported logic functions the wire
+ * handlers wrap (`services/labLifecycle.ts`, D4663).
+ *
+ * Run with:  node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *              --test cloudflare-worker/test/spinout_lab.test.mjs
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as catalog from '../src/services/spinoutLabCatalog.ts';
+import * as lifecycle from '../src/services/labLifecycle.ts';
+
+/* ------------------------------------------------------------------ */
+/* D4663: the catalog and the four lifecycle functions are imported    */
+/* from their modules. This file used to slice them out of the route's */
+/* source by brace counting, which kept wire-only reads out of         */
+/* getLabState and made a service import its week advance from a      */
+/* route. It still tests the exact module that ships.                  */
+/* ------------------------------------------------------------------ */
+async function loadModule() {
+  return { ...catalog, ...lifecycle };
+}
+
+/* ------------------------------------------------------------------ */
+/* In-memory sql() mock: enough surface to drive the route flow.      */
+/* Pattern-matches the exact statements emitted by the logic fns.     */
+/* ------------------------------------------------------------------ */
+function makeSql(initial = { user: null, milestones: [] }) {
+  const state = {
+    user: initial.user || {
+      id: 1,
+      spinout_lab_active: 0,
+      spinout_lab_week: 1,
+      spinout_lab_started_at: null,
+      is_incorporated: 0,
+    },
+    milestones: [...initial.milestones],
+    nextMilestoneId: 1,
+    log: [],
+  };
+
+  const sql = async (strings, ...values) => {
+    const text = strings.join('?').replace(/\s+/g, ' ').trim();
+    state.log.push({ text, values });
+
+    // --- SELECTs --------------------------------------------------
+    if (/^SELECT spinout_lab_active, spinout_lab_week, spinout_lab_started_at, is_incorporated FROM users WHERE id = \?$/i.test(text)) {
+      return [state.user];
+    }
+    if (/^SELECT milestone_key AS key, week, completed_at FROM spinout_lab_milestones WHERE user_id = \? ORDER BY week ASC, completed_at ASC$/i.test(text)) {
+      return state.milestones
+        .slice()
+        .sort((a, b) => a.week - b.week || a.completed_at.localeCompare(b.completed_at))
+        .map((m) => ({ key: m.milestone_key, week: m.week, completed_at: m.completed_at }));
+    }
+    if (/^SELECT is_incorporated FROM users WHERE id = \?$/i.test(text)) {
+      return [{ is_incorporated: state.user.is_incorporated }];
+    }
+    if (/^SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = \?$/i.test(text)) {
+      return [{
+        spinout_lab_active: state.user.spinout_lab_active,
+        spinout_lab_week: state.user.spinout_lab_week,
+      }];
+    }
+    if (/^SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = \?$/i.test(text)) {
+      return state.milestones.map((m) => ({ milestone_key: m.milestone_key }));
+    }
+
+    // --- UPDATEs --------------------------------------------------
+    // start: COALESCE preserves any existing started_at + non-zero week
+    if (/^UPDATE users SET spinout_lab_active = 1, spinout_lab_week = COALESCE\(NULLIF\(spinout_lab_week, 0\), 1\), spinout_lab_started_at = COALESCE\(spinout_lab_started_at, datetime\('now'\)\) WHERE id = \? AND COALESCE\(is_incorporated, 0\) = 0 RETURNING id$/i.test(text)) {
+      if (Number(state.user.is_incorporated) === 1) return [];
+      state.user.spinout_lab_active = 1;
+      if (!state.user.spinout_lab_week) state.user.spinout_lab_week = 1;
+      if (!state.user.spinout_lab_started_at) {
+        state.user.spinout_lab_started_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      }
+      return [{ id: state.user.id }];
+    }
+    if (/^UPDATE users SET spinout_lab_week = MAX\(COALESCE\(spinout_lab_week, 1\), \?\) WHERE id = \? AND spinout_lab_active = 1$/i.test(text)) {
+      if (Number(state.user.spinout_lab_active) === 1) state.user.spinout_lab_week = Math.max(Number(state.user.spinout_lab_week || 1), values[0]);
+      return [];
+    }
+    if (/^UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = \?( AND spinout_lab_active = 1)?$/i.test(text)) {
+      if (/AND spinout_lab_active = 1$/i.test(text) && Number(state.user.spinout_lab_active) !== 1) return [];
+      state.user.spinout_lab_active = 0;
+      state.user.is_incorporated = 1;
+      return [];
+    }
+
+    // --- INSERTs --------------------------------------------------
+    if (/^INSERT OR IGNORE INTO spinout_lab_milestones \(user_id, week, milestone_key\) VALUES \(\?, \?, \?\)$/i.test(text)) {
+      const [user_id, week, key] = values;
+      if (state.milestones.some((m) => m.user_id === user_id && m.milestone_key === key)) {
+        return [];
+      }
+      state.milestones.push({
+        id: state.nextMilestoneId++,
+        user_id,
+        week,
+        milestone_key: key,
+        completed_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      });
+      return [];
+    }
+
+    throw new Error(`Unhandled SQL in mock: ${text}`);
+  };
+  sql.end = async () => {};
+  return { sql, state };
+}
+
+/* ------------------------------------------------------------------ */
+/* Pure-logic tests                                                   */
+/* ------------------------------------------------------------------ */
+test('catalog defines four weeks with the spec\'s feature unlocks', async () => {
+  const { MILESTONES } = await loadModule();
+  assert.equal(MILESTONES.length, 4);
+  assert.deepEqual(MILESTONES.map((w) => w.week), [1, 2, 3, 4]);
+  assert.ok(MILESTONES[0].unlockedFeatures.includes('customer-discovery'));
+  assert.ok(MILESTONES[1].unlockedFeatures.includes('pitch-deck'));
+  assert.ok(MILESTONES[2].unlockedFeatures.includes('cofounder-match'));
+  assert.ok(MILESTONES[3].unlockedFeatures.includes('incorporate'));
+});
+
+test('VALID_MILESTONE_KEYS rejects typos but accepts every catalog key', async () => {
+  const { VALID_MILESTONE_KEYS, MILESTONES } = await loadModule();
+  for (const w of MILESTONES) {
+    for (const k of [...w.requiredAll, ...(w.requiredAny ?? [])]) {
+      assert.ok(VALID_MILESTONE_KEYS.has(k), `expected key ${k}`);
+    }
+  }
+  assert.equal(VALID_MILESTONE_KEYS.has('not_a_real_key'), false);
+});
+
+test('weekMet: week 1 needs project + 3 interviews', async () => {
+  const { weekMet } = await loadModule();
+  assert.equal(weekMet(1, new Set(['project_created'])), false);
+  assert.equal(
+    weekMet(1, new Set([
+      'project_created', 'customer_interview_logged_1', 'customer_interview_logged_2',
+    ])),
+    false,
+  );
+  assert.equal(
+    weekMet(1, new Set([
+      'project_created',
+      'customer_interview_logged_1',
+      'customer_interview_logged_2',
+      'customer_interview_logged_3',
+    ])),
+    true,
+  );
+});
+
+test('weekMet: week 3 enforces requiredAll AND at least one of requiredAny', async () => {
+  const { weekMet } = await loadModule();
+  assert.equal(weekMet(3, new Set(['advisor_meeting_booked'])), false);
+  assert.equal(weekMet(3, new Set(['scoring_run_completed'])), false);
+  assert.equal(weekMet(3, new Set(['scoring_run_completed', 'advisor_meeting_booked'])), true);
+  assert.equal(weekMet(3, new Set(['scoring_run_completed', 'cofounder_request_sent'])), true);
+});
+
+test('unlockedFeaturesThrough is cumulative and stable per week', async () => {
+  const { unlockedFeaturesThrough } = await loadModule();
+  const w1 = unlockedFeaturesThrough(1);
+  const w2 = unlockedFeaturesThrough(2);
+  const w4 = unlockedFeaturesThrough(4);
+  for (const f of w1) assert.ok(w2.includes(f), `${f} should remain at w2`);
+  for (const f of w2) assert.ok(w4.includes(f), `${f} should remain at w4`);
+  assert.equal(w1.includes('roadmap'), false);
+  assert.equal(w2.includes('roadmap'), true);
+  assert.equal(w4.includes('compliance'), true);
+});
+
+/* ------------------------------------------------------------------ */
+/* Route-flow smoke test — start → milestone (auto-advance) → exit    */
+/* ------------------------------------------------------------------ */
+test('happy path: start → 4 weeks of milestones → auto-exit on week 4', async () => {
+  // exitLab is not called here — week 4's 'incorporation_completed' milestone
+  // auto-exits the lab from inside recordMilestone, which is the behaviour
+  // this test asserts below. Exercising exitLab() directly is a separate test.
+  const { startLab, recordMilestone } = await loadModule();
+  const { sql, state } = makeSql();
+
+  // start()
+  let r = await startLab(sql, 1);
+  assert.equal(r.ok, true);
+  assert.equal(r.state.active, true);
+  assert.equal(r.state.week, 1);
+  assert.equal(r.state.is_incorporated, false);
+  assert.ok(r.state.unlocked_features.includes('customer-discovery'));
+  assert.equal(r.state.unlocked_features.includes('roadmap'), false);
+
+  // ---- Week 1: project + 3 interviews → advance to week 2 ------------
+  for (const key of [
+    'project_created',
+    'customer_interview_logged_1',
+    'customer_interview_logged_2',
+  ]) {
+    r = await recordMilestone(sql, 1, key);
+    assert.equal(r.ok, true);
+    assert.equal(r.state.week, 1, `still week 1 after ${key}`);
+  }
+  r = await recordMilestone(sql, 1, 'customer_interview_logged_3');
+  assert.equal(r.ok, true);
+  assert.equal(r.state.week, 2, 'auto-advanced to week 2');
+  assert.ok(r.state.unlocked_features.includes('roadmap'), 'week 2 features now unlocked');
+
+  // Idempotent re-record stays at week 2.
+  const before = state.milestones.length;
+  r = await recordMilestone(sql, 1, 'project_created');
+  assert.equal(r.ok, true);
+  assert.equal(r.state.week, 2);
+  assert.equal(state.milestones.length, before, 'duplicate milestone ignored');
+
+  // ---- Week 2: okrs + brand + deck → advance to week 3 --------------
+  for (const key of ['okrs_created', 'brand_basics_filled']) {
+    r = await recordMilestone(sql, 1, key);
+    assert.equal(r.state.week, 2, `still week 2 after ${key}`);
+  }
+  r = await recordMilestone(sql, 1, 'pitch_deck_drafted');
+  assert.equal(r.state.week, 3);
+
+  // ---- Week 3: scoring alone is NOT enough ---------------------------
+  r = await recordMilestone(sql, 1, 'scoring_run_completed');
+  assert.equal(r.state.week, 3, 'scoring alone does not advance week 3');
+  r = await recordMilestone(sql, 1, 'advisor_meeting_booked');
+  assert.equal(r.state.week, 4, 'scoring + mentor meets week 3');
+
+  // Sanity: lab still on, not yet incorporated.
+  assert.equal(r.state.active, true);
+  assert.equal(r.state.is_incorporated, false);
+
+  // ---- Week 4: incorporation_completed → auto-exit -------------------
+  r = await recordMilestone(sql, 1, 'incorporation_completed');
+  assert.equal(r.ok, true);
+  assert.equal(r.state.active, false, 'lab auto-flips off on week-4 milestone');
+  assert.equal(r.state.is_incorporated, true, 'is_incorporated set in same handler');
+  assert.equal(state.user.is_incorporated, 1);
+  assert.equal(state.user.spinout_lab_active, 0);
+});
+
+test('start: refuses for already-incorporated user with 409', async () => {
+  const { startLab } = await loadModule();
+  const { sql, state } = makeSql({
+    user: {
+      id: 1,
+      spinout_lab_active: 0,
+      spinout_lab_week: 1,
+      spinout_lab_started_at: null,
+      is_incorporated: 1,
+    },
+    milestones: [],
+  });
+  const r = await startLab(sql, 1);
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 409);
+  assert.equal(state.user.spinout_lab_active, 0, 'lab stays off');
+});
+
+test('start: idempotent — preserves started_at across repeat calls', async () => {
+  const { startLab } = await loadModule();
+  const { sql, state } = makeSql();
+  const first = await startLab(sql, 1);
+  assert.equal(first.ok, true);
+  const ts1 = state.user.spinout_lab_started_at;
+  // Force a tick so wall-clock differs; helper's COALESCE should still hold.
+  await new Promise((r) => setTimeout(r, 5));
+  const second = await startLab(sql, 1);
+  assert.equal(second.ok, true);
+  assert.equal(state.user.spinout_lab_started_at, ts1, 'started_at preserved');
+});
+
+test('milestone: rejects unknown key with 400', async () => {
+  const { startLab, recordMilestone } = await loadModule();
+  const { sql } = makeSql();
+  await startLab(sql, 1);
+  const r = await recordMilestone(sql, 1, 'made_up_key');
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 400);
+});
+
+test('milestone: refuses when lab is off with 409', async () => {
+  const { recordMilestone } = await loadModule();
+  const { sql } = makeSql();
+  const r = await recordMilestone(sql, 1, 'project_created');
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 409);
+});
+
+test('exit: idempotent — second call leaves state clean', async () => {
+  const { startLab, exitLab } = await loadModule();
+  const { sql, state } = makeSql();
+  await startLab(sql, 1);
+  const a = await exitLab(sql, 1);
+  assert.equal(a.active, false);
+  assert.equal(a.is_incorporated, true);
+  const b = await exitLab(sql, 1);
+  assert.equal(b.active, false);
+  assert.equal(b.is_incorporated, true);
+  assert.equal(state.user.spinout_lab_active, 0);
+  assert.equal(state.user.is_incorporated, 1);
+});

@@ -1,0 +1,117 @@
+# D7909: pinned opt-in pilot submission; ordinary CI never waits for this job.
+# D8626: a merge-queue candidate's ci.yml waits for `accepted`. Unset (disabled, refused, failed) means every
+# suite part runs hosted, so this workflow can delay a candidate by one job but never drop a part.
+name: Capacity pilot planner
+on:
+  workflow_call:
+    inputs:
+      submission:
+        description: Exact original-run submission, checked by trusted code and the authority
+        type: string
+        required: true
+      executor_sha:
+        description: Reviewed main executor revision; authority verifies this independently
+        type: string
+        required: true
+      child_workflow_sha:
+        description: Separately approved direct main workflow revision
+        type: string
+        required: true
+    outputs:
+      accepted:
+        description: "'true' only when the coordinator accepted this exact request (D8626)"
+        value: ${{ jobs.submit.outputs.accepted }}
+      request_id:
+        description: The accepted request's id, for the caller's log
+        value: ${{ jobs.submit.outputs.request_id }}
+permissions:
+  contents: read
+jobs:
+  submit:
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && vars.CI_CAPACITY_ENABLED == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/pr-') &&
+      vars.CI_CAPACITY_QUEUE_ROUTING == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      accepted: ${{ steps.submit.outputs.accepted }}
+      request_id: ${{ steps.submit.outputs.request_id }}
+    env:
+      CI_CAPACITY_ENABLED: ${{ vars.CI_CAPACITY_ENABLED }}
+      CI_CAPACITY_QUEUE_ROUTING: ${{ vars.CI_CAPACITY_QUEUE_ROUTING }}
+      CI_CAPACITY_URL: ${{ vars.CI_CAPACITY_URL }}
+      CI_CAPACITY_AUDIENCE: ${{ vars.CI_CAPACITY_AUDIENCE }}
+      CAPACITY_SUBMISSION: ${{ inputs.submission }}
+      CAPACITY_EXECUTOR_SHA: ${{ inputs.executor_sha }}
+      CAPACITY_CHILD_WORKFLOW_SHA: ${{ inputs.child_workflow_sha }}
+      CAPACITY_SOURCE_ROOT: ${{ github.workspace }}/candidate
+      # #8148: runner context belongs to step env, never job env.
+    steps:
+      - name: Resolve this pinned reusable workflow revision from GitHub OIDC
+        id: trusted
+        # Reserved runner endpoint, no candidate code, no token output.
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, re, urllib.parse, urllib.request
+          endpoint = urllib.parse.urlsplit(os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'])
+          if endpoint.scheme != 'https' or not (endpoint.hostname or '').endswith('.actions.githubusercontent.com') or endpoint.username or endpoint.password or endpoint.port:
+              raise SystemExit('invalid OIDC endpoint')
+          query = urllib.parse.parse_qsl(endpoint.query) + [('audience', os.environ['CI_CAPACITY_AUDIENCE'])]
+          url = urllib.parse.urlunsplit(endpoint._replace(query=urllib.parse.urlencode(query)))
+          request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+          # Fixed HTTPS GitHub endpoint; refusing redirects prevents credential forwarding.
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args): return None
+          with urllib.request.build_opener(NoRedirect).open(request, timeout=10) as response:
+              raw = response.read(32769)
+          if len(raw) > 32768: raise SystemExit('OIDC body bound')
+          token = json.loads(raw)['value']
+          claims = json.loads(base64.urlsafe_b64decode(token.split('.')[1] + '==='))
+          sha = claims.get('job_workflow_sha', '')
+          if not re.fullmatch('[a-f0-9]{40}', sha) or claims.get('job_workflow_ref') != 'AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@' + sha:
+              raise SystemExit('planner must be invoked at its reviewed full SHA')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output: output.write('sha=' + sha + '\n')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: AxalNetwork/StudioOS
+          ref: ${{ steps.trusted.outputs.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: AxalNetwork/StudioOS
+          ref: ${{ github.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22.23.3'
+      - name: Validate original parent and exact artifact identity
+        id: metadata
+        env:
+          CAPACITY_MODE: metadata
+          CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
+        run: node control/scripts/ci/capacity-planner.mjs
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: github.event_name == 'push'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          artifact-ids: ${{ steps.metadata.outputs.artifact_id }}
+          path: ${{ runner.temp }}/capacity-plan
+      - name: Submit once without waiting for external execution
+        id: submit
+        # D8626: in the queue a refusal (bound, outage, identity) must not fail the candidate's run: `accepted` stays
+        # unset and its parts run hosted. A main push keeps its visible failure.
+        continue-on-error: ${{ github.event_name == 'merge_group' }}
+        env:
+          CAPACITY_PLAN_FILE: ${{ runner.temp }}/capacity-plan/suite-plan.json
+        run: node control/scripts/ci/capacity-planner.mjs

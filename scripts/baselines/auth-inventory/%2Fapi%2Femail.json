@@ -1,0 +1,7 @@
+{
+  "POST /api/email/invites/:id/remind": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

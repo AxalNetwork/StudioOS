@@ -1,0 +1,17 @@
+#19 - Show the "Page not found" screen to logged-out visitors too
+What & Why
+Task #11 added a catch-all 404 page. It now works for signed-in users: visiting an unknown in-app URL renders the new NotFoundPage (verified). But signed-OUT visitors who hit an unknown URL are still bounced to the login screen instead of seeing the 404.
+This is NOT caused by the route — it's the pre-existing session interceptor in frontend/src/lib/api.js (the 401 handler around lines 86–130). On any page load a background fetch (e.g. settings/me) returns 401 for an anonymous visitor; the interceptor redirects to /login for every path that is not on its hardcoded isPublicPath allowlist. An unknown URL isn't on that allowlist, so it redirects. This predates Task #11 and was intentionally left out of scope (the documented "blank screen inside the layout" bug was the authenticated case).
+Done looks like
+* A logged-out visitor who navigates to an unknown URL sees the NotFoundPage ("404 / Page not found / Back to home"), not the login form.
+* Existing behavior is preserved: a genuinely-expired session on a real protected page (e.g. /dashboard, /admin) still bounces to /login; the existing public pages (/, /about, /articles, /insights, etc.) still do not bounce on a background settings/me 401.
+Suggested approach
+The interceptor cannot enumerate "unknown" paths from a static allowlist. Options to evaluate:
+* Have the 401 redirect distinguish "anonymous visitor / no token ever present" from "had a session that just expired" and only bounce the latter; OR
+* Let the SPA mark the catch-all (NotFoundPage) as a no-auth-redirect surface (e.g. a small shared flag the interceptor reads) so background 401s there don't redirect. Pick the lower-risk option; this code path is security-sensitive and carefully tuned (see the comments around the allowlist).
+Relevant files
+* frontend/src/lib/api.js (401 interceptor + isPublicPath allowlist, ~lines 77–133)
+* frontend/src/App.jsx (catch-all route path="*" at ~line 1317)
+* frontend/src/pages/NotFoundPage.jsx
+Dependencies
+Fix broken nav & add 404 fallback

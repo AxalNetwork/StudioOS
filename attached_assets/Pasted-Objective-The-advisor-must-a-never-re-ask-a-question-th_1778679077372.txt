@@ -1,0 +1,105 @@
+Objective
+  The advisor must (a) never re-ask a question that has already been
+  answered, (b) pick the highest-priority unanswered question for the
+  current persona/week/tier/page-focus, and (c) react to side-effects
+  (e.g. a milestone unlock changes priorities).
+
+Schema
+  CREATE TABLE IF NOT EXISTS advisor_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    question_id TEXT NOT NULL,
+    value_json TEXT,
+    written_to TEXT,                 -- 'projects.problem_statement#42'
+    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, question_id)
+  );
+  CREATE TABLE IF NOT EXISTS advisor_state (
+    user_id INTEGER PRIMARY KEY,
+    persona TEXT NOT NULL,
+    spinout_week INTEGER,
+    tier TEXT,
+    current_focus TEXT,              -- e.g. 'projects' if user is on the Projects page
+    last_question_id TEXT,
+    last_question_asked_at DATETIME,
+    completed_count INTEGER DEFAULT 0,
+    proposed_count INTEGER DEFAULT 0,
+    pending_count INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+State machine (cloudflare-worker/src/services/advisor/stateMachine.ts)
+  Inputs (read once per turn):
+    - QUESTION_BANK from frontend/src/lib/advisor/questionBank.ts
+      (mirrored server-side via shared package — see Prompt CH).
+    - users row (role, spinout_lab_active, spinout_lab_week, tier).
+    - advisor_answers for this user.
+    - Platform side-state that already populates fields (e.g. existing
+      projects rows, existing OKRs) — those count as "already answered"
+      for the matching question_id even without an advisor_answers row.
+    - current_focus (the page the user is on right now, sent by the
+      frontend; null if they're on the dashboard).
+
+  Output: { next_question, queue: { proposed[], pending[], completed[] } }
+
+  Selection rules:
+    1. Drop every question whose persona doesn't match the user.
+    2. Drop every question whose unlock_required > spinout_week.
+    3. Drop every question whose tier_required > user tier (mark as
+       "blocked: needs upgrade" — surface as paywall CTA, not a Q).
+    4. Drop every question already answered for this user (either in
+       advisor_answers or via platform side-state lookup).
+    5. From the remainder, rank by:
+         (a) section matches current_focus (× 2 boost)
+         (b) importance (critical=4, high=3, med=2, low=1)
+         (c) unlock_milestone proximity (Spin-Out: questions that
+             unblock the next milestone get +5)
+         (d) recency of related platform activity (e.g. user just
+             added a project → ask project follow-ups next)
+       Compute composite score; take the top one as next_question.
+    6. If no questions remain, return next_question = null and a
+       cheerful "you're set for now" message.
+
+  Anti-repeat guard: if next_question.id === advisor_state.last_question_id
+  AND advisor_state.last_question_asked_at within last 5 min AND no new
+  answer recorded → demote that question by 100 points and re-pick.
+  (Defends against UI bugs that re-fire the same turn.)
+
+  Side-effect hooks:
+    - On every answer commit, check whether it unlocks a Spin-Out-Lab
+      milestone; if yes, mark and update user's spinout_week if all
+      week milestones are now met.
+    - Update advisor_state counters.
+    - Emit `advisor.answered` event to the in-app notification stream.
+
+Endpoints (cloudflare-worker/src/routes/advisor.ts — replace existing)
+  POST /api/advisor/turn
+    body { conversation_id?, current_focus?, user_message? }
+    → { next_question, queue, suggestions }
+  POST /api/advisor/answer
+    body { conversation_id, question_id, value }
+    → { saved_to[], next_question, queue }
+  POST /api/advisor/skip
+    body { conversation_id, question_id, reason? }
+    → { next_question, queue }
+  POST /api/advisor/explain
+    body { topic }
+    → { explanation, doc_anchor, related_features[] }
+  GET  /api/advisor/queue
+    → { proposed[], pending[], completed[] } (snapshot for the progress widget)
+
+Tests
+  cloudflare-worker/test/advisor.stateMachine.test.ts
+    - "never repeats": answer 5 questions, advance 50 turns, assert
+      none reappear.
+    - "respects unlock_required": spinout_week=1 → no week-2+ questions.
+    - "respects tier": Free user → no Studio-tier questions.
+    - "focus boost": user on /projects → project-section questions
+      rank above unrelated ones.
+    - "no questions left": all answered → returns null + friendly state.
+
+Acceptance
+  - Advisor never asks a question whose answer already exists in
+    advisor_answers OR in the platform side-state.
+  - Selection deterministic for the same user state.
+  - Backed by unit tests with > 80% branch coverage on stateMachine.ts.

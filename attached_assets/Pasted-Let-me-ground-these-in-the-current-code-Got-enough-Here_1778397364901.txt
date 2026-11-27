@@ -1,0 +1,571 @@
+Let me ground these in the current code.
+
+Got enough. Here are the 5 separate Replit prompts.
+
+---
+
+## Replit Prompt Q — Fix User Analytics tabs (Overview / Users / Financial / Technical / Management)
+
+```
+Objective
+  /admin/monitoring User Analytics is failing across all five sub-tabs because
+  the Worker endpoints don't exist (or return 500/404). The frontend was
+  built ahead of the backend. Make every tab return real data from D1 + the
+  Workers Analytics Engine, or a clean empty state — never an error toast.
+
+Endpoints to implement (cloudflare-worker/src/routes/monitoring.ts)
+  All require requireAdmin AND requireCfAccess.
+
+  GET /api/monitoring/analytics/overview?from=&to=
+        → {
+            active_users_30d, new_signups, paid_conversion_rate,
+            mrr_usd, arr_usd, churn_rate_30d,
+            avg_session_minutes, p50_latency_ms, p95_latency_ms,
+            error_rate_pct,
+            top_pages: [{ path, views, avg_ms }]
+          }
+  GET /api/monitoring/analytics/users?role=&tier=&search=&limit=50&offset=0
+        → { total, items: [{
+              id, email_redacted, name, role, tier, last_login,
+              sessions_30d, projects_count, lifetime_value_usd
+            }] }
+  GET /api/monitoring/analytics/user/:id
+        → drill-down: feature_usage, billing_history, support_tickets,
+                       error_count_30d, last_50_events
+  GET /api/monitoring/analytics/financial?from=&to=
+        → mrr_breakdown_by_tier, new_mrr, expansion_mrr, churn_mrr,
+          ltv_by_cohort
+  GET /api/monitoring/analytics/technical?from=&to=
+        → { error_rate_by_route, latency_by_route (p50/p95/p99),
+            queue_depth, dlq_count, slow_queries: [{ stmt, avg_ms, calls }],
+            top_errors: [{ message, count, last_seen, sample_id }] }
+  GET /api/monitoring/analytics/management?from=&to=
+        → { dau_wau_mau, weekly_active_by_role, weekly_signups,
+            paid_pipeline, support_volume, sentiment_score }
+  POST /api/monitoring/analytics/export
+        body { report, format: 'csv'|'pdf', from, to, filters }
+        → { download_url } (R2 presigned, gated through Worker, 24h)
+
+Data sources
+  - D1: users, projects, deals, activity_logs, billing_*, esign_envelopes,
+         tickets, scoring_*
+  - Workers Analytics Engine binding (already proposed in earlier
+    infrastructure prompt — wire it now if not done):
+    bind name `ANALYTICS`, dataset `studioos_metrics`. Push request-level
+    rows from the global middleware: { ts, route, status, duration_ms,
+    user_id, role, tier }.
+  - Cron: pre-compute daily snapshots into `analytics_snapshots(date,
+    metric_key, value)` so /overview is fast (< 200ms).
+
+Frontend (frontend/src/pages/MonitoringPage.jsx Analytics tab)
+  - Wrap every fetch in try/catch with a clear inline error card showing:
+      "Couldn't load <tab name>. (status code) — Retry"
+    Never use a generic toast.
+  - Each chart/table renders an empty state with copy + skeleton if data
+    is null, and a "No data for this range" pill if the query succeeded
+    with zero rows.
+  - Date range picker default: last 30 days. Persist in URL ?from=&to=.
+  - "Export CSV" + "Export PDF" buttons disabled while data loads.
+
+Defensive shape contract (frontend/src/lib/api.js)
+  - Add adminAnalytics.{ overview, users, user, financial, technical,
+    management, export } typed-style helpers.
+  - On 5xx the helper retries once with exponential backoff (1s) before
+    surfacing the error.
+
+Acceptance
+  - All 5 sub-tabs render with real numbers in production.
+  - The Analytics tab no longer shows a generic error.
+  - 0-data ranges show "No data for this range" not an error.
+  - Non-admin users get 403 cleanly without crashing the page.
+  - Export CSV downloads. Export PDF renders an Axal-VC-styled report
+    via Cloudflare Browser Rendering.
+  - Every export logged to admin_audit_log.
+```
+
+---
+
+## Replit Prompt R — Fix Notifications digest + quiet hours
+
+```
+Objective
+  In Settings > Notifications the Digest frequency and Quiet hours controls
+  throw an error on save. Cause: the frontend posts to a settings field
+  shape the Worker doesn't accept. Make this round-trip cleanly, persist,
+  and actually be honoured by the email + push delivery code.
+
+Worker (cloudflare-worker/src/routes/settings.ts)
+  Add to SETTINGS_USER_COLUMNS:
+    ['digest_frequency', "TEXT DEFAULT 'weekly'"],   // 'off' | 'daily' | 'weekly'
+    ['quiet_hours_start', 'TEXT'],                   // 'HH:MM' 24h
+    ['quiet_hours_end',   'TEXT'],
+    ['quiet_hours_tz',    "TEXT DEFAULT 'UTC'"],     // IANA tz name
+
+  Endpoint:
+    GET  /api/settings/notifications
+       → {
+           categories: notification_prefs (existing JSON),
+           digest_frequency, quiet_hours_start, quiet_hours_end,
+           quiet_hours_tz
+         }
+    PUT  /api/settings/notifications
+       body Zod-validated:
+         categories?:        Record<string,{email?:boolean,inapp?:boolean,sms?:boolean,slack?:boolean}>
+         digest_frequency?:  'off' | 'daily' | 'weekly'
+         quiet_hours_start?: /^\d{2}:\d{2}$/ | null
+         quiet_hours_end?:   /^\d{2}:\d{2}$/ | null
+         quiet_hours_tz?:    valid IANA tz (use Intl.supportedValuesOf)
+
+  Migration runs lazily via ensureSchema as today.
+
+  Wire the values into the email/notification dispatcher
+  (cloudflare-worker/src/services/notifications.ts):
+    - Before sending email/push/slack, compute "is now in quiet hours" in
+      the user's tz and skip non-critical categories.
+    - Critical categories (security, billing, contract sign request) bypass
+      quiet hours.
+    - Digest:
+        'off'    → send each notification individually
+        'daily'  → batch into a single email, scheduled cron 09:00 user-tz
+        'weekly' → batch, cron Monday 09:00 user-tz
+      Implemented via a `notification_outbox` table + scheduled job.
+
+Frontend (frontend/src/pages/SettingsPage.jsx NotificationsSection)
+  - Replace the broken save with a single PUT /api/settings/notifications
+    payload matching the schema above.
+  - Quiet-hours UI: two HH:MM inputs + tz select (default user.timezone).
+    Allow leaving both blank → no quiet hours.
+  - Show inline validation: end can equal start (means 0-min window =
+    disabled), but invalid times block save.
+  - Surface server errors inline next to the field, not in a toast.
+
+Acceptance
+  - Saving Digest frequency persists and survives reload.
+  - Saving Quiet hours persists and survives reload.
+  - During quiet hours, email + push are suppressed for non-critical
+    categories; activity_logs records "suppressed_quiet_hours".
+  - Daily/weekly digest assembles a single email with the suppressed
+    notifications.
+  - Invalid input returns 400 with a useful field-level error, not 500.
+```
+
+---
+
+## Replit Prompt S — Page header explainers (dismissible, link to docs)
+
+```
+Objective
+  Every page should have a short banner under the title that explains what
+  the feature does and why it matters. Users can click an X to dismiss it
+  permanently per page. A "Learn more" link inside opens the relevant
+  Documentation section.
+
+Component
+  frontend/src/components/PageExplainer.jsx
+    Props: { pageKey, title, body, docPath }
+    Behaviour:
+      - Reads localStorage `dismissed_explainers` (JSON array of pageKeys)
+      - If pageKey is in that array → render nothing
+      - Otherwise render a slim card: icon + title + body + "Learn more →"
+        (routes to /docs#docPath) + X close button
+      - Closing pushes pageKey into the dismissed list and persists it
+      - Also POSTs /api/settings/explainer-dismissed { page_key } so the
+        preference syncs across devices
+
+Worker (cloudflare-worker/src/routes/settings.ts)
+  Add column: ['dismissed_explainers', "TEXT DEFAULT '[]'"]
+  Endpoints:
+    GET  /api/settings/explainers     → { dismissed: [pageKey, ...] }
+    POST /api/settings/explainer-dismissed { page_key }
+    POST /api/settings/explainer-restore   { page_key | 'all' }
+  On login, frontend hydrates localStorage from the server (server is the
+  source of truth; localStorage is the cache).
+
+Settings > Appearance
+  Add a "Help & explainers" section:
+    - List of dismissed explainers with "Restore" button per row.
+    - "Restore all" button.
+
+Content (one entry per page — keep it short, ≤ 240 chars body)
+  Define in frontend/src/lib/explainers.js as an exported map:
+  {
+    dashboard:           { title: 'Your home base', body: '…', doc: 'getting-started/dashboard' },
+    projects:            { title: 'Projects',       body: 'Each project is a venture you are
+                                                          building or evaluating. Capture problem,
+                                                          solution, market, and team.',
+                           doc: 'build/projects' },
+    customer_discovery:  { title: 'Customer Discovery',
+                           body: 'Talk to 5+ potential customers. Log every conversation —
+                                  pain points, quotes, and signals.',
+                           doc: 'build/customer-discovery' },
+    roadmap:             { title: 'Roadmap',  body: 'Turn your idea into 90-day OKRs and a
+                                                     weekly Kanban. Drag tasks across stages.',
+                           doc: 'build/roadmap' },
+    brand_builder:       { ... },
+    pitch_deck:          { ... },
+    scoring:             { title: 'Diligence & Scoring Engine',
+                           body: 'Get an objective venture-readiness score across team, market,
+                                  problem fit, and traction. Low scores point to your weakest area
+                                  and what to fix next.',
+                           doc: 'validate/scoring' },
+    mentors:             { ... },
+    office_hours:        { ... },
+    cofounder_match:     { ... },
+    market_intel:        { ... },
+    capital:             { ... },
+    captable:            { ... },
+    funds:               { ... },
+    reserves:            { ... },
+    waterfall:           { ... },
+    liquidity:           { ... },
+    incorporate:         { ... },
+    cofounder_agreement: { ... },
+    section_83b:         { ... },
+    compliance:          { ... },
+    kyc:                 { ... },
+    esign:               { ... },
+    legal_templates:     { ... },
+    marketplace:         { ... },
+    partners:            { ... },
+    co_marketing:        { ... },
+    network_effects:     { ... },
+    public_directory:    { ... },
+    refer_earn:          { ... },
+    activity:            { ... },
+    tickets:             { ... },
+    integrations:        { title: 'Integrations',
+                           body: 'Connect your CRM, legal providers, and data feeds.
+                                  Push deals out, receive webhooks back.',
+                           doc: 'account/integrations' },
+    settings:            { ... },
+    documentation:       null,                     // never explain the docs page
+    monitoring:          { ... },                  // admin
+    admin:               { ... },                  // admin
+    due_diligence:       { ... },                  // admin
+    spinout_lab:         { ... },
+  }
+
+Wiring
+  - At the top of every page component (under <h1>), insert
+      <PageExplainer pageKey="<key>" />
+    (component reads title/body/doc from the map by pageKey).
+  - The component fits the existing header layout (no breaking shifts).
+  - Mobile: collapses to one line + "?" button that expands the panel.
+
+Acceptance
+  - Every primary page renders an explainer.
+  - Clicking X hides it on that page across reloads + across devices.
+  - "Learn more" deep-links into the docs page anchor.
+  - Settings > Appearance lists restore controls; "Restore all" wipes the
+    dismissed set.
+  - Pages whose pageKey isn't in the map render nothing (no crash).
+```
+
+---
+
+## Replit Prompt T — Anti-cheat for Diligence & Scoring Engine
+
+```
+Objective
+  Founders self-report TAM, SAM, MRR, ARR, user counts, runway, etc.
+  These feed scoreMarket / scoreTraction / scoreFinancials. Today nothing
+  stops a founder from typing $5B TAM and $1M MRR to game the score.
+  Make the scoring engine require evidence and use external signals.
+  Score numbers without evidence; flag, deweight, or refuse anything that
+  smells fake.
+
+Approach
+  Layer 1 — Evidence-required inputs
+    Every "high-leverage" numeric input must be backed by either:
+      a) An auto-pulled external value (Stripe / Plaid / GA / GitHub /
+         Crunchbase / SEC EDGAR), OR
+      b) A founder-uploaded artefact (bank statement PDF, Stripe export,
+         board deck, signed customer LOI, traffic export) hashed and
+         stored in R2 (encrypted per Prompt B).
+    Without evidence, the input is accepted but scored as 0 for that band.
+
+    Mandatory evidence fields:
+      mrr_usd, arr_usd, monthly_revenue_usd, cash_in_bank_usd,
+      monthly_burn_usd, total_users, paying_customers,
+      tam_usd (must cite ≥1 public source URL), sam_usd, traction_growth.
+
+  Layer 2 — Cross-source reconciliation
+    Whenever a connected integration exists, the platform value beats the
+    founder-typed value:
+      - Stripe connected      → MRR/ARR pulled from Stripe charges
+      - Plaid connected       → cash_in_bank, monthly_burn
+      - Google Analytics      → DAU/WAU/MAU
+      - GitHub                → engineering activity
+      - Crunchbase            → funding history
+    Discrepancy > 20% between typed and source → flag for admin review,
+    score uses the source value, founder shown a banner: "We're using your
+    Stripe MRR ($X) instead of your typed value ($Y)."
+
+  Layer 3 — Plausibility checks
+    Server-side rules that always run:
+      - tam_usd ≤ 100x sam_usd                  else flag tam_implausible
+      - mrr_usd × 12 ≈ arr_usd  (±5%)            else flag arr_mrr_inconsistent
+      - monthly_revenue_usd ≥ mrr_usd            else flag revenue_lt_mrr
+      - paying_customers × min_acv ≤ arr_usd    else flag arr_customer_math
+      - growth_mom_pct ≤ 100                    else flag growth_implausible
+      - cash_in_bank_usd ≥ 0
+      - any % field in [0,100]
+      - monthly_burn_usd ≥ founder_salary_usd / 12  (if founder_salary set)
+    Each failed rule pushes a row into score_flags with reason + severity.
+
+  Layer 4 — Behavioural signals
+    Track edit-volatility per field per project:
+      - >5 edits to MRR in 7 days → suspicious
+      - flipping the same field up/down repeatedly → suspicious
+    Save into score_flags(kind='volatility').
+
+  Layer 5 — Attestation + signature
+    Before computing the score, founder must check a box:
+      "I attest these figures are accurate. I understand Axal verifies via
+       Stripe/Plaid and that fraudulent submission can void the engagement."
+    The attestation is signed (TOTP step-up if available) and the input
+    snapshot HMAC'd. Stored in score_attestations(project_id, snapshot_id,
+    signed_by, signed_at, totp_used, hmac).
+
+  Layer 6 — Score effects of evidence
+    The existing total_score is computed as today, but multiplied by an
+    evidence_confidence factor:
+        evidence_confidence =
+          0.4 + 0.6 × (verified_inputs_count / total_high_leverage_inputs)
+    No evidence → max 40% of score.
+    Full Stripe + Plaid + GA + Crunchbase → 100%.
+    Display "Evidence confidence: 73%" next to the score with a tooltip
+    listing what's verified and what isn't.
+
+  Layer 7 — Admin / DD overlap
+    Every score_flag with severity ≥ 'med' creates a dd_findings row
+    (Prompt D) under the relevant DD section. Founders cannot see these
+    flags in the score UI; admins/partners/investors can.
+
+Schema
+  CREATE TABLE IF NOT EXISTS score_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    field TEXT NOT NULL,                  -- e.g. 'mrr_usd'
+    source TEXT NOT NULL,                 -- 'stripe','plaid','ga','founder_upload','manual'
+    value REAL,
+    file_key TEXT,                        -- R2 key for upload
+    file_sha256 TEXT,
+    fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    verified INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS score_flags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    snapshot_id INTEGER,
+    kind TEXT NOT NULL,                   -- 'rule','volatility','discrepancy','no_evidence'
+    field TEXT,
+    reason TEXT,
+    severity TEXT NOT NULL,               -- 'info','low','med','high'
+    payload_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS score_attestations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    snapshot_id INTEGER NOT NULL,
+    signed_by INTEGER NOT NULL,
+    signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    totp_used INTEGER DEFAULT 0,
+    hmac_signature TEXT NOT NULL
+  );
+
+Worker (cloudflare-worker/src/routes/scoring.ts +
+        cloudflare-worker/src/services/scoring.ts +
+        cloudflare-worker/src/services/scoreIntegrity.ts)
+  - On POST /scoring/score:
+      1. Pull verified values from connected integrations (precedence rules)
+      2. Run plausibility rules; insert score_flags
+      3. Compute evidence_confidence
+      4. Multiply final score
+      5. Require attestation row (return 428 Precondition Required if
+         missing)
+      6. Persist snapshot with integrity_hash already implemented
+      7. Mirror med+ flags to dd_findings
+
+Frontend
+  Scoring page:
+    - Each input shows a small badge: "Verified via Stripe", "Founder upload
+      pending", or "No evidence".
+    - "Upload evidence" buttons next to inputs without verified source.
+    - Top of page: connect-integration suggestions ("Connect Stripe to
+      verify MRR automatically").
+    - "Run Score" disabled until attestation checkbox checked.
+    - Confidence ring + breakdown next to the score.
+    - When the platform overrides a typed value, show:
+        "Your typed MRR was $A. We used the Stripe value of $B."
+  Admin dashboard for flags:
+    - /admin/score-flags lists all flags grouped by project, with link into
+      the matching DD case.
+
+Acceptance
+  - Founder typing $5B TAM with no source URL gets a 'no_evidence' flag and
+    the TAM band scores 0.
+  - Stripe-connected founder cannot inflate MRR — UI shows the Stripe value.
+  - Typed numbers that fail plausibility rules block score finalisation
+    until corrected.
+  - Attestation required; no score without it.
+  - Med+ flags appear in the corresponding DD case under FINANCIAL or
+    MARKET section automatically.
+  - Existing snapshots remain valid (integrity_hash unchanged).
+```
+
+---
+
+## Replit Prompt U — Profile expansion (corporate info for contracts)
+
+```
+Objective
+  Settings > Profile is missing fields that contracts between Axal VC and
+  the user need (country, city, address, legal entity name, registration
+  number, etc.). Add structured personal + corporate identity blocks, and
+  thread these into every contract template so they auto-fill.
+
+Schema
+  Add to users (PII columns encrypted per Prompt B):
+    full_legal_name           TEXT
+    date_of_birth             TEXT       -- ISO 'YYYY-MM-DD'
+    nationality               TEXT       -- ISO 3166-1 alpha-2
+    tax_residency_country     TEXT
+    tax_id_number_ciphertext  TEXT       -- SSN/ITIN/NINO/etc., encrypted, last4 stored unencrypted
+    tax_id_last4              TEXT
+    phone_e164_ciphertext     TEXT
+    phone_last4               TEXT
+    address_line1             TEXT
+    address_line2             TEXT
+    city                      TEXT
+    state_or_region           TEXT
+    postal_code               TEXT
+    country                   TEXT       -- ISO 3166-1 alpha-2
+    profile_completion_pct    INTEGER    -- recomputed on save
+
+  New table corporate_profiles (one per user; founders/investors with an
+  entity):
+    user_id                          INTEGER PK
+    legal_entity_name                TEXT NOT NULL
+    trading_name                     TEXT
+    entity_type                      TEXT  -- 'c_corp','llc','ltd','sa','sas','gmbh','plc','pty','other'
+    incorporation_country            TEXT
+    incorporation_state              TEXT
+    registration_number              TEXT
+    tax_id_business_ciphertext       TEXT  -- EIN / VAT / ABN
+    tax_id_business_last4            TEXT
+    incorporation_date               TEXT
+    registered_address_line1         TEXT
+    registered_address_line2         TEXT
+    registered_city                  TEXT
+    registered_state                 TEXT
+    registered_postal_code           TEXT
+    registered_country               TEXT
+    operating_address_same_as_reg    INTEGER DEFAULT 1
+    operating_address_line1          TEXT
+    operating_address_line2          TEXT
+    operating_city                   TEXT
+    operating_state                  TEXT
+    operating_postal_code            TEXT
+    operating_country                TEXT
+    website                          TEXT
+    industry_naics                   TEXT
+    employees_count                  INTEGER
+    fiscal_year_end                  TEXT  -- 'MM-DD'
+    bank_country                     TEXT
+    aml_high_risk_jurisdiction       INTEGER DEFAULT 0   -- computed from country + sanctions
+    ubo_disclosed                    INTEGER DEFAULT 0
+    ubo_records_json                 TEXT  -- list of {name,dob,ownership_pct,nationality,address}
+    director_records_json            TEXT
+    signing_authority_user_id        INTEGER  -- which platform user is the signatory
+    insurance_do_carrier             TEXT
+    insurance_eo_carrier             TEXT
+    updated_at                       DATETIME DEFAULT CURRENT_TIMESTAMP
+
+Worker (cloudflare-worker/src/routes/settings.ts)
+  GET  /api/settings/profile/personal   → returns personal block (PII decrypted)
+  PUT  /api/settings/profile/personal   → upsert; Zod-validated
+  GET  /api/settings/profile/corporate
+  PUT  /api/settings/profile/corporate
+  POST /api/settings/profile/ubo        → add/update beneficial owner
+  DELETE /api/settings/profile/ubo/:id
+
+Validation
+  - country fields: must be valid ISO 3166-1 alpha-2.
+  - postal_code: validated per country (light regex map).
+  - registration_number: required if entity_type set.
+  - At least 1 UBO with ownership_pct ≥ 25% required for compliance flag
+    `ubo_disclosed = 1`.
+  - DOB: must be ≥18 years old.
+
+Frontend (frontend/src/pages/SettingsPage.jsx ProfileSection)
+  Sub-tabs inside Profile:
+    1. Personal      (existing fields + new identity + address)
+    2. Corporate     (the new entity block + UBOs + directors)
+    3. Verification  (KYC status from sumsub, profile_completion_pct ring,
+                      list of missing required fields)
+
+  Use a form library (react-hook-form already in repo) with country & state
+  pickers (use a static list, not external API).
+  Show a profile completeness ring at the top: "78% — add registered
+  address to unlock contract auto-fill."
+
+Contract auto-fill
+  Update every contract template generator
+  (cloudflare-worker/src/services/contractTemplates.ts and any per-doc
+  helpers) so that when an envelope is created the template's merge fields
+  are populated from the relevant profile block. Required merge fields:
+    {{counterparty.full_legal_name}}
+    {{counterparty.address_block}}
+    {{counterparty.entity_name}}
+    {{counterparty.entity_type}}
+    {{counterparty.registration_number}}
+    {{counterparty.signing_authority_name}}
+    {{counterparty.signing_authority_title}}
+    {{counterparty.tax_id_last4}}
+    {{counterparty.country}}
+  Block sending if a required merge field is missing — return 422 with
+  `missing_profile_fields: [...]` and surface a CTA in the UI:
+    "Complete your corporate profile to send this contract."
+
+Sanctions/PEP recheck on save
+  When country, registered_country, or entity_type changes, enqueue an
+  async job that hits the sanctions connector (Prompt D2) and updates
+  aml_high_risk_jurisdiction. Persist a flag in dd_findings if hit.
+
+Audit
+  Every change to a corporate field writes an activity_logs row with
+  before/after JSON (PII redacted).
+
+Acceptance
+  - Profile shows 3 sub-tabs with all new fields.
+  - Saving a Corporate profile with valid data persists; reload restores it.
+  - Country/postal validation blocks bad input with field-level errors.
+  - Trying to send a contract without required profile fields surfaces the
+    missing list and a "Complete profile" deep link.
+  - Existing contract templates auto-fill merge fields.
+  - PII (tax IDs, phone, DOB) stored encrypted; only last4 visible by default.
+  - Profile completeness ring updates live as fields are filled.
+  - High-risk jurisdiction selection triggers an async sanctions check and
+    a DD finding if matched.
+```
+
+---
+
+## Order
+
+```
+Phase 1 (immediate fixes — unblock users):
+  Q  Fix User Analytics tabs
+  R  Fix Notifications digest + quiet hours
+
+Phase 2 (UX quality):
+  S  Page header explainers
+
+Phase 3 (integrity + identity — enables better contracts + DD):
+  U  Profile expansion (do before T because T leans on tax/identity)
+  T  Anti-cheat for Scoring & Diligence
+```
+
+Each prompt is self-contained. Want me to draft the explainer copy for every page, the plausibility-rule constants for the scoring engine, or the country-specific postal regex map next?

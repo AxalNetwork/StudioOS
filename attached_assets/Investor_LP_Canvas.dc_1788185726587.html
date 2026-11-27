@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}a:hover{color:#4338ca}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 18px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:198px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .nav.on{color:#4f46e5;background:#f2f2ff;font-weight:700;box-shadow:inset 2px 0 0 #4f46e5}
+    .nav.lock{color:#615c6e}
+    .main{flex:1;min-width:0;padding:22px 24px 30px}
+    .rail{width:288px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:18px 18px 26px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .prop{background:#f6f6ff;border:1px solid #c7d2fe;border-radius:12px;padding:15px 17px}
+    .proph{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#3730a3;background:#e8e7ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #4f46e5;background:#4f46e5;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .add{font-size:11.5px;line-height:1.5;background:#eaf9f0;border-left:2px solid #10b981;padding:6px 10px;border-radius:0 6px 6px 0;color:#14532d}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px;scroll-margin-top:26px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .seamd{width:5px;height:5px;border-radius:50%;background:#0891b2;flex:none}
+    .seaml{font-size:10.5px;color:#0e7490;line-height:1.5;font-variant-numeric:tabular-nums}
+    .col{background:#fbfbfc;border:1px solid #f0eff4;border-radius:10px;padding:10px}
+  </style>
+</helmet>
+
+<!-- ══════════ A1 · SYSTEM ══════════ -->
+<section class="ab" id="i1">
+  <div class="ab-hd"><a class="ab-id" href="#i1">I1</a><span class="ab-nm">System — AI rail · license boundary · the transaction seam</span></div>
+  <div class="ab-sub" style="max-width:960px;margin:-8px 0 20px">Indigo, not violet: side by side with the founder product these read as two licenses, not two personas. The founder license exists to build a company; this one exists to put capital into companies and support them. They share no tools — they transact over shared objects, and the seam is a component, specified once here.</div>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div style="width:308px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);padding:18px">
+      <dc-import name="InvRail" page="Deals" hint-size="100%,660px"></dc-import>
+    </div>
+
+    <div style="flex:1;min-width:420px;display:grid;gap:16px">
+      <!-- LICENSE BOUNDARY -->
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">License boundary — designed in the open</div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:13px">
+          <div style="width:206px;flex:none;background:#fbfbfc;border:1px solid #ececf1;border-radius:10px;padding:12px 0">
+            <sc-for list="{{ navLic }}" as="n" hint-placeholder-count="9">
+              <div class="{{ n.cls }}">
+                <span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span>
+                <span style="flex:1">{{ n.label }}</span>
+                <sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="flex:1;min-width:220px">
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">The core license carries eight of nine rows. <strong>Fund</strong> — the GP back office — is the Institutional add-on. It is never hidden and never a dead click: the row renders locked, and selecting it opens a real upgrade surface rather than a shrug.</div>
+            <div style="border:1px solid #c7d2fe;background:#f6f6ff;border-radius:10px;padding:13px 15px;margin-top:12px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:9.5px;font-weight:800;letter-spacing:.07em;color:#3730a3;background:#e8e7ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px">INSTITUTIONAL</span>
+                <span style="font-size:12.5px;font-weight:800">Run your own fund</span>
+              </div>
+              <div style="font-size:11.5px;color:#3730a3;margin-top:7px;line-height:1.55">LP registry, capital calls and distributions, fund accounting with an audit trail, and quarterly LP packs. Adds the receiving side of the seam — your LPs deploying capital into you.</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:11px;flex-wrap:wrap"><div class="acc">See Institutional pricing</div><div class="gho">Talk to us</div></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:15px;padding-top:14px;border-top:1px solid #f2f1f5;flex-wrap:wrap">
+          <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px">
+            <span style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;background:#fff;color:#4f46e5;box-shadow:0 1px 2px rgba(24,24,27,.07)">Investor &amp; LP</span>
+            <span style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;color:#4a4553">Founder</span>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;line-height:1.55;flex:1;min-width:230px">Dual-license accounts get a product switcher beside the firm switcher. Two products, switched — never merged into one navigation.</div>
+        </div>
+      </div>
+
+      <!-- THE SEAM -->
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">The transaction seam</div>
+        <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.65">Seven objects live across the boundary. This product never renders a founder tool — only the object the founder produced, in this product's language, carrying a marker that says where it came from and what changed.</div>
+        <div style="display:grid;grid-template-columns:1fr 1.25fr 1.25fr;gap:12px;margin-top:14px">
+          <span class="th">Shared object</span><span class="th">Founder side</span><span class="th">This product sees</span>
+        </div>
+        <sc-for list="{{ seamRows }}" as="s" hint-placeholder-count="7">
+          <div style="display:grid;grid-template-columns:1fr 1.25fr 1.25fr;gap:12px">
+            <span class="td" style="font-weight:700">{{ s.obj }}</span>
+            <span class="td" style="color:#615c6e">{{ s.founder }}</span>
+            <span class="td">{{ s.here }}</span>
+          </div>
+        </sc-for>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px">
+          <sc-for list="{{ seamKinds }}" as="k" hint-placeholder-count="3">
+            <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:11px;padding:13px 14px">
+              <span class="seam"><span class="seamd"></span>{{ k.chip }}</span>
+              <div style="font-size:12px;font-weight:700;margin-top:9px">{{ k.title }}</div>
+              <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ k.body }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">Cyan is reserved for the seam and used nowhere else, so a founder-sourced object is identifiable at a glance without reading a label. Indigo remains the product's own accent.</div>
+      </div>
+
+      <!-- DARK MODE — the rail is identical across all seven pages, so the dark treatment is
+           specified once here and the pages inherit it by reference. -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <div style="width:296px;flex:none;background:#171622;border:1px solid #2c2b3c;border-radius:12px;box-shadow:0 2px 14px rgba(0,0,0,.3);padding:17px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span class="lbl" style="color:#a6a2b8">Worker AI · dark</span>
+            <span style="font-size:11px;color:#6d6980">›</span>
+          </div>
+          <div style="border:1px solid #443f8a;background:#211f3d;border-radius:9px;padding:10px 11px;margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:12px;font-weight:800;color:#c7d2fe">Advisor fills the blanks</span>
+              <span style="width:24px;height:14px;border-radius:999px;background:#818cf8;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#171622"></span></span>
+            </div>
+            <div style="font-size:10.5px;color:#c7d2fe;margin-top:4px;line-height:1.45">Indigo lifts to indigo-400 on dark. Violet-600 and indigo-600 are indistinguishable at low luminance, so the accent has to move for the two licences to stay legible apart.</div>
+          </div>
+          <div style="border:1px solid #443f8a;background:#211f3d;border-radius:9px;padding:10px 11px;margin-top:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+              <span style="font-size:12px;font-weight:800;color:#f3f2f7">DeepSeek V4 Pro</span>
+              <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#c7d2fe;background:#2e2a63;border:1px solid #443f8a;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span>
+            </div>
+            <div class="num" style="font-size:10.5px;color:#a6a2b8;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">@cf/deepseek-ai/deepseek-v4-pro-0813</div>
+            <div class="num" style="font-size:10.5px;color:#a6a2b8;margin-top:8px;padding-top:7px;border-top:1px solid #2c2b3c">$1.320 / M in · $3.960 / M out</div>
+            <div class="num" style="font-size:11px;font-weight:700;color:#34d399;margin-top:6px">{{ fundCost }} per call letter</div>
+          </div>
+          <div style="border:1px solid #164e50;background:#0d2b2e;border-radius:9px;padding:10px 11px;margin-top:8px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;color:#5eead4;background:#0f3b3d;border:1px solid #1c6265;border-radius:4px;padding:2px 7px"><span style="width:5px;height:5px;border-radius:50%;background:#2dd4bf"></span>From Meridian Labs · 2h ago</span>
+            <div style="font-size:10.5px;color:#99e6e0;margin-top:7px;line-height:1.5">The seam keeps its own hue on dark, but cyan-600 goes muddy against near-black — it lifts to teal-300 on a desaturated teal ground. This is the one colour a naive lightness flip breaks.</div>
+          </div>
+          <div style="border:1px solid #2c2b3c;border-radius:9px;padding:11px;margin-top:9px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <span class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:#f3f2f7">$31.00</span>
+              <span style="font-size:10.5px;color:#a6a2b8">of $80.00</span>
+            </div>
+            <div style="height:5px;background:#2c2b3c;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:39%;background:#818cf8;border-radius:999px"></div></div>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:340px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+          <div class="lbl">Token pairs — light / dark</div>
+          <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.6">Every page references these; no page defines its own colour. Semantic hues shift lightness, not hue — with one exception, called out below.</div>
+          <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:10px;margin-top:14px">
+            <span class="th">Token</span><span class="th">Light</span><span class="th">Dark</span>
+          </div>
+          <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="12">
+            <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600">{{ t.name }}</span>
+              <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ t.lSwatch }}"></span>{{ t.light }}</span>
+              <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ t.dSwatch }}"></span>{{ t.dark }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.65"><strong>Two rules an implementer must not flatten.</strong> The accent moves indigo-600 → indigo-400, because at low luminance indigo-600 and the Founder product's violet-600 converge and the licences stop reading apart. And the seam's cyan-600 → teal-300 on a desaturated ground, because cyan darkens to mud against near-black — the one hue here that cannot be lightness-flipped. Contrast floor stays 4.5:1 under 18.66px, which is why muted is <span class="num" style="font-family:ui-monospace,Menlo,monospace">#615c6e</span> on light and <span class="num" style="font-family:ui-monospace,Menlo,monospace">#a6a2b8</span> on dark, not a fainter grey.</div>
+        </div>
+      </div>
+
+      <!-- PROPOSAL RULE -->
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">Proposal anatomy — the rule on every page</div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph"><span class="propb">Proposal · Advisor</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ i1Will }}</span></div>
+          <div class="add">+ Drafts a screening memo with every claim page-referenced to the deck. Nothing in the pipeline is changed.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <div class="acc">Accept</div><div class="gho">Edit first</div><div class="dis">Discard</div>
+            <span class="num" style="font-size:10.5px;color:#615c6e;margin-left:auto">{{ i1Receipt }}</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:8px;margin-top:14px">
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Cost shown <strong>before</strong> the run, receipted <strong>after</strong>. The estimate and the receipt are the same arithmetic.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Every number in a generated artifact is traceable — a memo figure links to the deck page, a call figure to the schedule line.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Anything outbound to a founder or an LP passes <span class="num" style="font-family:ui-monospace,Menlo,monospace;font-size:11px">@cf/meta/llama-guard-3-8b</span> and carries the shield.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Manual mode is the whole product. Out of tokens degrades to Manual; nothing locks.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ A2 · HOME ══════════ -->
+<section class="ab" id="i2">
+  <div class="ab-hd"><a class="ab-id" href="#i2">I2</a><span class="ab-nm">Home — "Where does my capital stand today?"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navH }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Where does my capital stand today?</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">A brief, not a dashboard. Most of what is below arrived from the other side of the seam while you were away.</div>
+
+      <div style="margin-top:15px;background:#fff;border:1px solid #c7d2fe;border-radius:12px;padding:6px 6px 6px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(79,70,229,.08)">
+        <span style="width:16px;height:16px;display:block;flex:none;color:#4f46e5" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:13.5px;color:#3f3a49">Which positions are behind on reporting, and what does that do to my Q3 marks?</span>
+        <div class="acc" style="padding:9px 15px;font-size:12.5px">{{ homeAsk }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:15px">
+        <sc-for list="{{ homeStats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:14px 16px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">This morning's brief</span><span class="zs">Composed 06:40 · every line carries its receipt</span></div>
+        <div class="prop">
+          <div class="proph"><span class="propb">Proposal · brief</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ homeCost }}</span></div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Three things need you today. Meridian Labs' Q2 update landed overnight and moves your mark — revenue is ahead of the plan you underwrote, burn is not. Kestrel's Fund II call is due Friday and you have not confirmed the wire. And Novacraft granted you two more data-room items, which closes the gap that stalled your diligence.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept as today's brief</div><div class="gho">Edit</div><div class="dis">Discard</div></div>
+        </div>
+
+        <div style="display:grid;gap:9px;margin-top:14px">
+          <sc-for list="{{ arrivals }}" as="a" hint-placeholder-count="5">
+            <div style="{{ a.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1">
+                <div style="width:30px;height:30px;border-radius:9px;background:{{ a.chipBg }};color:{{ a.chipInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ a.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:13px;font-weight:700">{{ a.title }}</span>
+                    <sc-if value="{{ a.seam }}"><span class="seam"><span class="seamd"></span>{{ a.seam }}</span></sc-if>
+                  </div>
+                  <div style="font-size:11.5px;color:#4a4553;margin-top:5px;line-height:1.55">{{ a.body }}</div>
+                  <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ a.receipt }}</div>
+                </div>
+              </div>
+              <span class="acc" style="flex:none">{{ a.action }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="InvRail" page="Home" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ A3 · DEALS ══════════ -->
+<section class="ab" id="i3">
+  <div class="ab-hd"><a class="ab-id" href="#i3">I3</a><span class="ab-nm">Deals — "Find and close investments"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navD }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Find and close investments</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">One board, five columns. A deal card is the founder's round seen from this side — same object, different product.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchD }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="d-pipeline"><span class="zt">Pipeline</span><span class="zs">38 live · $4.2M allocated this quarter</span></div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px">
+          <sc-for list="{{ pipeCols }}" as="c" hint-placeholder-count="5">
+            <div class="col">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                <span class="lbl" style="font-size:9px">{{ c.name }}</span>
+                <span class="num" style="font-size:13px;font-weight:800">{{ c.n }}</span>
+              </div>
+              <div style="display:grid;gap:7px;margin-top:9px">
+                <sc-for list="{{ c.cards }}" as="d" hint-placeholder-count="2">
+                  <div style="{{ d.cardStyle }}">
+                    <div style="font-size:11.5px;font-weight:700;line-height:1.35">{{ d.name }}</div>
+                    <div class="num" style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.4">{{ d.terms }}</div>
+                    <sc-if value="{{ d.seam }}"><div class="seaml" style="margin-top:5px">{{ d.seam }}</div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.55">Passing requires a reason from a fixed taxonomy — too early, valuation, outside thesis, team, competitive dynamics — so a year from now the book can be asked what it passed on and why.</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="d-screen"><span class="zt">Screening desk</span><span class="zs">Novacraft Labs · seed</span></div>
+          <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:10px;padding:11px 13px">
+            <span class="seam"><span class="seamd"></span>Live from the founder</span>
+            <div class="seaml" style="margin-top:7px">Round: $1.5M seed on $12M post · terms edited 2h ago<br>Data room: 6 of 8 items granted to you · 2 pending<br>Founder activity: deck v4 shared, 3 investors viewing</div>
+          </div>
+          <div class="prop" style="margin-top:12px">
+            <div class="proph"><span class="propb">Proposal · screening memo</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ dealCost }}</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Drafted from the 22-page deck and the six granted data-room items. Every claim carries its page — the $4.2k MRR figure cites deck p.9 and the Stripe export, which agree.</div>
+            <div class="add" style="margin-top:9px">+ 900-word memo · 14 page-referenced claims · 2 flagged as deck-only, unsupported by the data room</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept memo</div><div class="gho">Read the 2 flags</div><div class="dis">Discard</div></div>
+          </div>
+          <div style="display:grid;gap:8px;margin-top:14px">
+            <sc-for list="{{ scoreRows }}" as="s" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:11px">
+                <span style="font-size:11.5px;font-weight:600;width:118px;flex:none">{{ s.layer }}</span>
+                <div style="flex:1;height:16px;background:#f4f3f7;border-radius:4px;overflow:hidden"><div style="height:100%;width:{{ s.pct }}%;background:{{ s.ink }};border-radius:4px"></div></div>
+                <span class="num" style="font-size:11.5px;font-weight:700;width:34px;flex:none;text-align:right">{{ s.score }}</span>
+                <span style="font-size:10.5px;color:#615c6e;width:210px;flex:none;line-height:1.4">{{ s.why }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:grid;gap:14px">
+          <div class="card" style="padding:17px 19px">
+            <div class="zh" id="d-commit"><span class="zt">Commit room</span><span class="zs">IC · Thu 09:00</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ icRows }}" as="i" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:7px;border-bottom:1px solid #f6f5f9">
+                  <span style="font-size:11.5px;font-weight:600">{{ i.k }}</span>
+                  <span class="num" style="font-size:11.5px;font-weight:700">{{ i.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">3 of 5 partners voted. Quorum met; the memo below is what they read.</div>
+          </div>
+          <div class="card" style="padding:17px 19px">
+            <div class="zh" id="d-closing"><span class="zt">Closing</span><span class="zs">Halverton · $400k</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ closeRows }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="{{ c.box }}"></span>
+                  <span style="font-size:11.5px;font-weight:600;flex:1">{{ c.step }}</span>
+                  <span style="{{ c.pill }}">{{ c.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:11px;line-height:1.5">The wire is instructed here and confirmed by both parties; the platform records, banks move the money.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="InvRail" page="Deals" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ A4 · PORTFOLIO ══════════ -->
+<section class="ab" id="i4">
+  <div class="ab-hd"><a class="ab-id" href="#i4">I4</a><span class="ab-nm">Portfolio — "Know how my investments are doing"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navP }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Know how my investments are doing</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Your <strong>direct book</strong> — 14 positions across four vintages, separate from Thornbury Fund II which you run under Fund. Every position is a founder-maintained cap table, seen from the outside.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchP }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:16px">
+        <sc-for list="{{ perfStats }}" as="p" hint-placeholder-count="4">
+          <div class="card" style="padding:15px 17px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span class="lbl" style="font-size:9.5px">{{ p.label }}</span>
+              <span class="num" style="font-size:10.5px;font-weight:700;color:{{ p.deltaInk }}">{{ p.delta }}</span>
+            </div>
+            <div class="num" style="font-size:23px;font-weight:800;letter-spacing:-.025em;margin-top:6px;line-height:1">{{ p.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ p.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="p-book"><span class="zt">Positions</span><span class="zs">14 companies · marks as of Jun 30, 2026</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr .75fr .75fr .75fr .75fr 1fr;gap:11px">
+          <span class="th">Company</span><span class="th">Invested</span><span class="th">Own %</span><span class="th">FMV</span><span class="th">Multiple</span><span class="th">Reporting</span>
+        </div>
+        <sc-for list="{{ positions }}" as="p" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.3fr .75fr .75fr .75fr .75fr 1fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ p.name }}</span>
+            <span class="td num">{{ p.invested }}</span>
+            <span class="td num">{{ p.own }}</span>
+            <span class="td num">{{ p.fmv }}</span>
+            <span class="td num" style="font-weight:700;color:{{ p.multInk }}">{{ p.mult }}</span>
+            <span class="td"><span style="{{ p.repPill }}">{{ p.rep }}</span></span>
+          </div>
+        </sc-for>
+        <div class="seaml" style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="seam"><span class="seamd"></span>Seam</span><span>Ownership is read from each founder's cap table — you never edit it here. When a founder issues shares, your percentage moves and the change is dated.</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="p-updates"><span class="zt">Updates &amp; KPI collection</span><span class="zs">11 of 14 reported Q2 · 3 overdue</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Extracted on arrival</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ portCost }}</span></div>
+            <div style="font-size:12px;font-weight:700">Meridian Labs · Q2 update</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:10px">
+              <sc-for list="{{ kpiDiff }}" as="k" hint-placeholder-count="4">
+                <div style="background:#fff;border:1px solid #e2e1e8;border-radius:8px;padding:9px 10px">
+                  <div class="lbl" style="font-size:9px">{{ k.label }}</div>
+                  <div class="num" style="font-size:14px;font-weight:800;margin-top:5px">{{ k.value }}</div>
+                  <div class="num" style="font-size:10px;font-weight:700;color:{{ k.ink }};margin-top:3px">{{ k.delta }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:10px;line-height:1.6">Revenue beat the plan you underwrote by 12%; burn beat it the wrong way by 31%. Runway is the number that moved.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept into the book</div><div class="gho">Check against the PDF</div><div class="dis">Discard</div></div>
+          </div>
+          <div class="prop" style="margin-top:11px">
+            <div class="proph"><span class="propb">Proposal · overdue chase</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">≈ $0.0009</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.6">Three companies are 31, 44 and 52 days past their reporting date. One note each, referencing what they last sent rather than a form letter.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Send all 3</div><div class="gho">Review each</div><div class="dis">Not yet</div><span class="shield" style="margin-left:auto">Screened</span></div>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="p-valueadd"><span class="zt">Value-add desk</span><span class="zs">Q2 · support given</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ valueAdd }}" as="v" hint-placeholder-count="4">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:10px;padding:11px 12px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+                  <span style="font-size:12px;font-weight:700">{{ v.kind }}</span>
+                  <span class="num" style="font-size:11.5px;font-weight:800">{{ v.count }}</span>
+                </div>
+                <div style="font-size:11px;color:#4a4553;margin-top:5px;line-height:1.5">{{ v.detail }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="seaml" style="margin-top:12px">Intros made for a portfolio founder are marked as support given, and appear on their side as help received.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="InvRail" page="Portfolio" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ A5 · AXAL FUND ══════════ -->
+<section class="ab" id="i5">
+  <div class="ab-hd"><a class="ab-id" href="#i5">I5</a><span class="ab-nm">Axal VC Fund — "My commitment and co-invest"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navA }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+    <div class="main">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">My commitment and co-invest</h1>
+          <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">The one seam object with no founder side — capital flowing from you into Axal VC's Fund I.</div>
+        </div>
+        <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px;flex:none">
+          <sc-for list="{{ lpStates }}" as="s" hint-placeholder-count="2"><div onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div></sc-for>
+        </div>
+      </div>
+
+      <div class="card" style="padding:19px 21px;margin-top:16px;background:linear-gradient(180deg,#f6f6ff,#fff);border-color:#c7d2fe">
+        <div class="lbl" style="color:#3730a3">Axal VC Fund I · thesis</div>
+        <div style="font-size:14.5px;font-weight:700;margin-top:8px;line-height:1.5;max-width:720px">Invests exclusively in Spin-Out Lab graduates, underwritten by 28 days of observed execution data rather than a pitch.</div>
+        <div style="font-size:12.5px;color:#3f3a49;margin-top:9px;line-height:1.65;max-width:800px">Every company in the fund was watched building for four weeks before a cheque was written — commitments kept or missed, interviews logged, incorporation completed. The Lab is the evidence base, not a product you buy here.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:16px">
+          <sc-for list="{{ fundFacts }}" as="f" hint-placeholder-count="4">
+            <div style="background:#fff;border:1px solid #e2e1e8;border-radius:10px;padding:12px 14px">
+              <div class="lbl" style="font-size:9px">{{ f.label }}</div>
+              <div class="num" style="font-size:17px;font-weight:800;margin-top:6px">{{ f.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ isProspect }}">
+        <div class="card" style="padding:17px 19px;margin-top:14px">
+          <div class="zh"><span class="zt">Terms &amp; tiers</span><span class="zs">Prospect view · applications open</span></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px">
+            <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="3">
+              <div style="{{ t.cardStyle }}">
+                <div class="num" style="font-size:17px;font-weight:800">{{ t.min }}</div>
+                <div class="lbl" style="font-size:9px;margin-top:4px">{{ t.name }}</div>
+                <div style="display:grid;gap:5px;margin-top:10px">
+                  <sc-for list="{{ t.rights }}" as="r" hint-placeholder-count="3"><div style="font-size:11px;color:#3f3a49;line-height:1.5">· {{ r }}</div></sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="prop" style="margin-top:13px">
+            <div class="proph"><span class="propb">Proposal · commitment scenario</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">≈ $0.0086</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">At $500k committed over the four-year call schedule you would wire roughly $125k a year, front-weighted — $175k in year one as the fund builds the book, then tapering. Against your stated liquidity that is comfortable; at $1M it is not, in year one.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Model $500k</div><div class="gho">Change the amount</div><div class="dis">Discard</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+            <div class="acc" style="padding:10px 17px;font-size:13px">Apply to Fund I</div>
+            <div class="gho" style="padding:10px 15px;font-size:13px">Request the deck</div>
+            <span style="font-size:11.5px;color:#615c6e">Accreditation and KYC are completed in Trust before a commitment can be signed.</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isCommitted }}">
+        <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+          <div class="card" style="padding:17px 19px">
+            <div class="zh"><span class="zt">My commitment</span><span class="zs">Signed Mar 2, 2026</span></div>
+            <div class="num" style="font-size:27px;font-weight:800;letter-spacing:-.03em">$500,000 <span style="font-size:14px;font-weight:600;color:#615c6e">committed</span></div>
+            <div style="height:8px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:13px;display:flex"><div style="height:100%;width:41%;background:#4f46e5"></div><div style="height:100%;width:9%;background:#a5b4fc"></div></div>
+            <div style="display:flex;gap:18px;margin-top:10px;flex-wrap:wrap"><span class="num" style="font-size:11px;color:#615c6e">■ $205,000 called</span><span class="num" style="font-size:11px;color:#615c6e">■ $45,000 due Sep 30</span><span class="num" style="font-size:11px;color:#615c6e">$250,000 uncalled</span></div>
+            <div style="display:grid;gap:8px;margin-top:14px">
+              <sc-for list="{{ callSchedule }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:7px;border-bottom:1px solid #f6f5f9">
+                  <span class="num" style="font-size:11.5px;font-weight:600">{{ c.date }}</span>
+                  <span class="num" style="font-size:11.5px">{{ c.amount }}</span>
+                  <span style="{{ c.pill }}">{{ c.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="card" style="padding:17px 19px">
+            <div class="zh"><span class="zt">Reporting archive</span><span class="zs">Queryable</span></div>
+            <div class="prop">
+              <div class="proph"><span class="propb">Ask the report</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ axalCost }}</span></div>
+              <div style="font-size:12px;color:#3f3a49;line-height:1.65">"Which of the eight positions drove the TVPI move?" — answered from the Q2 pack with the page cited. The first question reads the whole report; the next fifty are near-free.</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Ask</div><div class="gho">Open Q2 pack</div></div>
+            </div>
+            <div style="display:grid;gap:7px;margin-top:12px">
+              <sc-for list="{{ reports }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <span style="font-size:11.5px;font-weight:600">{{ r.name }}</span>
+                  <span class="num" style="font-size:10.5px;color:#615c6e">{{ r.meta }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px;margin-top:14px">
+          <div class="zh"><span class="zt">Co-invest offers</span><span class="zs">2 open · allocations expire</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <sc-for list="{{ coInvest }}" as="c" hint-placeholder-count="2">
+              <div style="{{ c.cardStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+                  <span style="font-size:13px;font-weight:800">{{ c.company }}</span>
+                  <span class="num" style="font-size:11px;color:#92400e;font-weight:700">{{ c.expires }}</span>
+                </div>
+                <div class="num" style="font-size:11.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ c.terms }}</div>
+                <div style="font-size:11.5px;color:#3f3a49;margin-top:8px;line-height:1.55">{{ c.eval }}</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Take allocation</div><div class="gho">Evaluate</div><div class="dis">Pass</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+    <div class="rail"><dc-import name="InvRail" page="AxalFund" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ A6 · FUND ══════════ -->
+<section class="ab" id="i6">
+  <div class="ab-hd"><a class="ab-id" href="#i6">I6</a><span class="ab-nm">Fund — "Run my fund" · Institutional add-on, with its locked state</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-8px 0 20px">The seam repeats one level up: here you are on the receiving side of commitments, maintaining a fund the way a founder maintains a company, with your own LPs deploying capital into you. Same seam language, roles reversed.</div>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div class="frame">
+      <div class="side"><sc-for list="{{ navF }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+      <div class="main">
+        <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Run my fund</h1>
+        <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">The GP back office. Money leaves a bank account from this page, so every figure is traceable to the schedule that produced it.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+          <sc-for list="{{ anchF }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+        </div>
+
+        <div class="card" style="padding:19px 21px;margin-top:16px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+            <div>
+              <div class="lbl">Thornbury Ventures Fund II, L.P. · 2025 vintage</div>
+              <div class="num" style="font-size:26px;font-weight:800;letter-spacing:-.03em;margin-top:7px">$42,000,000 <span style="font-size:13px;font-weight:600;color:#615c6e">committed</span></div>
+            </div>
+            <div style="display:flex;gap:22px;flex-wrap:wrap">
+              <sc-for list="{{ fundHdr }}" as="f" hint-placeholder-count="4">
+                <div><div class="lbl" style="font-size:9.5px">{{ f.label }}</div><div class="num" style="font-size:16px;font-weight:800;margin-top:5px">{{ f.value }}</div></div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:14px;padding-top:12px;border-top:1px solid #f2f1f5;line-height:1.6">{{ fundBasis }}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:14px;margin-top:14px">
+          <div class="card" style="padding:17px 19px">
+            <div class="zh" id="f-lps"><span class="zt">LP registry</span><span class="zs">11 LPs · 1 KYC outstanding</span></div>
+            <div style="display:grid;grid-template-columns:1.3fr .9fr .9fr;gap:11px">
+              <span class="th">LP</span><span class="th">Committed</span><span class="th">KYC</span>
+            </div>
+            <sc-for list="{{ lps }}" as="l" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1.3fr .9fr .9fr;gap:11px;align-items:center">
+                <span class="td" style="font-weight:600">{{ l.name }}</span>
+                <span class="td num">{{ l.committed }}</span>
+                <span class="td"><span style="{{ l.pill }}">{{ l.kyc }}</span></span>
+              </div>
+            </sc-for>
+            <div class="seaml" style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="seam"><span class="seamd"></span>Seam, reversed</span><span>Each LP row is the mirror of an Axal VC Fund commitment card — what they see on their side, maintained by you on yours.</span></div>
+          </div>
+
+          <div class="card" style="padding:17px 19px">
+            <div class="zh" id="f-calls"><span class="zt">Capital calls &amp; distributions</span><span class="zs">Call 04 · issued Aug 18</span></div>
+            <div class="prop">
+              <div class="proph"><span class="propb">Proposal · call letter</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ fundCost }}</span></div>
+              <div style="font-size:12px;color:#3f3a49;line-height:1.65">Drafted for 11 LPs from the schedule. Each letter states that LP's pro-rata share, cumulative called, and remaining uncalled — every figure linked to the line it came from, because a wrong number here is a legal problem.</div>
+              <div class="add" style="margin-top:9px">+ 11 letters · $2,940,000 total · pro-rata to the penny, sum reconciled before send</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Review all 11</div><div class="gho">Check the reconciliation</div><div class="dis">Discard</div><span class="shield" style="margin-left:auto">Screened</span></div>
+            </div>
+            <div style="display:grid;gap:8px;margin-top:13px">
+              <sc-for list="{{ callTrack }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <span style="font-size:11.5px;font-weight:600;flex:1">{{ c.lp }}</span>
+                  <span class="num" style="font-size:11.5px">{{ c.amount }}</span>
+                  <span style="{{ c.pill }}">{{ c.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:11px;line-height:1.5">Receipt confirmations are immutable once recorded — amendments append, never overwrite.</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+          <div class="card" style="padding:17px 19px">
+            <div class="zh" id="f-acct"><span class="zt">Fund accounting</span><span class="zs">NAV as of Jun 30</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ acct }}" as="a" hint-placeholder-count="5">
+                <div style="{{ a.rowStyle }}">
+                  <span style="font-size:11.5px;color:#3f3a49;font-weight:{{ a.weight }}">{{ a.label }}</span>
+                  <span class="num" style="font-size:12px;font-weight:{{ a.weight }}">{{ a.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="card" style="padding:17px 19px">
+            <div class="zh" id="f-reporting"><span class="zt">LP reporting</span><span class="zs">Q2 pack · in review</span></div>
+            <div class="prop">
+              <div class="proph"><span class="propb">Proposal · waterfall, explained</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">≈ $0.0243</span></div>
+              <div style="font-size:12px;color:#3f3a49;line-height:1.65">Return of capital first, then the 8% preferred return, then GP catch-up, then 80/20. On the $4.1M realised from the Verwood exit, the split lands $3.44M to LPs and $660k as carry — shown tier by tier, so an LP asking "why this number" gets the arithmetic, not an assertion.</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Attach to pack</div><div class="gho">Show each tier</div><div class="dis">Discard</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="InvRail" page="Fund" hint-size="100%,780px"></dc-import></div>
+    </div>
+
+    <!-- LOCKED STATE -->
+    <div style="width:400px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);padding:19px 21px">
+      <div class="lbl">Locked state — what a core-license holder sees</div>
+      <div style="border:1px solid #ececf1;border-radius:11px;overflow:hidden;margin-top:12px">
+        <div style="position:relative;padding:17px 18px;background:#fbfbfc">
+          <div style="filter:blur(3.5px);opacity:.5">
+            <div class="lbl">Thornbury Ventures Fund II, L.P.</div>
+            <div class="num" style="font-size:22px;font-weight:800;margin-top:7px">$42,000,000 committed</div>
+            <div style="display:flex;gap:18px;margin-top:12px"><span class="num" style="font-size:13px">DPI {{ fundHdr.2.value }}</span><span class="num" style="font-size:13px">RVPI {{ fundHdr.3.value }}</span><span class="num" style="font-size:13px">11 LPs</span></div>
+          </div>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;text-align:center;background:rgba(255,255,255,.62)">
+            <span style="width:19px;height:19px;display:block;color:#615c6e" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+            <div style="font-size:12.5px;font-weight:800">Fund is an Institutional add-on</div>
+            <div style="font-size:11px;color:#615c6e;line-height:1.5;max-width:250px">The row stays in your sidebar and the page stays reachable — you see what it does, not a dead end.</div>
+          </div>
+        </div>
+        <div style="padding:14px 18px;border-top:1px solid #f2f1f5">
+          <div style="display:grid;gap:6px">
+            <sc-for list="{{ lockedList }}" as="l" hint-placeholder-count="5"><div style="font-size:11.5px;color:#3f3a49;line-height:1.5">· {{ l }}</div></sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;margin-top:13px;flex-wrap:wrap"><div class="acc">See Institutional pricing</div><div class="gho">Talk to us</div></div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">Blurred real figures rather than a lorem placeholder: the shape of the product is the argument for buying it. Nothing sensitive is legible, and no control inside is clickable.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ A7 · NETWORK ══════════ -->
+<section class="ab" id="i7">
+  <div class="ab-hd"><a class="ab-id" href="#i7">I7</a><span class="ab-nm">Network — "Work my relationships"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navN }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Work my relationships</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Typed for this side of the table: founders met, co-investors, LPs, service partners — each tie carrying the deal or fund context it belongs to.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchN }}" as="a" hint-placeholder-count="3"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="n-book"><span class="zt">Relationship book</span><span class="zs">312 · 19 going cold</span></div>
+        <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr 1.2fr .8fr;gap:11px">
+          <span class="th">Person</span><span class="th">Type</span><span class="th">Strength</span><span class="th">Context</span><span class="th">Last touch</span>
+        </div>
+        <sc-for list="{{ relsInv }}" as="r" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.2fr .8fr .8fr 1.2fr .8fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ r.name }}</span>
+            <span class="td"><span style="{{ r.typeStyle }}">{{ r.type }}</span></span>
+            <span class="td"><span style="{{ r.strStyle }}">{{ r.strength }}</span></span>
+            <span class="td">{{ r.context }}</span>
+            <span class="td num" style="color:{{ r.touchInk }}">{{ r.touch }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="n-intros"><span class="zt">Introductions desk</span><span class="zs">4 asked · 6 offered · 2 in motion</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · double opt-in intro</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ netCost }}</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Meridian Labs needs an enterprise security reviewer; Aoife ran that function at two of your portfolio companies. Written from both sides' real context, forwardable, and asking each separately before either name is shared.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Ask both</div><div class="gho">Edit</div><div class="dis">Discard</div><span class="shield" style="margin-left:auto">Screened</span></div>
+          </div>
+          <div style="display:grid;gap:8px;margin-top:13px">
+            <sc-for list="{{ intros }}" as="i" hint-placeholder-count="3">
+              <div style="{{ i.rowStyle }}">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:12px;font-weight:700">{{ i.pair }}</span>
+                    <sc-if value="{{ i.support }}"><span class="seam"><span class="seamd"></span>Support given</span></sc-if>
+                  </div>
+                  <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.5">{{ i.context }}</div>
+                </div>
+                <span style="{{ i.pill }}">{{ i.state }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="n-orgs"><span class="zt">Organizations</span><span class="zs">58 firms, funds and studios</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ orgsInv }}" as="o" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:700">{{ o.name }}</div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ o.note }}</div>
+                </div>
+                <span class="num" style="font-size:11px;color:#615c6e;flex:none">{{ o.people }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.55">Co-investor suggestions for a live deal surface here and in Deals, with the reason attached — shared thesis, prior syndicate, or a partner who already knows the founder.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="InvRail" page="Network" hint-size="100%,720px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ A8 · RESEARCH ══════════ -->
+<section class="ab" id="i8">
+  <div class="ab-hd"><a class="ab-id" href="#i8">I8</a><span class="ab-nm">Research — "Go deep before money moves"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navRe }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span><sc-if value="{{ n.locked }}"><span style="width:12px;height:12px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ lockIcon }}"></span></sc-if></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Go deep before money moves</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">The page opens as a question.</div>
+
+      <div id="re-ask" style="margin-top:15px;background:#fff;border:1px solid #c7d2fe;border-radius:12px;padding:6px 6px 6px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(79,70,229,.08)">
+        <span style="width:16px;height:16px;display:block;flex:none;color:#4f46e5" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:13.5px;color:#3f3a49">Does Novacraft's retention support the multiple they're asking for?</span>
+        <div class="acc" style="padding:9px 15px;font-size:12.5px">{{ resAsk }}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:11px 0 0">
+        <sc-for list="{{ anchRe }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:15px">
+        <div class="zh" id="re-diligence"><span class="zt">Diligence pull · Novacraft Labs</span><span class="zs">{{ resReceipt }}</span></div>
+        <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:10px;padding:11px 13px">
+          <span class="seam"><span class="seamd"></span>Founder-shared data room</span>
+          <div class="seaml" style="margin-top:7px">Grant scope: 6 of 8 items · Financials, Legal, Product, Team granted · Cohort retention and Security posture withheld<br>Staged by the founder 4 days ago · they can see that you opened Financials twice</div>
+        </div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph"><span class="propb">Proposal · sourced answer</span><span class="num" style="font-size:10.5px;color:#3730a3;margin-left:auto">{{ resFirstCost }} first pass</span></div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Logo retention is strong at 94% on 14 accounts, but the cohort file that would prove net revenue retention is one of the two items <em>not</em> granted — so the multiple cannot be defended from what you have. The honest answer is that this needs the withheld file, and the brief says so rather than inferring.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Attach to the deal</div><div class="gho">Request the 2 items</div><div class="dis">Discard</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px;border-color:#a7f3d0;background:linear-gradient(180deg,#f7fffb,#fff)">
+        <div class="zh" id="re-library"><span class="zt">Cached input — the economics as a feature</span><span class="zs">Document library · 96-page data room</span></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+          <div style="flex:1;min-width:280px">
+            <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">The first question pays to read the room — 74,000 tokens at $0.440/M, or {{ resFirstCost }}. Every question after hits cached input at <strong>$0.014/M</strong>, so a follow-up lands at {{ resCachedCost }}. Ask a data room fifty questions for {{ resFifty }} — less than one hour of an analyst reading it.</div>
+            <div style="font-size:12.5px;color:#3f3a49;margin-top:9px;line-height:1.7">This is why the default here is chosen for long-document work rather than raw intelligence: diligence is re-reading, and re-reading is what caching makes cheap.</div>
+          </div>
+          <div style="width:250px;flex:none;background:#fff;border:1px solid #ececf1;border-radius:11px;padding:14px">
+            <div class="lbl" style="font-size:9.5px">Cost of asking one data room</div>
+            <div style="display:grid;gap:9px;margin-top:11px">
+              <sc-for list="{{ cacheRows }}" as="c" hint-placeholder-count="3">
+                <div>
+                  <div class="num" style="display:flex;justify-content:space-between;font-size:11.5px;color:#3f3a49"><span>{{ c.label }}</span><span style="font-weight:700">{{ c.cost }}</span></div>
+                  <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ c.pct }}%;background:{{ c.ink }};border-radius:999px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+        <sc-for list="{{ resCards }}" as="r" hint-placeholder-count="3">
+          <div class="card" style="padding:16px 18px">
+            <div class="zt" id="{{ r.anchorId }}" style="font-size:14px">{{ r.title }}</div>
+            <div style="font-size:11.5px;color:#4a4553;margin-top:7px;line-height:1.6">{{ r.body }}</div>
+            <div class="num" style="font-size:11px;color:#615c6e;margin-top:9px">{{ r.meta }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="InvRail" page="Research" hint-size="100%,800px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { anch:{}, lp:'committed' };
+
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  anchorsFor(key, list) {
+    const active = this.state.anch[key] || list[0][1];
+    return list.map(([label, id]) => ({
+      label, href:'#' + id,
+      go: () => { const a = Object.assign({}, this.state.anch); a[key] = id; this.setState({ anch:a }); },
+      style:'font-size:11px;font-weight:' + (active === id ? '700' : '600')
+        + ';color:' + (active === id ? '#4338ca' : '#615c6e')
+        + ';background:' + (active === id ? '#f2f2ff' : '#fff')
+        + ';border:1px solid ' + (active === id ? '#c7d2fe' : '#ececf1')
+        + ';border-radius:999px;padding:5px 11px;cursor:pointer;text-decoration:none;display:inline-block'
+    }));
+  }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      deals: this.ic('<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>'),
+      port:  this.ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'),
+      axal:  this.ic('<path d="M12 2 3 20h18Z"/><path d="M9 14h6"/>'),
+      fund:  this.ic('<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      trust: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      firm:  this.ic('<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-6h6v6"/>'),
+      lock:  this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      bell:  this.ic('<path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/>'),
+      doc:   this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      cash:  this.ic('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>'),
+      up:    this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>')
+    };
+    const ROWS = [
+      ['Home', I.home, false], ['Deals', I.deals, false], ['Portfolio', I.port, false],
+      ['Axal VC Fund', I.axal, false], ['Fund', I.fund, true], ['Network', I.net, false],
+      ['Research', I.res, false], ['Trust', I.trust, false], ['Firm Settings', I.firm, false]
+    ];
+    const nav = (active, unlockFund) => ROWS.map(([label, icon, locked]) => {
+      const isLocked = locked && !unlockFund;
+      return { label, icon, locked:isLocked,
+        cls: label === active ? 'nav on' : (isLocked ? 'nav lock' : 'nav') };
+    });
+
+    // ---- ONE cost arithmetic, shared with the rail ----
+    const c4 = (n) => '$' + n.toFixed(4);
+    const tk = (n) => n.toLocaleString('en-US');
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const HOME = run(18600, 1420, 0.293, 2.253);
+    const DEAL = run(34800, 2100, 0.293, 2.253);
+    const PORT = run(9400, 620, 0.017, 0.112);
+    const AXAL = run(48200, 1100, 0.440, 1.320);
+    const FUNDC = run(12400, 1850, 1.320, 3.960);
+    const NETC = run(2600, 480, 0.351, 0.555);
+    const RESF = run(74000, 1400, 0.440, 1.320);
+    const RESC = run(74000, 1400, 0.014, 1.320);
+
+    // ---- Portfolio: paid-in, residual value and distributions declared once ----
+    // Cash facts only. DIST is the SAME realisation the Fund waterfall states — $3.44M to LPs
+    // from Verwood — so one named exit produces one figure everywhere.
+    // TWO VEHICLES, two capital bases. Fund II's LP distribution is $3.44M (see the waterfall
+    // on I6); this direct book received only its co-invest share of that exit, so the two DPIs
+    // are computed from different cash flows and neither double-counts the other.
+    const FUND_LP_DIST = 3.44;          // $M · to Fund II LPs
+    const PAID_IN = 9.2, FMV = 18.4, PRIOR_FMV = 17.6, DIST = 0.61, CARRY = 0.20;
+    const x2 = (n) => n.toFixed(2) + '×';
+    // Carry is a RATE on the gain, not a flat multiple, so the drag has an observable basis.
+    const netOf = (fmv) => {
+      const gross = (fmv + DIST) / PAID_IN;
+      const drag = CARRY * (fmv + DIST - PAID_IN) / PAID_IN;
+      return { gross, drag, net: gross - drag };
+    };
+    const now = netOf(FMV), prior = netOf(PRIOR_FMV);
+    const rvpi = FMV / PAID_IN, rvpiPrior = PRIOR_FMV / PAID_IN;
+    const dpi = DIST / PAID_IN;
+    const sgn = (n) => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(2);
+    const PERF = [
+      { label:'TVPI · net', value:x2(now.net), delta:sgn(now.net - prior.net) + ' QoQ', deltaInk:'#047857',
+        note:'gross ' + x2(now.gross) + ' less ' + x2(now.drag) + ' — ' + Math.round(CARRY * 100) + '% carry on the gain' },
+      { label:'MOIC · gross', value:x2(now.gross), delta:'= DPI + RVPI', deltaInk:'#615c6e',
+        note:'$' + PAID_IN.toFixed(1) + 'M in · $' + FMV.toFixed(1) + 'M held + $' + DIST.toFixed(2) + 'M out' },
+      { label:'DPI', value:x2(dpi), delta:sgn(dpi) + ' QoQ', deltaInk:'#047857',
+        note:'$' + DIST.toFixed(2) + 'M · this book\u2019s co-invest share of the Verwood exit' },
+      { label:'RVPI', value:x2(rvpi), delta:sgn(rvpi - rvpiPrior) + ' QoQ', deltaInk:'#047857',
+        note:'$' + FMV.toFixed(1) + 'M still held, marked Jun 30' }
+    ];
+
+    // ---- Fund: called capital, NAV and the one distribution the page actually shows ----
+    // Axal VC Fund I: the user is an LP. Concentration derives from these two, never a literal.
+    const AXAL_COMMIT = 500000, ALLOC = 250000;
+
+    const CALLED = 18.9, NAV = 29.256, FUND_DIST = FUND_LP_DIST;   // $M
+    const fDpi = FUND_DIST / CALLED;
+    const fRvpi = NAV / CALLED;
+    const FUND_HDR = [
+      { label:'Called', value:'$' + CALLED.toFixed(1) + 'M' },
+      { label:'Deployed', value:'$16.2M' },
+      { label:'DPI', value:x2(fDpi) },
+      { label:'RVPI · on NAV', value:x2(fRvpi) }
+    ];
+    const fundBasis = 'This is Thornbury Fund II — the fund you run, distinct from your direct book on Portfolio. '
+      + 'DPI is the $' + FUND_DIST.toFixed(2) + 'M returned to LPs from the Verwood exit over $'
+      + CALLED.toFixed(1) + 'M called. RVPI is net asset value over the same base — NAV, not investments at fair value, so cash held but undeployed still counts as LP value. TVPI ' + x2(fDpi + fRvpi) + '.';
+
+    const pill = (t, map) => {
+      const c = map[t] || ['#f4f4f6','#615c6e','#e4e4e8'];
+      return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none;white-space:nowrap';
+    };
+    const STATE = { 'On time':['#ecfdf5','#047857','#a7f3d0'], 'Received':['#ecfdf5','#047857','#a7f3d0'],
+      'Verified':['#ecfdf5','#047857','#a7f3d0'], 'Called':['#ecfdf5','#047857','#a7f3d0'],
+      'Sent':['#f5f5ff','#3730a3','#c7d2fe'], 'In motion':['#f5f5ff','#3730a3','#c7d2fe'], 'Due':['#fffbeb','#92400e','#fde68a'],
+      'Pending':['#fffbeb','#92400e','#fde68a'], 'Asked':['#fffbeb','#92400e','#fde68a'],
+      'Overdue':['#fef2f2','#b91c1c','#fecaca'], 'Outstanding':['#fef2f2','#b91c1c','#fecaca'],
+      'Scheduled':['#f4f4f6','#615c6e','#e4e4e8'], 'Offered':['#f4f4f6','#615c6e','#e4e4e8'] };
+
+    return {
+      tokens: [
+        ['Page surface', '#f7f7f9', '#12111a'],
+        ['Card surface', '#ffffff', '#1c1b27'],
+        ['Rail surface', '#ffffff', '#171622'],
+        ['Border', '#ececf1', '#2c2b3c'],
+        ['Text primary', '#18181b', '#f3f2f7'],
+        ['Text muted', '#615c6e', '#a6a2b8'],
+        ['Accent · indigo', '#4f46e5', '#818cf8'],
+        ['Accent tint', '#f5f5ff', '#211f3d'],
+        ['Accent border', '#c7d2fe', '#443f8a'],
+        ['Seam · cyan → teal', '#0e7490', '#5eead4'],
+        ['Seam tint', '#f0fdff', '#0d2b2e'],
+        ['Seam border', '#a5edf5', '#1c6265'],
+        ['Positive', '#047857', '#34d399'],
+        ['Warning', '#92400e', '#fbbf24'],
+        ['Destructive', '#b91c1c', '#f87171']
+      ].map(([name, light, dark]) => ({
+        name, light, dark,
+        lSwatch:'width:11px;height:11px;border-radius:3px;flex:none;background:' + light + ';border:1px solid rgba(24,24,27,.14)',
+        dSwatch:'width:11px;height:11px;border-radius:3px;flex:none;background:' + dark + ';border:1px solid rgba(24,24,27,.14)'
+      })),
+
+      lockIcon: I.lock, searchIcon: I.res,
+      navLic: nav(null, false), navH: nav('Home', false), navD: nav('Deals', false),
+      navP: nav('Portfolio', false), navA: nav('Axal VC Fund', false),
+      navF: nav('Fund', true), navN: nav('Network', false), navRe: nav('Research', false),
+
+      i1Will: 'will cost ≈ ' + c4(DEAL),
+      i1Receipt: 'ran in 7.3s · ' + tk(34800) + ' in / ' + tk(2100) + ' out · ' + c4(DEAL),
+      homeAsk: 'Ask · ≈ ' + c4(HOME),
+      homeCost: '≈ ' + c4(HOME),
+      dealCost: '≈ ' + c4(DEAL),
+      portCost: '≈ ' + c4(PORT),
+      axalCost: '≈ ' + c4(AXAL),
+      fundCost: '≈ ' + c4(FUNDC),
+      netCost: '≈ ' + c4(NETC),
+      resAsk: 'Research · ≈ ' + c4(RESF),
+      resReceipt: 'Ran 11s ago · ' + tk(74000) + ' in / ' + tk(1400) + ' out · ' + c4(RESF),
+      resFirstCost: c4(RESF), resCachedCost: c4(RESC),
+      resFifty: '$' + (RESF + 49 * RESC).toFixed(2),
+      cacheRows: [
+        { label:'First question', cost:c4(RESF), pct:'100', ink:'#4f46e5' },
+        { label:'Each follow-up', cost:c4(RESC), pct:String(Math.round(RESC / RESF * 100)), ink:'#10b981' },
+        { label:'Same query, no cache', cost:c4(RESF), pct:'100', ink:'#d4d2dc' }
+      ],
+
+      // ---- A1 seam ----
+      seamRows: [
+        { obj:'The round', founder:'Raise → round planner, terms', here:'Deals → deal card, terms' },
+        { obj:'The data room', founder:'Raise → staged and shared', here:'Deals / Research → diligence' },
+        { obj:'The cap table', founder:'Raise → ownership maintained', here:'Portfolio → position held' },
+        { obj:'KPIs', founder:'Build → metrics entered', here:'Portfolio → performance' },
+        { obj:'The update', founder:'Build → cadence output', here:'Portfolio → update, parsed' },
+        { obj:'The intro', founder:'Network → help received', here:'Network → support given' },
+        { obj:'The commitment', founder:'— no founder side —', here:'Axal VC Fund → LP capital in' }
+      ],
+      seamKinds: [
+        { chip:'Provenance', title:'Where it came from', body:'"From Meridian Labs · 2h ago" — the object names its origin and when it last changed, so nothing here reads as your own data.' },
+        { chip:'Share state', title:'What you were granted', body:'"Data room: 6 of 8 items granted" — scope is always visible, including what is withheld. A gap is information, not an error.' },
+        { chip:'Counterparty', title:'What they just did', body:'Updates when the other side acts: terms edited, deck reshared, access widened. You see the act, never their tool.' }
+      ],
+
+      // ---- Home ----
+      homeStats: [
+        { label:'Portfolio value', value:'$18.4M', note:'14 positions · marked Jun 30' },
+        { label:'Deployed', value:'$9.2M', note:'across 4 vintages' },
+        { label:'Needs you today', value:'3', note:'1 wire, 1 mark, 1 grant' },
+        { label:'Dry powder', value:'$3.1M', note:'incl. $250k uncalled to Axal VC I' }
+      ],
+      arrivals: [
+        { title:'Meridian Labs · Q2 update', seam:'From Meridian Labs · 2h ago', icon:I.doc, tone:'seam',
+          body:'Revenue $412k ARR, ahead of the plan you underwrote. Burn $96k/mo, 31% above it. KPIs already extracted and diffed against Q1.',
+          receipt:'Source: founder update PDF, p.2 · Stripe export agrees', action:'Review the mark' },
+        { title:'Kestrel Fund II · capital call 04', seam:null, icon:I.cash, tone:'due',
+          body:'$45,000 due Friday Sep 30. Your wire is not yet confirmed and the GP has not marked receipt.',
+          receipt:'Source: call notice Aug 18 · schedule line 4 of 8', action:'Confirm wire' },
+        { title:'Novacraft Labs · data room widened', seam:'From Novacraft Labs · 5h ago', icon:I.doc, tone:'seam',
+          body:'Two more items granted: Financials and Legal. The cohort retention file you asked for is still withheld.',
+          receipt:'Grant scope now 6 of 8 · staged by the founder', action:'Resume diligence' },
+        { title:'Halverton · round moved to closing', seam:'From Halverton · yesterday', icon:I.up, tone:'seam',
+          body:'Terms unchanged since your commit. Signature packet out to all four participants; you are third of four.',
+          receipt:'Source: founder round planner · terms hash unchanged', action:'Open closing' },
+        { title:'Verwood exit · distribution modelled', seam:null, icon:I.cash, tone:'plain',
+          body:'$4.1M realised. Waterfall run: $3.44M to LPs, $660k carry. Ready for your review before letters go out.',
+          receipt:'Source: fund accounting · Jun 30 NAV', action:'Review waterfall' }
+      ].map(a => {
+        const M = { seam:['#f0fdff','#0e7490','#0891b2'], due:['#fffbeb','#92400e','#f59e0b'], plain:['#f4f4f6','#615c6e','#d4d4d8'] };
+        const c = M[a.tone];
+        return { title:a.title, seam:a.seam, body:a.body, receipt:a.receipt, action:a.action, icon:a.icon,
+          chipBg:c[0], chipInk:c[1],
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 15px;border:1px solid #f0eff4;border-left:3px solid '+c[2]+';border-radius:0 10px 10px 0;background:#fbfbfc' };
+      }),
+
+      // ---- Deals ----
+      anchD: this.anchorsFor('D', [['Pipeline','d-pipeline'],['Screening','d-screen'],['Commit','d-commit'],['Closing','d-closing']]),
+      pipeCols: [
+        { name:'Sourcing', n:'14', cards:[
+          { name:'Kelp Bio', terms:'Pre-seed · $800k ask', seam:null },
+          { name:'Thornfield', terms:'Seed · $2M ask', seam:null }] },
+        { name:'Screening', n:'9', cards:[
+          { name:'Novacraft Labs', terms:'$1.5M on $12M post', seam:'Terms edited 2h ago' },
+          { name:'Aperture', terms:'Seed · $1.2M', seam:null }] },
+        { name:'Diligence', n:'6', cards:[
+          { name:'Meridian Labs', terms:'$3M on $24M post', seam:'Room: 8 of 8 granted' }] },
+        { name:'Commit', n:'5', cards:[
+          { name:'Halverton', terms:'$400k of $1.5M', seam:'IC Thu · 3 of 5 voted' }] },
+        { name:'Closing', n:'4', cards:[
+          { name:'Halverton', terms:'Signature packet out', seam:'3 of 4 signed' }] }
+      ].map(c => ({ name:c.name, n:c.n, cards:c.cards.map(d => ({ name:d.name, terms:d.terms, seam:d.seam,
+        cardStyle:'background:#fff;border:1px solid ' + (d.seam ? '#a5edf5' : '#ececf1') + ';border-radius:8px;padding:9px 10px' })) })),
+      scoreRows: [
+        { layer:'Team', score:'82', pct:'82', ink:'#4f46e5', why:'Two founders, complementary; CTO shipped this exact system before.' },
+        { layer:'Market', score:'71', pct:'71', ink:'#4f46e5', why:'EU mid-market growing; sizing disputed by a factor of two.' },
+        { layer:'Product', score:'76', pct:'76', ink:'#4f46e5', why:'Working beta, 14 paying accounts, thin integration surface.' },
+        { layer:'Traction', score:'64', pct:'64', ink:'#818cf8', why:'$4.2k MRR, 37% trial conversion, only 5 months of history.' },
+        { layer:'Terms', score:'58', pct:'58', ink:'#f59e0b', why:'$12M post is 2.4× the comparable median at this ARR.' },
+        { layer:'Evidence', score:'49', pct:'49', ink:'#ef4444', why:'Cohort retention withheld; 2 memo claims deck-only.' }
+      ],
+      icRows: [
+        { k:'Allocation requested', v:'$400,000' },
+        { k:'Ownership at close', v:'2.7% fully diluted' },
+        { k:'Reserve earmarked', v:'$600,000' },
+        { k:'Partner votes', v:'3 approve · 1 conditional' }
+      ],
+      closeRows: [
+        { step:'IC approval recorded', state:'Received', done:true },
+        { step:'SAFE countersigned', state:'Sent', done:true },
+        { step:'Wire instructed', state:'Pending', done:false },
+        { step:'Cap table updated by founder', state:'Scheduled', done:false }
+      ].map(c => ({ step:c.step, state:c.state, pill:pill(c.state, STATE),
+        box:'width:14px;height:14px;border-radius:4px;flex:none;' + (c.done ? 'background:#10b981;border:1px solid #10b981' : 'background:#fff;border:1px solid #d4d2dc') })),
+
+      // ---- Portfolio ----
+      anchP: this.anchorsFor('P', [['Positions','p-book'],['Updates','p-updates'],['Value-add','p-valueadd']]),
+      // ONE set of cash flows. Every ratio derives, so TVPI = DPI + RVPI holds and net sits
+      // visibly below gross by construction.
+      perfStats: PERF,
+      positions: [
+        { name:'Meridian Labs', invested:'$3.0M', own:'11.2%', fmv:'$7.8M', mult:'2.60×', rep:'On time' },
+        { name:'Halverton', invested:'$1.4M', own:'6.4%', fmv:'$2.9M', mult:'2.07×', rep:'On time' },
+        { name:'Novacraft Labs', invested:'$0.4M', own:'2.7%', fmv:'$0.4M', mult:'1.00×', rep:'Pending' },
+        { name:'Aperture', invested:'$1.8M', own:'8.1%', fmv:'$2.2M', mult:'1.22×', rep:'Overdue' },
+        { name:'Kelp Bio', invested:'$0.9M', own:'5.5%', fmv:'$0.7M', mult:'0.78×', rep:'Overdue' }
+      ].map(p => ({ ...p, repPill:pill(p.rep, STATE),
+        multInk: parseFloat(p.mult) >= 1.5 ? '#047857' : (parseFloat(p.mult) >= 1 ? '#3f3a49' : '#b91c1c') })),
+      kpiDiff: [
+        { label:'ARR', value:'$412k', delta:'+18% QoQ', ink:'#047857' },
+        { label:'Burn', value:'$96k/mo', delta:'+31% vs plan', ink:'#b91c1c' },
+        { label:'Runway', value:'11 mo', delta:'−4 mo', ink:'#b91c1c' },
+        { label:'Headcount', value:'19', delta:'+4', ink:'#3f3a49' }
+      ],
+      valueAdd: [
+        { kind:'Introductions made', count:'11', detail:'7 to customers, 3 to candidates, 1 to a co-investor — each linked to the position it served.' },
+        { kind:'Board meetings attended', count:'6', detail:'Across Meridian, Halverton and Aperture. Briefs assembled from each company\u2019s full history.' },
+        { kind:'Hires influenced', count:'3', detail:'Two engineers and a GTM lead, sourced from your network into portfolio roles.' },
+        { kind:'Follow-on support', count:'$1.2M', detail:'Bridge participation in two positions, at the founder\u2019s request.' }
+      ],
+
+      // ---- Axal VC Fund ----
+      lpStates: [{ k:'prospect', label:'Prospect' }, { k:'committed', label:'Committed LP' }].map(s => ({
+        label:s.label, go: () => this.setState({ lp:s.k }),
+        style:'font-size:12px;font-weight:700;padding:6px 13px;border-radius:7px;cursor:pointer;'
+          + (this.state.lp === s.k ? 'background:#fff;color:#4f46e5;box-shadow:0 1px 2px rgba(24,24,27,.07)' : 'color:#4a4553')
+      })),
+      isProspect: this.state.lp === 'prospect',
+      isCommitted: this.state.lp === 'committed',
+      fundFacts: [
+        { label:'Target size', value:'$25M' },
+        { label:'Committed', value:'$16.4M' },
+        { label:'Positions', value:'8' },
+        { label:'Underwriting window', value:'28 days' }
+      ],
+      tiers: [
+        { min:'$100k', name:'Minimum', rights:['Quarterly reports','Annual meeting','No co-invest'] },
+        { min:'$500k', name:'Standard', rights:['Quarterly reports','Co-invest offers','Fee break at close'] },
+        { min:'$2M', name:'Anchor', rights:['All of the above','Advisory board seat','Pro-rata on every deal'] }
+      ].map((t, i) => ({ ...t, cardStyle:'border:1px solid ' + (i === 1 ? '#c7d2fe;background:#f6f6ff' : '#f0eff4;background:#fbfbfc') + ';border-radius:11px;padding:14px 15px' })),
+      callSchedule: [
+        { date:'Mar 30, 2026', amount:'$75,000', state:'Called' },
+        { date:'Jun 30, 2026', amount:'$130,000', state:'Called' },
+        { date:'Sep 30, 2026', amount:'$45,000', state:'Due' },
+        { date:'Dec 31, 2026', amount:'$100,000', state:'Scheduled' }
+      ].map(c => ({ ...c, pill:pill(c.state, STATE) })),
+      reports: [
+        { name:'Q2 2026 report', meta:'Aug 14 · 34 pages' },
+        { name:'Q1 2026 report', meta:'May 12 · 31 pages' },
+        { name:'Annual 2025 · audited', meta:'Mar 3 · 58 pages' },
+        { name:'Q4 2025 report', meta:'Feb 10 · 29 pages' }
+      ],
+      coInvest: [
+        { company:'Meridian Labs · Series A', expires:'6 days left',
+          terms:'$3M round on $24M post · your allocation up to $' + ALLOC.toLocaleString('en-US'),
+          eval:'You already hold 11.2% directly — $3.0M in your direct book, not through this fund. Taking the full allocation would put $'
+            + ALLOC.toLocaleString('en-US') + ' of your $' + (AXAL_COMMIT + ALLOC).toLocaleString('en-US')
+            + ' total Axal VC exposure into one name, or ' + Math.round(ALLOC / (AXAL_COMMIT + ALLOC) * 100) + '% — on top of a position you already carry.',
+          cardStyle:'border:1px solid #c7d2fe;background:#f6f6ff;border-radius:11px;padding:14px 15px' },
+        { company:'Kelp Bio · bridge', expires:'12 days left', terms:'$600k bridge at the last round cap · allocation up to $75,000',
+          eval:'Marked at 0.78×. The bridge is protective, not accretive — reasonable only if you intend to follow into the next priced round.',
+          cardStyle:'border:1px solid #f0eff4;background:#fbfbfc;border-radius:11px;padding:14px 15px' }
+      ],
+
+      // ---- Fund ----
+      anchF: this.anchorsFor('F', [['LPs','f-lps'],['Calls','f-calls'],['Accounting','f-acct'],['Reporting','f-reporting']]),
+      fundHdr: FUND_HDR,
+      fundBasis,
+      lps: [
+        { name:'Brightwater Foundation', committed:'$12.0M', kyc:'Verified' },
+        { name:'Okonkwo Family Office', committed:'$8.5M', kyc:'Verified' },
+        { name:'Lindqvist Trust', committed:'$6.0M', kyc:'Verified' },
+        { name:'Ashgrove Partners LP', committed:'$4.5M', kyc:'Outstanding' }
+      ].map(l => ({ ...l, pill:pill(l.kyc, STATE) })),
+      callTrack: [
+        { lp:'Brightwater Foundation', amount:'$840,000', state:'Received' },
+        { lp:'Okonkwo Family Office', amount:'$595,000', state:'Received' },
+        { lp:'Lindqvist Trust', amount:'$420,000', state:'Sent' },
+        { lp:'Ashgrove Partners LP', amount:'$315,000', state:'Overdue' }
+      ].map(c => ({ ...c, pill:pill(c.state, STATE) })),
+      acct: [
+        { label:'Investments at fair value', value:'$26,840,000' },
+        { label:'Cash and equivalents', value:'$2,710,000' },
+        { label:'Accrued management fee', value:'−$210,000' },
+        { label:'Accrued expenses', value:'−$84,000' },
+        { label:'Net asset value', value:'$29,256,000', total:true }
+      ].map(a => ({ label:a.label, value:a.value, weight: a.total ? '800' : '500',
+        rowStyle:'display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-bottom:8px;'
+          + (a.total ? 'border-top:1px solid #ececf1;padding-top:10px' : 'border-bottom:1px solid #f6f5f9') })),
+      lockedList: [
+        'LP registry with commitments, contacts and KYC state',
+        'Capital calls and distributions, with wire confirmation',
+        'Fund accounting — NAV, fees, expenses, audit trail',
+        'Quarterly LP packs and the reporting archive',
+        'The seam in reverse: your LPs deploying capital into you'
+      ],
+
+      // ---- Network ----
+      anchN: this.anchorsFor('N', [['Relationships','n-book'],['Introductions','n-intros'],['Organizations','n-orgs']]),
+      relsInv: [
+        { name:'Guillaume Lauzier', type:'Founder', strength:'Strong', context:'Novacraft · screening', touch:'2 days', cold:false },
+        { name:'Aoife Brennan', type:'Co-investor', strength:'Strong', context:'Kestrel · 3 syndicates', touch:'9 days', cold:false },
+        { name:'Brightwater Foundation', type:'LP', strength:'Strong', context:'Fund II · $12M', touch:'21 days', cold:false },
+        { name:'Priyanka Raghunathan', type:'Partner', strength:'Warm', context:'Counsel · 4 closings', touch:'6 days', cold:false },
+        { name:'Dev Raman', type:'Co-investor', strength:'Warm', context:'Latitude · 1 syndicate', touch:'88 days', cold:true }
+      ].map(r => {
+        const T = { Founder:['#f5f5ff','#3730a3','#c7d2fe'], 'Co-investor':['#f0fdff','#0e7490','#a5edf5'],
+                    LP:['#ecfdf5','#047857','#a7f3d0'], Partner:['#f4f4f6','#4a4553','#e4e4e8'] };
+        const S2 = { Strong:['#ecfdf5','#047857','#a7f3d0'], Warm:['#f5f5ff','#3730a3','#c7d2fe'] };
+        return { name:r.name, type:r.type, strength:r.strength, context:r.context, touch:r.touch,
+          touchInk: r.cold ? '#b91c1c' : '#615c6e',
+          typeStyle:pill(r.type, T), strStyle:pill(r.strength, S2) };
+      }),
+      intros: [
+        { pair:'Meridian Labs ↔ Aoife Brennan', context:'Enterprise security review for their SOC 2 push', state:'Asked', support:true },
+        { pair:'Halverton ↔ Brightwater', context:'LP wanted direct exposure; founder open to it', state:'In motion', support:true },
+        { pair:'Dev Raman ↔ you', context:'Co-investor sounding on the Novacraft round', state:'Offered', support:false }
+      ].map(i => ({ ...i, pill:pill(i.state, STATE),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
+          + (i.support ? '#a5edf5;background:#f8feff' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
+      orgsInv: [
+        { name:'Kestrel Ventures', note:'Co-investor · 3 shared syndicates', people:'2 known' },
+        { name:'Brightwater Foundation', note:'LP in Fund II · $12M committed', people:'3 known' },
+        { name:'Verwood', note:'Portfolio company · realised exit, Jun 2026', people:'4 known' },
+        { name:'Raghunathan Law', note:'Service partner · fund counsel', people:'1 known' }
+      ],
+
+      // ---- Research ----
+      anchRe: this.anchorsFor('Re', [['Ask','re-ask'],['Diligence','re-diligence'],['Benchmarking','re-bench'],['Markets','re-markets'],['Library','re-library']]),
+      resCards: [
+        { anchorId:'re-bench', title:'Fund &amp; manager benchmarking', body:'Your marks against same-vintage funds in the platform cohort, with the cohort size stated so a thin comparison reads as thin.', meta:'2025 vintage · 34 funds' },
+        { anchorId:'re-markets', title:'Market deep-dives', body:'Saved briefs keep their sources and run date, so a stale number is visibly stale rather than quietly wrong.', meta:'9 saved · oldest Feb 2026' },
+        { anchorId:'re-companies', title:'Company profiles', body:'Comparables built from public filings, your own notes, and any data room you have been granted.', meta:'41 tracked' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

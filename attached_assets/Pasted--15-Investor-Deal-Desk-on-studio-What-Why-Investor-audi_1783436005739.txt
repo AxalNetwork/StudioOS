@@ -1,0 +1,27 @@
+#15 - Investor Deal Desk on /studio
+What & Why
+Investor audit item ① (Critical — highest-leverage), plus mounting the quota bars on the home and giving investors a RoleBadge style. Today /studio (Dashboard.jsx) is byte-for-byte the founder page plus a trial banner, while the dashboard API already computes a scored, NDA-masked proprietary_deal_flow, ai_scored_opportunities, quick_stats, and syndication_tools for investors — all thrown away. And InvestorQuotaBars is mounted only on PartnerPortal, which redirects investors away, so their intro/deal-room usage is invisible. Turn /studio into the investor's deal desk via role-conditional composition inside the existing page (no new route), reusing the founder audit's lifecycle rail/checklist components.
+Done looks like
+* On /studio, an investor sees: a Deal Lifecycle module (their deals by stage + next best action), a scored-opportunities strip rendered as actionable cards (open deal room, add to watchlist, request intro), quick stats, and a quota/plan card (intros left, deal rooms used, plan, upgrade path).
+* InvestorQuotaBars is mounted on the investor home; ProfileFitSection (skills/values radar) is not shown to investors; PersonalAdvisor and search stay.
+* Investors get a proper RoleBadge style (not the gray fallback).
+* Founder and other-role dashboards are unchanged.
+Out of scope
+* Deep card-action behavior beyond navigation/quota (the sourcing task refines intro-quota consumption and the shared card primitive); this task renders the already-computed payload and wires the primary navigations.
+* Locked-tab previews and quota-beside-402 (Support/Account task).
+Steps
+1. Add a backend aggregation route GET /api/dashboard/investor-lifecycle that derives "my deals" by stage from existing tables (deal-room memberships, introductions, watchlist/journal, DD cases, IC decisions, portfolio positions, secondary listings) and computes next actions from existing data (journal next_check_at, open DD items, pending IC votes, calls due, unread updates). No new task system.
+2. Compose an investor branch of /studio (Dashboard.jsx): render the lifecycle rail reusing the founder command-center rail/checklist components, the scored-opportunities strip from the existing dashboard payload as actionable cards, and quick stats; drop ProfileFitSection for investors.
+3. Mount InvestorQuotaBars on the investor home and add an investor RoleBadge style.
+Constraints
+* The new route lives under /api/*, which is already routed on the apex — no wrangler.toml route change needed. Mount it in index.ts.
+* The lifecycle route reads existing tables read-only; it must not modify watchlist/journal.
+* Update BOTH changelogs for user-facing changes; pass npm run test:drift before merge.
+Relevant files
+* cloudflare-worker/src/routes/dashboard.ts
+* cloudflare-worker/src/index.ts
+* frontend/src/pages/Dashboard.jsx
+* frontend/src/components/InvestorQuotaBars.jsx
+* frontend/src/components/InvestorTrialBanner.jsx
+* frontend/src/components/command-center/LifecycleModule.jsx
+* frontend/src/components/command-center/OverviewTab.jsx

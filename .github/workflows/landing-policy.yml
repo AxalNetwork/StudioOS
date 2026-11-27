@@ -1,0 +1,100 @@
+name: Landing policy
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# A push to main and a merge-queue entry each get their own group (the run id),
+# so neither is ever cancelled.
+concurrency:
+  group: landing-policy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  policy:
+    name: landing policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      privileged: ${{ steps.tier.outputs.privileged }}
+    steps:
+      - name: Check out trusted base
+        id: base
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Report the advisory tier
+        id: tier
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LANDING_AUTO: ${{ vars.LANDING_AUTO == 'true' }}
+          CHECKOUT_OUTCOME: ${{ steps.base.outcome }}
+        shell: bash
+        run: |
+          result='{"tier":"T2","reasons":["Trusted classifier or exact pull request diff unavailable."]}'
+          if [[ "$CHECKOUT_OUTCOME" == success && "$PR_NUMBER" =~ ^[0-9]+$ &&
+                "$BASE_SHA" =~ ^[a-f0-9]{40}$ && "$HEAD_SHA" =~ ^[a-f0-9]{40}$ ]] &&
+             [[ -f scripts/merge-policy.mjs ]] &&
+             [[ "$(git rev-parse HEAD)" == "$BASE_SHA" ]] &&
+             git fetch --no-tags origin "refs/pull/$PR_NUMBER/head" &&
+             [[ "$(git rev-parse FETCH_HEAD)" == "$HEAD_SHA" ]] &&
+             classified=$(node scripts/merge-policy.mjs --base "$BASE_SHA" --head "$HEAD_SHA"); then
+            result="$classified"
+          fi
+          {
+            printf '## Landing policy (advisory)\n\n'
+            printf 'Base SHA: `%s`\n\n' "$BASE_SHA"
+            printf 'Head SHA: `%s`\n\n' "$HEAD_SHA"
+            printf 'LANDING_AUTO: `%s`\n\n' "$LANDING_AUTO"
+            printf '    %s\n' "$result"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # D8067: true when a privileged path changed, false only on a classification that names none;
+          # anything unreadable is true, so the label is never taken off on a guess.
+          privileged=true
+          if printf '%s' "$result" | node -e 'const r = JSON.parse(require("fs").readFileSync(0, "utf8")); process.exit(Array.isArray(r.privileged) && r.privileged.length === 0 ? 0 : 1)'; then
+            privileged=false
+          fi
+          echo "privileged=$privileged" >> "$GITHUB_OUTPUT"
+
+  # D8067: sets or clears pr:privileged from the policy job's answer. It checks out nothing and runs no code
+  # from the repository: only the gh CLI, on this pull request. A fork's token cannot write labels, so a
+  # fork's pull request is skipped rather than failed.
+  label:
+    name: privileged label
+    needs: policy
+    if: ${{ !cancelled() && needs.policy.outputs.privileged != '' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Set or clear pr:privileged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PRIVILEGED: ${{ needs.policy.outputs.privileged }}
+        shell: bash
+        run: |
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || exit 1
+          # labels-sync.yml creates the label once labels.yml reaches main; until then there is nothing to set.
+          if ! gh api "repos/$GH_REPO/labels/pr%3Aprivileged" --silent 2>/dev/null; then
+            echo "::warning::The pr:privileged label does not exist yet (labels-sync creates it from .github/labels.yml on main); privileged=$PRIVILEGED"
+            exit 0
+          fi
+          has=$(gh pr view "$PR_NUMBER" --json labels --jq '[.labels[].name] | index("pr:privileged") != null')
+          if [[ "$PRIVILEGED" == true && "$has" != true ]]; then
+            gh pr edit "$PR_NUMBER" --add-label 'pr:privileged'
+          elif [[ "$PRIVILEGED" == false && "$has" == true ]]; then
+            gh pr edit "$PR_NUMBER" --remove-label 'pr:privileged'
+          fi

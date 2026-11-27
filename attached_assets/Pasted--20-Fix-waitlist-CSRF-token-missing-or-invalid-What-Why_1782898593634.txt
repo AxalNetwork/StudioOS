@@ -1,0 +1,30 @@
+#20 - Fix waitlist "CSRF token missing or invalid"
+What & Why
+The public "Join the waitlist" form on landing-page templates (e.g. Proof Builder, Builder's Launchpad) returns a 403 "CSRF token missing or invalid" when a studio owner submits an email while logged in.
+Root cause: the form is server-rendered by the Worker, and its inline submit script calls fetch with no credentials option. The browser then uses the same-origin default and silently attaches the owner's studioos_auth session cookie. The Worker's CSRF middleware only enforces when that cookie is present — but the public form never sends an X-CSRF-Token header, so the POST is rejected. Anonymous visitors (no session cookie) are unaffected, which is why the failure looks intermittent and only the owner hits it while testing.
+This is also why test signups never appeared under Customer Discovery: the POST is blocked before the signup can be stored.
+Fix: make the public waitlist POST explicitly anonymous (credentials: 'omit') so it never carries the session cookie and therefore never triggers CSRF — for everyone, including a logged-in owner. The waitlist route is public (it does not call requireAuth), so omitting credentials loses nothing.
+Note: there is only ONE inline submit script now (singleWaitlistScript); the old six-tab switcher was removed, so every current template shares this single fetch.
+Done looks like
+* A logged-in studio owner can submit an email on a published landing page's waitlist form and see the success message ("You're on the list…") instead of the CSRF error.
+* Anonymous visitors continue to sign up successfully (unchanged).
+* The new signup appears in that project's Customer Discovery waitlist list.
+* A render test guards that the generated waitlist script sends the POST without credentials.
+Out of scope
+* Any change to the CSRF middleware's general behavior.
+* The Customer Discovery per-product waitlist UI/endpoints — already implemented and working.
+* Behavior for unpublished/draft pages — the public endpoint intentionally accepts signups only for published pages, so verification must use a published page.
+Steps
+1. Make the server-rendered waitlist submit script post anonymously so the owner's session cookie is never attached and CSRF is never triggered. This is the single inline fetch shared by all current templates.
+2. Add/extend a render test asserting the generated waitlist script issues the POST without credentials, to prevent regression.
+3. Verify end to end: publish a landing page for a project, submit the waitlist form while logged in as the owner, confirm the success message, and confirm the entry shows in that project's Customer Discovery waitlist.
+4. Add a plain-English line to the in-app "What's new" changelog and a matching technical entry to the engineering changelog (keep the two in sync per repo policy).
+Relevant files
+* cloudflare-worker/src/services/landingTemplates.ts:1536-1558
+* cloudflare-worker/src/middleware/csrf.ts:58-81
+* cloudflare-worker/src/routes/brand.ts:876-930
+* cloudflare-worker/test/landing_templates_render.test.ts
+* cloudflare-worker/src/routes/progress.ts:506-528
+* frontend/src/pages/CustomerDiscoveryPage.jsx
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

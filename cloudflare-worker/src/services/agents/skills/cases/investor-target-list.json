@@ -1,0 +1,34 @@
+{
+  "skill": "investor-target-list",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "network.relationships": [
+        {
+          "name": "Northpeak Ventures",
+          "stage": "Seed",
+          "sector": "Health software",
+          "path": "Priya Shah, warm"
+        }
+      ],
+      "raise.records": {
+        "round": "Seed",
+        "target_usd": 2000000
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Northpeak Ventures",
+      "Priya Shah"
+    ],
+    "must_say_not_recorded": [
+      "check size"
+    ],
+    "must_not_include": [
+      "will invest"
+    ]
+  }
+}

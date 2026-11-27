@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Studio · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · HQ authoring · #8669 · second pass after the 25 Nov production audit</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning studio — find the course, see why a learner cannot reach it, preview it as a member, then publish on purpose</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Learning studio (/learning/studio) is the Super Admin’s authoring workspace. It is organised around one question per course: can my intended learner find and start it? The inventory of 46 items keeps type, publication status and visibility as three separate filters, with one Create menu; a journeys strip from the existing curriculum coverage record says which learners have nothing they can reach and filters to the four founder drafts. A course workspace puts an editorial checklist (readiness, access, review) beside a learner-facing preview built from the course’s summary, output, audience, cover and syllabus. Preview changes nothing; Review and publish is the only control that changes who can see a course, and it shows the gates tracked in #8288. Retains the Axal VC HQ shell; Learning pages carry no AI rail (D4478). States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark data or backend work (#8288, or proposed); amber ⚑ tags mark owner decisions with option A drawn; synthetic states are labelled.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · Evidence-based pitch narratives, its exam “What can you substantiate?” and the exercise “Pitch decision memo” are observed on axal.vc; bracketed titles, [Iris Chen], [Ola Fenn], [Axal HQ] and every other person and figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Studio Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LST-00', 'The question, the route and the vocabulary', 'One question per course. The numbered route from inventory to result on desktop and phone, the three fields that are never mixed (type, status, visibility) and the derived “who can open it now”, why preview is not publishing, and the annotation key.', [W('LST00')]],
+      ['LST-01', 'Before · as observed on 25 Nov', 'A reconstruction of today’s studio: six creation links, a second New webinar, one chip row that mixes a type, three statuses and a visibility, and coverage at the bottom of the page. Kept: coverage’s verdicts.', [C('LST01', false, 1300, 850)]],
+      ['LST-02', 'Content inventory · desktop 1440', 'One h1 and one primary (Create). Studio tabs for Content, Webinars, Coverage and Regional programs. The journeys strip from curriculum coverage. Search plus Type, Status and Visibility filters with exact counts; the table separates status, visibility and who can open it now. 46 items, 20 per page.', [F('LST02', false, 1570), C('LST02B', 'Create menu · course first', 620, 575), C('LST02C', 'Filter variants with counts', 1300, 751)]],
+      ['LST-03', 'Locate the founder drafts', 'Founders · Not reachable filters to Type: Course and Status: Draft, 4 of 46. Each row says why a founder cannot start it while keeping its real status and visibility.', [F('LST03', false, 1060)]],
+      ['LST-04', 'Course workspace · checklist beside the member preview', 'Evidence-based pitch narratives: status, visibility and reach in the header; the editorial checklist in three groups (readiness, access, review) with its blocking rows; the learner-facing preview with summary, output, audience, cover and the ten-row syllabus. Details and Syllabus tabs edit what main already stores.', [F('LST04', false, 1720), F('LST04B', 'Details · unsaved changes and live preview', 1740), F('LST04C', 'Syllabus · what each lesson opens', 1440)]],
+      ['LST-05', 'Editorial checklist · variants and sources', 'Ready, Blocks publishing, Check, Not recorded, Unavailable and Proposed rows; the source of each check on main and which are gates today, #8288 gates or owner decisions.', [C('LST05', false, 1300, 748)]],
+      ['LST-06', 'Preview as an eligible member', 'The member course page under a black Preview bar, for a chosen learner: founder outside a program, founder enrolled in a program, investor. Read-only; Start records nothing. Variants for enrolment, audience, program-only courses, missing cover and output, and a failed read.', [F('LST06', false, 1740), C('LST06B', 'Preview variants', 1300, 540)]],
+      ['LST-07', 'Review and publish', 'What would change (status, who can open it, the Founders journey, notifications) and the gates; Publish stays unavailable with its reason while a check blocks. Confirm, result and the route’s refusal; unpublish and archive. Changing visibility on a published course as Scope → Review → Result, and who may do what.', [F('LST07', 'Blocked by two checks', 1230), C('LST07B', 'Confirm, result, refusal, unpublish, archive', 1300, 588), C('LST07C', 'Reach changes and permissions', 1300, 608)]],
+      ['LST-08', 'Create a course', 'Create ▾ → Course opens the existing form (?new=course), grouped by who it is for, what the learner leaves with, cover, and credits. One primary, Create draft; a live card preview from the form. Validation before sending and the route’s refusals beside their fields.', [F('LST08', false, 1430), C('LST08B', 'Validation and refusals', 1300, 369)]],
+      ['LST-09', 'Empty, filtered zero, loading and failed reads', 'Empty inventory, zero results with the filters kept, loading, one list Unavailable (partial), every list Unavailable, coverage Unavailable; then unsaved, saving, saved, refused, offline and session-expired saves.', [C('LST09', false, 1300, 907), C('LST09B', 'Save states', 1300, 367)]],
+      ['LST-10', 'Phone 390 × 844', 'The same route, numbered: inventory with journeys and Filters, the filter sheet, the four founder drafts, the course workspace checklist, preview as a founder, the publish sheet with its blocked reason, a new course, and zero results and errors.', [P('LST10A', '1 Inventory'), P('LST10B', '2 Filters'), P('LST10C', '2 Founder drafts'), P('LST10D', '3 Checklist'), P('LST10E', '4 Preview'), P('LST10F', '6 Review and publish'), P('LST10G', 'Create'), P('LST10H', 'Zero results and errors')]],
+      ['LST-11', 'Component variants', 'Status, who can open it now, type labels, journey tiles in the four coverage states plus a failed read, filter controls and chips, the preview bar, save status, syllabus rows and the phone course card.', [C('LST11', false, 1300, 964)]],
+      ['LST-12', 'Focus order, accessible names and wrapping', 'Numbered focus order for the inventory and the workspace, accessible names for each control, long titles at 1440 and 390, and 200% text.', [C('LST12', false, 1300, 718)]],
+      ['LST-13', 'Engineering handoff', 'The acceptance items mapped to boards, what main has with files, frontend-only work, ◇ data and backend work (#8288 and proposed), ⚑ owner decisions with option A drawn, coordination with #8288 and the sibling canvases, and accessibility.', [W('LST13')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

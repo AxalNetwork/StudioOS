@@ -1,0 +1,9 @@
+### Deck v2: Fix with critique and a figure's proof (D1552, D1586)
+
+Two deck v2 routes the map did not list yet (#3792, D1547). Both are mounted at `/api/decks`.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/decks/:id/critique/quote` | the deck's writers (`projectOwned`, write) | D1552 (#3799). What a critique holds before it runs: `{ ai: true, cards, score, findings, fixes: { count, per_microusd, microusd }, vision: { available, reason, family, writer_family, cards, per_card_microusd, microusd }, hold_microusd }`, or `{ ai: false, reason, message }`. Runs no model. |
+| `POST /api/decks/:id/critique` `{ vision? }` | the deck's writers | D1552. `{ score_before, score, score_if_accepted, threshold, rubric, findings, fixes: [{ proposal_uid, card, card_uid, check, before, after }], what_we_fixed, not_fixed, vision: { ran, family, writer_family, cards_read, reason }, charged_microusd }`. The free checks (fit, density, contrast, image-style drift) always run. The vision pass reads each rendered card on a model of another family than the writer, and says why when it cannot. Each fix is a `deck:shorten` rail proposal: nothing is placed or saved here. |
+| `GET /api/decks/share/:token/proof/:ref` | a signed-in investor on their own share link | D1586 (#3833). A two-minute signed download of the data-room file a shared figure cites, and its page. In order: the link must be live, bound to this browser and include `evidence` (404 `no_evidence`); the link must require the NDA and the reader must have accepted it (403 `nda_required`); the account must be the link's investor email, with an active data-room grant (403 `not_the_investor` / `no_grant`); the ref must be a citation this link sends, on a file still tagged as a deck source (404 `not_found`); the file's tier must admit the grant (404, or 403 when the founder's NDA is missing). An admin is refused. The data room's activity log records the download. |

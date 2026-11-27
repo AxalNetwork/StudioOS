@@ -1,0 +1,616 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import { CreditCard, Loader2, FileText, AlertTriangle, RotateCcw, Plus, Lock, X, Star, Trash2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { useSettings } from '../contexts/SettingsContext';
+import { getStripe, buildAppearance } from '../lib/stripe';
+import { cancelWords, openCheckout, planKeyOfProduct } from './checkout/checkoutEntry';
+import { useAccountRead } from '../pages/account/AccountCenter';
+import { formatStripeAmount } from '../lib/money';
+
+/**
+ * Task #5 — In-app billing dashboard.
+ *
+ * Replaces the Stripe Customer Portal redirect with an in-app surface that
+ * shows the user's active subscription(s), payment methods, upcoming invoice,
+ * and recent invoices, plus controls to:
+ *   - cancel a subscription (sets cancel_at_period_end; access kept till renewal)
+ *   - resume a subscription scheduled to cancel
+ *   - change plan: since D1054 (#2905, PAYX11) Change plan opens the checkout
+ *     sheet over this page (`openCheckout`), which quotes and makes the change
+ *     on D1051's routes; Cancel asks in an in-page dialog, never a browser
+ *     pop-up, and a cancelled plan says when it ends, with Resume plan
+ *   - add / replace a card (Stripe SetupIntent + Elements `confirmSetup`),
+ *     set a saved card as default, and remove a saved card
+ *
+ * Every action goes through `/api/billing/*` (server-side Stripe REST) so the
+ * secret key never reaches the SPA.
+ *
+ * Props:
+ *   scope    — 'founder' | 'investor' (selects which Stripe customer to read)
+ *   flash    — toast helper (msg, type?)
+ *   onChanged— called after any successful mutation so the parent can refresh
+ */
+const fmtMoney = (amt, cur) =>
+  amt == null
+    ? '—'
+    : formatStripeAmount(amt, cur || 'usd');
+
+const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
+export default function BillingDashboard({ scope = 'founder', variant = 'subscriber', flash, onChanged, overviewRead = null }) {
+  const localOverview = useAccountRead(() => api.billingOverview(scope), { enabled: !overviewRead });
+  const sharedOverview = overviewRead || localOverview;
+  const overview = sharedOverview.status === 'ready' ? sharedOverview.data : null;
+  const loading = sharedOverview.status === 'loading';
+  const [plans, setPlans] = useState([]);
+  const [busy, setBusy] = useState(null);          // action key in flight
+  const loadError = sharedOverview.status === 'unreadable'
+    ? (sharedOverview.httpStatus === 502 || sharedOverview.code === 'billing_unavailable'
+      ? 'Billing details are temporarily unavailable. Please try again in a moment.'
+      : (sharedOverview.message || 'Could not load billing details.'))
+    : null;
+  const load = sharedOverview.reload;
+
+  // Catalog → swap-able plan options for this scope. Founder products carry
+  // metadata.tier; investor products carry metadata.investor_tier (with
+  // monthly + yearly prices). We surface every active recurring price.
+  useEffect(() => {
+    let cancelled = false;
+    api.catalogProducts('subscription')
+      .then((res) => {
+        if (cancelled) return;
+        // D1054: one entry per plan (product), by its catalogue key; the sheet reads the prices.
+        const out = [];
+        for (const p of res?.products || []) {
+          const key = planKeyOfProduct(p);
+          if (!key || !key.startsWith(scope === 'investor' ? 'investor:' : 'founder:')) continue;
+          if (!(p.prices || []).some((pr) => pr.active !== false && pr.type === 'recurring')) continue;
+          out.push({ key, product_id: p.id, product: p.name });
+        }
+        setPlans(out);
+      })
+      .catch(() => { if (!cancelled) setPlans([]); });
+    return () => { cancelled = true; };
+  }, [scope]);
+
+  const refreshAll = () => { sharedOverview.reload(); onChanged?.(); };
+
+  // PAYX11: Cancel asks in the page's own dialog; "Keep plan" changes nothing.
+  const [asking, setAsking] = useState(null); // { sub, name }
+  const cancel = async (subId) => {
+    setBusy(`cancel:${subId}`);
+    try {
+      await api.billingCancelSubscription(subId, scope);
+      flash?.('Your plan will end at the end of the paid period.');
+      setAsking(null);
+      refreshAll();
+    } catch (e) { flash?.(e.message || 'Could not cancel', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const resume = async (subId) => {
+    setBusy(`resume:${subId}`);
+    try {
+      await api.billingResumeSubscription(subId, scope);
+      flash?.('Your plan is back on. It renews as before.');
+      refreshAll();
+    } catch (e) { flash?.(e.message || 'Could not resume', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  // D1054: Change plan opens the checkout sheet, which quotes and makes the change (D1051).
+  const changeTo = (plan, sub) => openCheckout({
+    plan_key: plan.key,
+    interval: sub?.items?.[0]?.interval === 'year' ? 'yearly' : 'monthly',
+    from: { label: 'Billing', href: '/account/billing' },
+  });
+
+  // ---- Payment-method management ------------------------------------------
+  const [addingCard, setAddingCard] = useState(false); // SetupIntent modal open
+
+  const makeDefault = async (pmId) => {
+    setBusy(`default:${pmId}`);
+    try {
+      await api.billingPaymentMethodDefault(pmId, scope);
+      flash?.('Default card updated.');
+      refreshAll();
+    } catch (e) { flash?.(e.message || 'Could not set default card', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const removeCard = async (pmId) => {
+    if (!window.confirm('Remove this card? Future invoices must use another saved card.')) return;
+    setBusy(`detach:${pmId}`);
+    try {
+      await api.billingPaymentMethodDetach(pmId, scope);
+      flash?.('Card removed.');
+      refreshAll();
+    } catch (e) { flash?.(e.message || 'Could not remove card', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const onCardAdded = () => {
+    setAddingCard(false);
+    flash?.('Card saved.');
+    refreshAll();
+  };
+
+  const subs = overview?.subscriptions || [];
+  const paymentMethodsUnreadable = overview?.degraded?.includes('payment_methods') === true;
+  const currentProducts = useMemo(
+    () => new Set(subs.flatMap((s) => (s.items || []).map((i) => i.product_id))),
+    [subs],
+  );
+  const nameOf = (item) => plans.find((p) => p.product_id === item?.product_id)?.product || item?.nickname || 'your plan';
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading billing details…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={load}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-300 dark:border-amber-700 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (overview && overview.has_customer === false) {
+    return (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400">
+        {variant === 'general'
+          ? 'No billing activity yet. When you make a purchase, your saved cards and receipts will appear here.'
+          : 'No active billing account yet. Subscribe to a plan to manage it here.'}
+      </div>
+    );
+  }
+
+  if (overview && overview.stripe_configured === false) {
+    return (
+      <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <span>Payments are not configured in this environment.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Some billing sections couldn't be loaded just now — say so explicitly
+          rather than silently showing them as empty. The rest still renders. */}
+      {overview?.degraded?.length > 0 && (
+        <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <span>Some billing details couldn't be loaded just now and may be incomplete.</span>
+            <button
+              type="button"
+              onClick={load}
+              className="ml-2 inline-flex items-center gap-1 font-medium underline hover:no-underline"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Retry
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Active subscriptions — hidden for the general (non-subscription) variant
+          when there are none, so those roles get a clean cards/receipts view. */}
+      {(variant !== 'general' || subs.length > 0) && (
+      <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Active subscriptions</h4>
+        {subs.length === 0 ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">No active subscriptions.</div>
+        ) : (
+          <div className="space-y-3">
+            {subs.map((sub) => {
+              const item = sub.items?.[0];
+              const name = nameOf(item);
+              const words = cancelWords(sub, name);
+              const others = plans.filter((p) => !currentProducts.has(p.product_id));
+              return (
+                <div key={sub.id} className="border border-gray-100 dark:border-gray-800 rounded-lg p-3" data-testid={`billing-sub-${sub.id}`}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-2">
+                        <span>{name}</span>
+                        {sub.cancel_at_period_end ? (
+                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="billing-ends-pill">{words.pill}</span>
+                        ) : null}
+                        {item?.amount != null && (
+                          <span className="text-gray-500 dark:text-gray-400 font-normal">
+                            {fmtMoney(item.amount, item.currency)}{item.interval ? ` / ${item.interval}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {sub.cancel_at_period_end
+                          ? <span data-testid="billing-cancelled-line">{words.cancelled}</span>
+                          : <>Status: <span className="capitalize">{sub.status}</span>{sub.current_period_end ? <> · Renews {fmtDate(sub.current_period_end)}</> : null}</>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {sub.cancel_at_period_end ? (
+                        <button type="button" disabled={busy === `resume:${sub.id}`} onClick={() => resume(sub.id)} data-testid="billing-resume"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-xs font-medium disabled:opacity-50">
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          {busy === `resume:${sub.id}` ? 'Resuming…' : 'Resume plan'}
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setAsking({ sub, name })} data-testid="billing-cancel"
+                          className="px-3 py-1.5 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md text-xs font-medium disabled:opacity-50">
+                          Cancel plan
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* D1054: Change plan opens the checkout sheet over this page. */}
+                  {!sub.cancel_at_period_end && others.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Change plan</div>
+                      <div className="flex flex-wrap gap-2">
+                        {others.map((p) => (
+                          <button key={p.key} type="button" onClick={() => changeTo(p, sub)} data-testid={`billing-change-${p.key}`}
+                            className="px-3 py-1.5 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-md text-xs font-medium">
+                            {`Change to ${p.product}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      )}
+
+      {/* PAYX11: the Cancel dialog. "Keep plan" changes nothing. */}
+      {asking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAsking(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="billing-cancel-title" className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full p-5" onClick={(e) => e.stopPropagation()} data-testid="billing-cancel-dialog">
+            <h4 id="billing-cancel-title" className="text-base font-semibold text-gray-900 dark:text-gray-100">{cancelWords(asking.sub, asking.name).title}</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{cancelWords(asking.sub, asking.name).line}</p>
+            <div className="mt-4 flex justify-end gap-2 flex-wrap">
+              <button type="button" disabled={busy === `cancel:${asking.sub.id}`} onClick={() => cancel(asking.sub.id)} data-testid="billing-cancel-confirm"
+                className="px-4 py-2 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium disabled:opacity-50">
+                {busy === `cancel:${asking.sub.id}` ? 'Cancelling…' : 'Cancel at period end'}
+              </button>
+              <button type="button" onClick={() => setAsking(null)} data-testid="billing-cancel-keep"
+                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+                Keep plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment methods */}
+      <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Payment methods</h4>
+          <button type="button" onClick={() => setAddingCard(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-md text-xs font-medium">
+            <Plus className="w-3.5 h-3.5" /> Add card
+          </button>
+        </div>
+        {paymentMethodsUnreadable ? (
+          <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2" data-testid="billing-payment-methods-unreadable">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <span>Your saved cards could not be read. This is not a claim that no card is saved.</span>
+              <button type="button" onClick={load} className="ml-2 inline-flex items-center gap-1 font-medium underline hover:no-underline">
+                <RotateCcw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          </div>
+        ) : (overview?.payment_methods || []).length === 0 ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            {variant === 'general'
+              ? 'No card on file. Add one to use for your purchases.'
+              : 'No card on file. Add one to keep your subscription active.'}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {overview.payment_methods.map((pm) => (
+              <div key={pm.id} className="flex items-center justify-between gap-3 border border-gray-100 dark:border-gray-800 rounded-lg p-3 flex-wrap">
+                <div className="flex items-center gap-2 text-sm text-gray-900 dark:text-gray-100">
+                  <CreditCard className="w-4 h-4 text-gray-400" />
+                  <span className="capitalize">{pm.brand}</span> •••• {pm.last4}
+                  {pm.exp_month && pm.exp_year && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">exp {String(pm.exp_month).padStart(2, '0')}/{String(pm.exp_year).slice(-2)}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {pm.is_default ? (
+                    <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">Default</span>
+                  ) : (
+                    <button type="button" disabled={busy === `default:${pm.id}`} onClick={() => makeDefault(pm.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-xs font-medium disabled:opacity-50">
+                      <Star className="w-3.5 h-3.5" />
+                      {busy === `default:${pm.id}` ? 'Setting…' : 'Make default'}
+                    </button>
+                  )}
+                  <button type="button" disabled={busy === `detach:${pm.id}`} onClick={() => removeCard(pm.id)}
+                    title="Remove card"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md text-xs font-medium disabled:opacity-50">
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {busy === `detach:${pm.id}` ? 'Removing…' : 'Remove'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Add / replace card modal (Stripe SetupIntent + Elements) */}
+      {addingCard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAddingCard(false)}>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Add a card</h4>
+              <button type="button" onClick={() => setAddingCard(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <CardSetupForm scope={scope} onSuccess={onCardAdded} onCancel={() => setAddingCard(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming invoice */}
+      {overview?.upcoming_invoice && (
+        <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Upcoming invoice</h4>
+          <div className="text-sm text-gray-700 dark:text-gray-200">
+            {fmtMoney(overview.upcoming_invoice.total, overview.upcoming_invoice.currency)}
+            {overview.upcoming_invoice.next_attempt && (
+              <span className="text-gray-500 dark:text-gray-400"> · due {fmtDate(overview.upcoming_invoice.next_attempt)}</span>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Recent invoices */}
+      <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Recent invoices</h4>
+        {(overview?.invoices || []).length === 0 ? (
+          <div className="text-sm text-gray-500 dark:text-gray-400">No invoices yet.</div>
+        ) : (
+          <div className="border border-gray-100 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+            {overview.invoices.map((inv, idx) => (
+              <div key={inv.id || idx} className="flex items-center justify-between px-3 py-2 text-sm">
+                <div className="text-gray-700 dark:text-gray-200">
+                  {fmtDate(inv.created)}
+                  <span className="text-gray-400 dark:text-gray-500"> · {inv.number || inv.id}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-900 dark:text-gray-100">{fmtMoney(inv.total, inv.currency)}</span>
+                  <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{inv.status}</span>
+                  {(inv.hosted_invoice_url || inv.invoice_pdf) && (
+                    <a href={inv.invoice_pdf || inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-300 hover:underline text-xs">
+                      <FileText className="w-3.5 h-3.5" /> View
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Payment history — one-off (non-invoice) purchases such as incorporation,
+          à la carte unlocks, and expert sessions. These are Stripe charges (not
+          invoices), so they never appear in "Recent invoices"; each links to its
+          Stripe-hosted receipt. Only rendered when there are any. */}
+      {(overview?.charges || []).length > 0 && (
+        <section className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Payment history</h4>
+          <div className="border border-gray-100 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+            {overview.charges.map((ch, idx) => (
+              <div key={ch.id || idx} className="flex items-center justify-between px-3 py-2 text-sm gap-3 flex-wrap">
+                <div className="text-gray-700 dark:text-gray-200">
+                  {fmtDate(ch.created)}
+                  {ch.description && <span className="text-gray-400 dark:text-gray-500"> · {ch.description}</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-900 dark:text-gray-100">{fmtMoney(ch.amount, ch.currency)}</span>
+                  {ch.refunded
+                    ? <span className="text-xs text-amber-600 dark:text-amber-400">Refunded</span>
+                    : <span className="text-xs capitalize text-gray-500 dark:text-gray-400">{ch.status || 'paid'}</span>}
+                  {ch.receipt_url && (
+                    <a href={ch.receipt_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-300 hover:underline text-xs">
+                      <FileText className="w-3.5 h-3.5" /> Receipt
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Card collection via a Stripe SetupIntent. Fetches a SetupIntent client_secret
+ * for the scope's customer (server-side, step-up gated), mounts Stripe Elements
+ * with the Axal VC appearance, and confirms with `confirmSetup({ redirect:
+ * 'if_required' })` so 3DS surfaces inline and we never leave the app. Raw card
+ * data is captured exclusively by Stripe Elements (PCI scope stays SAQ A).
+ */
+function CardSetupForm({ scope, onSuccess, onCancel }) {
+  const { effectiveTheme } = useSettings();
+  const isDark = effectiveTheme === 'dark';
+  const stripePromise = useMemo(() => getStripe(), []);
+  // Task #16 — runtime key: resolve async to distinguish loading/configured/not.
+  const [stripeConfigured, setStripeConfigured] = useState(null); // null=loading
+  useEffect(() => {
+    stripePromise.then((s) => setStripeConfigured(s !== null));
+  }, [stripePromise]);
+
+  const [clientSecret, setClientSecret] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (!stripeConfigured) return;
+    if (startedRef.current) return; // create exactly one SetupIntent per mount
+    startedRef.current = true;
+    let cancelled = false;
+    api.billingPaymentMethodSetup(scope)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res?.client_secret) { setLoadError('Could not start card setup. Please try again.'); return; }
+        setClientSecret(res.client_secret);
+      })
+      .catch((e) => { if (!cancelled) setLoadError(e?.message || 'Could not start card setup. Please try again.'); });
+    return () => { cancelled = true; };
+  }, [stripeConfigured, scope]);
+
+  if (stripeConfigured === null) {
+    return (
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-4 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2 animate-pulse">
+        <span>Loading payment form…</span>
+      </div>
+    );
+  }
+
+  if (!stripeConfigured) {
+    return (
+      <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <span>Payments are not configured in this environment.</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{loadError}</span>
+        </div>
+        <div className="flex justify-end">
+          <button type="button" onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!clientSecret) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6">
+        <Loader2 className="w-4 h-4 animate-spin" /> Preparing secure card form…
+      </div>
+    );
+  }
+
+  const appearance = buildAppearance(isDark);
+  return (
+    <Elements
+      key={`${clientSecret}:${effectiveTheme}`}
+      stripe={stripePromise}
+      options={{ clientSecret, appearance }}
+    >
+      <SetupForm onSuccess={onSuccess} onCancel={onCancel} />
+    </Elements>
+  );
+}
+
+function SetupForm({ onSuccess, onCancel }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [ready, setReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!stripe || !elements || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setError(submitError.message || 'Please check your card details.');
+      setSubmitting(false);
+      return;
+    }
+    const { error: confirmError, setupIntent } = await stripe.confirmSetup({
+      elements,
+      redirect: 'if_required',
+    });
+    if (confirmError) {
+      setError(confirmError.message || 'Could not save card. Please try again.');
+      setSubmitting(false);
+      return;
+    }
+    if (setupIntent?.status === 'succeeded' || setupIntent?.status === 'processing') {
+      setSubmitting(false);
+      onSuccess?.();
+      return;
+    }
+    setError('Card could not be saved. Please try another card.');
+    setSubmitting(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className={ready ? '' : 'hidden'}>
+        <PaymentElement onReady={() => setReady(true)} options={{ layout: 'tabs' }} />
+      </div>
+      {!ready && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading card form…
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      {ready && (
+        <>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onCancel}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium">
+              Cancel
+            </button>
+            <button type="submit" disabled={!stripe || !elements || submitting}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+              {submitting ? (<><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>) : 'Save card'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1.5">
+            <Lock className="w-3 h-3" />
+            Secured by Stripe · Your card details never touch Axal VC's servers.
+          </p>
+        </>
+      )}
+    </form>
+  );
+}

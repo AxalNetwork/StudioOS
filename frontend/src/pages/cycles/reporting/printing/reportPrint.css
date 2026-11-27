@@ -1,0 +1,18 @@
+/* The isolated sent-report print document always uses a light paper surface (#6094). */
+@page { size: A4; margin: 14mm; }
+:root { color-scheme: light; }
+body { margin: 0; background: #fff; color: #171722; font: 11pt/1.45 Arial, sans-serif; }
+h1 { font-size: 20pt; line-height: 1.2; }
+h2 { margin-top: 1.5em; font-size: 13pt; }
+p, li, td { overflow-wrap: anywhere; }
+table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+th, td { padding: 7pt 5pt; border-bottom: 1px solid #d8d8df; text-align: left; vertical-align: top; }
+th { font-weight: 700; }
+small { color: #454550; }
+.narrative { white-space: pre-wrap; }
+@media print {
+  body { background: #fff; color: #171722; }
+  thead { display: table-header-group; }
+  tr, section { break-inside: avoid; }
+  h1, h2 { break-after: avoid; }
+}

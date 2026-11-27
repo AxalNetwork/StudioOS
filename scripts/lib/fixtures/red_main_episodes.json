@@ -1,0 +1,487 @@
+{
+  "version": 1,
+  "window": {
+    "start": "2026-11-04T15:47:00Z",
+    "end": "2026-11-11T15:47:00Z"
+  },
+  "method": "First failure after a successful main CI interval, excluding audit-only and aggregate-only failures. 566 completed push runs; 29 total red intervals; 27 with a failed suite part. Failing files extracted from TAP failure location fields in the linked job logs. Historic traces unavailable; never count those episodes as passing.",
+  "episodes": [
+    {
+      "firstRedCommit": "b5b99c33e5a6bc2eb68d7a00394970233afea3e6",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/41896596574",
+      "createdAt": "2026-11-04T19:24:14Z",
+      "jobs": [
+        {
+          "id": 126810953532,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/41896596574/job/126810953532"
+        },
+        {
+          "id": 126810953695,
+          "name": "suite (rest)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/41896596574/job/126810953695"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/rail_frame_d556.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "93ccd0c17fb00490fcbe4540a1eb5951f46c4732",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/41918262162",
+      "createdAt": "2026-11-04T21:40:23Z",
+      "jobs": [
+        {
+          "id": 126896282275,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/41918262162/job/126896282275"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/record_mode_d696.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "2974c09c2126b98639b0b5bded1b4de0afca4959",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42353061407",
+      "createdAt": "2026-11-07T07:52:18Z",
+      "jobs": [
+        {
+          "id": 128345350003,
+          "name": "suite (worker-6-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42353061407/job/128345350003"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/agent_sessions_3957.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "565a9f5df0b7c6329ae8f2da7beee046be90e3dc",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42365366276",
+      "createdAt": "2026-11-07T10:46:33Z",
+      "jobs": [
+        {
+          "id": 128388305766,
+          "name": "suite (rest)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42365366276/job/128388305766"
+        }
+      ],
+      "failingFiles": [],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "9b2482f36e1f57bc81eeef282e5633615c1d007d",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42384166672",
+      "createdAt": "2026-11-07T14:59:33Z",
+      "jobs": [
+        {
+          "id": 128441086009,
+          "name": "suite (worker-3-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42384166672/job/128441086009"
+        },
+        {
+          "id": 128441086029,
+          "name": "suite (rest)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42384166672/job/128441086029"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/runtime_ddl_4568.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "7d56970bad76d18d05a9782158d968242123252d",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42411851728",
+      "createdAt": "2026-11-07T20:36:12Z",
+      "jobs": [
+        {
+          "id": 128533243334,
+          "name": "suite (frontend-1-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42411851728/job/128533243334"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/programs_generic_4808.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "ee312bd13a51d40f2e5e045587839653095b2534",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42417475475",
+      "createdAt": "2026-11-07T21:46:52Z",
+      "jobs": [
+        {
+          "id": 128551923313,
+          "name": "suite (worker-4-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42417475475/job/128551923313"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/github_roadmap_d782.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "23db289b81d90a8ee8155f1529a85b3b6537786e",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42418098060",
+      "createdAt": "2026-11-07T21:54:51Z",
+      "jobs": [
+        {
+          "id": 128557844817,
+          "name": "suite (worker-1-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42418098060/job/128557844817"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/program_grant_revisions_d4805.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "666dc3f5436af8a8ff897bc008723a679a9b0490",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42466726911",
+      "createdAt": "2026-11-08T09:19:59Z",
+      "jobs": [
+        {
+          "id": 128688111483,
+          "name": "suite (worker-4-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42466726911/job/128688111483"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/fund_fees_d709.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "20ad2fdf625acd5293b17dfdedf203755771b25b",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42479734562",
+      "createdAt": "2026-11-08T12:19:56Z",
+      "jobs": [
+        {
+          "id": 128735609660,
+          "name": "suite (worker-4-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42479734562/job/128735609660"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/mercury_not_ours_d749.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "7e1ef629e1a606adbf2f55a0368f9fd695af7f5f",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42479907906",
+      "createdAt": "2026-11-08T12:22:02Z",
+      "jobs": [
+        {
+          "id": 128735844986,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42479907906/job/128735844986"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/portfolio_preview_route_4849.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "def0e2ccdc520eac0f419f2c5708085c358502f7",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42483489924",
+      "createdAt": "2026-11-08T13:08:06Z",
+      "jobs": [
+        {
+          "id": 128741212918,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42483489924/job/128741212918"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/distribution_ads_integration_4741.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "fe0e27e1a909f5afe761030ad209610254e8f68a",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42498091396",
+      "createdAt": "2026-11-08T16:05:25Z",
+      "jobs": [
+        {
+          "id": 128784974458,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42498091396/job/128784974458"
+        },
+        {
+          "id": 128784974485,
+          "name": "suite (rest)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42498091396/job/128784974485"
+        },
+        {
+          "id": 128784974497,
+          "name": "suite (worker-5-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42498091396/job/128784974497"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/collision_free_ids_d4106.test.ts",
+        "frontend/test/partner_delivery_stores.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "3a00d80dcbbe0b1f265043daa69588032f385f48",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42521384368",
+      "createdAt": "2026-11-08T20:41:16Z",
+      "jobs": [
+        {
+          "id": 128855715032,
+          "name": "suite (frontend-1-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42521384368/job/128855715032"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/portfolio_preview_route_4849.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "c985bb8701b251e453134814468f410a7277ea97",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42584721877",
+      "createdAt": "2026-11-09T08:16:18Z",
+      "jobs": [
+        {
+          "id": 129061117108,
+          "name": "suite (worker-5-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42584721877/job/129061117108"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/closing_guards_d1214.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "693fc01bcb39898b88803ff00366507fa6d5b6ea",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42599193512",
+      "createdAt": "2026-11-09T10:12:36Z",
+      "jobs": [
+        {
+          "id": 129117151312,
+          "name": "suite (worker-3-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42599193512/job/129117151312"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/licence_agreement_policies_d5052.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "ae3d410baba03114a15141351e52ed4b62665662",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42710956809",
+      "createdAt": "2026-11-09T22:20:15Z",
+      "jobs": [
+        {
+          "id": 129504226741,
+          "name": "suite (rest)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42710956809/job/129504226741"
+        },
+        {
+          "id": 129504226754,
+          "name": "suite (worker-3-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42710956809/job/129504226754"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/meeting_bot_operations_integration_d886.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "f63e474dd4372719b32b7a4fd67cf3ff9d6e2fac",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42780042965",
+      "createdAt": "2026-11-10T08:06:23Z",
+      "jobs": [
+        {
+          "id": 129709919192,
+          "name": "suite (worker-1-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42780042965/job/129709919192"
+        },
+        {
+          "id": 129709919196,
+          "name": "suite (rest)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42780042965/job/129709919196"
+        },
+        {
+          "id": 129709919201,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42780042965/job/129709919201"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/collision_free_ids_d4106.test.ts",
+        "frontend/test/partner_delivery_stores.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "ea10e0068a9df47ec110284409587eaa0b46b49c",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42803113947",
+      "createdAt": "2026-11-10T10:54:50Z",
+      "jobs": [
+        {
+          "id": 129798663379,
+          "name": "suite (frontend-1-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42803113947/job/129798663379"
+        },
+        {
+          "id": 129798663406,
+          "name": "suite (worker-4-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42803113947/job/129798663406"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/network_standing_d976.test.ts",
+        "frontend/test/data_room_d696.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "b8104691a3a0b8d38e49e7d583e8d7d4c07ec5ae",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42840577839",
+      "createdAt": "2026-11-10T15:04:35Z",
+      "jobs": [
+        {
+          "id": 129931233204,
+          "name": "suite (worker-4-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42840577839/job/129931233204"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/billing_refund_review_5037.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "a2ed07ffc032f4a13bc5196c42579e4d915aa8af",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42879697818",
+      "createdAt": "2026-11-10T18:53:13Z",
+      "jobs": [
+        {
+          "id": 130062423662,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42879697818/job/130062423662"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/data_room_d696.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "a2e6022928caf23599273fa968d1e1919139fe2d",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42880326922",
+      "createdAt": "2026-11-10T18:57:01Z",
+      "jobs": [
+        {
+          "id": 130068001358,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42880326922/job/130068001358"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/data_room_d696.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "88259fa4ab90aa3bbd1ffc144e6eb9441835c7e5",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42893733038",
+      "createdAt": "2026-11-10T20:16:56Z",
+      "jobs": [
+        {
+          "id": 130116949191,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42893733038/job/130116949191"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/data_room_d696.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "901fbb3cd876c996d4b9a806ee18492eb515c3a5",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42906715211",
+      "createdAt": "2026-11-10T21:36:38Z",
+      "jobs": [
+        {
+          "id": 130147872510,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42906715211/job/130147872510"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/google_workspace_build_gw3_d1093.test.mjs",
+        "frontend/test/vercel_hosting_d1097.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "701e8c03b70307e4791f2a874b40182b749fbfe1",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42980555955",
+      "createdAt": "2026-11-11T07:35:05Z",
+      "jobs": [
+        {
+          "id": 130391948245,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42980555955/job/130391948245"
+        }
+      ],
+      "failingFiles": [
+        "frontend/test/dr_drill_d263.test.mjs"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "27d52fe3d929c80baa4848072703f2dfd81d99a8",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/42987540260",
+      "createdAt": "2026-11-11T08:30:13Z",
+      "jobs": [
+        {
+          "id": 130412703707,
+          "name": "suite (worker-2-of-6)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/42987540260/job/130412703707"
+        }
+      ],
+      "failingFiles": [
+        "cloudflare-worker/test/trust_publish_notices_d4683.test.ts"
+      ],
+      "traceStatus": "not-recorded"
+    },
+    {
+      "firstRedCommit": "5f36014c9355e90724d47309b443e86bac15e362",
+      "runUrl": "https://github.com/AxalNetwork/StudioOS/actions/runs/43027309561",
+      "createdAt": "2026-11-11T13:14:23Z",
+      "jobs": [
+        {
+          "id": 130557707588,
+          "name": "suite (frontend-1-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/43027309561/job/130557707588"
+        },
+        {
+          "id": 130557707729,
+          "name": "suite (frontend-2-of-2)",
+          "url": "https://github.com/AxalNetwork/StudioOS/actions/runs/43027309561/job/130557707729"
+        }
+      ],
+      "failingFiles": [],
+      "traceStatus": "not-recorded"
+    }
+  ]
+}

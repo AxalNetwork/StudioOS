@@ -1,0 +1,34 @@
+{
+  "skill": "newsletter-program-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Newsletter Program Design",
+        "task_scope": "Designs newsletter purpose, audience segments, editorial format, cadence, governance and performance model.",
+        "evidence": [
+          "subscriber promise and audience segment"
+        ],
+        "omitted_field": "consent basis"
+      },
+      "project.summary": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for subscriber promise and audience segment."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "subscriber promise and audience segment"
+    ],
+    "must_say_not_recorded": [
+      "consent basis"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

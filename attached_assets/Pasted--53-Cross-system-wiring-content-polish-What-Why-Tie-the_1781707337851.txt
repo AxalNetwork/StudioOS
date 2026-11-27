@@ -1,0 +1,31 @@
+#53 - Cross-system wiring + content + polish
+What & Why
+Tie the assessment and event systems together and finish the build: badges from event participation, archetype surfacing on event views, recommendations, the canonical-vector matching wiring, the remaining track content, docs, landing teasers, and a final all-green pass. This is the closing phase that depends on both systems being in place.
+Done looks like
+* Matching wiring — routes/matches.ts, cofounder.ts, mentors.ts, investor_signals.tsread user_values/user_skills/the investor profile table: co-founder/key-hire skill-vector complementarity (cosine distance); values alignment on founder spectrums + Schwartz with top 1–2 divergences surfaced as "watch-outs"; investor↔founder thesis × value alignment × stage/sector; mentor/coach↔founder domain-radar overlap × style. Extreme self-claims lacking confidence/evidence/endorsement are down-weighted. A co-founder match score visibly changes after two users complete their games.
+* Content bank — migration 110_seed_assessment_content.sql (INSERT OR IGNORE on slug) authors the full item bank for the other five tracks (operators_path_v1, thesis_lab_v1, partner_playbook_v1, mentor_compass_v1, coachs_lens_v1), ≥12 items per track, covering each track's emphasis (spec §2), with canonical value/skill slugs. Every track has a playable, scored game.
+* Cross-system features — Demo Day Presenter badge awarded to founders in an event's agenda; Networker (5 check-ins) and Founding Attendee badges from check-ins (idempotent user_badges inserts). Attendee archetype card surfaced on event roster / networking views. Event suggestions by archetype/track; invite suggestions by matching.
+* Docs + teasers — admin docs sections (roles:['admin']) for both systems; landing page gets "Discover your archetype" + "Upcoming events" teasers; CHANGELOG.md + CHANGELOG-user.md updated.
+* Final gates — npm run test:drift, cd cloudflare-worker && npx tsc --noEmit, and npm run build all green. The summary lists the only manual ops steps (prod migration apply + wrangler route deploy).
+Out of scope
+* Re-implementing engine internals (A1/E1) or UI shells (A2/A3/E2/E3/E4) — this phase only wires, seeds, and polishes.
+Steps
+1. Matching — extend the four matching routes to read the canonical vectors with the described scoring and down-weighting.
+2. Content seed — write migration 110_seed_assessment_content.sql for the five remaining tracks following the founder_origin_v1pattern.
+3. Cross-system badges + surfacing — award the event-driven badges idempotently; surface the archetype card on event/networking views; add archetype/match-based suggestions.
+4. Docs + landing teasers — add the admin docs sections and the landing teasers.
+5. Final all-green pass — run drift + tsc + build; update both changelogs; summarise manual ops steps.
+Relevant files
+* cloudflare-worker/src/routes/matches.ts
+* cloudflare-worker/src/routes/cofounder.ts
+* cloudflare-worker/src/routes/mentors.ts
+* cloudflare-worker/src/routes/investor_signals.ts
+* cloudflare-worker/sql/migrations/090_seed_skills_values_taxonomy.sql
+* frontend/src/pages/docs/sections/admin.js
+* frontend/src/pages/docs/sections/index.js
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#47 - Assessment admin authoring + analytics
+#48 - Assessment results → matching + full track content
+#52 - Event admin moderation, reminders, comp, tickets

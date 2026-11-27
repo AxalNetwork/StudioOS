@@ -1,0 +1,50 @@
+Objective
+  Sector Compass, Founder Lens, Investor Lens, Geography Lens,
+  Citations & Methodology, Custom Watchlist, Axal Investor Signals —
+  all return "Not Found". Build the endpoints + the aggregator.
+
+Tasks
+  1. cloudflare-worker/src/routes/market_intel.ts
+       Replace stub with real handlers:
+         GET /sector-compass?role=&persona=
+         GET /founder-lens?sector=&geo=&window=
+         GET /investor-lens?sector=&stage=
+         GET /geography-lens?sector=&metric=
+         GET /citations?since=
+         GET /watchlist                    user's saved
+         POST /watchlist
+         DELETE /watchlist/:id
+         GET /investor-signals?sector=&stage=&geo=
+       Auth: requireAuth + tier check per Prompt AA (Free → only
+       sector-compass overview).
+
+  2. cloudflare-worker/src/services/market_intel/
+       aggregator.ts + sources/ — per Prompt AA architecture. Start
+       with the free sources first (sec_edgar, google_trends, reddit,
+       hackernews, producthunt, github_trending, world_bank, oecd,
+       gdelt, arxiv, paperswithcode, builtwith, stack_exchange,
+       crunchbase via Prompt O).
+
+  3. Tables:
+       market_intel_rows (already partly used)
+       market_intel_indexes (sector × metric × ts composite scores)
+       market_intel_watchlist (user_id, sector, filters_json, digest_freq)
+       investor_profiles (Prompt E)
+       investor_signals_snapshots
+
+  4. Cron triggers
+       "0 */6 * * *"  → run free connectors
+       "0 4 * * *"    → compute composite indexes; refresh
+                        investor_signals_snapshots
+
+  5. Frontend (frontend/src/pages/MarketIntelPage.jsx)
+       Render each tab against its endpoint. Use cheap recharts charts
+       + skeleton loaders. Suppress cells with n<5 on investor-signals
+       (k-anonymity).
+
+Acceptance
+  - All seven sub-tabs render with real data (or "Insufficient data"
+    where rows are sparse).
+  - Watchlist add/remove persists; weekly digest job sends an email.
+  - Tier gating enforced server-side.
+  - Citations tab lists every source URL with ingest timestamp.

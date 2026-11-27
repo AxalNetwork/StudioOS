@@ -1,0 +1,452 @@
+import BuildFacts from './BuildFacts.jsx';
+import { Children, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Unreadable } from '../../ui';
+import { BuildStateTag } from './BuildStates.jsx';
+import { cellState } from './buildSystemStates.js';
+import { FillMark } from '../../ui/FillMark.jsx';
+import { CardBody, CycleHeader } from './CycleOverview';
+import { recordHref, recordId, rowLinks } from './recordModel.js';
+import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
+import { growTabCounts } from './growOverviewModel.js';
+import { cardView, cellView, cycleOf, isPlainClick, moduleSubtitle, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { verdictInterviewLine } from './validatePhone.js';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
+import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
+
+/**
+ * D661 (#1474) — one module page for all 26 modules, drawn to
+ * `Cycle Overview.dc.html`'s `module=0…6` and `Cycle Modules · Boards.dc.html`
+ * from #1469's module read:
+ *
+ *   { module, card: Card, records: { cols, rows, total, page, page_size,
+ *     filters?, sorts?, add? } }
+ *
+ * The tabs, the module's chart at full size with its caption and next action,
+ * then its records as a working table (search, filters, sort, pages, Add),
+ * then the module's further parts (`children`).
+ *
+ * The table's controls are the read's own query (`q`, `filter`, `sort`,
+ * `page`): the page hands them to `onQuery`, and the caller re-reads. Nothing
+ * is filtered in the browser, so a count is always the store's count.
+ *
+ * A module that already has a full working tool (the cap table, the data
+ * room, the pitch deck, the capital pipeline, the roadmap) is linked through
+ * `tool`, not redrawn here.
+ *
+ * A read refused on purpose (`status: 'refused'`, D693 #1704: a partner on
+ * Verdict) draws the Worker's sentence in a neutral box, with no chart, no
+ * table and no Retry: nothing broke, so there is nothing to try again.
+ */
+
+const PILL = {
+  v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  v2: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  v3: 'border-axal-lavender-edge bg-white text-axal-violet-deep dark:border-violet-800 dark:bg-gray-900 dark:text-violet-300',
+  ok: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+  warn: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  grey: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
+  muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
+};
+export const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
+const CONTROL = 'rounded-full border border-axal-hairline bg-white px-[11px] py-[5px] text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+export function Cell({ cell, first = false, linkState = undefined, plain = false }) {
+  if (cell?.blank === true) return null;
+  // D1327: a provenance cell is Fill with Eadwyn's one mark.
+  if (cell && typeof cell === 'object' && cell.fill) return <FillMark mark={cell.fill} />;
+  const v = cellView(cell);
+  // D4846 part 2 (#6032, BD14 A): a cell that is a state (Not recorded, Not expected yet, Unavailable, Waiting,
+  // Needs attention, Read only) draws that state's one chip, so none carries another's weight.
+  const st = cellState(cell);
+  if (st) return <BuildStateTag state={st.state} label={st.label} />;
+  // #6030: several links, each its own record (a pain theme, a hypothesis), drawn apart.
+  if (!plain && v.links) {
+    return <span className="flex flex-wrap gap-x-2 gap-y-0.5" data-testid="cell-links">{v.links.map((l, i) => (l.href
+      ? <Link key={i} to={l.href} state={linkState} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{l.text} →</Link>
+      : <span key={i} className="text-axal-ink/80 dark:text-gray-300">{l.text}</span>))}</span>;
+  }
+  const text = !plain && v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
+  const value = v.tone ? <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[v.tone]}`}>{text}</span>
+    : <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
+  if (!v.note) return value;
+  // #6006: the cell's note lines, small and muted under the value.
+  return <span className="inline-flex flex-col items-start gap-0.5">{value}
+    {v.note.map((line, i) => <span key={i} className="text-[11px] font-normal leading-snug text-axal-muted dark:text-gray-400" data-testid="cell-note">{line}</span>)}</span>;
+}
+
+/**
+ * `rowAction(row)` → `{ text, label, onClick }` or null: one control at the
+ * end of each row the caller can act on (Edit). A row it returns null for
+ * draws an empty cell, so the columns stay aligned.
+ *
+ * Each `add` entry is `{ text, href, state?, onOpen?, onClick? }`. A link
+ * passes its `state` on, so an Add's `/new` address carries `state.under`
+ * and closing it can go back to the page that opened it (D695).
+ */
+/**
+ * D5076: `progressive` is the module's zero-state copy (`progressiveList.js`).
+ * With it, the table draws by stage: zero → one guided first action and
+ * nothing else; few → rows, one Add and a plain count; many → everything.
+ */
+export function ZeroState({ copy, add, more = [], testid = 'records-zero' }) {
+  const addHref = safeHref(add?.href);
+  const className = 'inline-flex min-h-[44px] items-center justify-center rounded-[10px] bg-axal-violet px-4 py-2.5 text-[13.5px] font-bold text-white hover:bg-axal-violet-deep';
+  return (
+    <div className="flex flex-col items-start gap-2.5 px-4 py-5" data-testid={testid}>
+      <h3 className="m-0 text-[16px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{copy.heading}</h3>
+      <p className="m-0 max-w-[60ch] text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{copy.outcome}</p>
+      {add?.onClick ? <button type="button" onClick={add.onClick} className={className} data-testid="records-zero-action">{add.text}</button>
+        : addHref ? <Link to={addHref} state={add.state} data-testid="records-zero-action" aria-haspopup={add.onOpen ? 'dialog' : undefined}
+          onClick={add.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); add.onOpen(); } } : undefined} className={className}>{add.text}</Link> : null}
+      {/* Another form's Add stays subordinate to the first action. */}
+      {more.map((m) => <Link key={m.text} to={safeHref(m.href)} state={m.state} data-testid="records-zero-secondary-add"
+        className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{m.text}</Link>)}
+    </div>
+  );
+}
+
+/**
+ * D6124 (#6124): the table's Export, drawn beside Add only when the page hands
+ * an `onExport` (the Worker said `records.exportable`: a writer, on a module
+ * that has one) and the table has rows. The file is the Worker's, of every row
+ * the search, filters and sort select; a refusal shows the Worker's sentence.
+ */
+export function ExportButton({ onExport, className = 'whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30' }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (typeof onExport !== 'function') return null;
+  const run = async () => {
+    setBusy(true); setError('');
+    try { await onExport(); } catch (cause) { setError(cause?.message || 'The export could not be written.'); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" onClick={run} disabled={busy} className={className} data-testid="records-export">{busy ? 'Exporting…' : 'Export'}</button>
+      {error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="records-export-error">{error}</span>}
+    </>
+  );
+}
+
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, progressive = null, onExport = undefined }) {
+  const [text, setText] = useState(query.q || '');
+  const cols = Array.isArray(records?.cols) ? records.cols : [];
+  const rows = Array.isArray(records?.rows) ? records.rows : [];
+  const filters = Array.isArray(records?.filters) ? records.filters : [];
+  const sorts = Array.isArray(records?.sorts) ? records.sorts : [];
+  const count = recordsCount(records);
+  const addButtons = Array.isArray(add) ? add : [add || records?.add].filter(Boolean);
+  const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
+  const acts = typeof rowAction === 'function';
+  const tracks = cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)'));
+  const grid = { gridTemplateColumns: [...tracks, ...(acts && tracks.length ? ['auto'] : [])].join(' ') || '1fr' };
+  const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
+  const stage = progressive && status === 'ready' ? moduleStage(records, query, progressive) : 'many';
+  const controls = stage === 'many';
+
+  if (stage === 'zero') {
+    const usable = (a) => a?.text && (a.onClick || safeHref(a.href));
+    const firstRaw = addButtons.find(usable) || null;
+    const first = dominantAdd(firstRaw ? [firstRaw] : [], null, progressive);
+    return (
+      <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-records" data-stage="zero">
+        <ZeroState copy={progressive} add={first} more={addButtons.filter((a) => a !== firstRaw && a?.text && !a.onClick && safeHref(a.href))} />
+      </section>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-records" data-stage={progressive ? stage : undefined}>
+      <div className="flex flex-col gap-2.5 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{title}</h2>
+          <div className="flex flex-wrap gap-2">{addButtons.map((addBtn) => {
+            const addHref = safeHref(addBtn?.href);
+            const className = 'whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
+            return addBtn?.text && (addBtn.onClick
+              ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
+              : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
+          })}
+          {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
+          {/* D6043 (#6043): Export from the 'few' stage on (the zero stage returned above), once the list has read. */}
+          </div>
+        </div>
+        {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
+          <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
+            className="w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+        </form>}
+        {controls && (filters.length > 0 || sorts.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {filters.map((f) => (
+              <select key={f.key} aria-label={f.label} className={CONTROL} value={query.filter?.[f.key] || ''}
+                onChange={(e) => set({ filter: { ...(query.filter || {}), [f.key]: e.target.value } })}>
+                <option value="">{f.label}: all</option>
+                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{optionLabel(o)}</option>)}
+              </select>
+            ))}
+            {sorts.length > 0 && (
+              <select aria-label="Sort" className={`${CONTROL} ml-auto`} value={query.sort || sorts[0].key} onChange={(e) => set({ sort: e.target.value })}>
+                {sorts.map((s) => <option key={s.key} value={s.key}>Sort: {s.label}</option>)}
+              </select>
+            )}
+          </div>
+        )}
+      </div>
+
+      {status === 'unreadable' && <div className="px-4 py-3"><Unreadable what={`The ${String(title || 'records').toLowerCase()}`} claim={message || 'This is not a claim that there are none.'} onRetry={onRetry} /></div>}
+      {status === 'loading' && <div className="flex flex-col gap-2 px-4 py-3" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-4 rounded bg-axal-ground dark:bg-gray-800" />)}</div>}
+      {status === 'ready' && (
+        <>
+          {cols.length > 0 && (
+            <div role="row" className="hidden gap-2.5 border-b border-axal-hairline bg-axal-ground/60 px-4 py-2 text-[10.5px] font-bold uppercase tracking-[.06em] text-axal-muted lg:grid dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400" style={grid}>
+              {cols.map((c) => <span key={c.key} role="columnheader">{c.label}</span>)}
+              {acts && <span role="columnheader" className="sr-only">Actions</span>}
+            </div>
+          )}
+          {rows.length === 0 && (
+            <p className="m-0 px-4 py-5 text-[13px] text-axal-muted dark:text-gray-400" data-testid="records-empty">
+              {searching ? 'Nothing matches this search.' : 'No records yet.'}
+            </p>
+          )}
+          {rows.map((r, ri) => {
+            const href = rowHref?.(r);
+            return (
+            <div key={r.id ?? ri} role="row" className="relative grid grid-cols-2 items-center gap-x-2.5 gap-y-1 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 lg:[grid-template-columns:var(--cols)] dark:border-gray-800" style={{ '--cols': grid.gridTemplateColumns }}>
+              {cols.map((c, ci) => (
+                <span key={c.key} role="cell" className={ci === 0 ? 'col-span-2 lg:col-span-1' : ''}>
+                  {ci > 0 && <span className="mr-1.5 text-[10.5px] uppercase tracking-[.06em] text-axal-faint lg:hidden">{c.label}</span>}
+                  {ci === 0 && href ? <Link to={href} className="after:absolute after:inset-0 focus-visible:underline">
+                    <Cell cell={r.cells?.[c.key]} first plain />
+                  </Link> : <span className={r.cells?.[c.key]?.separateLink ? 'relative z-10' : undefined}><Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href && !r.cells?.[c.key]?.separateLink} /></span>}
+                </span>
+              ))}
+              {acts && <RowAction action={rowAction(r)} />}
+            </div>
+          ); })}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5" data-testid="records-count">
+            <span className="text-[12px] text-axal-muted dark:text-gray-400">{controls ? count.label : fewCountLabel(records, progressive)}</span>
+            {count.pages > 1 && (
+              <nav aria-label="Pages" className="flex gap-1">
+                <button type="button" className={CONTROL} disabled={count.page <= 1} onClick={() => onQuery?.({ ...query, page: count.page - 1 })} aria-label="Previous page">‹</button>
+                {pageButtons(count.page, count.pages).map((p, i) => (p === '…'
+                  ? <span key={`e${i}`} className="px-1.5 text-[12px] text-axal-muted">…</span>
+                  : <button key={p} type="button" aria-current={p === count.page ? 'page' : undefined} onClick={() => onQuery?.({ ...query, page: p })}
+                    className={`${CONTROL} ${p === count.page ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : ''}`}>{p}</button>))}
+                <button type="button" className={CONTROL} disabled={count.page >= count.pages} onClick={() => onQuery?.({ ...query, page: count.page + 1 })} aria-label="Next page">›</button>
+              </nav>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function RowAction({ action }) {
+  return (
+    <span role="cell" className="col-span-2 lg:col-span-1 lg:justify-self-end">
+      {action?.text && typeof action.onClick === 'function' && (
+        <button type="button" onClick={action.onClick} aria-label={action.label || action.text} data-testid="records-row-action"
+          className="relative z-10 rounded-[9px] border border-axal-hairline px-2.5 py-1 text-[11.5px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:text-violet-300 dark:hover:bg-violet-900/30">
+          {action.text}
+        </button>
+      )}
+    </span>
+  );
+}
+
+/**
+ * D5077 (#5077; Build v2 boards BD7, BD8, BD18 A) — THE SOURCES REGION: what the
+ * venture's tools report for this module, below the module's own work and never
+ * above it. Its one action, "Connect or manage tools", opens Connect a tool (the
+ * cycle's action, which no longer sits in a Build module's header). Each part
+ * keeps its own boundary (`buildParts.jsx`), so one failing tool reads
+ * Unreadable with its own Retry and the others stay drawn.
+ *
+ * Before the first record (D5076, BD18 A) the region is one closed line, so a
+ * page with nothing recorded shows no connector state; it is still one press
+ * away. From the first record it is an open section under the records.
+ */
+export function Sources({ children, phone = false, zero = false, action = null, drafts = false, fold = null }) {
+  const manage = <ManageTools action={action} />;
+  if (zero) {
+    return (
+      <details className={`group rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900 ${phone ? 'mt-[18px]' : ''}`.trim()} data-testid="module-sources" data-stage="zero">
+        <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 px-4 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
+          {/* D6100: a module's own fold label (progressiveList.js `fold`) where it sets one. */}
+          <span>{fold || (drafts ? 'Sources and Eadwyn drafts' : 'Sources')}</span>
+          <span className="text-[11.5px] font-normal text-axal-faint dark:text-gray-500">What your tools report appears here once the first record exists</span>
+        </summary>
+        <div className="flex min-w-0 flex-col gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">{manage}{children}</div>
+      </details>
+    );
+  }
+  return (
+    <section className={`flex min-w-0 flex-col gap-3 ${phone ? 'mt-[22px]' : ''}`.trim()} aria-labelledby="module-sources-title" data-testid="module-sources" data-stage="open">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="module-sources-title" className="m-0 text-[13.5px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">Sources · what your tools report</h2>
+        {manage}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** The Sources region's one action: Connect a tool, as a dialog over the page where the cycle offers one. */
+function ManageTools({ action }) {
+  const href = safeHref(action?.href);
+  if (!href) return null;
+  return (
+    <Link to={href} data-testid="module-sources-manage" aria-haspopup={action.onOpen ? 'dialog' : undefined}
+      onClick={action.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}
+      className="text-[12px] font-bold text-axal-violet-deep hover:underline dark:text-violet-300">Connect or manage tools →</Link>
+  );
+}
+
+/**
+ * D5077 (BD18 A): Ask Eadwyn on a module with nothing recorded yet: the module's
+ * own asks, which never run on their own. Each opens the one Ask panel with its
+ * words in the composer; the box opens it empty. No model, price or allowance is
+ * drawn here: those stay in the rail's AI settings (BD21 A).
+ */
+export function ModuleAskView({ asks, available, onAsk }) {
+  const list = Array.isArray(asks) ? asks.filter((a) => typeof a === 'string' && a.trim()) : [];
+  if (!available || list.length === 0 || typeof onAsk !== 'function') return null;
+  const chip = 'rounded-full border border-axal-lavender-edge bg-white px-3 py-1.5 text-[12px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-violet-800 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30';
+  return (
+    <section className="flex flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900" aria-label="Ask Eadwyn about this module" data-testid="module-ask">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <b className="text-[13px] text-axal-ink dark:text-gray-100">Ask Eadwyn</b>
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Suggestions never run on their own</span>
+      </div>
+      <button type="button" onClick={() => onAsk('')} data-testid="module-ask-open"
+        className="min-h-[40px] rounded-[9px] border border-axal-hairline bg-axal-ground/60 px-3 text-left text-[13px] text-axal-muted hover:border-axal-lavender-edge dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
+        Ask about this module…
+      </button>
+      <div className="flex flex-wrap gap-1.5">
+        {list.map((a) => <button key={a} type="button" className={chip} onClick={() => onAsk(a)} data-testid="module-ask-chip">{a}</button>)}
+      </div>
+    </section>
+  );
+}
+
+/** `ModuleAskView` where the rail's Ask serves this viewer; nothing where it does not (a support session, an Explorer). */
+export function ModuleAsk({ asks }) {
+  const ask = useAskPanel();
+  return <ModuleAskView asks={asks} available={ask.available} onAsk={(q) => openAskPanel(undefined, q)} />;
+}
+
+export default function CycleModulePage({
+  cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
+  // D5077 (#5077): the module's connector parts, drawn in the Sources region below the records; the
+  // region's Connect or manage tools (`sourcesAction`); and the module's Eadwyn asks for the zero state.
+  sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a mature tool that owns its page (`{ sub }`): its `subnav` is the page, so the module's
+  // generic "at a glance", its tool doors and its records are not drawn under it, and the header says the tool's line.
+  owned = null,
+  // D6049 (#6049, RA-16): a module that owns its page draws `home(...)` in place of the generic chart
+  // and records table, with the header's line (`sub`) its own. Only Fundraising readiness has one.
+  home = null, sub = undefined,
+}) {
+  const meta = cycleOf(cycle);
+  if (!meta) return null;
+  const card = data?.card || null;
+  const view = cardView(card);
+  const interviewLine = verdictInterviewLine(data);
+  // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
+  const name = card?.name || data?.module?.name || moduleName || slug;
+  // D6010: a cycle's `tool` may be one link or several (Market intelligence draws two).
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href));
+  const recs = records ?? data?.records;
+  // D5076: on a Build module with no records, the zero state's first action is
+  // the page's one dominant action: the header's and the card's step give way.
+  const progressive = progressiveFor(meta.key, slug);
+  const recsStatus = recordsStatus || (recs ? 'ready' : status);
+  const zero = !!progressive && showRecords && status === 'ready' && recsStatus === 'ready' && moduleStage(recs, query, progressive) === 'zero';
+  // The card's step is the table's own Add on a progressive module: draw it once, in the table.
+  const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
+  const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
+  const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
+  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? moduleStage(recs, query, progressive) : undefined;
+  // D6004: with a few records the header's action gives way when it is the table's own Add (Customer research's Record a session).
+  const dupAction = stage === 'few' && !!action?.label && addTexts.includes(action.label);
+  // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
+  const hasChildren = Children.toArray(children).length > 0;
+  const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
+  // D6049's `home(...)` and D5081's `owned` both own the page; `home` draws the module's own Home, `owned` the tool's subnav.
+  const ownsHome = typeof home === 'function';
+  const doors = toolLinks.map((item) => (
+    <Link key={item.href} to={item.href} className={MODULE_LINK_CLASS} data-testid="cycle-module-tool">
+      {item.label || `Open ${name}`}
+    </Link>
+  ));
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : moduleSubtitle(meta.key, slug, card?.caption)} tabCounts={meta.key === 'grow' ? growTabCounts(slug, data) : null} search={search} more={more} /> : header}
+      {header === null && more ? <div className="flex justify-end">{more}</div> : null}
+      {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
+      {subnav}
+      {status === 'refused' ? (
+        <p role="status" className="m-0 rounded-xl border border-axal-hairline bg-axal-ground px-4 py-3.5 text-[13px] leading-relaxed text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="cycle-module-refused">
+          {message || 'You do not have access to this module.'}
+        </p>
+      ) : status === 'unreadable' ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-module-unreadable">
+          <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
+        </div>
+      ) : ownsHome ? (
+        <>
+          {/* D5078 (#5078): a home that `placesSources` draws the Sources region where it belongs (Operating systems › Tools).
+              D6120 (#6120): the table's own query too, so a page that owns its list filters and sorts through the read.
+              D6038 (#6038): a home that lists its own table gets its row control, Export and the tool doors; one
+              that sets `drawsTools` draws those doors itself (Company creation's supporting tools, BD11). */}
+          {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search,
+            query, onQuery, rowAction, onExport, tools: toolLinks,
+            sources: sources ? <Sources action={sourcesAction}>{sources}</Sources> : null })}
+          {home.drawsTools ? null : doors}
+          {children}{sources && !home.placesSources && <Sources action={sourcesAction}>{sources}</Sources>}
+        </>
+      ) : owned ? children : (
+        <>
+          <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-module-chart" data-state={view.state}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2.5">
+              <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{name} · at a glance</h2>
+              {card?.range && <span className="text-[11px] text-axal-faint dark:text-gray-500">{card.range}</span>}
+            </div>
+            <CardBody card={shownCard} onRetry={onRetry} search={search} />
+            {view.state === 'ok' && card.caption && <span className="text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{card.caption}</span>}
+            {/* D757 §2.6 (#1928): Verdict's interview evidence since the last decision, writers only. */}
+            {interviewLine && <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
+
+          </section>
+          <BuildFacts cycle={cycle} slug={slug} data={data} status={status} />
+          {doors}
+          {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
+          {aboveRecords}
+          {showRecords && <RecordsTable
+            key={`${meta.key}/${slug}`}
+            title={data?.module?.records_title || name}
+            records={recs}
+            status={recsStatus}
+            message={recordsMessage}
+            query={query}
+            onQuery={onQuery}
+            onRetry={onRetryRecords || onRetry}
+            add={add}
+            rowAction={rowAction}
+            progressive={progressive}
+            onExport={onExport}
+            rowHref={rowHref}
+          />}
+          {/* D5077 (BD18 A): before the first record, the module's own asks; the rail carries them after. */}
+          {zero && <ModuleAsk asks={asks} />}
+          {zero
+            ? (hasChildren || sources) && <Sources zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
+            : <>{children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}</>}
+        </>
+      )}
+    </div>
+  );
+}

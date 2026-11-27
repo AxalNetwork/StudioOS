@@ -1,0 +1,83 @@
+Claude Code is mid-flight with a large multi-agent restoration (6 commits pushed, 12 more implementation agents still running). Here's a Replit verification prompt tailored to this exact branch and commit set, to run once the branch is ready — or incrementally as commits land.
+
+## Replit prompt
+
+Verify the Spin-Out Lab UI restoration work on branch `claude/spinout-lab-workspace-wuyyqd` (commits `226e79c..0c26ecc` and any additional commits pushed after this point). Claude Code ran a 20-page audit-and-restore against the original Claude Design source and is committing fixes per page/unit. Your job is to confirm every commit actually works in the running app, nothing regressed, and the branch is safe to merge.
+
+### Step 1: Sync and build
+
+1. Checkout `claude/spinout-lab-workspace-wuyyqd` and pull latest (there may be more commits beyond `0c26ecc` if the remaining 12 agents finished — check `git log` for anything after that hash).
+2. Run a clean install and build. Note: Claude Code reported fighting Replit's package firewall (registry MITM on the "direct" route, needed `NO_PROXY` blanked). Confirm the install actually succeeds cleanly in this environment before testing anything — if the firewall issue recurs, resolve it first since Claude Code's own build verification was blocked by this.
+3. Confirm zero build errors and zero new console warnings.
+4. Boot the app and confirm no runtime exceptions on startup.
+
+### Step 2: Verify each committed unit individually
+
+Go commit-by-commit and verify the specific claim made for each:
+
+1. **`ef5ea41` — audit report**: confirm this is documentation only, no functional code changed.
+2. **`f09f978` — Office Hours crash fix**: load the Office Hours page and confirm it no longer crashes. Test whatever the original crash trigger was (check the diff for the exact code path).
+3. **`dc4efa1` — Workspace week-overview + chrome**: this touched `SpinoutLabWorkspace.jsx` heavily (WEEK_DEFS panels/preview pills, tool descriptions, week-overview view state, preview ring, completion dates, full-bleed container, sticky header, violet segmented bar, week-overview view wrapper). This was flagged as "the riskiest edit." Specifically verify:
+   - The workspace shell renders correctly with the sticky header and segmented bar.
+   - Week-overview view state toggles correctly between views.
+   - Preview pills and completion dates display real data, not placeholders.
+   - The `ws-glow` keyframe animation added to `index.css` actually renders (check for the glow effect, confirm no CSS conflicts).
+   - No regression to the CohortDeadlineBanner (frozen/grace/countdown states) or `state.cohort_timing` — this was explicitly on the preserve list.
+4. **`28e4516` — Roadmap modal/list fidelity**: open the Roadmap page, test the modal open/close, and confirm the list view matches expected fidelity fixes.
+5. **`77942a7` — Profiling archetype detail + toolbar**: open Profiling, verify archetype detail view and toolbar actions all function.
+6. **`0c26ecc` — entry/marketing/apply/brief unit** (291+/202− across 4 files): test the full apply flow end-to-end — entry page, marketing page, apply page submission, and brief page — confirm forms submit and data persists correctly given this was a large diff.
+
+### Step 3: Verify remaining in-flight agent work
+
+Check whether these 12 units have landed as additional commits since `0c26ecc`, and if so, verify each:
+
+- Scoring
+- Market Intel (flagged as "the FAIL page" — pay extra attention here, confirm it doesn't literally fail/crash)
+- Cap Table
+- Use of Funds
+- Capital
+- Co-founder Agreement
+- Advisors
+- Office Hours (quick actions + editable brief — note this is a second pass beyond the earlier crash fix)
+- Pitch Deck (share sheet + export modal)
+- Brand (inline editor + publish)
+- Discovery
+- Revenue
+
+For each, confirm: page renders, restored UI elements are clickable and functional (not just visually present), forms/editors save correctly, and no console errors on interaction.
+
+### Step 4: Verify the explicit preserve-list held
+
+Claude Code named specific things that must not have regressed. Confirm directly:
+
+1. **CohortDeadlineBanner** — all states (frozen, grace, countdown) still render correctly and pull from `state.cohort_timing` as before, not hardcoded.
+2. **Cohort admin API surface** — confirm admin cohort management endpoints/actions still function unchanged.
+3. #176 additions — confirm whatever was merged in PR #176 (Startup page design-fidelity fixes) is still intact and wasn't overwritten by this branch restarting from main.
+4. **`projects` backend fields** — confirm `tam`/`sam`/`som` with SAM≤TAM validation still works correctly in the Market Intel/drawer UI, and that `competitor_analysis` data displays correctly if that page reads from it.
+
+### Step 5: Cross-cutting checks
+
+1. **Auth/role gating** — log in as founder and as admin, confirm page visibility and actions are correctly scoped on every restored page.
+2. **Cohort week-gating** — confirm locked/unlocked states per week still work correctly across the restored workspace shell and haven't been bypassed by the UI restructure.
+3. **No faked backend state** — Claude Code's instructions to the implementation agents explicitly forbade "faking backend state." Spot-check a few pages (especially Scoring, Cap Table, Revenue) to confirm displayed data is genuinely pulled from real API/DB calls, not mocked or hardcoded during the restoration.
+4. **Import resolution** — Claude Code noted Bun only checks syntax, not cross-file imports, and did a manual resolve check for the entry/marketing/apply/brief unit. Run a full import/dependency check across all changed files to confirm nothing broke silently.
+
+### Step 6: Report
+
+Produce:
+
+- **Per-commit pass/fail** with specific reproduction notes for any failure.
+- **Per-page pass/fail** for all 20 pages, noting which were verified functionally (clicked/submitted) vs. only visually.
+- **Confirmation status** on each of the 4 preserve-list items.
+- **Any console errors, failed network requests, or React warnings** found during interaction testing, tied to specific page and action.
+- **Build/firewall status** — confirm whether the install/build actually succeeded cleanly in this environment or if the registry issue is still blocking real verification.
+- **Overall merge readiness verdict** for `claude/spinout-lab-workspace-wuyyqd` — safe to open/merge the draft PR, or does anything need to go back to Claude Code first.
+
+### Constraints
+
+- Test live in the running app — do not mark anything "verified" from diff review alone.
+- Flag explicitly if the remaining 12 agent commits haven't landed yet at time of testing, and note which ones are still outstanding.
+- If the package firewall issue blocks a real build, report that as a blocker rather than skipping build verification silently.
+- Any regression to the preserve-list items (CohortDeadlineBanner, cohort admin API, #176 fixes, TAM/SAM/SOM validation) should be treated as critical and reported first.
+
+Sources

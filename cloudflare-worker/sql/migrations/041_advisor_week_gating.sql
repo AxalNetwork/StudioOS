@@ -1,0 +1,18 @@
+-- Task #2 (AR) — Persona Banks + Spin-Out Week Gating.
+--
+-- Adds `users.spinout_lab_week` (1..4) to drive week-gated visibility
+-- in the new persona banks. Default 1 means every existing user
+-- starts in Week 1 of the Spin-Out Lab; the auto-advance loop in
+-- writeRouter.recordSpinoutMilestoneAndAdvance bumps it as
+-- milestones complete.
+--
+-- D1/SQLite has no `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, so on
+-- environments where the column was previously added out-of-band
+-- (e.g. via `wrangler d1 execute --command`) re-running this file
+-- will report `duplicate column name: spinout_lab_week` and the
+-- migration runner will roll the file back. This is the established
+-- repo convention (see migrations 007 and 024 in replit.md "Persistent
+-- gotchas"). Belt-and-braces: the worker also runs
+-- `ensureAdvisorWeekColumn()` lazily on the first /advisor request
+-- so dev/SQLite databases that skipped this file still self-heal.
+ALTER TABLE users ADD COLUMN spinout_lab_week INTEGER DEFAULT 1;

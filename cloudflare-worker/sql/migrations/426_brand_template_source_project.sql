@@ -1,0 +1,12 @@
+-- 426 — the project a saved brand template came from (D636, #1394).
+--
+-- The Ops canvas's Brand screen (sp-brand) lists each saved template as
+-- "from [Project]". Templates are kept per founder, across all their projects,
+-- and until now nothing recorded which project a template was saved from.
+-- POST /api/brand/custom-templates writes it from the page being saved.
+-- Nothing is backfilled: a template saved before this migration has no source
+-- recorded, and the screen says so rather than guessing one.
+--
+-- Not re-runnable (SQLite has no ADD COLUMN IF NOT EXISTS); the migration
+-- ledger stops the replay.
+ALTER TABLE brand_custom_templates ADD COLUMN source_project_id INTEGER;

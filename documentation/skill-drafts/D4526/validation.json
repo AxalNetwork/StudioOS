@@ -1,0 +1,17 @@
+{
+  "definitions": 70,
+  "cases": 70,
+  "counts": {
+    "legal_compliance": 16,
+    "design": 20,
+    "marketing_brand": 19,
+    "gtm_sales": 15
+  },
+  "repository_slug_collisions": 0,
+  "negative_checks": 560,
+  "importer_validation": "passed",
+  "case_validation": "passed",
+  "model_evaluations": "not_run",
+  "d1_duplicate_check": "pending_before_import",
+  "production_writes": 0
+}

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    a:focus-visible,button:focus-visible{outline:2px solid #6d28d9;outline-offset:3px;border-radius:6px}
+    .ab{padding:44px 48px 40px;border-bottom:1px solid rgba(20,17,24,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px 'Roboto Mono',ui-monospace,monospace;padding:4px 8px;background:#141118;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#6b6577;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#faf9fc;border:1px solid #dedce4;border-radius:12px;overflow:hidden}
+    .wrap{max-width:1080px;margin:0 auto;padding:0 34px;box-sizing:border-box}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eb{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#6b6577}
+    .ebv{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#6d28d9}
+    .ebd{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#a78bfa}
+    .h2{margin:12px 0 0;font-size:28px;line-height:1.14;font-weight:800;letter-spacing:-.025em;color:#141118}
+    .p{font-size:14.5px;color:#4a4553;line-height:1.7}
+    .card{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:10px;font-size:13.5px;font-weight:700;border:1px solid transparent;cursor:pointer;white-space:nowrap}
+    .btn-p{background:#6d28d9;color:#fff;border-color:#6d28d9}.btn-p:hover{background:#7c3aed;color:#fff}
+    .btn-w{background:#fff;color:#241f38;border-color:#fff}.btn-w:hover{color:#241f38}
+    .btn-g{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}.btn-g:hover{color:#fff;border-color:#a78bfa}
+    .fld{display:inline-flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+    .fb{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:600;color:#6b6577;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:5px;padding:2px 6px}
+    .fbd{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9.5px;font-weight:600;color:rgba(255,255,255,.62);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:5px;padding:2px 6px}
+    .nav a{font-size:13px;font-weight:600;color:#4a4553;padding:6px 2px}
+    .side{width:220px;flex:none;background:#fff;border-right:1px solid #e8e6ee;padding:14px 0;display:flex;flex-direction:column}
+    .srow{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .srow.on{color:#6d28d9;background:#f4f0fe;font-weight:700;box-shadow:inset 2px 0 0 #6d28d9}
+    .trk{flex:1;min-width:0;text-align:left;font-family:inherit;padding:16px 18px;border-radius:13px;border:1px solid #e8e6ee;background:#fff;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+    .trk.on{border-color:#6d28d9;box-shadow:inset 0 0 0 1px #6d28d9;background:#faf8ff}
+    .jur{flex:1;min-width:0;text-align:left;font-family:inherit;padding:11px 13px;border-radius:10px;border:1px solid #e8e6ee;background:#fff;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+    .jur.on{border-color:#6d28d9;box-shadow:inset 0 0 0 1px #6d28d9;background:#faf8ff}
+    .jur.soon{cursor:not-allowed;background:#faf9fc}
+    .tool{background:#fff;border:1px solid #e8e6ee;border-radius:11px;padding:12px 13px;display:flex;flex-direction:column;gap:5px;min-height:86px;box-sizing:border-box}
+    .tool.lead{border-color:#6d28d9;background:#faf8ff}
+    .tool.have{border-style:dashed;background:#f4f3f7}
+    .tag{font-family:'Roboto Mono',ui-monospace,monospace;font-size:8.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px;border-radius:4px;white-space:nowrap}
+    .tick{display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.55;color:#4a4553}
+    .tk{width:16px;height:16px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;margin-top:2px;background:#f4f0fe;color:#6d28d9}
+    .cap{font:400 12.5px/1.6 Inter,system-ui,sans-serif;color:#6b6577;margin-top:14px;max-width:1440px}
+    .ab{padding:0;border:0;min-width:0;font-family:Inter,system-ui,sans-serif}
+    .ab-hd,.ab-sub,.cap{display:none}
+    .frame{width:auto;min-width:0;border:0;border-radius:0;background:#faf9fc}
+  </style>
+</helmet>
+
+<sc-for list="{{ surfaces }}" as="sf" hint-placeholder-count="2">
+  <section class="ab" id="{{ sf.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ sf.id }}">{{ sf.badge }}</a><span class="ab-nm">{{ sf.title }}</span><span class="mono" style="font-size:11px;color:#6b6577">{{ sf.route }}</span></div>
+    <div class="ab-sub">{{ sf.blurb }}</div>
+
+    <div class="frame">
+      
+
+      <div style="display:flex;align-items:stretch">
+        <sc-if value="{{ sf.app }}">
+          <aside class="side">
+            <div style="padding:2px 16px 14px;display:flex;align-items:center;gap:9px"><img src="data:image/png;base64,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" alt="Axal VC" style="width:22px;height:22px;object-fit:contain"><span style="font-size:13px;font-weight:900;letter-spacing:-.02em">Axal VC</span></div>
+            <div style="margin:0 12px 12px;padding:9px 11px;border:1px solid #e8e6ee;border-radius:9px;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:12px;font-weight:700">Meridian Robotics</span><span style="color:#6b6577;font-size:11px">⌄</span></div>
+            <sc-for list="{{ appNav }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}">{{ n.label }}</div></sc-for>
+            <div style="flex:1"></div>
+            <div class="srow" style="border-top:1px solid #e8e6ee;margin-top:10px;padding-top:14px">Company Settings</div>
+          </aside>
+        </sc-if>
+
+        <main style="flex:1;min-width:0">
+          <sc-if value="{{ sf.app }}">
+            <div style="height:52px;border-bottom:1px solid #e8e6ee;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px">
+              <span style="font-size:12.5px;color:#6b6577">Spin-Out Lab · <span style="color:#141118;font-weight:600">Not yet applied</span></span>
+              <span class="mono" style="font-size:11px;color:#6b6577">ines@meridianrobotics.nl</span>
+            </div>
+          </sc-if>
+
+          <!-- HERO · full-bleed -->
+          <div style="background:#241f38;color:#fff;position:relative;overflow:hidden">
+            <img src="../../../frontend/public/axal-vc-future.png" alt="" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:72% 58%">
+            <div style="position:absolute;inset:0;background:linear-gradient(94deg,rgba(36,31,56,.94) 0%,rgba(36,31,56,.88) 46%,rgba(36,31,56,.52) 70%,rgba(36,31,56,.22) 100%)"></div>
+            <div style="position:absolute;inset:auto 0 0 0;height:56%;background:linear-gradient(180deg,transparent,rgba(36,31,56,.55))"></div>
+            <div style="position:relative;padding:56px 48px 48px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.85fr);gap:56px;align-items:end">
+              <div>
+                <div class="ebd" style="margin-bottom:18px">Spin-Out Lab · 28 days · nineteen tools · one cohort a month</div>
+                <h1 style="margin:0;font-size:46px;line-height:1.04;font-weight:900;letter-spacing:-.035em;max-width:min(760px,100%);text-wrap:balance">Four weeks of execution, with the whole arsenal and a cohort beside you.</h1>
+                <div style="font-size:15px;color:rgba(255,255,255,.76);line-height:1.7;margin-top:20px;max-width:600px">Nineteen working tools, four evidence gates, matched advisors, and the founders building alongside you this month. Incorporation is one of the nineteen — leading for those who need it, quiet for those who already have an entity.</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:28px">
+                  <a class="btn btn-w" href="{{ applyHref }}">Apply to {{ cohortName }} →</a>
+                  <a class="btn btn-g" href="/spinout-lab/brief">Download the programme brief</a>
+                </div>
+              </div>
+              <div style="border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:20px 22px;background:rgba(36,31,56,.72);backdrop-filter:blur(6px)">
+                <div class="ebd">Next cohort</div>
+                <div style="display:grid;gap:12px;margin-top:12px">
+                  <sc-for list="{{ live }}" as="l" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px solid rgba(255,255,255,.1);padding-top:11px">
+                      <span style="font-size:12px;color:rgba(255,255,255,.66)">{{ l.k }}</span>
+                      <span class="fld"><span class="mono" style="font-size:13px;font-weight:700;color:#fff">{{ l.v }}</span><span class="fbd">Not recorded</span></span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size:11px;color:rgba(255,255,255,.55);line-height:1.6;margin-top:14px">Read from the cohort record. The deadline is computed as seven days before the start, 23:59 Delaware time — never typed.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 1 · TRACKS -->
+          <div class="wrap" style="padding:56px 34px 0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div><div class="ebv">Three starting points</div><h2 class="h2">Where is the company today?</h2></div>
+              <span style="font-size:12.5px;color:#6b6577;max-width:380px;line-height:1.55">Chosen at application. Same arsenal, same four gates; what fills each week comes from the track.</span>
+            </div>
+            <sc-if value="{{ sf.preNote }}"><div style="margin-top:14px;display:inline-flex;align-items:center;gap:9px;padding:8px 12px;border-radius:9px;background:#f4f0fe;border:1px solid #ddd6fe;font-size:12.5px;color:#4a4553"><span class="tag" style="background:#6d28d9;color:#fff">Preselected</span>{{ sf.preNote }}</div></sc-if>
+            <div role="radiogroup" aria-label="Track" style="display:flex;gap:10px;margin-top:18px">
+              <sc-for list="{{ tracks }}" as="t" hint-placeholder-count="3">
+                <button class="{{ t.cls }}" role="radio" aria-checked="{{ t.checked }}" onClick="{{ t.pick }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:15px;font-weight:800;letter-spacing:-.015em">{{ t.name }}</span><span class="mono" style="font-size:9.5px;color:#6b6577">{{ t.n }}</span></div>
+                  <span style="font-size:12.5px;color:#4a4553;line-height:1.5">{{ t.who }}</span>
+                  <span style="font-size:11.5px;color:#6b6577;line-height:1.5;margin-top:2px">Leads with {{ t.leadsWith }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- 2 · GATES -->
+          <div class="wrap" style="padding:56px 34px 0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div><div class="ebv">The rhythm</div><h2 class="h2">Four weeks. Each ends at a gate that opens on evidence.</h2></div>
+              <span style="font-size:12px;color:#6b6577;max-width:360px;line-height:1.55">Shown for the {{ trackName }} track. An illustration of the shape, not a status readout — a visitor has no cohort.</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:22px;position:relative">
+              <div style="position:absolute;left:12px;right:12px;top:15px;height:1px;background:#dedce4;z-index:0" aria-hidden="true"></div>
+              <sc-for list="{{ gates }}" as="g" hint-placeholder-count="4">
+                <div style="position:relative;z-index:1">
+                  <div style="display:flex;align-items:center;gap:10px;padding:0 4px"><span class="mono" style="width:26px;height:26px;border-radius:50%;background:#6d28d9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;flex:none;border:3px solid #faf9fc">{{ g.n }}</span><span class="mono" style="font-size:10px;color:#6b6577;background:#faf9fc;padding:0 4px">{{ g.days }}</span></div>
+                  <div class="card" style="padding:16px 17px 14px;margin-top:12px">
+                    <div style="font-size:16px;font-weight:800;letter-spacing:-.02em">{{ g.name }}</div>
+                    <div style="display:grid;gap:7px;margin-top:11px"><sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3"><div class="tick"><span class="tk">✓</span><span>{{ it }}</span></div></sc-for></div>
+                    <div style="border-top:1px solid #e8e6ee;margin-top:13px;padding-top:10px"><span class="eb">Gate opens on</span><div style="font-size:12px;color:#4a4553;margin-top:4px;line-height:1.5">{{ g.gate }}</div></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- 3 · ARSENAL -->
+          <div class="wrap" style="padding:64px 34px 0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap">
+              <div><div class="ebv">The arsenal</div><h2 class="h2">Nineteen working tools. Count them.</h2></div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#4a4553"><span style="width:12px;height:12px;border-radius:3px;border:1px solid #6d28d9;background:#faf8ff"></span>Leads on {{ trackName }}</span>
+                <sc-if value="{{ sf.app }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#4a4553"><span style="width:12px;height:12px;border-radius:3px;border:1px dashed #6b6577;background:#f4f3f7"></span>Already in your workspace</span></sc-if>
+              </div>
+            </div>
+            <div style="display:grid;gap:22px;margin-top:22px">
+              <sc-for list="{{ sf.groups }}" as="gr" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:9px"><span class="eb">{{ gr.name }}</span><span class="mono" style="font-size:10px;color:#6b6577">{{ gr.count }}</span></div>
+                  <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">
+                    <sc-for list="{{ gr.tools }}" as="tl" hint-placeholder-count="4">
+                      <div class="{{ tl.cls }}">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><span class="mono" style="font-size:9.5px;color:#6b6577">{{ tl.n }}</span><sc-if value="{{ tl.tag }}"><span class="tag" style="{{ tl.tagStyle }}">{{ tl.tag }}</span></sc-if></div>
+                        <div style="font-size:12.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3">{{ tl.name }}</div>
+                        <div style="font-size:11px;color:#6b6577;line-height:1.45">{{ tl.d }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ sf.app }}">
+              <div style="margin-top:18px;background:#f4f0fe;border:1px solid #ddd6fe;border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div><div class="ebv">What the Lab adds</div><div style="font-size:12.5px;color:#4a4553;line-height:1.6;margin-top:6px">The cohort, the four gates, two matched advisors, office hours with partner organisations, and a deadline. These exist only inside a cohort.</div></div>
+                <div><div class="eb">What merely becomes available</div><div style="font-size:12.5px;color:#4a4553;line-height:1.6;margin-top:6px">{{ haveCount }} of the nineteen are already in your workspace outside the Lab and are drawn dashed above. The Lab does not re-sell them; it puts a cohort and a gate around them.</div></div>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- 4 · JURISDICTION -->
+          <div class="wrap" style="padding:40px 34px 0">
+            <div class="card" style="padding:20px 22px;background:{{ jurBg }}">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap">
+                <div><div class="eb">Tool 12 · Incorporation</div><div style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:4px">{{ jurHead }}</div></div>
+                <span style="font-size:12px;color:#6b6577;max-width:380px;line-height:1.5">The entity, the filing and the outcome badges follow the selection. Two live, two coming and marked as such.</span>
+              </div>
+              <div role="radiogroup" aria-label="Incorporation jurisdiction" style="display:flex;gap:8px;margin-top:14px">
+                <sc-for list="{{ jurs }}" as="j" hint-placeholder-count="4">
+                  <button class="{{ j.cls }}" role="radio" aria-checked="{{ j.checked }}" aria-disabled="{{ j.soon }}" onClick="{{ j.pick }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><span style="font-size:12.5px;font-weight:800;color:{{ j.ink }}">{{ j.name }}</span><sc-if value="{{ j.soon }}"><span class="tag" style="background:#fef3c7;color:#92400e">Soon</span></sc-if></div>
+                    <span style="font-size:11px;color:#6b6577">{{ j.sub }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px">
+                <sc-for list="{{ outcomes }}" as="o" hint-placeholder-count="3"><div style="background:#fff;border:1px solid #e8e6ee;border-radius:9px;padding:10px 12px"><div class="eb">{{ o.k }}</div><div style="font-size:13px;font-weight:700;margin-top:4px">{{ o.v }}</div></div></sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5 · COMMUNITY -->
+          <div class="wrap" style="padding:64px 34px 0">
+            <div class="ebv">The cohort</div>
+            <h2 class="h2">Who else is building this month, and what they shipped.</h2>
+            <div class="p" style="margin-top:8px;max-width:640px">A working surface, not a social one. Three panels: the directory, the shipping feed, and asks between founders. Every entry is a record the product already holds.</div>
+            <div style="display:grid;grid-template-columns:1fr 1.15fr .95fr;gap:12px;margin-top:22px">
+              <div class="card" style="padding:16px 17px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="eb">Cohort directory</span><span class="fld"><span class="mono" style="font-size:11px;font-weight:700">{cohort.company_count}</span><span class="fb">Not recorded</span></span></div>
+                <div style="display:grid;gap:8px;margin-top:12px">
+                  <sc-for list="{{ dir }}" as="d" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #f0eff3"><span style="width:30px;height:30px;border-radius:8px;background:#f4f0fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;flex:none">{{ d.ini }}</span><div style="min-width:0"><div style="font-size:12.5px;font-weight:700">{{ d.name }}</div><div style="font-size:11px;color:#6b6577">{{ d.track }} · gate {{ d.gate }} of 4</div></div></div>
+                  </sc-for>
+                </div>
+                <div style="font-size:11px;color:#6b6577;margin-top:10px;line-height:1.5">Listed with each founder’s consent. Gate position is read from their record.</div>
+              </div>
+              <div class="card" style="padding:16px 17px">
+                <span class="eb">Shipped this week</span>
+                <div style="display:grid;gap:8px;margin-top:12px">
+                  <sc-for list="{{ feed }}" as="f" hint-placeholder-count="4">
+                    <div style="padding:9px 0;border-top:1px solid #f0eff3;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline"><span class="mono" style="font-size:10px;color:#6b6577">{{ f.when }}</span><div><span style="font-size:12.5px;font-weight:700">{{ f.who }}</span> <span style="font-size:12.5px;color:#4a4553">{{ f.what }}</span><div style="margin-top:4px"><span class="tag" style="background:#f4f3f7;color:#4a4553;border:1px solid #e8e6ee">{{ f.tool }}</span></div></div></div>
+                  </sc-for>
+                </div>
+                <div style="font-size:11px;color:#6b6577;margin-top:10px;line-height:1.5">Each line is a tool event — a gate cleared, a filing archived, a deck version — not a post.</div>
+              </div>
+              <div class="card" style="padding:16px 17px">
+                <span class="eb">Founder-to-founder asks</span>
+                <div style="display:grid;gap:8px;margin-top:12px">
+                  <sc-for list="{{ asks }}" as="a" hint-placeholder-count="3">
+                    <div style="padding:10px 0;border-top:1px solid #f0eff3"><div style="font-size:12.5px;font-weight:600;line-height:1.45">{{ a.q }}</div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:5px"><span style="font-size:11px;color:#6b6577">{{ a.who }}</span><span class="tag" style="{{ a.st }}">{{ a.state }}</span></div></div>
+                  </sc-for>
+                </div>
+                <div style="font-size:11px;color:#6b6577;margin-top:10px;line-height:1.5">An ask is open until one founder answers it. No threads, no reactions.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6 · APPLY -->
+          <div class="wrap" style="padding:64px 34px 64px">
+            <div style="background:#241f38;color:#fff;border-radius:16px;padding:36px 40px;display:flex;align-items:center;justify-content:space-between;gap:36px;flex-wrap:wrap">
+              <div style="max-width:580px">
+                <div class="ebd">How to apply</div>
+                <h2 class="h2" style="color:#fff;font-size:26px">Apply to {{ cohortName }} on the {{ trackName }} track.</h2>
+                <div style="font-size:14px;color:rgba(255,255,255,.72);line-height:1.7;margin-top:10px">Applications close <span class="mono" style="color:#fff;font-weight:700">{{ deadline }}</span> — seven days before the cohort starts, at 23:59 Delaware time. The track is chosen at application and can be changed before the first gate. Selection is on evidence of thinking. No equity is taken for participation.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px;flex:none">
+                <a class="btn btn-w" href="{{ applyHref }}">Apply to {{ cohortName }} →</a>
+                <a class="btn btn-g" href="/spinout-lab/brief">Download the programme brief</a>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      
+    </div>
+    <div class="cap">{{ sf.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  // Track defaults to Find fit: the signed-in member has a company. Both surfaces read one state,
+  // so a pick restyles both artboards identically — one component family, two contexts.
+  state = { track:'fit', jur:'de' };
+
+  renderVals() {
+    const TOOLS = [
+      { id:'record',   g:'Company', name:'Company record', d:'One record every tool writes into.' },
+      { id:'profile',  g:'Company', name:'Founder profiling', d:'Skills, values, archetype.' },
+      { id:'score',    g:'Company', name:'Venture scoring', d:'Nine dimensions with confidence.' },
+      { id:'advisors', g:'Company', name:'Advisor matching', d:'Two advisors against measured gaps.' },
+      { id:'cofind',   g:'Company', name:'Co-founder matching', d:'Complementarity, not similarity.' },
+      { id:'disc',     g:'Evidence', name:'Customer discovery', d:'Interviews logged with severity.' },
+      { id:'market',   g:'Evidence', name:'Market sizing', d:'TAM/SAM with citations.' },
+      { id:'revenue',  g:'Evidence', name:'Revenue proof', d:'Verified by source.' },
+      { id:'roadmap',  g:'Build', name:'Roadmap and OKRs', d:'MVP scope, value-rated.' },
+      { id:'brand',    g:'Build', name:'Brand and landing pages', d:'Sixteen templates, lead routing.' },
+      { id:'deck',     g:'Build', name:'Pitch deck', d:'Twelve slides from your own data.' },
+      { id:'inc',      g:'Formation', name:'Incorporation', d:'Entity by jurisdiction.' },
+      { id:'cap',      g:'Formation', name:'Cap table', d:'Vesting, dilution, waterfall.' },
+      { id:'e83b',     g:'Formation', name:'83(b) tracking', d:'The 30-day window, counted.' },
+      { id:'coagree',  g:'Formation', name:'Co-founder agreement', d:'Clause by clause, e-signed.' },
+      { id:'comply',   g:'Formation', name:'Compliance', d:'Formation, equity, filings, records.' },
+      { id:'raise',    g:'Capital', name:'Raise workspace', d:'Target, committed, wired.' },
+      { id:'uof',      g:'Capital', name:'Use of funds', d:'Allocation, runway, scenarios.' },
+      { id:'office',   g:'Capital', name:'Office hours', d:'Partner organisations, booked.' }
+    ];
+    const GROUPS = ['Company','Evidence','Build','Formation','Capital'];
+
+    const TRACKS = [
+      { id:'form', n:'01', name:'Form', who:'No entity yet. An idea, a prototype, or research.',
+        leads:['inc','e83b','cap','coagree','cofind','comply'], leadsWith:'incorporation, 83(b), cap table, co-founder agreement, co-founder matching, compliance.',
+        gates:[
+          { name:'Validate', items:['Problem and buyer defined','≥5 interviews logged','Founder profile complete'], gate:'discovery evidence reviewed' },
+          { name:'Structure', items:['Co-founder decision or solo declaration','Equity split and vesting drafted','Jurisdiction chosen'], gate:'a cap table that holds' },
+          { name:'Form', items:['Entity filed','83(b) window opened and counted','Co-founder agreement signed'], gate:'entity, equity, filing complete' },
+          { name:'Fund', items:['Deck from recorded data','Use of funds locked','Three warm introductions'], gate:'a raise the record supports' } ] },
+      { id:'fit', n:'02', name:'Find fit', who:'Incorporated, no product-market fit yet.',
+        leads:['disc','market','profile','score','revenue'], leadsWith:'customer discovery, market sizing, founder profiling, venture scoring, revenue proof.',
+        gates:[
+          { name:'Interview', items:['ICP hypothesis written down','≥5 interviews logged with severity','Pain map ranked'], gate:'a pain someone will pay to remove' },
+          { name:'Size', items:['TAM/SAM with citations','Competitive map','Venture score, nine dimensions'], gate:'a market the score can defend' },
+          { name:'Prove', items:['Pricing tested','Revenue proof by source','Two advisors matched to the weak dimensions'], gate:'paid evidence, however small' },
+          { name:'Fund', items:['Deck rebuilt on the evidence','Use of funds locked','Three warm introductions'], gate:'a raise the record supports' } ] },
+      { id:'line', n:'03', name:'Launch a line', who:'Incorporated, testing a new product.',
+        leads:['disc','market','brand','roadmap','revenue'], leadsWith:'discovery, market sizing, brand and landing pages, roadmap, revenue proof.',
+        gates:[
+          { name:'Discover', items:['Segment for the new line named','≥5 interviews logged','Pain map for this line only'], gate:'a distinct pain, not the old one' },
+          { name:'Scope', items:['MVP scope, value-rated','90-day OKRs locked','Landing page live'], gate:'a page collecting real leads' },
+          { name:'Prove', items:['First paid pilot recorded','Revenue proof by source','Advisor read on the line'], gate:'paid evidence for the line' },
+          { name:'Fund', items:['Deck for the line','Use of funds locked','Three warm introductions'], gate:'a raise the record supports' } ] }
+    ];
+    const DAYS = ['Days 1–7','Days 8–14','Days 15–21','Days 22–28'];
+    const cur = TRACKS.find(t => t.id === this.state.track);
+    const tracks = TRACKS.map(t => ({ n:t.n, name:t.name, who:t.who, leadsWith:t.leadsWith,
+      checked: t.id === cur.id ? 'true' : 'false', cls:'trk' + (t.id === cur.id ? ' on' : ''),
+      pick: () => this.setState({ track:t.id }) }));
+    const gates = cur.gates.map((g, i) => Object.assign({ n:String(i + 1), days:DAYS[i] }, g));
+
+    const JURS = [
+      { id:'de', name:'Delaware C-Corp', sub:'United States · live', entity:'Delaware C-Corp', filing:'83(b) Election', capTable:'Vesting cap table on Carta', soon:false },
+      { id:'wy', name:'Wyoming C-Corp', sub:'United States · live', entity:'Wyoming C-Corp', filing:'83(b) Election', capTable:'Vesting cap table on Carta', soon:false },
+      { id:'sg', name:'Singapore Pte Ltd', sub:'Singapore · coming soon', entity:'Singapore Pte Ltd', filing:'ACRA Share Allotment', capTable:'Vesting cap table, ACRA-registered', soon:true },
+      { id:'uk', name:'UK Ltd', sub:'England & Wales · coming soon', entity:'UK Ltd', filing:'SH01 Return of Allotment', capTable:'Vesting cap table, Companies House', soon:true }
+    ];
+    const jur = JURS.find(j => j.id === this.state.jur);
+    const jurs = JURS.map(j => ({ name:j.name, sub:j.sub, soon:j.soon, checked: j.id === jur.id ? 'true' : 'false',
+      ink: j.soon ? '#6b6577' : '#141118', cls:'jur' + (j.id === jur.id ? ' on' : '') + (j.soon ? ' soon' : ''),
+      pick: j.soon ? null : () => this.setState({ jur:j.id }) }));
+    const outcomes = [ { k:'Entity', v:jur.entity }, { k:'Equity', v:jur.capTable }, { k:'Filing', v:jur.filing } ];
+    const formLeads = cur.id === 'form';
+    const jurHead = formLeads ? 'Leads on the Form track. Pick the jurisdiction.' : 'Quiet on ' + cur.name + ' — your entity already exists. Shown for reference.';
+    const jurBg = formLeads ? '#faf8ff' : '#fff';
+
+    const HAVE = ['record','profile','disc','market','roadmap','brand','deck','revenue'];
+    const groups = (app) => GROUPS.map(gn => {
+      const tools = TOOLS.filter(t => t.g === gn).map(t => {
+        const idx = TOOLS.indexOf(t) + 1, lead = cur.leads.includes(t.id), have = app && HAVE.includes(t.id) && !lead;
+        return { n: (idx < 10 ? '0' : '') + idx, name:t.name, d:t.d,
+          cls:'tool' + (lead ? ' lead' : '') + (have ? ' have' : ''),
+          tag: lead ? 'Leads' : (have ? 'Yours' : null),
+          tagStyle: lead ? 'background:#6d28d9;color:#fff' : 'background:#e8e6ee;color:#4a4553' };
+      });
+      return { name:gn, count: tools.length + ' of 19', tools };
+    });
+    const haveCount = HAVE.filter(id => !cur.leads.includes(id)).length;
+
+    const dir = [ { ini:'HS', name:'Halyard Security', track:'Find fit', gate:'2' }, { ini:'VH', name:'Verity Health', track:'Form', gate:'3' },
+                  { ini:'LS', name:'LoopSense', track:'Launch a line', gate:'1' }, { ini:'KB', name:'Kelp Bio', track:'Form', gate:'2' } ];
+    const feed = [ { when:'Today', who:'Verity Health', what:'cleared gate 3 — entity filed, 83(b) window opened.', tool:'Incorporation' },
+                   { when:'Yesterday', who:'Halyard Security', what:'logged interview 9; pain map re-ranked.', tool:'Customer discovery' },
+                   { when:'2 days', who:'LoopSense', what:'landing page live; first 14 leads routed.', tool:'Brand and landing pages' },
+                   { when:'3 days', who:'Kelp Bio', what:'cap table v2 — vesting confirmed for both founders.', tool:'Cap table' } ];
+    const askTag = (open) => open ? 'background:#f4f0fe;color:#6d28d9' : 'background:#ecfdf5;color:#047857';
+    const asks = [ { q:'Anyone priced a paid pilot under $2k for a SMB buyer? What held?', who:'Halyard Security', state:'Open', st:askTag(true) },
+                   { q:'TTO asking for 8% — is that in range for a university licence?', who:'Kelp Bio', state:'Answered', st:askTag(false) },
+                   { q:'Which registered agent did you use in Wyoming?', who:'Verity Health', state:'Answered', st:askTag(false) } ];
+
+    const live = [ { k:'Cohort', v:'{cohort.name}' }, { k:'Starts', v:'{cohort.start_date}' }, { k:'Ends', v:'{cohort.end_date}' }, { k:'Applications close', v:'{cohort.close_at}' } ];
+    const APPLY = '/register?lane=founder&product=spinout-lab&track=' + cur.id;
+    const pubNav = [['Firm','/firm'],['Spin-Out Lab','/spinout-lab'],['Founders','/for-founders'],['Investors','/for-investors'],['Platform','/platform'],['Network ▾','/directory']]
+      .map(([label, href]) => ({ label, href, style: href === '/spinout-lab' ? 'color:#141118;font-weight:800;box-shadow:inset 0 -2px 0 #6d28d9' : '' }));
+    const appNav = ['Home','Spin-Out Lab','Validate','Build','Raise','Grow','Network','Research','Trust'].map(l => ({ label:l, cls:'srow' + (l === 'Spin-Out Lab' ? ' on' : '') }));
+    const footCols = [
+      { t:'Firm', links:[{t:'Firm',href:'/firm'},{t:'Spin-Out Lab',href:'/spinout-lab'},{t:'Founders',href:'/for-founders'},{t:'Investors',href:'/for-investors'}] },
+      { t:'Network', links:[{t:'Articles',href:'/articles'},{t:'Directory',href:'/directory'},{t:'Programs & Events',href:'/events'},{t:'Jobs',href:'/jobs'}] },
+      { t:'Access', links:[{t:'Sign in',href:'/login'},{t:'Apply',href:'/register'},{t:'Terms',href:'/terms'},{t:'Risk disclosures',href:'/risk'}] }
+    ];
+
+    return {
+      tracks, gates, jurs, outcomes, jurHead, jurBg, dir, feed, asks, live, pubNav, appNav, footCols, haveCount,
+      trackName: cur.name, cohortName:'{cohort.name}', deadline:'{cohort.close_at}', applyHref:APPLY,
+      surfaces: [
+        { id:'p', badge:'A', title:'Spin-Out Lab · public', route:'/spinout-lab', public:true, app:false, preNote:null, groups: groups(false),
+          blurb:'Logged out. Public nav and footer. Full-bleed hero; the track selector high on the page restyles the gates, the arsenal and the apply band.',
+          cap:'Public surface. Incorporation is tool 12 of 19 — it leads only on the Form track and reads as “quiet” on the other two, with the jurisdiction selector still present for reference. No seat count, no track record; the only figures are nineteen tools and the four day ranges, both true.' }
+      ]
+    };
+  }
+}
+</script>
+</body></html>

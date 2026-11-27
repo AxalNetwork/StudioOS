@@ -1,0 +1,102 @@
+**✅ Here’s a complete, ready-to-use plan + prompt** for building the **Market Intelligence** layer exactly as shown in your screenshot.
+
+### Recommended Structure (Clean & Scalable)
+
+**Backend**
+- New router: `backend/routers/market_intelligence.py`
+- D1 table: `market_signals` (flexible, one table for all tabs)
+- Endpoints:
+  - `GET /api/market-intelligence` → returns all tabs
+  - `GET /api/market-intelligence/:tab` → returns one tab
+  - Admin endpoints to CRUD cards
+
+**Frontend**
+- New page: `/market-intelligence.html`
+- Tab navigation (Market Pulse, Public Markets, Private Rounds, High Conviction, Studio Benchmarks)
+- Responsive card grid
+- Filters (Conviction level)
+- "Save to Pipeline" button on each Spin-out Opportunity
+
+**Missing / Recommended Enhancements**
+- Search bar (will use Vectorize later)
+- Last updated timestamp per card
+- Source / attribution field
+- "Save to Pipeline" action (links directly to your existing Pipeline Board)
+- Export to CSV
+- AI-generated weekly summary card at the top
+
+---
+
+### 1. First, add this to your D1 schema (run once)
+
+```sql
+CREATE TABLE IF NOT EXISTS market_signals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tab TEXT NOT NULL,                    -- 'market_pulse', 'public_markets', etc.
+  sector TEXT NOT NULL,
+  multiplier TEXT,
+  conviction TEXT,                      -- 'Aggressive', 'Cautious', 'Wait-and-See'
+  tech_signal TEXT,
+  hiring_signal TEXT,
+  spinout_opportunity TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP
+);
+```
+
+---
+
+### 2. Ready-to-copy prompt for Replit Agent
+
+**Paste this directly into the Agent tab:**
+
+```
+You are the senior product engineer for Axal StudioOS. Build the complete **Market Intelligence** layer exactly as shown in the attached screenshot.
+
+Tabs: Market Pulse (default), Public Markets, Private Rounds, High Conviction, Studio Benchmarks.
+
+Each card must include: Sector name, multiplier (e.g. 22.4x), conviction badge (Aggressive / Cautious / Wait-and-See), Tech Signal, Hiring signal, and Spin-out Opportunity.
+
+Exact requirements:
+
+1. **Database**
+   - Create table `market_signals` with columns: id, tab, sector, multiplier, conviction, tech_signal, hiring_signal, spinout_opportunity, created_at, updated_at.
+
+2. **Backend**
+   - Create `backend/routers/market_intelligence.py`
+   - Endpoints:
+     - GET /api/market-intelligence → returns all data grouped by tab
+     - GET /api/market-intelligence/:tab → returns one tab
+     - Admin endpoints (POST/PATCH/DELETE) to manage cards
+
+3. **Frontend**
+   - Create `/market-intelligence.html`
+   - Top tabs exactly as in screenshot
+   - Responsive card grid (3-column on desktop)
+   - Conviction badges with correct colors (green = Aggressive, orange = Cautious, yellow = Wait-and-See)
+   - "Save to Pipeline" button on each Spin-out Opportunity (links to /pipeline.html with pre-filled data)
+
+4. **Polish**
+   - Add a global search bar at the top
+   - Add "Last updated" timestamp on each card
+   - Make the page match Axal branding (purple accents, clean cards)
+
+Build this step-by-step:
+1. First create the D1 table `market_signals` + migration.
+2. Then create the backend router with all endpoints.
+3. Then build the full frontend page `/market-intelligence.html` with tabs and cards.
+4. Finally seed some sample data from the screenshot and test.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+**What to do next:**
+1. Paste the prompt above into Replit Agent.
+2. After it finishes, you’ll have a fully functional Market Intelligence page.
+3. (Optional) I can then give you a prompt to seed the exact cards from your screenshot.
+
+Would you like me to also prepare a **seed data prompt** with the exact cards from your screenshot, or move on to another feature? Just say the word.

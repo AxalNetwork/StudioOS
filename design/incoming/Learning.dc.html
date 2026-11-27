@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    @media (max-width:760px){
+      .lp-side,.lp-rail,.lp-hide{display:none!important}.lp-shell{grid-template-columns:1fr!important}
+      .lp-main{padding:14px 14px 40px!important}.lp-g2,.lp-g3,.lp-g4,.lp-split{grid-template-columns:minmax(0,1fr)!important}
+      .lp-tabs,.lp-filters{flex-wrap:nowrap!important;overflow-x:auto;padding-bottom:4px}.lp-h1{font-size:20px!important}
+      .lp-th{display:none!important}.lp-tr{grid-template-columns:1fr 1fr!important;gap:3px 10px!important}.lp-tr>:first-child{grid-column:1/-1}
+      .lp-menu{right:10px!important;left:10px!important;width:auto!important}
+    }
+  </style>
+</helmet>
+<div class="lp" style="background:#f4f3f7;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<div class="lp-shell" style="display:grid;grid-template-columns:186px minmax(0,1fr) auto;align-items:start">
+
+  <aside class="lp-side" style="background:#fff;border-right:1px solid #ececf1;padding:18px 10px;display:flex;flex-direction:column;gap:2px;align-self:stretch">
+    <div style="display:flex;align-items:center;gap:8px;padding:2px 10px 14px"><span style="width:22px;height:22px;border-radius:6px;background:#7c3aed"></span><span style="font-weight:700;font-size:16px;letter-spacing:-.02em">Axal VC</span></div>
+    <sc-if value="{{ badge.show }}" hint-placeholder-val="{{ false }}"><div style="margin:0 10px 12px;padding:6px 8px;border-radius:7px;background:{{ badge.bg }};color:{{ badge.fg }};font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.04em">{{ badge.t }}</div></sc-if>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="9"><div style="padding:8px 10px;border-radius:8px;font-weight:500;font-size:13px;color:#6b6577">{{ s }}</div></sc-for>
+  </aside>
+
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <div style="position:relative;height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#6b6577"><span style="font-weight:600;color:#18181b">Learning</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">{{ route }}</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:30px;height:30px;border-radius:50%;background:#f4f0fe;border:1px solid #ddd0fb;display:grid;place-items:center;font:600 11px 'Roboto Mono',monospace;color:#6d28d9">[AB]</span>
+        <span style="font-size:12px;color:#6b6577">▾</span>
+      </div>
+      <sc-if value="{{ p.menu }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-menu" style="position:absolute;top:50px;right:16px;width:252px;background:#fff;border:1px solid #ececf1;border-radius:12px;box-shadow:0 18px 40px rgba(24,24,27,.12);padding:6px;z-index:5">
+          <div style="padding:10px 12px 8px;border-bottom:1px solid #ececf1;margin-bottom:4px"><div style="font-weight:700;font-size:13px">[Member name]</div><div style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">[role] · [email]</div></div>
+          <sc-for list="{{ menu }}" as="m" hint-placeholder-count="9">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:500;background:{{ m.bg }};color:{{ m.fg }}"><span>{{ m.t }}</span><sc-if value="{{ m.note }}" hint-placeholder-val="{{ false }}"><span style="font:500 10px 'Roboto Mono',monospace;color:#6d28d9;background:#f4f0fe;border-radius:99px;padding:2px 7px">replaces Articles</span></sc-if></div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <main class="lp-main" style="padding:22px 28px 56px;display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px 20px">
+        <div style="min-width:0">
+          <sc-if value="{{ head.back }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;font-weight:600;color:#6d28d9;margin-bottom:6px">‹ {{ head.back }}</div></sc-if>
+          <h1 class="lp-h1" style="margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.02em">{{ head.h1 }}</h1>
+          <div style="margin-top:4px;font-size:13.5px;line-height:1.5;color:#6b6577;max-width:720px">{{ head.sub }}</div>
+        </div>
+        <sc-if value="{{ head.cta }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:9px 14px">{{ head.cta }}</span></sc-if>
+      </div>
+
+      <!-- ===== HOME ===== -->
+      <sc-if value="{{ p.home }}" hint-placeholder-val="{{ true }}">
+        <div class="lp-g2" style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Continue learning</div>
+            <sc-for list="{{ cont }}" as="c" hint-placeholder-count="2">
+              <div style="padding:12px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-weight:600;font-size:13.5px">[Course title]</span><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ c.pct }}</span></div>
+                <div style="height:6px;border-radius:99px;background:#f4f3f7"><div style="height:6px;border-radius:99px;background:#7c3aed;width:{{ c.w }}"></div></div>
+                <div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:#6b6577"><span>Next: <span style="color:#18181b;font-weight:500">[Lesson title]</span> · <span style="font-family:'Roboto Mono',monospace">[12 min]</span></span><span style="color:#6d28d9;font-weight:600">Continue →</span></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">My programs</div>
+            <sc-for list="{{ progs }}" as="g" hint-placeholder-count="2">
+              <div style="padding:12px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-weight:600;font-size:13.5px">[Program name]</span><span style="font:500 11px 'Roboto Mono',monospace;color:#a1a1aa">[Region]</span></div>
+                <div style="height:6px;border-radius:99px;background:#f4f3f7"><div style="height:6px;border-radius:99px;background:#ddd0fb;width:{{ g.w }}"></div></div>
+                <div style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ g.done }}</div>
+              </div>
+            </sc-for>
+            <div style="padding:10px 16px;font-size:12px;color:#6b6577">Enrolment is set by a Super Admin.</div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div class="lp-tabs" style="display:flex;gap:4px;padding:10px 12px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="9"><span style="{{ t.style }}">{{ t.t }}</span></sc-for>
+          </div>
+          <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid #ececf1">
+            <div style="display:flex;align-items:center;gap:10px;border:1px solid #ececf1;border-radius:9px;padding:9px 12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg><span style="font-size:13px;color:#a1a1aa">Search courses, videos, articles…</span></div>
+            <div class="lp-filters" style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4"><span style="font-size:12px;font-weight:500;white-space:nowrap;padding:5px 11px;border-radius:99px;border:1px solid #ececf1;background:#fff">{{ f }}</span></sc-for>
+              <span style="margin-left:auto;font-size:12px;color:#6b6577;white-space:nowrap">Sort: Newest ▾</span>
+            </div>
+            <div style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">1–24 of [N]</div>
+          </div>
+          <div class="lp-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:14px 16px">
+            <sc-for list="{{ items }}" as="i" hint-placeholder-count="8">
+              <div style="border:1px solid #ececf1;border-radius:10px;overflow:hidden;display:flex;flex-direction:column">
+                <div style="height:78px;background:#f4f3f7;display:grid;place-items:center;font:500 11px 'Roboto Mono',monospace;color:#a1a1aa">[cover]</div>
+                <div style="padding:10px 12px;display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap"><span style="font:600 10px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6d28d9;min-width:0;overflow:hidden;text-overflow:ellipsis">{{ i.kind }}</span><sc-if value="{{ i.draft }}" hint-placeholder-val="{{ false }}"><span style="font:600 10px 'Roboto Mono',monospace;color:#92400e;background:#fcd34d;border-radius:99px;padding:1px 7px;flex:none">Draft</span></sc-if></div>
+                  <span style="font-weight:600;font-size:13px;line-height:1.3">{{ i.t }}</span>
+                  <span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">{{ i.meta }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:4px;padding:0 16px 14px">
+            <sc-for list="{{ pages }}" as="g" hint-placeholder-count="6"><span style="{{ g.style }}">{{ g.t }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Upcoming webinars</div>
+          <sc-for list="{{ webs }}" as="w" hint-placeholder-count="3">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 12px;padding:11px 16px;border-bottom:1px solid #f4f3f7">
+              <div style="display:flex;gap:12px;align-items:center"><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577;white-space:nowrap">[DD Mon] · [HH:MM TZ]</span><span style="font-weight:600;font-size:13.5px">[Webinar title]</span></div>
+              <span style="font-size:12.5px;font-weight:600;color:#6d28d9">Register →</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ===== COURSE ===== -->
+      <sc-if value="{{ p.course }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px 20px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{ courseChips }}" as="c" hint-placeholder-count="3"><span style="font-size:12px;font-weight:500;padding:4px 10px;border-radius:99px;background:#f4f3f7;border:1px solid #ececf1;font-family:'Roboto Mono',monospace">{{ c }}</span></sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1">
+            <div style="flex:1;min-width:120px;height:6px;border-radius:99px;background:#f4f3f7"><div style="height:6px;width:38%;border-radius:99px;background:#7c3aed"></div></div>
+            <span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">[38%] · [5 of 12] lessons</span>
+            <span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:9px 14px;white-space:nowrap">Continue</span>
+          </div>
+        </div>
+        <div class="lp-g2" style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1.3fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ modules }}" as="m" hint-placeholder-count="3">
+              <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+                <div style="display:flex;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #ececf1"><span style="font-weight:700;font-size:13.5px">{{ m.t }}</span><span style="font:500 11px 'Roboto Mono',monospace;color:#a1a1aa">{{ m.n }}</span></div>
+                <sc-for list="{{ m.lessons }}" as="l" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:26px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid #f4f3f7">
+                    <span style="width:24px;height:24px;border-radius:6px;background:#f4f0fe;color:#6d28d9;display:grid;place-items:center;font:600 11px 'Roboto Mono',monospace" title="{{ l.kind }}">{{ l.icon }}</span>
+                    <span style="font-size:13px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">[Lesson title] <span style="color:#a1a1aa;font-weight:400">· {{ l.kind }}</span></span>
+                    <span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ l.len }}</span>
+                    <span style="{{ l.tick }}">✓</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+              <span style="font-weight:700;font-size:13.5px">Resources</span>
+              <sc-for list="{{ resources }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px"><span style="font-weight:500">[Resource title]</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">{{ r }}</span></div></sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+              <span style="font-weight:700;font-size:13.5px">Certificate</span>
+              <span style="align-self:flex-start;font-size:11.5px;font-weight:500;color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:99px;padding:3px 10px">Not recorded</span>
+              <span style="font-size:12.5px;line-height:1.5;color:#6b6577">Certificates are not issued for courses yet.</span>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== LESSON PLAYER ===== -->
+      <sc-if value="{{ p.lesson }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g2" style="display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="aspect-ratio:16/9;background:#18181b;display:grid;place-items:center;color:#a1a1aa;font:500 12px 'Roboto Mono',monospace">[video] · [12:40]</div>
+              <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid #ececf1">
+                <div style="display:flex;gap:6px"><span style="font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid #ececf1">‹ Previous</span><span style="font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid #ececf1">Next ›</span></div>
+                <span style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Mark complete</span>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #ececf1"><span style="font-weight:700;font-size:13.5px">Transcript</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">auto-generated · [date]</span></div>
+              <sc-for list="{{ transcript }}" as="t" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;padding:8px 16px;font-size:13px;line-height:1.5"><span style="font:400 11.5px 'Roboto Mono',monospace;color:#a1a1aa">{{ t }}</span><span style="color:#4a4553">[Transcript line]</span></div></sc-for>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid #ececf1"><span style="font-weight:700;font-size:13px">Course outline</span><span style="font-size:12px;color:#6b6577">Collapse ▴</span></div>
+            <sc-for list="{{ outline }}" as="o" hint-placeholder-count="6"><div style="{{ o.style }}"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.icon }} [Lesson title]</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">{{ o.len }}</span></div></sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== WEBINAR ===== -->
+      <sc-if value="{{ p.webinar }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+          <sc-for list="{{ webStates }}" as="w" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="padding:10px 14px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.08em;color:#6b6577">{{ w.label }}</span><span style="{{ w.pill }}">{{ w.pillT }}</span></div>
+              <div style="aspect-ratio:16/9;background:{{ w.bg }};display:grid;place-items:center;font:500 12px 'Roboto Mono',monospace;color:{{ w.fg }}">{{ w.media }}</div>
+              <div style="padding:14px;display:flex;flex-direction:column;gap:9px">
+                <div style="font-weight:700;font-size:14px">[Webinar title]</div>
+                <div style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ w.when }}</div>
+                <div style="font-size:12.5px;line-height:1.5;color:#6b6577">Host [Host name] · [Role] · capacity [N] · [n] registered</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;padding-top:4px">
+                  <span style="{{ w.primaryStyle }}">{{ w.primary }}</span>
+                  <sc-if value="{{ w.secondary }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid #ececf1">{{ w.secondary }}</span></sc-if>
+                </div>
+                <div style="font-size:12px;line-height:1.5;color:#6b6577;border-top:1px solid #f4f3f7;padding-top:8px">{{ w.note }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ===== EXERCISE ===== -->
+      <sc-if value="{{ p.exercise }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g2" style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:8px">
+              <span style="font-weight:700;font-size:13.5px">Instructions</span>
+              <p style="margin:0;font-size:13.5px;line-height:1.6;color:#4a4553">[Exercise instructions, two or three paragraphs. What to produce, how long it should be, and what the reviewer looks for.]</p>
+              <div style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">Due [date] · [Course title]</div>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13.5px">Your answer</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">last saved [time]</span></div>
+              <div style="min-height:150px;border:1px solid #ececf1;border-radius:9px;padding:12px;font-size:13.5px;line-height:1.6;color:#4a4553">[The member's submitted text answer.]</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">[1,240] words</span><span style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Resubmit</span></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+              <span style="font-weight:700;font-size:13.5px">Status</span>
+              <sc-for list="{{ exStatus }}" as="x" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;border:1px solid {{ x.border }};background:{{ x.bg }}"><span style="font-size:12.5px;font-weight:600;color:{{ x.fg }}">{{ x.t }}</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">{{ x.when }}</span></div>
+              </sc-for>
+              <span style="font-size:12px;color:#6b6577">Current: <b style="color:#92400e">Needs work</b>. Resubmitting keeps earlier attempts.</span>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between"><span style="font-weight:700;font-size:13.5px">Reviewer's feedback</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">[Reviewer] · [date]</span></div>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#4a4553;border-left:2px solid #ddd0fb;padding-left:10px">[The reviewer's written feedback on this attempt.]</p>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== EXAM ===== -->
+      <sc-if value="{{ p.exam }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:10px 14px;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.08em;color:#6b6577">STEP 1 · INTRO</div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="font-weight:700;font-size:15px">[Exam title]</div>
+              <div class="lp-g2" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <sc-for list="{{ examFacts }}" as="f" hint-placeholder-count="4"><div style="border:1px solid #ececf1;border-radius:9px;padding:10px 12px"><div style="font:500 16px 'Roboto Mono',monospace">{{ f.v }}</div><div style="font-size:11.5px;color:#6b6577;margin-top:3px">{{ f.k }}</div></div></sc-for>
+              </div>
+              <p style="margin:0;font-size:12.5px;line-height:1.5;color:#6b6577">Once you start, the timer runs until you submit. Correct answers are shown only if the exam allows it.</p>
+              <span style="align-self:flex-start;font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:9px 14px">Start exam</span>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:10px 14px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.08em;color:#6b6577">STEP 2 · TAKING IT</span><span style="font:500 12px 'Roboto Mono',monospace;color:#92400e;background:#fcd34d;border-radius:99px;padding:2px 8px">[23:48]</span></div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;font:500 11.5px 'Roboto Mono',monospace;color:#6b6577"><span>Question [4] of [20]</span><span>[3] answered</span></div>
+              <div style="height:5px;border-radius:99px;background:#f4f3f7"><div style="height:5px;width:20%;border-radius:99px;background:#7c3aed"></div></div>
+              <div style="font-weight:600;font-size:14px;line-height:1.4">[Question text]</div>
+              <sc-for list="{{ options }}" as="o" hint-placeholder-count="4"><div style="display:flex;gap:10px;align-items:center;border:1px solid {{ o.border }};background:{{ o.bg }};border-radius:9px;padding:10px 12px;font-size:13px"><span style="width:16px;height:16px;border-radius:50%;border:1.5px solid {{ o.dot }};display:grid;place-items:center"><span style="width:8px;height:8px;border-radius:50%;background:{{ o.fill }}"></span></span>[Option {{ o.n }}]</div></sc-for>
+              <div style="display:flex;justify-content:space-between;gap:6px"><span style="font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:9px;border:1px solid #ececf1">‹ Back</span><span style="font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Next ›</span></div>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:10px 14px;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.08em;color:#6b6577">STEP 3 · RESULT</div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:baseline;gap:10px"><span style="font:500 36px 'Roboto Mono',monospace;letter-spacing:-.02em">[82%]</span><span style="font-size:12px;font-weight:700;color:#047857;background:#ecfdf5;border-radius:99px;padding:3px 9px">Pass</span></div>
+              <div style="font-size:12.5px;color:#6b6577">Pass mark [70%] · [16 of 20] correct · submitted [date]</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-weight:600;font-size:12.5px">Earlier attempts</span>
+                <sc-for list="{{ attempts }}" as="a" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;font-size:12.5px;padding:7px 10px;border:1px solid #ececf1;border-radius:8px"><span style="font-family:'Roboto Mono',monospace">{{ a.v }}</span><span style="color:{{ a.fg }};font-weight:600">{{ a.r }}</span><span style="font:400 11px 'Roboto Mono',monospace;color:#a1a1aa">[date]</span></div></sc-for>
+              </div>
+              <div style="font-size:12px;line-height:1.5;color:#6b6577;border-top:1px solid #f4f3f7;padding-top:8px">Correct answers: <span style="font-weight:600;color:#18181b">hidden</span>. This exam does not reveal them.</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== ARTICLES & PUBLICATIONS ===== -->
+      <sc-if value="{{ p.lists }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Articles</span><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">1–24 of [N]</span></div>
+            <sc-for list="{{ articles }}" as="a" hint-placeholder-count="6">
+              <div style="padding:11px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:600;font-size:13.5px">[Article title]</span><sc-if value="{{ a.draft }}" hint-placeholder-val="{{ false }}"><span style="font:600 10px 'Roboto Mono',monospace;color:#92400e;background:#fcd34d;border-radius:99px;padding:1px 7px;white-space:nowrap">Draft · only you</span></sc-if></div>
+                <div style="font-size:12px;color:#6b6577">[Author] · <span style="color:#6d28d9">{{ a.role }}</span> · <span style="font-family:'Roboto Mono',monospace">[date] · [6 min read]</span></div>
+              </div>
+            </sc-for>
+            <div style="padding:10px 16px;font-size:12px;color:#6b6577">Opens in the existing article reader.</div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Publications</span><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">1–24 of [N]</span></div>
+            <sc-for list="{{ pubs }}" as="b" hint-placeholder-count="5">
+              <div style="padding:11px 16px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-weight:600;font-size:13.5px">[Publication title]</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">[date] · PDF · [2.4 MB] · published by HQ</span></div>
+                <span style="font-size:12px;font-weight:600;color:#6d28d9;white-space:nowrap">Download PDF ↓</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== MY LEARNING ===== -->
+      <sc-if value="{{ p.me }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Courses in progress</div>
+              <sc-for list="{{ cont }}" as="c" hint-placeholder-count="2"><div style="padding:11px 16px;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between"><span style="font-weight:600;font-size:13px">[Course title]</span><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ c.pct }}</span></div><div style="height:5px;border-radius:99px;background:#f4f3f7"><div style="height:5px;border-radius:99px;background:#7c3aed;width:{{ c.w }}"></div></div></div></sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Completed</div>
+              <sc-for list="{{ attempts }}" as="x" hint-placeholder-count="2"><div style="padding:10px 16px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:600">[Course title]</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#a1a1aa">[date]</span></div></sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Videos watched</div>
+              <sc-for list="{{ options }}" as="v" hint-placeholder-count="4"><div style="padding:9px 16px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;font-size:13px"><span>▶ [Video title]</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#a1a1aa">[14 min] · [date]</span></div></sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Exercises</div>
+              <sc-for list="{{ exStatus }}" as="x" hint-placeholder-count="3"><div style="padding:9px 16px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;align-items:center;font-size:13px"><span>✎ [Exercise title]</span><span style="font-size:11.5px;font-weight:600;color:{{ x.fg }};background:{{ x.bg }};border:1px solid {{ x.border }};border-radius:99px;padding:2px 8px">{{ x.t }}</span></div></sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:14px">Exam results</div>
+              <sc-for list="{{ attempts }}" as="a" hint-placeholder-count="2"><div style="padding:9px 16px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;align-items:center;font-size:13px"><span>[Exam title]</span><span style="display:flex;gap:8px;align-items:center"><span style="font-family:'Roboto Mono',monospace">{{ a.v }}</span><span style="font-size:11.5px;font-weight:600;color:{{ a.fg }}">{{ a.r }}</span></span></div></sc-for>
+            </div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+              <span style="font-weight:700;font-size:14px">Certificates</span>
+              <span style="align-self:flex-start;font-size:11.5px;font-weight:500;color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:99px;padding:3px 10px">Not recorded</span>
+              <span style="font-size:12.5px;line-height:1.5;color:#6b6577">Certificates are not issued for courses yet.</span>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== STUDIO ===== -->
+      <sc-if value="{{ p.studio }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px">
+            <div class="lp-filters" style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ studioFilters }}" as="f" hint-placeholder-count="5"><span style="{{ f.style }}">{{ f.t }}</span></sc-for></div>
+            <span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">1–24 of [N]</span>
+          </div>
+          <div class="lp-th lp-tr" style="display:grid;grid-template-columns:90px minmax(0,2fr) 100px 110px minmax(0,1.4fr) 120px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577">
+            <span>KIND</span><span>TITLE</span><span>STATUS</span><span>VISIBILITY</span><span>PROGRAMS</span><span>UPDATED</span>
+          </div>
+          <sc-for list="{{ content }}" as="c" hint-placeholder-count="7">
+            <div class="lp-tr" style="display:grid;grid-template-columns:90px minmax(0,2fr) 100px 110px minmax(0,1.4fr) 120px;gap:12px;padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px">
+              <span style="font:600 10.5px 'Roboto Mono',monospace;color:#6d28d9">{{ c.kind }}</span>
+              <span style="font-weight:600">{{ c.t }}</span>
+              <span style="{{ c.pill }}">{{ c.status }}</span>
+              <span style="font-size:12.5px;color:#6b6577">{{ c.vis }}</span>
+              <span style="font-size:12.5px;color:#6b6577">{{ c.progs }}</span>
+              <span style="font:400 11.5px 'Roboto Mono',monospace;color:#a1a1aa">[date]</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">Editors</div>
+        <div class="lp-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+          <sc-for list="{{ editors }}" as="e" hint-placeholder-count="5">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden;display:flex;flex-direction:column">
+              <div style="padding:11px 14px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13.5px">{{ e.t }}</span><span style="font:600 10px 'Roboto Mono',monospace;color:#92400e;background:#fcd34d;border-radius:99px;padding:1px 7px">Draft</span></div>
+              <div style="padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+                <sc-for list="{{ e.fields }}" as="f" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center;font-size:12.5px"><span style="color:#6b6577">{{ f.k }}</span><span style="border:1px solid #ececf1;border-radius:7px;padding:6px 9px;background:#fff;min-height:14px;font-family:{{ f.font }};color:{{ f.color }}">{{ f.v }}</span></div>
+                </sc-for>
+                <sc-if value="{{ e.note }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;line-height:1.5;color:#6b6577">{{ e.note }}</div></sc-if>
+              </div>
+              <div style="margin-top:auto;display:flex;justify-content:flex-end;gap:6px;padding:10px 14px;border-top:1px solid #f4f3f7"><span style="font-size:12px;font-weight:600;padding:7px 11px;border-radius:8px;border:1px solid #ececf1;color:#6b6577">Unpublish</span><span style="font-size:12px;font-weight:600;padding:7px 11px;border-radius:8px;background:#7c3aed;color:#fff">Publish</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ===== PROGRAMS (LIST) ===== -->
+      <sc-if value="{{ p.programs }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+          <div class="lp-th lp-tr" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) 110px minmax(0,1.4fr) 110px;gap:12px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577">
+            <span>PROGRAM</span><span>REGION</span><span>MEMBERS</span><span>ADMINS</span><span>CONTENT</span>
+          </div>
+          <sc-for list="{{ progList }}" as="g" hint-placeholder-count="4">
+            <div class="lp-tr" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) 110px minmax(0,1.4fr) 110px;gap:12px;padding:11px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:13px">
+              <span style="font-weight:600">[Program name]</span><span style="color:#6b6577">[Region]</span><span style="font-family:'Roboto Mono',monospace">[n]</span><span style="font-size:12.5px;color:#6b6577">{{ g.admins }}</span><span style="font-family:'Roboto Mono',monospace">[n] items</span>
+            </div>
+          </sc-for>
+          <div style="padding:10px 16px;font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">1–24 of [N]</div>
+        </div>
+      </sc-if>
+
+      <!-- ===== PROGRAM PAGE (SUPER) ===== -->
+      <sc-if value="{{ p.program }}" hint-placeholder-val="{{ false }}">
+        <div class="lp-g3" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr);gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Content, in order</span><span style="font-size:12px;font-weight:600;color:#6d28d9">Add content</span></div>
+            <sc-for list="{{ content }}" as="c" hint-placeholder-count="7">
+              <div style="display:grid;grid-template-columns:18px 70px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:13px">
+                <span style="color:#a1a1aa;cursor:grab">⋮⋮</span><span style="font:600 10.5px 'Roboto Mono',monospace;color:#6d28d9">{{ c.kind }}</span><span style="font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.t }}</span><span style="font-size:12px;color:#b91c1c">Remove</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Assigned admins</span><span style="font-size:12px;font-weight:600;color:#6d28d9">Assign</span></div>
+            <sc-for list="{{ attempts }}" as="a" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span><span style="font-weight:600">[Admin name]</span> <span style="color:#6b6577">· [Licence]</span></span><span style="font-size:12px;color:#b91c1c">Remove</span></div></sc-for>
+            <div style="padding:10px 16px;font-size:12px;line-height:1.5;color:#6b6577">Admins see this program's content and each member's completion. They author nothing.</div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Members · [n]</span><span style="font-size:12px;font-weight:600;color:#6d28d9">Enrol</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid #ececf1;font-size:12.5px"><span>Open to self-enrolment</span><span style="width:34px;height:20px;border-radius:99px;background:#7c3aed;position:relative"><span style="position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:#fff"></span></span></div>
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:13px"><span><span style="font-weight:600">[Member name]</span> <span style="color:#6b6577">· {{ m.role }}</span></span><span style="display:flex;gap:10px;align-items:center"><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ m.done }}</span><span style="font-size:12px;color:#b91c1c">Remove</span></span></div></sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== ADMIN PROGRAM VIEW ===== -->
+      <sc-if value="{{ p.adminview }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #ececf1;border-radius:10px;padding:10px 14px;font-size:12.5px;color:#6b6577"><span style="font:600 10px 'Roboto Mono',monospace;color:#334155;background:#eef1f5;border-radius:99px;padding:2px 8px">READ-ONLY</span>Assigned to you by a Super Admin. Content and enrolment are managed at HQ.</div>
+        <div class="lp-g2" style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Members against content</span><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">[n] members · [n] items</span></div>
+            <div style="overflow-x:auto">
+              <div style="min-width:640px">
+                <div style="display:grid;grid-template-columns:150px repeat(6,minmax(0,1fr));gap:6px;padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1">
+                  <span style="font:600 10.5px 'Roboto Mono',monospace;color:#6b6577">MEMBER</span>
+                  <sc-for list="{{ matrixCols }}" as="h" hint-placeholder-count="6"><span style="font:600 10px 'Roboto Mono',monospace;color:#6d28d9;text-align:center">{{ h }}</span></sc-for>
+                </div>
+                <sc-for list="{{ matrix }}" as="r" hint-placeholder-count="5">
+                  <div style="display:grid;grid-template-columns:150px repeat(6,minmax(0,1fr));gap:6px;padding:8px 16px;border-bottom:1px solid #f4f3f7;align-items:center;background:{{ r.bg }}">
+                    <span style="font-weight:600;font-size:13px">[Member name]</span>
+                    <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6"><span style="{{ c.style }}">{{ c.t }}</span></sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:10px 16px;font-size:12px;color:#6b6577">✓ completed · score for exams · status for exercises · — not started. A member who never opened an item shows a dash, not 0.</div>
+          </div>
+          <div style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;overflow:hidden">
+            <div style="padding:14px 16px;border-bottom:1px solid #ececf1;background:#f4f0fe"><div style="font:500 10.5px 'Roboto Mono',monospace;color:#6d28d9">Member record</div><div style="font-weight:700;font-size:15px;margin-top:3px">[Member name]</div><div style="font-size:12px;color:#6b6577">[Role] · enrolled [date]</div></div>
+            <sc-for list="{{ record }}" as="x" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:12.5px"><span style="font:600 10.5px 'Roboto Mono',monospace;color:#6d28d9">{{ x.kind }}</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ x.t }}</span><span style="{{ x.style }}">{{ x.v }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== ADMIN EMPTY ===== -->
+      <sc-if value="{{ p.adminempty }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px dashed #d4d1dc;border-radius:12px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">
+          <span style="width:40px;height:40px;border-radius:10px;background:#f4f3f7;display:grid;place-items:center;font-size:18px;color:#a1a1aa">◫</span>
+          <div style="font-weight:700;font-size:15px">No program assigned</div>
+          <p style="margin:0;max-width:420px;font-size:13.5px;line-height:1.55;color:#6b6577">A Super Admin assigns regional programs to admins. When one is assigned to you, its content and member progress appear here, read-only.</p>
+          <span style="font-size:12.5px;font-weight:600;color:#6d28d9">Ask HQ · open a ticket →</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ p.states }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em">States on this screen</div>
+          <div class="lp-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="font-weight:600;font-size:12.5px">Loading</span><div style="height:10px;width:70%;border-radius:99px;background:#ececf1"></div><div style="height:10px;width:92%;border-radius:99px;background:#f4f3f7"></div><div style="height:10px;width:56%;border-radius:99px;background:#f4f3f7"></div></div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px">Empty</span><span style="font-size:12.5px;line-height:1.5;color:#6b6577">{{ states.empty }}</span><span style="font-size:12px;font-weight:600;color:#6d28d9">{{ states.emptyCta }}</span></div>
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px">Not recorded</span><span style="align-self:flex-start;font-size:11px;font-weight:500;color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc;border-radius:99px;padding:2px 8px">Not recorded</span><span style="font-size:12.5px;line-height:1.5;color:#6b6577">{{ states.nr }}</span></div>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:600;font-size:12.5px;color:#b91c1c">Unreadable</span><span style="font-size:12.5px;line-height:1.5;color:#b91c1c">{{ states.unread }}</span><span style="font-size:12px;font-weight:600;color:#b91c1c">Try again</span></div>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+  </div>
+
+  <aside class="lp-rail" style="background:#fff;border-left:1px solid #ececf1;align-self:stretch">
+    <sc-if value="{{ railOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="width:280px;box-sizing:border-box;padding:16px 14px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13.5px">Eadwyn</span><span style="font-size:12px;color:#6b6577">Collapse ›</span></div>
+        <div style="display:flex;gap:6px"><span style="flex:1;text-align:center;font-size:12px;font-weight:600;padding:7px;border-radius:8px;border:1px solid #ececf1;color:#6b6577">Manual</span><span style="flex:1;text-align:center;font-size:12px;font-weight:600;padding:7px;border-radius:8px;background:#7c3aed;color:#fff">Eadwyn</span></div>
+        <div style="font:600 10.5px 'Roboto Mono',monospace;color:#6b6577;letter-spacing:.08em">MODEL</div>
+        <sc-for list="{{ railModels }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px;border:1px solid {{ r.border }};background:{{ r.bg }};border-radius:9px;padding:8px 10px;font:500 11px 'Roboto Mono',monospace"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span><sc-if value="{{ r.def }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:#6d28d9;background:#fff;border:1px solid #ddd0fb;border-radius:99px;padding:1px 7px">Default</span></sc-if></div></sc-for>
+        <div style="border:1px solid #ddd0fb;background:#f4f0fe;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+          <span style="font:600 10.5px 'Roboto Mono',monospace;color:#6d28d9;letter-spacing:.06em">PROPOSAL · {{ rail.title }}</span>
+          <span style="font-size:12.5px;line-height:1.5">{{ rail.body }}</span>
+          <div style="display:flex;gap:6px"><span style="font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:7px;background:#fff;border:1px solid #ddd0fb">Draft</span><span style="font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:7px;background:#7c3aed;color:#fff">Accept</span><span style="font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:7px;color:#6b6577">Discard</span></div>
+          <span style="font-size:11.5px;line-height:1.45;color:#6b6577">{{ rail.writes }}</span>
+        </div>
+        <div style="border-top:1px solid #ececf1;padding-top:10px;font-size:12px;color:#6b6577;line-height:1.5">Spend on this page: <span style="font-family:'Roboto Mono',monospace">no runs yet</span><br>Top up when you want Eadwyn back.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ railClosed }}" hint-placeholder-val="{{ false }}">
+      <div style="width:44px;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0"><span style="width:26px;height:26px;border-radius:7px;background:#7c3aed;display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px">E</span><span style="font:600 9px 'Roboto Mono',monospace;color:#a1a1aa;text-align:center;line-height:1.3">AI<br>rail</span></div>
+    </sc-if>
+  </aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;menu&quot;,&quot;home&quot;,&quot;course&quot;,&quot;lesson&quot;,&quot;webinar&quot;,&quot;exercise&quot;,&quot;exam&quot;,&quot;lists&quot;,&quot;me&quot;,&quot;studio&quot;,&quot;programs&quot;,&quot;program&quot;,&quot;adminview&quot;,&quot;adminempty&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.screen ?? 'home';
+    const role = ['studio','programs','program'].includes(s) ? 'super' : (s === 'adminview' || s === 'adminempty') ? 'admin' : 'member';
+    const SIDES = {
+      member: ['Studio','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'],
+      super: ['Home','Licences','Funds','Contracts','Team','Revenue','Content','Platform','Support','Security','Settings'],
+      admin: ['Studio','Accounts','Approvals','Programs','Community','Contracts','Insights','Settings'],
+    };
+    const badge = role === 'super' ? { show:true, t:'AXAL VC HQ · SUPER ADMIN', bg:'#881337', fg:'#fff' } : role === 'admin' ? { show:true, t:'[Licence name] · BRANCH', bg:'#334155', fg:'#fff' } : { show:false, t:'', bg:'', fg:'' };
+    const ROUTE = { menu:'/learning', home:'/learning', course:'/learning/courses/[slug]', lesson:'/learning/courses/[slug]/[lesson]', webinar:'/learning/webinars/[slug]', exercise:'/learning/exercises/[slug]', exam:'/learning/exams/[slug]', lists:'/learning?tab=articles', me:'/learning/me', studio:'/learning/studio', programs:'/learning/studio/programs', program:'/learning/studio/programs/[program]', adminview:'/learning/programs/[program]', adminempty:'/learning/programs' };
+    const HEAD = {
+      home: { h1:'Learning', sub:'Courses, videos, webinars, articles, publications, events, exercises and exams, in one place.', cta:'Write an article' },
+      course: { h1:'[Course title]', sub:'[One line on what the course covers]', back:'Learning' },
+      lesson: { h1:'[Lesson title]', sub:'[Module title] · lesson [5 of 12]', back:'[Course title]' },
+      webinar: { h1:'[Webinar title]', sub:'Three states of one page: upcoming, live now, past.', back:'Learning' },
+      exercise: { h1:'[Exercise title]', sub:'Part of [Course title] · [Module title]', back:'[Course title]' },
+      exam: { h1:'[Exam title]', sub:'Three steps of one exam: intro, taking it, result.', back:'[Course title]' },
+      lists: { h1:'Articles and publications', sub:'Articles any member writes, and the PDF reports HQ publishes.', cta:'Write an article' },
+      me: { h1:'My learning', sub:'Everything you have started, finished, submitted or sat.' },
+      studio: { h1:'Learning studio', sub:'Author videos, courses, webinars, exercises and exams. Only a Super Admin sees this page.', cta:'New content ▾' },
+      programs: { h1:'Regional programs', sub:'Programs group content for a region. Assign admins and enrol members here.', cta:'New program' },
+      program: { h1:'[Program name]', sub:'[Region] · content in order, assigned admins, members.', back:'Regional programs' },
+      adminview: { h1:'[Program name]', sub:'Read-only. What each enrolled member has completed in the content a Super Admin assigned to you.' },
+      adminempty: { h1:'Programs', sub:'Programs a Super Admin has assigned to you.' },
+    };
+    const head = Object.assign({ cta:'', back:'' }, HEAD[s] || HEAD.home);
+    const MENU = ['Account','Trust Center','Perks','Calendar','Events','Learning','Help Center','Plans & Pricing','Log Out'];
+    const menu = MENU.map(t => ({ t, note: t === 'Learning', bg: t === 'Learning' ? '#f4f0fe' : 'transparent', fg: t === 'Log Out' ? '#b91c1c' : t === 'Learning' ? '#6d28d9' : '#18181b' }));
+    const tabs = ['All','Courses','Videos','Webinars','Articles','Publications','Events','Exercises','Exams'].map((t, i) => ({ t, style:'font-size:12.5px;font-weight:600;white-space:nowrap;padding:7px 12px;border-radius:8px;' + (i === 0 ? 'background:#f4f0fe;color:#6d28d9' : 'color:#6b6577') }));
+    const pages = ['‹','1','2','3','…','›'].map((t, i) => ({ t, style:'min-width:28px;text-align:center;font:500 12px \'Roboto Mono\',monospace;padding:5px 8px;border-radius:7px;border:1px solid ' + (i === 1 ? '#ddd0fb' : '#ececf1') + ';background:' + (i === 1 ? '#f4f0fe' : '#fff') + ';color:' + (i === 1 ? '#6d28d9' : '#6b6577') }));
+    const KINDS = ['COURSE','VIDEO','WEBINAR','ARTICLE','PUBLICATION','EVENT','EXERCISE','EXAM'];
+    const items = KINDS.map((k, i) => ({ kind:k, t:'[' + k.charAt(0) + k.slice(1).toLowerCase() + ' title]', meta: k === 'COURSE' ? '[12 lessons] · [3h 20m]' : k === 'VIDEO' ? '[14 min]' : k === 'ARTICLE' ? '[Author] · [6 min read]' : '[date]', draft: i === 5 }));
+    const ICON = { video:'▶', reading:'¶', exercise:'✎', exam:'✓', webinar:'◉' };
+    const lesson = (kind, done, len) => ({ kind, icon: ICON[kind], len, tick: 'width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;' + (done ? 'background:#047857;color:#fff' : 'border:1px solid #ececf1;color:transparent') });
+    const modules = [
+      { t:'Module 1 · [Module title]', n:'[4 lessons] · [52 min]', lessons:[lesson('video', true, '[12 min]'), lesson('reading', true, '[8 min]'), lesson('exercise', true, '[20 min]'), lesson('video', true, '[12 min]')] },
+      { t:'Module 2 · [Module title]', n:'[4 lessons] · [1h 05m]', lessons:[lesson('video', true, '[15 min]'), lesson('webinar', false, '[45 min]'), lesson('reading', false, '[5 min]'), lesson('exercise', false, '[20 min]')] },
+      { t:'Module 3 · [Module title]', n:'[4 lessons] · [1h 23m]', lessons:[lesson('video', false, '[18 min]'), lesson('video', false, '[14 min]'), lesson('reading', false, '[6 min]'), lesson('exam', false, '[45 min]')] },
+    ];
+    const outline = ['video','reading','exercise','video','video','webinar'].map((k, i) => ({ icon: ICON[k], len:'[12 min]', style: 'display:flex;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:1px solid #f4f3f7;font-size:12.5px;' + (i === 4 ? 'background:#f4f0fe;color:#6d28d9;font-weight:600' : i < 4 ? 'color:#6b6577' : '') }));
+    const STATES = {
+      home: { empty:'Nothing published yet for this tab.', emptyCta:'Browse all', nr:'Progress: no lesson has been marked complete.', unread:'The content list could not be read just now.' },
+      course: { empty:'This course has no lessons published yet.', emptyCta:'Back to Learning', nr:'Length: lesson durations are not set by the author.', unread:'The course could not be read just now.' },
+      lesson: { empty:'This lesson has no media yet.', emptyCta:'Next lesson', nr:'Transcript: not generated for this video.', unread:'The video could not be loaded.' },
+    };
+    const RAIL = {
+      home: { title:'Study plan', body:'Order the next three lessons of [Course title] around your calendar for this week.', writes:'Accept writes three reminders to your Calendar. It does not mark anything complete.' },
+      course: { title:'Course summary', body:'Summarise what the remaining modules cover, from their lesson descriptions.', writes:'Accept writes a note to this course. It does not change progress.' },
+    };
+    const railOpen = ['home','menu','course','lists','me','studio','programs','program','adminview','adminempty','webinar','exercise','exam'].includes(s);
+    return {
+      side: SIDES[role], badge, route: ROUTE[s] || '/learning', head, menu,
+      railOpen, railClosed: !railOpen,
+      railModels: [{ name:'zai-org/glm-4.7-flash', def:true, border:'#ddd0fb', bg:'#f4f0fe' }, { name:'google/gemma-4-26b-a4b-it', def:false, border:'#ececf1', bg:'#fff' }, { name:'moonshotai/kimi-k2.6', def:false, border:'#ececf1', bg:'#fff' }],
+      rail: RAIL[s] || RAIL.home,
+      p: { menu: s === 'menu', home: s === 'home' || s === 'menu', course: s === 'course', lesson: s === 'lesson', webinar: s === 'webinar', exercise: s === 'exercise', exam: s === 'exam', lists: s === 'lists', me: s === 'me', studio: s === 'studio', programs: s === 'programs', program: s === 'program', adminview: s === 'adminview', adminempty: s === 'adminempty', states: s !== 'menu' },
+      states: STATES[s] || { empty:'Nothing here yet.', emptyCta:'Back to Learning', nr:'A value the source does not hold, with its reason.', unread:'This could not be read just now.' },
+      cont: [{ pct:'[38%]', w:'38%' }, { pct:'[72%]', w:'72%' }],
+      progs: [{ w:'54%', done:'[7 of 13] items complete' }, { w:'12%', done:'[1 of 8] items complete' }],
+      tabs, filters:['Topic ▾','Level ▾','Length ▾','Format ▾'], items, pages, webs:[1,2,3],
+      courseChips:['[Level]','[3h 20m]','[12 lessons]'], modules, resources:['PDF · [1.2 MB]','Link','Template'],
+      transcript:['00:00','00:42','01:15','02:03'], outline,
+      webStates: [
+        { label:'UPCOMING', pillT:'Registered', pill:'font-size:11px;font-weight:600;color:#6d28d9;background:#f4f0fe;border-radius:99px;padding:2px 8px', bg:'#f4f3f7', fg:'#a1a1aa', media:'[cover]', when:'[DD Mon YYYY] · [HH:MM] [TZ] · [60 min]', primary:'Register', primaryStyle:'font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px', secondary:'Add to calendar', note:'The join link appears here 15 minutes before the start.' },
+        { label:'LIVE NOW', pillT:'● Live', pill:'font-size:11px;font-weight:700;color:#b91c1c;background:#fef2f2;border-radius:99px;padding:2px 8px', bg:'#18181b', fg:'#a1a1aa', media:'[live stream]', when:'Started [HH:MM] · [n] watching', primary:'Join', primaryStyle:'font-size:12.5px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px', secondary:'', note:'Joining opens the host\u2019s room in a new tab.' },
+        { label:'PAST', pillT:'Ended', pill:'font-size:11px;font-weight:600;color:#6b6577;background:#f4f3f7;border-radius:99px;padding:2px 8px', bg:'#f4f3f7', fg:'#a1a1aa', media:'[recording] · [58:12]', when:'[DD Mon YYYY] · [n] attended', primary:'Watch the recording', primaryStyle:'font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:9px;border:1px solid #ddd0fb;color:#6d28d9;background:#f4f0fe', secondary:'', note:'If no recording was attached: \u201cRecording not available.\u201d' },
+      ],
+      exStatus: [
+        { t:'Submitted', when:'[date]', fg:'#6b6577', bg:'#f4f3f7', border:'#ececf1' },
+        { t:'Accepted', when:'—', fg:'#047857', bg:'#ecfdf5', border:'#a7f3d0' },
+        { t:'Needs work', when:'[date]', fg:'#92400e', bg:'#fffbeb', border:'#fcd34d' },
+      ],
+      examFacts: [{ v:'[20]', k:'questions' }, { v:'[30 min]', k:'time limit' }, { v:'[70%]', k:'pass mark' }, { v:'[2]', k:'attempts left' }],
+      options: [1, 2, 3, 4].map(n => ({ n, border: n === 2 ? '#ddd0fb' : '#ececf1', bg: n === 2 ? '#f4f0fe' : '#fff', dot: n === 2 ? '#7c3aed' : '#d4d1dc', fill: n === 2 ? '#7c3aed' : 'transparent' })),
+      attempts: [{ v:'[64%]', r:'Fail', fg:'#b91c1c' }, { v:'[58%]', r:'Fail', fg:'#b91c1c' }],
+      articles: [false, true, false, false, false, false].map((draft, i) => ({ draft, role: ['Founder','Investor','Partner','Advisor','Founder','Admin'][i] })),
+      pubs: [1, 2, 3, 4, 5],
+      studioFilters: ['All kinds','Published','Draft','Archived','Program-only'].map((t, i) => ({ t, style:'font-size:12px;font-weight:500;white-space:nowrap;padding:5px 11px;border-radius:99px;border:1px solid ' + (i === 0 ? '#ddd0fb' : '#ececf1') + ';background:' + (i === 0 ? '#f4f0fe' : '#fff') + ';color:' + (i === 0 ? '#6d28d9' : '#18181b') })),
+      content: [['VIDEO','[Video title]','Published','open','—'],['COURSE','[Course title]','Published','program','[Program name]'],['WEBINAR','[Webinar title]','Draft','program','[Program name], [Program name]'],['EXERCISE','[Exercise title]','Published','program','[Program name]'],['EXAM','[Exam title]','Draft','open','—'],['COURSE','[Course title]','Archived','program','[Program name]'],['VIDEO','[Video title]','Published','open','—']].map(([kind, t, status, vis, progs]) => ({ kind, t, status, vis, progs,
+        pill:'font-size:11px;font-weight:600;border-radius:99px;padding:2px 8px;justify-self:start;' + (status === 'Published' ? 'color:#047857;background:#ecfdf5' : status === 'Draft' ? 'color:#92400e;background:#fcd34d' : 'color:#6b6577;background:#f4f3f7') })),
+      editors: [
+        { t:'Video', fields:[{ k:'Title', v:'[Video title]' }, { k:'Source', v:'Upload file · or paste a link' }, { k:'Link', v:'YouTube · Vimeo · Cloudflare Stream', font:'\'Roboto Mono\',monospace', color:'#a1a1aa' }, { k:'Visibility', v:'Open · Program' }], note:'' },
+        { t:'Course builder', fields:[{ k:'Title', v:'[Course title]' }, { k:'Module 1', v:'⋮⋮ [Module title] · [4 lessons]' }, { k:'Module 2', v:'⋮⋮ [Module title] · [4 lessons]' }, { k:'Lesson', v:'+ Add lesson · video, reading, exercise, exam, webinar' }], note:'Modules and lessons reorder by drag.' },
+        { t:'Webinar scheduler', fields:[{ k:'Date', v:'[DD Mon YYYY] · [HH:MM]', font:'\'Roboto Mono\',monospace', color:'#18181b' }, { k:'Time zone', v:'[Europe/Zurich]', font:'\'Roboto Mono\',monospace', color:'#18181b' }, { k:'Capacity', v:'[N]', font:'\'Roboto Mono\',monospace', color:'#18181b' }, { k:'Join link', v:'[https://…]', font:'\'Roboto Mono\',monospace', color:'#18181b' }], note:'The recording is attached after the event.' },
+        { t:'Exercise editor', fields:[{ k:'Title', v:'[Exercise title]' }, { k:'Instructions', v:'[Rich text]' }, { k:'Answer', v:'Text' }, { k:'Reviewer', v:'[Admin or Super Admin]' }], note:'' },
+        { t:'Exam builder', fields:[{ k:'Question 1', v:'[Question] · single choice · correct: [B]' }, { k:'Question 2', v:'[Question] · multiple choice · correct: [A, C]' }, { k:'Pass mark', v:'[70%]', font:'\'Roboto Mono\',monospace', color:'#18181b' }, { k:'Limits', v:'[30 min] · [3] attempts · reveal answers: off', font:'\'Roboto Mono\',monospace', color:'#18181b' }], note:'' },
+      ].map(e => Object.assign({}, e, { fields: e.fields.map(f => Object.assign({ font:'inherit', color:'#18181b' }, f)) })),
+      progList: [{ admins:'[Admin name], [Admin name]' }, { admins:'[Admin name]' }, { admins:'—' }, { admins:'[Admin name]' }],
+      members: ['Founder','Founder','Investor','Advisor','Partner'].map((role, i) => ({ role, done: i === 3 ? '—' : '[n of n]' })),
+      matrixCols: ['VIDEO','COURSE','EXERCISE','EXAM','WEBINAR','VIDEO'],
+      matrix: [0, 1, 2, 3, 4].map(i => ({ bg: i === 1 ? '#faf8ff' : '#fff', cells: [0, 1, 2, 3, 4, 5].map(j => {
+        const k = (i * 3 + j) % 5;
+        const base = 'text-align:center;font:500 11.5px \'Roboto Mono\',monospace;padding:4px 0;border-radius:6px;';
+        return k === 0 ? { t:'✓', style: base + 'color:#047857;background:#ecfdf5' } : k === 1 ? { t:'[82%]', style: base + 'color:#18181b' } : k === 2 ? { t:'Needs work', style: base + 'color:#92400e;background:#fffbeb;font-size:10.5px' } : k === 3 ? { t:'—', style: base + 'color:#a1a1aa' } : { t:'✓', style: base + 'color:#047857;background:#ecfdf5' };
+      }) })),
+      record: [
+        { kind:'VIDEO', t:'[Video title]', v:'✓ [date]', style:'font:500 11.5px \'Roboto Mono\',monospace;color:#047857' },
+        { kind:'COURSE', t:'[Course title]', v:'[7 of 12]', style:'font:500 11.5px \'Roboto Mono\',monospace;color:#18181b' },
+        { kind:'EXERCISE', t:'[Exercise title]', v:'Accepted', style:'font-size:11.5px;font-weight:600;color:#047857' },
+        { kind:'EXAM', t:'[Exam title]', v:'[82%] · Pass', style:'font:500 11.5px \'Roboto Mono\',monospace;color:#18181b' },
+        { kind:'WEBINAR', t:'[Webinar title]', v:'Attended', style:'font-size:11.5px;font-weight:600;color:#6b6577' },
+        { kind:'VIDEO', t:'[Video title]', v:'—', style:'font:500 11.5px \'Roboto Mono\',monospace;color:#a1a1aa' },
+      ],
+    };
+  }
+}
+</script>
+</body></html>

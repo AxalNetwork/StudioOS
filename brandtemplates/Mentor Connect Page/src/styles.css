@@ -1,0 +1,61 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-rule: var(--rule);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+}
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.985 0.005 85);
+  --foreground: oklch(0.22 0.02 60);
+  --ink: oklch(0.18 0.02 60);
+  --ink-soft: oklch(0.42 0.015 70);
+  --muted: oklch(0.955 0.008 80);
+  --muted-foreground: oklch(0.48 0.015 70);
+  --card: oklch(0.99 0.004 85);
+  --card-foreground: oklch(0.22 0.02 60);
+  --border: oklch(0.9 0.012 80);
+  --rule: oklch(0.86 0.012 75);
+  --accent: oklch(0.55 0.13 35);
+  --accent-foreground: oklch(0.985 0.005 85);
+  --primary: oklch(0.24 0.02 60);
+  --primary-foreground: oklch(0.985 0.005 85);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html { scroll-behavior: smooth; }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3 { font-family: var(--font-serif); letter-spacing: -0.01em; }
+}
+
+@utility text-balance { text-wrap: balance; }
+@utility text-pretty { text-wrap: pretty; }

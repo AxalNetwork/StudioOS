@@ -1,0 +1,134 @@
+/**
+ * D5617: `claims.mjs` and `../claim.mjs`: claim metadata round trips and TTL
+ * expiry, one winner between two concurrent acquisitions, renew and release,
+ * comment-only reaping, the 403 label fallback, and the WIP cap.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { claimRef, claimMessage, parseClaim, isExpired } from './claims.mjs';
+import { runClaim } from '../claim.mjs';
+
+const at = '2026-11-11T00:00:00.000Z';
+const identity = { issue: 5617, slot: 's39', agent: 'Codex', session: '39', now: at, log() {} };
+function fake() {
+  let ref = null, n = 0;
+  const commits = { main: { tree: { sha: 'tree' }, message: '' } };
+  const comments = [], writes = [];
+  const fail = status => { throw Object.assign(new Error('HTTP ' + status), { status }); };
+  const api = async (method, path, body) => {
+    if (method !== 'GET') writes.push({ method, path, body });
+    if (path === 'git/ref/heads/main') return { object: { sha: 'main' } };
+    if (path.startsWith('git/ref/heads/claim/')) return ref ? { object: { sha: ref } } : fail(404);
+    if (path.startsWith('git/matching-refs/')) return ref ? [{ ref: claimRef(5617), object: { sha: ref } }] : [];
+    if (path.startsWith('git/commits/')) return commits[path.split('/').at(-1)];
+    if (path === 'git/commits') { const sha = 'c' + ++n; commits[sha] = { ...body, tree: { sha: body.tree } }; return { sha }; }
+    if (path === 'git/refs') { if (ref) fail(422); ref = body.sha; return {}; }
+    if (path.startsWith('git/refs/')) {
+      if (method === 'DELETE') { ref = null; return null; }
+      assert.equal(body.force, false);
+      if (commits[body.sha].parents[0] !== ref) fail(422);
+      ref = body.sha; return {};
+    }
+    if (path.includes('/comments')) {
+      if (method === 'GET') return comments;
+      comments.push(body); return {};
+    }
+    throw new Error('unexpected ' + path);
+  };
+  return { api, comments, writes };
+}
+test('metadata round trips; malformed and TTL boundary are expired', () => {
+  const message = claimMessage({ ...identity, at });
+  const claim = parseClaim(message);
+  assert.equal(claim.session, '39');
+  assert.equal(claimRef(5617), 'refs/heads/claim/5617');
+  assert.equal(isExpired(claim, '2026-11-11T23:59:59.999Z'), false);
+  assert.equal(isExpired(claim, '2026-11-12T00:00:00.000Z'), true);
+  for (const value of ['broken', '{}', 'null', '{"version":1}']) assert.equal(isExpired(parseClaim(value), at), true);
+  assert.throws(() => claimRef('../main'));
+  assert.throws(() => claimMessage({ ...identity, at, ttlHours: -1 }));
+});
+test('two concurrent acquisitions have exactly one winner, 422 is held', async () => {
+  const f = fake();
+  const codes = await Promise.all([runClaim({ ...identity, ...f, command: 'claim' }), runClaim({ ...identity, ...f, session: 'other', command: 'claim' })]);
+  assert.deepEqual(codes.sort(), [0, 3]);
+  assert.equal(await runClaim({ ...identity, ...f, command: 'claim' }), 3);
+  assert.equal(f.writes.filter(w => w.path === 'git/refs').length, 2);
+});
+test('renew uses a child of the held commit and release verifies holder', async () => {
+  const f = fake();
+  assert.equal(await runClaim({ ...identity, ...f, command: 'claim' }), 0);
+  assert.equal(await runClaim({ ...identity, ...f, command: 'release', session: 'other' }), 3);
+  assert.equal(await runClaim({ ...identity, ...f, command: 'renew', now: '2026-11-11T01:00:00Z' }), 0);
+  assert.equal(await runClaim({ ...identity, ...f, command: 'renew', now: '2026-11-12T02:00:00Z' }), 3);
+  assert.equal(await runClaim({ ...identity, ...f, command: 'release' }), 0);
+  assert.equal(await runClaim({ ...identity, ...f, command: 'claim' }), 0);
+});
+test('reap comments once across two runs and never deletes', async () => {
+  const f = fake();
+  await runClaim({ ...identity, ...f, command: 'claim' });
+  for (let i = 0; i < 2; i++) await runClaim({ ...identity, ...f, command: 'reap', now: '2026-11-12T00:00:00Z' });
+  assert.equal(f.comments.length, 1);
+  assert.match(f.comments[0].body, /<!-- expired-claim:5617:c1 -->/);
+  assert.equal(f.writes.some(w => w.method === 'DELETE'), false);
+});
+test('403 requests explicit label fallback; other API errors propagate', async () => {
+  const f = fake();
+  const api = async (...args) => { if (args[0] === 'POST') throw Object.assign(new Error('no'), { status: 403 }); return f.api(...args); };
+  assert.equal(await runClaim({ ...identity, api, command: 'claim' }), 4);
+  assert.equal(await runClaim({ ...identity, api: async () => { throw Object.assign(new Error('read forbidden'), { status: 403 }); }, command: 'claim' }), 4);
+  await assert.rejects(runClaim({ ...identity, command: 'claim', api: async () => { throw new Error('offline'); } }), /offline/);
+});
+
+test('reap reads an unpaginated matching-ref list above 100 and still paginates comments', async () => {
+  const refs = Array.from({ length: 101 }, (_, i) => ({ ref: claimRef(10000 + i), object: { sha: `ref-${i}` } }));
+  const comments = Array.from({ length: 100 }, (_, i) => ({ body: `Existing comment ${i}` }));
+  const writes = [];
+  let refReads = 0;
+  const api = async (method, path, body) => {
+    if (path.startsWith('git/matching-refs/heads/claim/')) {
+      refReads++;
+      // GitHub's matching-refs endpoint ignores page/per_page and returns the complete match list.
+      return refs;
+    }
+    if (path.startsWith('git/commits/')) {
+      const i = Number(path.split('-').at(-1));
+      return { message: claimMessage({ ...identity, issue: 10000 + i, at: i === 100 ? at : '2026-11-12T00:00:00Z' }) };
+    }
+    if (method === 'GET' && path.startsWith('issues/10100/comments')) {
+      const page = Number(new URLSearchParams(path.split('?')[1]).get('page') || 1);
+      return comments.slice((page - 1) * 100, page * 100);
+    }
+    writes.push({ method, path, body });
+    if (method === 'POST' && path === 'issues/10100/comments') { comments.push(body); return {}; }
+    throw new Error('Unexpected write: ' + method + ' ' + path);
+  };
+  for (let i = 0; i < 2; i++) {
+    assert.equal(await runClaim({ ...identity, api, command: 'reap', now: '2026-11-12T00:00:00Z' }), 0);
+  }
+  assert.equal(refReads, 2, 'one complete matching-ref read per run');
+  assert.equal(comments.length, 101, 'the marker on comment page two prevents a duplicate notice');
+  assert.deepEqual(writes.map(({ method, path }) => [method, path]), [['POST', 'issues/10100/comments']]);
+});
+
+test('claim reports WIP, blocks before writes at the cap, and proceeds when unset', async () => {
+  const f = fake();
+  const output = [];
+  const options = { ...identity, ...f, command: 'claim', log: value => output.push(value),
+    wipReport: async () => new Map([['S39', { pulls: [
+      { number: 123, state: 'draft', weight: 1 }, { number: 124, state: 'green', weight: 1 },
+    ], expired: [] }]]) };
+  assert.equal(await runClaim({ ...options, wipCap: '1' }), 5);
+  assert.deepEqual(f.writes, []);
+  assert.match(output.at(-1), /finish #123 before claiming/);
+  assert.doesNotMatch(output.at(-1), /#124/);
+  assert.equal(await runClaim(options), 0);
+});
+
+test('a report outage is advisory with no cap and stops an enforced claim', async () => {
+  const f = fake();
+  const options = { ...identity, ...f, command: 'claim', wipReport: async () => { throw Object.assign(new Error('offline'), { status: 403 }); } };
+  await assert.rejects(runClaim({ ...options, wipCap: '3' }), /offline/);
+  assert.deepEqual(f.writes, []);
+  assert.equal(await runClaim(options), 0);
+});

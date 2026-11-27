@@ -1,0 +1,377 @@
+/** D1487/D1488 (#3724): real SQLite routes, private signal ownership, eligibility, vectors and Explain billing. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import rec, { EVENT_REC_AI, EVENT_REC_PAGE } from '../src/routes/event_recommendations.ts';
+import events, { canViewEvent, visibleEventIds } from '../src/routes/events.ts';
+import { registrationEligibility, registrationEligibilityBatch } from '../src/services/eventOrganiser.ts';
+import eventsPublic from '../src/routes/events_public.ts';
+import { RECOMMENDATION_DEPS, cosine, readRecPrefs } from '../src/services/eventRecommendations.ts';
+import { d1Over } from './_d1_sqlite.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA, setFixtureAllowance } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+import { __resetForTest, run as runAI } from '../src/services/aiRouter.ts';
+import { tableFromBaseline } from './_baseline.mjs';
+const SECRET = 'synthetic-3724-event-recommendation-secret';
+function table(name: string) {
+  const files = ['schema_baseline.sql', ...readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort(compareMigrations).map(f=>'migrations/'+f)];
+  for (const file of files) { try { return tableFromBaseline(readFileSync(new URL('../sql/'+file,import.meta.url),'utf8'),name); } catch {} }
+  throw new Error('table absent: '+name);
+}
+function fixture() {
+  const db = new DatabaseSync(':memory:',{ enableForeignKeyConstraints:false });
+  for (const t of ['users','projects','assessment_results','raise_rounds','customer_segments','job_postings','investor_profiles','advisors','advisor_services','engagements','ai_rail_preferences','ai_usage_logs']) db.exec(table(t));
+  for (const f of ['109_events_core.sql','392_event_organiser.sql','546_events_review_columns.sql','611_event_registrations_comp_promoted.sql','493_ai_usage_charged.sql','709_event_recommendations.sql']) db.exec(readFileSync(new URL('../sql/migrations/'+f,import.meta.url),'utf8'));
+  db.exec("INSERT INTO users (id,email,name,role,founder_id,partner_id) VALUES (1,'host@example.test','Host','admin',NULL,NULL),(2,'founder@example.test','Founder','founder',20,NULL),(3,'investor@example.test','Investor','investor',NULL,NULL),(4,'advisor@example.test','Advisor','advisor',NULL,NULL),(5,'partner@example.test','Partner','partner',NULL,50),(6,'explorer@example.test','Explorer','exploring',NULL,NULL),(7,'other@example.test','Other private member','founder',70,NULL);" );
+  db.exec("INSERT INTO projects (id,name,founder_id,stage,sector) VALUES (10,'Synthetic venture',20,'MVP','fintech'),(11,'Other private venture',70,'MVP','fintech');");
+  db.exec("INSERT INTO raise_rounds (id,uid,project_id,name,status) VALUES (1,'own-round',10,'Seed','active'),(2,'other-round',11,'Secret Series Z','active');");
+  db.exec("INSERT INTO customer_segments (id,project_id,name,name_norm) VALUES (1,10,'CFOs','cfos'); INSERT INTO job_postings (id,slug,project_id,title,status) VALUES (1,'own-job',10,'Engineer','published');");
+  db.exec("INSERT INTO investor_profiles (user_id,sectors_json,stages_json,thesis_text) VALUES (3,'[\"climate\"]','[\"Seed\"]','Private thesis must never leave'); INSERT INTO advisors (id,uid,user_id,display_name) VALUES (4,'advisor',4,'Advisor'); INSERT INTO advisor_services (uid,advisor_id,title) VALUES ('own-service',4,'Marketing sprint');");
+  db.exec("INSERT INTO engagements (uid,need_id,quote_id,partner_id,founder_id,project_id,price) VALUES ('own-engagement',1,1,50,20,10,100);");
+  db.exec("INSERT INTO assessment_results (session_id,game_id,user_id,track) VALUES (2,1,2,'founder_origin_v1'),(6,1,6,'explorer_v1');");
+  const insert = db.prepare("INSERT INTO events (id,slug,host_user_id,title,summary,description,type,starts_at,status,visibility,admin_published,topics_json) VALUES (?,?,1,?,?,?,'workshop','2099-01-01T10:00:00Z','published','public',1,?)");
+  for (let i=1;i<=16;i++) insert.run(i,'event-'+i,'Fintech Seed CFOs engineer climate marketing MVP workshop '+i,'Synthetic venture workshop','Recorded content','["fundraising","ai"]');
+  const DB = d1Over(db); const app = new Hono<any>().route('/api/events',rec).route('/api/events',events).route('/api/public',eventsPublic);
+  const env:any={ DB,JWT_SECRET:SECRET,ENVIRONMENT:'development' };
+  return { db,env,async call(path:string,user:number|null=2,method='GET',body?:unknown,support=false) {
+    const headers:Record<string,string>={'Content-Type':'application/json'};
+    if (user!==null) headers.Authorization='Bearer '+await new SignJWT({user_id:user,...(support?{impersonated_by:1}:{})}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
+    const r=await app.fetch(new Request('http://test'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),env,{waitUntil(){},passThroughOnException(){}});
+    return {status:r.status,body:await r.json() as any};
+  }};
+}
+
+test('record reasons belong to the caller; each profile uses its own records, with honest missing and unreadable signals',async()=>{
+  const f=fixture();try {
+    const founder=await f.call('/api/events/recommended');assert.equal(founder.status,200,JSON.stringify(founder.body));
+    const reasons=founder.body.events.flatMap((e:any)=>e.reasons);
+    assert.ok(reasons.some((r:any)=>r.code==='raise_round'&&r.text==='You have a Seed round open.'&&r.ref.id===1));
+    assert.ok(reasons.every((r:any)=>!/(attend|[0-9]+ investors)/i.test(r.text)));
+    assert.ok(!JSON.stringify(founder.body).includes('Secret Series Z'));assert.ok(!JSON.stringify(founder.body).includes('Other private member'));assert.ok(reasons.filter((r:any)=>r.code==='sector'||r.code==='stage').every((r:any)=>r.ref.id===10));
+    for (const [user,code] of [[3,'thesis'],[4,'service'],[5,'engagement']] as const) { const r=await f.call('/api/events/recommended',user);assert.equal(r.status,200);assert.ok(r.body.events.some((e:any)=>e.reasons.some((x:any)=>x.code===code)),code);assert.ok(!JSON.stringify(r.body).includes('Private thesis must never leave')); }
+    f.db.exec("UPDATE investor_profiles SET sectors_json='[\"AI\"]' WHERE user_id=3");assert.ok((await f.call('/api/events/recommended',3)).body.events.some((e:any)=>e.reasons.some((r:any)=>r.code==='thesis'&&r.text.includes('AI'))));
+    f.db.exec('DELETE FROM assessment_results WHERE user_id=6');const explorer=await f.call('/api/events/recommended',6);assert.ok(explorer.body.events.some((e:any)=>e.reasons.some((r:any)=>r.text==='Popular with new members')));
+    f.db.exec('DELETE FROM raise_rounds WHERE id=1');const missing=await f.call('/api/events/recommended');assert.equal(missing.body.signals.raise_round,'not_recorded');assert.ok(!missing.body.events.some((e:any)=>e.reasons.some((r:any)=>r.code==='raise_round')));
+    f.db.exec('DROP TABLE customer_segments');const failed=await f.call('/api/events/recommended');assert.equal(failed.status,200);assert.equal(failed.body.signals.segment,'unreadable');assert.equal(failed.body.signals.sector,'read');
+    f.db.exec('DROP TABLE events');assert.equal((await f.call('/api/events/recommended')).status,503);
+  }finally{f.db.close();}
+});
+
+test('candidate gates exclude private, unlisted, unapproved, past, cancelled, hosted, held, ineligible and hidden events',async()=>{
+  const f=fixture();try {
+    f.db.exec("UPDATE events SET visibility='private' WHERE id=2; UPDATE events SET visibility='unlisted' WHERE id=3; UPDATE events SET admin_published=0 WHERE id=4; UPDATE events SET starts_at='2000-01-01' WHERE id=5; UPDATE events SET status='cancelled' WHERE id=6; UPDATE events SET host_user_id=2 WHERE id=7; UPDATE events SET audience_rules_json='{\"mode\":\"selected\",\"roles\":[\"investor\"]}' WHERE id=9;");
+    f.db.exec("INSERT INTO event_registrations(event_id,user_id,email,status) VALUES (8,2,'founder@example.test','confirmed');");
+    assert.equal((await f.call('/api/events/10/recommendation-feedback',2,'POST',{verdict:'not_for_me',reason:'topic'})).status,200);
+    const r=await f.call('/api/events/recommended?limit=50');assert.equal(r.status,200);const ids=r.body.events.map((e:any)=>e.id);assert.ok(ids.includes(1));for(let i=2;i<=10;i++)assert.ok(!ids.includes(i),'excluded '+i);
+    assert.ok(!JSON.stringify(r.body).includes('attendee'));assert.ok(r.body.events.every((e:any)=>e.source==='axal'&&e.registration_eligible.eligible===true&&e.location_url===null));
+    f.db.exec('DROP TABLE IF EXISTS user_personas');f.db.exec("UPDATE events SET audience_rules_json='{\"mode\":\"selected\",\"roles\":[\"advisor\"],\"personas\":[\"missing\"]}' WHERE id=1");
+    assert.equal((await f.call('/api/events/recommended')).status,503,'unreadable eligibility is never eligible');
+  }finally{f.db.close();}
+});
+
+test('preferences and feedback validate, remain private, reject support-session writes and disable all ranking work',async()=>{
+  const f=fixture();const embed=RECOMMENDATION_DEPS.embed;const modelRun=EVENT_REC_AI.run;try {
+    let modelCalls=0;EVENT_REC_AI.run=async()=>{modelCalls++;return {ok:false,error:'unexpected'} as any;};
+    let calls=0;RECOMMENDATION_DEPS.embed=async()=>{calls++;return new Array(768).fill(1);};f.env.AI={};
+    assert.equal((await f.call('/api/events/recommendation-prefs',null)).status,401);
+    for (const body of [{enabled:'yes'},{travel_km:-1},{interests:['unknown']},{formats:['fax']},{types:['unknown']}]) assert.equal((await f.call('/api/events/recommendation-prefs',2,'PUT',body)).status,400);
+    assert.equal((await f.call('/api/events/recommendation-prefs',2,'PUT',{goals_90d:'x'.repeat(501)})).body.error,'too_long');
+    for(const path of ['/api/events/recommendation-prefs','/api/events/1/recommendation-feedback']) assert.equal((await f.call(path,2,path.endsWith('prefs')?'PUT':'POST',{enabled:false,verdict:'saved'},true)).status,403);
+    assert.equal((await f.call('/api/events/1/recommendation-feedback',2,'POST',{verdict:'bad'})).status,400);
+    assert.equal((await f.call('/api/events/1/recommendation-feedback',2,'POST',{verdict:'not_for_me',reason:'bad'})).status,400);
+    assert.equal((await f.call('/api/events/1/recommendation-feedback',2,'POST',{verdict:'saved'})).status,200);
+    assert.deepEqual((await f.call('/api/events/recommendation-prefs')).body.saved,[1]);assert.deepEqual((await f.call('/api/events/recommendation-prefs',3)).body.saved,[]);
+    await f.call('/api/events/1/recommendation-feedback',2,'POST',{verdict:null});assert.deepEqual((await f.call('/api/events/recommendation-prefs')).body.saved,[]);
+    f.db.exec("UPDATE events SET visibility='private' WHERE id=2");assert.equal((await f.call('/api/events/2/recommendation-feedback',2,'POST',{verdict:'saved'})).status,404);
+    await f.call('/api/events/recommendation-prefs',2,'PUT',{enabled:false});const off=await f.call('/api/events/recommended');assert.equal(off.body.enabled,false);assert.deepEqual(off.body.events,[]);assert.equal(calls,0);assert.equal(modelCalls,0);
+  }finally{RECOMMENDATION_DEPS.embed=embed;EVENT_REC_AI.run=modelRun;f.db.close();}
+});
+
+test('bounded system embeddings are cached only in D1 and invalidate when recorded content changes',async()=>{
+  const f=fixture();const embed=RECOMMENDATION_DEPS.embed;try {
+    let calls=0;RECOMMENDATION_DEPS.embed=async()=>{calls++;return new Array(768).fill(1);};f.env.AI={};f.env.VECTORIZE={upsert(){throw new Error('must not publish vectors');}};
+    await f.call('/api/events/recommended');assert.ok(calls>0&&calls<=10);assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM event_rec_member_vectors').get()!.n,1);
+    f.db.exec('DELETE FROM events WHERE id>3');const before=calls;await f.call('/api/events/recommended');assert.equal(calls,before,'cached second view embeds nothing');
+    f.db.exec("UPDATE events SET summary='Changed public content' WHERE id=1");await f.call('/api/events/recommended');assert.equal(calls,before+1);
+    await f.call('/api/events/recommendation-prefs',2,'PUT',{goals_90d:'Raise a seed round'});await f.call('/api/events/recommended');assert.equal(calls,before+2);
+    assert.equal(cosine(new Array(768).fill(1),new Array(768).fill(1)),1);assert.equal(cosine([],[]),0);assert.equal(cosine(new Array(768).fill(0),new Array(768).fill(1)),0);
+  }finally{RECOMMENDATION_DEPS.embed=embed;f.db.close();}
+});
+
+test('host topics validate on create/edit and public topic filtering uses stored topics',async()=>{
+  const f=fixture();try{
+    const base={title:'New synthetic workshop',starts_at:'2099-02-01T10:00:00Z'};
+    assert.equal((await f.call('/api/events',2,'POST',{...base,topics:['unknown']})).status,400);
+    const created=await f.call('/api/events',2,'POST',{...base,topics:['ai','hiring']});assert.equal(created.status,201,JSON.stringify(created.body));assert.deepEqual(created.body.event.topics,['ai','hiring']);
+    const id=created.body.event.id;assert.equal((await f.call('/api/events/'+id,3,'PATCH',{topics:['climate']})).status,403);
+    assert.equal((await f.call('/api/events/'+id,2,'PATCH',{topics:['ai','ai']})).status,400);
+    assert.equal((await f.call('/api/events/'+id,2,'PATCH',{topics:['climate']})).status,200);
+    f.db.prepare("UPDATE events SET status='published',visibility='public',admin_published=1 WHERE id=?").run(id);
+    const feed=await f.call('/api/public/events?topic=climate',null);assert.equal(feed.status,200);assert.deepEqual(feed.body.events.map((e:any)=>e.id),[id]);assert.equal(feed.body.total,1);
+    assert.equal((await f.call('/api/public/events?topic=invalid',null)).status,400);
+  }finally{f.db.close();}
+});
+
+test('Explain quote runs no model; paid run uses caller reasons and a fixed event rail record; refusals protect the free list',async()=>{
+  const f=fixture();const original={...EVENT_REC_AI};try{
+    let runs=0,quotes=0;const opts:any[]=[];const paidOpts:typeof opts=[];
+    EVENT_REC_AI.quote=async(_env:any,o:any)=>{quotes++;opts.push(o);return {ok:true,hold_microusd:120,model:'synthetic'};};
+    f.db.exec("INSERT INTO ai_usage_logs(id,user_id,task,model,charged_microusd) VALUES (1,2,'rail_match','synthetic',75)");
+    EVENT_REC_AI.run=async(_env:any,o:any)=>{runs++;opts.push(o);paidOpts.push(o);return {ok:true,output:'Your recorded round matches the fundraising topic.',usage:{} as any,usageLogId:1} as any;};
+    const quote=await f.call('/api/events/1/recommendation/explain/quote',2,'POST');assert.equal(quote.status,200);assert.equal(quote.body.hold_microusd,120);assert.equal(runs,0);assert.equal(quotes,1);
+    const run=await f.call('/api/events/1/recommendation/explain',2,'POST',{quote_uid:quote.body.quote_uid,user_id:7,reasons:['Secret Series Z']});assert.equal(run.status,200);assert.equal(run.body.charged_microusd,75);assert.equal(run.body.usage_log_id,1);assert.equal(runs,1);assert.equal(paidOpts[0].userId,2);assert.equal(paidOpts[0].rail.page,EVENT_REC_PAGE);assert.equal(paidOpts[0].rail.record,'event:1');assert.ok(!JSON.stringify(opts).includes('Secret Series Z'));
+    assert.equal((await f.call('/api/events/1/recommendation/explain',2,'POST',{},true)).status,403);assert.equal(runs,1);
+    f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES ('synthetic-off',?,?,'','manual')").run(2,EVENT_REC_PAGE.toLowerCase());assert.equal((await f.call('/api/events/1/recommendation/explain/quote',2,'POST')).status,403);assert.equal(runs,1);assert.equal((await f.call('/api/events/recommended')).status,200);
+    f.db.exec('DELETE FROM ai_rail_preferences');EVENT_REC_AI.quote=async()=>({ok:false,refusal:'budget_user_day',error:'synthetic'} as any);assert.equal((await f.call('/api/events/1/recommendation/explain/quote',2,'POST')).status,402);EVENT_REC_AI.quote=async()=>({ok:true,hold_microusd:120,model:'synthetic'});for(const [refusal,status] of [['budget_user_day',402],['ai_paused',403],['guard_blocked',422],['guard_unavailable',503]] as const){ EVENT_REC_AI.run=async()=>({ok:false,refusal,error:'synthetic'} as any);assert.equal((await f.call('/api/events/1/recommendation/explain',2,'POST',{quote_uid:quote.body.quote_uid})).status,status); }
+  }finally{Object.assign(EVENT_REC_AI,original);f.db.close();}
+});
+
+test('migration 709 cascades member-private preferences/feedback/vectors and deletes event vectors with their event',()=>{
+ const db=new DatabaseSync(':memory:');try{
+  db.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(id INTEGER PRIMARY KEY); CREATE TABLE events(id INTEGER PRIMARY KEY); INSERT INTO users VALUES (1); INSERT INTO events VALUES (1);');
+  db.exec(readFileSync(new URL('../sql/migrations/709_event_recommendations.sql',import.meta.url),'utf8'));
+  db.exec("INSERT INTO event_rec_prefs(user_id) VALUES (1); INSERT INTO event_rec_feedback(user_id,event_id,verdict) VALUES (1,1,'saved'); INSERT INTO event_rec_member_vectors(user_id,vector,norm,content_hash) VALUES (1,X'00',1,'test'); INSERT INTO event_rec_vectors(event_id,vector,norm,content_hash) VALUES (1,X'00',1,'test');");
+  db.exec('DELETE FROM users WHERE id=1');
+  for(const table of ['event_rec_prefs','event_rec_feedback','event_rec_member_vectors'])assert.equal(db.prepare('SELECT COUNT(*) AS n FROM '+table).get()!.n,0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM event_rec_vectors').get()!.n,1);
+  db.exec('DELETE FROM events WHERE id=1');assert.equal(db.prepare('SELECT COUNT(*) AS n FROM event_rec_vectors').get()!.n,0);
+ }finally{db.close();}
+});
+
+// D4450: a paid explanation survives an unavailable receipt; null is not a zero charge.
+test('Explain retains generated text when the post-charge receipt read fails', async () => {
+  const f = fixture(); const original = { ...EVENT_REC_AI };
+  try {
+    EVENT_REC_AI.quote = async () => ({ ok: true, hold_microusd: 120, model: 'synthetic' } as any);
+    EVENT_REC_AI.run = async () => ({ ok: true, output: 'Your recorded round matches this event.', usage: {}, usageLogId: 1 } as any);
+    f.db.exec("INSERT INTO ai_usage_logs(id,user_id,task,model,charged_microusd) VALUES (1,2,'rail_match','synthetic',75)");
+    const quote = await f.call('/api/events/1/recommendation/explain/quote', 2, 'POST');
+    const body = { quote_uid: quote.body.quote_uid };
+    const charged = await f.call('/api/events/1/recommendation/explain', 2, 'POST', body);
+    assert.equal(charged.status, 200);
+    assert.equal(charged.body.charged_microusd, 75);
+    const freshQuote = await f.call('/api/events/1/recommendation/explain/quote', 2, 'POST');
+    const DB = f.env.DB;
+    f.env.DB = { ...DB, prepare(sql: string) {
+      const stmt = DB.prepare(sql);
+      if (sql.startsWith('SELECT charged_microusd FROM ai_usage_logs')) {
+        return { bind(...args: any[]) { stmt.bind(...args); return { async first() { throw new Error('synthetic receipt outage'); } }; } };
+      }
+      return stmt;
+    } };
+    const unreadable = await f.call('/api/events/1/recommendation/explain', 2, 'POST', { quote_uid: freshQuote.body.quote_uid });
+    assert.equal(unreadable.status, 200, JSON.stringify(unreadable.body));
+    assert.deepEqual(unreadable.body, { text: 'Your recorded round matches this event.', usage_log_id: 1, charged_microusd: null });
+  } finally { Object.assign(EVENT_REC_AI, original); f.db.close(); }
+});
+
+// The real router/ledger proves that carrying the quote identity prevents a second hold and charge.
+test('Explain retries reuse one paid run; quote expiry and changed member/event/input/price refuse before a charge', async () => {
+  const f = fixture(); const original = { ...EVENT_REC_AI }; const embed = RECOMMENDATION_DEPS.embed;
+  __resetForTest();
+  try {
+    const sql = (name: string) => readFileSync(new URL('../sql/migrations/'+name,import.meta.url),'utf8');
+    f.db.exec('DROP TABLE ai_usage_logs'); f.db.exec(AI_LOG_SCHEMA);
+    f.db.exec(AI_BUDGET_MIGRATION + ['510_member_ai_pauses.sql','525_ai_reservation_idempotency.sql','632_ai_hold_context.sql'].map(sql).join('\n'));
+    setFixtureAllowance(f.db, 0);
+    f.db.exec("UPDATE users SET subscription_tier='growth',subscription_status='active' WHERE id IN (2,7); INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES (2,5000000),(7,5000000)");
+    f.db.exec('UPDATE users SET founder_id=20 WHERE id=7; DELETE FROM assessment_results WHERE user_id IN (2,7)');
+    let calls = 0;
+    f.env.AI = withGuard({ run: async () => { calls++; return { response: 'Your recorded round matches this event.', usage: { prompt_tokens: 40, completion_tokens: 10 } }; } });
+    RECOMMENDATION_DEPS.embed = async () => new Array(768).fill(1);
+    EVENT_REC_AI.run = runAI;
+    const beforeQuote = Date.now();
+    const quote = await f.call('/api/events/1/recommendation/explain/quote',2,'POST');
+    const afterQuote = Date.now();
+    assert.equal(quote.status,200,JSON.stringify(quote.body));
+    assert.equal(Date.parse(quote.body.expires_at),parseInt(quote.body.quote_uid.split('.')[0],36));
+    assert.ok(Date.parse(quote.body.expires_at)>=beforeQuote+10*60_000 && Date.parse(quote.body.expires_at)<=afterQuote+10*60_000,'the existing deck quote lifetime is ten minutes');
+    const body = {quote_uid:quote.body.quote_uid};
+    const balance = () => Number(f.db.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id=2').get()!.balance_microusd);
+    const holds = () => f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get()!.n;
+    const rejected = async (payload: unknown, event = 1, user = 2) => {
+      const r = await f.call(`/api/events/${event}/recommendation/explain`,user,'POST',payload);
+      assert.equal(r.status,409,JSON.stringify(r.body));
+      assert.equal(r.body.message,'This price has expired. Get a new quote.');
+      assert.deepEqual([calls,holds(),balance()],[0,0,5000000]);
+    };
+    await rejected({});
+    const [,signature] = body.quote_uid.split('.');
+    await rejected({quote_uid:(Date.now()-1).toString(36)+'.'+signature});
+    await rejected({quote_uid:body.quote_uid.replace(/.$/, (v: string) => v === '0' ? '1' : '0')});
+    await rejected(body,2);
+    await rejected(body,1,7);
+    f.db.exec("UPDATE events SET summary='Synthetic venture worksh0p' WHERE id=1");
+    await rejected(body);
+    f.db.exec("UPDATE events SET summary='Synthetic venture workshop' WHERE id=1");
+    const quoteFn = EVENT_REC_AI.quote;
+    EVENT_REC_AI.quote = async (env,opts) => { const q = await quoteFn(env,opts); return q.ok ? {...q,hold_microusd:q.hold_microusd+1} : q; };
+    await rejected(body);
+    EVENT_REC_AI.quote = quoteFn;
+    const first = await f.call('/api/events/1/recommendation/explain',2,'POST',body);
+    assert.equal(first.status,200,JSON.stringify(first.body));
+    assert.equal(first.body.text,'Your recorded round matches this event.');
+    assert.equal(calls,1);
+    assert.ok(balance()<5000000,'the first run charged actual top-up tokens');
+    assert.equal(first.body.charged_microusd,5000000-balance());
+    assert.ok(Number.isSafeInteger(first.body.usage_log_id) && first.body.usage_log_id>0);
+    const usageRows = () => f.db.prepare("SELECT COUNT(*) AS n FROM ai_usage_logs WHERE task='rail_match'").get()!.n;
+    assert.equal(usageRows(),1);
+    const chargedBalance = balance(); const held = holds();
+    const again = await f.call('/api/events/1/recommendation/explain',2,'POST',body);
+    assert.deepEqual([again.status,again.body.error],[409,'step_replayed']);
+    assert.equal(usageRows(),1,'a replay writes no second charged usage row');
+    assert.deepEqual([calls,holds(),balance()],[1,held,chargedBalance],'a retry takes no second hold or charge');
+    const key = f.db.prepare("SELECT idempotency_key FROM ai_budget_reservations WHERE operation='ai.rail_match'").get()!.idempotency_key;
+    assert.equal(key,`event-explain:2:1:${body.quote_uid}`);
+    const fresh = await f.call('/api/events/1/recommendation/explain/quote',2,'POST');
+    assert.notEqual(fresh.body.quote_uid,body.quote_uid);
+    const next = await f.call('/api/events/1/recommendation/explain',2,'POST',{quote_uid:fresh.body.quote_uid});
+    assert.equal(next.status,200,JSON.stringify(next.body));
+    assert.equal(calls,2,'a fresh displayed quote can start a new paid run');
+    assert.ok(balance()<chargedBalance);
+  } finally { Object.assign(EVENT_REC_AI,original);RECOMMENDATION_DEPS.embed=embed;__resetForTest();f.db.close(); }
+});
+
+// D6413: keep the result contract while bounding both rows and caller reads.
+test('recommendation eligibility shares caller context across 200 candidates and re-reads it on the next request', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(table('account_licences'));
+    f.db.exec(table('licences'));
+    const insert = f.db.prepare("INSERT INTO events (id,slug,host_user_id,title,type,starts_at,status,visibility,admin_published,audience_rules_json) VALUES (?, ?,1,'Synthetic batch event','workshop','2099-01-01','published','public',1,'{}')");
+    for (let id = 17; id <= 220; id++) insert.run(id, 'batch-' + id);
+    f.db.prepare('UPDATE events SET audience_rules_json=?').run(JSON.stringify({ mode: 'selected', roles: ['investor'] }));
+    const DB = f.env.DB; const queries: string[] = [];
+    f.env.DB = { ...DB, prepare(sql: string) { queries.push(sql); return DB.prepare(sql); } };
+    const first = await f.call('/api/events/recommended?limit=50', 3);
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    assert.equal(first.body.events.length, 50);
+    assert.ok(first.body.events.every((event: any) => event.registration_eligible.reason === 'Your role is eligible.'));
+    assert.equal(queries.filter(sql => sql === 'SELECT role FROM users WHERE id = ?').length, 1);
+    assert.equal(queries.filter(sql => sql.includes('SELECT licence FROM account_licences')).length, 2, 'one auth read and one shared eligibility read');
+    assert.ok(queries.length <= 12, 'bounded context/ranking reads: ' + queries.length);
+    queries.length = 0;
+    f.db.exec("UPDATE users SET role='founder' WHERE id=3");
+    const changed = await f.call('/api/events/recommended?limit=50', 3);
+    assert.equal(changed.status, 200);
+    assert.deepEqual(changed.body.events, []);
+    f.db.exec("INSERT INTO account_licences(user_id,licence,source) VALUES (3,'investor','synthetic-test')");
+    assert.equal((await f.call('/api/events/recommended?limit=50', 3)).body.events.length, 50, 'retained licence still qualifies');
+    f.db.exec("UPDATE account_licences SET revoked_at='2026-01-01' WHERE user_id=3");
+    assert.deepEqual((await f.call('/api/events/recommended?limit=50', 3)).body.events, [], 'revoked grant is re-read');
+    assert.equal(queries.filter(sql => sql === 'SELECT role FROM users WHERE id = ?').length, 3);
+  } finally { f.db.close(); }
+});
+
+test('batched audience gates match single-event rules, segment overlap and invitation revocation, with bounded reads', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(readFileSync(new URL('../sql/migrations/559_segment_profiles.sql', import.meta.url), 'utf8'));
+    f.db.exec(table('user_personas'));
+    f.db.exec("INSERT INTO user_personas(user_id,persona_id,is_primary) VALUES (3,'angel_scout',1),(3,'operator_advisor',0)");
+    const records = [
+      { id: 1, audience_rules_json: '{"mode":"everyone"}' },
+      { id: 2, audience_rules_json: '{"mode":"selected","roles":["investor"]}' },
+      { id: 3, audience_rules_json: '{"mode":"selected","roles":["founder"]}' },
+      { id: 4, audience_rules_json: '{"mode":"selected","personas":["angel_scout"]}' },
+      { id: 5, audience_rules_json: '{"mode":"invite_only"}' },
+      { id: 6, audience_rules_json: '{"mode":"invite_only"}' },
+      { id: 7, audience_rules_json: '{"mode":"selected","personas":["operator_advisor"]}' },
+    ];
+    f.db.exec("INSERT INTO event_invitations(event_id, invited_email, token, status) VALUES (5,'INVESTOR@example.test','batch-valid','pending'),(6,'investor@example.test','batch-revoked','revoked')");
+    const single = [];
+    for (const record of records) single.push(await registrationEligibility(f.env, record, 3, 'investor@example.test'));
+    assert.deepEqual(single.map(result => result.eligible), [true, true, false, true, true, false, false]);
+    const DB = f.env.DB; const queries: string[] = [];
+    f.env.DB = { ...DB, prepare(sql: string) { queries.push(sql); return DB.prepare(sql); } };
+    assert.deepEqual(await registrationEligibilityBatch(f.env, records, 3, 'investor@example.test'), single);
+    assert.equal(queries.filter(sql => sql.includes('SELECT key FROM segment_profiles')).length, 1);
+    assert.equal(queries.filter(sql => sql.includes('SELECT persona_id, is_primary')).length, 1);
+    assert.equal(queries.filter(sql => sql.includes('SELECT event_id FROM event_invitations')).length, 1);
+    f.db.exec("UPDATE event_invitations SET status='revoked'");
+    assert.equal((await registrationEligibilityBatch(f.env, records, 3, 'investor@example.test'))[4].eligible, false);
+    const guest = await registrationEligibilityBatch(f.env, records, null, null);
+    assert.deepEqual(guest.map(result => result.eligible), [true, false, false, false, false, false, false]);
+    await assert.rejects(() => registrationEligibilityBatch(f.env, [{ id: 1, audience_rules_json: '{"mode":"selected","personas":["not-a-recorded-segment"]}' }], 3, 'investor@example.test'));
+    f.db.exec('DROP TABLE segment_profiles');
+    await assert.rejects(() => registrationEligibilityBatch(f.env, records, 3, 'investor@example.test'));
+  } finally { f.db.close(); }
+});
+
+test('saved events use bounded ordered windows and the existing private/withdrawn visibility gates', async () => {
+  const f = fixture();
+  try {
+    const insert = f.db.prepare("INSERT INTO events (id,slug,host_user_id,title,type,starts_at,status,visibility,admin_published) VALUES (?, ?,1,'Saved batch fixture','workshop','2099-01-01','published','public',1)");
+    for (let id = 17; id <= 260; id++) insert.run(id, 'saved-' + id);
+    const save = f.db.prepare("INSERT INTO event_rec_feedback(user_id,event_id,verdict,created_at) VALUES (2,?,'saved',?)");
+    for (let id = 260; id >= 1; id--) save.run(id, id <= 130 ? '2026-01-01 00:00:00' : '2026-01-02 00:00:00');
+    f.db.exec("UPDATE events SET visibility='private' WHERE id IN (1,2,3,4,5,6); UPDATE events SET status='draft' WHERE id IN (7,8); UPDATE events SET admin_published=0 WHERE id=9; UPDATE events SET visibility='unlisted' WHERE id=10; UPDATE events SET visibility='private',host_user_id=2 WHERE id=11;");
+    f.db.exec("INSERT INTO event_registrations(event_id,user_id,email,status) VALUES (2,2,'founder@example.test','cancelled'),(7,2,'founder@example.test','confirmed'); INSERT INTO event_invitations(event_id,invited_user_id,invited_email,token,status) VALUES (3,2,NULL,'by-user','pending'),(4,NULL,'FOUNDER@example.test','by-email','pending'),(5,2,NULL,'revoked','revoked'),(6,3,'investor@example.test','foreign','pending');");
+    const all = f.db.prepare('SELECT * FROM events ORDER BY id').all();
+    const user = f.db.prepare('SELECT * FROM users WHERE id=2').get() as any;
+    const expected: number[] = [];
+    for (const event of all) if (await canViewEvent(f.env, event, user)) expected.push(Number(event.id));
+    assert.deepEqual(expected.filter(id => id <= 11), [2,3,4,7,10,11]);
+    const DB = f.env.DB; const queries: string[] = []; const windows: number[] = [];
+    f.env.DB = { ...DB, prepare(sql: string) {
+      queries.push(sql); const stmt = DB.prepare(sql);
+      if (sql.includes('f.created_at AS saved_at')) {
+        const read = stmt.all.bind(stmt);
+        stmt.all = async () => { const rows = await read(); windows.push(rows.results.length); return rows; };
+      }
+      return stmt;
+    } };
+    const result = await f.call('/api/events/recommendation-prefs');
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.deepEqual(result.body.saved, expected);
+    assert.deepEqual(windows, [100,100,60]);
+    assert.ok(queries.length <= 12, 'window reads rather than per-event reads: ' + queries.length);
+    assert.deepEqual(await visibleEventIds(f.env, all.slice(0,11), { ...user, role: 'admin' }), Array.from({ length: 11 }, (_, i) => i + 1));
+    f.db.exec("UPDATE event_invitations SET status='revoked' WHERE event_id IN (3,4); DELETE FROM event_registrations WHERE event_id IN (2,7)");
+    const revoked = await f.call('/api/events/recommendation-prefs');
+    assert.equal(revoked.status, 200);
+    assert.deepEqual(revoked.body.saved.filter((id: number) => id <= 11), [10,11]);
+    f.db.exec('DROP TABLE event_invitations');
+    assert.equal((await f.call('/api/events/recommendation-prefs')).status, 503);
+  } finally { f.db.close(); }
+});
+
+// D6414: valid JSON scalars/objects in pre-existing rows must remain unreadable.
+test('stored preference arrays retain recorded values and refuse malformed historical shapes without a write', async () => {
+  const f = fixture();
+  try {
+    assert.deepEqual(await readRecPrefs(f.env, 2), {
+      enabled: true, interests: [], goals_90d: null, formats: [], types: [], home_city: null, travel_km: null,
+    });
+    const expected = { enabled: false, interests: ['climate', 'ai'], goals_90d: 'Recorded goal', formats: ['virtual'], types: ['workshop'], home_city: 'Geneva', travel_km: 0 };
+    f.db.prepare('INSERT INTO event_rec_prefs (user_id,enabled,interests_json,goals_90d,formats_json,types_json,home_city,travel_km) VALUES (?,?,?,?,?,?,?,?)')
+      .run(2, 0, JSON.stringify(expected.interests), expected.goals_90d, JSON.stringify(expected.formats), JSON.stringify(expected.types), expected.home_city, 0);
+    assert.deepEqual(await readRecPrefs(f.env, 2), expected);
+    const stored = f.db.prepare('SELECT * FROM event_rec_prefs WHERE user_id=2').get();
+    const columns = ['interests_json', 'formats_json', 'types_json'] as const;
+    for (const column of columns) {
+      // The fixture alone bypasses CHECK(json_valid) to also model legacy invalid syntax.
+      f.db.exec('PRAGMA ignore_check_constraints=ON');
+      for (const raw of ['{}', '{"0":"ai"}', 'null', '"ai"', '0', 'true', '{']) {
+        f.db.prepare(`UPDATE event_rec_prefs SET ${column}=? WHERE user_id=2`).run(raw);
+        await assert.rejects(() => readRecPrefs(f.env, 2), undefined, column + ': ' + raw);
+        for (const path of ['/api/events/recommendation-prefs', '/api/events/recommended']) {
+          const result = await f.call(path);
+          assert.equal(result.status, 503, column + ': ' + raw + ': ' + path);
+          assert.deepEqual(result.body, { error: 'unreadable', detail: 'Recommendations could not be read. That is not the same as having none.' });
+        }
+        assert.equal(f.db.prepare(`SELECT ${column} AS raw FROM event_rec_prefs WHERE user_id=2`).get()!.raw, raw);
+      }
+      f.db.prepare(`UPDATE event_rec_prefs SET ${column}=? WHERE user_id=2`).run(stored![column]);
+      f.db.exec('PRAGMA ignore_check_constraints=OFF');
+      assert.deepEqual(await readRecPrefs(f.env, 2), expected);
+    }
+    assert.deepEqual(f.db.prepare('SELECT * FROM event_rec_prefs WHERE user_id=2').get(), stored);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM event_rec_feedback').get()!.n, 0);
+  } finally { f.db.close(); }
+});

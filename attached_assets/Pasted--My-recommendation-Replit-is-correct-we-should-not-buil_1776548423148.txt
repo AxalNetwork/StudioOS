@@ -1,0 +1,73 @@
+**My recommendation:**
+
+Replit is correct — we should **not** build SyndicateRoom or MetricsRoom right now.
+
+- SyndicateRoom requires building the entire syndicate feature first (DB tables, CRUD, UI, permissions). That’s a big separate project.
+- MetricsRoom gives very little gain over the existing 5-second polling.
+
+**Best move: Build only the two highest-value, ready-to-go Durable Objects:**
+
+1. **PipelineRoom** — Live updates on the Pipeline Board (stage changes, metrics, AI recommendations). This is core to the 30-Day Spin-Out Engine and very visible to users.
+2. **OnboardingChat** — Real-time chat inside the Admin user profile modal (the one in your screenshot).
+
+These two are fully aligned with what already exists in the codebase and will immediately improve the user experience without scope creep.
+
+---
+
+### Ready-to-copy prompt (focused & realistic)
+
+Paste this directly into Replit Agent:
+
+```
+You are the senior real-time systems engineer for Axal StudioOS. Implement **Durable Objects** only for the two highest-value, ready features:
+
+- Live Pipeline Board updates (stage changes, metrics, AI recommendations)
+- Real-time chat in the Admin user profile onboarding modal
+
+Skip SyndicateRoom and MetricsRoom for now (as they are premature).
+
+Use the following wrangler.toml configuration:
+
+[[durable_objects]]
+name = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[durable_objects]]
+name = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[migrations]]
+tag = "v2"
+new_classes = ["PipelineRoom", "OnboardingChat"]
+
+Exact requirements:
+
+1. Create durable-objects/pipeline-room.js and durable-objects/onboarding-chat.js with proper WebSocket handling, broadcasting, and authentication.
+
+2. Add WebSocket routes in main.py:
+   - GET /api/pipeline/ws/{deal_id}
+   - GET /api/onboarding/chat/ws/{user_id}
+
+3. Update the frontend:
+   - /pipeline.html → connect to WebSocket and show live updates on cards (stage, metrics, AI badge)
+   - Admin Console user profile modal → replace static conversation with real-time chat
+
+4. Security: Require valid Replit Auth / RBAC on every WebSocket connection.
+
+Build this step-by-step:
+1. First update wrangler.toml with the two Durable Objects and migration.
+2. Then create the two Durable Object classes.
+3. Then add the WebSocket routes in main.py.
+4. Then update the Pipeline Board and Admin onboarding modal frontend.
+5. Finally test end-to-end (change a project stage → see live update; send chat message in modal).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Would you like me to also give you the prompt for **R2 (secure storage of KYC/AML passports and IDs)** right after this? It pairs very well with the Identity Verification page you showed earlier.
+
+Just say **“R2 prompt”** or let me know what you want next.

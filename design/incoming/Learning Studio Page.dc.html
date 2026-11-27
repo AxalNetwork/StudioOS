@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Studio · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.lst-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.lst-cv.lst-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.lst-cv *{box-sizing:border-box}
+.lst-cv a{color:var(--vt);text-decoration:none}
+.lst-cv button{font-family:var(--sg);cursor:pointer}
+.lst-cv :focus-visible,.lst-cv .lst-fv{outline:2px solid var(--vi);outline-offset:2px}
+.lst-cv h1,.lst-cv h2,.lst-cv h3,.lst-cv p,.lst-cv ol,.lst-cv ul,.lst-cv dl,.lst-cv dd,.lst-cv dt{margin:0;padding:0}
+.lst-cv ol,.lst-cv ul{list-style:none}
+.lst-mo{font-family:var(--mo)}
+.lst-mu{color:var(--mu)}
+.lst-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.lst-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.lst-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.lst-sd .lst-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.lst-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.lst-sd .lst-grp{padding:6px 20px 4px}
+.lst-sd nav{display:flex;flex-direction:column;gap:2px}
+.lst-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.lst-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.lst-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.lst-mn{min-width:0;display:flex;flex-direction:column}
+.lst-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.lst-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.lst-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.lst-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.lst-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.lst-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.lst-sp .lst-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.lst-sp .lst-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.lst-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.lst-hdr{display:flex;flex-direction:column;gap:6px}
+.lst-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.lst-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.lst-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.lst-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lst-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.lst-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.lst-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.lst-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.lst-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.lst-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.lst-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.lst-k.lst-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.lst-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.lst-kv.lst-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.lst-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.lst-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.lst-c3{grid-column:span 3}
+.lst-c4{grid-column:span 4}
+.lst-c5{grid-column:span 5}
+.lst-c6{grid-column:span 6}
+.lst-c7{grid-column:span 7}
+.lst-c8{grid-column:span 8}
+.lst-c9{grid-column:span 9}
+.lst-c12{grid-column:span 12}
+.lst-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.lst-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.lst-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.lst-ch .lst-sm{font:500 12px var(--mo);color:var(--mu)}
+.lst-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.lst-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.lst-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.lst-btn.lst-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.lst-btn.lst-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.lst-btn.lst-ask .lst-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.lst-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.lst-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.lst-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.lst-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.lst-pl.lst-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.lst-pl.lst-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.lst-pl.lst-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.lst-pl.lst-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.lst-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.lst-nt.lst-r{background:var(--negBg);border-color:var(--negE)}
+.lst-nt.lst-a{background:var(--amBg);border-color:var(--amE)}
+.lst-nt.lst-g{background:var(--posBg);border-color:var(--posE)}
+.lst-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.lst-nt.lst-r .lst-ic{background:var(--neg)}
+.lst-nt.lst-a .lst-ic{background:var(--amT)}
+.lst-nt.lst-g .lst-ic{background:var(--pos)}
+.lst-nt .lst-bt{margin-left:auto;flex:none}
+.lst-sk{display:block;border-radius:6px;background:var(--skel)}
+.lst-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.lst-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lst-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lst-tbl .lst-n{text-align:right;font-family:var(--mo)}
+.lst-tbl td.lst-na{color:var(--mu);font-weight:500}
+.lst-tbl td b{font-weight:700}
+.lst-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.lst-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lst-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.lst-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.lst-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.lst-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.lst-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.lst-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lst-pg .lst-pb{display:flex;gap:5px;align-items:center}
+.lst-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.lst-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.lst-st{display:grid;gap:14px 18px}
+.lst-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.lst-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.lst-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.lst-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.lst-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.lst-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.lst-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.lst-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.lst-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.lst-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.lst-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.lst-stp span:first-child{border-radius:999px 0 0 999px}
+.lst-stp span:last-child{border-radius:0 999px 999px 0}
+.lst-stp span+span{border-left:0}
+.lst-stp span.lst-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.lst-stp span.lst-nx{border-style:dashed}
+.lst-tl{display:flex;flex-direction:column}
+.lst-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.lst-tl li:first-child{border-top:0}
+.lst-tl .lst-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.lst-tl .lst-mk.lst-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.lst-tl .lst-mk.lst-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.lst-tl .lst-mk.lst-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.lst-tl .lst-mk.lst-no{border-style:dashed}
+.lst-tl .lst-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.lst-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.lst-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.lst-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.lst-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.lst-ph .lst-hrow h1{font-size:22px}
+.lst-ph .lst-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lst-ph .lst-k{padding:12px 13px}
+.lst-ph .lst-kv{font-size:22px}
+.lst-ph .lst-btn{min-height:44px}
+.lst-ph .lst-lk{min-height:44px}
+.lst-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.lst-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.lst-lst li:first-child{border-top:0}
+.lst-lst b{font-size:13.5px}
+.lst-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.lst-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.lst-bar i{display:block;height:100%;background:var(--vi)}
+.lst-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.lst-toast a{color:#c4b5fd!important}
+.lst-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.lst-pr:first-of-type{border-top:0}
+.lst-pr b{font-size:13px}
+.lst-pr small{display:block;font-size:12px;color:var(--mu)}
+.lst-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.lst-grp:first-of-type{border-top:0}
+.lst-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.lst-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.lst-tbl tr.lst-cur td{background:var(--lav)}
+.lst-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.lst-sec h3{font-size:13.5px;font-weight:800}
+.lst-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.lst-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.lst-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.lst-k.lst-bad{border-color:var(--negE)}
+.lst-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.lst-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- LST (Learning Studio, #8669) base, from the Network look: additions to the approved Network workspace look ---- */
+.lst-cv{text-align:left}
+.lst-cv table{border-spacing:0}
+.lst-st.lst-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.lst-sh.lst-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.lst-sd .lst-sep{height:1px;background:var(--hair);margin:8px 16px}
+.lst-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.lst-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.lst-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.lst-s.lst-ur{color:var(--neg)}
+.lst-s.lst-rf{color:var(--ink)}
+.lst-s b{font:800 12px var(--mo)}
+.lst-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.lst-vd{text-decoration:line-through;color:var(--mu)}
+.lst-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.lst-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.lst-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.lst-rh .lst-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.lst-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.lst-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.lst-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.lst-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.lst-src span::before{content:"↳ ";color:var(--vt)}
+.lst-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.lst-draft p.lst-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.lst-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.lst-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.lst-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.lst-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.lst-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.lst-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.lst-line b.lst-mo{font-size:14px}
+.lst-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.lst-grh:first-child{border-top:0;padding-top:0}
+.lst-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.lst-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.lst-mc .lst-mh{display:flex;gap:10px;align-items:center}
+.lst-mc .lst-mh>div{flex:1;min-width:0}
+.lst-mc small{display:block;font-size:12px;color:var(--mu)}
+.lst-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.lst-rs span::before{content:"· ";color:var(--mu)}
+.lst-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lst-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.lst-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.lst-strip .lst-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.lst-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.lst-f{display:flex;flex-direction:column;gap:5px}
+.lst-f label,.lst-f .lst-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.lst-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.lst-in.lst-hint{color:var(--mu)}
+.lst-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.lst-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.lst-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.lst-panel .lst-dh{padding:16px 20px 12px}
+.lst-panel .lst-dc{padding:14px 20px}
+.lst-panel .lst-df{padding:12px 20px}
+.lst-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.lst-pick.lst-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.lst-pick small{display:block;font-size:12px;color:var(--mu)}
+.lst-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.lst-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.lst-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.lst-bn.lst-ro{background:#334155;color:#fff}
+.lst-bn.lst-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.lst-bn b{font-weight:800}
+.lst-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.lst-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lst-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.lst-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.lst-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.lst-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.lst-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.lst-tile b{font:700 22px var(--mo)}
+.lst-ph.lst-fx{height:844px;overflow:hidden}
+.lst-ph .lst-pbd{flex:1;min-height:0}
+.lst-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.lst-stk .lst-btn{flex:1;min-height:44px;font-size:14px}
+.lst-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.lst-pc .lst-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.lst-pc small{font-size:12px;color:var(--mu)}
+.lst-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.lst-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.lst-doc h2{font-size:17px;font-weight:800}
+.lst-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.lst-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.lst-doc .lst-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.lst-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.lst-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.lst-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.lst-lst small{display:block}
+.lst-lst li>div{min-width:0}
+.lst-cv td,.lst-cv th,.lst-cv dd,.lst-cv li,.lst-cv p,.lst-cv h1,.lst-cv h2,.lst-cv h3{color:inherit}
+.lst-tbl td{color:var(--ink)}
+.lst-tbl td.lst-mo{white-space:nowrap}
+.lst-crop,.lst-doc{box-sizing:border-box}
+/* ---- LST additions (#8669 Learning studio) ---- */
+.lst-sh.lst-nr{grid-template-columns:196px minmax(0,1fr)}
+.lst-sd .lst-bdg{align-self:flex-start;margin:14px 16px 0;background:#881337}
+.lst-bk2{display:inline-flex;align-items:center;gap:4px;font:700 12.5px var(--sg);color:var(--vt)!important;margin-bottom:2px;align-self:flex-start}
+.lst-flt{display:flex;flex-direction:column;gap:3px}
+.lst-flt>span{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.lst-flt .lst-dd{min-width:150px;justify-content:space-between}
+.lst-flt .lst-dd.lst-on{border-color:var(--vi);background:var(--lav);color:var(--vt)}
+.lst-tools2{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.lst-tools2 .lst-inp{min-width:240px}
+.lst-rc{margin-left:auto;font:600 12px var(--mo);color:var(--mu);align-self:center;white-space:nowrap}
+.lst-ty{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);white-space:nowrap}
+.lst-rch{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.lst-rch.lst-o{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.lst-rch.lst-p{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.lst-rch.lst-d{border-style:dashed;color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.lst-rch.lst-x{color:var(--mu);background:var(--raised)}
+.lst-jr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.lst-jt{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card);min-width:0;color:var(--ink)!important}
+.lst-jt b{font-size:13px}
+.lst-jt small{font-size:11.5px;color:var(--mu);line-height:1.4}
+.lst-jt.lst-w{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.lst-jt.lst-m{border-color:var(--negE);box-shadow:inset 3px 0 0 var(--neg)}
+.lst-jt.lst-ok{box-shadow:inset 3px 0 0 var(--pos)}
+.lst-jt.lst-sel{outline:2px solid var(--vi);outline-offset:1px}
+.lst-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.lst-chip{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:700 11.5px var(--sg)}
+.lst-chip button{border:0;background:transparent;color:var(--vt);font:700 13px var(--sg);width:22px;height:22px;border-radius:999px;padding:0}
+.lst-mnu{background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.16);padding:6px;display:flex;flex-direction:column;gap:1px;width:340px}
+.lst-mnu .lst-mh{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px 4px}
+.lst-mnu a{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 10px;padding:8px 10px;border-radius:8px;color:var(--ink)!important;font-weight:700;font-size:13px}
+.lst-mnu a small{grid-column:1/-1;font-weight:500;font-size:11.5px;color:var(--mu)}
+.lst-mnu a.lst-fv{background:var(--lav);outline:2px solid var(--vi);outline-offset:-2px}
+.lst-mnu .lst-sep{height:1px;background:var(--hair);margin:4px 6px}
+.lst-kb{font:600 10.5px var(--mo);color:var(--mu);padding:0 5px;border:1px solid var(--hair);border-radius:4px;background:var(--raised)}
+.lst-ws{display:grid;grid-template-columns:minmax(0,1fr) 560px;gap:16px;align-items:start}
+.lst-wsh{display:flex;flex-direction:column;gap:10px;padding:14px 18px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.lst-wsh .lst-r1{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.lst-wsh h1{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.25;max-width:720px}
+.lst-facts{display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--mu)}
+.lst-facts b{color:var(--ink)}
+.lst-cl{display:flex;flex-direction:column}
+.lst-cl li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-top:1px solid var(--hair);align-items:start}
+.lst-cl li:first-child{border-top:0}
+.lst-cl li>div{min-width:0}
+.lst-cl b{font-size:13px;display:block}
+.lst-cl small{display:block;font-size:12px;color:var(--mu);line-height:1.45;margin-top:1px}
+.lst-cl .lst-act{white-space:nowrap}
+.lst-gl{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;font:800 11px var(--sg);border:1px solid var(--hair2);background:var(--card);color:var(--mu)}
+.lst-gl.lst-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.lst-gl.lst-bl{background:var(--neg);border-color:var(--neg);color:#fff}
+.lst-gl.lst-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.lst-gl.lst-nr{border-style:dashed}
+.lst-gl.lst-un{border-color:var(--negE);color:var(--neg);background:var(--negBg)}
+.lst-gl.lst-pr{border:1px dashed #a78bfa;color:var(--vt);background:var(--lav)}
+.lst-gh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 0 2px;border-top:1px solid var(--hair)}
+.lst-gh:first-child{border-top:0;padding-top:0}
+.lst-gh h3{font-size:13px;font-weight:800;display:flex;gap:8px;align-items:center}
+.lst-pvb{display:flex;align-items:center;gap:10px;padding:9px 14px;background:#18181b;color:#fff;font-size:12.5px;flex-wrap:wrap}
+.lst-pvb b{font-weight:800}
+.lst-pvb .lst-pv-s{margin-left:auto;display:flex;align-items:center;gap:8px;color:#d4d4d8}
+.lst-pvb .lst-dd{min-height:28px;background:#27272a;border-color:#3f3f46;color:#fff}
+.lst-pvf{border:2px solid #18181b;border-radius:12px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.lst-pvf .lst-pvc{padding:16px;display:flex;flex-direction:column;gap:12px}
+.lst-cov{display:grid;place-items:end start;aspect-ratio:16/5;border-radius:10px;background:#efeaf9;border:1px solid var(--lavE);padding:12px 14px;color:var(--vt);font:800 15px var(--sg);letter-spacing:-.01em;line-height:1.25;position:relative}
+.lst-cov small{position:absolute;top:8px;right:10px;font:600 10px var(--mo);color:var(--mu)}
+.lst-cov.lst-fb{background:var(--card);border-style:dashed;color:var(--ink)}
+.lst-out{border:1px solid var(--lavE);background:var(--lav);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5}
+.lst-out .lst-eye{color:var(--vt)}
+.lst-syl{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;background:var(--card);overflow:hidden}
+.lst-syl .lst-mh2{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font:800 12.5px var(--sg)}
+.lst-syl .lst-mh2 span{font:600 11px var(--mo);color:var(--mu)}
+.lst-syl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:2px 8px;padding:8px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:start}
+.lst-syl li:last-child{border-bottom:0}
+.lst-syl li .lst-n{font:600 11px var(--mo);color:var(--mu);padding-top:1px}
+.lst-syl li small{display:block;color:var(--mu);font-size:11.5px}
+.lst-syl li .lst-w2{color:var(--amT);font-weight:600}
+.lst-kd{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);white-space:nowrap}
+.lst-opt{font:600 10.5px var(--mo);color:var(--mu);border:1px solid var(--hair);border-radius:5px;padding:0 5px;white-space:nowrap}
+.lst-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
+.lst-form .lst-full{grid-column:1/-1}
+.lst-form .lst-f small{font-size:11.5px;color:var(--mu);line-height:1.4}
+.lst-fs{grid-column:1/-1;display:flex;flex-direction:column;gap:10px;padding-top:12px;border-top:1px solid var(--hair)}
+.lst-fs h3{font-size:13px;font-weight:800}
+.lst-cbx{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px}
+.lst-cbx span{display:inline-flex;align-items:center;gap:6px}
+.lst-cbx i{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:4px;border:1.5px solid var(--hair2);font:800 10px var(--sg);font-style:normal;color:#fff}
+.lst-cbx i.lst-on{background:#7c3aed;border-color:#7c3aed}
+.lst-err{border-color:var(--neg)!important;box-shadow:inset 0 0 0 1px var(--neg)}
+.lst-em{color:var(--neg);font-size:12px;font-weight:600}
+.lst-ss{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.lst-ss.lst-g{color:var(--pos)}
+.lst-ss.lst-a{color:var(--amT)}
+.lst-ss.lst-r{color:var(--neg)}
+.lst-mod{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.lst-mod .lst-mt{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.lst-mod h3{font-size:13px;font-weight:800}
+.lst-lsn{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:2px 10px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px;align-items:start}
+.lst-lsn small{display:block;color:var(--mu);font-size:11.5px}
+.lst-ib2{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:700 12px var(--sg);padding:0}
+.lst-fo{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#18181b;color:#fff;font:700 10.5px var(--mo);vertical-align:middle}
+.lst-co{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:#f59e0b;color:#18181b;font:800 11px var(--mo);flex:none}
+.lst-flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.lst-flow>div{flex:1;min-width:0;border:1px solid var(--hair);border-right:0;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.lst-flow>div:first-child{border-radius:10px 0 0 10px}
+.lst-flow>div:last-child{border-right:1px solid var(--hair);border-radius:0 10px 10px 0}
+.lst-flow b{font-size:12.5px}
+.lst-flow small{color:var(--mu);font-size:11px;font-family:var(--mo)}
+.lst-pc2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.lst-pc2 .lst-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.lst-pc2 b{font-size:14px;line-height:1.3}
+.lst-pc2 small{font-size:12px;color:var(--mu)}
+.lst-rg{display:flex;flex-direction:column;gap:2px}
+.lst-rg label{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 4px;border-bottom:1px solid var(--hair);font-size:14px}
+.lst-rg label i{width:18px;height:18px;border-radius:999px;border:2px solid var(--hair2);flex:none}
+.lst-rg label i.lst-on{border:6px solid #7c3aed}
+.lst-rg label span{margin-left:auto;font:500 12px var(--mo);color:var(--mu)}
+.lst-bsh{position:absolute;left:0;right:0;bottom:0;z-index:4;background:var(--card);border-radius:18px 18px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.22);display:flex;flex-direction:column;max-height:760px}
+.lst-bsh .lst-grab{width:40px;height:4px;border-radius:9px;background:var(--hair2);margin:8px auto 2px}
+.lst-ph .lst-tbl{font-size:12px}
+.lst-zoom{font-size:26px}
+.lst-ann{font-size:11.5px;color:var(--mu);line-height:1.45}
+.lst-ann b{color:var(--ink)}
+.lst-wrapdemo{border:1px dashed var(--hair2);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.lst-before{position:relative}
+.lst-before .lst-co{position:absolute}
+.lst-doc .lst-tbl td,.lst-doc .lst-tbl th{font-size:12px;vertical-align:top}
+.lst-dark-note{display:none}
+.lst-jt>.lst-pl,.lst-jt>.lst-s{align-self:flex-start}
+.lst-tbl td.lst-na{white-space:nowrap}
+.lst-nt code,.lst-cl code{word-break:break-all}
+.lst-rs span span::before{content:none}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "LST02", "options": ["LST00", "LST01", "LST02", "LST02B", "LST02C", "LST03", "LST04", "LST04B", "LST04C", "LST05", "LST06", "LST06B", "LST07", "LST07B", "LST07C", "LST08", "LST08B", "LST09", "LST09B", "LST10A", "LST10B", "LST10C", "LST10D", "LST10E", "LST10F", "LST10G", "LST10H", "LST11", "LST12", "LST13"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'LST02';
+    const CV = 'cv';
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs data or backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+    const SYN = `<span class="lbl" style="color:var(--amT);background:var(--amBg);border-color:var(--amE)">Synthetic state</span>`;
+    const CO = (n, st) => `<span class="co" aria-hidden="true"${st ? ` style="${st}"` : ''}>${n}</span>`;
+    const FO = (n) => `<span class="fo" aria-hidden="true">${n}</span>`;
+
+    /* ---------- Platform States words (glyph + word, never colour alone) ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const UN = (t) => `<span class="s ur">? Unavailable${t ? ' · ' + t : ''}</span>`;
+    const NONE = `<span class="s">○ None</span>`;
+    const RF = (t) => `<span class="s rf">⊘ Refused${t ? ' · ' + t : ''}</span>`;
+    const SR = (t) => `<span class="sr">${t}</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- status, visibility and reach: three separate things ---------- */
+    const STP = {
+      published: `<span class="pl g">✓ Published</span>`,
+      draft: `<span class="pl a">✎ Draft</span>`,
+      archived: `<span class="pl">▣ Archived</span>`
+    };
+    const VIS = { open: 'Open to every member', program: 'Program-only' };
+    const VIS_S = { open: 'Open', program: 'Program-only' };
+    /* Who can open it now: derived on the page from status + visibility (frontend only). */
+    const REACH = {
+      draft: `<span class="rch d">◌ Super Admins only</span>`,
+      open: `<span class="rch o">● Every signed-in member</span>`,
+      program: `<span class="rch p">◐ Enrolled program members</span>`,
+      archived: `<span class="rch x">⊘ No member</span>`
+    };
+    const reachOf = (r) => r.st === 'draft' ? REACH.draft : r.st === 'archived' ? REACH.archived : r.vis === 'program' ? REACH.program : REACH.open;
+
+    /* ---------- sample data: fictional; every figure agrees on every board ----------
+       Thu 26 Nov 2026. Content table 46 = 4 courses + 16 videos + 18 readings + 4 exercises + 4 exams
+       (webinars keep their own list: 3). Status: 30 published, 14 draft, 2 archived.
+       Visibility: 41 open, 5 program-only. Drafts 14 = 4 courses + 4 exercises + 4 exams + 2 readings. Videos 15 published + 1 archived; readings 15 published + 2 draft + 1 archived.
+       Course and syllabus from LEARN_CATALOGUE.md (Evidence-based pitch narratives).
+       Coverage (GET /coverage): 4 courses; Founders Not reachable (4 drafts); Investors, Advisors, Partners Missing. */
+    const N = { all: 46, course: 4, video: 16, reading: 18, exercise: 4, exam: 4, pub: 30, draft: 14, arch: 2, open: 41, prog: 5, web: 3 };
+    const PC = 'Evidence-based pitch narratives';
+    const PCX = 'What can you substantiate?';
+    const ROWS = [
+      { k: 'Course', t: PC, st: 'draft', vis: 'open', v: null, d: '2026-11-24', sub: 'For Founders · Intro · 85 min' },
+      { k: 'Exercise', t: 'Pitch decision memo', st: 'draft', vis: 'open', v: null, d: '2026-11-24' },
+      { k: 'Exam', t: PCX, st: 'draft', vis: 'open', v: null, d: '2026-11-24' },
+      { k: 'Reading', t: '[Example: a seed deck’s claim register, annotated line by line]', st: 'draft', vis: 'open', v: null, d: '2026-11-23' },
+      { k: 'Reading', t: '[Before and after: one memo, two drafts]', st: 'draft', vis: 'open', v: null, d: '2026-11-23' },
+      { k: 'Course', t: '[Customer discovery in 30 days]', st: 'draft', vis: 'open', v: null, d: '2026-11-20', sub: 'For Founders · Intro · 80 min' },
+      { k: 'Exercise', t: '[Interview script and notes]', st: 'draft', vis: 'open', v: null, d: '2026-11-20' },
+      { k: 'Exam', t: '[Customer discovery check]', st: 'draft', vis: 'open', v: null, d: '2026-11-20' },
+      { k: 'Course', t: '[Unit economics for a seed raise]', st: 'draft', vis: 'open', v: null, d: '2026-11-19', sub: 'For Founders · Intro · 75 min' },
+      { k: 'Exercise', t: '[Seed unit economics model]', st: 'draft', vis: 'open', v: null, d: '2026-11-19' },
+      { k: 'Exam', t: '[Unit economics check]', st: 'draft', vis: 'open', v: null, d: '2026-11-19' },
+      { k: 'Course', t: '[Hiring your first five]', st: 'draft', vis: 'open', v: null, d: '2026-11-18', sub: 'For Founders · Intro · 80 min' },
+      { k: 'Exercise', t: '[First-five hiring plan]', st: 'draft', vis: 'open', v: null, d: '2026-11-18' },
+      { k: 'Exam', t: '[Hiring check]', st: 'draft', vis: 'open', v: null, d: '2026-11-18' },
+      { k: 'Reading', t: '[Prepare for the questions your claims invite]', st: 'published', vis: 'open', v: null, d: '2026-11-17' },
+      { k: 'Reading', t: '[Write the narrative from the register]', st: 'published', vis: 'open', v: null, d: '2026-11-17' },
+      { k: 'Reading', t: '[Further reading: what investors check first]', st: 'published', vis: 'program', v: null, d: '2026-11-16' },
+      { k: 'Reading', t: '[Build a claim register you can reuse]', st: 'published', vis: 'open', v: null, d: '2026-11-16' },
+      { k: 'Video', t: '[Fundraising office hours · recording]', st: 'published', vis: 'open', v: 'Stream · Ready', d: '2026-11-15' },
+      { k: 'Reading', t: 'Give every important claim a traceable basis', st: 'published', vis: 'open', v: null, d: '2026-11-15' }
+    ];
+    const COURSES = ROWS.filter((r) => r.k === 'Course');
+
+    /* The pitch course, as the authoring read returns it (GET /api/admin/learning/courses/:uid). */
+    const PCD = {
+      slug: 'evidence-based-pitch-narratives-v1', level: 'Intro', min: 85, aud: 'Founders', stage: 'Pre-seed to seed',
+      sum: 'Turn every claim in your pitch into one you can back with evidence, and leave with a memo an investor can check.',
+      out: 'A 2,000-character decision memo and a reusable claim register.',
+      outcomes: ['Sort each pitch claim as measured, estimated or assumed.', 'Record the evidence behind each claim in a reusable register.', 'Cut or qualify the claims you cannot substantiate.', 'Write a 2,000-character decision memo an investor can check.', 'Answer “how do you know?” for traction and market size.'],
+      pre: ['A current pitch deck or draft.', '[Customer discovery in 30 days], or interview notes of your own.'],
+      author: '[Iris Chen]'
+    };
+    /* Ten syllabus rows: 7 required + 3 optional, two modules. tgt = what the lesson opens and its status. */
+    const SYL = [
+      { m: 1, n: 1, k: 'Reading', t: 'Give every important claim a traceable basis', req: 1, tgt: 'published' },
+      { m: 1, n: 2, k: 'Reading', t: '[Separate measured, estimated and assumed figures]', req: 1, tgt: 'published' },
+      { m: 1, n: 3, k: 'Reading', t: '[Build a claim register you can reuse]', req: 1, tgt: 'published' },
+      { m: 1, n: 4, k: 'Reading', t: '[Example: a seed deck’s claim register, annotated line by line]', req: 0, tgt: 'draft' },
+      { m: 1, n: 5, k: 'Reading', t: '[Further reading: what investors check first]', req: 0, tgt: 'program' },
+      { m: 2, n: 6, k: 'Reading', t: '[Write the narrative from the register]', req: 1, tgt: 'published' },
+      { m: 2, n: 7, k: 'Exercise', t: 'Pitch decision memo', req: 1, tgt: 'draft' },
+      { m: 2, n: 8, k: 'Reading', t: '[Before and after: one memo, two drafts]', req: 0, tgt: 'draft' },
+      { m: 2, n: 9, k: 'Reading', t: '[Prepare for the questions your claims invite]', req: 1, tgt: 'published' },
+      { m: 2, n: 10, k: 'Exam', t: PCX, req: 1, tgt: 'draft' }
+    ];
+    const MODS = ['[Claims and evidence]', '[From register to decision memo]'];
+
+    /* ---------- shell: HQ, Super Admin. Learning lives in the Account menu; Learning pages carry no AI rail (D4478) ---------- */
+    const NAV = ['Home', 'Network', 'Research', '|', 'Admin console'];
+    const side = () => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: [Axal HQ]">[Axal HQ] <span aria-hidden="true">▾</span></button><span class="eye grp">HQ</span><nav aria-label="HQ">${J(NAV.map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#">${t}</a>`))}</nav><span class="bdg">Super Admin</span></aside>`;
+    const top = () => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences, Learning">IC</button></div></div>`;
+    const shell = (body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh nr" style="min-height:${h}px">${side()}<div class="mn">${top()}<main class="bd">${body}</main></div></div>${o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+    };
+    const crop = (w, body, st) => `<div class="${CV} crop" style="width:${w}px${st ? ';' + st : ''}">${body}</div>`;
+    const doc = (body) => `<div class="${CV} doc">${body}</div>`;
+
+    /* ---------- studio header: one h1, one primary (Create) ---------- */
+    const CREATE = (exp) => `<button type="button" class="btn p" aria-haspopup="menu" aria-expanded="${exp ? 'true' : 'false'}">Create <span aria-hidden="true">▾</span></button>`;
+    const HEAD = (o) => `<header class="hdr"><a href="#" class="bk2">‹ Learning</a><span class="eye">Learning · HQ authoring</span><div class="hrow"><div><h1>Learning studio</h1><p>${o && o.sub || 'Author courses and the videos, readings, exercises and exams they open. Only a Super Admin sees this page.'}</p></div><div class="acts">${o && o.acts !== undefined ? o.acts : CREATE()}</div></div></header>`;
+    const STABS = (cur) => `<nav class="ptabs" aria-label="Learning studio">${J([['Content', N.all], ['Webinars', N.web], ['Coverage', null], ['Regional programs', null]].map(([t, n]) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}${n !== null ? ` <span>${n}</span>` : ''}</a>`))}</nav>`;
+
+    /* Journeys strip: GET /api/admin/learning/coverage (main), four states. */
+    const JOUR = (sel) => `<section aria-labelledby="jr" class="cd" style="gap:10px"><div class="ch"><h2 id="jr">Can each intended learner find a course?</h2><span class="sm">from curriculum coverage · ${N.course} courses in the catalogue</span></div><div class="jr">
+      <a href="#" class="jt w${sel ? ' sel' : ''}" aria-label="Founders: Not reachable. 4 courses name founders; each is a draft. Show them."><span class="pl a">▽ Not reachable</span><b>Founders</b><small>${mo('4')} courses name founders; each is a draft, so only Super Admins can open them.</small><span class="lk" style="align-self:flex-start">${sel ? '✓ Showing the 4 drafts' : 'Show the 4 drafts →'}</span></a>
+      <div class="jt m"><span class="pl r">✕ Missing</span><b>Investors</b><small>Every course records an audience, and none names investors.</small></div>
+      <div class="jt m"><span class="pl r">✕ Missing</span><b>Advisors</b><small>Every course records an audience, and none names advisors.</small></div>
+      <div class="jt m"><span class="pl r">✕ Missing</span><b>Partners</b><small>Every course records an audience, and none names partners.</small></div></div></section>`;
+
+    /* Three separate filters: type, publication status, visibility. */
+    const FLT = (o) => {
+      o = o || {};
+      const f = (lab, val, on, id) => `<div class="flt"><span id="${id}">${lab}</span><button type="button" class="dd${on ? ' on' : ''}" aria-haspopup="listbox" aria-labelledby="${id} ${id}v"><span id="${id}v">${val}</span> <span aria-hidden="true">▾</span></button></div>`;
+      return `<div class="tools2" role="search" aria-label="Filter content"><div class="flt"><span id="fq">Search</span><div class="inp" aria-labelledby="fq"><span aria-hidden="true">⌕</span>${o.q || 'Titles'}</div></div>${f('Type', o.ty || 'All types', !!o.ty, 'ft')}${f('Status', o.st || 'Any status', !!o.st, 'fs')}${f('Visibility', o.vi || 'Any visibility', !!o.vi, 'fv')}<span class="rc" role="status">${o.count || `${N.all} of ${N.all}`}</span></div>${o.chips ? `<div class="chips"><span class="foot">Filtered by</span>${J(o.chips.map((c) => `<span class="chip">${c}<button type="button" aria-label="Remove filter ${c}">×</button></span>`))}<button type="button" class="btn t">Clear filters</button></div>` : ''}`;
+    };
+
+    const VID = (r) => r.k !== 'Video' ? '<span class="mu">—</span>' : r.v === 'Stream · Ready' ? '<span class="pl g">✓ Stream · Ready</span>' : `<span class="pl">${r.v}</span>`;
+    const ROW = (r, cur) => `<tr${cur ? ' class="cur"' : ''}><td><span class="ty">${r.k}</span></td><td><a href="#"><b>${r.t}</b></a>${r.sub ? `<small>${r.sub}</small>` : ''}</td><td>${STP[r.st]}</td><td style="white-space:nowrap">${VIS_S[r.vis]}</td><td>${reachOf(r)}</td><td class="na">— Not recorded</td><td>${VID(r)}</td><td class="mo">${r.d}</td></tr>`;
+    const THEAD = `<thead><tr><th scope="col">Type</th><th scope="col">Title</th><th scope="col">Status</th><th scope="col">Visibility</th><th scope="col">Who can open it now</th><th scope="col">Programs</th><th scope="col">Video</th><th scope="col">Updated</th></tr></thead>`;
+    const TABLE = (rows, cap, cur) => `<table class="tbl"><caption class="sr">${cap}</caption>${THEAD}<tbody>${J(rows.map((r, i) => ROW(r, cur === i)))}</tbody></table>`;
+    const pager = (a, b, tot) => `<div class="pg"><span>${a}–${b} of ${tot}</span><div class="pb"><button type="button" aria-label="Previous page" aria-disabled="true">‹</button><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button">3</button><button type="button" aria-label="Next page">›</button></div></div>`;
+
+    /* ---------- phone ---------- */
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Notifications">${bell}</button><button type="button" class="pi" aria-label="Account menu"><span class="av">IC</span></button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:844px;height:844px;overflow:hidden">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${stk ? `<div class="stk">${stk}</div>` : ''}${o && o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+
+    /* ---------- course workspace parts ---------- */
+    const GL = { ok: ['ok', '✓', 'Ready'], bl: ['bl', '✕', 'Blocks publishing'], wa: ['wa', '!', 'Check'], nr: ['nr', '—', 'Not recorded'], un: ['un', '?', 'Unavailable'], pr: ['pr', '◇', 'Proposed check'] };
+    const CK = (g, title, body, act) => `<li><span class="gl ${GL[g][0]}" aria-hidden="true">${GL[g][1]}</span><div><b>${title}</b><small>${body}</small></div><span class="act">${SR(GL[g][2] + '.')}${act || ''}</span></li>`;
+    const CHECKS = (o) => {
+      o = o || {};
+      const g = (h, n, body) => `<div class="gh"><h3>${h}</h3><span class="foot">${n}</span></div><ul class="cl">${body}</ul>`;
+      return `<section class="cd" aria-labelledby="ckh"><div class="ch"><h2 id="ckh">Editorial checklist</h2><span class="sm">${o.ready ? '0 blocking' : '2 blocking · 3 to check'}</span></div>
+      ${g('Readiness', o.ready ? 'all clear' : '1 blocking', J([
+        CK('ok', 'Has lessons', `${mo('10')} lessons in ${mo('2')} modules; ${mo('7')} required. Publishing is refused without one (<code>no_lessons</code>).`),
+        o.ready ? CK('ok', 'Every required lesson opens published content', 'Exercise and exam are published.') : CK('bl', 'Two required lessons open drafts', `Lesson 7 opens the exercise “Pitch decision memo” (Draft). Lesson 10 opens the exam “${PCX}” (Draft). Members cannot open a draft exercise or exam. ${TB('#8288 enforce at publish')}`, '<a href="#" class="lk">Open lesson 7</a>'),
+        o.ready ? CK('ok', 'Optional lessons', 'All three open content a founder can open.') : CK('wa', 'Optional lessons a founder cannot open', 'Lessons 4 and 8 open draft readings; lesson 5 opens a program-only reading. They do not count toward progress.', '<a href="#" class="lk">Review</a>'),
+        CK('ok', 'About this course is filled', 'Summary, practical output, audience (Founders), stage, 5 outcomes, 2 prerequisites, cover link.')
+      ]))}
+      ${g('Access', 'who can see it', J([
+        CK(o.ready ? 'ok' : 'wa', o.ready ? 'Published · Open to every member' : 'Draft · only Super Admins can open it', o.ready ? 'Every signed-in member can find it in Courses.' : 'Status and visibility are separate: once published, Open means every signed-in member.'),
+        CK(o.ready ? 'ok' : 'wa', 'Intended learner: Founders', o.ready ? 'Coverage reads Founders · Published.' : `Coverage reads Founders · Not reachable (all ${mo('4')} founder courses are drafts).`, '<a href="#" class="lk">Coverage</a>'),
+        CK('pr', 'Programs that hold it', `${NR('the content list does not say')} Each program’s page lists what it holds. ${TB('proposed · programs per course')}`)
+      ]))}
+      ${g('Review', o.ready ? 'recorded' : '1 blocking', J([
+        CK('ok', 'Author', `${PCD.author}`),
+        o.ready ? CK('ok', 'Reviewed', `[Ola Fenn] · ${mo('2026-11-25')}`) : CK('bl', 'Reviewer and review date', `${NR()} ${TO('Q1 · A: required to publish')}`, '<a href="#" class="lk">Add</a>'),
+        CK('pr', 'The reviewed version is the one that publishes', `Saved ${mo('2026-11-24 16:40 UTC')}; no edits since. ${TB('#8288 revision check')}`)
+      ]))}</section>`;
+    };
+
+    const COVER = (fb) => fb ? `<div class="cov fb" role="img" aria-label="No cover image: the title is shown instead">${PC}<small>no cover</small></div>` : `<div class="cov" role="img" aria-label="Course cover image"><span>${PC}</span><small>cover_url</small></div>`;
+    const SYLL = (o) => {
+      o = o || {};
+      const row = (s) => {
+        const blocked = !o.author && (s.tgt === 'draft' || (s.tgt === 'program' && !o.enrolled));
+        const why = s.tgt === 'draft' ? `Not open to members yet: the ${s.k.toLowerCase()} is a draft.` : 'For program members only.';
+        return `<li><span class="n">${s.n}</span><div><span class="kd">${s.k}</span> ${s.req ? '' : '<span class="opt">Optional</span>'}<div>${s.t}</div>${blocked ? `<small class="w2">${o.preview ? '◌ ' + why : why}</small>` : ''}</div><span class="foot">${s.req ? 'Required' : ''}</span></li>`;
+      };
+      return `<div class="syl" aria-label="Syllabus">${J([1, 2].map((m) => `<div class="mh2">Module ${m} · ${MODS[m - 1]}<span>${SYL.filter((s) => s.m === m).length} lessons</span></div><ol>${J(SYL.filter((s) => s.m === m).map(row))}</ol>`))}</div>`;
+    };
+
+    /* The learner-facing overview, as a founder member would see it (preview). */
+    const PREVIEW = (o) => {
+      o = o || {};
+      return `<div class="pvf" aria-label="Preview of the member page">
+        <div class="pvb" role="status"><b>◉ Preview</b><span>Draft · not visible to members. Previewing changes nothing.</span><span class="pv-s">Previewing as <button type="button" class="dd" aria-haspopup="listbox">${o.as || 'Founder · not in a program'} <span aria-hidden="true">▾</span></button></span></div>
+        <div class="pvc">
+          <span class="foot mo">/learning/courses/${PCD.slug}</span>
+          ${o.nocover ? COVER(1) : COVER()}
+          <div><span class="eye">Course · ${PCD.level} · ${mo(PCD.min + ' min')}</span><h2 style="font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.25;margin-top:3px">${PC}</h2><p class="sub" style="margin-top:4px">${PCD.sum}</p></div>
+          <div class="out"><span class="eye">You leave with</span><div>${o.noout ? NR() : PCD.out}</div></div>
+          <div class="facts"><span>For <b>${PCD.aud}</b></span><span>Stage <b>${PCD.stage}</b></span><span>${mo('7')} required of ${mo('10')}</span></div>
+          <div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn p" aria-disabled="true" title="Preview: Start does not record progress">Start course</button><span class="foot">In preview, Start does not record progress.</span></div>
+          ${o.short ? '' : SYLL({ preview: 1, enrolled: o.enrolled })}
+          ${o.short ? '' : `<details open><summary class="eye" style="cursor:pointer">What you will be able to do · 5</summary><ul class="rs" style="margin-top:6px">${J(PCD.outcomes.map((x) => `<span>${x}</span>`))}</ul></details><div class="eye">Before you start · 2</div><ul class="rs">${J(PCD.pre.map((x) => `<span>${x}</span>`))}</ul>`}
+        </div></div>`;
+    };
+
+    const WSH = (o) => {
+      o = o || {};
+      return `<div class="wsh"><a href="#" class="bk2">‹ All content</a><div class="r1"><div><span class="eye">Course</span> <span class="foot mo">/learning/studio?course=crs_7Q2M</span><h1>${PC}</h1></div><div class="acts">${o.acts || `<span class="ss">✓ Saved ${mo('16:40 UTC')}</span><button type="button" class="btn p">Review and publish</button>`}</div></div>
+      <div class="facts"><span>Status ${o.pub ? STP.published : STP.draft}</span><span>Visibility <b>${VIS.open}</b></span><span>Who can open it now ${o.pub ? REACH.open : REACH.draft}</span><span>For <b>Founders</b></span><span>${mo('10')} lessons · ${mo('7')} required</span></div>
+      <nav class="ptabs" aria-label="Course workspace">${J(['Overview and preview', 'Details', 'Syllabus'].map((t) => `<a href="#"${t === (o.tab || 'Overview and preview') ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></div>`;
+    };
+
+    let html = '';
+    if (B === 'LST00') html = doc(`<div><span class="eye">Learning · HQ authoring · #8669</span><h2 style="font-size:22px;margin-top:4px">Can my intended learner find and start this course?</h2><p class="sub" style="max-width:900px;margin-top:6px">The studio answers one question per course. The inventory finds the course, the journeys strip says which learners have nothing they can reach, and the course workspace puts the editorial checklist beside a learner-facing preview. Publishing is a separate, reviewed step. Desktop and phone follow the same numbered route.</p></div>
+      <div><h3>The route · desktop board → phone board</h3><div class="flow">
+        <div><span class="step">1</span><b>Content inventory</b><span>46 items, three separate filters, one Create.</span><small>LST02 → LST10A</small></div>
+        <div><span class="step">2</span><b>Founders · Not reachable</b><span>The strip filters to the 4 founder drafts.</span><small>LST03 → LST10B, LST10C</small></div>
+        <div><span class="step">3</span><b>Course workspace</b><span>Checklist beside the member preview.</span><small>LST04 → LST10D</small></div>
+        <div><span class="step">4</span><b>Preview as a member</b><span>Read-only; changes nothing.</span><small>LST06 → LST10E</small></div>
+        <div><span class="step">5</span><b>Fix details or syllabus</b><span>Save, then re-check.</span><small>LST04B, LST04C</small></div>
+        <div><span class="step">6</span><b>Review and publish</b><span>Who will see it, and the gates.</span><small>LST07 → LST10F</small></div>
+        <div><span class="step">7</span><b>Result</b><span>Published, or the route’s refusal.</span><small>LST07B</small></div></div>
+        <p class="foot" style="margin-top:8px">Create path: Create ▾ → Course (LST02B) → New course form (LST08 → LST10G) → Create draft → step 3. Empty, filtered-zero and error states: LST09, LST09B, LST10H.</p></div>
+      <div class="cols">
+        <div><h3>Three things that are never mixed</h3><table class="tbl"><thead><tr><th>Field</th><th>Values</th><th>Source</th></tr></thead><tbody>
+          <tr><td><b>Type</b></td><td>Course, Video, Reading, Exercise, Exam (webinars keep their own tab)</td><td><code>kind</code></td></tr>
+          <tr><td><b>Status</b></td><td>${STP.draft} ${STP.published} ${STP.archived}</td><td><code>status</code></td></tr>
+          <tr><td><b>Visibility</b></td><td>Open to every member · Program-only</td><td><code>visibility</code></td></tr>
+          <tr><td><b>Who can open it now</b></td><td>${REACH.draft}<br>${REACH.open}<br>${REACH.program}<br>${REACH.archived}</td><td>derived on the page from status + visibility, the same rule as <code>canSeeLearning</code></td></tr>
+          <tr><td><b>Intended learner</b></td><td>Founders · Investors · Advisors · Partners</td><td><code>audience_json</code>: guides discovery, never restricts access</td></tr></tbody></table></div>
+        <div><h3>Preview is not publishing</h3><ul><li><b>Preview</b> draws the member page for a chosen learner under a black “Preview” bar. It writes nothing, records no progress and sends nothing.</li><li><b>Review and publish</b> is the only control that changes who can see a course. It names the change (Super Admins only → every signed-in member), lists the gates, and asks once.</li><li><b>Visibility</b> edits on a published course are reach changes too, and get their own confirmation (LST07C).</li></ul>
+          <h3 style="margin-top:12px">Annotation key</h3><ul><li>${TB('issue')} needs data or backend work (release work is #8288).</li><li>${TO('Q')} owner decision; option A is drawn.</li><li>${SYN} not observed in production.</li><li>${CO(1, 'position:static;display:inline-grid')} observation callout · ${FO(1)} focus order.</li></ul>
+          <h3 style="margin-top:12px">State words</h3><p class="foot">${NR()} · ${UN()} · ${NONE} · ${RF()} — each a glyph and a word. A list that failed to read is never drawn as empty or as 0.</p></div></div>`);
+
+    else if (B === 'LST01') html = crop(1300, `<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">Before · as observed on axal.vc, 25 Nov 2026, Super Admin session</span><span class="foot">Reconstruction for reference; not the proposal</span></div>
+      <div class="cd before" style="gap:12px"><div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div><a href="#" class="bk2">‹ Learning</a><h2 style="font-size:20px;font-weight:800">Learning studio</h2><p class="sub">Author videos, readings and courses. Only a Super Admin sees this page.</p></div>
+        <div class="acts" style="position:relative">${CO(1, 'top:-14px;left:-14px')}<button type="button" class="btn">New video</button><button type="button" class="btn">New reading</button><button type="button" class="btn">New exercise</button><button type="button" class="btn">New exam</button><button type="button" class="btn">New webinar</button><button type="button" class="btn p">New course</button></div></div>
+        <div class="cd" style="background:var(--raised)"><div class="ch"><h2>Content</h2><span class="sm">46 of 46</span></div>
+          <div class="acts" style="position:relative">${CO(2, 'top:-12px;left:-14px')}${J(['All kinds', 'Published', 'Draft', 'Archived', 'Program-only'].map((t, i) => `<span class="pl${i === 0 ? ' v' : ''}">${t}</span>`))}</div>
+          <table class="tbl"><thead><tr><th>Kind</th><th>Title</th><th>Status</th><th>Visibility</th><th>Programs</th><th>Video</th><th>Updated</th></tr></thead><tbody>
+          <tr><td class="ty">Course</td><td><b>${PC}</b></td><td><span class="pl a">Draft</span></td><td>Open</td><td>Not recorded</td><td>—</td><td class="mo">24 Nov 2026</td></tr>
+          <tr><td class="ty">Exercise</td><td><b>Pitch decision memo</b></td><td><span class="pl a">Draft</span></td><td>Open</td><td>Not recorded</td><td>—</td><td class="mo">24 Nov 2026</td></tr>
+          <tr><td class="ty">Exam</td><td><b>${PCX}</b></td><td><span class="pl a">Draft</span></td><td>Open</td><td>Not recorded</td><td>—</td><td class="mo">24 Nov 2026</td></tr></tbody></table><p class="foot">… 43 more rows, one list, no paging</p></div>
+        <div class="cd" style="background:var(--raised);position:relative">${CO(4, 'top:-10px;left:-10px')}<div class="ch"><h2>Webinars</h2><button type="button" class="btn">New webinar</button></div></div>
+        <div class="cd" style="background:var(--raised);position:relative">${CO(5, 'top:-10px;left:-10px')}<div class="ch"><h2>Curriculum coverage</h2><span class="sm">4 courses in the catalogue</span></div><table class="tbl"><thead><tr><th>Journey</th><th>Coverage</th><th>Published</th><th>Not reachable</th></tr></thead><tbody><tr><td><b>Founders</b></td><td><span class="pl a">Not reachable</span></td><td>None</td><td>${PC} (draft) · [Customer discovery in 30 days] (draft) · …</td></tr><tr><td><b>Investors</b></td><td><span class="pl r">Missing</span></td><td>None</td><td>None</td></tr></tbody></table></div></div>
+      <div class="g3">
+        <div class="nt a"><span class="co" style="position:static">1</span><div>Six creation links compete with the page title; the single landed canvas had one “New content ▾”.</div></div>
+        <div class="nt a"><span class="co" style="position:static">2</span><div>“All kinds” (a type) sits in one chip row with three statuses and a visibility, and only one chip applies at a time: “draft courses” cannot be asked for. ${CO(3, 'position:static;display:inline-grid')} “46 of 46” mixes every type; nothing says how many are courses.</div></div>
+        <div class="nt a"><span class="co" style="position:static">4</span><div>A second “New webinar” in the Webinars list. ${CO(5, 'position:static;display:inline-grid')} Coverage, the only place that says founders cannot reach anything, sits last on the page. Kept: its verdicts were correct and are moved to the top.</div></div></div>`);
+
+    else if (B === 'LST02') html = shell(`${HEAD()}${STABS('Content')}${JOUR()}
+      <section class="cd" aria-labelledby="ct"><div class="ch"><h2 id="ct">Content</h2><span class="sm">courses and what their lessons open · newest edit first</span></div>${FLT()}
+      ${TABLE(ROWS, 'All learning content: type, title, status, visibility, who can open it now, programs, video and last update')}
+      ${pager(1, 20, N.all)}
+      <p class="foot">${mo(N.pub)} published · ${mo(N.draft)} draft · ${mo(N.arch)} archived · ${mo(N.prog)} program-only. Webinars (${mo(N.web)}) are on their own tab. Programs reads ${NR()} because the list routes do not say which programs hold an item ${TB('proposed')}.</p></section>`, { h: 1500 });
+
+    else if (B === 'LST02B') html = crop(620, `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="foot">Header, Create open · focus on the first item</span>${CREATE(1)}</div>
+      <div style="display:flex;justify-content:flex-end"><div class="mnu" role="menu" aria-label="Create">
+        <span class="mh">Start here</span>
+        <a href="#" role="menuitem" class="fv">Course <span class="kb">C</span><small>A course gathers lessons into modules. It is created as a draft.</small></a>
+        <div class="sep" role="separator"></div><span class="mh">Content a lesson opens</span>
+        <a href="#" role="menuitem">Video <small>A link (YouTube, Vimeo, Stream) or an uploaded file.</small></a>
+        <a href="#" role="menuitem">Reading <small>Text a member reads.</small></a>
+        <a href="#" role="menuitem">Exercise <small>Work a reviewer accepts.</small></a>
+        <a href="#" role="menuitem">Exam <small>Questions with a pass mark and attempts.</small></a>
+        <div class="sep" role="separator"></div>
+        <a href="#" role="menuitem">Webinar <small>An event; it is listed on the Webinars tab.</small></a></div></div>
+      <p class="ann"><b>One primary action.</b> Each item opens the address main already uses (<code>?new=course</code>, <code>video</code>, <code>reading</code>, <code>exercise</code>, <code>exam</code>, <code>webinar</code>); nothing is created until the form is saved. Arrow keys move, Enter opens, Escape returns focus to Create. The Webinars tab drops its second “New webinar”.</p>`);
+
+    else if (B === 'LST02C') html = crop(1300, `<span class="lbl">Filter variants</span>
+      <div class="g3">
+        <div class="cd"><span class="tag">Type · open</span><div class="flt"><span>Type</span><button type="button" class="dd on" aria-expanded="true">All types ▾</button></div><ul class="lst" role="listbox" aria-label="Type">${J([['All types', 46, 1], ['Course', 4], ['Video', 16], ['Reading', 18], ['Exercise', 4], ['Exam', 4]].map(([t, n, on]) => `<li role="option" aria-selected="${on ? 'true' : 'false'}"><b>${on ? '✓ ' : ''}${t}</b><span class="mo mu">${n}</span></li>`))}</ul></div>
+        <div class="cd"><span class="tag">Status · open</span><div class="flt"><span>Status</span><button type="button" class="dd on" aria-expanded="true">Any status ▾</button></div><ul class="lst" role="listbox" aria-label="Status">${J([['Any status', 46, 1], ['✎ Draft', 14], ['✓ Published', 30], ['▣ Archived', 2]].map(([t, n, on]) => `<li role="option" aria-selected="${on ? 'true' : 'false'}"><b>${on ? '✓ ' : ''}${t}</b><span class="mo mu">${n}</span></li>`))}</ul></div>
+        <div class="cd"><span class="tag">Visibility · open</span><div class="flt"><span>Visibility</span><button type="button" class="dd on" aria-expanded="true">Any visibility ▾</button></div><ul class="lst" role="listbox" aria-label="Visibility">${J([['Any visibility', 46, 1], ['Open to every member', 41], ['Program-only', 5]].map(([t, n, on]) => `<li role="option" aria-selected="${on ? 'true' : 'false'}"><b>${on ? '✓ ' : ''}${t}</b><span class="mo mu">${n}</span></li>`))}</ul><p class="foot">Program-only reaches members enrolled in a published program that holds it.</p></div></div>
+      <div class="cd"><span class="tag">Applied · type and status</span>${FLT({ ty: 'Course', st: 'Draft', count: '4 of 46', chips: ['Type: Course', 'Status: Draft'] })}</div>
+      <p class="ann"><b>Counts</b> come from the lists the studio already reads (frontend only). While a list is still loading its counts read “…”; when one failed they read ${UN()} and that type’s option says so, never 0. Filters live in the address (<code>?type=course&amp;status=draft</code>) so a filtered view can be shared.</p>`);
+
+    else if (B === 'LST03') {
+      const crs = COURSES.map((r) => Object.assign({}, r, { sub: r.sub + ' · <span style="color:var(--amT)">Draft: only Super Admins can open it</span>' }));
+      html = shell(`${HEAD()}${STABS('Content')}${JOUR(1)}
+      <section class="cd" aria-labelledby="ct"><div class="ch"><h2 id="ct">Content</h2><span class="sm">filtered from the Founders journey</span></div>${FLT({ ty: 'Course', st: 'Draft', count: '4 of 46', chips: ['Type: Course', 'Status: Draft'] })}
+      ${TABLE(crs, 'Draft courses: 4 of 46', 0)}
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Why founders cannot start these.</b> All four name Founders and are Open, so visibility is not the problem: each is a draft. Open one to see its checklist beside what a founder would see. Exercises and exams the courses open are drafts too (${mo('8')}), which the checklist names.</div></div></section>`, { h: 1060 });
+    }
+
+    else if (B === 'LST04') html = shell(`${WSH()}<div class="ws"><div style="display:flex;flex-direction:column;gap:16px">${CHECKS()}
+      <section class="cd"><div class="ch"><h2>Course facts</h2><a href="#" class="lk">Edit details</a></div><dl class="rv"><dt>Summary</dt><dd>${PCD.sum}</dd><dt>Practical output</dt><dd>${PCD.out}</dd><dt>Audience</dt><dd>Founders · ${PCD.stage}</dd><dt>Level · time</dt><dd>${PCD.level} · ${mo(PCD.min + ' min')}</dd><dt>Cover</dt><dd>Link recorded</dd><dt>Resources</dt><dd>${NONE}</dd></dl></section></div>
+      ${PREVIEW()}</div>`, { h: 1720 });
+
+    else if (B === 'LST04B') {
+      const F = (lab, val, o) => `<div class="f${o && o.full ? ' full' : ''}"><label>${lab}</label><div class="in${o && o.ta ? ' ta' : ''}${o && o.dirty ? '" style="border-color:var(--vi);box-shadow:inset 3px 0 0 var(--vi)' : ''}">${val}</div>${o && o.hint ? `<small>${o.hint}</small>` : ''}</div>`;
+      html = shell(`${WSH({ tab: 'Details', acts: `<span class="ss a">● Unsaved · 2 fields ${TB('#8288 guard')}</span><button type="button" class="btn">Preview</button><button type="button" class="btn p">Save course</button>` })}
+      <div class="ws"><section class="cd"><div class="form">
+        ${F('Title', PC)}${F('Slug', `<span class="mo">${PCD.slug}</span>`, { hint: 'Lowercase letters, digits and hyphens: the course’s address.' })}
+        ${F('Summary', PCD.sum, { full: 1, ta: 1 })}
+        ${F('Level', 'Intro ▾')}${F('Estimated minutes', `<span class="mo">85</span>`)}
+        <div class="f full"><label>Visibility</label><div class="in">Open to every member ▾</div><small>Takes effect when the course is published. Program-only reaches members once they are enrolled in a published program that holds it.</small></div>
+        <div class="fs"><h3>Who it is for</h3><div class="cbx" role="group" aria-label="Who it is for"><span><i class="on">✓</i>Founders</span><span><i></i>Investors</span><span><i></i>Advisors</span><span><i></i>Partners</span></div><small class="foot">Guides discovery and coverage; it does not limit who can open the course.</small>${F('Stage', PCD.stage)}</div>
+        <div class="fs"><h3>What the learner leaves with</h3>${F('Practical output', PCD.out, { full: 1, dirty: 1, hint: 'Up to 300 characters. Shown first on the member page.' })}${F('Outcomes · one per line, up to 8', J(PCD.outcomes.map((x) => x + '<br>')), { full: 1, ta: 1, dirty: 1 })}${F('Prerequisites · one per line', J(PCD.pre.map((x) => x + '<br>')), { full: 1, ta: 1 })}</div>
+        <div class="fs"><h3>Cover</h3>${F('Cover image link', '<span class="mo">https://…/covers/pitch-narratives.png</span>', { full: 1, hint: 'https. Draw a cover is available once the course is saved.' })}</div>
+        <div class="fs"><h3>Credits and review</h3><div class="form">${F('Author', PCD.author)}${F('Reviewer', '<span class="mu">Not recorded</span>')}${F('Review date', '<span class="mu">YYYY-MM-DD</span>', { hint: 'Not in the future.' })}</div></div>
+        <div class="fs"><h3>Resources</h3><p class="foot">${NONE} · Each one is a title and an https link, up to 50.</p><button type="button" class="btn" style="align-self:flex-start">Add a resource</button></div>
+      </div><div class="cf"><span class="foot">Saving keeps the course a draft. Publishing is a separate step. Save stays in the header, which stays on screen.</span></div></section>
+      <div style="display:flex;flex-direction:column;gap:12px"><span class="foot">Live from the form · not saved</span>${PREVIEW({ short: 1 })}</div></div>`, { h: 1720 });
+    }
+
+    else if (B === 'LST04C') {
+      const LS = (s) => {
+        const dep = s.tgt === 'draft' ? `<small style="color:${s.req ? 'var(--neg)' : 'var(--amT)'}">${s.req ? '✕' : '!'} opens a draft ${s.k.toLowerCase()} · members cannot open it</small>` : s.tgt === 'program' ? '<small style="color:var(--amT)">! opens program-only content · only enrolled members can open it</small>' : `<small>✓ opens a published ${s.k.toLowerCase()}</small>`;
+        return `<div class="lsn"><span class="kd">${s.k}</span><div><b>${s.n}. ${s.t}</b> ${s.req ? '' : '<span class="opt">Optional</span>'}${dep}</div><span class="acts"><button type="button" class="btn">Edit</button><button type="button" class="ib2" aria-label="Move lesson ${s.n} up">↑</button><button type="button" class="ib2" aria-label="Move lesson ${s.n} down">↓</button><button type="button" class="btn" style="color:var(--neg)">Delete</button></span></div>`;
+      };
+      html = shell(`${WSH({ tab: 'Syllabus' })}<div class="ws"><section class="cd"><div class="ch"><h2>Modules and lessons</h2><span class="sm">2 modules · 10 lessons · 7 required</span></div>
+        ${J([1, 2].map((m) => `<div class="mod"><div class="mt"><h3>Module ${m} · ${MODS[m - 1]}</h3><span class="acts"><button type="button" class="btn">Rename</button><button type="button" class="ib2" aria-label="Move module ${m} up"${m === 1 ? ' aria-disabled="true"' : ''}>↑</button><button type="button" class="ib2" aria-label="Move module ${m} down"${m === 2 ? ' aria-disabled="true"' : ''}>↓</button></span></div>${J(SYL.filter((s) => s.m === m).map(LS))}<button type="button" class="btn" style="align-self:flex-start">Add lesson</button></div>`))}
+        <div class="tools"><div class="inp" style="flex:1">New module title</div><button type="button" class="btn">Add module</button></div>
+        <p class="foot">Each write answers with the whole course, so the order shown is the order stored. A module can be deleted only when empty. Dependency lines come from the studio’s own lists (frontend only); publishing does not check them yet ${TB('#8288')}.</p></section>
+        <section class="cd"><div class="ch"><h2>What a founder can open</h2><span class="sm">from this syllabus</span></div><ul class="cl">
+          ${CK('ok', '5 of 7 required lessons', 'Open published readings.')}
+          ${CK('bl', '2 required lessons open drafts', 'Lesson 7 (exercise) and lesson 10 (exam). Publish the exercise and the exam, or make those lessons optional.', '<a href="#" class="lk">Open exercise</a>')}
+          ${CK('wa', '3 optional lessons', 'Lessons 4 and 8 open draft readings; lesson 5 opens program-only content.')}
+          ${CK('nr', 'Lesson lengths', 'Not recorded for the 10 lessons. Members see the course estimate (85 min), never an invented length per lesson.')}</ul></section></div>`, { h: 1380 });
+    }
+
+    else if (B === 'LST05') html = crop(1300, `<span class="lbl">Editorial checklist · row variants</span>
+      <div class="g2"><section class="cd"><div class="ch"><h2>One row per state</h2></div><ul class="cl">
+        ${CK('ok', 'Ready', 'A check that passed, with the fact behind it.')}
+        ${CK('bl', 'Blocks publishing', 'Names what blocks and links to the place it is fixed. Review and publish stays unavailable while any row blocks.', '<a href="#" class="lk">Fix</a>')}
+        ${CK('wa', 'Check', 'Worth a look; never blocks (optional lessons, intended learner not yet reachable).')}
+        ${CK('nr', 'Not recorded', 'The course has no value for this field. Never drawn as empty or as 0.')}
+        ${CK('un', 'Unavailable', 'The read behind the check failed, for example the exam list. Retry; this is not a claim the check passed or failed.', '<button type="button" class="btn">Retry</button>')}
+        ${CK('pr', 'Proposed check', 'Needs data or backend work; drawn with its issue so it is not mistaken for a live gate.')}</ul></section>
+      <section class="cd"><div class="ch"><h2>Where each check comes from</h2></div><table class="tbl"><thead><tr><th>Check</th><th>Source on main</th><th>Gate?</th></tr></thead><tbody>
+        <tr><td>Has lessons</td><td><code>POST /courses/:uid/publish</code> refuses <code>no_lessons</code></td><td>Yes, today</td></tr>
+        <tr><td>Required lessons open published content</td><td>course tree + the item, exercise and exam lists</td><td>${TB('#8288')}</td></tr>
+        <tr><td>Optional lessons a learner cannot open</td><td>same</td><td>Warn only</td></tr>
+        <tr><td>About this course filled</td><td>course read: summary, output, audience, outcomes, cover</td><td>Warn only</td></tr>
+        <tr><td>Status, visibility, who can open it</td><td>course read</td><td>Shown</td></tr>
+        <tr><td>Intended learner reachable</td><td><code>GET /coverage</code></td><td>Shown</td></tr>
+        <tr><td>Programs that hold it</td><td>${NR('no list route says')}</td><td>${TB('proposed')}</td></tr>
+        <tr><td>Reviewer and review date</td><td>course read: <code>reviewer_name</code>, <code>reviewed_on</code></td><td>${TO('Q1')}</td></tr>
+        <tr><td>Reviewed version is what publishes</td><td>no revision is stored</td><td>${TB('#8288')}</td></tr>
+        <tr><td>No unsaved edits</td><td>the open form</td><td>${TB('#8288')}</td></tr></tbody></table></section></div>
+      <div class="g3"><div class="cd"><span class="tag">Collapsed · all clear</span><div class="line"><span>✓ <b>Ready to publish</b></span><span class="foot">10 checks · reviewed ${mo('2026-11-25')}</span></div></div>
+        <div class="cd"><span class="tag">Collapsed · blocked</span><div class="line" style="border-color:var(--negE)"><span>✕ <b>2 blocking</b> · 3 to check</span><a href="#" class="lk">Show</a></div></div>
+        <div class="cd"><span class="tag">Loading</span><div role="status" aria-busy="true" style="display:flex;flex-direction:column;gap:8px"><span class="sr">Reading the checks…</span><span class="sk" style="height:14px;width:90%"></span><span class="sk" style="height:14px;width:72%"></span><span class="sk" style="height:14px;width:60%"></span></div></div></div>`);
+
+    else if (B === 'LST06') html = shell(`${WSH({ acts: `<button type="button" class="btn">Close preview</button><button type="button" class="btn p">Review and publish</button>` })}
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start">${PREVIEW()}
+      <aside class="cd" aria-labelledby="pva"><div class="ch"><h2 id="pva">What this preview is</h2></div><ul class="rs"><span>The member course page, drawn for the learner chosen above.</span><span>Read-only: Start records nothing, and nothing is sent or published.</span><span>Rows a founder could not open say why (draft, program-only).</span></ul>
+        <div class="sec"><h3>Preview as</h3><ul class="lst" role="listbox" aria-label="Preview as">
+          <li role="option" aria-selected="true"><b>✓ Founder · not in a program</b><small>the intended learner</small></li>
+          <li role="option" aria-selected="false"><b>Founder · enrolled in [Lisbon Founders 2026]</b><small>opens program-only lesson 5</small></li>
+          <li role="option" aria-selected="false"><b>Investor</b><small>not named in the audience; can still open it once published</small></li></ul></div>
+        <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Today a Super Admin who opens <code>/learning/courses/${PCD.slug}</code> sees the draft as an author, because the member read lets a Super Admin see everything. “View as” changes the menu, not that read. ${TB('proposed · preview projection')}</div></div></aside></div>`, { h: 1500 });
+
+    else if (B === 'LST06B') html = crop(1300, `<span class="lbl">Preview variants</span>
+      <div class="g3">
+        <div class="cd"><span class="tag">Founder · enrolled in a program</span>${SYN}<div class="syl"><div class="mh2">Module 1 · ${MODS[0]}<span>5 lessons</span></div><ol><li><span class="n">5</span><div><span class="kd">Reading</span> <span class="opt">Optional</span><div>${SYL[4].t}</div><small>Opens: you are enrolled in [Lisbon Founders 2026].</small></div><span class="foot"></span></li></ol></div></div>
+        <div class="cd"><span class="tag">Investor · outside the audience</span>${SYN}<div class="nt"><span class="ic" aria-hidden="true">i</span><div>This course is for <b>Founders</b>. Audience guides discovery and coverage; it does not stop an investor opening an Open course once it is published.</div></div></div>
+        <div class="cd"><span class="tag">Program-only course · not enrolled</span>${SYN}<div class="nt"><span class="ic" aria-hidden="true">i</span><div>A member outside the program gets the same answer as a course that does not exist (the member read answers “not found” for both). The preview says: <b>This learner would not see this course.</b></div></div></div></div>
+      <div class="g3">
+        <div class="cd"><span class="tag">No cover recorded</span>${COVER(1)}<p class="foot">The title on a plain card; no stock art.</p></div>
+        <div class="cd"><span class="tag">Practical output not recorded</span><div class="out"><span class="eye">You leave with</span><div>${NR()}</div></div><p class="foot">The checklist row “About this course” turns to Check.</p></div>
+        <div class="cd"><span class="tag">Preview could not be drawn</span><div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>${UN('the course')}</b> The course could not be read. This is not a claim that it does not exist. <button type="button" class="btn">Retry</button></div></div></div></div>`);
+
+    else if (B === 'LST07') {
+      const dlg = `<div class="sheetc" role="dialog" aria-modal="true" aria-labelledby="rp"><div class="dh"><div><span class="eye">Review and publish · course</span><h2 id="rp">Publish “${PC}”?</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div>
+        <div class="dc"><div class="stp" role="list" aria-label="Steps"><span role="listitem" class="on" aria-current="step">1 Review</span><span role="listitem">2 Confirm</span><span role="listitem">3 Result</span></div>
+        <section><h3 style="font-size:13.5px;font-weight:800;margin-bottom:6px">What would change</h3><dl class="rv"><dt>Status</dt><dd>${STP.draft} → ${STP.published}</dd><dt>Who can open it</dt><dd>${REACH.draft} → ${REACH.open}</dd><dt>Founders journey</dt><dd><span class="pl a">▽ Not reachable</span> → <span class="pl g">✓ Published</span></dd><dt>Notifications</dt><dd>None. Publishing sends nothing.</dd></dl></section>
+        <section><h3 style="font-size:13.5px;font-weight:800;margin-bottom:6px">2 checks block publishing</h3><ul class="cl">
+          ${CK('bl', 'Two required lessons open drafts', `Lesson 7 (exercise) and lesson 10 (exam). ${TB('#8288')}`, '<a href="#" class="lk">Fix</a>')}
+          ${CK('bl', 'Reviewer and review date', `${NR()} ${TO('Q1 · A')}`, '<a href="#" class="lk">Add</a>')}
+          ${CK('wa', '3 optional lessons a founder cannot open', 'Does not block.')}</ul></section></div>
+        <div class="df"><span class="foot" id="pbr">Publish is unavailable: resolve the 2 blocking checks first.</span><div class="acts"><button type="button" class="btn">Cancel</button><button type="button" class="btn p" aria-disabled="true" aria-describedby="pbr">Publish course</button></div></div></div>`;
+      html = shell(`${WSH()}<div class="ws"><div>${CHECKS()}</div>${PREVIEW({ short: 1 })}</div>`, { h: 1020, overlay: dlg });
+    }
+
+    else if (B === 'LST07B') html = crop(1300, `<span class="lbl">Publish · confirm, result and refusal</span>
+      <div class="g3">
+        <div class="panel"><div class="dh"><div><span class="eye">Step 2 of 3 · confirm</span><h2 style="font-size:16px">Publish to every signed-in member?</h2></div></div><div class="dc">${SYN}<p class="sub">“${PC}” becomes visible in Courses for every signed-in member. Founders reach it at once. You can unpublish it later; members keep their progress.</p><dl class="rv"><dt>Acting</dt><dd>${PCD.author} · Super Admin</dd><dt>Reviewed</dt><dd>[Ola Fenn] · ${mo('2026-11-25')}</dd></dl></div><div class="df"><button type="button" class="btn">Back</button><button type="button" class="btn p">Publish course</button></div></div>
+        <div class="panel"><div class="dh"><div><span class="eye">Step 3 of 3 · result</span><h2 style="font-size:16px">Published</h2></div></div><div class="dc">${SYN}<div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Published ${mo('26 Nov 2026 14:05 UTC')}</b> by ${PCD.author}. Founders can now find it in Courses; coverage reads Founders · Published.</div></div><div class="facts"><span>Status ${STP.published}</span><span>${REACH.open}</span></div><p class="foot">Drawn from what the route answered (the course tree), not from what was sent.</p></div><div class="df"><a href="#" class="lk">Open the member page</a><button type="button" class="btn">Unpublish</button></div></div>
+        <div class="panel"><div class="dh"><div><span class="eye">Refused by the route</span><h2 style="font-size:16px">Not published</h2></div></div><div class="dc">${SYN}<div class="nt r"><span class="ic" aria-hidden="true">⊘</span><div>${RF()} <b>A course needs at least one lesson before it is published.</b><br><span class="foot">[Hiring your first five] · the route’s own words (<code>no_lessons</code>)</span></div></div><p class="foot">Nothing changed: still ${STP.draft}, ${REACH.draft}.</p></div><div class="df"><a href="#" class="lk">Add a lesson</a><button type="button" class="btn">Close</button></div></div></div>
+      <div class="g2">
+        <div class="cd"><span class="tag">Unpublish · published course</span><p class="sub">Unpublish “${PC}”? It returns to Draft: members can no longer open it and the Founders journey reads Not reachable again. Their progress is kept.</p><div class="acts"><button type="button" class="btn">Cancel</button><button type="button" class="btn" style="border-color:var(--negE);color:var(--neg)">Unpublish</button></div></div>
+        <div class="cd"><span class="tag">Archive · asked twice (main)</span><div class="nt r"><div>Archive this course? Members lose it at once; it stays here, and can be published again.</div></div><div class="acts"><button type="button" class="btn">Cancel</button><button type="button" class="btn" style="border-color:var(--negE);color:var(--neg)">Archive</button></div></div></div>`);
+
+    else if (B === 'LST07C') html = crop(1300, `<span class="lbl">Changing who can see a published course · and who may</span>
+      <div class="g3">
+        <div class="cd"><span class="tag">1 Scope</span>${SYN}<div class="f"><label>Visibility</label><div class="in" style="border-color:var(--vi)">Program-only ▾</div></div><p class="foot">Changed in Details on a <b>published</b> course. Save asks first, because it changes reach at once.</p></div>
+        <div class="cd"><span class="tag">2 Review</span><dl class="rv"><dt>Who can open it</dt><dd>${REACH.open} → ${REACH.program}</dd><dt>Programs holding it</dt><dd>${NR()} ${TB('proposed')}</dd><dt>Founders journey</dt><dd><span class="pl g">✓ Published</span> → <span class="pl a">▽ Not reachable</span></dd></dl><div class="acts"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Save and restrict</button></div></div>
+        <div class="cd"><span class="tag">3 Result</span><div class="nt g"><span class="ic" aria-hidden="true">✓</span><div>Saved. Only members enrolled in a published program that holds it can open it.</div></div></div></div>
+      <section class="cd"><div class="ch"><h2>Who sees what</h2><span class="sm">publishing controls follow permissions</span></div><table class="tbl"><thead><tr><th>Who</th><th>Studio</th><th>Publish, unpublish, archive</th><th>Draft course page</th></tr></thead><tbody>
+        <tr><td><b>Super Admin</b></td><td>Opens <code>/learning/studio</code></td><td>Yes, through Review and publish</td><td>Sees the draft (the member read shows a Super Admin everything); the studio preview carries the Preview bar</td></tr>
+        <tr><td><b>HQ or branch admin</b> (not Super Admin)</td><td>Not linked; the studio’s calls answer ${RF('Super Admin only')}</td><td>No control drawn</td><td>Not found, like any member</td></tr>
+        <tr><td><b>Program admin</b></td><td>No; reads their programs read-only at <code>/learning/programs</code></td><td>No control drawn</td><td>Not found</td></tr>
+        <tr><td><b>Founder, investor, advisor, partner</b></td><td>No</td><td>No</td><td>Not found until published and open, or program-only and enrolled</td></tr></tbody></table>
+        <p class="foot">Every studio call is <code>requireSuperAdmin</code> on the Worker; the page hides controls, the Worker enforces them.</p></section>`);
+
+    else if (B === 'LST08') {
+      const F = (lab, val, o) => `<div class="f${o && o.full ? ' full' : ''}"><label>${lab}</label><div class="in${o && o.ta ? ' ta' : ''}${o && o.ph ? ' hint' : ''}">${val}</div>${o && o.hint ? `<small>${o.hint}</small>` : ''}</div>`;
+      html = shell(`<header class="hdr"><a href="#" class="bk2">‹ All content</a><span class="eye">Learning studio · Create · ${mo('?new=course')}</span><div class="hrow"><div><h1>New course</h1><p>Created as a draft. Only Super Admins can open it until it is published.</p></div></div></header>
+      <div class="ws"><section class="cd"><div class="form">
+        ${F('Title', '[Board-ready financial model]')}${F('Slug', '<span class="mo">board-ready-financial-model</span>', { hint: 'Lowercase letters, digits and hyphens: the course’s address.' })}
+        ${F('Summary', 'One or two sentences a learner reads first.', { full: 1, ta: 1, ph: 1 })}
+        ${F('Level', 'Not set ▾')}${F('Estimated minutes', 'e.g. 60', { ph: 1 })}
+        <div class="f full"><label>Visibility</label><div class="in">Open to every member ▾</div><small>Takes effect when the course is published.</small></div>
+        <div class="fs"><h3>Who it is for</h3><div class="cbx" role="group" aria-label="Who it is for"><span><i class="on">✓</i>Founders</span><span><i></i>Investors</span><span><i></i>Advisors</span><span><i></i>Partners</span></div>${F('Stage', 'e.g. Seed', { ph: 1 })}</div>
+        <div class="fs"><h3>What the learner leaves with</h3>${F('Practical output', 'The artefact a learner leaves with, up to 300 characters.', { full: 1, ph: 1 })}${F('Outcomes · one per line, up to 8', '', { full: 1, ta: 1 })}${F('Prerequisites · one per line, up to 8', '', { full: 1, ta: 1 })}</div>
+        <div class="fs"><h3>Cover</h3>${F('Cover image link', 'https://…', { full: 1, ph: 1, hint: 'Draw a cover becomes available after the draft is created.' })}</div>
+        <div class="fs"><h3>Credits and review</h3><div class="form">${F('Author', PCD.author)}${F('Reviewer', '', {})}${F('Review date', 'YYYY-MM-DD', { ph: 1 })}</div></div>
+      </div><div class="cf"><span class="foot">Title and slug are needed; any other field may stay empty, and members then read “Not recorded”.</span><div class="acts"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Create draft</button></div></div></section>
+      <div style="display:flex;flex-direction:column;gap:12px"><span class="foot">Card preview · live from the form, not saved</span><div class="pc2"><div class="cov fb" role="img" aria-label="No cover yet">[Board-ready financial model]<small>no cover</small></div><span class="eye">Course · level not set</span><b>[Board-ready financial model]</b><small>For Founders · You leave with: ${NR()}</small></div>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>After <b>Create draft</b> the course workspace opens on the new course (<code>?course=&lt;uid&gt;</code>) with “Draft created.” Modules and lessons are added there; the checklist starts with “Has lessons” blocking.</div></div></div></div>`, { h: 900 });
+    }
+
+    else if (B === 'LST08B') html = crop(1300, `<span class="lbl">Create and save · validation and refusals</span>
+      <div class="g3">
+        <div class="cd"><span class="tag">Before sending</span><div class="f"><label for="t1">Title</label><div class="in err" id="t1"></div><span class="em" role="alert">✕ Enter a title.</span></div><div class="f"><label>Practical output</label><div class="in ta err">${'A ' + 'very long practical output '.repeat(5)}…</div><span class="em">✕ 312 of 300 characters.</span></div><p class="foot">Checked in the form; focus moves to the first field in error.</p></div>
+        <div class="cd"><span class="tag">Refused by the route</span>${SYN}<div class="f"><label>Slug</label><div class="in err mo">pitch-narratives-v1</div></div><div class="nt r"><span class="ic" aria-hidden="true">⊘</span><div>${RF()} <b>Another course already has that slug.</b><br><span class="foot">the route’s words (<code>slug_taken</code>), shown beside the field</span></div></div></div>
+        <div class="cd"><span class="tag">Review date in the future</span>${SYN}<div class="f"><label>Review date</label><div class="in err mo">2026-12-02</div><span class="em">✕ Not in the future.</span></div><p class="foot">The route checks the same rule; its sentence is shown as it came.</p></div></div>`);
+
+    else if (B === 'LST09') html = crop(1300, `<span class="lbl">Inventory states</span>
+      <div class="g2">
+        <div class="cd"><span class="tag">Empty inventory</span>${SYN}<div style="text-align:center;padding:18px 10px;display:flex;flex-direction:column;gap:8px;align-items:center"><b style="font-size:15px">No content yet</b><p class="sub" style="max-width:420px">Videos, courses, webinars, exercises and exams appear here once a Super Admin creates them. Start with a course; it gathers the lessons.</p>${CREATE()}</div><p class="foot">Filters are hidden: there is nothing to filter. Journeys read Missing for every learner.</p></div>
+        <div class="cd"><span class="tag">Filtered to zero</span>${SYN}${FLT({ ty: 'Exam', st: 'Published', count: '0 of 46', chips: ['Type: Exam', 'Status: Published'] })}<div style="padding:12px 0;display:flex;flex-direction:column;gap:6px"><b>No content matches these filters.</b><span class="foot">All ${mo('4')} exams are drafts. Clear a filter to see them.</span><button type="button" class="btn" style="align-self:flex-start">Clear filters</button></div></div></div>
+      <div class="g2">
+        <div class="cd"><span class="tag">Loading</span><div role="status" aria-busy="true" style="display:flex;flex-direction:column;gap:9px"><span class="sr">Reading the content list…</span><span class="sk" style="height:32px;width:100%"></span>${J([92, 79, 66, 53].map((w) => `<span class="sk" style="height:14px;width:${w}%"></span>`))}</div><p class="foot">Counts read “…” until every list has answered.</p></div>
+        <div class="cd"><span class="tag">One list failed · partial</span>${SYN}<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>${UN('the course list')}</b> The course list could not be read. This is not a claim that there are no courses. <button type="button" class="btn">Retry</button></div></div><div class="line"><span>Showing ${mo('42')} of ${mo('46')}+ · videos, readings, exercises and exams</span><span class="pl">◐ Partial</span></div><p class="foot">The Type option “Course” reads Unavailable, and the Founders journey keeps its own coverage read.</p></div></div>
+      <div class="g2">
+        <div class="cd"><span class="tag">Every list failed</span>${SYN}<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>${UN('the content list')}</b> This is not a claim that nothing has been authored. <button type="button" class="btn">Retry</button></div></div><p class="foot">No table, no count, no “0 of 0”.</p></div>
+        <div class="cd"><span class="tag">Coverage failed</span>${SYN}<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>${UN('curriculum coverage')}</b> The course catalogue could not be read, so coverage is unknown. This is not a claim that any journey has no material. <button type="button" class="btn">Retry</button></div></div><p class="foot">The route’s own sentence (<code>coverage_unreadable</code>). The inventory below still works.</p></div></div>`);
+
+    else if (B === 'LST09B') html = crop(1300, `<span class="lbl">Save states · course details and syllabus</span>
+      <div class="g3">
+        <div class="cd"><span class="tag">Unsaved</span><span class="ss a">● Unsaved · 2 fields</span><p class="foot">Leaving asks: Keep editing · Discard changes. Preview and Review and publish say they show the last save. ${TB('#8288 guard')}</p></div>
+        <div class="cd"><span class="tag">Saving</span><span class="ss" role="status">◌ Saving…</span><p class="foot">Save is unavailable while a write is in flight; the form stays editable.</p></div>
+        <div class="cd"><span class="tag">Saved</span><span class="ss g" role="status">✓ Saved ${mo('16:40 UTC')}</span><p class="foot">Drawn from the course the route returned.</p></div>
+        <div class="cd"><span class="tag">Save refused</span>${SYN}<div class="nt r"><span class="ic" aria-hidden="true">⊘</span><div>${RF()} <b>Another course already has that slug.</b> Your other changes are still in the form.</div></div></div>
+        <div class="cd"><span class="tag">Offline</span>${SYN}<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>You are offline.</b> Nothing was saved. Your text stays in this form; Save works again when you reconnect.</div></div></div>
+        <div class="cd"><span class="tag">Session expired</span>${SYN}<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Your session ended.</b> Nothing was saved. Sign in again in a new tab, then Save here.</div></div></div></div>`);
+
+    else if (B.indexOf('LST10') === 0) {
+      const card = (r, why) => `<div class="pc2"><div class="r1"><span class="ty">${r.k}</span>${STP[r.st]}</div><b>${r.t}</b><small>${r.sub ? r.sub + ' · ' : ''}${VIS_S[r.vis]} · <span style="white-space:nowrap">updated ${mo(r.d)}</span></small><div>${reachOf(r)}</div>${why ? `<small style="color:var(--amT)">${why}</small>` : ''}</div>`;
+      const PH = (t, step) => `<div style="display:flex;justify-content:space-between;align-items:center"><span class="step" style="width:30px;height:30px;font-size:13px;border-radius:9px">${step}</span><span class="foot">${t}</span></div>`;
+      const sec = (cur) => `<label class="eye" for="ms">Studio section</label><select id="ms" class="msel" aria-label="Studio section"><option${cur === 'Content' ? ' selected="selected"' : ''}>Content · 46</option><option>Webinars · 3</option><option>Coverage</option><option>Regional programs</option></select>`;
+      const jrPh = (sel) => `<div class="cd" style="padding:12px 14px;gap:8px"><b style="font-size:13.5px">Can each intended learner find a course?</b><a href="#" class="line" style="padding:8px 10px${sel ? ';outline:2px solid var(--vi)' : ''}"><span><span class="pl a">▽ Not reachable</span> <b>Founders</b></span><span class="foot">${sel ? '✓ filtered' : '4 drafts →'}</span></a><div class="line" style="padding:8px 10px"><span><span class="pl r">✕ Missing</span> Investors, Advisors, Partners</span></div></div>`;
+      const wsPh = (seg) => `<a href="#" class="bk2">‹ All content</a><h1 style="font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25">${PC}</h1><div class="facts">${STP.draft}${REACH.draft}<span>For <b>Founders</b></span></div><label class="eye" for="ws">Course section</label><select id="ws" class="msel"><option${seg === 'c' ? ' selected="selected"' : ''}>Checklist · 2 blocking</option><option${seg === 'p' ? ' selected="selected"' : ''}>Preview as a member</option><option>Details</option><option>Syllabus</option></select>`;
+      if (B === 'LST10A') html = phone('Learning studio', `${PH('390 · inventory', 1)}<div class="hdr"><span class="eye">Learning · HQ authoring</span><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h1 style="font-size:22px;font-weight:800">Learning studio</h1>${CREATE()}</div></div>${sec('Content')}${jrPh()}
+        <div style="display:flex;gap:8px"><div class="inp" style="min-width:0;flex:1;min-height:44px">⌕ Titles</div><button type="button" class="btn" style="min-height:44px" aria-haspopup="dialog">Filters</button></div><span class="foot mo" role="status">46 of 46 · newest edit first</span>${J(ROWS.slice(0, 3).map((r) => card(r)))}`, null, { back: 1 });
+      else if (B === 'LST10B') html = phone('Learning studio', `${PH('390 · filters', 2)}${sec('Content')}${jrPh(1)}`, null, { back: 1, overlay: `<div class="bsh" role="dialog" aria-modal="true" aria-labelledby="fsh"><span class="grab" aria-hidden="true"></span><div class="dh" style="padding:8px 16px 10px"><h2 id="fsh" style="font-size:17px">Filters</h2><button type="button" class="btn t">Clear</button></div><div class="dc" style="padding:10px 16px;gap:10px">
+        <fieldset style="border:0;padding:0;margin:0"><legend class="eye">Type</legend><div class="rg">${J([['All types', 46], ['Course', 4, 1], ['Video', 16], ['Reading', 18]].map(([t, n, on]) => `<label><i class="${on ? 'on' : ''}"></i>${t}<span>${n}</span></label>`))}<label style="color:var(--mu)">+ Exercise, Exam</label></div></fieldset>
+        <fieldset style="border:0;padding:0;margin:0"><legend class="eye">Status</legend><div class="rg">${J([['Any status', 46], ['✎ Draft', 14, 1], ['✓ Published', 30], ['▣ Archived', 2]].map(([t, n, on]) => `<label><i class="${on ? 'on' : ''}"></i>${t}<span>${n}</span></label>`))}</div></fieldset>
+        <fieldset style="border:0;padding:0;margin:0"><legend class="eye">Visibility</legend><div class="rg">${J([['Any visibility', 46, 1], ['Open to every member', 41], ['Program-only', 5]].map(([t, n, on]) => `<label><i class="${on ? 'on' : ''}"></i>${t}<span>${n}</span></label>`))}</div></fieldset></div>
+        <div class="stk"><button type="button" class="btn p">Show 4 results</button></div></div>` });
+      else if (B === 'LST10C') html = phone('Learning studio', `${PH('390 · the founder drafts', 2)}<div class="chips"><span class="chip">Course<button type="button" aria-label="Remove filter Course">×</button></span><span class="chip">Draft<button type="button" aria-label="Remove filter Draft">×</button></span><button type="button" class="btn t">Clear</button></div><span class="foot mo" role="status">4 of 46 · from Founders · Not reachable</span>${J(COURSES.map((r) => card(r, 'Draft: only Super Admins can open it')))}`, null, { back: 1 });
+      else if (B === 'LST10D') html = phone('Course', `${PH('390 · course workspace', 3)}${wsPh('c')}<ul class="cl">
+        ${CK('ok', 'Has lessons', '10 lessons, 7 required.')}
+        ${CK('bl', 'Two required lessons open drafts', 'Lesson 7 (exercise) and lesson 10 (exam).', '')}
+        ${CK('wa', '3 optional lessons a founder cannot open', 'Lessons 4, 5 and 8.')}
+        ${CK('bl', 'Reviewer and review date', 'Not recorded.')}
+        ${CK('wa', 'Intended learner: Founders', 'Coverage reads Not reachable.')}</ul>`, `<button type="button" class="btn">Preview</button><button type="button" class="btn p">Review and publish</button>`, { back: 1 });
+      else if (B === 'LST10E') html = phone('Preview', `${PH('390 · preview as a founder', 4)}<div class="pvf" style="border-radius:10px"><div class="pvb" role="status" style="padding:8px 10px"><b>◉ Preview</b><span>Draft · changes nothing</span></div><div class="pvc" style="padding:12px">
+        <label class="eye" for="pa">Previewing as</label><select id="pa" class="msel"><option>Founder · not in a program</option></select>
+        <span class="eye">Course · Intro · ${mo('85 min')}</span><h2 style="font-size:18px;font-weight:800;line-height:1.25">${PC}</h2><div class="out"><span class="eye">You leave with</span><div>${PCD.out}</div></div><div class="facts"><span>For <b>Founders</b></span><span>${mo('7')} required of ${mo('10')}</span></div>
+        <div class="syl"><div class="mh2">Module 2 · ${MODS[1]}<span>5 lessons</span></div><ol>${J(SYL.filter((s) => s.n >= 7 && s.n <= 9).map((s) => `<li><span class="n">${s.n}</span><div><span class="kd">${s.k}</span> ${s.req ? '' : '<span class="opt">Optional</span>'}<div>${s.t}</div>${s.tgt === 'draft' ? '<small class="w2">◌ Not open to members yet: draft.</small>' : s.tgt === 'program' ? '<small class="w2">◌ For program members only.</small>' : ''}</div><span></span></li>`))}</ol></div></div></div>`, `<button type="button" class="btn">Close preview</button><button type="button" class="btn p">Review and publish</button>`, { back: 1 });
+      else if (B === 'LST10F') html = phone('Course', `${PH('390 · review and publish', 6)}${wsPh('c')}`, null, { back: 1, overlay: `<div class="bsh" role="dialog" aria-modal="true" aria-labelledby="pbs"><span class="grab" aria-hidden="true"></span><div class="dh" style="padding:8px 16px 10px"><div><span class="eye">Review and publish</span><h2 id="pbs" style="font-size:17px">Publish this course?</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc" style="padding:12px 16px;gap:10px">
+        <dl class="rv" style="grid-template-columns:96px minmax(0,1fr)"><dt>Status</dt><dd>Draft → Published</dd><dt>Who can open</dt><dd>Super Admins only → every signed-in member</dd><dt>Sends</dt><dd>Nothing</dd></dl>
+        <ul class="cl">${CK('bl', 'Two required lessons open drafts', 'Lessons 7 and 10.', '<a href="#" class="lk">Fix</a>')}${CK('bl', 'Reviewer and review date', 'Not recorded.', '<a href="#" class="lk">Add</a>')}</ul></div>
+        <div class="stk" style="flex-direction:column"><span class="foot" id="pbm">Publish is unavailable: resolve the 2 blocking checks first.</span><button type="button" class="btn p" aria-disabled="true" aria-describedby="pbm">Publish course</button></div></div>` });
+      else if (B === 'LST10G') html = phone('New course', `${PH('390 · create', '+')}<h1 style="font-size:22px;font-weight:800">New course</h1><p class="sub">Created as a draft. Only Super Admins can open it until it is published.</p>
+        <div class="f"><label>Title</label><div class="in" style="min-height:44px">[Board-ready financial model]</div></div><div class="f"><label>Slug</label><div class="in mo" style="min-height:44px">board-ready-financial-model</div></div><div class="f"><label>Summary</label><div class="in ta hint">One or two sentences a learner reads first.</div></div>
+        <div class="f"><span class="lb">Who it is for</span><div class="cbx" style="flex-direction:column;gap:2px">${J(['Founders', 'Investors', 'Advisors', 'Partners'].map((t, i) => `<span style="min-height:40px"><i class="${i === 0 ? 'on' : ''}">${i === 0 ? '✓' : ''}</i>${t}</span>`))}</div></div><div class="f"><label>Visibility</label><div class="in" style="min-height:44px">Open to every member ▾</div><small class="foot">Takes effect when published.</small></div>`, `<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Create draft</button>`, { back: 1 });
+      else if (B === 'LST10H') html = phone('Learning studio', `${PH('390 · zero results and errors', 'S')}<div class="chips"><span class="chip">Exam<button type="button" aria-label="Remove filter Exam">×</button></span><span class="chip">Published<button type="button" aria-label="Remove filter Published">×</button></span></div><span class="foot mo" role="status">0 of 46</span><div class="cd" style="padding:14px">${SYN}<b>No content matches these filters.</b><span class="foot">All 4 exams are drafts.</span><button type="button" class="btn">Clear filters</button></div>
+        <div class="cd" style="padding:14px">${SYN}<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>${UN('the course list')}</b> This is not a claim that there are no courses.</div></div><button type="button" class="btn">Retry</button></div>
+        <div class="cd" style="padding:14px">${SYN}<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>You are offline.</b> Nothing was saved; your text stays in the form.</div></div></div>`, null, { back: 1 });
+    }
+
+    else if (B === 'LST11') html = crop(1300, `<span class="lbl">Component variants</span>
+      <div class="g3">
+        <div class="cd"><span class="tag">Status</span><div class="acts">${STP.draft}${STP.published}${STP.archived}</div><p class="foot">Glyph + word. Draft is amber, never red.</p></div>
+        <div class="cd"><span class="tag">Who can open it now</span><div class="acts">${REACH.draft}${REACH.open}${REACH.program}${REACH.archived}</div><p class="foot">Derived from status + visibility; dashed outline only for draft.</p></div>
+        <div class="cd"><span class="tag">Type label</span><div class="acts">${J(['Course', 'Video', 'Reading', 'Exercise', 'Exam'].map((t) => `<span class="ty">${t}</span>`))}</div><p class="foot">Text, not icons alone; the Video column carries ${'<span class="pl g">✓ Stream · Ready</span>'} <span class="pl">Link</span> <span class="pl">Uploaded file</span>.</p></div></div>
+      <div class="cd"><span class="tag">Journey tile · coverage states (main’s four, plus a failed read)</span><div class="jr" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+        <div class="jt ok"><span class="pl g">✓ Published</span><b>Founders</b><small>At least one published course open to members names this journey.</small></div>
+        <div class="jt w"><span class="pl a">▽ Not reachable</span><b>Founders</b><small>Courses name it, but each is a draft, archived, or for program members only.</small></div>
+        <div class="jt"><span class="pl v">◔ Unknown</span><b>Advisors</b><small>No course names it, but some record no audience and may serve it.</small></div>
+        <div class="jt m"><span class="pl r">✕ Missing</span><b>Investors</b><small>Every course records its audience, and none names it.</small></div>
+        <div class="jt"><span class="s ur">? Unavailable</span><b>All journeys</b><small>Coverage could not be read. Not a claim of missing material.</small></div></div></div>
+      <div class="g3">
+        <div class="cd"><span class="tag">Filter control</span>${'<div class="flt"><span>Status</span><button type="button" class="dd">Any status ▾</button></div><div class="flt"><span>Status</span><button type="button" class="dd on">Draft ▾</button></div>'}<span class="chip">Status: Draft<button type="button" aria-label="Remove filter Status: Draft">×</button></span></div>
+        <div class="cd"><span class="tag">Preview bar</span><div class="pvb" style="border-radius:8px"><b>◉ Preview</b><span>Draft · not visible to members. Previewing changes nothing.</span></div><div class="pvb" style="border-radius:8px"><b>◉ Preview</b><span>Published · what a founder sees now.</span></div></div>
+        <div class="cd"><span class="tag">Save status</span><span class="ss a">● Unsaved · 2 fields</span><span class="ss">◌ Saving…</span><span class="ss g">✓ Saved ${mo('16:40 UTC')}</span><span class="ss r">✕ Not saved · see the message</span></div></div>
+      <div class="g2"><div class="cd"><span class="tag">Syllabus row</span>${'<div class="syl"><ol>'}${J([SYL[0], SYL[3], SYL[4], SYL[6]].map((s) => `<li><span class="n">${s.n}</span><div><span class="kd">${s.k}</span> ${s.req ? '' : '<span class="opt">Optional</span>'}<div>${s.t}</div>${s.tgt === 'draft' ? '<small class="w2">◌ Not open to members yet: draft.</small>' : s.tgt === 'program' ? '<small class="w2">◌ For program members only.</small>' : ''}</div><span class="foot">${s.req ? 'Required' : ''}</span></li>`))}</ol></div></div>
+        <div class="cd"><span class="tag">Course card · inventory on phone</span><div class="pc2"><div class="r1"><span class="ty">Course</span>${STP.draft}</div><b>${PC}</b><small>For Founders · Intro · 85 min · Open · updated ${mo('2026-11-24')}</small><div>${REACH.draft}</div></div></div></div>`);
+
+    else if (B === 'LST12') html = crop(1300, `<span class="lbl">Focus order, accessible names and wrapping</span>
+      <div class="g2">
+        <div class="cd"><span class="tag">Focus order · inventory (LST02)</span><ol class="rs" style="gap:5px">
+          <span>${FO(1)} Skip link → main · ${FO(2)} ‹ Learning · ${FO(3)} Create (menu button)</span>
+          <span>${FO(4)} Studio tabs: Content, Webinars, Coverage, Regional programs (one tab stop, arrows move)</span>
+          <span>${FO(5)} Founders tile “Show the 4 drafts” (the only interactive journey tile)</span>
+          <span>${FO(6)} Search · ${FO(7)} Type · ${FO(8)} Status · ${FO(9)} Visibility · ${FO(10)} Clear filters</span>
+          <span>${FO(11)} Table: each title link in row order · ${FO(12)} Pager</span></ol>
+          <span class="tag" style="margin-top:6px">Focus order · course workspace (LST04)</span><ol class="rs" style="gap:5px">
+          <span>${FO(1)} ‹ All content · ${FO(2)} Review and publish · ${FO(3)} Workspace tabs</span>
+          <span>${FO(4)} Checklist actions in row order (Open lesson 7, Review, Coverage, Add)</span>
+          <span>${FO(5)} Previewing as · ${FO(6)} preview content (links inert, Start disabled with its reason)</span></ol>
+          <p class="foot">Opening the publish dialog moves focus to its heading; Escape and Cancel return it to Review and publish. Applying a filter keeps focus on the control and announces the count (“4 of 46”) in a polite live region.</p></div>
+        <div class="cd"><span class="tag">Accessible names</span><table class="tbl"><thead><tr><th>Control</th><th>Name</th></tr></thead><tbody>
+          <tr><td>Create</td><td>“Create”, <code>aria-haspopup="menu"</code>, expanded state</td></tr>
+          <tr><td>Filters</td><td>“Type: All types”, “Status: Draft”, “Visibility: Any visibility”</td></tr>
+          <tr><td>Chip remove</td><td>“Remove filter Status: Draft”</td></tr>
+          <tr><td>Founders tile</td><td>“Founders: Not reachable. 4 courses name founders; each is a draft. Show them.”</td></tr>
+          <tr><td>Reach chip</td><td>Text is the name: “Super Admins only”; the glyph is decorative</td></tr>
+          <tr><td>Checklist row</td><td>Title + state word read first (“Blocks publishing.”)</td></tr>
+          <tr><td>Publish course (unavailable)</td><td><code>aria-disabled</code> + <code>aria-describedby</code> naming the 2 blocking checks</td></tr>
+          <tr><td>Preview region</td><td>“Preview of the member page”, bar in <code>role="status"</code></td></tr>
+          <tr><td>Move buttons</td><td>“Move lesson 7 up”, “Move module 2 down”</td></tr></tbody></table></div></div>
+      <div class="g3">
+        <div class="cd"><span class="tag">Long title · desktop row</span><div class="wrapdemo"><b style="font-size:13px">[A very long course title that keeps going: what founders should measure before, during and after a seed raise]</b><small class="foot">Wraps to two lines in the Title column; Type, Status and Updated keep their width. Never truncated with an ellipsis.</small></div></div>
+        <div class="cd"><span class="tag">Long title · 390 card</span><div class="pc2" style="width:300px"><div class="r1"><span class="ty">Course</span>${STP.draft}</div><b>[A very long course title that keeps going: what founders should measure before, during and after a seed raise]</b><div>${REACH.draft}</div></div></div>
+        <div class="cd"><span class="tag">200% text</span><div class="zoom" style="line-height:1.25"><b>${PC}</b></div><p class="foot">The workspace stacks (checklist above preview) below 1100px wide; the table becomes cards below 760px; Create and Review and publish stay on screen.</p></div></div>`);
+
+    else if (B === 'LST13') html = doc(`<div><span class="eye">Engineering handoff · #8669 · checked on main 7b0db10927</span><h2 style="font-size:20px;margin-top:4px">Learning studio: inventory, authoring and member preview</h2><p class="sub" style="margin-top:4px">Route <code>/learning/studio</code> (Super Admin, <code>guard(['admin'], hqOnly(…))</code>; every call <code>requireSuperAdmin</code>). No AI rail on Learning pages (D4478). Release work is #8288; sibling canvases #8662 to #8670 share one catalogue (<code>LEARN_CATALOGUE.md</code>).</p></div>
+      <div><h3>Design acceptance → boards</h3><table class="tbl"><thead><tr><th>Acceptance item</th><th>Answered on</th></tr></thead><tbody>
+        <tr><td>An editor can locate a draft founder course and see why it is unreachable, retaining real status and program visibility.</td><td>LST02 (journeys strip, separate Status / Visibility / Who can open it now), LST03 (Founders → 4 drafts, reason per row), LST04 checklist, LST10A–C phone</td></tr>
+        <tr><td>Covers create, edit, empty inventory and filtered zero results, with explicit save, preview and publication actions.</td><td>Create: LST02B, LST08, LST08B, LST10G · Edit: LST04B, LST04C, LST09B · Empty and filtered zero: LST09, LST10H · Save / Preview / Review and publish: LST04, LST04B, LST06, LST07</td></tr>
+        <tr><td>Preview exposes what an eligible member will see; publishing controls reflect permissions and the #8288 release gates.</td><td>LST06, LST06B, LST10E (preview) · LST07, LST07B, LST10F (gates) · LST07C (permissions, reach changes) · LST05 (gate sources)</td></tr></tbody></table></div>
+      <div class="cols">
+        <div><h3>What main has (drawn as working)</h3><ul>
+          <li><code>LearningStudio.jsx</code>: content table, webinar list and coverage on one page; editor chosen by the address (<code>?course=</code>, <code>?new=course</code>…). Six “New …” links today (LST01).</li>
+          <li><code>StudioContentTable.jsx</code>: one chip row <code>STUDIO_FILTERS</code> (All kinds, Published, Draft, Archived, Program-only); Programs column reads Not recorded (<code>programs: null</code>).</li>
+          <li><code>StudioCourseBuilder.jsx</code>: title, slug, summary, cover link (+ draw after save), minutes, level, visibility, resources, audience, stage, practical output, outcomes, prerequisites, author, reviewer, review date; modules and lessons with move, rename, delete.</li>
+          <li><code>studioParts.jsx</code> <code>StatusActions</code>: Publish posts at once; Archive asks twice.</li>
+          <li><code>admin_learning.ts</code>: publish refuses <code>no_lessons</code>; <code>slug_taken</code>; <code>GET /coverage</code> with <code>coverage_unreadable</code>.</li>
+          <li><code>learningCoverage.ts</code>: Published / Not reachable (draft, archived, program-only) / Unknown / Missing.</li>
+          <li><code>learningAccess.ts</code> <code>canSeeLearning</code>: Super Admin sees everything; members see published open, or program content when enrolled. Audience never restricts access.</li></ul>
+          <h3 style="margin-top:12px">Frontend only</h3><ul>
+          <li>One Create menu; Webinars, Coverage and Regional programs as studio tabs; the second “New webinar” removed.</li>
+          <li>Type, Status and Visibility as three filters with counts, search, chips, address state and paging of the lists already read.</li>
+          <li>“Who can open it now” derived from status + visibility; the journeys strip from <code>GET /coverage</code>.</li>
+          <li>Course workspace: checklist from the course tree and the item, exercise and exam lists; live card preview from the form; Review and publish dialog before the existing publish call; confirmation before saving a visibility change on a published course.</li>
+          <li>Preview drawn with the member page components from the authoring read, under the Preview bar, with Start inert.</li>
+          <li>States: loading, partial and full Unavailable, empty, filtered zero, offline, refusals in the route’s words.</li></ul></div>
+        <div><h3>Needs data or backend ${TB('…')}</h3><ul>
+          <li>${TB('#8288')} Publish refuses a course whose required lessons open unpublished content (release work 2, dependency readiness).</li>
+          <li>${TB('#8288')} The reviewed revision is the one that publishes; unsaved-edit guards on the editors (release work 2).</li>
+          <li>${TB('#8288')} Published structure and used assessments keep their meaning (release work 3); the syllabus editor then explains frozen lessons.</li>
+          <li>${TB('proposed')} A preview projection: the member read for a chosen learner (role, enrolment), so a Super Admin sees exactly what that member’s read returns. Today the member read shows a Super Admin everything, and “View as” does not change it.</li>
+          <li>${TB('proposed')} Programs that hold an item or course in the content list (today Not recorded).</li></ul>
+          <h3 style="margin-top:12px">Owner decisions ${TO('…')}</h3><ul>
+          <li>${TO('Q1')} Must a course record a reviewer and review date before it publishes? <b>A (drawn):</b> yes, it blocks. B: a warning only.</li>
+          <li>${TO('Q2')} Should Unpublish ask first? <b>A (drawn):</b> yes, one confirmation naming who loses access. B: as today, immediate.</li></ul>
+          <h3 style="margin-top:12px">Coordination</h3><ul>
+          <li>#8288 owns the gates; this canvas draws where they appear (checklist, publish dialog) and keeps them tagged until they ship.</li>
+          <li>#8663 course cards and #8664 course overview supply the member components the preview reuses; #8667 draws the exam’s own author preview.</li>
+          <li>Catalogue: Evidence-based pitch narratives (2 modules, 10 lessons, 7 required), exam “What can you substantiate?”, exercise “Pitch decision memo”.</li></ul>
+          <h3 style="margin-top:12px">Accessibility</h3><ul><li>Focus order and names: LST12. Status, reach and checks pair a glyph with a word. The unavailable Publish keeps a visible reason. Phone targets 44px; tables become cards below 760px.</li></ul></div></div>`);
+
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => 'lst-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

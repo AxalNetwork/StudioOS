@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}
+    .ab{padding:40px 44px 32px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .fr{width:1080px;min-width:1080px;box-sizing:border-box;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden;padding:28px 30px 34px}
+    .mono{font-family:'Roboto Mono',monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .c{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .sec{font-size:16px;font-weight:800;letter-spacing:-.015em}
+    .shim{background:linear-gradient(90deg,#f0eef5 0%,#f8f7fb 50%,#f0eef5 100%);border-radius:6px}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:1080px}
+  </style>
+</helmet>
+
+<!-- ══════════ S1 · TOKENS ══════════ -->
+<section class="ab" id="s1">
+  <div class="ab-hd"><a class="ab-id" href="#s1">S1</a><span class="ab-nm">System · Tokens</span><span class="ab-sub">the language already in use across every canvas · platform-wide</span></div>
+  <div class="fr">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="min-width:0">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2">Axal VC · design tokens</h1>
+        <div style="font-size:13.5px;color:#6b6577;margin-top:6px;line-height:1.55;max-width:640px">{{ s1Lede }}</div>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577;flex:none">{{ s1Meta }}</span>
+    </div>
+
+    <div class="c" style="padding:20px 22px;margin-top:18px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <span class="sec">Colour</span>
+        <span class="mono" style="font-size:10.5px;color:#6b6577">{{ colourNote }}</span>
+      </div>
+      <sc-for list="{{ ramps }}" as="r" hint-placeholder-count="4">
+        <div style="margin-top:16px">
+          <div class="lbl">{{ r.group }}</div>
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:10px">
+            <sc-for list="{{ r.swatches }}" as="s" hint-placeholder-count="6">
+              <div>
+                <div style="{{ s.chip }}"></div>
+                <div style="font-size:11.5px;font-weight:700;margin-top:7px;line-height:1.3">{{ s.name }}</div>
+                <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:3px">{{ s.hex }}</div>
+                <div style="font-size:10.5px;color:#6b6577;margin-top:4px;line-height:1.45">{{ s.use }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <div style="background:#fbfaff;border:1px solid #f0eef5;border-radius:10px;padding:13px 15px;margin-top:18px">
+        <div style="font-size:12px;color:#332e45;line-height:1.65">{{ violetRule }}</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px;align-items:start">
+      <div class="c" style="padding:20px 22px">
+        <span class="sec">Type</span>
+        <div style="display:grid;gap:0;margin-top:14px">
+          <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="7">
+            <div style="{{ t.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="{{ t.sample }}">{{ t.text }}</div>
+              </div>
+              <div class="mono" style="font-size:10.5px;color:#6b6577;text-align:right;flex:none;line-height:1.5">{{ t.spec }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#6b6577;margin-top:14px;padding-top:13px;border-top:1px solid #f0eef5;line-height:1.6">{{ typeNote }}</div>
+      </div>
+
+      <div style="display:grid;gap:14px">
+        <div class="c" style="padding:20px 22px">
+          <span class="sec">Radii</span>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <sc-for list="{{ radii }}" as="r" hint-placeholder-count="5">
+              <div style="text-align:center">
+                <div style="{{ r.box }}"></div>
+                <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:6px">{{ r.px }}</div>
+                <div style="font-size:10px;color:#6b6577;margin-top:2px">{{ r.use }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="c" style="padding:20px 22px">
+          <span class="sec">Spacing</span>
+          <div style="display:grid;gap:8px;margin-top:14px">
+            <sc-for list="{{ spacing }}" as="s" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:11px">
+                <span class="mono" style="font-size:10.5px;color:#6b6577;width:26px;flex:none;text-align:right">{{ s.px }}</span>
+                <span style="{{ s.bar }}"></span>
+                <span style="font-size:10.5px;color:#6b6577;line-height:1.4">{{ s.use }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="c" style="padding:20px 22px;margin-top:14px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <span class="sec">Components in use</span>
+        <span class="mono" style="font-size:10.5px;color:#6b6577">{{ compMeta }}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:15px">
+        <div style="border:1px solid #f0eef5;border-radius:11px;padding:14px 15px">
+          <div class="lbl">Status pills</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px">
+            <sc-for list="{{ pills }}" as="p" hint-placeholder-count="5"><span style="{{ p.style }}">{{ p.label }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="border:1px solid #f0eef5;border-radius:11px;padding:14px 15px">
+          <div class="lbl">Metric card</div>
+          <div style="border:1px solid #e8e6ee;border-radius:10px;padding:12px 13px;margin-top:11px">
+            <div class="lbl" style="font-size:9px">MRR</div>
+            <div class="mono" style="font-size:19px;font-weight:700;letter-spacing:-.02em;margin-top:5px">€104,800</div>
+            <div class="mono" style="font-size:10px;color:#047857;margin-top:4px">+8% wk/wk</div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #f0eef5;border-radius:11px;padding:14px 15px">
+          <div class="lbl">Avatar stack</div>
+          <div style="display:flex;align-items:center;margin-top:13px">
+            <sc-for list="{{ stack }}" as="a" hint-placeholder-count="5"><span style="{{ a.style }}">{{ a.i }}</span></sc-for>
+          </div>
+          <div class="mono" style="font-size:10px;color:#6b6577;margin-top:9px">42 investors confirmed</div>
+        </div>
+
+        <div style="border:1px solid #f0eef5;border-radius:11px;padding:14px 15px">
+          <div class="lbl">Table row</div>
+          <div style="margin-top:11px">
+            <div style="display:grid;grid-template-columns:1.3fr .8fr .7fr;gap:9px;padding-bottom:7px">
+              <span class="lbl" style="font-size:9px">Company</span><span class="lbl" style="font-size:9px">Stage</span><span class="lbl" style="font-size:9px">Ask</span>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:1.3fr .8fr .7fr;gap:9px;padding:8px 0;border-top:1px solid #f4f3f7">
+                <span style="font-size:11.5px;font-weight:600">{{ r.a }}</span>
+                <span style="font-size:11.5px;color:#4a4459">{{ r.b }}</span>
+                <span class="mono" style="font-size:11.5px">{{ r.c }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="border:1px solid #f0eef5;border-radius:11px;padding:14px 15px">
+          <div class="lbl">Tab bar</div>
+          <div style="display:flex;gap:5px;margin-top:11px;flex-wrap:wrap">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><span style="{{ t.style }}">{{ t.label }}</span></sc-for>
+          </div>
+          <div class="mono" style="font-size:10px;color:#6b6577;margin-top:10px">Pill tabs · 99px · violet on active</div>
+        </div>
+
+        <div style="border:1px solid #f0eef5;border-radius:11px;padding:14px 15px">
+          <div class="lbl">Rail pattern</div>
+          <div style="display:grid;gap:6px;margin-top:11px">
+            <sc-for list="{{ rails }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:9px;padding:7px 9px;border:1px solid #f0eef5;background:#fbfaff;border-radius:8px">
+                <span class="mono" style="font-size:10.5px;font-weight:700">{{ r.name }}</span>
+                <span style="{{ r.dot }}"></span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px;color:#6b6577;margin-top:10px;line-height:1.5">{{ railNote }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ s1Cap }}</div>
+</section>
+
+<!-- ══════════ S2 · STATES ══════════ -->
+<section class="ab" id="s2">
+  <div class="ab-hd"><a class="ab-id" href="#s2">S2</a><span class="ab-nm">System · States</span><span class="ab-sub">the four the canvases were missing · empty, loading, error, confirmation</span></div>
+  <div class="fr">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="min-width:0">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2">The states nothing had</h1>
+        <div style="font-size:13.5px;color:#6b6577;margin-top:6px;line-height:1.55;max-width:660px">{{ s2Lede }}</div>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577;flex:none">{{ s2Meta }}</span>
+    </div>
+
+    <sc-for list="{{ stateRows }}" as="row" hint-placeholder-count="4">
+      <div style="margin-top:20px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span class="sec">{{ row.name }}</span>
+            <span class="mono" style="font-size:10.5px;color:#6b6577">{{ row.count }}</span>
+          </div>
+          <span style="font-size:11.5px;color:#6b6577;max-width:520px;text-align:right;line-height:1.5">{{ row.rule }}</span>
+        </div>
+
+        <div style="{{ row.gridStyle }}">
+          <sc-for list="{{ row.cards }}" as="k" hint-placeholder-count="3">
+            <div style="{{ k.cardStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span class="lbl" style="color:{{ k.labelInk }}">{{ k.surface }}</span>
+                <sc-if value="{{ k.badge }}"><span style="{{ k.badgeStyle }}">{{ k.badge }}</span></sc-if>
+              </div>
+
+              <sc-if value="{{ k.isEmpty }}">
+                <div style="text-align:center;padding:16px 0 4px">
+                  <div style="display:flex;justify-content:center">
+                    <span style="width:44px;height:44px;display:block;color:#7c3aed" dangerouslySetInnerHTML="{{ k.art }}"></span>
+                  </div>
+                  <div style="font-size:14.5px;font-weight:800;letter-spacing:-.01em;margin-top:13px">{{ k.title }}</div>
+                  <div style="font-size:12.5px;color:#4a4459;margin-top:7px;line-height:1.6">{{ k.body }}</div>
+                  <div style="margin-top:15px"><span style="{{ k.ctaStyle }}">{{ k.cta }}</span></div>
+                  <sc-if value="{{ k.foot }}"><div class="mono" style="font-size:10px;color:#6b6577;margin-top:10px;line-height:1.55">{{ k.foot }}</div></sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ k.isSkeleton }}">
+                <div style="margin-top:13px">
+                  <sc-for list="{{ k.bars }}" as="b" hint-placeholder-count="4"><div class="shim" style="{{ b }}"></div></sc-for>
+                </div>
+                <div class="mono" style="font-size:10px;color:#6b6577;margin-top:12px;line-height:1.55">{{ k.foot }}</div>
+              </sc-if>
+
+              <sc-if value="{{ k.isError }}">
+                <div style="margin-top:13px">
+                  <sc-if value="{{ k.field }}">
+                    <div class="lbl" style="font-size:9px">{{ k.field }}</div>
+                    <div style="{{ k.inputStyle }}">{{ k.value }}</div>
+                    <div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px">
+                      <span style="width:13px;height:13px;display:block;flex:none;color:#b91c1c;margin-top:1px" dangerouslySetInnerHTML="{{ k.art }}"></span>
+                      <span style="font-size:11.5px;color:#b91c1c;line-height:1.5">{{ k.body }}</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.title }}">
+                    <div style="display:flex;align-items:flex-start;gap:11px">
+                      <span style="{{ k.artWrap }}" dangerouslySetInnerHTML="{{ k.art }}"></span>
+                      <div style="min-width:0;flex:1">
+                        <div style="font-size:13.5px;font-weight:800;letter-spacing:-.01em;line-height:1.35">{{ k.title }}</div>
+                        <div style="font-size:12px;color:#4a4459;margin-top:6px;line-height:1.6">{{ k.body }}</div>
+                        <sc-if value="{{ k.cta }}"><div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap"><span style="{{ k.ctaStyle }}">{{ k.cta }}</span><sc-if value="{{ k.alt }}"><span style="{{ k.altStyle }}">{{ k.alt }}</span></sc-if></div></sc-if>
+                        <sc-if value="{{ k.foot }}"><div class="mono" style="font-size:10px;color:#6b6577;margin-top:10px;line-height:1.55">{{ k.foot }}</div></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ k.isDialog }}">
+                <div style="margin-top:14px">
+                  <div style="font-size:16px;font-weight:800;letter-spacing:-.015em;line-height:1.3">{{ k.title }}</div>
+                  <div style="font-size:12.5px;color:#332e45;margin-top:9px;line-height:1.65">{{ k.body }}</div>
+                  <div style="{{ k.consStyle }}">
+                    <div class="lbl" style="color:#92400e">What happens</div>
+                    <div style="display:grid;gap:7px;margin-top:9px">
+                      <sc-for list="{{ k.consequences }}" as="c" hint-placeholder-count="3">
+                        <div style="display:flex;align-items:flex-start;gap:8px">
+                          <span style="width:4px;height:4px;border-radius:50%;background:#92400e;flex:none;margin-top:7px"></span>
+                          <span style="font-size:11.5px;color:#78350f;line-height:1.55">{{ c }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:flex-end;gap:9px;margin-top:16px;flex-wrap:wrap">
+                    <span style="{{ k.altStyle }}">{{ k.alt }}</span>
+                    <span style="{{ k.ctaStyle }}">{{ k.cta }}</span>
+                  </div>
+                  <div class="mono" style="font-size:10px;color:#6b6577;margin-top:11px;line-height:1.55;text-align:right">{{ k.foot }}</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+
+    <div class="c" style="padding:18px 20px;margin-top:20px">
+      <div class="lbl">Voice</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
+        <div>
+          <div style="font-size:11.5px;font-weight:700;color:#047857">Written this way</div>
+          <div style="display:grid;gap:7px;margin-top:9px">
+            <sc-for list="{{ voiceGood }}" as="g" hint-placeholder-count="3"><span style="font-size:12px;color:#332e45;line-height:1.55">{{ g }}</span></sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;color:#6b6577">Not this way</div>
+          <div style="display:grid;gap:7px;margin-top:9px">
+            <sc-for list="{{ voiceBad }}" as="b" hint-placeholder-count="3"><span style="font-size:12px;color:#6b6577;line-height:1.55">{{ b }}</span></sc-for>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#6b6577;margin-top:13px;padding-top:12px;border-top:1px solid #f0eef5;line-height:1.6">{{ voiceNote }}</div>
+    </div>
+  </div>
+  <div class="cap">{{ s2Cap }}</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p, w){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(w||1.6)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const INK = '#241f38', MUT = '#6b6577', FAINT = '#8b8798', HAIR = '#e8e6ee';
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe';
+    const AM = '#fcd34d', AMD = '#92400e', RED = '#b91c1c';
+
+    const I = {
+      deals:  this.ic('<path d="M3 7h18M6 12h12M9 17h6"/><circle cx="12" cy="12" r="10.5" stroke-dasharray="3 4"/>'),
+      msg:    this.ic('<path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/>'),
+      chart:  this.ic('<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>'),
+      warn:   this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>'),
+      lock:   this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      plug:   this.ic('<path d="M9 3v6M15 3v6M6 9h12v3a6 6 0 0 1-12 0Z"/><path d="M12 18v3"/>')
+    };
+
+    // ══ Colour ramp: one record. The swatch, hex, use note and the count all read it. ══
+    const RAMPS = [
+      { group:'Ink & text', sw:[
+        ['Ink', INK, 'Headings, body, figures'], ['Muted', MUT, 'Metadata, labels'],
+        ['Faint', FAINT, 'Placeholder text only'], ['Hairline', HAIR, 'Borders, dividers'],
+        ['Ground', '#f4f3f7', 'Page behind cards'], ['Surface', '#ffffff', 'Cards, rows']
+      ]},
+      { group:'Violet · accent', sw:[
+        ['Violet', V, 'Fills, active states'], ['Violet deep', VD, 'Text on white, hover'],
+        ['Lavender tint', VT, 'Highlight blocks'], ['Lavender edge', '#ddd0fb', 'Tint borders']
+      ]},
+      { group:'Amber · deadlines', sw:[
+        ['Amber', AM, 'Badge fills only'], ['Amber deep', AMD, 'Amber text, warnings'],
+        ['Amber tint', '#fffdf5', 'Caution blocks']
+      ]},
+      { group:'Semantic · sparing', sw:[
+        ['Positive', '#047857', 'Cleared, paid, up'], ['Positive tint', '#eefbf5', 'Success blocks'],
+        ['Destructive fill', RED, 'Dialog buttons only'], ['Error text & hairline', RED, 'Validation, failure icons'],
+        ['Error tint', '#fef2f2', 'Failure icon grounds']
+      ]}
+    ];
+    const swatchCount = RAMPS.reduce((a, r) => a + r.sw.length, 0);
+
+    const chip = (hex) => 'height:42px;border-radius:9px;background:' + hex + ';border:1px solid '
+      + (hex === '#ffffff' || hex === '#f4f3f7' || hex === '#fffdf5' ? HAIR : 'rgba(36,31,56,.08)');
+
+    const TYPE = [
+      ['Page heading', 'Axal VC platform', 'Inter 800 · 23px · −0.02em', 'font-size:23px;font-weight:800;letter-spacing:-.02em'],
+      ['Section', 'Components in use', 'Inter 800 · 16px · −0.015em', 'font-size:16px;font-weight:800;letter-spacing:-.015em'],
+      ['Card title', 'Capital call №3', 'Inter 800 · 14.5px · −0.01em', 'font-size:14.5px;font-weight:800;letter-spacing:-.01em'],
+      ['Body', 'A capital call is the fund asking for part of what you already committed.', 'Inter 400 · 14.5px · 1.65', 'font-size:14.5px;line-height:1.65;color:#332e45'],
+      ['Small', 'Reviewed by the Benelux team.', 'Inter 400 · 12.5px · muted', 'font-size:12.5px;color:#6b6577;line-height:1.55'],
+      ['Data', '\u20AC360,000 · 18%', 'Roboto Mono 700 · tabular', 'font-family:\'Roboto Mono\',monospace;font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums'],
+      ['Label', 'YOUR POSITION', 'Roboto Mono 500 · 10px · .11em', 'font-family:\'Roboto Mono\',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577']
+    ];
+
+    const RADII = [['7px','Inputs, small chips'],['9px','Buttons'],['10px','Inner cards'],['12px','Blocks'],['16px','Outer cards'],['99px','Pills, avatars']];
+    const SPACE = [['4','Icon to label'],['7','Chip gaps'],['11','Within a card'],['14','Between cards'],['20','Section gaps'],['30','Frame padding']];
+
+    const pill = (label, tint, ink, edge) => ({ label,
+      style:'font-family:\'Roboto Mono\',monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:99px;background:'
+        + tint + ';color:' + ink + ';border:1px solid ' + edge + ';white-space:nowrap' });
+
+    const btn = (kind) => {
+      if (kind === 'primary') return 'display:inline-block;font-size:13px;font-weight:700;padding:10px 20px;border-radius:9px;background:'+V+';color:#fff;border:1px solid '+V+';cursor:pointer';
+      if (kind === 'quiet') return 'display:inline-block;font-size:12.5px;font-weight:600;padding:9px 15px;border-radius:9px;background:#fff;color:#4a4459;border:1px solid '+HAIR+';cursor:pointer';
+      return 'display:inline-block;font-size:13px;font-weight:700;padding:10px 20px;border-radius:9px;background:'+RED+';color:#fff;border:1px solid '+RED+';cursor:pointer';
+    };
+    const card = (tone) => 'background:#fff;border-radius:14px;padding:18px 20px;border:1px solid '
+      + (tone === 'error' ? '#f4c7c7' : (tone === 'dialog' ? HAIR : HAIR));
+
+    // ══ States: one record per row, count derived. ══
+    const ROWS = [
+      { name:'Empty', cols:3,
+        rule:'Name what is missing, say what to do, offer one action. No shrugging illustration without a next step.',
+        cards:[
+          { surface:'DEAL FLOW', isEmpty:true, art:I.deals, title:'No deals yet',
+            body:'Deals arrive from the marketplace, from investor intros, or you add them yourself. Nothing has come in on this fund.',
+            cta:'Add your first deal', foot:'Sourcing settings decide what arrives here automatically.' },
+          { surface:'MESSAGES', isEmpty:true, art:I.msg, title:'No conversations',
+            body:'Threads start from an accepted intro, a booked session, or a live engagement — never cold.',
+            cta:'Request an intro', foot:'You cannot message someone you have no shared context with.' },
+          { surface:'PORTFOLIO', isEmpty:true, art:I.chart, title:'No positions yet',
+            body:'Positions appear once a wire clears against a signed instrument. Your first close is not recorded.',
+            cta:'Open Deal Flow', foot:'Committed but unfunded shows here as soon as the SAFE is signed.' }
+        ]},
+      { name:'Loading', cols:3,
+        rule:'Skeletons match the shape that will arrive, so nothing jumps. No spinner where a layout is known.',
+        cards:[
+          { surface:'METRIC CARD', isSkeleton:true, badge:'SKELETON',
+            bars:['height:9px;width:38%','height:24px;width:62%;margin-top:11px','height:9px;width:30%;margin-top:9px'],
+            foot:'Three bars, same rhythm as label / figure / delta.' },
+          { surface:'TABLE', isSkeleton:true, badge:'SKELETON',
+            bars:['height:9px;width:100%','height:13px;width:100%;margin-top:12px','height:13px;width:100%;margin-top:8px','height:13px;width:100%;margin-top:8px','height:13px;width:64%;margin-top:8px'],
+            foot:'Header bar, then rows. Last row short, so the end is legible.' },
+          { surface:'RAIL', isSkeleton:true, badge:'SKELETON',
+            bars:['height:9px;width:44%','height:40px;width:100%;margin-top:12px','height:40px;width:100%;margin-top:8px','height:9px;width:56%;margin-top:12px'],
+            foot:'Rail loads its mode blocks before the model list.' }
+        ]},
+      { name:'Error', cols:3, tone:'error',
+        rule:'Say what failed, whether it is yours to fix, and what happens next. Retry only where retrying can work.',
+        cards:[
+          { surface:'INLINE FIELD', isError:true, art:I.warn, field:'VALUATION CAP', value:'8.000.000',
+            body:'Use digits and a decimal point — 8000000 or 8000000.00. Thousands separators are added for you.' },
+          { surface:'CARD FAILURE', isError:true, art:I.plug, title:'Cap table did not sync',
+            body:'Carta returned an error on the last three attempts. Your local cap table is intact and editable; only the sync is stalled.',
+            cta:'Retry sync', alt:'Work offline', foot:'Last successful sync 22 Aug, 11:04.' },
+          { surface:'PERMISSION', isError:true, art:I.lock, title:'Not your fund',
+            body:'This capital call belongs to Fund III, which your licence does not cover. Nothing is wrong with your account.',
+            cta:'Request access', alt:'Back to Fund II', foot:'Access requests go to the GP, not to support.' }
+        ]},
+      { name:'Confirmation', cols:1, tone:'dialog', wide:true,
+        rule:'State the consequence in full before the button. This is the only filled red button in the system — the error row above uses red text and hairlines, never a fill.',
+        cards:[
+          { surface:'DESTRUCTIVE DIALOG', isDialog:true, badge:'MODAL',
+            title:'Delete “Cap table — Aug 2026.xlsx” from the data room?',
+            body:'Two investors have this file open in an active diligence review.',
+            consequences:[
+              'Latitude Seed and Thornbury lose access immediately, mid-review.',
+              'Their download records stay in the access log — the file goes, the audit trail does not.',
+              'The version history is deleted with it. Nothing here is recoverable by support.'
+            ],
+            cta:'Delete file', alt:'Keep it',
+            foot:'Recorded in Security as dataroom.file.delete' }
+        ]}
+    ];
+
+    return {
+      s1Lede:'Not a proposal. These are the values already in the canvases — this sheet writes them down so a new surface can be built without guessing, and names the two rules that keep the accent meaningful.',
+      s1Meta: swatchCount + ' swatches · ' + TYPE.length + ' type roles · ' + RADII.length + ' radii',
+      colourNote:'Named, with the use each one is for',
+      ramps: RAMPS.map(r => ({ group:r.group,
+        swatches:r.sw.map(s => ({ name:s[0], hex:s[1], use:s[2], chip: chip(s[1]) })) })),
+      violetRule:'Two rules do the work. Violet marks one thing at a time — an active state, a primary action, or a programme scope — so a screen with three violet elements has a hierarchy problem rather than a colour one. Red splits by weight, not by hue: a red fill appears only on a confirmation dialog\u2019s destructive button, while red text and hairlines mark validation errors and failure icons wherever they occur. The fill is the scarce thing; a filled red button anywhere else is a bug.',
+
+      typeScale: TYPE.map((t, i) => ({ text:t[1], spec:t[2], sample:t[3],
+        rowStyle:'display:flex;align-items:baseline;justify-content:space-between;gap:20px;padding:12px 0;'
+          + (i < TYPE.length - 1 ? 'border-bottom:1px solid #f4f3f7' : '') })),
+      typeNote:'Inter for interface, Roboto Mono for anything a reader might compare or verify — figures, dates, identifiers, and the uppercase label style. A number in Inter is a claim; a number in mono is a value.',
+
+      radii: RADII.map(r => ({ px:r[0], use:r[1],
+        box:'width:52px;height:38px;background:'+VT+';border:1px solid #ddd0fb;border-radius:'+r[0] })),
+      spacing: SPACE.map(s => ({ px:s[0], use:s[1],
+        bar:'display:block;height:8px;width:'+s[0]+'px;background:'+V+';border-radius:2px;flex:none' })),
+
+      compMeta:'6 patterns · used across every canvas',
+      pills: [
+        pill('GOING','#eefbf5','#047857','#a7f3d0'), pill('WAITLIST','#fef9e7',AMD,AM),
+        pill('CLOSED','#f4f3f7',MUT,HAIR), pill('OPEN',VT,VD,'#ddd0fb'), pill('SPIN-OUT LAB',VT,VD,'#ddd0fb')
+      ],
+      stack: ['KS','LT','MV','JH','+37'].map((i, n) => ({ i,
+        style:'width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:9px;font-weight:700;border:2px solid #fff;margin-left:'
+          + (n === 0 ? '0' : '-8px') + ';' + (i.charAt(0) === '+' ? 'background:'+VT+';color:'+VD : 'background:#f4f3f7;color:#4a4459') })),
+      rows: [{ a:'Kelp Bio', b:'Pre-seed', c:'€800k' }, { a:'Verrel', b:'Seed', c:'€2.4M' }],
+      tabs: [['All', true], ['Action needed', false], ['Mentions', false]].map(t => ({ label:t[0],
+        style:'font-size:11.5px;font-weight:' + (t[1] ? '700' : '600') + ';padding:6px 12px;border-radius:99px;'
+          + (t[1] ? 'background:'+VT+';color:'+VD+';border:1px solid '+V : 'background:#fff;color:#4a4459;border:1px solid '+HAIR) })),
+      rails: [['AIRail', V], ['InvRail', '#4f46e5'], ['EmberRail', '#059669'], ['AdminRail', '#881337']].map(r => ({
+        name:r[0], dot:'width:9px;height:9px;border-radius:3px;background:'+r[1]+';flex:none' })),
+      railNote:'Same anatomy in every product — mode, model, meter, shield. Only the accent changes, which is how a licence is recognisable at a glance.',
+      s1Cap:'Swatch, type and radius counts derive from the token records, so the meta line cannot drift from the swatches beneath it. The rail thumbnails show four accents against one anatomy — the pattern that lets a founder and an admin share a component without sharing a colour.',
+
+      s2Lede:'Every canvas so far designed the populated case. These are the four that were missing, at card scale, in the product voice — specific, active, and never apologising for something the reader did not do wrong.',
+      s2Meta: ROWS.reduce((a, r) => a + r.cards.length, 0) + ' states · 4 patterns',
+      stateRows: ROWS.map(r => ({
+        name:r.name, rule:r.rule, count:r.cards.length + (r.cards.length === 1 ? ' state' : ' states'),
+        gridStyle:'display:grid;grid-template-columns:' + (r.cols === 1 ? '1fr' : 'repeat(' + r.cols + ',1fr)') + ';gap:12px;margin-top:12px'
+          + (r.wide ? ';max-width:560px' : ''),
+        cards:r.cards.map(k => Object.assign({}, k, {
+          isEmpty:!!k.isEmpty, isSkeleton:!!k.isSkeleton, isError:!!k.isError, isDialog:!!k.isDialog,
+          labelInk: k.isDialog ? AMD : MUT,
+          badge:k.badge || null,
+          badgeStyle:'font-family:\'Roboto Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:99px;background:#f4f3f7;color:'+MUT+';border:1px solid '+HAIR,
+          cardStyle: card(r.tone),
+          artWrap:'width:32px;height:32px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;padding:7px;box-sizing:border-box;background:'
+            + (k.title && k.surface === 'PERMISSION' ? '#f4f3f7;color:'+MUT : '#fef2f2;color:'+RED),
+          inputStyle:'font-family:\'Roboto Mono\',monospace;font-size:13px;padding:10px 12px;border-radius:7px;margin-top:7px;background:#fff;border:1.5px solid '+RED+';color:'+INK,
+          consStyle:'background:#fffdf5;border:1px solid '+AM+';border-radius:11px;padding:14px 16px;margin-top:14px',
+          ctaStyle: k.isDialog ? btn('danger') : (k.isEmpty ? btn('primary') : btn('primary')),
+          altStyle: btn('quiet')
+        }))
+      })),
+
+      voiceGood: [
+        '“Positions appear once a wire clears against a signed instrument.”',
+        '“Carta returned an error on the last three attempts. Your local cap table is intact.”',
+        '“Latitude Seed and Thornbury lose access immediately, mid-review.”'
+      ],
+      voiceBad: [
+        '“Oops! Nothing to see here yet 🙂”',
+        '“Something went wrong. Please try again later.”',
+        '“Are you sure? This action cannot be undone.”'
+      ],
+      voiceNote:'The difference is not tone, it is information. “Something went wrong” tells a reader nothing they cannot already see, and “are you sure” asks them to confirm a decision the dialog never explained. Every state here names the specific thing, and where a consequence has a name — a company, a date, a log entry — it uses it.',
+      s2Cap:'One record per pattern drives the state counts and the grid. The dialog holds the system\u2019s only filled red button, which is what the S1 rule reserves — the error row above needs red too, but as text and hairlines, because a validation message is information rather than a decision. Its three consequences are specific enough to change a decision, which is the only reason a confirmation dialog earns a click.'
+    };
+  }
+}
+</script>
+</body>
+</html>

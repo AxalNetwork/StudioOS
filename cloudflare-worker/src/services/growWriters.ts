@@ -1,0 +1,1513 @@
+/**
+ * D691 (S19-A, #1697) — one writer per Grow store. `routes/cycle_grow.ts`
+ * calls them after its gate (`canAccessProject` for writing), and #1698's
+ * actions and feedback-theme fill call the same ones, so a store has one
+ * insert and one update.
+ *
+ * Each writer checks every id its body names against the venture (an id
+ * outside it is a 404), records who wrote the row, and logs one activity row
+ * through `logCycleWrite`: `entity_type 'grow.<module>'`, the record's id and
+ * the `project_id`. A summary never holds a customer's, contact's or
+ * applicant's name, because every reader reads activity.
+ *
+ * Money is whole cents with a three-letter lowercase currency, stored only
+ * beside an amount, `usd` when the body sends none. Every request value is
+ * bound; a column or a table is never taken from a request.
+ */
+import type { Env, User } from '../types';
+import { logCycleWrite, logCycleWriteStatement } from './cycleActivity';
+import { closePosting, createPosting, submitForReview } from './jobBoardCommon';
+import { APPLICATION_STAGES, MARKET_PARTS, type GrowSlug } from './growCycle';
+import { calendarDay } from './growKpis';
+import { mintDownloadToken } from './signedDownload';
+import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
+import { onCompanyTeam } from './obligationOwner';
+import { putRecordOrThrow } from './recordStore';
+import { eraseRecordObjects } from './recordErasure';
+import { currencyCode, toMajorString } from '../../../frontend/src/lib/money.js';
+
+export class Refused extends Error {
+  status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
+  constructor(status: number, sentence: string, field: string | null = null, extra: Record<string, unknown> | null = null) {
+    super(sentence); this.status = status; this.sentence = sentence; this.field = field; this.extra = extra;
+  }
+}
+
+type Body = Record<string, unknown>;
+type Row = Record<string, unknown>;
+
+const nowIso = () => new Date().toISOString();
+const newUid = () => crypto.randomUUID().replace(/-/g, '');
+export const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+export const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const has = (b: Body, k: string) => b[k] !== undefined;
+
+export const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+
+export function oneOf<T extends string>(v: unknown, allowed: readonly T[], field: string, required = false): T | null {
+  if (v == null || v === '') { if (required) throw new Refused(400, `${field} is required`, field); return null; }
+  if (!(allowed as readonly string[]).includes(String(v))) throw new Refused(400, `${field} must be one of ${allowed.join(', ')}`, field);
+  return String(v) as T;
+}
+
+export function cents(v: unknown, field: string): number {
+  const n = typeof v === 'object' || typeof v === 'boolean' ? NaN : Number(v);
+  if (v === '' || !Number.isInteger(n) || n < 0 || n > 10_000_000_000) throw new Refused(400, `${field} must be whole cents, 0 or more`, field);
+  return n;
+}
+const centsOrNull = (v: unknown, field: string) => (v == null || v === '' ? null : cents(v, field));
+
+/** A currency stored only beside an amount: the body's, or `usd` when it sends none. */
+function currencyFor(amount: number | null, v: unknown, field: string): string | null {
+  if (amount == null) return null;
+  if (v == null || v === '') return 'usd';
+  const c = String(v).trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(c)) throw new Refused(400, `${field} is a three-letter currency code`, field);
+  return c;
+}
+
+function pct(v: unknown, field: string): number | null {
+  if (v == null || v === '') return null;
+  const n = typeof v === 'object' || typeof v === 'boolean' ? NaN : Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 100) throw new Refused(400, `${field} is a percentage from 0 to 100`, field);
+  return n;
+}
+
+/** A yes/no switch: 1, 0, true or false; anything else is refused. */
+function switchOf(v: unknown, field: string): 0 | 1 {
+  if (v === 1 || v === true || v === '1') return 1;
+  if (v === 0 || v === false || v === '0') return 0;
+  throw new Refused(400, `${field} is 1 or 0`, field);
+}
+
+function day(v: unknown, field: string): string | null {
+  if (v == null || v === '') return null;
+  const d = calendarDay(v);
+  if (!d) throw new Refused(400, `${field} is a real date written YYYY-MM-DD`, field);
+  return d;
+}
+
+function email(v: unknown, field: string): string | null {
+  const e = str(v, 200)?.toLowerCase() ?? null;
+  if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Refused(400, `${field} is an email address`, field);
+  return e;
+}
+
+function score(v: unknown, field: string): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 10) throw new Refused(400, `${field} must be a whole number from 0 to 10`, field);
+  return n;
+}
+
+async function owned<T>(env: Env, sql: string, key: unknown, pid: number): Promise<T> {
+  const row = await env.DB.prepare(sql).bind(key, pid).first<T>();
+  if (!row) throw new Refused(404, 'Not found');
+  return row;
+}
+
+type Log = { module: GrowSlug | 'kpis'; entityId: string | number | null; action: string; summary: string };
+const MODULE_OF: Record<Log['module'], GrowSlug> = {
+  'product-improvement': 'product-improvement', distribution: 'distribution', 'revenue-and-traction': 'revenue-and-traction',
+  'team-expansion': 'team-expansion', 'partner-network': 'partner-network', 'market-expansion': 'market-expansion',
+  'durable-company-building': 'durable-company-building', kpis: 'revenue-and-traction',
+};
+const entry = (pid: number, userId: number, l: Log) =>
+  ({ projectId: pid, userId, cycle: 'grow' as const, module: MODULE_OF[l.module], entityId: l.entityId, action: l.action, summary: l.summary });
+export const logGrowWrite = (env: Env, pid: number, userId: number, l: Log) => logCycleWrite(env, entry(pid, userId, l));
+
+// ── Product improvement ─────────────────────────────────────────────────────
+
+export const FEEDBACK_SOURCES = ['customer', 'investor', 'team'] as const;
+export const FEEDBACK_STATUS = ['open', 'planned', 'shipped'] as const;
+
+/** A roadmap item of this venture, and its label read from the item; another venture's is a 404. */
+async function roadmapItem(env: Env, pid: number, ref: unknown): Promise<{ ref: string; label: string } | null> {
+  if (ref == null || ref === '') return null;
+  const id = Number(ref);
+  if (!Number.isSafeInteger(id) || id < 1) throw new Refused(404, 'Not found', 'roadmap_item_ref');
+  const row = await env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(id, pid).first<{ id: number; objective: string }>();
+  if (!row) throw new Refused(404, 'Not found', 'roadmap_item_ref');
+  return { ref: String(row.id), label: String(row.objective).slice(0, 200) };
+}
+
+const flag = (v: unknown) => (v === true || v === 1 || v === '1' ? 1 : 0);
+
+/** D6865 (#6865): where a feedback item came from. A row written before migration 202611161128 has none. */
+export const FEEDBACK_ORIGINS = ['inbox_reply', 'interview', 'notion', 'posthog_survey', 'typed'] as const;
+
+/** D6865: the asker's contacts record in this venture, by uid; another venture's or a missing one is a 404. NULL clears. */
+async function contactOf(env: Env, pid: number, raw: unknown): Promise<string | null> {
+  if (raw == null || raw === '') return null;
+  const uid = str(raw, 64);
+  const row = uid ? await env.DB.prepare('SELECT uid FROM contacts WHERE uid = ? AND project_id = ?').bind(uid, pid).first<{ uid: string }>() : null;
+  if (!row) throw new Refused(404, 'That customer or prospect is not on this venture', 'contact_uid');
+  return String(row.uid);
+}
+
+/**
+ * D6865 part 2 (#6891, GR-24): the Inbox message a feedback item is saved from
+ * (`services/growInbox.ts` keys). A recorded reply (`contact:<id>`) must be an
+ * inbound reply of the linked contact in this venture; a mailbox message
+ * (`mail:<digest>`) is a digest of mail Axal never stores, so only its shape is
+ * checked. Either way it is matched inside its own thread only (`contact_uid`).
+ */
+export const REPLY_KEY = /^(?:contact:[1-9][0-9]{0,18}|mail:[a-f0-9]{64})$/;
+async function replyKeyOf(env: Env, pid: number, raw: unknown, contactUid: string | null, origin: string): Promise<string | null> {
+  if (raw == null || raw === '') return null;
+  if (typeof raw !== 'string' || !REPLY_KEY.test(raw)) throw new Refused(400, 'Choose the reply to save', 'reply_key');
+  if (origin !== 'inbox_reply') throw new Refused(400, 'Only an Inbox reply is saved with a reply', 'reply_key');
+  if (!contactUid) throw new Refused(400, 'A reply is saved with the person who sent it', 'contact_uid');
+  if (raw.startsWith('contact:')) {
+    const reply = await env.DB.prepare(
+      `SELECT r.id FROM contact_replies r JOIN contacts c ON c.id = r.contact_id
+        WHERE r.id = ? AND c.uid = ? AND c.project_id = ? AND r.direction = 'inbound'`,
+    ).bind(Number(raw.slice(8)), contactUid, pid).first<{ id: number }>();
+    if (!reply) throw new Refused(404, 'That reply is not in this person’s Inbox thread', 'reply_key');
+  }
+  const saved = await env.DB.prepare('SELECT uid FROM product_feedback WHERE project_id = ? AND contact_uid = ? AND reply_key = ?')
+    .bind(pid, contactUid, raw).first<{ uid: string }>();
+  if (saved) throw new Refused(409, 'That reply is already saved as feedback', 'reply_key', { uid: String(saved.uid) });
+  return raw;
+}
+
+export async function addFeedback(
+  env: Env, pid: number, user: User, b: Body, options: { sourceProposalId?: number | null } = {},
+): Promise<{ uid: string }> {
+  const text = str(b.body, 4000);
+  if (!text) throw new Refused(400, 'Feedback says something', 'body');
+  const source = oneOf(b.source, FEEDBACK_SOURCES, 'source', true);
+  const item = await roadmapItem(env, pid, b.roadmap_item_ref);
+  const status = oneOf(b.status, FEEDBACK_STATUS, 'status') ?? 'open';
+  const sourceProposalId = Number.isSafeInteger(options.sourceProposalId) && Number(options.sourceProposalId) > 0
+    ? Number(options.sourceProposalId) : null;
+  const id = sourceProposalId == null ? newUid() : `posthog-proposal-${sourceProposalId}`;
+  // D6865: a PostHog proposal is a survey answer; a body that names no origin was typed.
+  const origin = oneOf(b.origin, FEEDBACK_ORIGINS, 'origin') ?? (sourceProposalId != null ? 'posthog_survey' : 'typed');
+  const contactUid = await contactOf(env, pid, b.contact_uid);
+  const replyKey = await replyKeyOf(env, pid, b.reply_key, contactUid, origin);
+  if (sourceProposalId != null) {
+    const existing = await env.DB.prepare('SELECT uid FROM product_feedback WHERE uid = ? AND project_id = ?')
+      .bind(id, pid).first<{ uid: string }>();
+    if (existing) return { uid: String(existing.uid) };
+  }
+  await env.DB.prepare(
+    `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label,
+       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin, reply_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, pid, text, source, str(b.from_name, 200), email(b.from_email, 'from_email'), str(b.from_company, 200), str(b.theme, 80),
+    item?.ref ?? null, item?.label ?? str(b.roadmap_item_label, 200), flag(b.notify_on_ship),
+    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin, replyKey).run();
+  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged',
+    summary: replyKey ? 'Feedback saved from an Inbox reply' : origin === 'interview' ? 'Feedback saved from an interview' : 'Feedback logged' });
+  return { uid: id };
+}
+
+export async function updateFeedback(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string; status: string }> {
+  const row = await owned<Row & { id: number; status: string }>(env,
+    `SELECT id, body, source, status, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label, notify_on_ship, contact_uid
+       FROM product_feedback WHERE uid = ? AND project_id = ?`, uid, pid);
+  // D6865: Link to a customer or prospect, or unlink with null; the typed name is kept either way.
+  const contactUid = has(b, 'contact_uid') ? await contactOf(env, pid, b.contact_uid) : (row.contact_uid as string | null);
+  const status = has(b, 'status') ? oneOf(b.status, FEEDBACK_STATUS, 'status', true)! : row.status;
+  let text = row.body;
+  if (has(b, 'body')) { text = str(b.body, 4000); if (!text) throw new Refused(400, 'Feedback says something', 'body'); }
+  let ref = row.roadmap_item_ref; let label = row.roadmap_item_label;
+  if (has(b, 'roadmap_item_ref')) {
+    const item = await roadmapItem(env, pid, b.roadmap_item_ref);
+    ref = item?.ref ?? null;
+    label = item ? item.label : has(b, 'roadmap_item_label') ? str(b.roadmap_item_label, 200) : null;
+  } else if (has(b, 'roadmap_item_label')) label = str(b.roadmap_item_label, 200);
+  await env.DB.prepare(
+    `UPDATE product_feedback SET body = ?, source = ?, status = ?, from_name = ?, from_email = ?, from_company = ?, theme = ?,
+       roadmap_item_ref = ?, roadmap_item_label = ?, notify_on_ship = ?, contact_uid = ?,
+       shipped_on = CASE WHEN ? = 'shipped' AND status <> 'shipped' THEN ? ELSE shipped_on END, updated_by = ?, updated_at = ? WHERE id = ?`,
+  ).bind(text, has(b, 'source') ? oneOf(b.source, FEEDBACK_SOURCES, 'source', true) : row.source, status,
+    has(b, 'from_name') ? str(b.from_name, 200) : row.from_name, has(b, 'from_email') ? email(b.from_email, 'from_email') : row.from_email,
+    has(b, 'from_company') ? str(b.from_company, 200) : row.from_company, has(b, 'theme') ? str(b.theme, 80) : row.theme,
+    ref, label, has(b, 'notify_on_ship') ? flag(b.notify_on_ship) : row.notify_on_ship, contactUid,
+    status, nowIso().slice(0, 10), user.id, nowIso(), row.id).run();
+  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_updated', summary: 'Feedback updated' });
+  return { uid, status };
+}
+
+/** The writer #1698's feedback-theme fill applies through: an existing theme or a new one. */
+export async function setFeedbackTheme(
+  env: Env, projectId: number, uid: string, theme: string | null, userId: number,
+  sourceProposalId: number | null = null,
+): Promise<{ uid: string; theme: string | null }> {
+  const row = await owned<{ id: number }>(env, 'SELECT id FROM product_feedback WHERE uid = ? AND project_id = ?', uid, projectId);
+  const t = str(theme, 80);
+  await env.DB.prepare(
+    'UPDATE product_feedback SET theme = ?, theme_source_proposal_id = ?, updated_by = ?, updated_at = ? WHERE id = ?',
+  ).bind(t, sourceProposalId, userId, nowIso(), row.id).run();
+  await logGrowWrite(env, projectId, userId, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_theme_set', summary: t ? 'Theme set' : 'Theme cleared' });
+  return { uid, theme: t };
+}
+
+/**
+ * D6098 (#6098): one theme's rows in one venture, by the theme's exact stored
+ * text (the writers store it trimmed and at most 80 characters, and every
+ * reader groups by that text). `roadmap_items` counts the roadmap items that
+ * answer the theme (`roadmap_okrs.feedback_theme`, written by buildCreates).
+ */
+export async function feedbackThemes(env: Env, pid: number): Promise<{ theme: string; feedback: number; roadmap_items: number }[]> {
+  const q = await env.DB.prepare(
+    `SELECT t.theme AS theme,
+            (SELECT COUNT(*) FROM product_feedback f WHERE f.project_id = ? AND f.theme = t.theme) AS feedback,
+            (SELECT COUNT(*) FROM roadmap_okrs o WHERE o.project_id = ? AND o.feedback_theme = t.theme) AS roadmap_items
+       FROM (SELECT DISTINCT theme FROM product_feedback WHERE project_id = ? AND theme IS NOT NULL AND theme <> '') t
+      ORDER BY t.theme`,
+  ).bind(pid, pid, pid).all<{ theme: string; feedback: number; roadmap_items: number }>();
+  return (q.results || []).map((t) => ({ theme: String(t.theme), feedback: Number(t.feedback), roadmap_items: Number(t.roadmap_items) }));
+}
+
+const countOf = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * D6098 (#6098): rename one feedback theme, or merge it into another, in one
+ * venture. `from` is the theme as stored; `to` is the new name. When `to` is
+ * already a theme of the venture's feedback the write is a merge, and it
+ * needs `merge: true`; without it the answer is a 409 carrying the counts that
+ * would move, so the page can ask first. Every feedback row of `from` and
+ * every roadmap item that answers it change in one batch, with one activity
+ * row whose summary holds the counts and never the theme's words.
+ */
+export async function renameFeedbackTheme(
+  env: Env, pid: number, user: User, b: Body,
+): Promise<{ from: string; to: string; merged: boolean; feedback: number; roadmap_items: number }> {
+  const from = str(b.from, 80);
+  if (!from) throw new Refused(400, 'Name the theme to rename', 'from');
+  const to = str(b.to, 80);
+  if (!to) throw new Refused(400, 'A theme needs a name', 'to');
+  if (to === from) throw new Refused(400, 'The new name is the same as the old one', 'to');
+  const counts = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM product_feedback WHERE project_id = ? AND theme = ?) AS feedback,
+            (SELECT COUNT(*) FROM roadmap_okrs WHERE project_id = ? AND feedback_theme = ?) AS roadmap_items,
+            (SELECT COUNT(*) FROM product_feedback WHERE project_id = ? AND theme = ?) AS target`,
+  ).bind(pid, from, pid, from, pid, to).first<{ feedback: number; roadmap_items: number; target: number }>();
+  const feedback = Number(counts?.feedback ?? 0); const roadmapItems = Number(counts?.roadmap_items ?? 0);
+  if (feedback === 0) throw new Refused(404, 'No feedback has that theme', 'from');
+  const merged = Number(counts?.target ?? 0) > 0;
+  if (merged && b.merge !== true) {
+    throw new Refused(409,
+      `That theme already exists. Merging moves ${countOf(feedback, 'feedback row', 'feedback rows')} and ${countOf(roadmapItems, 'roadmap item', 'roadmap items')} into it`,
+      'to', { merge_needed: true, feedback, roadmap_items: roadmapItems });
+  }
+  const moved = `${countOf(feedback, 'feedback row', 'feedback rows')} and ${countOf(roadmapItems, 'roadmap item', 'roadmap items')}`;
+  await env.DB.batch([
+    env.DB.prepare('UPDATE product_feedback SET theme = ?, updated_by = ?, updated_at = ? WHERE project_id = ? AND theme = ?')
+      .bind(to, user.id, nowIso(), pid, from),
+    env.DB.prepare('UPDATE roadmap_okrs SET feedback_theme = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ? AND feedback_theme = ?')
+      .bind(to, pid, from),
+    logCycleWriteStatement(env, entry(pid, user.id, {
+      module: 'product-improvement', entityId: null, action: merged ? 'grow_feedback_theme_merged' : 'grow_feedback_theme_renamed',
+      summary: merged ? `Theme merged: ${moved} moved` : `Theme renamed on ${moved}`,
+    })),
+  ]);
+  return { from, to, merged, feedback, roadmap_items: roadmapItems };
+}
+
+// ── Distribution ────────────────────────────────────────────────────────────
+
+export const CHANNEL_STATES = ['active', 'testing', 'paused'] as const;
+export const CHANNEL_KINDS = ['organic', 'ads', 'newsletter', 'outreach', 'signups', 'partner'] as const;
+const LEGACY_CHANNEL_KINDS = ['content', 'paid_search', 'paid_social', 'outbound', 'referral', 'partner', 'events', 'other'] as const;
+/** D4486: old open tabs may still submit the former vocabulary; keep it and map clear equivalents. */
+function channelKind(value: unknown): { kind: string | null; legacy: string | null } {
+  if (value == null || value === '') return { kind: null, legacy: null };
+  if (CHANNEL_KINDS.includes(value as any)) return { kind: String(value), legacy: null };
+  const legacy = oneOf(value, LEGACY_CHANNEL_KINDS, 'kind', true)!;
+  const mapped: Record<string, string> = { content: 'organic', paid_search: 'ads', paid_social: 'ads', outbound: 'outreach' };
+  return { kind: mapped[legacy] ?? null, legacy };
+}
+
+/** A UTM source from a channel's name: lowercase, non-alphanumerics to `-`, `-2`, `-3` on a clash. */
+export async function deriveUtmSource(env: Env, pid: number, name: string): Promise<string> {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'channel';
+  const taken = new Set(((await env.DB.prepare('SELECT utm_source FROM growth_channels WHERE project_id = ?').bind(pid).all<{ utm_source: string }>()).results || [])
+    .map((r) => r.utm_source));
+  if (!taken.has(base)) return base;
+  for (let i = 2; ; i += 1) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`;
+}
+
+const thisMonth = () => nowIso().slice(0, 7);
+const spendStatement = (env: Env, uid: string, month: string, spend: number, userId: number) => env.DB.prepare(
+  `INSERT INTO channel_spend (channel_id, month, spend_cents, source, recorded_by)
+   VALUES ((SELECT id FROM growth_channels WHERE uid = ?), ?, ?, 'manual', ?)
+   ON CONFLICT(channel_id, month) DO UPDATE SET spend_cents = excluded.spend_cents, recorded_by = excluded.recorded_by`,
+).bind(uid, month, spend, userId);
+
+const isUnique = (e: unknown) => String((e as Error).message).toLowerCase().includes('unique');
+
+/** D4486: a channel's owner is the founder or an active accepted venture member. */
+async function channelOwner(env: Env, pid: number, value: unknown): Promise<number | null> {
+  if (value == null || value === '') return null;
+  const id = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Refused(400, 'Choose a member of this venture', 'owner_user_id');
+  const member = await env.DB.prepare(`SELECT u.id FROM users u WHERE u.id = ? AND u.is_active = 1
+    AND (u.founder_id = (SELECT founder_id FROM projects WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = ? AND m.user_id = u.id AND m.status = 'accepted'))`)
+    .bind(id, pid, pid).first();
+  if (!member) throw new Refused(400, 'Choose a member of this venture', 'owner_user_id');
+  return id;
+}
+
+function channelPurpose(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || value.trim().length > 140) throw new Refused(400, 'Purpose is at most 140 characters', 'purpose');
+  return value.trim() || null;
+}
+
+export async function addChannel(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string; utm_source: string }> {
+  const name = str(b.name, 120);
+  if (!name) throw new Refused(400, 'A channel has a name', 'name');
+  const given = str(b.utm_source, 80)?.toLowerCase() ?? null;
+  const utm = given ?? await deriveUtmSource(env, pid, name);
+  const bar = centsOrNull(b.cac_bar_cents, 'cac_bar_cents');
+  const spend = centsOrNull(b.spend_cents, 'spend_cents');
+  const owner = await channelOwner(env, pid, b.owner_user_id);
+  const purpose = channelPurpose(b.purpose);
+  const kind = channelKind(b.kind);
+  const id = newUid();
+  const statements = [
+    env.DB.prepare(`INSERT INTO growth_channels (uid, project_id, name, utm_source, state, kind, cac_bar_cents, bar_currency, created_by, purpose, owner_user_id, legacy_kind)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, pid, name, utm, oneOf(b.state, CHANNEL_STATES, 'state') ?? 'active', kind.kind,
+        bar, currencyFor(bar, b.bar_currency, 'bar_currency'), user.id, purpose, owner, kind.legacy),
+    ...(spend == null ? [] : [spendStatement(env, id, thisMonth(), spend, user.id)]),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: id, action: 'grow_channel_added', summary: 'Channel added' })),
+  ];
+  try { await env.DB.batch(statements); } catch (e) {
+    if (isUnique(e)) throw new Refused(409, 'A channel already uses that UTM source', 'utm_source');
+    throw e;
+  }
+  return { uid: id, utm_source: utm };
+}
+
+export async function updateChannel(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
+  const row = await owned<Row & { id: number }>(env,
+    'SELECT id, name, state, kind, legacy_kind, cac_bar_cents, bar_currency, purpose, owner_user_id FROM growth_channels WHERE uid = ? AND project_id = ?', uid, pid);
+  const bar = has(b, 'cac_bar_cents') ? centsOrNull(b.cac_bar_cents, 'cac_bar_cents') : row.cac_bar_cents as number | null;
+  const barCurrency = has(b, 'cac_bar_cents') || has(b, 'bar_currency')
+    ? currencyFor(bar, has(b, 'bar_currency') ? b.bar_currency : row.bar_currency, 'bar_currency') : row.bar_currency;
+  const spend = has(b, 'spend_cents') ? centsOrNull(b.spend_cents, 'spend_cents') : null;
+  const owner = has(b, 'owner_user_id') ? await channelOwner(env, pid, b.owner_user_id) : row.owner_user_id;
+  const purpose = has(b, 'purpose') ? channelPurpose(b.purpose) : row.purpose;
+  const kind = has(b, 'kind') ? channelKind(b.kind) : { kind: row.kind, legacy: row.legacy_kind };
+  await env.DB.batch([
+    env.DB.prepare('UPDATE growth_channels SET name = ?, state = ?, kind = ?, cac_bar_cents = ?, bar_currency = ?, updated_at = ?, purpose = ?, owner_user_id = ?, legacy_kind = ? WHERE id = ?')
+      .bind(has(b, 'name') ? (str(b.name, 120) ?? row.name) : row.name, has(b, 'state') ? oneOf(b.state, CHANNEL_STATES, 'state', true) : row.state,
+        kind.kind, bar, barCurrency, nowIso(), purpose, owner, kind.legacy ?? row.legacy_kind, row.id),
+    ...(spend == null ? [] : [spendStatement(env, uid, thisMonth(), spend, user.id)]),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_channel_updated', summary: 'Channel updated' })),
+  ]);
+  return { uid };
+}
+
+export async function setChannelSpend(env: Env, pid: number, user: User, uid: string, month: string, b: Body) {
+  if (!MONTH.test(month)) throw new Refused(400, 'month is YYYY-MM', 'month');
+  await owned<{ id: number }>(env, 'SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?', uid, pid);
+  const spend = cents(b.spend_cents, 'spend_cents');
+  await env.DB.batch([
+    spendStatement(env, uid, month, spend, user.id),
+    // The channel's own id: D690's record ids hold no month.
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_channel_spend', summary: `Spend entered for ${month}` })),
+  ]);
+  return { uid, month, spend_cents: spend, source: 'manual' as const };
+}
+
+// D1090 (#2955): the content calendar. A planned piece, never a record of what was sent.
+export const CONTENT_STATUS = ['idea', 'planned', 'scheduled', 'published', 'dropped'] as const;
+
+/** A channel of this venture by its uid, or none; another venture's is a 404. */
+async function channelId(env: Env, pid: number, uid: unknown): Promise<number | null> {
+  if (uid == null || uid === '') return null;
+  return (await owned<{ id: number }>(env, 'SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?', String(uid), pid)).id;
+}
+
+/** A link to the piece: http or https only. */
+function link(v: unknown, field: string): string | null {
+  const u = str(v, 2000);
+  if (!u) return null;
+  try { const p = new URL(u); if (p.protocol === 'https:' || p.protocol === 'http:') return p.toString(); } catch { /* refused below */ }
+  throw new Refused(400, `${field} is a web link`, field);
+}
+
+export async function addContentItem(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
+  const title = str(b.title, 200);
+  if (!title) throw new Refused(400, 'A planned piece has a title', 'title');
+  const channel = await channelId(env, pid, b.channel_uid);
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO content_calendar_items (uid, project_id, channel_id, title, planned_on, status, url, source, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`)
+      .bind(id, pid, channel, title, day(b.planned_on, 'planned_on'), oneOf(b.status, CONTENT_STATUS, 'status') ?? 'idea', link(b.url, 'url'), user.id, user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: id, action: 'grow_content_added', summary: 'Planned piece added' })),
+  ]);
+  return { uid: id };
+}
+
+/** A typed piece's edit. A piece from Notion changes in Notion: the next sync would undo an edit here. */
+export async function updateContentItem(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
+  const row = await owned<Row & { id: number; source: string }>(env,
+    'SELECT id, channel_id, title, planned_on, status, url, source FROM content_calendar_items WHERE uid = ? AND project_id = ?', uid, pid);
+  if (row.source !== 'manual') throw new Refused(409, 'This piece comes from Notion. Change it there, and the next sync brings it here.');
+  let title = row.title;
+  if (has(b, 'title')) { title = str(b.title, 200); if (!title) throw new Refused(400, 'A planned piece has a title', 'title'); }
+  await env.DB.batch([
+    env.DB.prepare('UPDATE content_calendar_items SET channel_id = ?, title = ?, planned_on = ?, status = ?, url = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+      .bind(has(b, 'channel_uid') ? await channelId(env, pid, b.channel_uid) : row.channel_id, title,
+        has(b, 'planned_on') ? day(b.planned_on, 'planned_on') : row.planned_on,
+        has(b, 'status') ? oneOf(b.status, CONTENT_STATUS, 'status', true) : row.status,
+        has(b, 'url') ? link(b.url, 'url') : row.url, user.id, nowIso(), row.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_content_updated', summary: 'Planned piece updated' })),
+  ]);
+  return { uid };
+}
+
+/** Removes a piece, typed or from Notion; one from Notion stays deleted (its ledger row keeps no local id). */
+export async function removeContentItem(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; deleted: true }> {
+  const row = await owned<{ id: number }>(env, 'SELECT id FROM content_calendar_items WHERE uid = ? AND project_id = ?', uid, pid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM content_calendar_items WHERE id = ?').bind(row.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_content_deleted', summary: 'Planned piece deleted' })),
+  ]);
+  return { uid, deleted: true };
+}
+
+/** The calendar's table, for a record reference: only its writers spell the name (content_calendar.test.ts). */
+export const CONTENT_CALENDAR_TABLE = 'content_calendar_items';
+
+/** D1567: how many planned pieces came from one source, and when the latest changed (the deck's Notion count). */
+export async function contentCountFrom(env: Env, pid: number, source: string): Promise<{ n: number; at: string | null }> {
+  const r = await env.DB.prepare(
+    'SELECT COUNT(*) AS n, MAX(updated_at) AS at FROM content_calendar_items WHERE project_id = ? AND source = ?',
+  ).bind(pid, source).first<{ n: number; at: string | null }>();
+  return { n: Number(r?.n) || 0, at: r?.at ?? null };
+}
+
+/** The calendar as Distribution reads it, soonest first; an unplanned piece last. */
+export async function contentCalendar(env: Env, pid: number): Promise<Row[]> {
+  const q = await env.DB.prepare(
+    `SELECT i.uid, i.title, i.planned_on, i.status, i.url, i.source, g.uid AS channel_uid, g.name AS channel_name
+       FROM content_calendar_items i LEFT JOIN growth_channels g ON g.id = i.channel_id
+      WHERE i.project_id = ? ORDER BY i.planned_on IS NULL, i.planned_on, i.id`,
+  ).bind(pid).all<Row>();
+  return q.results || [];
+}
+
+// ── Team expansion ──────────────────────────────────────────────────────────
+
+/** The types Open a role offers; anything else is refused, never turned into full-time. */
+export const ROLE_TYPES = ['full_time', 'part_time', 'contract', 'fractional'] as const;
+
+function roleFields(b: Body, prev: Row = {}) {
+  const pick = <T>(k: string, read: () => T, fallback: unknown) => (has(b, k) ? read() : fallback) as T;
+  const target = pick('target_start', () => str(b.target_start, 10), prev.target_start ?? null) as string | null;
+  if (target && !DATE.test(target) && !MONTH.test(target)) throw new Refused(400, 'target_start is YYYY-MM or YYYY-MM-DD', 'target_start');
+  const min = pick('comp_min_cents', () => centsOrNull(b.comp_min_cents, 'comp_min_cents'), prev.comp_min_cents ?? null) as number | null;
+  const max = pick('comp_max_cents', () => centsOrNull(b.comp_max_cents, 'comp_max_cents'), prev.comp_max_cents ?? null) as number | null;
+  if (min != null && max != null && min > max) throw new Refused(400, 'The band starts below where it ends', 'comp_max_cents');
+  const amount = min ?? max;
+  const currency = has(b, 'comp_currency') || has(b, 'comp_min_cents') || has(b, 'comp_max_cents')
+    ? currencyFor(amount, has(b, 'comp_currency') ? b.comp_currency : prev.comp_currency, 'comp_currency')
+    : (prev.comp_currency ?? null);
+  // #2181: the band on the public board is the founder's switch, off by default. A
+  // switch sent on with no band is refused; a band cleared later turns it off.
+  const shown = has(b, 'comp_public') ? switchOf(b.comp_public, 'comp_public') : (Number(prev.comp_public) === 1 ? 1 : 0);
+  if (shown === 1 && min == null && max == null && has(b, 'comp_public')) throw new Refused(400, 'Fill the band before showing it on the jobs board', 'comp_public');
+  return {
+    comp_public: (min == null && max == null ? 0 : shown) as 0 | 1,
+    team: pick('team', () => str(b.team, 80), prev.team ?? null) as string | null,
+    target_start: target,
+    employment_type: pick('type', () => oneOf(b.type, ROLE_TYPES, 'type', true), prev.employment_type ?? 'full_time') as string,
+    comp_min_cents: min, comp_max_cents: max, comp_currency: currency as string | null,
+    equity_pct: pick('equity_pct', () => pct(b.equity_pct, 'equity_pct'), prev.equity_pct ?? null) as number | null,
+  };
+}
+
+export async function openRole(env: Env, pid: number, user: User, b: Body): Promise<{ id: number; status: string }> {
+  const title = str(b.title, 200);
+  if (!title) throw new Refused(400, 'A role has a title', 'title');
+  if (b.type == null || b.type === '') b = { ...b, type: 'full_time' };
+  const f = roleFields(b);
+  const posting = await createPosting(env, user.id, pid, { title, ...f });
+  let status = String(posting.status);
+  if (b.publish === true) {
+    // The caller is the posting's host, so the board's own gate admits them.
+    const out = await submitForReview(env, posting, user);
+    if (out.ok) status = String(out.posting.status);
+  }
+  await logGrowWrite(env, pid, user.id, { module: 'team-expansion', entityId: posting.id, action: 'grow_role_opened',
+    summary: status === 'pending_review' ? 'Role opened and sent for review' : 'Role opened as a draft' });
+  return { id: Number(posting.id), status };
+}
+
+export async function updateRole(env: Env, pid: number, user: User, id: number, b: Body): Promise<{ id: number; status: string }> {
+  const row = await owned<Row & { id: number; status: string }>(env, 'SELECT * FROM job_postings WHERE id = ? AND project_id = ?', id, pid);
+  const publish = b.publish === true && (row.status === 'draft' || row.status === 'rejected');
+  // Publishing is the board's: only the posting's host or an admin, and a refusal writes nothing.
+  if (b.publish === true && !(user.role === 'admin' || Number(row.host_user_id) === Number(user.id))) {
+    throw new Refused(403, 'Only the role\'s host or an admin can send it for review', 'publish');
+  }
+  let title = row.title as string;
+  if (has(b, 'title')) { title = str(b.title, 200) ?? ''; if (!title) throw new Refused(400, 'A role has a title', 'title'); }
+  const f = roleFields(b, row);
+  await env.DB.prepare(
+    `UPDATE job_postings SET title = ?, team = ?, target_start = ?, employment_type = ?, comp_min_cents = ?, comp_max_cents = ?,
+       comp_currency = ?, equity_pct = ?, comp_public = ?, updated_at = ? WHERE id = ?`,
+  ).bind(title, f.team, f.target_start, f.employment_type, f.comp_min_cents, f.comp_max_cents, f.comp_currency, f.equity_pct, f.comp_public, nowIso(), row.id).run();
+  let status = row.status;
+  if (publish) {
+    const out = await submitForReview(env, { ...row, title }, user);
+    if (!out.ok) throw new Refused(out.status, out.error === 'forbidden' ? 'Only the role\'s host or an admin can send it for review' : 'A role has a title', 'publish');
+    status = String(out.posting.status);
+  }
+  await logGrowWrite(env, pid, user.id, { module: 'team-expansion', entityId: row.id, action: 'grow_role_updated',
+    summary: publish ? 'Role updated and sent for review' : 'Role updated' });
+  return { id: row.id, status };
+}
+
+/** Close role (#1698's action): the board's own close, so only the host or an admin. */
+export async function closeRole(env: Env, pid: number, user: User, id: number): Promise<{ id: number; status: string }> {
+  const row = await owned<Row & { id: number }>(env, 'SELECT * FROM job_postings WHERE id = ? AND project_id = ?', id, pid);
+  const out = await closePosting(env, row, user);
+  if (!out.ok) throw new Refused(out.status, 'Only the role\'s host or an admin can close it');
+  await logGrowWrite(env, pid, user.id, { module: 'team-expansion', entityId: row.id, action: 'grow_role_closed', summary: 'Role closed' });
+  return { id: row.id, status: String(out.posting.status) };
+}
+
+export async function setApplicationStage(env: Env, pid: number, user: User, id: number, b: Body) {
+  const row = await owned<{ id: number; posting_id: number }>(env,
+    'SELECT a.id, a.posting_id FROM job_applications a JOIN job_postings p ON p.id = a.posting_id WHERE a.id = ? AND p.project_id = ?', id, pid);
+  const stage = oneOf(b.stage, APPLICATION_STAGES, 'stage', true);
+  await env.DB.prepare('UPDATE job_applications SET stage = ?, stage_changed_at = ?, stage_changed_by = ?, updated_at = ? WHERE id = ?')
+    .bind(stage, nowIso(), user.id, nowIso(), row.id).run();
+  // The role's record: an applicant is never a Grow record, and never named.
+  await logGrowWrite(env, pid, user.id, { module: 'team-expansion', entityId: row.posting_id, action: 'grow_application_stage', summary: `Applicant moved to ${stage}` });
+  return { id: row.id, stage };
+}
+
+// ── Partner network ─────────────────────────────────────────────────────────
+
+export const PARTNER_TYPES = ['reseller', 'integration', 'agency', 'referral', 'co_marketing', 'other'] as const;
+export const PARTNER_STAGES = ['talking', 'terms', 'signed', 'paused', 'ended'] as const;
+export const TERMS_KINDS = ['rev_share', 'services_fee', 'referral_fee', 'none'] as const;
+
+/** Terms keep a percentage and an amount apart: one or the other, never both (decision 7). */
+function termsFields(b: Body, prev: Row = {}) {
+  const pctGiven = has(b, 'terms_pct') && b.terms_pct != null && b.terms_pct !== '';
+  const amountGiven = has(b, 'terms_amount_cents') && b.terms_amount_cents != null && b.terms_amount_cents !== '';
+  if (pctGiven && amountGiven) throw new Refused(400, 'Terms are a percentage or an amount, not both', 'terms_amount_cents');
+  let termsPct = (prev.terms_pct ?? null) as number | null;
+  let amount = (prev.terms_amount_cents ?? null) as number | null;
+  if (has(b, 'terms_pct')) { termsPct = pct(b.terms_pct, 'terms_pct'); if (termsPct != null) amount = null; }
+  if (has(b, 'terms_amount_cents')) { amount = centsOrNull(b.terms_amount_cents, 'terms_amount_cents'); if (amount != null) termsPct = null; }
+  const currency = has(b, 'terms_amount_cents') || has(b, 'terms_currency') || has(b, 'terms_pct')
+    ? currencyFor(amount, has(b, 'terms_currency') ? b.terms_currency : prev.terms_currency, 'terms_currency')
+    : (prev.terms_currency ?? null);
+  return {
+    terms_kind: has(b, 'terms_kind') ? oneOf(b.terms_kind, TERMS_KINDS, 'terms_kind') : (prev.terms_kind ?? null),
+    terms_pct: termsPct, terms_amount_cents: amount, terms_currency: currency,
+    renewal_on: has(b, 'renewal_on') ? day(b.renewal_on, 'renewal_on') : (prev.renewal_on ?? null),
+    contact_name: has(b, 'contact_name') ? str(b.contact_name, 200) : (prev.contact_name ?? null),
+    contact_email: has(b, 'contact_email') ? email(b.contact_email, 'contact_email') : (prev.contact_email ?? null),
+    terms: has(b, 'terms') ? str(b.terms, 400) : (prev.terms ?? null),
+  };
+}
+
+/**
+ * D8254 (#8254): the markets a body names (`markets`: market uids), each the venture's own. Absent means unchanged
+ * (null); an empty list unlinks every market. A uid that is not this venture's market is a 400 before anything is written.
+ */
+async function partnerMarketIds(env: Env, pid: number, b: Body): Promise<number[] | null> {
+  if (!has(b, 'markets')) return null;
+  const raw = b.markets;
+  const list = raw == null || raw === '' ? [] : Array.isArray(raw) ? raw : [raw];
+  const uids = [...new Set(list.map((x) => String(x ?? '').trim()).filter(Boolean))];
+  if (uids.length > 100) throw new Refused(400, 'A partner links up to 100 markets', 'markets');
+  if (!uids.length) return [];
+  const res = await env.DB.prepare(`SELECT id, uid FROM markets WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))`)
+    .bind(pid, JSON.stringify(uids)).all<{ id: number; uid: string }>();
+  const found = new Map((res.results || []).map((m) => [String(m.uid), Number(m.id)]));
+  const missing = uids.find((u) => !found.has(u));
+  if (missing) throw new Refused(400, 'Choose markets of this venture', 'markets');
+  return uids.map((u) => found.get(u) as number);
+}
+
+/** Replaces the partner's links with `marketIds`, as statements for the caller's batch. */
+function partnerMarketStatements(env: Env, partnerId: number, marketIds: number[], userId: number) {
+  return [
+    env.DB.prepare(`DELETE FROM growth_partner_markets WHERE partner_id = ? AND market_id NOT IN (SELECT value FROM json_each(?))`).bind(partnerId, JSON.stringify(marketIds)),
+    ...(marketIds.length ? [env.DB.prepare(`INSERT OR IGNORE INTO growth_partner_markets (partner_id, market_id, created_by) SELECT ?, value, ? FROM json_each(?)`)
+      .bind(partnerId, userId, JSON.stringify(marketIds))] : []),
+  ];
+}
+
+export async function addPartner(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
+  const name = str(b.name, 200);
+  if (!name) throw new Refused(400, 'A partner has a name', 'name');
+  const t = termsFields(b);
+  const marketIds = await partnerMarketIds(env, pid, b);
+  const id = newUid();
+  await env.DB.prepare(
+    `INSERT INTO growth_partners (uid, project_id, name, type, stage, terms, terms_kind, terms_pct, terms_amount_cents, terms_currency,
+       renewal_on, contact_name, contact_email, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, pid, name, oneOf(b.type, PARTNER_TYPES, 'type', true), oneOf(b.stage, PARTNER_STAGES, 'stage') ?? 'talking', t.terms,
+    t.terms_kind, t.terms_pct, t.terms_amount_cents, t.terms_currency, t.renewal_on, t.contact_name, t.contact_email, user.id).run();
+  if (marketIds?.length) {
+    const made = await env.DB.prepare('SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?').bind(id, pid).first<{ id: number }>();
+    if (made) await env.DB.batch(partnerMarketStatements(env, made.id, marketIds, user.id));
+  }
+  await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: id, action: 'grow_partner_added', summary: 'Partner added' });
+  return { uid: id };
+}
+
+export async function updatePartner(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
+  const row = await owned<Row & { id: number }>(env, 'SELECT * FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
+  const t = termsFields(b, row);
+  const marketIds = await partnerMarketIds(env, pid, b);
+  let name = row.name;
+  if (has(b, 'name')) { name = str(b.name, 200); if (!name) throw new Refused(400, 'A partner has a name', 'name'); }
+  await env.DB.prepare(
+    `UPDATE growth_partners SET name = ?, type = ?, stage = ?, terms = ?, terms_kind = ?, terms_pct = ?, terms_amount_cents = ?, terms_currency = ?,
+       renewal_on = ?, contact_name = ?, contact_email = ?, updated_at = ? WHERE id = ?`,
+  ).bind(name, has(b, 'type') ? oneOf(b.type, PARTNER_TYPES, 'type', true) : row.type, has(b, 'stage') ? oneOf(b.stage, PARTNER_STAGES, 'stage', true) : row.stage,
+    t.terms, t.terms_kind, t.terms_pct, t.terms_amount_cents, t.terms_currency, t.renewal_on, t.contact_name, t.contact_email, nowIso(), row.id).run();
+  if (marketIds) await env.DB.batch(partnerMarketStatements(env, row.id, marketIds, user.id));
+  await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_updated', summary: 'Partner updated' });
+  return { uid };
+}
+
+/** D6112: how a `partner_revenue.source` reads beside its month. Only 'manual' (typed) exists today (migration 443). */
+export function partnerRevenueSource(source: unknown): string {
+  if (source === 'manual') return 'typed';
+  if (source === 'mercury') return 'From Mercury';
+  return String(source ?? '');
+}
+
+/**
+ * A month's partner-sourced revenue, typed. D6112 (#6112): typing replaces a
+ * typed month and never a month another source filled. Migration 443 allows
+ * only `source = 'manual'`, so no such month exists today; the read and the
+ * upsert's `WHERE` both hold the line for the day one does.
+ */
+export async function setPartnerRevenue(env: Env, pid: number, user: User, uid: string, month: string, b: Body) {
+  if (!MONTH.test(month)) throw new Refused(400, 'month is YYYY-MM', 'month');
+  const row = await owned<{ id: number }>(env, 'SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
+  const amount = cents(b.amount_cents, 'amount_cents');
+  const prev = await env.DB.prepare('SELECT source FROM partner_revenue WHERE partner_id = ? AND month = ?').bind(row.id, month).first<{ source: string }>();
+  if (prev && prev.source !== 'manual') {
+    throw new Refused(409, `The ${month} figure came from ${prev.source === 'mercury' ? 'Mercury' : prev.source}, so it is kept and cannot be typed over`, 'month');
+  }
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO partner_revenue (partner_id, month, amount_cents, source, recorded_by) VALUES (?, ?, ?, 'manual', ?)
+       ON CONFLICT(partner_id, month) DO UPDATE SET amount_cents = excluded.amount_cents, recorded_by = excluded.recorded_by
+       WHERE partner_revenue.source = 'manual'`,
+    ).bind(row.id, month, amount, user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_revenue', summary: `Revenue entered for ${month}` })),
+  ]);
+  return { uid, month, amount_cents: amount, source: 'manual' as const };
+}
+
+// ── Market expansion ────────────────────────────────────────────────────────
+
+export const MARKET_STATES = ['considering', 'entering', 'served', 'not_now'] as const;
+export const DECISIONS = ['enter', 'not_yet', 'exit'] as const;
+
+/** The four parts from a body: a score needs its source. */
+function marketParts(b: Body, prev: Row = {}) {
+  const out: Row = {};
+  for (const [k, label] of MARKET_PARTS) {
+    const s = b[`${k}_score`] === undefined ? (prev[`${k}_score`] as number | null ?? null) : score(b[`${k}_score`], `${k}_score`);
+    const src = b[`${k}_source`] === undefined ? (prev[`${k}_source`] as string | null ?? null) : str(b[`${k}_source`], 200);
+    if (s != null && !src) throw new Refused(400, `The ${label.toLowerCase()} score needs its source`, `${k}_source`);
+    out[`${k}_score`] = s; out[`${k}_source`] = s == null ? null : src;
+  }
+  return out;
+}
+
+async function marketExtras(env: Env, b: Body, prev: Row = {}) {
+  let geo = (prev.geography_ref ?? null) as string | null;
+  if (has(b, 'geography_ref')) {
+    geo = str(b.geography_ref, 2)?.toUpperCase() ?? null;
+    if (geo && !await env.DB.prepare('SELECT 1 FROM research_countries WHERE code = ?').bind(geo).first()) {
+      throw new Refused(400, 'geography_ref is not a country in Research › Geographies', 'geography_ref');
+    }
+  }
+  const size = has(b, 'size_cents') ? centsOrNull(b.size_cents, 'size_cents') : (prev.size_cents ?? null) as number | null;
+  return {
+    geography_ref: geo, size_cents: size,
+    size_currency: has(b, 'size_cents') || has(b, 'size_currency')
+      ? currencyFor(size, has(b, 'size_currency') ? b.size_currency : prev.size_currency, 'size_currency') : (prev.size_currency ?? null),
+    size_source: has(b, 'size_source') ? str(b.size_source, 200) : (prev.size_source ?? null),
+  };
+}
+
+export async function addMarket(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
+  const name = str(b.name, 120);
+  if (!name) throw new Refused(400, 'A market has a name', 'name');
+  const p = marketParts(b);
+  const x = await marketExtras(env, b);
+  const id = newUid();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO markets (uid, project_id, name, state, demand_score, demand_source, regulation_score, regulation_source,
+         partners_score, partners_source, cost_score, cost_source, geography_ref, size_cents, size_currency, size_source, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(id, pid, name, oneOf(b.state, MARKET_STATES, 'state') ?? 'considering', p.demand_score, p.demand_source, p.regulation_score, p.regulation_source,
+      p.partners_score, p.partners_source, p.cost_score, p.cost_source, x.geography_ref, x.size_cents, x.size_currency, x.size_source, user.id, user.id).run();
+  } catch (e) {
+    if (isUnique(e)) throw new Refused(409, 'That market is already on the list', 'name');
+    throw e;
+  }
+  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: id, action: 'grow_market_added', summary: 'Market added' });
+  return { uid: id };
+}
+
+export async function updateMarket(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
+  const row = await owned<Row & { id: number; state: string; decision: string | null }>(env, 'SELECT * FROM markets WHERE uid = ? AND project_id = ?', uid, pid);
+  const p = marketParts(b, row);
+  const x = await marketExtras(env, b, row);
+  const decision = b.decision === undefined ? row.decision : oneOf(b.decision, DECISIONS, 'decision');
+  await env.DB.prepare(
+    `UPDATE markets SET state = ?, decision = ?, decided_on = CASE WHEN ? IS NOT ? THEN ? ELSE decided_on END,
+       demand_score = ?, demand_source = ?, regulation_score = ?, regulation_source = ?, partners_score = ?, partners_source = ?,
+       cost_score = ?, cost_source = ?, geography_ref = ?, size_cents = ?, size_currency = ?, size_source = ?, updated_by = ?, updated_at = ? WHERE id = ?`,
+  ).bind(b.state === undefined ? row.state : oneOf(b.state, MARKET_STATES, 'state', true), decision, decision, row.decision, nowIso().slice(0, 10),
+    p.demand_score, p.demand_source, p.regulation_score, p.regulation_source, p.partners_score, p.partners_source,
+    p.cost_score, p.cost_source, x.geography_ref, x.size_cents, x.size_currency, x.size_source, user.id, nowIso(), row.id).run();
+  const changes = marketChanges(row, { state: b.state === undefined ? row.state : oneOf(b.state, MARKET_STATES, 'state', true), decision, ...p, ...x });
+  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_updated', summary: marketUpdatedSummary(changes) });
+  return { uid };
+}
+
+// D8252 (#8252): what a market edit changed, written into the activity line itself: `Market updated: Regulation
+// score 2 → 4; Decision Not decided → Enter`. A line written before this says `Market updated` and keeps that text.
+// The activity log's summary is capped at 500 characters, so a long list ends in `and N more` rather than being cut.
+const NOT_SET = 'Not recorded';
+const STATE_WORD: Record<string, string> = { considering: 'Considering', entering: 'Entering', served: 'Served', not_now: 'Not now' };
+const DECISION_WORD: Record<string, string> = { enter: 'Enter', not_yet: 'Not yet', exit: 'Exit' };
+const clip = (v: string, n = 48) => (v.length > n ? `${v.slice(0, n - 1).trimEnd()}…` : v);
+const worded = (words: Record<string, string>, v: unknown, empty = NOT_SET) => (v == null || v === '' ? empty : words[String(v)] ?? clip(String(v)));
+// D5373: the amount in the currency's own decimals (JPY none, KWD three) from the money layer, never a bare factor of 100.
+const money = (cents: unknown, cur: unknown) => {
+  if (cents == null) return NOT_SET;
+  const code = currencyCode(typeof cur === 'string' ? cur.trim().toUpperCase() : cur);
+  const major = code ? toMajorString(cents, code) : null;
+  return major === null ? `${String(cents)} in minor units, currency not recorded` : `${major} ${code}`;
+};
+
+export function marketChanges(before: Row, after: Row): string[] {
+  const out: string[] = [];
+  const diff = (label: string, a: unknown, b: unknown, show: (v: unknown) => string) => {
+    if ((a ?? null) !== (b ?? null)) out.push(`${label} ${show(a)} → ${show(b)}`);
+  };
+  diff('State', before.state, after.state, (v) => worded(STATE_WORD, v));
+  diff('Decision', before.decision, after.decision, (v) => worded(DECISION_WORD, v, 'Not decided'));
+  for (const [k, label] of MARKET_PARTS) {
+    diff(`${label} score`, before[`${k}_score`], after[`${k}_score`], (v) => (v == null ? NOT_SET : String(v)));
+    diff(`${label} source`, before[`${k}_source`], after[`${k}_source`], (v) => (v == null || v === '' ? NOT_SET : clip(String(v))));
+  }
+  diff('Country', before.geography_ref, after.geography_ref, (v) => (v == null || v === '' ? NOT_SET : String(v)));
+  if ((before.size_cents ?? null) !== (after.size_cents ?? null) || (before.size_currency ?? null) !== (after.size_currency ?? null)) {
+    out.push(`Size ${money(before.size_cents, before.size_currency)} → ${money(after.size_cents, after.size_currency)}`);
+  }
+  diff('Size source', before.size_source, after.size_source, (v) => (v == null || v === '' ? NOT_SET : clip(String(v))));
+  return out;
+}
+
+export function marketUpdatedSummary(changes: string[], cap = 500): string {
+  if (!changes.length) return 'Market updated: no field changed';
+  let line = 'Market updated: ';
+  for (let i = 0; i < changes.length; i++) {
+    const next = `${i ? '; ' : ''}${changes[i]}`;
+    const tail = changes.length - i - 1 > 0 ? `; and ${changes.length - i - 1} more` : '';
+    if (line.length + next.length + tail.length > cap) return i ? `${line}; and ${changes.length - i} more` : `${line}${clip(changes[0], cap - line.length)}`;
+    line += next;
+  }
+  return line;
+}
+
+// ── Eadwyn's proposals on a market (D8251, GR-24) ───────────────────────────
+
+export const PROPOSAL_KINDS = ['score', 'plan', 'comparison'] as const;
+type Source = { label: string; url: string | null };
+
+function proposalSources(raw: unknown, required: boolean): Source[] {
+  const list = raw == null ? [] : Array.isArray(raw) ? raw : null;
+  if (!list || list.length > 10) throw new Refused(400, 'Sources are a list of up to 10', 'sources');
+  const out: Source[] = list.map((x: any) => {
+    const label = str(x?.label, 120);
+    const url = x?.url == null || x.url === '' ? null : String(x.url).slice(0, 500);
+    if (!label || (url && !/^https:\/\/[^\s]+$/.test(url))) throw new Refused(400, 'A source has a label and, if it links, an https address', 'sources');
+    return { label, url };
+  });
+  if (required && !out.length) throw new Refused(400, 'A proposed score names its source', 'sources');
+  return out;
+}
+
+/** The proposal's payload, validated by its kind; nothing outside the kind's own keys is kept. */
+function proposalPayload(kind: string, raw: unknown): Record<string, unknown> {
+  const p = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  if (kind === 'score') {
+    const part = MARKET_PARTS.find(([k]) => k === p.part)?.[0];
+    if (!part) throw new Refused(400, 'A proposed score is for one of the four parts', 'part');
+    const value = score(p.score, 'score');
+    if (value == null) throw new Refused(400, 'A proposed score is a whole number from 0 to 10', 'score');
+    return { part, score: value };
+  }
+  if (kind === 'plan') {
+    const steps = Array.isArray(p.steps) ? p.steps : [];
+    if (!steps.length || steps.length > 12) throw new Refused(400, 'A drafted plan has 1 to 12 steps', 'steps');
+    return { steps: steps.map((x: any) => {
+      const text = str(x?.text, 300);
+      if (!text) throw new Refused(400, 'A step says what is to be done', 'steps');
+      return { text, due_on: x?.due_on == null || x.due_on === '' ? null : day(x.due_on, 'due_on') };
+    }) };
+  }
+  if (kind === 'comparison') {
+    const text = str(p.text, 2000);
+    if (!text) throw new Refused(400, 'A comparison is written out', 'text');
+    return { text };
+  }
+  throw new Refused(400, 'A proposal is a score, a plan or a comparison', 'kind');
+}
+
+/**
+ * What Eadwyn's run calls to leave a proposal on a market. It is not a route: nothing a founder does creates one.
+ * Nothing here touches the market's own fields; only `decideMarketProposal` with an accept does, through the Edit path.
+ */
+export async function recordMarketProposal(env: Env, pid: number, marketUid: string, input: { kind: unknown; payload: unknown; sources?: unknown }): Promise<{ uid: string }> {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const kind = oneOf(input.kind, PROPOSAL_KINDS, 'kind', true) as string;
+  const payload = proposalPayload(kind, input.payload);
+  const sources = proposalSources(input.sources, kind === 'score');
+  const uid = newUid();
+  await env.DB.prepare('INSERT INTO market_proposals (uid, market_id, kind, payload, sources) VALUES (?, ?, ?, ?, ?)')
+    .bind(uid, m.id, kind, JSON.stringify(payload), JSON.stringify(sources)).run();
+  return { uid };
+}
+
+/**
+ * The founder's decision on one proposal of this market. It is decided once: a second decision is a 409 and writes
+ * nothing. Accept writes through the existing market paths (`updateMarket` for a score, `addEntryStep` for each step
+ * of a plan; a comparison has nothing to write and is only marked read); Dismiss writes nothing. A failed write
+ * puts the proposal back, so Accept can be tried again.
+ */
+export async function decideMarketProposal(env: Env, pid: number, user: User, marketUid: string, proposalUid: unknown, decision: 'accept' | 'dismiss'): Promise<{ uid: string; state: string }> {
+  const uid = str(proposalUid, 64);
+  if (!uid) throw new Refused(400, 'Say which proposal', 'proposal');
+  const p = await env.DB.prepare(
+    `SELECT p.id, p.kind, p.payload, p.sources, p.state FROM market_proposals p JOIN markets m ON m.id = p.market_id
+      WHERE p.uid = ? AND m.uid = ? AND m.project_id = ?`,
+  ).bind(uid, marketUid, pid).first<{ id: number; kind: string; payload: string; sources: string; state: string }>();
+  if (!p) throw new Refused(404, 'Not found');
+  const next = decision === 'accept' ? 'accepted' : 'dismissed';
+  const claimed = await env.DB.prepare(`UPDATE market_proposals SET state = ?, decided_by = ?, decided_at = ? WHERE id = ? AND state = 'proposed'`)
+    .bind(next, user.id, nowIso(), p.id).run();
+  if (!changed(claimed)) throw new Refused(409, 'This proposal was already decided');
+  if (decision === 'accept') {
+    try {
+      const payload = JSON.parse(p.payload) as any;
+      if (p.kind === 'score') {
+        const sources = JSON.parse(p.sources) as Source[];
+        await updateMarket(env, pid, user, marketUid, { [`${payload.part}_score`]: payload.score, [`${payload.part}_source`]: sources.map((s) => s.label).join('; ').slice(0, 200) });
+      } else if (p.kind === 'plan') {
+        for (const step of payload.steps) await addEntryStep(env, pid, user, marketUid, { text: step.text, due_on: step.due_on });
+      }
+    } catch (e) {
+      await env.DB.prepare(`UPDATE market_proposals SET state = 'proposed', decided_by = NULL, decided_at = NULL WHERE id = ?`).bind(p.id).run();
+      throw e;
+    }
+  }
+  return { uid, state: next };
+}
+
+// ── Durable company-building ────────────────────────────────────────────────
+
+export const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
+export const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
+// D6872 (#6872, owner answer B): compliance and other are stored as two event types, so one of each can fall on the
+// same day (UNIQUE(project_id, event_type, due_date)) and each reads back its own kind.
+const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'compliance', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
+/** Repeats, as the form says it, to `compliance_events.recurrence` (decision 1). */
+export const REPEATS = { once: 'one_time', monthly: 'monthly', quarterly: 'quarterly', yearly: 'annual' } as const;
+export const REPEATS_OF: Record<string, keyof typeof REPEATS> = { one_time: 'once', monthly: 'monthly', quarterly: 'quarterly', annual: 'yearly' };
+
+export function obligationKind(event: Row): string {
+  if (event.kind) return String(event.kind);
+  if (event.event_type === 'board_meeting') return 'governance';
+  if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
+  // D6872: a kind-less `compliance` or `other` row (Calendar, or older than D6872) reads as compliance, as before.
+  return 'compliance';
+}
+
+export function obligationState(completion: unknown, kind: string, due: string, today: string): string {
+  if (completion === 'completed') return 'done';
+  if (completion === 'snoozed') return 'snoozed';
+  if (due < today) return 'overdue';
+  return kind === 'governance' ? 'scheduled' : 'upcoming';
+}
+
+function obligationCompletion(state: unknown): string {
+  return state === 'done' ? 'completed' : state === 'snoozed' ? 'snoozed' : 'pending';
+}
+
+function obligationDue(value: unknown): string {
+  const due = str(value, 10);
+  if (!due) throw new Refused(400, 'An obligation has a due date.', 'due_at');
+  if (!DATE.test(due)) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
+  return due;
+}
+
+function obligationClash(error: unknown, kind: string, due: string): never {
+  if (isUnique(error)) throw new Refused(409, `Another ${kind} obligation is already due on ${due}. Pick another date.`, 'due_at');
+  throw error;
+}
+
+/** Remind: whole days before the due date, 0 to 90, at most three, stored as a JSON array. */
+function remindDays(v: unknown): string | null {
+  if (v == null) return null;
+  if (!Array.isArray(v) || v.length > 3) throw new Refused(400, 'remind_days is at most three whole numbers of days', 'remind_days');
+  const days = v.map((d) => Number(d));
+  if (days.some((d) => !Number.isInteger(d) || d < 0 || d > 90)) throw new Refused(400, 'Each reminder is a whole number of days from 0 to 90', 'remind_days');
+  const unique = [...new Set(days)].sort((a, b) => b - a);
+  return unique.length ? JSON.stringify(unique) : null;
+}
+
+/** D6790: an obligation's owner is picked from the company team; '' or null names nobody. */
+async function obligationOwner(env: Env, pid: number, value: unknown): Promise<number | null> {
+  if (value == null || value === '') return null;
+  const id = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0 || !(await onCompanyTeam(env, pid, id))) {
+    throw new Refused(400, 'Choose someone on the company team', 'owner_user_id');
+  }
+  return id;
+}
+
+/** `source` is `manual` for a typed obligation; D1095's Calendar proposal writes `google_calendar`. */
+export async function addObligation(env: Env, pid: number, user: User, b: Body, source: 'manual' | 'google_calendar' = 'manual'): Promise<{ id: number }> {
+  const title = str(b.title, 200);
+  if (!title) throw new Refused(400, 'An obligation has a title', 'title');
+  const due = obligationDue(b.due_at);
+  const kind = oneOf(b.kind, OBLIGATION_KINDS, 'kind', true)!;
+  const repeats = oneOf(b.repeats, Object.keys(REPEATS) as Array<keyof typeof REPEATS>, 'repeats') ?? 'once';
+  const remind = remindDays(b.remind_days);
+  const completion = obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status'));
+  // D6790: a picked team member is the owner; the typed name is kept only for callers that still send one.
+  const ownerId = await obligationOwner(env, pid, b.owner_user_id);
+  const entity = await env.DB.prepare(
+    'SELECT e.id, e.jurisdiction FROM projects p JOIN entities e ON e.id = p.entity_id WHERE p.id = ?',
+  ).bind(pid).first<{ id: number; jurisdiction: string | null }>();
+  let id: number;
+  try {
+    const ins = await env.DB.prepare(
+      `INSERT INTO compliance_events (project_id, entity_id, jurisdiction, event_type, title, due_date,
+        completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
+        completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
+      completion, REPEATS[repeats], source, kind, ownerId == null ? str(b.owner_name, 120) : null, ownerId, user.id, user.id,
+      completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null, remind).run();
+    id = ins.meta.last_row_id;
+  } catch (error) { obligationClash(error, kind, due); }
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: id, action: 'grow_obligation_added', summary: 'Obligation added' });
+  return { id };
+}
+
+export async function updateObligation(env: Env, pid: number, user: User, id: number, b: Body): Promise<{ id: number }> {
+  const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; owner_user_id: number | null; due_date: string; title: string;
+    completed_at: string | null; completed_by_user_id: number | null; reminders_sent_json: string; recurrence: string; remind_days_json: string | null }>(env,
+    `SELECT id, title, kind, event_type, completion_status, owner_name, owner_user_id, due_date, completed_at, completed_by_user_id, reminders_sent_json,
+            recurrence, remind_days_json FROM compliance_events WHERE id = ? AND project_id = ?`, id, pid);
+  const due = b.due_at === undefined ? row.due_date : obligationDue(b.due_at);
+  const completion = b.status === undefined ? row.completion_status : obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status', true));
+  const completedAt = b.status === undefined ? row.completed_at : completion === 'completed' ? nowIso() : null;
+  const completedBy = b.status === undefined ? row.completed_by_user_id : completion === 'completed' ? user.id : null;
+  let title = row.title;
+  if (has(b, 'title')) { title = str(b.title, 200) ?? ''; if (!title) throw new Refused(400, 'An obligation has a title', 'title'); }
+  const kind = has(b, 'kind') ? oneOf(b.kind, OBLIGATION_KINDS, 'kind', true)! : null;
+  const recurrence = has(b, 'repeats') ? REPEATS[oneOf(b.repeats, Object.keys(REPEATS) as Array<keyof typeof REPEATS>, 'repeats', true)!] : row.recurrence;
+  const remind = has(b, 'remind_days') ? remindDays(b.remind_days) : row.remind_days_json;
+  // D6790: picking a team member replaces a typed name; picking nobody keeps a name typed before #6790.
+  const ownerId = has(b, 'owner_user_id') ? await obligationOwner(env, pid, b.owner_user_id) : row.owner_user_id;
+  const ownerName = has(b, 'owner_user_id') ? (ownerId == null ? row.owner_name : null)
+    : b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120);
+  try {
+    await env.DB.prepare(
+      `UPDATE compliance_events SET title = ?, kind = ?, event_type = ?, completion_status = ?, owner_name = ?, owner_user_id = ?, due_date = ?, completed_at = ?,
+        completed_by_user_id = ?, reminders_sent_json = ?, recurrence = ?, remind_days_json = ?, updated_at = ? WHERE id = ?`,
+    ).bind(title, kind ?? row.kind ?? null, kind ? OBLIGATION_EVENTS[kind] : row.event_type, completion,
+      ownerName, ownerId, due, completedAt, completedBy,
+      due !== row.due_date || remind !== row.remind_days_json ? '[]' : row.reminders_sent_json, recurrence, remind, nowIso(), row.id).run();
+  } catch (error) { obligationClash(error, kind ?? obligationKind(row), due); }
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_updated', summary: 'Obligation updated' });
+  return { id: row.id };
+}
+
+// ── Remove (D6115) ──────────────────────────────────────────────────────────
+// A record added by mistake is deleted outright, never hidden (D6115): no
+// reader filters a deleted flag. One that holds history is refused with what
+// to do instead; the check is inside the DELETE itself, so a row that gains
+// history while it runs is never taken. A connector's ledger row is unlinked
+// and kept, so the connector does not land it again. The activity row is
+// written after the delete and outlives the record.
+
+export const PARTNER_KEPT = 'This partner has revenue or deals recorded, so it stays as history. Set its stage to Ended instead.';
+export const OBLIGATION_KEPT = 'This obligation has been held, so its past meetings stay as history. Mark it done instead.';
+
+/** Kept: revenue, a deal, or Mercury payments accepted onto it. */
+const PARTNER_DELETE_SQL = `DELETE FROM growth_partners WHERE id = ? AND project_id = ?
+  AND NOT EXISTS (SELECT 1 FROM partner_revenue WHERE partner_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM growth_partner_deals WHERE partner_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM mercury_partner_proposals WHERE growth_partner_id = ? AND project_id = ? AND state = 'accepted')`;
+/** Kept: a held occurrence. */
+const OBLIGATION_DELETE_SQL = `DELETE FROM compliance_events WHERE id = ? AND project_id = ?
+  AND NOT EXISTS (SELECT 1 FROM obligation_occurrences WHERE event_id = ?)`;
+
+const changed = (r: { meta?: { changes?: number } } | undefined) => Number(r?.meta?.changes ?? 0) > 0;
+
+export async function removePartner(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; removed: true }> {
+  const row = await owned<{ id: number; name: string }>(env, 'SELECT id, name FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(PARTNER_DELETE_SQL).bind(row.id, pid, row.id, row.id, row.id, pid),
+    env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'growth_partners' AND local_id = ?
+       AND NOT EXISTS (SELECT 1 FROM growth_partners WHERE id = ?)`).bind(pid, row.id, row.id),
+  ]);
+  // The row is the venture's (`owned`), so a delete that took nothing found its history.
+  if (!changed(del)) throw new Refused(409, PARTNER_KEPT);
+  await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_removed', summary: `Partner removed: ${row.name}` });
+  return { uid, removed: true };
+}
+
+/**
+ * A market holds plans and judgements only, so it is always removable; its entry
+ * steps and localisation go with it (`ON DELETE CASCADE`, which D1 enforces).
+ */
+export async function removeMarket(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; removed: true }> {
+  const row = await owned<{ id: number; name: string }>(env, 'SELECT id, name FROM markets WHERE uid = ? AND project_id = ?', uid, pid);
+  const del = await env.DB.prepare('DELETE FROM markets WHERE id = ? AND project_id = ?').bind(row.id, pid).run();
+  if (!changed(del)) throw new Refused(404, 'Not found');
+  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_removed', summary: `Market removed: ${row.name}` });
+  return { uid, removed: true };
+}
+
+/**
+ * The one obligation delete: Grow's Remove and `DELETE /api/compliance/events/:id`
+ * both run it, each after its own write gate. A held obligation is refused; its
+ * agenda items go with it (they are its plan, not its record; `ON DELETE CASCADE`).
+ */
+export async function removeObligation(env: Env, pid: number, user: Pick<User, 'id'>, id: number): Promise<{ id: number; removed: true }> {
+  if (!Number.isSafeInteger(id) || id < 1) throw new Refused(404, 'Not found');
+  const row = await owned<{ id: number; title: string }>(env, 'SELECT id, title FROM compliance_events WHERE id = ? AND project_id = ?', id, pid);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(OBLIGATION_DELETE_SQL).bind(row.id, pid, row.id),
+    env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'compliance_events' AND local_id = ?
+       AND NOT EXISTS (SELECT 1 FROM compliance_events WHERE id = ?)`).bind(pid, row.id, row.id),
+  ]);
+  if (!changed(del)) throw new Refused(409, OBLIGATION_KEPT);
+  await logGrowWrite(env, pid, Number(user.id), { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_removed',
+    summary: `Obligation removed: ${row.title}` });
+  return { id: row.id, removed: true };
+}
+
+export async function setChecklistItem(env: Env, pid: number, user: User, key: string, done: boolean) {
+  // D6789: a tick by hand says the item applies, so it clears a Not applicable mark.
+  await env.DB.prepare(
+    `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at,
+       not_applicable_at = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_at END,
+       not_applicable_by = CASE WHEN excluded.done_at IS NOT NULL THEN NULL ELSE durability_checklist.not_applicable_by END`,
+  ).bind(pid, key, done ? nowIso() : null, done ? user.id : null, nowIso()).run();
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key, action: done ? 'grow_checklist_done' : 'grow_checklist_undone',
+    summary: done ? 'Checklist item ticked' : 'Checklist item unticked' });
+  return { key, done };
+}
+
+/**
+ * D6789 (#6789): mark a durability checklist item Not applicable, or clear the mark. The mark records who and
+ * when, clears a tick by hand, and takes the item out of the score. The route refuses an item the Spin-Out Lab
+ * ticked: the Lab says it applies.
+ */
+export async function setChecklistNotApplicable(env: Env, pid: number, user: User, key: string, notApplicable: boolean) {
+  const at = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, not_applicable_at, not_applicable_by, updated_at) VALUES (?, ?, NULL, NULL, ?, ?, ?)
+     ON CONFLICT(project_id, item_key) DO UPDATE SET not_applicable_at = excluded.not_applicable_at, not_applicable_by = excluded.not_applicable_by,
+       done_at = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_at END,
+       done_by = CASE WHEN excluded.not_applicable_at IS NOT NULL THEN NULL ELSE durability_checklist.done_by END,
+       updated_at = excluded.updated_at`,
+  ).bind(pid, key, notApplicable ? at : null, notApplicable ? user.id : null, at).run();
+  await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key,
+    action: notApplicable ? 'grow_checklist_not_applicable' : 'grow_checklist_applies',
+    summary: notApplicable ? 'Checklist item marked not applicable' : 'Checklist item applies again' });
+  return { key, not_applicable: notApplicable };
+}
+
+// ── The records' actions (#1698) ────────────────────────────────────────────
+// Each action on a Grow record (`services/records/grow.ts`) runs one of these,
+// or the PATCH writer above, so a record and a route write a row one way.
+
+export const TOLD_VIA = ['email', 'call', 'message', 'in_person'] as const;
+
+/**
+ * Mark told (decision 5): the founder told the customer themselves. Records how
+ * and when, and hands back a `mailto:` draft for their own mail client when the
+ * feedback carries an address; the platform never emails a venture's customer.
+ */
+export async function markFeedbackTold(env: Env, pid: number, user: User, uid: string, b: Body) {
+  const row = await owned<{ id: number; body: string; from_name: string | null; from_email: string | null; roadmap_item_label: string | null;
+    notify_on_ship: number; status: string }>(env,
+    'SELECT id, body, from_name, from_email, roadmap_item_label, notify_on_ship, status FROM product_feedback WHERE uid = ? AND project_id = ?', uid, pid);
+  if (Number(row.notify_on_ship) !== 1) throw new Refused(400, 'Nobody asked to be told about this feedback', 'via');
+  if (row.status !== 'shipped') throw new Refused(400, 'Mark it told once it has shipped', 'via');
+  const via = oneOf(b.via, TOLD_VIA, 'via', true)!;
+  const at = nowIso();
+  await env.DB.prepare('UPDATE product_feedback SET told_at = ?, told_via = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+    .bind(at, via, user.id, at, row.id).run();
+  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_told', summary: `Customer told it shipped (${via.replace('_', ' ')})` });
+  const what = row.roadmap_item_label ? `"${row.roadmap_item_label}"` : 'what you asked for';
+  const mailto = row.from_email
+    ? `mailto:${encodeURIComponent(row.from_email)}?subject=${encodeURIComponent('It shipped')}&body=${encodeURIComponent(
+      `Hi${row.from_name ? ` ${row.from_name}` : ''},\n\nYou told us: "${String(row.body).slice(0, 300)}"\n\n${what} has shipped. Thank you for asking for it.\n`)}`
+    : null;
+  return { uid, told_at: at, told_via: via, mailto };
+}
+
+export async function addExperiment(env: Env, pid: number, user: User, channelUid: string, b: Body) {
+  const ch = await owned<{ id: number }>(env, 'SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?', channelUid, pid);
+  const title = str(b.title, 200);
+  if (!title) throw new Refused(400, 'An experiment has a title', 'title');
+  const cac = centsOrNull(b.cac_cents, 'cac_cents');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO channel_experiments (uid, channel_id, title, run_on, cac_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, ch.id, title, day(b.run_on, 'run_on'), cac, currencyFor(cac, b.currency, 'currency'), user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: channelUid, action: 'grow_experiment_added', summary: 'Experiment added' })),
+  ]);
+  return { uid: id };
+}
+
+export const ALERT_MEASURES = ['value', 'change_30d_pct'] as const;
+export const ALERT_OPS = ['below', 'above'] as const;
+
+/** Set an alert: a threshold for a count or a percentage, or whole cents for money; never both. */
+export async function setKpiAlert(env: Env, pid: number, user: User, kpi: string, b: Body) {
+  const measure = oneOf(b.measure, ALERT_MEASURES, 'measure') ?? 'value';
+  const op = oneOf(b.op, ALERT_OPS, 'op', true)!;
+  const hasThreshold = b.threshold != null && b.threshold !== '';
+  const hasCents = b.threshold_cents != null && b.threshold_cents !== '';
+  if (hasThreshold === hasCents) throw new Refused(400, 'An alert has one threshold: a number, or an amount in cents', 'threshold');
+  let threshold: number | null = null;
+  if (hasThreshold) {
+    threshold = typeof b.threshold === 'object' || typeof b.threshold === 'boolean' ? NaN : Number(b.threshold);
+    if (!Number.isFinite(threshold)) throw new Refused(400, 'threshold is a number', 'threshold');
+  }
+  const cents = hasCents ? centsOrNull(b.threshold_cents, 'threshold_cents') : null;
+  if (cents != null && measure !== 'value') throw new Refused(400, 'A change is a percentage, not an amount', 'threshold_cents');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO kpi_alerts (uid, project_id, kpi_key, measure, op, threshold, threshold_cents, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, pid, kpi, measure, op, threshold, cents, user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'revenue-and-traction', entityId: kpi, action: 'grow_alert_set', summary: 'Alert set' })),
+  ]);
+  return { uid: id, kpi };
+}
+
+export async function addPartnerDeal(env: Env, pid: number, user: User, partnerUid: string, b: Body) {
+  const p = await owned<{ id: number }>(env, 'SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?', partnerUid, pid);
+  const customer = str(b.customer, 200);
+  if (!customer) throw new Refused(400, 'A deal names its customer', 'customer');
+  const amount = centsOrNull(b.amount_cents, 'amount_cents');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO growth_partner_deals (uid, partner_id, customer, closed_on, amount_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, p.id, customer, day(b.closed_on, 'closed_on'), amount, currencyFor(amount, b.currency, 'currency'), user.id),
+    // The partner's record; the customer is never named in activity.
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_added', summary: 'Deal added' })),
+  ]);
+  return { uid: id };
+}
+
+/**
+ * D6114 (#6114): a deal of this partner, by its uid. The deal's partner must be
+ * the partner named and that partner the venture's, so a deal of another
+ * partner, or of another venture's, is a 404 before anything is written.
+ */
+async function partnerDeal(env: Env, pid: number, partnerUid: string, dealUid: unknown) {
+  if (typeof dealUid !== 'string' || !dealUid) throw new Refused(404, 'Not found', 'deal');
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.customer, d.closed_on, d.amount_cents, d.currency FROM growth_partner_deals d JOIN growth_partners p ON p.id = d.partner_id
+      WHERE d.uid = ? AND p.uid = ? AND p.project_id = ?`,
+  ).bind(dealUid, partnerUid, pid).first<{ id: number; customer: string; closed_on: string | null; amount_cents: number | null; currency: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'deal');
+  return row;
+}
+
+/**
+ * D6114 (#6114): a deal's edit. Only the keys the body sends change; an amount
+ * keeps its currency unless the body names another, and an amount cleared
+ * clears its currency. Logged on the partner; the customer is never named.
+ */
+export async function updatePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown, b: Body) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  let customer = d.customer;
+  if (has(b, 'customer')) { customer = str(b.customer, 200) ?? ''; if (!customer) throw new Refused(400, 'A deal names its customer', 'customer'); }
+  const closed = has(b, 'closed_on') ? day(b.closed_on, 'closed_on') : d.closed_on;
+  const amount = has(b, 'amount_cents') ? centsOrNull(b.amount_cents, 'amount_cents') : d.amount_cents;
+  const currency = currencyFor(amount, has(b, 'currency') ? b.currency : d.currency, 'currency');
+  await env.DB.batch([
+    env.DB.prepare("UPDATE growth_partner_deals SET customer = ?, closed_on = ?, amount_cents = ?, currency = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(customer, closed, amount, currency, d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_updated', summary: 'Deal updated' })),
+  ]);
+  return { uid: String(dealUid) };
+}
+
+/** D6114 (#6114): removes a deal of this partner, logged on the partner without the customer. */
+export async function removePartnerDeal(env: Env, pid: number, user: User, partnerUid: string, dealUid: unknown) {
+  const d = await partnerDeal(env, pid, partnerUid, dealUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM growth_partner_deals WHERE id = ?').bind(d.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_removed', summary: 'Deal removed' })),
+  ]);
+  return { uid: String(dealUid), deleted: true as const };
+}
+
+export async function addEntryStep(env: Env, pid: number, user: User, marketUid: string, b: Body) {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const text = str(b.text, 300);
+  if (!text) throw new Refused(400, 'A step says what is to be done', 'text');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO market_entry_steps (uid, market_id, text, owner_name, due_on) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, m.id, text, str(b.owner_name, 120), day(b.due_on, 'due_on')),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_added', summary: 'Entry step added' })),
+  ]);
+  return { uid: id };
+}
+
+/**
+ * D6113 (#6113): a step of this market, by its uid. The step's market must be
+ * the market named and that market the venture's, so a step of another
+ * market, or of another venture's, is a 404 before anything is written.
+ */
+async function entryStep(env: Env, pid: number, marketUid: string, stepUid: unknown) {
+  if (typeof stepUid !== 'string' || !stepUid) throw new Refused(404, 'Not found', 'step');
+  const row = await env.DB.prepare(
+    `SELECT s.id, s.text, s.owner_name, s.due_on, s.done_at FROM market_entry_steps s JOIN markets m ON m.id = s.market_id
+      WHERE s.uid = ? AND m.uid = ? AND m.project_id = ?`,
+  ).bind(stepUid, marketUid, pid).first<{ id: number; text: string; owner_name: string | null; due_on: string | null; done_at: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'step');
+  return row;
+}
+
+/**
+ * D6113 (#6113): a step's edit. Only the keys the body sends change; `done`
+ * marks the step done (keeping the day it was first done) or reopens it. One
+ * activity row on the market, named for what changed; never the step's text.
+ */
+export async function updateEntryStep(env: Env, pid: number, user: User, marketUid: string, stepUid: unknown, b: Body) {
+  const s = await entryStep(env, pid, marketUid, stepUid);
+  let text = s.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'A step says what is to be done', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : s.owner_name;
+  const due = has(b, 'due_on') ? day(b.due_on, 'due_on') : s.due_on;
+  const done = has(b, 'done') ? switchOf(b.done === 'true' ? 1 : b.done === 'false' ? 0 : b.done, 'done') : null;
+  const doneAt = done == null ? s.done_at : done === 1 ? s.done_at ?? nowIso() : null;
+  const edited = has(b, 'text') || has(b, 'owner_name') || has(b, 'due_on');
+  const [action, summary] = !edited && done === 1 ? ['grow_entry_step_done', 'Entry step done']
+    : !edited && done === 0 ? ['grow_entry_step_reopened', 'Entry step reopened']
+      : ['grow_entry_step_updated', 'Entry step updated'];
+  await env.DB.batch([
+    env.DB.prepare("UPDATE market_entry_steps SET text = ?, owner_name = ?, due_on = ?, done_at = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(text, owner, due, doneAt, s.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action, summary })),
+  ]);
+  return { uid: String(stepUid), done: doneAt != null };
+}
+
+/** D6113 (#6113): removes a step of this market, logged on the market. */
+export async function removeEntryStep(env: Env, pid: number, user: User, marketUid: string, stepUid: unknown) {
+  const s = await entryStep(env, pid, marketUid, stepUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM market_entry_steps WHERE id = ?').bind(s.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_removed', summary: 'Entry step removed' })),
+  ]);
+  return { uid: String(stepUid), deleted: true as const };
+}
+
+export const LOCALISATION_KEYS = ['language', 'payments', 'legal_entity'] as const;
+
+export async function setLocalisation(env: Env, pid: number, user: User, marketUid: string, b: Body) {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const key = oneOf(b.key, LOCALISATION_KEYS, 'key', true)!;
+  const done = b.done === true || b.done === 1 || b.done === '1' || b.done === 'true';
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO market_localisation (uid, market_id, key, done_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(market_id, key) DO UPDATE SET done_at = excluded.done_at, updated_at = datetime('now')`,
+    ).bind(newUid(), m.id, key, done ? nowIso() : null),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_localisation_checked',
+      summary: `${key.replace('_', ' ')} ${done ? 'done' : 'reopened'}` })),
+  ]);
+  return { key, done };
+}
+
+export async function addAgendaItem(env: Env, pid: number, user: User, eventId: number, b: Body) {
+  const e = await owned<{ id: number }>(env, 'SELECT id FROM compliance_events WHERE id = ? AND project_id = ?', eventId, pid);
+  const text = str(b.text, 300);
+  if (!text) throw new Refused(400, 'An agenda item says what is discussed', 'text');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO obligation_agenda_items (uid, event_id, text, owner_name) VALUES (?, ?, ?, ?)').bind(id, e.id, text, str(b.owner_name, 120)),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: e.id, action: 'grow_agenda_added', summary: 'Agenda item added' })),
+  ]);
+  return { uid: id };
+}
+
+/**
+ * D6114 (#6114): an agenda item of this obligation, by its uid. The item's
+ * obligation must be the one named and that obligation the venture's, so an
+ * item of another obligation, or of another venture's, is a 404.
+ */
+async function agendaItem(env: Env, pid: number, eventId: number, itemUid: unknown) {
+  if (typeof itemUid !== 'string' || !itemUid || !Number.isSafeInteger(eventId)) throw new Refused(404, 'Not found', 'item');
+  const row = await env.DB.prepare(
+    `SELECT a.id, a.text, a.owner_name FROM obligation_agenda_items a JOIN compliance_events e ON e.id = a.event_id
+      WHERE a.uid = ? AND e.id = ? AND e.project_id = ?`,
+  ).bind(itemUid, eventId, pid).first<{ id: number; text: string; owner_name: string | null }>();
+  if (!row) throw new Refused(404, 'Not found', 'item');
+  return row;
+}
+
+/** D6114 (#6114): an agenda item's edit; only the sent keys change. Logged on the obligation, never the item's text. */
+export async function updateAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown, b: Body) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  let text = a.text;
+  if (has(b, 'text')) { text = str(b.text, 300) ?? ''; if (!text) throw new Refused(400, 'An agenda item says what is discussed', 'text'); }
+  const owner = has(b, 'owner_name') ? str(b.owner_name, 120) : a.owner_name;
+  await env.DB.batch([
+    env.DB.prepare("UPDATE obligation_agenda_items SET text = ?, owner_name = ?, updated_at = datetime('now') WHERE id = ?").bind(text, owner, a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_updated', summary: 'Agenda item updated' })),
+  ]);
+  return { uid: String(itemUid) };
+}
+
+/** D6114 (#6114): removes an agenda item of this obligation, logged on the obligation. */
+export async function removeAgendaItem(env: Env, pid: number, user: User, eventId: number, itemUid: unknown) {
+  const a = await agendaItem(env, pid, eventId, itemUid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM obligation_agenda_items WHERE id = ?').bind(a.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: eventId, action: 'grow_agenda_removed', summary: 'Agenda item removed' })),
+  ]);
+  return { uid: String(itemUid), deleted: true as const };
+}
+
+/** The month length each repeat moves an obligation by (decision 2); a one-time obligation is completed instead. */
+const REPEAT_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, annual: 12 };
+
+/** `YYYY-MM-DD` moved by whole calendar months, clamped to the target month's last day. */
+export function addCalendarMonths(date: string, months: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return target.toISOString().slice(0, 10);
+}
+
+/** Minutes: a PDF or a DOCX, 20 MB at most, under a key the server makes and that carries no file name. */
+const MINUTES_TYPES: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+};
+export const MINUTES_MAX_BYTES = 20 * 1024 * 1024;
+export const minutesPrefix = (pid: number) => `grow-minutes/${pid}/`;
+
+/**
+ * Mark held (decision 2): an occurrence (date, notes, optional minutes) and the
+ * same obligation moved to its next due date, so its id, agenda and past
+ * meetings stay on one record; the reminders it sent are reset. A one-time
+ * obligation is completed instead. A clash with another obligation of the
+ * same kind on the new date answers 409 and writes nothing.
+ */
+/** D6788: plain-text lines in the form, or explicit text/passed_on entries in JSON; never truncate a resolution. */
+export function boardResolutions(raw: unknown, heldOn: string, passedOn: unknown = undefined): Array<{ text: string; passed_on: string }> {
+  if (raw == null || raw === '') return [];
+  const entries = typeof raw === 'string' ? raw.replace(/\r\n?/g, '\n').split('\n').map(text => text.trim()).filter(Boolean) : raw;
+  if (!Array.isArray(entries) || entries.length > 20) throw new Refused(400, 'Record up to 20 resolutions, one per line.', 'resolutions');
+  const defaultDate = day(passedOn, 'resolutions_passed_on') ?? heldOn;
+  return entries.map(entry => {
+    const item = typeof entry === 'string' ? { text: entry, passed_on: defaultDate } : entry;
+    if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.text !== 'string' || !item.text.trim() || item.text.trim().length > 2000) {
+      throw new Refused(400, 'Each resolution is 1 to 2000 characters of text.', 'resolutions');
+    }
+    return { text: item.text.trim(), passed_on: day(item.passed_on, 'resolutions_passed_on') ?? defaultDate };
+  });
+}
+
+export async function markHeld(env: Env, pid: number, user: User, eventId: number, b: Body & { minutes?: unknown }) {
+  const e = await owned<Row & { id: number; due_date: string; recurrence: string }>(env,
+    'SELECT id, kind, event_type, due_date, recurrence FROM compliance_events WHERE id = ? AND project_id = ?', eventId, pid);
+  const heldOn = day(b.held_on, 'held_on');
+  if (!heldOn) throw new Refused(400, 'When was it held?', 'held_on');
+  const resolutions = boardResolutions(b.resolutions, heldOn, b.resolutions_passed_on);
+  if (resolutions.length && e.event_type !== 'board_meeting') throw new Refused(400, 'Resolutions belong to a board meeting.', 'resolutions');
+  const citation = oneOf(b.cite_minutes, ['yes', 'no'] as const, 'cite_minutes') === 'yes';
+  const file = b.minutes && typeof b.minutes === 'object' && 'arrayBuffer' in (b.minutes as object) ? b.minutes as File : null;
+  if (citation && resolutions.length && !file) throw new Refused(400, 'Upload the minutes to cite them, or choose No.', 'cite_minutes');
+  let key: string | null = null;
+  let storage: StorageTicket | null = null;
+  if (file) {
+    if (!env.FILES) throw new Refused(503, 'File storage is not configured', 'minutes');
+    const ext = MINUTES_TYPES[String(file.type || '').toLowerCase()];
+    if (!ext) throw new Refused(415, 'Minutes are a PDF or a DOCX file', 'minutes');
+    if (file.size > MINUTES_MAX_BYTES) throw new Refused(413, 'Minutes are 20 MB at most', 'minutes');
+    key = `${minutesPrefix(pid)}${newUid()}.${ext}`;
+    // D1170 — Grow minutes count to the venture's owner (D1169 §1).
+    storage = await assertStorageRoom(env, { projectId: pid }, file.size, user);
+    // D6651: minutes are a record, written once under a fresh key.
+    await putRecordOrThrow(env.FILES, key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+  }
+  const months = REPEAT_MONTHS[e.recurrence];
+  const next = months ? addCalendarMonths(e.due_date, months) : e.due_date;
+  const at = nowIso();
+  const occurrence = newUid();
+  const statements = [
+    env.DB.prepare('INSERT INTO obligation_occurrences (uid, event_id, held_on, minutes_file_key, size_bytes, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(occurrence, e.id, heldOn, key, key ? file!.size : null, str(b.notes, 2000), user.id),
+    // D6788: occurrence, resolutions, schedule and activity commit in the same D1 transaction.
+    ...resolutions.map(resolution => env.DB.prepare(`INSERT INTO board_resolutions
+      (uid, event_id, occurrence_uid, held_on, text, passed_on, recorded_by, minutes_file_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(newUid(), e.id, occurrence, heldOn, resolution.text, resolution.passed_on, user.id, citation ? key : null)),
+    months
+      ? env.DB.prepare("UPDATE compliance_events SET due_date = ?, reminders_sent_json = '[]', updated_at = ? WHERE id = ?").bind(next, at, e.id)
+      : env.DB.prepare("UPDATE compliance_events SET completion_status = 'completed', completed_at = ?, completed_by_user_id = ?, updated_at = ? WHERE id = ?")
+        .bind(at, user.id, at, e.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: e.id, action: 'grow_obligation_held',
+      summary: months ? `Held on ${heldOn}; next due ${next}` : `Held on ${heldOn}; completed` })),
+  ];
+  try { await env.DB.batch(statements); } catch (error) {
+    // D6651: the batch is one transaction, so no row names the file this request just stored: it leaves
+    // through the one record-erasure path as `unreferenced`.
+    if (key && env.FILES) { try { await eraseRecordObjects(env.FILES, key, 'unreferenced', { db: env.DB }); } catch { /* the stored file is orphaned, never served */ } }
+    obligationClash(error, obligationKind(e), next);
+  }
+  if (storage) await noteStorageLanded(env, storage);
+  return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed', resolutions_recorded: resolutions.length };
+}
+
+/** Open minutes: one signed download, for a key under this venture's own prefix only; anything else is a 404. */
+export async function openMinutes(env: Env, pid: number, user: User, eventId: number, occurrenceId: number) {
+  const row = await env.DB.prepare(
+    `SELECT o.id, o.minutes_file_key FROM obligation_occurrences o JOIN compliance_events e ON e.id = o.event_id
+      WHERE o.id = ? AND o.event_id = ? AND e.project_id = ?`,
+  ).bind(occurrenceId, eventId, pid).first<{ id: number; minutes_file_key: string | null }>();
+  if (!row || !row.minutes_file_key || !row.minutes_file_key.startsWith(minutesPrefix(pid))) throw new Refused(404, 'Not found', 'occurrence');
+  const { token, expires_at } = await mintDownloadToken(env, {
+    key: row.minutes_file_key, audience: `grow-minutes:occurrence-${row.id}`, userId: user.id, ttlSec: 120,
+  });
+  return { open: { url: `/api/files/dl/${token}`, expires_at } };
+}

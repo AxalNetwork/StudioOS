@@ -1,0 +1,75 @@
+name: Migration immutability
+
+# A migration already on main is never edited, deleted or renamed (D269).
+# scripts/migration-immutability-gate.mjs holds the check; this file only
+# decides WHEN it runs and WHAT it compares against.
+#
+# WHY ITS OWN WORKFLOW AND NOT A ci.yml JOB. ci.yml cancels an in-progress run
+# on the same ref (`cancel-in-progress: true`). On main that means a push that
+# lands while the previous push is still being checked cancels the previous
+# run, and the previous push's commit range is then never checked by anything.
+# Six of the eight drifts D269 records arrived in ONE direct push (1563f0aa8),
+# which is exactly the run a cancellation would have skipped. So a push to
+# main is checked to completion here, one run per pushed commit; only pull
+# request runs, which are superseded by the next push to the same PR, cancel.
+#
+# WHY fetch-depth 0. The check is a three-dot diff from the merge base of the
+# base and HEAD. A depth-1 clone has no merge base, so the diff cannot be
+# made; the script fails rather than passes when that happens, but a gate that
+# can only fail is no more use than one that can only pass.
+#
+# WHY BLOBLESS (`filter: blob:none`, 2026-11-03). A full clone of every blob
+# in the history ran past this job's 10 minutes while busy (#4306, run
+# 41716929617: cancelled inside "Fetching the repository"), and a cancelled
+# gate is a red required check on a PR that touched nothing. The gate needs
+# commits and trees only: `ls-tree --name-only` and a `diff --name-status`
+# under the migrations folder; git fetches the few blobs rename detection
+# reads on demand. The same fix the lfs size gate in ci.yml carries.
+#
+# THE TWO MODES, and the event chooses between them:
+#   · pull_request — the base is the PR's base branch (GITHUB_BASE_REF).
+#   · push to main — the base is the commit main pointed at before the push
+#     (github.event.before). A push cannot be blocked, so what the job does
+#     there is turn main red the minute the edit lands, not at the next
+#     deploy's "checksum drift" warning.
+#   · merge_group (#4107) — `applied migrations unchanged` is a required check,
+#     so it runs on each merge queue entry too. The base is the main commit the
+#     queue built the entry on (github.event.merge_group.base_sha), so the diff
+#     is exactly what the queue would merge.
+#
+# Every value reaches the script through `env:`, never `${{ }}` inside `run:`,
+# so nothing a PR controls is ever parsed as shell.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-immutability-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: applied migrations unchanged
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: No migration on the base was edited, deleted or renamed
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          MIGRATION_GATE_BEFORE: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
+        run: node scripts/migration-immutability-gate.mjs

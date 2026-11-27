@@ -1,0 +1,166 @@
+name: Landing bot conflict resolver
+
+# #6475: a model resolves only a pull request's conflicted files, keeping both
+# sides; a separate job checks the resolution with main's code and pushes it.
+# Dispatched by the branch keeper (landing-bot-keeper.yml) with one PR number.
+# `plan` holds a read-only token and calls no model; `resolve` is the model
+# runner (#6473) in merge mode, with no GitHub write; `apply` holds the App
+# token and no model key, runs no PR code and pushes a normal merge commit,
+# never forced. Never main, never a merge, approval or queue entry: the owner
+# lands every model-resolved pull request.
+# scripts/landing-bot/README.md, "The conflict resolver", has the rules.
+
+run-name: Conflict resolver for #${{ inputs.pr }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The conflicted pull request to resolve
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: studioos-landing-bot-conflict-${{ inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Check the rules and stage the merge
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      (vars.LANDING_BOT_ENABLED == 'true' || vars.LANDING_BOT_ENABLED == 'dispatch')
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    outputs:
+      decision: ${{ steps.plan.outputs.decision }}
+      ref: ${{ steps.plan.outputs.ref }}
+      task: ${{ steps.plan.outputs.task }}
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_DAILY_MODEL_RUNS: ${{ vars.LANDING_BOT_DAILY_MODEL_RUNS }}
+      LANDING_BOT_DAILY_PUSHES: ${{ vars.LANDING_BOT_DAILY_PUSHES }}
+      LANDING_BOT_MAX_CONFLICT_FILES: ${{ vars.LANDING_BOT_MAX_CONFLICT_FILES }}
+      LANDING_BOT_MAX_CONFLICT_LINES: ${{ vars.LANDING_BOT_MAX_CONFLICT_LINES }}
+      RESOLVE_PR: ${{ inputs.pr }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # Only to learn the App's login, which counts the bot's own commits; this token reads metadata and nothing else.
+      - name: Read the landing bot's login
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-metadata: read
+      - name: Check every rule before any model call
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+        run: node scripts/landing-bot/resolve.mjs plan
+      - name: Keep the plan for the apply job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-conflict-plan
+          path: ${{ runner.temp }}/resolver/plan.json
+          if-no-files-found: error
+          retention-days: 7
+      # Today's model run and push, reserved before the model is called; the next run counts it.
+      - name: Reserve today's model run
+        if: steps.plan.outputs.decision == 'resolve'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.plan.outputs.reservation }}
+          path: ${{ runner.temp }}/resolver/plan.json
+          if-no-files-found: error
+          retention-days: 30
+
+  resolve:
+    name: Resolve with a model
+    needs: plan
+    if: needs.plan.outputs.decision == 'resolve'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/landing-bot-model.yml
+    with:
+      ref: ${{ needs.plan.outputs.ref }}
+      task: ${{ needs.plan.outputs.task }}
+
+  apply:
+    name: Check the resolution and push it
+    needs: [plan, resolve]
+    if: >-
+      always() && github.repository == 'AxalNetwork/StudioOS' &&
+      (needs.plan.outputs.decision == 'resolve' || needs.plan.outputs.decision == 'handback')
+    environment: landing-bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      MODEL_OUTCOME: ${{ needs.resolve.outputs.outcome }}
+      # #8506: the controller commit the model runner's jobs ran; this job runs github.sha and refuses a patch unless
+      # they are one commit and the patch's record names it.
+      CONTROLLER_SHA: ${{ needs.resolve.outputs.controller }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-conflict-plan
+          path: ${{ runner.temp }}/plan
+      - if: needs.resolve.outputs.outcome == 'passed'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-patch
+          path: ${{ runner.temp }}/patch
+      - name: Get the landing bot's installation token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.LANDING_BOT_APP_ID }}
+          private-key: ${{ secrets.LANDING_BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - name: Check the resolution with main's code, then push or hand back
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESOLVER_APP_TOKEN: ${{ steps.app.outputs.token }}
+          LANDING_BOT_LOGIN: ${{ steps.app.outputs.app-slug }}[bot]
+          PLAN_DIR: ${{ runner.temp }}/plan
+          PATCH_DIR: ${{ runner.temp }}/patch
+        run: node scripts/landing-bot/resolve.mjs apply

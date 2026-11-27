@@ -1,0 +1,509 @@
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
+import { clampDays } from '../util/pagination';
+import { maskFounderForInvestor } from '../services/trust';
+import { keepFindable } from '../services/investorFindable';
+import { holdsLicence } from '../services/accountLicences';
+
+const dashboard = new Hono<{ Bindings: Env }>();
+
+// Two-tier cache:
+//   L1 — per-isolate Map, 10s TTL. Sub-millisecond, but only the isolate
+//        that wrote it gets a hit. Useful for tight refresh loops.
+//   L2 — KV (TOKENS namespace, `cache:dash:<userId>` key), 60s TTL. Shared
+//        across all worker isolates worldwide, ~150ms read.
+// Origin (D1) is the source of truth on miss.
+const L1_TTL_MS = 10_000;
+const KV_TTL_SEC = 60;
+const l1 = createL1<any>(L1_TTL_MS);
+/**
+ * The cache key MUST carry the active company.
+ *
+ * Both layers keyed on the user alone, which was correct while the payload was
+ * the same under every company and became a cross-company leak the moment the
+ * project list started narrowing: a founder switches company and is served the
+ * other company's dashboard from L1 or KV for the whole TTL. Scoping a payload
+ * without scoping its cache key is not a smaller version of scoping it.
+ *
+ * `all` rather than an empty segment for "no company selected", so the key is
+ * never ambiguous with a company whose id is somehow blank.
+ */
+//
+// D4623 part 2: a held, non-primary Investor licence's payload (`?licence=investor`)
+// is computed with the investor lens, so it is a different payload and carries
+// its own `:investor` segment. Every other key is unchanged.
+const cacheKey = (userId: number, companyId: number | null, lens: 'investor' | null = null) =>
+  `${userId}:${companyId ?? 'all'}${lens ? `:${lens}` : ''}`;
+const kvKey = (userId: number, companyId: number | null, lens: 'investor' | null = null) =>
+  `cache:dash:${cacheKey(userId, companyId, lens)}`;
+
+/** The one licence a caller may name with `?licence=`. */
+export const DASHBOARD_LICENCE_LENSES = Object.freeze(['investor'] as const);
+
+// Wrap a query so a single missing table or SQL error doesn't 500 the whole dashboard.
+// Returns the fallback value and logs the underlying error for observability.
+//
+// D4620 (#4620): the fallback is still returned (the dashboard must not 500),
+// but the outcome is recorded in `status`, so a caller can tell a read that
+// answered zero rows from one that failed and was given a stand-in. Nothing
+// downstream may read a fallback as a fact.
+type SourceStatus = Map<string, 'ready' | 'unreadable'>;
+async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T, status?: SourceStatus): Promise<T> {
+  try {
+    const out = await fn();
+    status?.set(label, 'ready');
+    return out;
+  } catch (e: any) {
+    console.error('[dashboard]', label, String(e?.message || e));
+    status?.set(label, 'unreadable');
+    return fallback;
+  }
+}
+
+/** The deal list: the newest this many eligible rows are the preview. */
+export const DEAL_PREVIEW_LIMIT = 12;
+/** Candidates read before the eligibility filter. Above this the total is a lower bound, and says so. */
+export const DEAL_CANDIDATE_CAP = 500;
+
+dashboard.get('/', async (c) => {
+  const user = await requireAuth(c);
+  const fresh = c.req.query('fresh') === '1';
+  // T17 — `?days=N` window (default 30, max 365) sizes the earnings series
+  // and the recent-notifications query. Older callers without the param
+  // get the historical default behavior.
+  const days = clampDays(c.req.query('days'), 30, 365);
+  const now = Date.now();
+
+  // D4623 part 2 (#4623): the Investor block of a multi-licence Studio (D4474)
+  // asks `?licence=investor`. For a member who holds Investor as a granted,
+  // non-primary licence, the investor figures (the deal-flow total, its masked
+  // preview, the match average, the recommended syndicates) are then computed
+  // with the investor lens, exactly as for a primary investor; before, they
+  // were computed with the primary licence's lens (a founder's own projects).
+  // The lens is the caller's own licence only: a licence the member does not
+  // hold is refused, never served another licence's figures, and an admin
+  // keeps the admin payload (an admin is never on a block page). With no
+  // `licence` the payload is the primary licence's, unchanged.
+  const askedLicence = c.req.query('licence');
+  if (askedLicence !== undefined && !(DASHBOARD_LICENCE_LENSES as readonly string[]).includes(askedLicence)) {
+    return c.json({ error: 'invalid_licence', message: 'This summary can be read for the Investor licence only.' }, 400);
+  }
+  if (askedLicence === 'investor' && (user.role === 'admin' || !holdsLicence(user, 'investor'))) {
+    return c.json({ error: 'licence_not_held', message: 'This account does not hold the Investor licence.' }, 403);
+  }
+  const lens: 'investor' | null = askedLicence === 'investor' && user.role !== 'investor' ? 'investor' : null;
+  const viewRole = lens ?? user.role;
+
+  // Resolved BEFORE the cache lookup because it is part of the key. Only a
+  // founder's payload is company-scoped, so nobody else pays for the lookup.
+  const dashCompanyId = viewRole === 'founder' ? await activeCompanyFor(c, user) : null;
+  const ck = cacheKey(user.id, dashCompanyId, lens);
+
+  // L1 — per-isolate
+  if (!fresh) {
+    const l1Hit = l1.map.get(ck);
+    if (l1Hit && l1Hit.exp > now) {
+      return c.json({ ...l1Hit.v, cached: 'l1' });
+    }
+    // L2 — KV (only attempt if binding exists; falls through to origin otherwise)
+    if (c.env.TOKENS) {
+      const kvHit = await kvGetJSON<any>(c.env.TOKENS, kvKey(user.id, dashCompanyId, lens));
+      if (kvHit) {
+        l1.map.set(ck, { v: kvHit, exp: now + L1_TTL_MS });
+        return c.json({ ...kvHit, cached: 'kv' });
+      }
+    }
+  }
+
+  const sql = getSQL(c.env);
+  // `viewRole` is `user.role` unless a held, non-primary Investor licence was asked for (above).
+  const isAdmin = viewRole === 'admin';
+  // Phase 0.1: investors share dashboard view with partners (capital-allocator lens).
+  const isInvestor = viewRole === 'investor';
+  const isPartner = viewRole === 'partner' || isInvestor;
+  const isFounder = viewRole === 'founder';
+
+
+  // Run all queries in parallel for speed (Cloudflare Workers loves this).
+  // Each query is wrapped in safeQuery so one missing table cannot 500 the whole dashboard.
+  const status: SourceStatus = new Map();
+  const sq = <T,>(label: string, fn: () => Promise<T>, fallback: T) => safeQuery(label, fn, fallback, status);
+  const [
+    deals, scoresMine, syndicatesAll, mySyndicateMemberships, marketplaceCount,
+    monthEarnings, lifetimeEarnings, compoundEarnings, pendingPayouts,
+    chainCounts, topReferrers, recentCommissions, earningsSeries, myTasks,
+    notifications,
+  ] = await Promise.all([
+    // `projects` has neither a `score` nor an `ai_decision` column — the
+    // composite score lives in score_snapshots.total_score. All four variants
+    // named both, so safeQuery swallowed the error and proprietary_deal_flow
+    // was empty for every role. Dashboard.jsx only counts this list, so the
+    // columns are dropped rather than replaced with a subquery nothing reads.
+    sq('deals', () =>
+      isAdmin
+        ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`
+        : isFounder
+          // `submitted_by` is a tickets column; projects owns founder_id.
+          // The select list above was corrected once already — the WHERE was
+          // not, so the founder's own deal list stayed empty.
+          // Company scoping. This list is the FIRST thing a founder sees, and
+          // without the clause it disagreed with the project picker two rows
+          // below it: switch company, and Studio still showed the other
+          // company's projects. Only the founder branch narrows — the admin
+          // branch above is oversight, and the investor/partner branches below
+          // are a marketplace of tier_1/tier_2 deals, which must stay whole.
+          //
+          // Two full literals; the tagged template binds its values, but the
+          // clause itself would still be assembled text if it were built.
+          ? (dashCompanyId === null
+              ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`
+              : sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND (company_id = ${dashCompanyId} OR company_id IS NULL) AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`)
+          // Task #3 (Y-1) — investors get the founder_user_id JOIN so
+          // the Trust Center mask can null sensitive fields when no
+          // active pairwise NDA exists. Partners stay un-masked.
+          : isInvestor
+            ? sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.created_at, u.id AS founder_user_id FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} LEFT JOIN users u ON u.founder_id = p.founder_id WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`
+            : sql`SELECT DISTINCT p.id, p.name, p.sector, p.stage, p.status, p.created_at FROM projects p LEFT JOIN match_scores ms ON ms.deal_id = p.id AND ms.user_id = ${user.id} WHERE p.status NOT IN ('rejected', 'archived') AND p.deleted_at IS NULL AND (p.status IN ('tier_1', 'tier_2') OR ms.id IS NOT NULL) ORDER BY p.created_at DESC LIMIT ${DEAL_CANDIDATE_CAP + 1}`,
+      [] as any[]),
+    sq('scoresMine', () => sql`
+      SELECT ms.*, p.name as deal_name, p.sector, p.stage
+      FROM match_scores ms LEFT JOIN projects p ON p.id = ms.deal_id
+      WHERE ms.user_id = ${user.id} ORDER BY ms.score DESC LIMIT 10
+    `, [] as any[]),
+    sq('syndicatesAll', () => sql`
+      SELECT s.id, s.name, s.description, s.target_cents, s.min_commitment_cents, s.created_at,
+        (SELECT COUNT(*) FROM syndicate_members WHERE syndicate_id = s.id) as members,
+        (SELECT COALESCE(SUM(commitment_cents), 0) FROM syndicate_members WHERE syndicate_id = s.id) as committed_cents
+      FROM syndicates s WHERE s.status = 'open' ORDER BY s.created_at DESC LIMIT 8
+    `, [] as any[]),
+    sq('mySyndicateMemberships', () => sql`
+      SELECT sm.commitment_cents, sm.joined_at, s.id, s.name, s.status, s.target_cents
+      FROM syndicate_members sm JOIN syndicates s ON s.id = sm.syndicate_id
+      WHERE sm.user_id = ${user.id} ORDER BY sm.joined_at DESC LIMIT 10
+    `, [] as any[]),
+    sq('marketplaceCount', () =>
+      sql`SELECT COUNT(*) as n FROM marketplace_profiles WHERE availability = 'available'`,
+      [{ n: 0 }] as any[]),
+    sq('monthEarnings', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', 'start of month')`,
+      [{ c: 0 }] as any[]),
+    sq('lifetimeEarnings', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id}`,
+      [{ c: 0 }] as any[]),
+    sq('compoundEarnings', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type LIKE '%_compound'`,
+      [{ c: 0 }] as any[]),
+    sq('pendingPayouts', () =>
+      sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND status = 'accrued'`,
+      [{ c: 0 }] as any[]),
+    sq('chainCounts', () =>
+      sql`SELECT level, COUNT(*) as n FROM referral_chains WHERE root_referrer_id = ${user.id} GROUP BY level`,
+      [] as any[]),
+    sq('topReferrers', () => sql`
+      SELECT u.id, u.name, u.email, COUNT(DISTINCT rc.user_id) as downstream
+      FROM referral_chains my_l1
+      JOIN users u ON u.id = my_l1.user_id
+      LEFT JOIN referral_chains rc ON rc.root_referrer_id = my_l1.user_id AND rc.level = 1
+      WHERE my_l1.root_referrer_id = ${user.id} AND my_l1.level = 1
+      GROUP BY u.id, u.name, u.email
+      HAVING COUNT(DISTINCT rc.user_id) > 0
+      ORDER BY downstream DESC LIMIT 5
+    `, [] as any[]),
+    sq('recentCommissions', () =>
+      sql`SELECT id, amount_cents, source_type, description, status, created_at FROM commissions WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10`,
+      [] as any[]),
+    sq('earningsSeries', () => sql`
+      SELECT DATE(created_at) as day, SUM(amount_cents) as cents
+      FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', ${`-${days} days`})
+      GROUP BY DATE(created_at) ORDER BY day
+    `, [] as any[]),
+    sq('myTasks', () => sql`
+      SELECT t.id, t.title, t.status, t.priority, t.due_date, w.title as workflow_title, w.type
+      FROM workflow_tasks t JOIN workflows w ON w.id = t.workflow_id
+      WHERE t.assignee_user_id = ${user.id} AND t.status != 'done' ORDER BY t.due_date IS NULL, t.due_date LIMIT 10
+    `, [] as any[]),
+    sq('notifications', () => sql`
+      SELECT 'commission' as kind, id, description as title, amount_cents, created_at FROM commissions WHERE user_id = ${user.id} AND created_at >= datetime('now', '-7 days')
+      UNION ALL
+      SELECT 'syndicate' as kind, id, name as title, NULL as amount_cents, created_at FROM syndicates WHERE created_by != ${user.id} AND status = 'open' AND created_at >= datetime('now', '-7 days')
+      ORDER BY created_at DESC LIMIT 12
+    `, [] as any[]),
+  ]);
+
+  // Build chain counts map
+  const chains: Record<string, number> = { L1: 0, L2: 0, L3: 0 };
+  for (const r of chainCounts as any[]) chains[`L${r.level}`] = r.n;
+  const sourceReady = (label: string) => status.get(label) === 'ready';
+  const countFigure = (label: string, raw: unknown): number | null => {
+    if (!sourceReady(label)) return null;
+    const parsed = Number.parseInt(String(raw ?? 0), 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const networkReach = sourceReady('chainCounts') ? chains.L1 + chains.L2 + chains.L3 : null;
+
+  // AI score average across my matches
+  const scoresArr = (scoresMine as any[]).map(s => s.score).filter((n): n is number => typeof n === 'number');
+  const aiScoreAvg = scoresArr.length ? Math.round(scoresArr.reduce((a, b) => a + b, 0) / scoresArr.length) : null;
+
+  // Personalized "AI-recommended syndicates" for partners — open syndicates whose deal_id has a high match_score for the user
+  let recommendedSyndicates: any[] = [];
+  if (isPartner || isAdmin) {
+    recommendedSyndicates = await sq('recommendedSyndicates', () => sql`
+      SELECT s.id, s.name, s.description, s.target_cents, s.min_commitment_cents, ms.score, ms.explanation
+      FROM syndicates s
+      JOIN match_scores ms ON ms.deal_id = s.deal_id AND ms.user_id = ${user.id}
+      WHERE s.status = 'open' AND s.created_by != ${user.id}
+        AND s.id NOT IN (SELECT syndicate_id FROM syndicate_members WHERE user_id = ${user.id})
+      ORDER BY ms.score DESC LIMIT 5
+    `, [] as any[]);
+  }
+
+  try { await sql.end(); } catch {}
+
+  // Task #3 (Y-1) — Trust Center mask. For investors only, run each
+  // proprietary-deal-flow row through maskFounderForInvestor so any
+  // founder/project payload is reduced to FOUNDER_PUBLIC_KEYS until
+  // the pairwise NDA is active. Fail-closed: rows whose
+  // founder_user_id couldn't be resolved are masked too.
+  // D4620 (#4620): eligibility comes BEFORE the preview is cut. The read above
+  // takes candidates (newest first, up to DEAL_CANDIDATE_CAP), the filter below
+  // removes what this viewer may not find, and only then are the first
+  // DEAL_PREVIEW_LIMIT rows kept. Cutting first left a preview of 12 candidates
+  // of which some were then dropped (12 became 9 of 14 eligible), or empty
+  // when only older rows qualified.
+  const dealRows = deals as any[];
+  const dealsCapped = dealRows.length > DEAL_CANDIDATE_CAP;
+  const dealCandidates = dealsCapped ? dealRows.slice(0, DEAL_CANDIDATE_CAP) : dealRows;
+  let eligibleDeals = dealCandidates;
+  if (isInvestor) {
+    // D702 — this list names ventures, so one whose founder chose "through
+    // introductions only" is left out for an investor without an introduction.
+    eligibleDeals = await keepFindable(c.env, user, dealCandidates, (row: any) => row.id);
+  }
+  const dealPreview = eligibleDeals.slice(0, DEAL_PREVIEW_LIMIT);
+  let dealsMasked: any[] = dealPreview;
+  if (isInvestor) {
+    dealsMasked = await Promise.all(
+      dealPreview.map(row => maskFounderForInvestor(c.env, row, {
+        viewerRole: 'investor',
+        viewerUserId: user.id,
+      })),
+    );
+  }
+  // `total` is the count of eligible rows, or null when the read failed (never
+  // 0 for a stand-in). Above the candidate cap it is a floor, and says so.
+  const dealsReadable = status.get('deals') === 'ready';
+  const proprietaryDealFlow = {
+    total: dealsReadable ? eligibleDeals.length : null,
+    total_is_lower_bound: dealsReadable && dealsCapped,
+    preview_limit: DEAL_PREVIEW_LIMIT,
+    previewed: dealsMasked.length,
+  };
+
+  // Audit dashboard view (admins only, low volume)
+  if (isAdmin) {
+    try { await c.env.DB.prepare(`INSERT INTO shared_services_log (workflow_id, action_type, details, performed_by) VALUES (NULL, 'dashboard_view_admin', '{}', ?)`).bind(user.id).run(); } catch {}
+  }
+
+  // Build the day-series with zeros filled for the requested ?days window.
+  const seriesMap = new Map<string, number>();
+  for (const row of (earningsSeries as any[])) seriesMap.set(row.day, parseInt(row.cents) || 0);
+  const today = new Date();
+  const series: { day: string; cents: number }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    series.push({ day: key, cents: seriesMap.get(key) || 0 });
+  }
+
+  const payload = {
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, kyc_status: user.kyc_status, assistant_enabled: (() => {
+      // Mirror /api/assistant/* mount gate — see routes/auth.ts.
+      const e = c.env as any;
+      const prod = e?.STAGE === 'production' || e?.ENVIRONMENT === 'production';
+      if (prod || e?.ENABLE_ANTHROPIC_DEV !== '1') return 0;
+      return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
+    })() },
+    quick_stats: {
+      month_earnings_cents: countFigure('monthEarnings', (monthEarnings as any)[0]?.c),
+      lifetime_earnings_cents: countFigure('lifetimeEarnings', (lifetimeEarnings as any)[0]?.c),
+      compound_earnings_cents: countFigure('compoundEarnings', (compoundEarnings as any)[0]?.c),
+      pending_payouts_cents: countFigure('pendingPayouts', (pendingPayouts as any)[0]?.c),
+      active_syndicates: sourceReady('syndicatesAll') ? (syndicatesAll as any[]).length : null,
+      my_syndicates: sourceReady('mySyndicateMemberships') ? (mySyndicateMemberships as any[]).length : null,
+      ai_score_avg: aiScoreAvg,
+      network_reach: networkReach,
+      marketplace_available: countFigure('marketplaceCount', (marketplaceCount as any)[0]?.n),
+    },
+    proprietary_deal_flow: dealsMasked,
+    proprietary_deal_flow_summary: proprietaryDealFlow,
+    // D4620: per-read outcome. A zero or an empty list from a read marked
+    // 'unreadable' is a stand-in for a failed read, not a fact.
+    source_status: Object.fromEntries(status),
+    ai_scored_opportunities: scoresMine,
+    syndication_tools: {
+      open_syndicates: syndicatesAll,
+      my_memberships: mySyndicateMemberships,
+      ai_recommendations: recommendedSyndicates,
+    },
+    performance_analytics: {
+      // Field name is historical (was hardcoded 30d). The actual length now
+      // reflects the requested ?days window — see `window_days` below.
+      earnings_series_30d: series,
+      window_days: days,
+      chain_counts: chains,
+      network_reach: networkReach,
+      top_referrers: topReferrers,
+      recent_commissions: recentCommissions,
+    },
+    operator_workspace: {
+      assigned_tasks: myTasks,
+    },
+    notifications,
+    role_view: isAdmin ? 'admin' : isInvestor ? 'investor' : isPartner ? 'partner' : isFounder ? 'founder' : 'member',
+    cached: false,
+    generated_at: new Date().toISOString(),
+  };
+
+  // Write through both tiers. KV write is fire-and-forget via waitUntil so
+  // the response stays fast; KV failure is logged but never blocks.
+  // D4620: a payload that carries a stand-in for a failed read is not kept, so
+  // the next request asks again instead of serving the failure for 60 seconds.
+  const anyUnreadable = [...status.values()].includes('unreadable');
+  if (anyUnreadable) return c.json(payload);
+  l1.map.set(ck, { v: payload, exp: Date.now() + L1_TTL_MS });
+  if (c.env.TOKENS) {
+    const ctx = (c.executionCtx as any);
+    const writeP = kvPutJSON(c.env.TOKENS, kvKey(user.id, dashCompanyId, lens), payload, KV_TTL_SEC);
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
+  }
+  return c.json(payload);
+});
+
+// Task #81 — Investor deal lifecycle.
+//
+// A READ-ONLY aggregation that answers "what deals is THIS investor engaged
+// with, and how far along?" for the investor deal desk on /studio. Every
+// count is scoped to the caller's own user id (no cross-user leakage) and the
+// route NEVER writes — in particular it must not touch watchlist/journal.
+//
+// The funnel stages (watching → intro → deal room → diligence → committed) are
+// derived from the same tables their dedicated surfaces own:
+//   watching   — watchlist_items (owner_user_id, status='watching')
+//   intro      — investor_introductions (investor_user_id)
+//   dealroom   — investor_dealroom_members (investor_user_id)
+//   diligence  — dd_cases the investor owns OR reviews
+//   committed  — decision_journal_entries (owner_user_id, decision='invest')
+// Extra per-investor counts (IC engagement, recorded positions, open secondary
+// listings) ride along in `counts` for the quick-stats row.
+dashboard.get('/investor-lifecycle', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  // D4620 (#4620): a count whose read failed is null, never the 0 its fallback
+  // stands in with. The route says which reads failed (`sources`), so a funnel
+  // stage the page cannot read is not drawn as a stage the investor has not reached.
+  const status: SourceStatus = new Map();
+  const sq = <T,>(label: string, fn: () => Promise<T>, fallback: T) => safeQuery(label, fn, fallback, status);
+  const n = (label: string, rows: any): number | null => {
+    if (status.get(label) !== 'ready') return null;
+    const r = Array.isArray(rows) ? rows[0] : null;
+    return r ? parseInt((r as any).n, 10) || 0 : 0;
+  };
+
+  const [
+    watching, watchlistTotal, intros, introsPending, dealrooms,
+    ddTotal, ddOpen, icEngaged, committed, positions, listingsOpen,
+  ] = await Promise.all([
+    sq('inv:watching', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status = 'watching'`, [{ n: 0 }]),
+    sq('inv:watchlistTotal', () => sql`SELECT COUNT(*) AS n FROM watchlist_items WHERE owner_user_id = ${user.id} AND status != 'archived'`, [{ n: 0 }]),
+    sq('inv:intros', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
+    sq('inv:introsPending', () => sql`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ${user.id} AND status = 'pending'`, [{ n: 0 }]),
+    sq('inv:dealrooms', () => sql`SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`, [{ n: 0 }]),
+    sq('inv:ddTotal', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})`, [{ n: 0 }]),
+    sq('inv:ddOpen', () => sql`SELECT COUNT(*) AS n FROM dd_cases WHERE (owner_user_id = ${user.id} OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ${user.id})) AND status IN ('open', 'in_review')`, [{ n: 0 }]),
+    sq('inv:icEngaged', () => sql`SELECT COUNT(DISTINCT d.id) AS n FROM ic_decisions d LEFT JOIN ic_votes v ON v.ic_decision_id = d.id WHERE d.created_by = ${user.id} OR v.user_id = ${user.id}`, [{ n: 0 }]),
+    sq('inv:committed', () => sql`SELECT COUNT(*) AS n FROM decision_journal_entries WHERE owner_user_id = ${user.id} AND decision = 'invest'`, [{ n: 0 }]),
+    sq('inv:positions', () => sql`SELECT COUNT(*) AS n FROM portfolio_positions WHERE created_by = ${user.id}`, [{ n: 0 }]),
+    sq('inv:listingsOpen', () => sql`SELECT COUNT(*) AS n FROM secondary_listings WHERE user_id = ${user.id} AND status IN ('open', 'listed', 'matched')`, [{ n: 0 }]),
+  ]);
+
+  // Task #83 — open DD reviewer items assigned to THIS investor feed the
+  // lifecycle module's next-actions. Scoped to `assignee_user_id = user` (no
+  // cross-user leakage) and only for cases that are still open/in-review.
+  const reviewerRows = await sq('inv:ddNextActions', () => sql`
+    SELECT s.title AS section_title, c.uid AS case_uid, c.subject_label AS subject_label
+      FROM dd_sections s
+      JOIN dd_cases c ON c.id = s.case_id
+     WHERE s.assignee_user_id = ${user.id}
+       AND s.status IN ('pending', 'assigned', 'in_review')
+       AND c.status IN ('open', 'in_review')
+     ORDER BY s.updated_at DESC
+     LIMIT 5`, [] as any[]);
+
+  try { await sql.end(); } catch {}
+
+  const nextActions = (Array.isArray(reviewerRows) ? reviewerRows : []).map((r: any) => ({
+    key: `dd:${r.case_uid}:${r.section_title}`,
+    label: `Review ${r.section_title} — ${r.subject_label}`,
+    href: `/due-diligence/${r.case_uid}`,
+    done: false,
+    manual: false,
+  }));
+
+  const counts = {
+    watching: n('inv:watching', watching),
+    watchlist_total: n('inv:watchlistTotal', watchlistTotal),
+    intros: n('inv:intros', intros),
+    intros_pending: n('inv:introsPending', introsPending),
+    dealrooms: n('inv:dealrooms', dealrooms),
+    dd_total: n('inv:ddTotal', ddTotal),
+    dd_open: n('inv:ddOpen', ddOpen),
+    ic_engaged: n('inv:icEngaged', icEngaged),
+    committed: n('inv:committed', committed),
+    positions: n('inv:positions', positions),
+    listings_open: n('inv:listingsOpen', listingsOpen),
+  };
+
+  // Ordered funnel. `href` deep-links to the surface that moves the stage.
+  const stages = [
+    // The Watchlist page was removed (owner, 2026-10-20): Watching opens the
+    // deal flow, and Committed the portfolio its commitments become.
+    { id: 'watching', label: 'Watching', count: counts.watching, reached: (counts.watching ?? 0) > 0, href: '/deals' },
+    { id: 'intro', label: 'Warm intro', count: counts.intros, reached: (counts.intros ?? 0) > 0, href: '/deals' },
+    { id: 'dealroom', label: 'Deal room', count: counts.dealrooms, reached: (counts.dealrooms ?? 0) > 0, href: '/deals' },
+    { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: (counts.dd_total ?? 0) > 0, href: '/due-diligence' },
+    { id: 'committed', label: 'Committed', count: counts.committed, reached: (counts.committed ?? 0) > 0, href: '/portfolio' },
+  ];
+
+  // Current stage = the deepest one with any activity (falls back to the first).
+  let currentStage = stages[0].id;
+  for (const s of stages) if (s.reached) currentStage = s.id;
+
+  // D4620: every count unreadable means the page has nothing to draw but a
+  // failure; a 200 of nulls would read as an empty funnel.
+  const lifecycleStatus = Object.fromEntries(status);
+  const failedReads = [...status.values()].filter((v) => v === 'unreadable').length;
+  const countReads = Object.keys(lifecycleStatus).filter((k) => k !== 'inv:ddNextActions').length;
+  const failedCounts = Object.entries(lifecycleStatus).filter(([k, v]) => k !== 'inv:ddNextActions' && v === 'unreadable').length;
+  if (countReads > 0 && failedCounts === countReads) {
+    return c.json({ error: 'unreadable', detail: 'The deal lifecycle could not be read.', sources: lifecycleStatus }, 503);
+  }
+
+  return c.json({
+    stages,
+    current_stage: currentStage,
+    // True when a read failed: a null count is unknown, and `current_stage` is
+    // the deepest stage among the stages that could be read.
+    partial: failedReads > 0,
+    sources: lifecycleStatus,
+    next_actions: nextActions,
+    counts,
+    generated_at: new Date().toISOString(),
+  });
+});
+
+export default dashboard;

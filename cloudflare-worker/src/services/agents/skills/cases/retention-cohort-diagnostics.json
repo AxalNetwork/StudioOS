@@ -1,0 +1,58 @@
+{
+  "skill": "retention-cohort-diagnostics",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "build.records": {
+        "record_id": "retention-definition-02",
+        "version": 2,
+        "unit": "account",
+        "cohort_entry": "First successful report export",
+        "retained_event": "At least one report_exported event during days 23 through 30 after entry",
+        "window_days": 30,
+        "segment_membership": null
+      },
+      "grow.records": {
+        "record_id": "retention-extract-12",
+        "as_of": "2026-10-28",
+        "definition_version": 2,
+        "cohorts": [
+          {
+            "cohort_start": "2026-09-01",
+            "cohort_end": "2026-09-07",
+            "window_days": 30,
+            "eligible_accounts": 100,
+            "retained_accounts": 60,
+            "complete_observation": true
+          },
+          {
+            "cohort_start": "2026-10-20",
+            "cohort_end": "2026-10-26",
+            "window_days": 30,
+            "initial_accounts": 80,
+            "eligible_accounts": null,
+            "complete_observation": false,
+            "accounts_with_repeat_export_to_date": 20
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "60%",
+      "not yet observable",
+      "retention-extract-12"
+    ],
+    "must_say_not_recorded": [
+      "segment membership"
+    ],
+    "must_not_include": [
+      "The October cohort has 25% retention",
+      "Retention fell by 35 percentage points",
+      "All cohorts are mature"
+    ]
+  }
+}

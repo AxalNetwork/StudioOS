@@ -1,0 +1,231 @@
+name: Runner benchmark
+
+on:
+  push:
+    branches: ['bench/runners-**']
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # D8693: the same steps as ci.yml's `plan` job (runner_lanes_5611), which writes the equal-weight plan.
+      - name: Generate the exact-once plan
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          full_parts=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
+          parts=$(node --input-type=module -e '
+            import { tierFor } from "./scripts/lib/prTier.mjs";
+            const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
+            console.log(tier.parts === null ? process.argv[1] : JSON.stringify(tier.parts));
+          ' "$full_parts")
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-plan
+          path: suite-plan.json
+          if-no-files-found: error
+          retention-days: 3
+      - id: matrix
+        env:
+          SPENDING_CAP_VERIFIED: ${{ vars.RUNNER_BENCHMARK_SPENDING_CAP_VERIFIED }}
+          GITHUB8_READY: ${{ vars.RUNNER_BENCHMARK_GITHUB8_READY }}
+          EPHEMERAL_READY: ${{ vars.RUNNER_BENCHMARK_EPHEMERAL_READY }}
+          CODEBUILD_READY: ${{ vars.RUNNER_BENCHMARK_CODEBUILD_READY }}
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          import { partsOf } from './scripts/test-drift-parts.mjs';
+          import { benchmarkLanes } from './scripts/lib/runnerBenchmark.mjs';
+          const env = process.env;
+          const lanes = benchmarkLanes({
+            spendingCapVerified: env.SPENDING_CAP_VERIFIED, github8Ready: env.GITHUB8_READY,
+            ephemeralReady: env.EPHEMERAL_READY, codebuildReady: env.CODEBUILD_READY,
+            repository: env.GITHUB_REPOSITORY, event: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF,
+            runId: env.GITHUB_RUN_ID, attempt: env.GITHUB_RUN_ATTEMPT,
+          });
+          const parts = partsOf(JSON.parse(readFileSync('package.json', 'utf8')).scripts);
+          console.log('matrix=' + JSON.stringify({ include: lanes.flatMap(lane => parts.map(part => ({ ...lane, part: part.name }))) }));
+          NODE
+
+  benchmark:
+    name: benchmark/${{ matrix.lane }}/${{ matrix.part }}
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 27
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+            package-lock.json
+      # D7108 part 2, D8435: no job plans for this one, on any event. Each part
+      # writes the exact-once plan itself from this commit with equal weights (no
+      # timings file, no API, no artifact), so every part of a run writes the same
+      # bytes. It fails this part, never drops one, when this part is not in the
+      # plan, or when the matrix is not the plan's parts a whole number of times
+      # (once in CI; once a lane in the runner benchmark, which shares these
+      # steps). A draft tier must be exactly one part.
+      - name: Exact-once plan from this commit
+        env:
+          PART: ${{ matrix.part }}
+          TOTAL: ${{ strategy.job-total }}
+          DRAFT_TIER: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
+        run: |
+          names=$(node scripts/test-drift-parts.mjs --plan --equal-weights)
+          node --input-type=module -e '
+            const names = JSON.parse(process.argv[1]);
+            const { PART, TOTAL, DRAFT_TIER } = process.env;
+            const total = Number(TOTAL);
+            const whole = DRAFT_TIER === "true" ? total === 1 : total >= names.length && total % names.length === 0;
+            if (!whole || !names.includes(PART)) {
+              console.error(`::error::The suite matrix (${TOTAL} parts, this one "${PART}") does not match the plan: ${names.join(", ")}.`);
+              process.exit(1);
+            }
+            console.log(`Equal-weight plan, ${names.length} parts; this part is ${PART}.`);
+          ' "$names"
+      # Every part installs the worker's and the root dependencies. Only the
+      # frontend-* parts and rest install frontend's: they import React deck
+      # templates through the vite loader and run the root SPA build, which
+      # needs vite. The worker-* parts run test:worker alone, which reads
+      # neither frontend/node_modules nor docs/ (D7108,
+      # frontend/test/ci_worker_parts_7108.test.mjs).
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+        if: ${{ !startsWith(matrix.part, 'worker') }}
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci
+      # D5398: D4558's independent-recovery tests require the real age CLI.
+      # The Ubuntu 26 security.ubuntu.com mirror has intermittently failed DNS
+      # across unrelated PRs; pin a release SHA256 rather than apt-fetching it.
+      # The script installs locally to RUNNER_TEMP and adds only age to PATH.
+      - name: Install age
+        if: startsWith(matrix.part, 'frontend')
+        run: bash scripts/ci/install-age-linux.sh
+      # docs/ is not committed (D529), and part of the suite reads the built
+      # SPA (check-docs-assets-closure, the tests that open docs/), so build
+      # it first — the same root build the deploy runs. Those tests are all in
+      # test:frontend and rest; the worker-* parts read no docs/ (D7108).
+      - name: Build the SPA
+        run: npm run build
+        if: ${{ !startsWith(matrix.part, 'worker') }}
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
+      # D7881: the controller only delegates the selected Worker part. It
+      # preserves a real test failure and returns to hosted on unavailability.
+      - name: Try the MacBook for one Worker shard
+        id: macbook
+        if: vars.MACBOOK_WORKER_ENABLED == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ matrix.part }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+        run: node scripts/ci/macbook-worker.mjs
+      # D5608: trace what each test file reads and how long it takes, on the
+      # queue and on main only (never a PR run, never a benchmark branch). An
+      # empty value leaves the tracer inert, so the run line is the same for
+      # every event.
+      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
+        env:
+          CI_FAILURE_DIR: ${{ runner.temp }}/ci-failures
+          CI_FAILURE_PART: ${{ matrix.part }}
+          CI_FAILURE_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
+        if: steps.macbook.outputs.delegated != 'true'
+      - name: Upload bounded failure evidence (D5502)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failures-${{ matrix.part }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-failures/failures.json
+          if-no-files-found: ignore
+          retention-days: 3
+      # D7124: the test files this pull request adds or edits, run again with
+      # the clock 7 days and 9 days 11 hours ahead under libfaketime (as the
+      # nightly does, D5398), so a date-bound test fails here and not on main
+      # (#7108: 6 h 25 min with nothing merged). Non-draft PRs only, in the
+      # `rest` part, which has every install and the built SPA; never under
+      # merge_group. No changed test file: nothing is installed.
+      - name: Changed tests with the clock moved ahead (D7124)
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft && matrix.part == 'rest'
+        env:
+          FUTURE_CLOCK_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(node scripts/future-clock-changed.mjs --list)
+          if [ -z "$files" ]; then exit 0; fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq faketime
+          node scripts/future-clock-changed.mjs
+      - name: Collect the delegated Mac test traces
+        if: always() && steps.macbook.outputs.delegated == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macbook-worker-traces
+          run-id: ${{ steps.macbook.outputs.child_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/test-traces
+      - name: Upload this part's test traces
+        if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-traces-${{ matrix.part }}
+          path: ${{ runner.temp }}/test-traces
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Cancel the owned Mac run when CI is cancelled
+        if: cancelled() && steps.macbook.outputs.child_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PART: ${{ matrix.part }}
+          MACBOOK_WORKER_ENABLED: ${{ vars.MACBOOK_WORKER_ENABLED }}
+          CHILD_RUN_ID: ${{ steps.macbook.outputs.child_run_id }}
+        run: node scripts/ci/macbook-worker.mjs --cancel-owned
+
+  gate:
+    name: benchmark gate
+    if: always()
+    needs: [plan, benchmark]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require a successful plan and complete suite
+        env:
+          PLAN: ${{ needs.plan.result }}
+          SUITE: ${{ needs.benchmark.result }}
+        run: test "$PLAN" = success && test "$SUITE" = success

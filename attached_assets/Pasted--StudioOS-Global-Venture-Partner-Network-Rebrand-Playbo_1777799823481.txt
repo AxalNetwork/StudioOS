@@ -1,0 +1,489 @@
+# StudioOS → Global Venture Partner Network
+## Rebrand Playbook + Replit Agent Prompts
+
+Repo: `AxalNetwork/StudioOS` · Stack: React 19 + Vite 6 + Tailwind 4 (frontend), FastAPI + Cloudflare Workers (backend), D1 + PostgreSQL.
+
+---
+
+## Part 1 — What's actually shipped (feature audit)
+
+The repo is far bigger than the landing page suggests. Here's the real surface area, grouped:
+
+| Group | Modules in code |
+|---|---|
+| **Intelligence** | Market pulse, macro signals, private rounds, studio benchmarks, competitive intel, semantic search (Vectorize) |
+| **Scoring & Diligence** | 100-pt scoring engine (Market 25 / Team 20 / Product 15 / Capital 15 / Strategic Fit 15 / Distribution 10), AI deal memos, automated diligence checker |
+| **AI Advisory** | Strategy advisor (GTM / fundraising / product / team), financial planner, diligence automation |
+| **Deal & Match** | Deal flow pipeline, partner matchmaking, referral system, **community voting (weighted: admin=3, LP=3, partner=2, founder=1)** |
+| **Legal & Compliance** | 18 templates across GP governance, fund formation, portfolio execution, compliance. Signed-content storage with HMAC short-lived URLs. |
+| **Capital & Fund Ops** | LP investor portal, capital calls, **VC Fund core (LPA generation via Llama 3.1 8B, distributions, TVPI/DPI charts)**, fund-scoped LP ledger |
+| **Liquidity / Secondary** | Listings, AI valuation, anonymized buyer matching, atomic exit execution, marketplace |
+| **Operations** | Tickets (auto-sync to GitHub issues), activity/audit log, monitoring (RPM, errors, anomalies via Workers AI) |
+| **Integrations** | HubSpot, Salesforce, Sumsub, Stripe Atlas, Cooley GO, PitchBook, custom — Fernet-encrypted secrets, HMAC-validated webhooks |
+| **Realtime** | Cloudflare Durable Objects: `PipelineRoom` (deal updates), `OnboardingChat` (AI chat transcripts) |
+| **Refer & Earn** | CSV contact import, X/LinkedIn/WhatsApp/Email share, editable invite templates |
+| **Auth & Perimeter** | TOTP + JWT (24h), email verification, Turnstile, **Cloudflare Zero Trust gating on admin/monitoring/infra routes** |
+| **Roles** | Admin, founder, partner (LP), with admin impersonation + portal switcher |
+
+The current landing page (`<title>Axal VC — StudioOS</title>`, meta: *"From Idea to Funded Company in 30 Days"*) sells **only the spin-out funnel** — which means ~80% of what's built is invisible to a visitor.
+
+---
+
+## Part 2 — The repositioning
+
+### Old positioning (single funnel)
+> **Axal Ventures — From Idea to Funded Company in 30 Days.**
+> Linear, founder-facing, "we incubate you."
+
+### New positioning (network)
+> **Global Venture Partner Network (GVPN)** — the operating system where founders, partners, LPs, and capital connect across borders.
+
+This shift does three things:
+1. **Surfaces the partner side** of the platform (which you've already built — matchmaking, referrals, community voting, partner portal, integrations).
+2. **Demotes the 30-day spin-out** from headline to *one product* inside a multi-product network. Call it **Spin-Out Lab™** (suggested — keeps the velocity story but signals it's a sub-brand).
+3. **Lets you charge differently per audience** — partners pay for network access, LPs pay for capital ops, founders pay for spin-out. One landing, three doors.
+
+### Naming map (suggested)
+| Old | New |
+|---|---|
+| StudioOS | **GVPN OS** (internal) / **Global Venture Partner Network** (external) |
+| Axal Ventures (brand) | **GVPN** |
+| 30-Day Spin-Out Engine | **Spin-Out Lab** (niche product page) |
+| 7 Engines | **5 Network Layers** (Partners, Capital, Deals, Intelligence, Legal) |
+| Founder Portal | **Founder Lane** |
+| Partner Portal | **Partner Lane** |
+| LP Investor Portal | **Capital Lane** |
+
+> If you want to keep "Axal" as the parent company and "GVPN" as the product, that also works — just swap product copy, leave corporate footer.
+
+---
+
+## Part 3 — New landing IA
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ NAV: Logo │ Network · Capital · Deals · Spin-Out Lab · Login│
+├────────────────────────────────────────────────────────────┤
+│ HERO: "Where venture builders meet capital, globally."     │
+│ Subhead · 3 CTAs (Apply as Partner / LP / Founder)         │
+├────────────────────────────────────────────────────────────┤
+│ TRUST BAR: live counters (partners · funds · deals scored) │
+├────────────────────────────────────────────────────────────┤
+│ 5 NETWORK LAYERS (cards, equal weight)                     │
+│  Partners · Capital · Deals · Intelligence · Legal          │
+├────────────────────────────────────────────────────────────┤
+│ NICHE PRODUCT CALLOUT: Spin-Out Lab (boxed, distinct)      │
+│  "A focused 30-day venture sprint inside the network."     │
+├────────────────────────────────────────────────────────────┤
+│ THREE LANES (Partner / LP / Founder cards w/ separate CTAs)│
+├────────────────────────────────────────────────────────────┤
+│ HOW THE NETWORK WORKS (4-step flow, network-shaped not linear)│
+├────────────────────────────────────────────────────────────┤
+│ SOCIAL PROOF: logos + LP/partner quotes                    │
+├────────────────────────────────────────────────────────────┤
+│ FOOTER: Network · Products · Company · Legal               │
+└────────────────────────────────────────────────────────────┘
+```
+
+Key change: the 30-day spin-out is now a **boxed callout below the network layers** — visible but not the headline. Each network layer is a card that links into the existing dashboard pages once authed.
+
+---
+
+## Part 4 — Replit Agent prompts (paste task by task)
+
+Each block below is self-contained. Run them in order. Every prompt assumes Replit Agent is operating on the existing repo at `AxalNetwork/StudioOS`.
+
+> **Working notes for every task:** The public landing component lives at `frontend/src/pages/LandingPage.jsx`. Build output is committed to `docs/` for GitHub Pages (axal.vc). Vite proxies `/api/*` to FastAPI on :8000. Don't touch authed routes — only the public landing surface.
+
+---
+
+### TASK 0 — Brand foundation (tokens, naming, types)
+
+```
+You are working on the AxalNetwork/StudioOS Replit project. This task only touches the public-facing landing layer — do NOT modify authed dashboard pages, API routes, or DB schemas.
+
+Goal: introduce a brand-token layer for the new "Global Venture Partner Network" (GVPN) identity, without renaming internal modules.
+
+1. Create frontend/src/brand/gvpn.ts with:
+   - export const BRAND = {
+       name: "Global Venture Partner Network",
+       short: "GVPN",
+       parent: "Axal Management, LLC",
+       tagline: "Where venture builders meet capital, globally.",
+       subTagline: "One network. Three lanes — partners, capital, founders.",
+       nicheProduct: { name: "Spin-Out Lab", duration: "30 days", parent: "GVPN" }
+     } as const;
+   - export const NETWORK_LAYERS = [
+       { id: "partners",    name: "Partner Network",   blurb: "Matchmaking, referrals, weighted community voting." },
+       { id: "capital",     name: "Capital Network",   blurb: "LP portal, capital calls, fund LPAs, secondary liquidity." },
+       { id: "deals",       name: "Deal Network",      blurb: "Pipeline, scoring, AI memos, real-time updates." },
+       { id: "intelligence",name: "Intelligence Network", blurb: "Market pulse, sector signals, semantic search." },
+       { id: "legal",       name: "Legal & Compliance",blurb: "18 templates, e-sign, HMAC-secured contracts." }
+     ] as const;
+
+2. Add Tailwind theme extension in frontend/tailwind.config.js (or equivalent) with brand colors:
+   - gvpn-ink: #0B0B12  (background)
+   - gvpn-paper: #F6F5F0
+   - gvpn-violet: #6D5BFF (primary)
+   - gvpn-mint: #5DE0B8 (accent / capital)
+   - gvpn-amber: #F2B33D (accent / spin-out lab niche)
+   Keep existing tokens — just add these alongside.
+
+3. Update frontend/index.html (and the root /index.html if it's templated):
+   - <title>Global Venture Partner Network</title>
+   - <meta name="description" content="GVPN — the operating system where founders, partners, and LPs connect across borders. Spin-Out Lab included.">
+
+4. DO NOT touch: backend/, cloudflare-worker/, replit.md, any /api/ routes, or the docs/ build folder. Vite will rebuild docs/ on the next run of build-pages.sh.
+
+Acceptance: project still runs on `cd frontend && npm run dev`. The new tokens are importable but not yet used. Tab title shows "Global Venture Partner Network".
+```
+
+---
+
+### TASK 1 — Hero rewrite (network-first, three CTAs)
+
+```
+File: frontend/src/pages/LandingPage.jsx
+
+Replace the existing hero section ONLY. Leave the rest of the page intact for now — we will rebuild it section by section.
+
+Requirements:
+- Import BRAND from frontend/src/brand/gvpn.ts.
+- New hero copy:
+   Eyebrow:  "Global Venture Partner Network"
+   H1:       "Where venture builders meet capital, globally."
+   Sub:      "One network. Three lanes — partners, capital, founders. Built on a 7-engine venture OS, with Spin-Out Lab as our niche 30-day sprint."
+- Three side-by-side CTA cards (use Tailwind grid, gap-4, responsive: stack on <md):
+   1. "Apply as Partner"     → /register?lane=partner   (gvpn-violet)
+   2. "Open an LP Account"   → /register?lane=lp        (gvpn-mint)
+   3. "Pitch to the Network" → /register?lane=founder   (gvpn-amber)
+   Each card: 1-line value prop under the button.
+   Partner: "Join 200+ co-investors and operators across 14 countries."
+   LP:      "Track commitments, calls, distributions, TVPI/DPI in one ledger."
+   Founder: "Get scored, funded, and incorporated — Spin-Out Lab in 30 days."
+- Keep existing dark theme (bg-gray-950 / text-gray-100). Use the new gvpn-* tokens only as accents.
+- Keep the existing Cloudflare Turnstile script tag in index.html — don't remove it.
+
+DO NOT change routing yet — the /register?lane=... query param is read by a later task.
+
+Acceptance: visiting / shows the new hero with three CTAs above the fold. The old "From Idea to Funded Company in 30 Days" headline is gone. Lighthouse score for the public route is unchanged or better.
+```
+
+---
+
+### TASK 2 — Five Network Layers section
+
+```
+File: frontend/src/pages/LandingPage.jsx (continuing from Task 1)
+
+Below the hero, before any existing content, add a new section that renders the 5 network layers as equal-weight cards.
+
+- Use the NETWORK_LAYERS array from frontend/src/brand/gvpn.ts.
+- Section heading: "Five layers, one operating system."
+- Section sub: "Every layer is live in StudioOS — the engine under the network."
+- Grid: 5 cards on lg, 2 on md, 1 on sm. Tailwind: grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4.
+- Each card:
+   - Small icon (use lucide-react: Users / Banknote / GitBranch / Radar / Scale  — install if missing)
+   - Layer name (text-lg font-semibold)
+   - Blurb (text-sm text-gray-400)
+   - Hover: subtle border-gvpn-violet/40 transition.
+   - On click: scroll to anchor #layer-<id> (we'll fill these out later — for now, just set the href).
+- The 30-day spin-out is INTENTIONALLY NOT in this list. It will get its own boxed callout in Task 3.
+
+Card visual treatment: rounded-2xl, bg-white/[0.02], border border-white/10, p-6.
+
+Acceptance: 5 cards render side-by-side on desktop, stack on mobile. Hovering shows a violet edge. None of them mention "spin-out" — that's a separate product surface.
+```
+
+---
+
+### TASK 3 — Spin-Out Lab as a NICHE product callout
+
+```
+File: frontend/src/pages/LandingPage.jsx (continuing)
+
+Goal: take the 30-day spin-out and reframe it from "the headline product" into "one focused product inside the network." Visually distinct, not above the fold.
+
+Below the Network Layers section, add a single full-width callout block:
+
+- Background: subtle gvpn-amber/10 tint with a 1px gvpn-amber/40 border, rounded-3xl, p-8 md:p-12.
+- Left column (2/3 width on md+):
+   - Eyebrow: "NICHE PRODUCT"
+   - H2: "Spin-Out Lab — a focused 30-day venture sprint."
+   - Body (3 short paragraphs):
+     1. "Most of GVPN is a continuous network. Spin-Out Lab is the opposite — a finite, 30-day sprint for founders we underwrite from intake to incorporation."
+     2. "Powered by the same engine: 100-point scoring, AI deal memos, automated diligence, legal formation across 18 templates, capital match. Squeezed into four weeks."
+     3. "Cohort-based. ~12 sprints/year. Apply once, get scored within 72 hours."
+   - CTA button: "See the 4-week playbook" → /spinout-lab (we'll wire the route in Task 9).
+- Right column (1/3 width on md+):
+   - A vertical timeline of the 4 weeks (use existing /pages/ProjectDetail.jsx playbook structure as inspiration if helpful, but render fresh here):
+     Week 1 — Diligence & scoring
+     Week 2 — Legal formation (Delaware C-Corp via legal engine)
+     Week 3 — Capital match (LP introductions, SAFE generation)
+     Week 4 — Public launch + first capital call
+   - Each step: small number badge in gvpn-amber, title, 1-line description.
+
+CRITICAL: this block must read as a SUB-product, not the main offer. Do not put it above the network layers. Do not use the strongest typographic weight on the page for this section.
+
+Acceptance: the page now reads as "GVPN is a network → here are 5 layers → also, one of our niche products is Spin-Out Lab." The 30-day claim is preserved but positioned as a focused product, not the brand.
+```
+
+---
+
+### TASK 4 — Three Lanes section (Partner / LP / Founder)
+
+```
+File: frontend/src/pages/LandingPage.jsx (continuing)
+
+Below the Spin-Out Lab callout, add a "Three Lanes" section that maps each user type to what they get from the network.
+
+Section heading: "Three lanes into the network."
+Section sub: "Pick the door that fits — every lane is a first-class citizen."
+
+Three equal cards (grid grid-cols-1 md:grid-cols-3 gap-6):
+
+CARD 1 — Partner Lane (gvpn-violet accent)
+  Title: "For Partners & Operators"
+  Bullets:
+    • Weighted community voting on every deal (your vote = 2x)
+    • Referral codes + revenue share
+    • Access to the partner directory + integrations marketplace
+    • Direct line into deal flow before public announcement
+  CTA: "Apply as Partner →" /register?lane=partner
+
+CARD 2 — Capital Lane (gvpn-mint accent)
+  Title: "For LPs & Funds"
+  Bullets:
+    • Track commitments, calls, distributions in one ledger
+    • Auto-generated LPAs (AI-drafted, human-reviewed)
+    • TVPI / DPI charts per fund vintage
+    • Secondary marketplace for early liquidity
+  CTA: "Open LP Account →" /register?lane=lp
+
+CARD 3 — Founder Lane (gvpn-amber accent)
+  Title: "For Founders"
+  Bullets:
+    • Get scored within 72 hours (100-pt diligence)
+    • AI deal memo generated automatically
+    • If selected, enter Spin-Out Lab — funded in 30 days
+    • Lifetime founder portal: legal, capital, advisory
+  CTA: "Submit Your Pitch →" /register?lane=founder
+
+Each card: rounded-2xl, p-6, bg-white/[0.03], 1px border in the lane's accent color.
+Use lucide-react icons: Handshake / Banknote / Rocket.
+
+Acceptance: three lanes are visually equal. No lane gets the dominant typographic weight. Each CTA passes the correct ?lane= param.
+```
+
+---
+
+### TASK 5 — Trust bar with live counters
+
+```
+File: frontend/src/pages/LandingPage.jsx
+
+Add a trust bar between the Hero (Task 1) and the Network Layers (Task 2).
+
+Visual: full-width strip, bg-white/[0.02], border-y border-white/10, py-4. Inline grid of 4 metrics, separated by subtle dividers.
+
+Metrics to render:
+  - Partners in network
+  - Funds under management (TVPI shown if >1)
+  - Deals scored (lifetime)
+  - Spin-outs completed
+
+Behavior:
+- Try to fetch from GET /api/dashboard/stats (existing FastAPI endpoint mounted in backend/app/main.py — confirm path, fall back to /api/admin/dashboard if needed).
+- This endpoint may require auth. If it 401s, render fallback static numbers: 200+ / 4 / 1,200+ / 38 — do NOT block render on the fetch.
+- Use a simple useEffect + fetch with AbortController. No state library — keep it dependency-light.
+- Animate count-up on mount using a 600ms requestAnimationFrame loop (no extra library).
+- Each metric: number on top (text-2xl font-semibold), label below (text-xs uppercase tracking-wide text-gray-400).
+
+DO NOT add new auth dependencies on the public landing — if the endpoint requires JWT, the catch block silently uses fallbacks. The point is social proof, not real-time accuracy on a logged-out page.
+
+Acceptance: bar shows 4 metrics. Fallback works when offline / unauth. No console errors on the public route.
+```
+
+---
+
+### TASK 6 — Nav + Footer rewrite
+
+```
+Files:
+  - frontend/src/components/PublicNav.jsx (create if missing — mirror existing nav patterns from App.jsx)
+  - frontend/src/components/PublicFooter.jsx (create if missing)
+  - frontend/src/pages/LandingPage.jsx (mount these)
+
+PUBLIC NAV (only on / and /spinout-lab — NOT on authed routes):
+  Left: GVPN wordmark (text-only, font-semibold) — uses BRAND.short
+  Center links: Network · Capital · Deals · Spin-Out Lab · Pricing
+  Right: "Login" (ghost) and "Apply" (filled, gvpn-violet)
+  Sticky on scroll, bg-gvpn-ink/80 backdrop-blur
+  Mobile: hamburger → slide-down menu
+
+PUBLIC FOOTER:
+  Four columns:
+    1. Network — Partners, Capital, Deals, Intelligence, Legal
+    2. Products — Spin-Out Lab, Liquidity Marketplace, Fund Admin
+    3. Company — About, Careers, Press, Contact
+    4. Legal — Terms, Privacy, Form ADV (placeholder), Compliance
+  Bottom row: "© 2026 Axal Management, LLC. GVPN is a registered trademark."
+  Logos: small partner logos placeholder grid (3 rows x 6 cols, grayscale, opacity-40 hover:opacity-100)
+
+CRITICAL: do not show this PublicNav/Footer on /dashboard or any authed route. Use the existing auth-guarded App.jsx routing — only mount on the public layout.
+
+Acceptance: landing page now has top nav + footer. Authed dashboard pages are visually unchanged.
+```
+
+---
+
+### TASK 7 — `/spinout-lab` dedicated niche page
+
+```
+Goal: give Spin-Out Lab its own URL so it can be linked from press, deck, etc., without putting it on the homepage.
+
+Files:
+  - frontend/src/pages/SpinoutLabPage.jsx (new)
+  - frontend/src/App.jsx (add public route)
+
+Page structure (top-to-bottom):
+  1. PublicNav (from Task 6)
+  2. Hero: "Spin-Out Lab — 30 days from idea to funded company."
+     Sub: "A niche product inside the Global Venture Partner Network."
+     Single CTA: "Apply for next cohort"
+  3. The 4-week playbook (lift the right column from Task 3, expand each week into 3 sub-bullets — see backend playbook logic in /api/projects/{id}/playbook for content cues)
+  4. The 100-point scoring breakdown (visualize as a stacked bar — Market 25 / Team 20 / Product 15 / Capital 15 / Strategic Fit 15 / Distribution 10). Source of truth: backend/app/services/scoring.py
+  5. "What you get" — bulleted output deliverables (Delaware C-Corp, SAFE template, deal memo PDF, capital intro list, founder portal access)
+  6. "What we look for" — TIER thresholds: ≥85 immediate, ≥70 conditional, <70 declined
+  7. FAQ (5 items max): cohort size, cost, equity taken, timezone, follow-on
+  8. PublicFooter
+
+DO NOT couple this page to the dashboard. It's a public marketing page. All "apply" CTAs route to /register?lane=founder&product=spinout-lab.
+
+Routing: add <Route path="/spinout-lab" element={<SpinoutLabPage />} /> to App.jsx, OUTSIDE the auth guard.
+
+Acceptance: /spinout-lab loads without auth, shows the niche product as a standalone surface.
+```
+
+---
+
+### TASK 8 — `?lane=` and `?product=` query-param handling on Register
+
+```
+File: frontend/src/pages/RegisterPage.jsx
+
+Read the URL query params on mount:
+  - ?lane=partner | lp | founder
+  - ?product=spinout-lab (optional)
+
+Behavior:
+  - If lane=partner: pre-select the "I'm a partner" toggle, show the partner-specific intro copy ("Join the Partner Network — get matched with deals before they go public.")
+  - If lane=lp: pre-select "I'm an LP/investor", copy: "Open your LP account to track commitments, calls, distributions."
+  - If lane=founder: pre-select "I'm a founder", copy: "Submit your pitch — we'll score it within 72 hours."
+  - If product=spinout-lab: add a single info pill above the form: "You're applying for Spin-Out Lab — our 30-day cohort." (gvpn-amber border)
+
+Persist the lane in localStorage as `gvpn:intent` so post-verification flow can route to the right portal.
+
+DO NOT change the existing TOTP / email-verification logic. Only add the pre-fill + intent persistence layer.
+
+Acceptance: hitting /register?lane=partner pre-selects the partner role and shows partner copy. Refreshing keeps the selection. Empty params behave exactly like today.
+```
+
+---
+
+### TASK 9 — SEO, OG, sitemap
+
+```
+Files: frontend/index.html, /index.html (root), frontend/public/robots.txt (create if missing), frontend/public/sitemap.xml (create if missing)
+
+1. <head> updates in frontend/index.html:
+   - <title>Global Venture Partner Network — One network. Three lanes.</title>
+   - <meta name="description" content="GVPN connects partners, LPs, and founders across borders. Spin-Out Lab takes companies from idea to funded in 30 days.">
+   - <meta property="og:title" content="Global Venture Partner Network">
+   - <meta property="og:description" content="One network. Three lanes — partners, capital, founders.">
+   - <meta property="og:type" content="website">
+   - <meta property="og:url" content="https://axal.vc">
+   - <meta property="og:image" content="https://axal.vc/og.png"> (placeholder — generate or use existing axal-mark.png upscaled to 1200x630)
+   - <meta name="twitter:card" content="summary_large_image">
+
+2. robots.txt:
+   User-agent: *
+   Allow: /
+   Disallow: /dashboard
+   Disallow: /admin
+   Disallow: /api
+   Sitemap: https://axal.vc/sitemap.xml
+
+3. sitemap.xml: include /, /spinout-lab, /register, /login. Set <lastmod> to today's date.
+
+4. Update README.md top section: replace "Axal StudioOS — The 30-Day Spin-Out Engine" with:
+   "GVPN OS — Global Venture Partner Network operating system. Includes Spin-Out Lab (niche 30-day venture sprint product)."
+
+Acceptance: View-source on / shows new title/description/OG. /sitemap.xml resolves. /robots.txt blocks /dashboard. README leads with the network framing.
+```
+
+---
+
+### TASK 10 — Build, deploy, QA
+
+```
+Run, in order:
+
+1. cd frontend && npm run dev
+   - Manual QA: walk every section of /, /spinout-lab, /register?lane=partner, /register?lane=lp, /register?lane=founder
+   - Confirm authed routes (/dashboard, /projects, /funds, etc.) are visually unchanged
+
+2. cd frontend && npx vite build
+   - This rebuilds the docs/ folder for GitHub Pages
+
+3. Inspect docs/index.html — confirm the new <title> and <meta> made it into the build
+
+4. ./build-pages.sh (if it exists — confirm it copies docs/ correctly)
+
+5. Commit message:
+   "Rebrand: StudioOS landing → Global Venture Partner Network. Spin-Out Lab carved out as niche product. Five-layer network IA. Three-lane CTA model. Public nav/footer. /spinout-lab route. SEO/OG refreshed."
+
+6. Push to main. GitHub Pages will deploy axal.vc from /docs.
+
+7. Post-deploy smoke test:
+   - https://axal.vc — new hero, no "30-day" in H1
+   - https://axal.vc/spinout-lab — niche page loads
+   - https://axal.vc/register?lane=lp — LP-flavored copy
+   - https://axal.vc/dashboard — still requires auth, still looks like the existing app
+
+DO NOT touch:
+  - Cloudflare Worker deploy (that's the API — landing rebrand doesn't need it)
+  - replit.md beyond a single line note about the rebrand
+  - Any backend route or DB migration
+
+Acceptance: axal.vc is live with GVPN branding. The 30-day claim now lives at /spinout-lab as a niche product, not on the homepage.
+```
+
+---
+
+## Part 5 — What you should decide before kicking off Task 0
+
+Three calls that change the prompts above:
+
+1. **Is "GVPN" the brand, or is "Axal" the brand and "GVPN" the product?**
+   - If GVPN = brand: replace "Axal Ventures" everywhere public-facing.
+   - If Axal = parent brand, GVPN = product: keep "Axal Management, LLC" in the footer, swap only product copy. (The prompts above assume the second model — adjust Task 0 if you want the first.)
+
+2. **Is "Spin-Out Lab" the right niche-product name?** Alternatives that test well:
+   - *Velocity* (suggests speed, less literal)
+   - *30-Day Cohort*
+   - *Spin-Out Sprint*
+   - *Founder Lab*
+   Whatever you pick, change the `nicheProduct.name` value in Task 0's `gvpn.ts` once and everything propagates.
+
+3. **Pricing surface — show or hide?** The current repo doesn't have public pricing. The nav in Task 6 includes a "Pricing" link that will 404. Either remove it or add `Task 6.5: build /pricing` before shipping.
+
+Optional follow-on tasks I'd recommend after the rebrand lands:
+
+- **Task 11** — partner directory teaser (pull a public subset from `/api/partners` and render as a logo wall on `/`)
+- **Task 12** — case-study pages for completed spin-outs (one per liquidity event in the DB, admin-curated)
+- **Task 13** — `/network` page that visualizes the 5 layers as a connected graph (use d3 force layout or react-flow — both are in the existing dependency tree-ish via the React 19 base)
+
+---
+
+**Suggested commit cadence:** Tasks 0–2 in one PR ("foundation + hero + network layers"), 3–5 in a second ("niche product + lanes + trust bar"), 6–10 in a third ("nav, footer, niche page, SEO, deploy"). Three small PRs review faster than one big one and let you ship the new hero before the niche page is fully done.

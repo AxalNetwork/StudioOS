@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#92400e;background:#fffbf2;border-color:#fde68a;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#fffbf2;border-color:#fde68a;color:#92400e;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#fffbf2;border:1px solid #fde68a;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #b45309;background:#b45309;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .grant{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#5b21b6;background:#f7f4ff;border:1px solid #ddd6fe;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .grant.rv{color:#7c6f86;background:#f6f5f8;border-color:#e2e1e8;text-decoration:line-through}
+    .mode{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:4px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /delivery</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#92400e;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Delivery</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <sc-if value="{{ p.client }}">
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">{{ p.client }} <span style="color:#615c6e;font-weight:600">⌄ switch client</span></span>
+          </sc-if>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ p.legend }}">
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:10.5px;color:#615c6e">
+            <sc-for list="{{ p.legend }}" as="lg" hint-placeholder-count="3">
+              <span style="display:inline-flex;align-items:center;gap:6px"><span class="{{ lg.cls }}">{{ lg.chip }}</span>{{ lg.t }}</span>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.mode }}"><span class="mode" style="{{ c.modeStyle }}">{{ c.mode }}</span></sc-if>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                  <sc-if value="{{ c.grant }}"><span class="{{ c.grantCls }}">{{ c.grant }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="amber" page="Delivery" hint-size="100%,720px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const A = { ink:'#b45309', deep:'#92400e', tint:'#fffbf2' };
+    const ROWS = ['Home','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Delivery' ? 'nav on' : 'nav',
+      style: label === 'Delivery' ? 'color:'+A.deep+';background:'+A.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+A.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Board','Deliverables','Capacity','Status reports','Health'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Deliverables' || label === 'Health' }));
+
+    const pill = (t) => {
+      const M = { 'On track':['#ecfdf5','#047857','#a7f3d0'], 'Opened':['#ecfdf5','#047857','#a7f3d0'],
+        'Signed off':['#ecfdf5','#047857','#a7f3d0'], 'Sent':['#ecfdf5','#047857','#a7f3d0'],
+        'At risk':['#fffbeb','#92400e','#fde68a'], 'Late':['#fffbeb','#92400e','#fde68a'],
+        'Drift':['#fffbeb','#92400e','#fde68a'], 'Draft':['#fffbeb','#92400e','#fde68a'],
+        'Never opened':['#fef2f2','#b91c1c','#fecaca'], 'Blocked':['#fef2f2','#b91c1c','#fecaca'],
+        'Over':['#fef2f2','#b91c1c','#fecaca'], 'Revoked':['#f6f5f8','#7c6f86','#e2e1e8'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const MODE = { Project:['#eef2ff','#3730a3','#c7d2fe'], Embedded:['#f7f4ff','#5b21b6','#ddd6fe'] };
+    const modeStyle = (m) => { const c = MODE[m]; return 'margin-left:6px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, mode:null, pill:null, seam:null, grant:null, nr:false, style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      o.modeStyle = o.mode ? modeStyle(o.mode) : '';
+      o.grantCls = o.grant ? (o.revoked ? 'grant rv' : 'grant') : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven'][n] || String(n);
+
+    // ══ Delivery curation rate — Granite 4.0 H Micro, as the rail declares ══
+    const D_IN = 0.017, D_OUT = 0.112;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * D_IN + tout / 1e6 * D_OUT;
+
+    // ══ ONE engagement book. Both modes. Every count on all five pages derives from it. ══
+    // Project rows carry milestones; embedded rows carry a granted seat and hours.
+    const ENG = [
+      { client:'Verwood', mode:'Project', scope:'Design system + component library', value:48000,
+        ms:[1,1,0,0], health:'At risk', drift:true, util:null, sat:4.2, blocked:false, owner:'Nadia Okonkwo' },
+      { client:'Halverton', mode:'Embedded', scope:'Fractional Head of Product · 2 days/wk', value:14000,
+        grant:'Board, KPIs', hrs:31, cap:32, health:'On track', util:0.95, sat:4.8, blocked:false, owner:'Tomás Ferreira' },
+      { client:'Meridian Robotics', mode:'Project', scope:'Sprint 2 — onboarding flow', value:22500,
+        ms:[1,1,1,0], health:'On track', util:null, sat:null, blocked:false, owner:'Nadia Okonkwo' },
+      { client:'Novacraft Labs', mode:'Embedded', scope:'Interim RevOps · 1 day/wk', value:6500,
+        grant:'Pipeline', hrs:7, cap:8, health:'On track', util:0.88, sat:4.5, blocked:false, owner:'Sena Adeyemi' },
+      { client:'Thornfield', mode:'Project', scope:'Brand refresh + landing pages', value:31000,
+        ms:[1,0,0,0], health:'Blocked', util:0.34, sat:3.1, blocked:true, owner:'Sena Adeyemi' },
+      { client:'Aperture', mode:'Embedded', scope:'Fractional CTO · seat closed Aug 12', value:0,
+        grant:'Repo, Metrics', revoked:true, hrs:0, cap:0, health:'Revoked', util:null, sat:null, blocked:false, owner:'Tomás Ferreira' }
+    ];
+    const live = ENG.filter(e => e.health !== 'Revoked');
+    const proj = live.filter(e => e.mode === 'Project');
+    const emb = live.filter(e => e.mode === 'Embedded');
+    const atRisk = live.filter(e => e.health === 'At risk' || e.health === 'Blocked');
+    const revoked = ENG.filter(e => e.health === 'Revoked');
+    const monthly = emb.reduce((a, e) => a + e.value, 0);
+    const projValue = proj.reduce((a, e) => a + e.value, 0);
+    const msDone = (e) => e.ms.filter(Boolean).length;
+    const pct = (x) => Math.round(x * 100) + '%';
+
+    const boardRows = ENG.map(e => {
+      const prog = e.mode === 'Project'
+        ? cell(msDone(e) + ' of ' + e.ms.length + ' milestones')
+        : (e.health === 'Revoked' ? cell('—', { nr:true }) : cell(e.hrs + ' of ' + e.cap + ' h this week'));
+      return { rowStyle: e.health === 'Revoked' ? 'opacity:.62' : '', cells:[
+        cell(e.client),
+        cell('', { mode: e.mode }),
+        cell(e.scope, e.mode === 'Embedded' ? { grant:'Granted · ' + e.grant, revoked: !!e.revoked } : {}),
+        prog,
+        cell('', { pill: e.health })
+      ]};
+    });
+
+    // ══ ONE deliverables log, keyed to the same clients. Never-opened designed first. ══
+    const DEL = [
+      { client:'Verwood', item:'Component library v2 — handoff', sent:'Aug 14', state:'Never opened', days:18, who:'Nadia Okonkwo' },
+      { client:'Verwood', item:'Design tokens spec', sent:'Aug 21', state:'Never opened', days:11, who:'Nadia Okonkwo' },
+      { client:'Meridian Robotics', item:'Onboarding flow — sprint 2 build', sent:'Aug 26', state:'Signed off', days:6, who:'Nadia Okonkwo' },
+      { client:'Thornfield', item:'Brand direction — three routes', sent:'Jul 30', state:'Opened', days:33, who:'Sena Adeyemi' },
+      { client:'Halverton', item:'Q3 product plan (seat output)', sent:'Aug 25', state:'Opened', days:7, who:'Tomás Ferreira' },
+      { client:'Novacraft Labs', item:'Pipeline hygiene audit', sent:'Aug 28', state:'Sent', days:4, who:'Sena Adeyemi' }
+    ];
+    const unopened = DEL.filter(d => d.state === 'Never opened');
+    const signed = DEL.filter(d => d.state === 'Signed off');
+    const delRows = DEL.slice().sort((a, b) => (a.state === 'Never opened' ? 0 : 1) - (b.state === 'Never opened' ? 0 : 1) || b.days - a.days)
+      .map(d => ({ rowStyle: d.state === 'Never opened' ? 'background:#fffafa' : '', cells:[
+        cell(d.client), cell(d.item), cell(d.sent), cell(d.days + ' d ago'),
+        cell('', { pill: d.state })
+      ]}));
+
+    // ══ ONE people roster. Hours are the sum of what the engagement book says. ══
+    const PEOPLE = ['Nadia Okonkwo','Tomás Ferreira','Sena Adeyemi'];
+    const PROJ_HRS = { 'Nadia Okonkwo':[['Verwood',22],['Meridian Robotics',14]],
+      'Tomás Ferreira':[], 'Sena Adeyemi':[['Thornfield',9]] };
+    const EMB_HRS = { 'Nadia Okonkwo':[], 'Tomás Ferreira':[['Halverton',31,'Board, KPIs']],
+      'Sena Adeyemi':[['Novacraft Labs',7,'Pipeline']] };
+    const ADMIN = { 'Nadia Okonkwo':6, 'Tomás Ferreira':11, 'Sena Adeyemi':5 };
+    const CAP_H = 40;
+    const roster = PEOPLE.map(p => {
+      const ph = PROJ_HRS[p].reduce((a, x) => a + x[1], 0);
+      const eh = EMB_HRS[p].reduce((a, x) => a + x[1], 0);
+      const total = ph + eh + ADMIN[p];
+      return { p, ph, eh, total, over: total > CAP_H, seats: EMB_HRS[p] };
+    });
+    const overCommitted = roster.filter(r => r.over);
+    const capRows = roster.map(r => ({ rowStyle: r.over ? 'background:#fffafa' : '', cells:[
+      cell(r.p),
+      cell(r.seats.length ? r.seats.map(s => s[0]).join(', ') : '—',
+        r.seats.length ? { grant:'Granted · ' + r.seats[0][2] } : {}),
+      cell(r.ph + ' h'), cell(r.eh + ' h'), cell(ADMIN[r.p] + ' h'),
+      cell(r.total + ' of ' + CAP_H + ' h', { pill: r.over ? 'Over' : null })
+    ]}));
+
+    // ══ ONE status-report feed. Client-side blocker designed in. ══
+    const REP = [
+      { client:'Thornfield', period:'Week of Aug 25', state:'Draft', shipped:'Brand direction routes revised (2 of 3).',
+        next:'Landing page build once a route is chosen.',
+        blocked:'Waiting on Thornfield to pick a direction — asked Aug 18, Aug 22, Aug 27. The build cannot start without it; the deadline does not move because of that.' },
+      { client:'Verwood', period:'Week of Aug 25', state:'Sent', shipped:'Design tokens spec delivered Aug 21.',
+        next:'Component audit, pending handoff review.',
+        blocked:'Two deliverables sent and not yet opened. Review is what unblocks the next milestone.' },
+      { client:'Halverton', period:'Week of Aug 25', state:'Sent', shipped:'Q3 product plan; two roadmap sessions run.',
+        next:'Pricing workstream kickoff.', blocked:'—' },
+      { client:'Meridian Robotics', period:'Week of Aug 18', state:'Sent', shipped:'Sprint 2 build signed off.',
+        next:'Sprint 3 scoping.', blocked:'—' }
+    ];
+    const drafts = REP.filter(r => r.state === 'Draft');
+    const withBlockers = REP.filter(r => r.blocked !== '—');
+    const repRows = REP.map(r => ({ rowStyle: r.state === 'Draft' ? 'background:#fffcf5' : '', cells:[
+      cell(r.client), cell(r.period), cell('', { pill: r.state }),
+      cell(r.shipped), cell(r.blocked, r.blocked !== '—' ? { pill: 'Blocked' } : {})
+    ]}));
+
+    // ══ Health — utilization for retainer clients is READ from the retainer record, not recomputed ══
+    const RETAINER_UTIL = { Halverton:0.95, 'Novacraft Labs':0.88, Thornfield:0.34 };
+    const healthRows = live.map(e => {
+      const u = RETAINER_UTIL[e.client];
+      return { rowStyle: e.health === 'Blocked' || e.health === 'At risk' ? 'background:#fffafa' : '', cells:[
+        cell(e.client),
+        cell('', { mode: e.mode }),
+        cell(e.drift ? 'Scope drift' : (e.blocked ? 'Client-side block' : 'Within scope'),
+          e.drift ? { pill:'Drift' } : (e.blocked ? { pill:'Blocked' } : {})),
+        u === undefined ? cell('—', { nr:true }) : cell(pct(u), { seam:'Read · Pipeline · Retainers' }),
+        e.sat === null ? cell('', { nr:true }) : cell(e.sat.toFixed(1) + ' / 5'),
+        cell('', { pill: e.health })
+      ]};
+    });
+    const noSat = live.filter(e => e.sat === null);
+
+    const legendSeam = [
+      { cls:'seam', chip:'From client', t:'founder-sourced object' },
+      { cls:'grant', chip:'Granted · Board', t:'scoped, revocable grant to a named operator' },
+      { cls:'grant rv', chip:'Granted · Repo', t:'grant revoked by the founder' }
+    ];
+
+    const PAGES = [
+      { id:'pd1', badge:'PD1', route:'/delivery/board', zone:'Board', arch:'WORK BOARD', client:'All clients · board view',
+        title:'Delivery · Board', h1:'Engagement board',
+        blurb:'The page the Delivery row lands on. Every live engagement in both modes, one row each — and the two modes are not variants: a project reports milestones, an embedded seat reports hours against a grant the founder can revoke.',
+        sub:'Both delivery modes, one row per engagement.',
+        cmpTitle:'Delivery · ' + live.length + ' live engagements',
+        cmpBody: proj.length + ' project, ' + emb.length + ' embedded. ' + atRisk.length + ' need attention.',
+        viewMore:'View more · ' + ENG.length + ' engagements incl. ' + nWord(revoked.length) + ' revoked seat →',
+        filters: fil(['All','Project','Embedded','Needs attention'], 0), ops:['Bulk status update','Saved views','Export'],
+        adds:[ { label:'Project value', value:usd(projValue), note: proj.length + ' scoped engagements' },
+          { label:'Embedded / month', value:usd(monthly), note: emb.length + ' granted seats' },
+          { label:'Need attention', value:String(atRisk.length), note:'1 at risk, 1 client-blocked' },
+          { label:'Revoked seats', value:String(revoked.length), note:'Aperture · closed Aug 12' } ],
+        legend: legendSeam,
+        instTitle:'Live engagements', instMeta:'Mode is structural, not a status',
+        cols:'1fr .8fr 2.1fr 1.2fr .9fr',
+        head:['Client','Mode','Scope','Progress','Health'],
+        rows: boardRows,
+        instNote:'A project row counts milestones; an embedded row counts hours against a granted seat, and names what was granted — Halverton\u2019s operator holds Board and KPIs, which is a different relationship from a file handed over. Aperture\u2019s row is a revoked grant, kept visible and struck through: a founder closing a seat is a normal event in this bucket, not an error state.',
+        aiLabel:'Draft · board read', aiCost:c4(runCost(8400, 620)),
+        aiBody:'Across ' + live.length + ' live engagements, ' + nWord(atRisk.length) + ' carry risk and both are client-facing: Verwood has drifted past scope with ' + unopened.length
+          + ' deliverables unopened, and Thornfield is blocked on a decision asked three times. Neither is a capacity problem, so neither is solved by adding people.',
+        aiAccept:'Accept draft', aiFoot:'Traces to engagement rows.' },
+
+      { id:'pd2', badge:'PD2', route:'/delivery/deliverables', zone:'Deliverables', arch:'COLLECTION', client:'All clients · shipped log',
+        title:'Delivery · Deliverables', h1:'Shipped work',
+        blurb:'What was shipped, when, and whether the client opened it. The never-opened rows sort to the top and carry red, because work delivered into silence is the firm\u2019s most expensive state — invoiced, unreviewed, and blocking the next milestone.',
+        sub:'Versions, send dates and acknowledgment states.',
+        cmpTitle:'Deliverables · ' + DEL.length + ' shipped',
+        cmpBody: unopened.length + ' never opened, ' + signed.length + ' signed off.',
+        viewMore:'View more · ' + DEL.length + ' items, ' + unopened.length + ' unacknowledged →',
+        filters: fil(['Never opened','All','Signed off','By client'], 0), ops:['Chase unopened','Version history','Export'],
+        adds:[ { label:'Never opened', value:String(unopened.length), note:'both Verwood, 11 and 18 days out' },
+          { label:'Signed off', value:String(signed.length), note:'Meridian sprint 2' },
+          { label:'Shipped this month', value:String(DEL.filter(d => d.days <= 31).length), note:'across ' + new Set(DEL.map(d => d.client)).size + ' clients' },
+          { label:'Median days to open', nr:true, note:'too few opened items to state one honestly' } ],
+        instTitle:'Shipped log', instMeta:'Unopened first, oldest first within it',
+        cols:'1fr 2.1fr .8fr .9fr 1.1fr',
+        head:['Client','Deliverable','Sent','Age','Acknowledgment'],
+        rows: delRows,
+        instNote:'Verwood\u2019s two unopened rows lead the page and tint red: the component library has been out for 18 days and the tokens spec for 11, both invoiced, neither reviewed — which is also why that engagement reads at risk on the board. Median days to open reads "Not recorded" rather than averaging ' + nWord(DEL.length - unopened.length) + ' opens into a number that would look like a metric.',
+        aiLabel:'Draft · unopened chase', aiCost:c4(runCost(5200, 480)),
+        aiBody:'A chase note per unopened deliverable, naming the item, the date sent, and what the review unblocks — sent by a person, from the account that shipped the work. States the milestone consequence without assigning blame.',
+        aiAccept:'Accept drafts', aiFoot:'Two notes; a human sends each.' },
+
+      { id:'pd3', badge:'PD3', route:'/delivery/capacity', zone:'Capacity', arch:'ANALYTICS', client:'Firm-wide · people view',
+        title:'Delivery · Capacity', h1:'Capacity & allocation',
+        blurb:'People, not projects. Where the firm is over-committed — and where an over-committed person also holds a granted seat inside a client\u2019s systems, which is a trust exposure rather than only a throughput one.',
+        sub:'Allocation across the team, with granted operator seats.',
+        cmpTitle:'Capacity · ' + overCommitted.length + ' over-committed',
+        cmpBody: roster.length + ' people, ' + emb.length + ' granted seats held.',
+        viewMore:'View more · ' + roster.length + ' people, hours by mode →',
+        filters: fil(['This week','Next week','Seats only','All'], 0), ops:['Reallocate','Seat register','Export'],
+        adds:[ { label:'Over-committed', value:String(overCommitted.length), note: overCommitted.map(r => r.p.split(' ')[0]).join(', ') || 'none' },
+          { label:'Seats held', value:String(emb.length), note:'each scoped and revocable' },
+          { label:'Project hours', value:roster.reduce((a, r) => a + r.ph, 0) + ' h', note:'this week' },
+          { label:'Seat hours', value:roster.reduce((a, r) => a + r.eh, 0) + ' h', note:'inside client systems' } ],
+        instTitle:'People', instMeta:'Cap ' + CAP_H + ' h · seat hours counted, not estimated',
+        cols:'1.1fr 1.6fr .8fr .8fr .8fr 1.1fr',
+        head:['Person','Seats held','Project h','Seat h','Internal h','Total'],
+        rows: capRows,
+        instNote:'Nadia is over at ' + roster[0].total + ' of ' + CAP_H + ' hours, ' + roster[0].ph + ' of them project work — a scheduling problem. Tomás sits at ' + roster[1].total
+          + ' while holding Halverton\u2019s Board and KPIs grant, which is the row to read differently: a stretched operator inside a client\u2019s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does.',
+        aiLabel:'Draft · capacity findings', aiCost:c4(runCost(6100, 540)),
+        aiBody:'Findings across ' + roster.length + ' people: who is over cap, by how much, and which overage sits behind a granted seat. Separates schedulable overflow from seat commitments, since only one of them can be moved without going back to the founder.',
+        aiAccept:'Accept findings', aiFoot:'Hours read from engagement rows.' },
+
+      { id:'pd4', badge:'PD4', route:'/delivery/status-reports', zone:'Status reports', arch:'FEED', client:'All clients · report feed',
+        title:'Delivery · Status reports', h1:'Client status reports',
+        blurb:'The recurring client-facing update: shipped, next, blocked. Drafted with assistance and sent by a person — and where the blocker is on the client\u2019s side, the report says so plainly without treating it as an excuse.',
+        sub:'Every report, its cadence and delivery history.',
+        cmpTitle:'Reports · ' + REP.length + ' this cycle',
+        cmpBody: drafts.length + ' in draft, ' + withBlockers.length + ' naming a blocker.',
+        viewMore:'View more · ' + REP.length + ' reports, full send history →',
+        filters: fil(['This cycle','Drafts','With blockers','Archive'], 0), ops:['Draft all','Cadence rules','Export'],
+        adds:[ { label:'In draft', value:String(drafts.length), note:'Thornfield · awaiting send' },
+          { label:'Sent this cycle', value:String(REP.length - drafts.length), note:'on the weekly cadence' },
+          { label:'Naming a blocker', value:String(withBlockers.length), note:'both client-side' },
+          { label:'Median read time', nr:true, note:'reports do not report their own opens yet' } ],
+        instTitle:'Report feed', instMeta:'A draft is never sent automatically',
+        cols:'1fr .9fr .8fr 1.9fr 2.4fr',
+        head:['Client','Period','State','Shipped','Blocked on'],
+        rows: repRows,
+        instNote:'Thornfield\u2019s draft names the client as the blocker: a direction was asked for on Aug 18, 22 and 27, and the build cannot start without it. The copy states that the deadline does not move because of it — not our delay, still our problem. Verwood\u2019s sent report says the same thing about ' + unopened.length + ' unopened deliverables, in the client\u2019s own inbox, which is the only place saying it changes anything.',
+        aiLabel:'Draft · weekly reports', aiCost:c4(runCost(4 * 5400, 4 * 420)),
+        aiBody:'One report per client drafted from the week\u2019s real activity — shipped items from the deliverables log, next steps from milestones, blockers from where the work actually stopped. Batch cost shown before it runs; every draft waits for a person to send.',
+        aiAccept:'Review the batch', aiFoot:'Four drafts; none send themselves.' },
+
+      { id:'pd5', badge:'PD5', route:'/delivery/health', zone:'Health', arch:'WORK BOARD', client:'All clients · renewal watch',
+        title:'Delivery · Health', h1:'Engagement health',
+        blurb:'The renewal early-warning page: scope drift, utilization, satisfaction, blockage. Utilization here is a read of the retainer record on Pipeline · Retainers — the same number, not a second one computed from a different source.',
+        sub:'Drift against scope, at-risk flags and satisfaction signals.',
+        cmpTitle:'Health · ' + atRisk.length + ' at risk',
+        cmpBody:'1 scope drift, 1 client-side block, ' + noSat.length + ' with no satisfaction recorded.',
+        viewMore:'View more · ' + live.length + ' engagements, renewal watch →',
+        filters: fil(['At risk','All','Renewing soon','By owner'], 0), ops:['Change order','Renewal watch','Export'],
+        adds:[ { label:'At risk', value:String(atRisk.length), note:'Verwood, Thornfield' },
+          { label:'Scope drift', value:'1', note:'Verwood — requests beyond SOW §2' },
+          { label:'Lowest utilization', value:pct(0.34), note:'Thornfield · read from retainer record' },
+          { label:'Firm satisfaction avg', nr:true, note: noSat.length + ' of ' + live.length + ' engagements have no score' } ],
+        legend:[ { cls:'seam', chip:'Read · Pipeline', t:'utilization read from the retainer record, not recomputed' },
+          { cls:'grant', chip:'Granted · KPIs', t:'scoped, revocable operator grant' } ],
+        instTitle:'Renewal watch', instMeta:'Utilization is a read, not a second record',
+        cols:'1fr .8fr 1.5fr 1.5fr .9fr .9fr',
+        head:['Client','Mode','Scope state','Utilization','Satisfaction','Health'],
+        rows: healthRows,
+        instNote:(() => { const eng = noSat.length === 1 ? 'engagement has' : 'engagements have';
+          return 'Thornfield renews in 17 days at ' + pct(0.34) + ' utilization — a client not using what they pay for, and the figure is seam-marked because it is read from the retainer record rather than recalculated here; two pages disagreeing about the same client\u2019s utilization is worse than either number. Firm satisfaction average reads "Not recorded" because '
+          + nWord(noSat.length) + ' ' + eng + ' no score, and averaging the rest would present ' + nWord(live.length - noSat.length) + ' opinions as a firm-wide fact.'; })(),
+        aiLabel:'Draft · renewal risk read', aiCost:c4(runCost(7300, 700)),
+        aiBody:'Per engagement: drift against SOW, utilization against the retainer record, and where satisfaction is absent rather than low. Thornfield reads as the near-term risk on utilization and a decision the client has not made; Verwood reads as drift plus silence, which is a scoping conversation and not a renewal one yet.',
+        aiAccept:'Accept read', aiFoot:'Utilization traced to Pipeline · Retainers.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

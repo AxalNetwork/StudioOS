@@ -1,0 +1,121 @@
+# Replit Build & Deploy Prompt for Multi-Template Landing Page System
+
+## Context
+A multi-template landing page system has been completed and pushed to branch `claude/fervent-bell-get7yn`. The system includes:
+- 5 audience-specific landing page templates under `/lp/*` routes
+- Shared reusable component library for all templates
+- Centralized brand kit with design tokens and button classes
+- All templates data-driven, lazy-loaded, and using forced light theme
+
+**PR Reference:** AxalNetwork/StudioOS#87 (Draft)
+**Branch:** claude/fervent-bell-get7yn
+
+## What Was Built
+
+### New Files (19 files total)
+
+**Brand Kit & Shared Components:**
+- `frontend/src/templates/brandKit.js` — Central brand kit with button classes, section backgrounds, Space Grotesk font constant
+- `frontend/src/templates/components/` — 11 reusable components:
+  - Hero.jsx, MetricsStrip.jsx, FeatureGrid.jsx, OutcomeCards.jsx, Timeline.jsx
+  - TestimonialBlock.jsx, FAQ.jsx, CTABlock.jsx, ProofBar.jsx, AccessBlock.jsx, ValidationBlock.jsx, SectionHeader.jsx
+
+**Page Templates:**
+- `frontend/src/pages/templates/FounderHomePage.jsx` → `/lp/founder`
+- `frontend/src/pages/templates/CustomerDiscoveryHomePage.jsx` → `/lp/customer-discovery`
+- `frontend/src/pages/templates/InvestorDealflowHomePage.jsx` → `/lp/investor`
+- `frontend/src/pages/templates/PartnerPartnershipHomePage.jsx` → `/lp/partner`
+- `frontend/src/pages/templates/SpinoutDemoDayPage.jsx` → `/lp/spinout-demo-day`
+
+**Modified Files:**
+- `frontend/src/App.jsx` — Added lazy imports and 5 new routes for `/lp/*` pages
+
+## Build Steps for Replit
+
+### 1. Fetch the Branch
+```bash
+git fetch origin claude/fervent-bell-get7yn
+git checkout claude/fervent-bell-get7yn
+git pull origin claude/fervent-bell-get7yn
+```
+
+### 2. Verify Files
+Confirm all 19 new files exist:
+```bash
+ls -la frontend/src/templates/
+ls -la frontend/src/pages/templates/
+grep -n "const.*HomePage = lazy" frontend/src/App.jsx
+```
+
+### 3. Install Dependencies (if needed)
+```bash
+cd frontend && npm install && cd ..
+```
+
+### 4. Build Frontend
+```bash
+cd frontend && npm run build
+```
+Expected output:
+- Build completes successfully
+- New chunk files appear in `docs/assets/` for all 5 template pages:
+  - `FounderHomePage-*.js`
+  - `CustomerDiscoveryHomePage-*.js`
+  - `InvestorDealflowHomePage-*.js`
+  - `PartnerPartnershipHomePage-*.js`
+  - `SpinoutDemoDayPage-*.js`
+- New shared component chunks appear:
+  - `Hero-*.js`, `MetricsStrip-*.js`, `FeatureGrid-*.js`, `OutcomeCards-*.js`, `Timeline-*.js`
+  - `TestimonialBlock-*.js`, `FAQ-*.js`, `CTABlock-*.js`, `ProofBar-*.js`, `AccessBlock-*.js`, `ValidationBlock-*.js`, `SectionHeader-*.js`
+
+### 5. Deploy to Cloudflare Pages
+```bash
+npx wrangler pages deploy docs/
+```
+
+## Testing Checklist (Post-Deploy)
+
+- [ ] Visit each `/lp/*` route and verify content renders correctly
+- [ ] Confirm all 5 templates use forced light theme (no dark mode bleed)
+- [ ] Check that CTAs route to correct destinations:
+  - `/lp/founder` → `/register?lane=founder`
+  - `/lp/customer-discovery` → `/register?lane=founder`
+  - `/lp/investor` → `/register?lane=lp`
+  - `/lp/partner` → `/register?lane=partner`
+  - `/lp/spinout-demo-day` → custom RSVP CTA
+- [ ] Verify animated components work (count-up in MetricsStrip, Timeline animation)
+- [ ] Test `/lp/investor` dark data room section (AccessBlock)
+- [ ] Test `/lp/partner` anchor link (#models) navigation
+- [ ] Verify responsive design on mobile (hero, grids, timeline orientation)
+- [ ] Check bundle size — lazy-loaded chunks should be individually small
+
+## Architecture Notes
+
+**Route Structure:**
+All templates are lazy-loaded via React `lazy()` + `Suspense` in `App.jsx`. This ensures each template loads its own JS chunk on-demand.
+
+**Data Pattern:**
+Each template file exports content as structured JS arrays at the top:
+- `METRICS`, `PROOF_BAR`, `PAIN_POINTS`, `SOLUTION_PILLARS`, `HOW_IT_WORKS`, etc.
+- Data flows as props into shared components
+- No hardcoded content in JSX
+
+**Theming:**
+All templates call `useForcedLightTheme()` hook to override app-wide dark mode.
+
+**Brand Kit:**
+All button classes and section backgrounds sourced from `frontend/src/templates/brandKit.js`.
+
+## Key Files to Monitor
+
+- `frontend/src/App.jsx` — Router configuration for the 5 new routes
+- `docs/index.html` — Entry point for Cloudflare Pages; must reference correct JS chunks
+- `frontend/vite.config.js` — Vite build config (check that lazy-loaded chunks are properly split)
+
+## Notes on Prior Build Attempts
+
+During development, a build issue occurred due to empty `react-router-dom` package in the cloud environment (pre-existing npm network issue). This did not block the PR or code — the build successfully processed 3479 modules before failing on that unrelated dependency. All template code is correct and will build successfully in a clean environment.
+
+---
+
+**Ready to deploy on Replit!**

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals · Experience V2 · #4815</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Deals Experience V2</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The product is organised around investment decisions: Discover → Understand → Investigate → Decide → Commit → Close → Monitor. /deals has one job, My Deal Flow: a header, Needs your attention, the board or table, then a compact Other deal activity line; Screening, Commit and Closing live on their own routes. Three status families never merge: Company is a square CO tag, My investment process a violet pill, and Transaction a teal-edged tag. Five absence states each have their own treatment, and an unreadable state never falls through to a negative action. Eadwyn starts from investor tasks, with model and usage behind a disclosure. A consequential action in preview mode names the real actor.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Shell follows the owner’s #3704 rule over the prompt’s “keep the account switcher”: no licence or account switcher, a union sidebar (Investor: Studio, Spin-Out Lab, Deals, Axal VC Fund, Fund, Trust, Network, Research), a company/project switcher top-left, and Portfolio / Companies / Licences in the Account menu. Companies, people and amounts are fictional sample data.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DX1', 'Deal flow · desktop', 'My Deal Flow only: scope links (Mine / All deals / New for you), Board/Table, search, filters, sort, View settings, Compare. A Needs your attention strip; five stage columns (Passed is a filter) with count and total ask; cards carry a company tag, my stage, the round, a scorecard strip, three scopes and fit. Other deal activity is one compact line.', [F('DE01', false, 1300)]],
+      ['DX1b', 'Deal card examples', 'Normal, low confidence, missing scores, locked scores, stale, passed, unassigned, and access status unavailable (Try again; never Request invitation).', [C('DE01b', false, 1240, 640)]],
+      ['DX2', 'Deal flow · table', 'Venture and My stage stay fixed; scope columns use the same score component, and missing values read Not recorded / Not reported / Locked rather than 0. A quick-preview row and real pagination.', [F('DE02', false, 820)]],
+      ['DX3', 'Deal flow · mobile 390', 'A · Table as cards with the same actions. B · Board as one stage at a time; Move to… replaces drag. C · Filters as a full-height sheet. D · Compare selection. Targets are 44px.', [P('DE03a', 'A · Cards'), P('DE03b', 'B · Board'), P('DE03c', 'C · Filters'), P('DE03d', 'D · Compare')]],
+      ['DX4', 'Individual deal · overview', 'An investment cockpit: company tag beside the name, my progress separately (Diligence · Step 3 of 8), one primary action, the financial strip once, the eight-step progress with one reason and one next action, scorecard summary, material changes only, the investment case, and Your position.', [F('DE04', false, 1150)]],
+      ['DX5', 'Scorecard', 'Eleven scopes and no overall score. Each row shows score, band, confidence, coverage, change and evidence, and covers Scored, Not enough recorded, Not expected yet, Locked and Unreadable.', [F('DE05', false, 980)]],
+      ['DX6', 'Screening', 'Decision-oriented table with Move to diligence and Pass…; Pass reasons sit behind a disclosure as fund memory.', [F('DE06', false, 760)]],
+      ['DX7', 'Investment committee', 'A · A decision with votes and rationales; recusal is distinct from abstain and counted beside the tally; open conditions are marked as blocking Closing; minutes are Not recorded. B · Empty: “No investment decision is open.” with How voting works.', [F('DE07', 'A · Decision open', 1000), F('DE07b', 'B · Empty', 560)]],
+      ['DX8', 'Closing', 'A · Deal-first list with progress, signatures, conditions and transfer state, and the empty state. B · Closing workspace (Checklist, Paper, Conditions, Transfer, Audit); the transfer disclaimer appears once.', [F('DE08', 'A · Deals at closing', 760), F('DE08b', 'B · Workspace', 820)]],
+      ['DX9', 'Individual deal · investment', 'Your commitment, firm and private note; explicit route (Direct / syndicate / fund); round context without other investors’ names or amounts; the closing status drives the next action. The Eadwyn rail is shown running a task.', [F('DE09', false, 900)]],
+      ['DX10', 'Data room states', 'A no access, B NDA required, C NDA out for signature, D open (folders, search, files), E access unreadable → Try again.', [C('DE10', false, 1300, 460)]],
+      ['DX11', 'Compare', 'Sticky venture headers with fixed colours; bar opacity shows confidence, which is also written in words; missing values use words, never zero bars; Eadwyn’s comparison draft is a proposal (Save to notes / Discard).', [F('DE11', false, 1050)]],
+      ['DX12', 'Studio deals · admin / Operating Partner', 'Round funnel, a Needs attention strip, and an admin table with Advance plus More (Pass, Invite investors, Edit terms). Shown in Super Admin preview of the Investor shell; Operating Partners act only on rounds they lead.', [F('DE12', false, 760)]],
+      ['DX13', 'States', 'Loading, unreadable, empty, no permission, the five absence states, the three status families, and the primary Deal Flow failure with “Other deal information is still available” kept visibly separate.', [C('DE13', false, 1400, 560)]],
+      ['DX14', 'Dialogs', 'Pass (reason required), Move to diligence, Commit, Withdraw (reason), Record transfer (open-condition warning), and the preview-mode version that names Super Admin, with the Return to HQ policy alternative.', [C('DE14', false, 1400, 800)]],
+      ['DX15', 'Individual deal · mobile 390', 'Compact header, a 2×2 financial strip, scrollable tabs, a vertical progress stepper and a sticky primary action.', [P('DE15', false)]],
+      ['DX16', 'Dark mode', 'A · Deal flow. B · Individual deal overview. Same hierarchy and the same word-and-shape statuses.', [F('DE16a', 'A · Deal flow', 1300), F('DE16b', 'B · Deal overview', 1150)]],
+      ['DX-R', 'Eadwyn Deals rail', 'A · Default: five investor tasks; model and usage behind a disclosure. B · After choosing a task: sources, model, estimate, Run, then a proposal with sources and Save / Discard.', [C('DE18', false, 700, 680)]],
+      ['DX-H', 'Shell rule, backend fit and handoff', 'How #3704 overrides the prompt’s shell line, the Worker routes behind each board, what is frontend-only, the backend/policy item (preview-mode write enforcement), and accessibility.', [W('DE17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

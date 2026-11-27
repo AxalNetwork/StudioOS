@@ -1,0 +1,34 @@
+{
+  "skill": "brand-voice-governance",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "Brand Voice Governance",
+        "task_scope": "Defines operational voice standards, tone dimensions, vocabulary, prohibited patterns and review rules across channels.",
+        "evidence": [
+          "tone dimensions and review rules"
+        ],
+        "omitted_field": "approved terminology"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for tone dimensions and review rules."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "tone dimensions and review rules"
+    ],
+    "must_say_not_recorded": [
+      "approved terminology"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+#52 - Event admin moderation, reminders, comp, tickets
+What & Why
+Close the event loop per design/EVENT_SYSTEM.md §5–§8: admin moderation + analytics UI, reminder/notification automation through the existing cron, comp-invite automation on publish, and optional paid tickets via the existing Stripe PaymentIntent flow.
+Done looks like
+* /admin/events → AdminEventsPage (admin-guarded): pending-review queue with approve/reject, publish/unpublish/feature, capacity override, cancel; analytics (registrations, attendance, capacity utilisation, conversion) via recharts.
+* Reminders: invite + T-24h/T-1h reminders + waitlist-promotion + cancellation notices enqueued via notification_outbox and drained in the existing scheduled() cron in index.ts. .ics attached to invite emails.
+* Comp automation: on publish, comp invitations auto-mint for official partners and invested LPs via eventAudience.ts, surfaced in attendees' inboxes.
+* (Optional) Paid tickets: if price_cents>0, an embedded Stripe PaymentIntent with metadata.kind='event_ticket', fulfilled in the payment_intent.succeeded webhook (mark registration confirmed). Comp invites skip payment; default free.
+* An admin approves a pending public event and it appears on /events; an official partner and an invested LP each receive an automatic free invite; reminders fire from the cron. npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* Cross-system badges/archetype surfacing/suggestions (Phase F).
+* New event CRUD beyond admin moderation (E1/E2 already cover it).
+Steps
+1. Admin UI — build AdminEventsPage (review queue, publish/feature/override/cancel, recharts analytics), admin-guarded.
+2. Reminder automation — enqueue invite/T-24h/T-1h/waitlist-promotion/cancellation notices to notification_outbox and drain them in the existing cron; attach .ics to invite emails.
+3. Comp automation — on publish, auto-mint comp invitations via eventAudience.ts and surface them in inboxes.
+4. Optional paid tickets — gate on price_cents>0 with a PaymentIntent (metadata.kind='event_ticket') fulfilled in the existing payment_intent.succeededwebhook; comp skips payment.
+5. Green gates — dark: variants; run drift + tsc; update both changelogs.
+Relevant files
+* cloudflare-worker/src/index.ts:864
+* cloudflare-worker/src/services/wellbeing/bookings.ts
+* cloudflare-worker/sql/migrations/013_notifications_digest.sql
+* frontend/src/App.jsx
+* frontend/src/sidebarConfig.js
+* frontend/src/lib/api.js
+* scripts/check-dark-mode.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#51 - Public event calendar + RSVP + apex routing

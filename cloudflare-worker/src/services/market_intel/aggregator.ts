@@ -1,0 +1,428 @@
+/**
+ * Task #14 (AA-1) — Market Intelligence aggregator.
+ *
+ * Two entry points the cron consumes:
+ *   - `runSourcesByCadence(env, cadence)` — dispatches every registered
+ *     source matching `cadence`, writing observations to
+ *     `market_intel_rows`. Sources flagged LIVE call `fetchLive`. The rest
+ *     store nothing and the run says why, unless `MI_STUB_ROWS = "on"`
+ *     (development and tests), where they write their `fetchStub` (D538).
+ *   - `recomputeIndexes(env)` — reads the rows retrieved in the last
+ *     WINDOW_DAYS days, counts each observation once, applies weights + decay,
+ *     writes per-(sector, dimension) composites to `market_intel_indexes`
+ *     with the window each covers and the mix it used (D7708), and busts the
+ *     KV layer.
+ *
+ * Index re-runs are safe: the upsert on `market_intel_indexes` keys on the
+ * UNIQUE(sector, geo, period_key, dimension) constraint. Row writes are
+ * append-only and NOT idempotent: every run of a live source appends its
+ * rows again, even when the provider's figure has not changed (storing an
+ * unchanged observation once is #7711). The read path filters by `ts`.
+ *
+ * D7707 — each run of a source flagged live also appends one row to
+ * `market_intel_source_runs` saying what it did.
+ */
+import type { Env } from '../../types';
+import type { CommonRow, SourceDescriptor, Cadence, Dimension } from './registry';
+import { listSources, isLive } from './registry';
+import { compositeHeadline, compositeMix, composeSectorScores, periodKey, scoreWindow, type ScoreMix, type ScoredRow } from './scoring';
+import { bumpQuota, isExhausted, markRateLimited } from './quota';
+import { writeKv } from './cache';
+import { isLiveRow, liveRowSql, liveIndexSql, retrievedAtSql, LIVE_INDEX_BASIS } from './liveRows';
+
+/** Canonical sector universe. Connectors normalise to one of these. */
+export const SECTORS = [
+  'Agentic B2B', 'Bio-Automation', 'AI Infrastructure', 'Fintech / DeFi',
+  'Data / Analytics', 'Cybersecurity', 'Autonomous Robotics',
+  'Climate Intelligence', 'Quantum Infrastructure', 'Enterprise AI',
+  'Vertical SaaS', 'DevTools',
+] as const;
+export type Sector = typeof SECTORS[number];
+
+const ROW_PAYLOAD_TRUNC = 8 * 1024;
+
+async function persistRows(env: Env, rows: CommonRow[]): Promise<{ inserted: number }> {
+  if (rows.length === 0) return { inserted: 0 };
+  // D7707 — a plain insert, as before, now with what the row measures and
+  // when it was fetched. A connector that sets none of them stores null.
+  const stmts = rows.map((r) =>
+    env.DB.prepare(
+      `INSERT INTO market_intel_rows
+         (source_key, sector, geo, metric_key, metric_value, raw_value, unit, ts, citation_url, payload_json,
+          observed_period, observed_period_end, published_at, retrieved_at, coverage_area, scope)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      r.source_key,
+      r.sector,
+      r.geo ?? 'global',
+      r.metric_key,
+      r.metric_value,
+      r.raw_value ?? null,
+      r.unit ?? 'index',
+      r.ts,
+      r.citation_url ?? null,
+      r.payload ? JSON.stringify(r.payload).slice(0, ROW_PAYLOAD_TRUNC) : null,
+      r.observed_period ?? null,
+      r.observed_period_end ?? null,
+      r.published_at ?? null,
+      r.retrieved_at ?? null,
+      r.coverage_area ?? null,
+      r.scope ?? null,
+    )
+  );
+  await env.DB.batch(stmts);
+  return { inserted: rows.length };
+}
+
+/**
+ * D538 step 2 — whether a source that cannot report live data writes its
+ * synthetic stub instead. `MI_STUB_ROWS = "on"` only, set in `.dev.vars` or a
+ * test. `wrangler.toml` declares it `"off"` at the top level and under
+ * `[env.production.vars]`, and anything else counts as off, so production
+ * never stores a stub row again: the 237,372 it stored before D538 are the
+ * reason this exists.
+ */
+export function stubRowsEnabled(env: Env): boolean {
+  const v = (env as unknown as Record<string, string | undefined>).MI_STUB_ROWS;
+  return (v || '').toLowerCase() === 'on';
+}
+
+/** Why a run stored nothing for a source. Shown to operators, never a figure. */
+export type SkipReason = 'flag_off' | 'no_live_client' | 'quota_exhausted' | 'no_live_rows' | 'fetch_failed';
+
+/**
+ * D7707 — what one run of a source flagged live did, as stored in
+ * `market_intel_source_runs.outcome`.
+ */
+export type RunOutcome = 'fetched' | 'failed' | 'out_of_quota' | 'nothing_to_cite' | 'no_live_client';
+
+/**
+ * D7707 — why a fetch failed, from a fixed list. Provider text and request
+ * URLs are never stored; this is all a run row keeps of an error.
+ */
+export type RunErrorClass = `http_${number}` | 'timeout' | 'unreadable_response' | 'empty' | 'other';
+
+/**
+ * Classify a fetch error into the fixed list. `fetchJson` throws
+ * `http_<status>`, and `buildLiveRows` joins each sector's message after
+ * `live_fetch_failed`, so the first status named wins; an abort is a
+ * timeout; a body that would not parse is unreadable; a failure with no
+ * sector error at all (every sector had nothing to cite, or a macro source
+ * returned no value) is empty.
+ */
+export function classifyRunError(e: unknown): RunErrorClass {
+  const msg = String((e as Error)?.message ?? e ?? '');
+  const name = String((e as Error)?.name ?? '');
+  const http = /\bhttp_([1-5]\d\d)\b/.exec(msg);
+  if (http) return `http_${http[1]}` as RunErrorClass;
+  if (name === 'AbortError' || name === 'TimeoutError' || /\babort|timed? ?out\b/i.test(msg)) return 'timeout';
+  if (name === 'SyntaxError' || /JSON|Unexpected token|Unexpected end|unreadable/i.test(msg)) return 'unreadable_response';
+  if (/^live_fetch_failed(?: empty)?\s*$/.test(msg)) return 'empty';
+  return 'other';
+}
+
+export interface SourceRun {
+  source: string;
+  inserted: number;
+  mode: 'live' | 'stub' | 'degraded' | 'skipped';
+  /** Set when mode is 'skipped': why nothing was stored. */
+  reason?: SkipReason;
+  error?: string;
+  /** D7707 — rows the provider answered with, before the live filter. */
+  seen?: number;
+  /** D7707 — the fixed-list class of `error`; the run row stores this, never `error`. */
+  error_class?: RunErrorClass;
+  /** D7707 — what the run did, for a source flagged live. */
+  outcome?: RunOutcome;
+  /**
+   * D7707 — the reason the run row stores. `reason` itself stays set only
+   * when nothing was stored, so a development run a stub filled in for still
+   * counts as it did before; this carries why it was filled in.
+   */
+  run_reason?: SkipReason;
+}
+
+async function runOneSource(env: Env, src: SourceDescriptor): Promise<SourceRun> {
+  const sectors = SECTORS.slice();
+  const stubs = stubRowsEnabled(env);
+  const flaggedLive = isLive(env, src.key);
+  const wantLive = flaggedLive && typeof src.fetchLive === 'function';
+  const stubRun = async (mode: 'stub' | 'degraded', error?: string): Promise<SourceRun> => {
+    const r = await persistRows(env, src.fetchStub({ sectors, now: new Date() }));
+    return { source: src.key, inserted: r.inserted, mode, ...(error ? { error } : {}) };
+  };
+  const skip = (reason: SkipReason, error?: string): SourceRun =>
+    ({ source: src.key, inserted: 0, mode: 'skipped', reason, ...(error ? { error } : {}) });
+
+  if (!wantLive) {
+    // Off: development gets its stub; production stores nothing.
+    if (stubs) return { ...(await stubRun('stub')), ...(flaggedLive ? { outcome: 'no_live_client' as const, run_reason: 'no_live_client' as const } : {}) };
+    return { ...skip(flaggedLive ? 'no_live_client' : 'flag_off'), ...(flaggedLive ? { outcome: 'no_live_client' as const } : {}) };
+  }
+  // GRACEFUL DEGRADE (development only since D538) — a live provider that
+  // has burned its daily quota falls back to the stub so a dev database keeps
+  // its recency window. In production it stores nothing and says why.
+  if (await isExhausted(env, src.key)) {
+    const r = stubs ? await stubRun('degraded', 'quota_exhausted') : skip('quota_exhausted');
+    return { ...r, run_reason: 'quota_exhausted', outcome: 'out_of_quota', seen: 0 };
+  }
+  try {
+    const fetched = await src.fetchLive!(env, { sectors });
+    await bumpQuota(env, src.key, { cap: src.daily_cap });
+    // A connector still marked draft answers fetchLive with stub rows. Those
+    // are never stored as if they were live: outside development only rows a
+    // provider can be cited for are kept (the D538 predicate).
+    const rows = stubs ? fetched : fetched.filter(isLiveRow);
+    if (rows.length === 0) return { ...skip('no_live_rows'), outcome: 'nothing_to_cite', seen: fetched.length };
+    const r = await persistRows(env, rows);
+    return { source: src.key, inserted: r.inserted, mode: 'live', outcome: 'fetched', seen: fetched.length };
+  } catch (e) {
+    const msg = ((e as Error)?.message || 'fetch_failed').slice(0, 200);
+    const error_class = classifyRunError(e);
+    if (/429|rate.?limit/i.test(msg)) await markRateLimited(env, src.key);
+    else await bumpQuota(env, src.key, { error: true, cap: src.daily_cap });
+    if (stubs) {
+      try {
+        return { ...(await stubRun('degraded', msg)), run_reason: 'fetch_failed', outcome: 'failed', error_class, seen: 0 };
+      } catch {
+        /* fall through */
+      }
+    }
+    return { ...skip('fetch_failed', msg), outcome: 'failed', error_class, seen: 0 };
+  }
+}
+
+/**
+ * D7707 — one `market_intel_source_runs` row for a run of a source flagged
+ * live. Only the fixed-list outcome, reason and error class are stored, never
+ * the provider's text or a URL. A failed write is logged and ingestion
+ * carries on: the record of a run never stops the run.
+ */
+async function recordSourceRun(env: Env, run: SourceRun, started_at: string, finished_at: string): Promise<void> {
+  if (!run.outcome) return;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO market_intel_source_runs
+         (source_key, started_at, finished_at, outcome, reason, rows_seen, rows_inserted, rows_unchanged, error_class)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`
+    ).bind(
+      run.source, started_at, finished_at, run.outcome, run.run_reason ?? run.reason ?? null,
+      run.seen ?? 0, run.inserted, run.error_class ?? null,
+    ).run();
+  } catch (e) {
+    console.warn(`[market-intel] could not record the run of ${run.source}: ${String((e as Error)?.message || e).slice(0, 120)}`);
+  }
+}
+
+export interface CadenceRun {
+  scanned: number;
+  ok: number;
+  failed: number;
+  inserted: number;
+  /** Sources that stored nothing, with how many for each reason. */
+  skipped: number;
+  skip_reasons: Partial<Record<SkipReason, number>>;
+  details: SourceRun[];
+}
+
+/**
+ * Run `sources` in turn and record the outcome. A live fetch that failed and
+ * stored nothing counts as failed; one a development stub filled in for is
+ * 'degraded' and counts as ok, as before D538; a source that is merely off
+ * counts as ok. Every source that stored nothing is logged with
+ * its reason, so the run itself records why a sector has no figure.
+ */
+async function runSources(env: Env, sources: SourceDescriptor[], label: string): Promise<CadenceRun> {
+  const details: SourceRun[] = [];
+  const skip_reasons: Partial<Record<SkipReason, number>> = {};
+  let inserted = 0;
+  let ok = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const s of sources) {
+    const started_at = new Date().toISOString();
+    const r = await runOneSource(env, s);
+    // D7707 — a source whose flag is live leaves a run row; one that is off leaves none.
+    if (isLive(env, s.key)) await recordSourceRun(env, r, started_at, new Date().toISOString());
+    details.push(r);
+    inserted += r.inserted;
+    if (r.mode === 'skipped') {
+      skipped += 1;
+      skip_reasons[r.reason!] = (skip_reasons[r.reason!] || 0) + 1;
+    }
+    if (r.reason === 'fetch_failed') failed += 1;
+    else ok += 1;
+  }
+  if (skipped > 0) {
+    const counts = Object.entries(skip_reasons).map(([k, n]) => `${k}:${n}`).join(',');
+    const failures = details
+      .filter((d) => d.reason === 'fetch_failed' || d.reason === 'quota_exhausted' || d.reason === 'no_live_rows')
+      .map((d) => `${d.source}=${d.reason}${d.error ? `(${d.error.slice(0, 80)})` : ''}`)
+      .join(' ');
+    console.info(`[market-intel] ${label} stored nothing for ${skipped} source(s): ${counts}${failures ? ` ${failures}` : ''}`);
+  }
+  return { scanned: sources.length, ok, failed, inserted, skipped, skip_reasons, details };
+}
+
+/**
+ * Task #5 (AK) — convenience wrapper that runs every FREE source on the
+ * given cadence. The spec asks for a single cron-callable entry point for
+ * the always-available connectors; this just filters out `paid: true`
+ * descriptors so the cron can call `runFreeConnectors(env, 'hourly')`
+ * without leaking into paid quotas.
+ *
+ * NOTE: cron WIRING (wrangler.toml schedule + invocation in `index.ts`)
+ * is owned by Task #9 (AO). This export is the contract that task hooks
+ * into — the existing 6h aggregator in index.ts still uses
+ * `runSourcesByCadence` to keep both free + paid sources flowing on the
+ * same cadence today.
+ */
+export async function runFreeConnectors(env: Env, cadence: Cadence): Promise<CadenceRun> {
+  return runSources(env, listSources().filter((s) => s.cadence === cadence && !s.paid), `free ${cadence}`);
+}
+
+export async function runSourcesByCadence(env: Env, cadence: Cadence): Promise<CadenceRun> {
+  return runSources(env, listSources().filter((s) => s.cadence === cadence), cadence);
+}
+
+export interface IndexRow {
+  sector: string;
+  geo: string;
+  period_key: string;
+  dimension: Dimension | 'composite';
+  value: number;
+  /** Change against the previous point's live value (its own window), in percent; null when there is none. */
+  delta_pct: number | null;
+  /** D7708 — distinct registered providers that contributed, for a dimension and for the composite. */
+  source_count: number;
+  /** D7708 — the window the point covers (ISO instants). */
+  window_start: string;
+  window_end: string;
+  /** D7708 — the mix the score used, stored beside the point and never recomputed on a read. */
+  source_mix: ScoreMix;
+}
+
+/** The month before `period` (`YYYY-MM`). */
+export function previousPeriodKey(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+/**
+ * D538 — the change from one month to the next, which nothing wrote before.
+ * Only from a live previous-month value above zero; otherwise null, never 0.
+ */
+export function deltaPct(value: number, previous: number | undefined): number | null {
+  if (previous == null || !isFinite(previous) || previous <= 0 || !isFinite(value)) return null;
+  return Math.round(((value - previous) / previous) * 1000) / 10;
+}
+
+/**
+ * Read recent LIVE rows + recompute every (sector, dimension) composite.
+ *
+ * D538: stub rows are never read here (`liveRowSql`), a dimension no live
+ * row contributes to is not written, and every row written carries
+ * `basis = 'live'` so the read side can tell it from the stub-derived
+ * indexes written before D538. For the current period, a dimension that has
+ * lost its live data loses its row too, so a stale figure cannot linger.
+ */
+export async function recomputeIndexes(env: Env): Promise<{ sectors: number; rows_written: number; rows_cleared: number }> {
+  const sources = new Map(listSources().map((s) => [s.key, s] as const));
+  const period = periodKey();
+  const now = new Date();
+  const cutoff = scoreWindow(now).window_start;
+
+  // D7708 — in the window by retrieval date (D7707: retrieved_at, or ts before it),
+  // with what the scorer needs to count each observation once.
+  const allRows = (await env.DB.prepare(
+    `SELECT id, source_key, sector, geo, metric_key, metric_value, ts,
+            observed_period, retrieved_at, scope, coverage_area
+       FROM market_intel_rows WHERE ${retrievedAtSql()} >= ? AND ${liveRowSql()}`
+  ).bind(cutoff).all<ScoredRow>()).results || [];
+
+  // D538 — last month's live values, so each write carries its change.
+  const prevRows = (await env.DB.prepare(
+    `SELECT sector, dimension, value FROM market_intel_indexes
+      WHERE geo = 'global' AND period_key = ? AND ${liveIndexSql()}`
+  ).bind(previousPeriodKey(period)).all<{ sector: string; dimension: string; value: number }>()).results || [];
+  const prev = new Map(prevRows.map((p) => [`${p.sector}|${p.dimension}`, p.value] as const));
+
+  // Group rows by sector for the composer.
+  const bySector = new Map<string, ScoredRow[]>();
+  for (const r of allRows) {
+    const arr = bySector.get(r.sector) || [];
+    arr.push(r);
+    bySector.set(r.sector, arr);
+  }
+
+  const writes: IndexRow[] = [];
+  const cleared: Array<{ sector: string; dimension: Dimension | 'composite' }> = [];
+  for (const sector of SECTORS) {
+    const rows = bySector.get(sector) || [];
+    const scores = composeSectorScores({ rows, sources, now });
+    const dims: Dimension[] = ['demand', 'supply', 'capital', 'talent', 'research', 'sentiment'];
+    for (const d of dims) {
+      const v = scores[d].value;
+      if (v == null) { cleared.push({ sector, dimension: d }); continue; }
+      const mix = scores[d].mix!;
+      writes.push({
+        sector, geo: 'global', period_key: period, dimension: d, value: v,
+        delta_pct: deltaPct(v, prev.get(`${sector}|${d}`)), source_count: scores[d].source_count,
+        window_start: mix.window_start, window_end: mix.window_end, source_mix: mix,
+      });
+    }
+    const headline = compositeHeadline(scores);
+    const composite = compositeMix(scores);
+    if (headline == null || !composite) { cleared.push({ sector, dimension: 'composite' }); continue; }
+    // D7708 — the composite's count is distinct providers too; it was the row count until now.
+    writes.push({
+      sector, geo: 'global', period_key: period, dimension: 'composite',
+      value: headline, delta_pct: deltaPct(headline, prev.get(`${sector}|composite`)), source_count: composite.source_count,
+      window_start: composite.mix.window_start, window_end: composite.mix.window_end, source_mix: composite.mix,
+    });
+  }
+
+  const stmts = [
+    ...cleared.map((x) =>
+      env.DB.prepare(
+        `DELETE FROM market_intel_indexes
+          WHERE sector = ? AND geo = 'global' AND period_key = ? AND dimension = ?`
+      ).bind(x.sector, period, x.dimension)
+    ),
+    ...writes.map((w) =>
+      env.DB.prepare(
+        `INSERT INTO market_intel_indexes (sector, geo, period_key, dimension, value, delta_pct, source_count, computed_at, basis,
+                                           window_start, window_end, source_mix_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)
+         ON CONFLICT(sector, geo, period_key, dimension) DO UPDATE SET
+           value = excluded.value,
+           delta_pct = excluded.delta_pct,
+           source_count = excluded.source_count,
+           computed_at = excluded.computed_at,
+           basis = excluded.basis,
+           window_start = excluded.window_start,
+           window_end = excluded.window_end,
+           source_mix_json = excluded.source_mix_json`
+      ).bind(w.sector, w.geo, w.period_key, w.dimension, w.value, w.delta_pct, w.source_count, LIVE_INDEX_BASIS,
+        w.window_start, w.window_end, JSON.stringify(w.source_mix))
+    ),
+  ];
+  if (stmts.length > 0) await env.DB.batch(stmts);
+
+  // Persist the warm KV snapshot the /sector-compass route falls back to
+  // when the edge cache misses. Written via the shared `writeKv` helper so
+  // the prefix matches the read path. Do NOT bust here — the compute is
+  // already the freshest snapshot we have. The key is versioned (D538) so a
+  // snapshot of stub-derived indexes written before D538 is never read.
+  await writeKv(env, COMPASS_KV_KEY, { period_key: period, computed_at: new Date().toISOString(), rows: writes });
+
+  return { sectors: SECTORS.length, rows_written: writes.length, rows_cleared: cleared.length };
+}
+
+/**
+ * KV key of the warm sector-compass snapshot. `:live` since D538: the old
+ * `compass:global` snapshot held stub-derived indexes and must never be read.
+ * `:v7708` since D7708: a snapshot written before it holds row counts and no
+ * window, and is never served.
+ */
+export const COMPASS_KV_KEY = 'compass:global:live:v7708';

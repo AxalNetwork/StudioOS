@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Community › Events</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Events console</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:820px;line-height:1.55">A desk with four tabs and one page per event: approve or send back public events with the full picture, keep the calendar healthy, and see how events perform. One studio’s figures, HQ-held accounts on axal.vc.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="17">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Events Console Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['EV1', 'Overview · desktop 1440 · light', 'Two rows of tiles, registrations and check-ins by week, what needs attention next to what is next up, then events by type, show-up by event and who comes. Page views and feedback say Not recorded with their reason.', [D('EV1')]],
+      ['EV2', 'Overview · desktop 1440 · dark', 'The same page in the dark colours. Violet becomes #a78bfa; the other series keep their colour.', [D('EV2')]],
+      ['EV3', 'Review tab · desktop 1440', 'The queue on the left, the selected event on the right: its public preview, the facts, what approving does, the clash and its history, with a sticky action bar.', [D('EV3')]],
+      ['EV4', 'Approve dialog, and after', 'The dialog states what approving does, with the real counts. Afterwards the row leaves the queue and one line confirms it, with no toast.', [D('EV4', 'Dialog'), D('EV4b', 'After approving')]],
+      ['EV5', 'Send back dialog', 'A quick reason fills the text; the host sees the reason. Send back stays disabled until there is one.', [D('EV5', false, 660, 560)]],
+      ['EV6', 'All events tab · desktop 1440', 'Search, filters, saved views and sort over every event. Attended and show-up show a dash until an event is held. The CSV holds counts only.', [D('EV6')]],
+      ['EV7', 'One event · desktop 1440', 'The event page with the publish gate, two rows of tiles, seats over time against capacity, the path from sign-up to the door, and the cards that explain the event. No attendee names.', [D('EV7'), D('EV7g', 'Publish gate · three states', 1100, 360)]],
+      ['EV8', 'Calendar tab · month and week', 'Month grid with three chips a day, an overlap marker and a chip opened as a small card. Week view puts overlapping events side by side.', [D('EV8', 'Month', 1440, 1140), D('EV8w', 'Week', 1200, 530)]],
+      ['EV9', 'Change capacity dialog', 'The live line says what a new capacity does before it is saved: raising moves people off the waitlist, lowering takes no seat away.', [D('EV9a', 'Raising', 660, 500), D('EV9b', 'Lowering', 660, 500), D('EV9c', 'Error', 660, 500)]],
+      ['EV10', 'Cancel event dialog', 'Cancel waits for the checkbox when paid tickets need a refund, because HQ refunds them in Revenue › Billing.', [D('EV10', false, 660, 700)]],
+      ['EV11', 'Unpublish and Feature dialogs', 'Unpublish sends the event back to the host as a draft. Featuring ranks it higher in suggestions; it is not pinned on the public calendar.', [D('EV11a', 'Unpublish', 660, 440), D('EV11b', 'Feature', 660, 400)]],
+      ['EV12', 'Chart as table', 'The weekly chart with Table on. The current week says so far; the week with no check-ins shows a dash.', [D('EV12', false, 1200, 780)]],
+      ['EV13', 'Empty', 'No events at all: real zeros in the tiles, one line in each chart card. And the Review tab with nothing waiting.', [D('EV13a', 'No events'), D('EV13b', 'Nothing waiting', 1440, 600)]],
+      ['EV14', 'Loading', 'Header, tabs and period control are live; every tile and card is a skeleton reading.', [D('EV14')]],
+      ['EV15', 'Error and refused', 'One block failed on the event page, the whole read failed on Overview, and two refused actions under the action bar. Nothing shows as zero.', [D('EV15a', 'One block failed'), D('EV15b', 'Whole read failed'), D('EV15c', 'Action refused', 1100, 330)]],
+      ['EV16', 'No permission', 'A member who is not an admin, in their own shell, with a way to the public events.', [D('EV16', false, 1440, 720)]],
+      ['EV17', 'Phone · 390 wide', 'Tiles two to a row and charts stacked; the queue, then the event as a full-screen page with sticky buttons; events as cards; the calendar as a list; a dialog as a bottom sheet.', [P('EV17a', 'Overview'), P('EV17b', 'Review queue'), P('EV17c', 'Review event'), P('EV17d', 'All events'), P('EV17e', 'Calendar list'), P('EV17f', 'Bottom sheet')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

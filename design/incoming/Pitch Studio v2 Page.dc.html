@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Studio v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.ps-tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:6px;border:1px dashed var(--amE);color:var(--amT);background:var(--amBg);font:700 10.5px var(--mo);letter-spacing:.01em;white-space:nowrap}
+.ps-later{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:6px;border:1px dotted var(--hair2);color:var(--mu);font:600 10.5px var(--mo);white-space:nowrap}
+.ps-nr{color:var(--mu);font-style:italic;font-weight:500}
+.ps-sample{font:600 10.5px var(--mo);color:var(--mu);letter-spacing:.02em}
+.ps-shell{display:grid;grid-template-columns:200px minmax(0,1fr) 44px;min-height:900px}
+.ps-main{display:flex;flex-direction:column;min-width:0}
+.ps-body{display:flex;flex-direction:column;gap:18px;padding:22px 28px 32px;position:relative}
+.ps-ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.ps-ph h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ps-ph p{font-size:13px;color:var(--mu);margin-top:4px}
+.ps-ph .ps-act{display:flex;gap:8px;align-items:center}
+.ps-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ps-tabs a{padding:9px 12px 11px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.ps-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ps-tabs .ps-sep{flex:1}
+.ps-card{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ps-card.lav{background:var(--lav);border-color:var(--lavE)}
+.ps-card.amb{background:var(--amBg);border-color:var(--amE)}
+.ps-card.neg{background:var(--negBg);border-color:var(--negE)}
+.ps-card.dash{border-style:dashed;background:transparent}
+.ps-ch{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ps-ch h2{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.ps-ch h3{font-size:13px;font-weight:800}
+.ps-ch .ps-r{display:flex;gap:6px;align-items:center}
+.ps-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.ps-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.ps-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.ps-hero{display:grid;grid-template-columns:420px minmax(0,1fr);gap:22px;align-items:stretch}
+.ps-kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:0;font-size:12.5px}
+.ps-kv dt,.ps-kv dd{padding:7px 0;border-bottom:1px solid var(--hair)}
+.ps-kv dt{color:var(--mu)}
+.ps-kv dd{font-weight:600}
+.ps-li{display:flex;flex-direction:column}
+.ps-li>li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-li>li:first-child{border-top:0}
+.ps-li small{display:block;color:var(--mu);font-size:11.5px;margin-top:1px}
+.ps-next{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;border:1.5px solid var(--vi);background:var(--card)}
+.ps-next b{font-size:15px}
+.ps-next p{font-size:12.5px;color:var(--mu);margin-top:2px}
+.ps-next .btn{margin-left:auto}
+.ps-num{font:700 22px var(--mo);letter-spacing:-.02em}
+.ps-stat{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.ps-stat small{font-size:11.5px;color:var(--mu)}
+.ps-stat em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.ps-steps{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.ps-steps span{flex:1;text-align:center;padding:8px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.ps-steps span+span{border-left:0}
+.ps-steps span:first-child{border-radius:8px 0 0 8px}.ps-steps span:last-child{border-radius:0 8px 8px 0}
+.ps-steps span.done{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.ps-steps span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.ps-chips{display:flex;gap:6px;flex-wrap:wrap}
+.ps-chip{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.ps-chip.on{border-color:var(--vi);background:var(--lav);color:var(--vt)}
+.ps-chip[aria-disabled=true]{opacity:.55;border-style:dashed}
+.ps-src{display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.ps-src.ok{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.ps-src.st{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.ps-price{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;border:1px solid var(--hair);background:var(--card)}
+.ps-price .ps-pl{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.ps-price b.mo{font:700 16px var(--mo)}
+.ps-price.reading{border-style:dashed}
+.ps-price.unav{border-color:var(--amE);background:var(--amBg)}
+.ps-price.stale{border-color:var(--amE);border-style:dashed}
+.ps-price.ok{border-color:var(--posE)}
+.ps-price.met{border-color:var(--lavE);background:var(--lav)}
+.ps-price p{font-size:12px;color:var(--mu);line-height:1.45}
+.ps-bar{height:6px;border-radius:3px;background:var(--hair);overflow:hidden}
+.ps-bar i{display:block;height:100%;background:var(--vi);border-radius:3px}
+.ps-ol{display:flex;flex-direction:column;gap:6px}
+.ps-ol li{display:grid;grid-template-columns:22px 28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:12.5px}
+.ps-ol li .ps-h{color:var(--mu);font:700 13px var(--mo);text-align:center}
+.ps-ol li .ps-n{font:700 11px var(--mo);color:var(--mu)}
+.ps-ol li small{display:block;color:var(--mu);font-size:11.5px}
+.ps-slide{position:relative;overflow:hidden;border-radius:6px;flex:none}
+.ps-slide .ps-sin{position:absolute;left:0;top:0;width:960px;height:540px;transform-origin:0 0;font-family:'Space Grotesk',system-ui,sans-serif}
+.ps-th{background:#0f1d2e;color:#e8eef5}
+.ps-th .ps-ac{color:#2dd4bf}
+.ps-gridov{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,rgba(124,58,237,.16) 1px,transparent 1px),linear-gradient(to bottom,rgba(124,58,237,.16) 1px,transparent 1px);background-size:calc(100%/12) calc(100%/6)}
+.ps-sel{position:absolute;border:2px solid #7c3aed;border-radius:3px;box-shadow:0 0 0 3px rgba(124,58,237,.18)}
+.ps-sel .ps-sl{position:absolute;top:-22px;left:-2px;background:#7c3aed;color:#fff;font:700 10.5px var(--mo);padding:2px 7px;border-radius:4px 4px 0 0;white-space:nowrap}
+.ps-guide{position:absolute;background:#f43f5e}
+.ps-held{position:absolute;border:2px dashed #0ea5e9;border-radius:3px}
+.ps-held span{position:absolute;bottom:-21px;left:-2px;background:#0ea5e9;color:#fff;font:700 10.5px var(--sg);padding:2px 7px;border-radius:0 0 4px 4px;white-space:nowrap}
+.ps-ed{display:grid;grid-template-columns:56px minmax(0,1fr);min-height:900px}
+.ps-rail{background:var(--card);border-right:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0}
+.ps-rail .ps-ri{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font:700 11px var(--sg);color:var(--mu);border:1px solid transparent}
+.ps-rail .ps-ri.on{background:var(--lav);color:var(--vt);border-color:var(--lavE)}
+.ps-rail .ps-lg{width:30px;height:30px;border-radius:8px;background:var(--vi);margin-bottom:8px}
+.ps-tool{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--hair);min-height:56px}
+.ps-tool .ps-dt{display:flex;flex-direction:column;min-width:0;margin-right:8px}
+.ps-tool .ps-dt b{font-size:14px;font-weight:800;white-space:nowrap}
+.ps-tool .ps-dt span{font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.ps-tool .ps-sp{flex:1}
+.ps-tool .ps-vs{display:inline-flex;align-items:center;gap:6px;padding:0 10px;min-height:30px;border-radius:8px;border:1px solid var(--hair);font:600 12px var(--sg);white-space:nowrap}
+.ps-ibtn{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--hair);background:var(--card);font:700 13px var(--sg);color:var(--ink)}
+.ps-ibtn[aria-disabled=true]{opacity:.4}
+.ps-div{width:1px;height:24px;background:var(--hair)}
+.ps-cols{display:grid;grid-template-columns:232px minmax(0,1fr) 330px;flex:1;min-height:0;overflow:hidden}
+.ps-left{background:var(--card);border-right:1px solid var(--hair);padding:12px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.ps-left .ps-sec{font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding:6px 4px 2px;display:flex;justify-content:space-between}
+.ps-th2{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:start;padding:5px;border-radius:9px;border:1px solid transparent}
+.ps-th2.on{border-color:var(--vi);background:var(--lav)}
+.ps-th2 .ps-tn{font:700 10.5px var(--mo);color:var(--mu);padding-top:3px}
+.ps-th2 .ps-tm{display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:10.5px;color:var(--mu)}
+.ps-th2.hid{opacity:.5}
+.ps-center{background:var(--stage);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:22px 22px 14px;gap:12px;position:relative;min-width:0}
+.ps-ctx{display:flex;align-items:center;gap:4px;padding:5px;border-radius:10px;background:var(--card);border:1px solid var(--hair);box-shadow:0 6px 18px rgba(24,24,27,.08)}
+.ps-ctx .btn{min-height:28px}
+.ps-notes{width:100%;background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--mu)}
+.ps-right{background:var(--card);border-left:1px solid var(--hair);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.ps-rt{display:flex;border-bottom:1px solid var(--hair);padding:0 10px}
+.ps-rt a{padding:11px 10px;font:600 12.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ps-rt a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ps-rb{padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ps-fld{display:flex;flex-direction:column;gap:5px;font-size:12px}
+.ps-fld label{font-weight:700;font-size:11.5px;color:var(--mu)}
+.ps-in{min-height:32px;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:12.5px}
+.ps-in.ps-ta{min-height:64px;align-items:flex-start;padding:8px 10px;line-height:1.45}
+.ps-in.foc{border-color:var(--vi);box-shadow:0 0 0 3px var(--lav)}
+.ps-in.ro{background:var(--raised);color:var(--mu);border-style:dashed}
+.ps-seg{display:inline-flex;border:1px solid var(--hair2);border-radius:8px;overflow:hidden}
+.ps-seg span{padding:5px 10px;font:600 11.5px var(--sg);color:var(--mu);border-left:1px solid var(--hair2)}
+.ps-seg span:first-child{border-left:0}
+.ps-seg span.on{background:var(--ink);color:var(--card)}
+.ps-banner{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.ps-banner.amb{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.ps-banner.neg{background:var(--negBg);color:var(--neg);border-color:var(--negE)}
+.ps-banner.lav{background:var(--lav);color:var(--vt);border-color:var(--lavE)}
+.ps-banner b{color:var(--ink)}
+.ps-banner .ps-r{margin-left:auto;display:flex;gap:6px}
+.ps-prop{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav)}
+.ps-prop.ps-dim{background:var(--raised);border-color:var(--hair)}
+.ps-prop .ps-pr{display:flex;gap:6px;flex-wrap:wrap}
+.ps-quote{font-size:12.5px;line-height:1.5;padding:8px 10px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 8px 8px 0}
+.ps-quote.old{border-left-color:var(--hair2);color:var(--mu);text-decoration:line-through}
+.ps-sheet{position:absolute;inset:0;background:rgba(24,24,27,.38);display:flex;align-items:flex-start;justify-content:center;padding-top:70px;z-index:3}
+.ps-dlg{width:720px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden}
+.ps-dlg .ps-dh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--hair)}
+.ps-dlg .ps-dh h2{font-size:15px;font-weight:800}
+.ps-dlg .ps-db{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.ps-dlg .ps-df{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--hair);background:var(--raised)}
+.ps-arow{display:grid;grid-template-columns:120px minmax(0,1fr) 150px 110px;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-arow:first-child{border-top:0}
+.ps-arow .mo{font-size:11.5px}
+.ps-chk{display:flex;flex-direction:column}
+.ps-chk>li{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-chk>li:first-child{border-top:0}
+.ps-chk small{display:block;color:var(--mu);font-size:11.5px;margin-top:2px}
+.ps-grp{display:flex;flex-direction:column;gap:6px}
+.ps-grp h3{font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.ps-share{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:20px;align-items:start}
+.ps-tog{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.ps-tog:first-child{border-top:0}
+.ps-tog small{display:block;color:var(--mu);font-size:11.5px}
+.ps-sw{width:34px;height:20px;border-radius:999px;background:var(--hair2);position:relative;flex:none}
+.ps-sw::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+.ps-sw.on{background:var(--vi)}
+.ps-sw.on::after{left:17px}
+.ps-sw.ps-lk{opacity:.6}
+.ps-recv{border:1px solid var(--hair);border-radius:14px;background:var(--raised);padding:14px;display:flex;flex-direction:column;gap:10px}
+.ps-browser{border:1px solid var(--hair2);border-radius:10px;overflow:hidden;background:#fff}
+.ps-browser .ps-bu{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f1f0f5;border-bottom:1px solid var(--hair2);font:500 10.5px var(--mo);color:#5f5a6b}
+.ps-browser .ps-bu i{width:8px;height:8px;border-radius:50%;background:#d3d0dc;display:inline-block}
+.ps-wm{position:absolute;right:10px;bottom:8px;font:600 10px var(--mo);color:rgba(232,238,245,.55)}
+.ps-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ps-tbl th{text-align:left;font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair)}
+.ps-tbl td{padding:10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.ps-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.ps-tbl tr.on td{background:var(--lav)}
+.ps-tbl .n{text-align:right;font-family:var(--mo)}
+.ps-spark{display:flex;align-items:flex-end;gap:3px;height:150px}
+.ps-spark i{flex:1;background:var(--vi);border-radius:2px 2px 0 0;opacity:.85}
+.ps-spark i.z{background:var(--hair2);height:2px!important}
+.ps-spark i.f{background:#0ea5e9}
+.ps-hb{display:grid;grid-template-columns:150px minmax(0,1fr) 70px;gap:10px;align-items:center;font-size:12px;padding:4px 0}
+.ps-hb .ps-bar{height:10px}
+.ps-hb .ps-bar i.nr{background:transparent;border:1px dashed var(--hair2);height:8px}
+.ps-tl{display:flex;flex-direction:column}
+.ps-tl li{display:grid;grid-template-columns:110px 14px minmax(0,1fr);gap:10px;align-items:start;padding:7px 0;font-size:12.5px}
+.ps-tl li .ps-w{font:500 11px var(--mo);color:var(--mu);padding-top:1px}
+.ps-tl li .ps-d{width:10px;height:10px;border-radius:50%;background:var(--vi);margin-top:4px}
+.ps-tl li .ps-d.o{background:transparent;border:2px solid var(--hair2)}
+.ps-abs{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:12px;border:1px solid var(--hair);background:var(--card);min-height:170px}
+.ps-abs .ps-big{font:700 26px var(--mo)}
+.ps-abs p{font-size:12px;color:var(--mu);line-height:1.45}
+.ps-mx{width:100%;border-collapse:collapse;font-size:12px}
+.ps-mx th,.ps-mx td{padding:8px 10px;border:1px solid var(--hair);text-align:left;vertical-align:top}
+.ps-mx thead th{background:var(--raised);font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.ps-mx tbody th{font-weight:800;white-space:nowrap}
+.ps-phone{width:390px;height:844px;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.ps-pst{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font:700 13px var(--sg)}
+.ps-ptop{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px 10px;border-bottom:1px solid var(--hair);background:var(--card)}
+.ps-ptop b{font-size:15px}
+.ps-pbtn{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:1px solid var(--hair);background:var(--card);font:700 15px var(--sg)}
+.ps-pbody{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ps-pfoot{padding:10px 14px 28px;border-top:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;gap:8px}
+.ps-pfoot .btn{min-height:48px;width:100%}
+.ps-ptabs{display:flex;gap:6px;overflow:hidden;padding:0 0 2px}
+.ps-ptabs span{padding:7px 12px;border-radius:999px;border:1px solid var(--hair2);font:600 12.5px var(--sg);white-space:nowrap;background:var(--card)}
+.ps-ptabs span.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.ps-psheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:18px 18px 0 0;border-top:1px solid var(--hair);box-shadow:0 -14px 40px rgba(0,0,0,.14);padding:10px 16px 30px;display:flex;flex-direction:column;gap:10px}
+.ps-psheet .ps-grab{width:40px;height:5px;border-radius:3px;background:var(--hair2);align-self:center}
+.ps-tok{display:grid;grid-template-columns:150px minmax(0,1fr) 120px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #ececf1;font-size:12.5px}
+.ps-sw2{width:28px;height:28px;border-radius:7px;border:1px solid rgba(0,0,0,.12)}
+.ps-road{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.ps-road .ps-card{gap:8px}
+.ps-road ol{display:flex;flex-direction:column;gap:6px;font-size:12px;padding-left:16px;list-style:decimal}
+.ps-cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ps-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;font-size:12px}
+.ps-cmp>div.mine{border-color:var(--vi)}
+.ps-jr{display:flex;gap:0;align-items:stretch}
+.ps-jr>div{flex:1;border:1px solid #ececf1;border-left:0;padding:12px;display:flex;flex-direction:column;gap:6px;font-size:12px;background:#fff}
+.ps-jr>div:first-child{border-left:1px solid #ececf1;border-radius:10px 0 0 10px}
+.ps-jr>div:last-child{border-radius:0 10px 10px 0}
+.ps-jr b{font-size:12.5px}
+.ps-jr .ps-n{font:700 10.5px var(--mo);color:#7c3aed}
+.ps-skel{background:var(--skel);border-radius:6px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "840px"}, "board": {"editor": "enum", "default": "PS01", "options": ["PS09", "PS09B", "PS01", "PS01B", "PS01C", "PS02", "PS02B", "PS02C", "PS02D", "PS02E", "PS03", "PS03B", "PS03C", "PS03D", "PS03E", "PS04", "PS04B", "PS04D", "PS04C", "PS05", "PS05B", "PS06", "PS06G", "PS06C", "PS07", "PS07B", "PS07C", "PS08a", "PS08b", "PS08c", "PS08d", "PS08e", "PS08f", "PS08g", "PS08h", "PS00", "PS00B", "PS10", "PS10B", "PS11", "PS12", "PS12B"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'PS01';
+    const dark = B === 'PS09' || B === 'PS09B';
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', stage: '#070c16' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1', stage: '#e9e8ef' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      q: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.4 1.8c-.4.2-.6.5-.6 1V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="10" r=".9" fill="currentColor"/>'),
+      dot: SV('<circle cx="6" cy="6" r="4" fill="currentColor"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      off: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      zero: SV('<rect x="2" y="5" width="8" height="2" rx="1" fill="currentColor"/>'),
+      wifi: SV('<path d="M1.5 4.5a6.5 6.5 0 0 1 9 0M3.3 6.5a4 4 0 0 1 5.4 0" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="9" r="1" fill="currentColor"/><path d="M1.5 1.5l9 9" stroke="currentColor" stroke-width="1.4"/>')
+    };
+    /* one state vocabulary: the word always carries the meaning, the shape repeats it, colour never alone */
+    const S = {
+      'Version saved': ['ok', 'ok'], 'All changes saved': ['ok', 'ok'], Passed: ['ok', 'ok'], Accepted: ['ok', 'ok'], Active: ['ok', 'ok'], 'Signed': ['ok', 'ok'], Done: ['ok', 'ok'], Connected: ['ok', 'ok'], 'Confirmed · no charge': ['ok', 'ok'], Fresh: ['ok', 'ok'],
+      'Unsaved changes': ['pd', 'dot'], 'Saving…': ['pd', 'pd'], 'Draft · on this device': ['pd', 'dot'], Proposed: ['pd', 'dot'], Running: ['pd', 'pd'], 'Reading price…': ['un', 'pd'], 'In progress': ['pd', 'half'], 'Confirmed · metered': ['pd', 'dot'],
+      'To fix': ['fl', 'fl'], Failed: ['fl', 'fl'], Refused: ['fl', 'fl'], Mismatch: ['fl', 'fl'], Withdrawn: ['ni', 'off'], Expired: ['ni', 'nd'],
+      'Worth a look': ['xar', 'ar'], Conflict: ['xar', 'ar'], Stale: ['xst', 'pd'], 'Quote expired': ['xst', 'pd'], 'Needs approval': ['xar', 'ar'], 'Not Done': ['xar', 'half'], Offline: ['xar', 'wifi'], 'Price unavailable': ['xar', 'q'],
+      "Couldn't check": ['un', 'q'], Unreadable: ['un', 'q'], 'Checking…': ['un', 'q'],
+      'Not recorded': ['ni', 'nd'], 'Tracking off': ['ni', 'off'], 'Measured zero': ['mz', 'zero'], 'Read-only': ['ni', 'lk'], 'Coming later': ['ni', 'nd'], 'Not switched on': ['ni', 'off'], 'Not checked': ['ni', 'nd']
+    };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NR = '<span class="ps-nr">Not recorded</span>';
+    const ENG = (t) => '<span class="ps-tag" title="Requires engineering">◇ Requires engineering' + (t ? ' · ' + t : '') + '</span>';
+    const LATER = (t) => '<span class="ps-later" title="Not on main yet">Coming later' + (t ? ' · ' + t : '') + '</span>';
+    const src = (t, c) => '<span class="ps-src ' + (c || '') + '">' + t + '</span>';
+    const btn = (t, c, x) => '<button type="button" class="btn ' + (c || '') + '"' + (x || '') + '>' + t + '</button>';
+    const SAMPLE = '<span class="ps-sample">Sample data · Halden Energy is fictional</span>';
+
+    /* ---------- the deck itself: themed independently of the app chrome ---------- */
+    const at = (c1, c2, r1, r2, inner, sty) => '<div style="position:absolute;left:' + ((c1 - 1) * 80) + 'px;top:' + ((r1 - 1) * 90) + 'px;width:' + ((c2 - c1 + 1) * 80) + 'px;height:' + ((r2 - r1 + 1) * 90) + 'px;padding:14px 18px;' + (sty || '') + '">' + inner + '</div>';
+    const bars = (vals, lab) => '<div style="display:flex;align-items:stretch;gap:10px;height:230px;padding-top:8px">' + J(vals.map((v, i) => '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px"><div style="width:100%;height:' + v + '%;background:' + (i === vals.length - 1 ? '#2dd4bf' : 'rgba(45,212,191,.38)') + ';border-radius:4px 4px 0 0"></div><span style="font:500 13px var(--mo);color:#8aa0b6">' + lab[i] + '</span></div>')) + '</div>';
+    const SLIDES = {
+      cover: () => at(1, 9, 2, 4, '<div style="font:700 15px var(--mo);color:#2dd4bf;letter-spacing:.08em">SEED · 2026</div><div style="font:800 64px var(--sg);letter-spacing:-.03em;line-height:1;margin-top:14px">Halden Energy</div><div style="font:500 26px var(--sg);color:#b6c4d3;margin-top:16px;line-height:1.25">Battery health analytics for grid-scale storage</div>') + at(1, 12, 6, 6, '<div style="font:500 14px var(--mo);color:#8aa0b6">Confidential · prepared for investors</div>'),
+      problem: () => at(1, 12, 1, 1, '<div style="font:800 34px var(--sg);letter-spacing:-.02em">Operators find failing cells too late</div>') + at(1, 6, 2, 5, '<div style="font:500 20px var(--sg);line-height:1.5;color:#c9d5e1">Grid batteries degrade unevenly. Today, most sites inspect on a fixed schedule, so a weak string is found after it has cost capacity.</div>') + at(7, 12, 2, 5, '<div style="border:1px solid rgba(45,212,191,.4);border-radius:12px;height:100%;padding:20px;display:flex;flex-direction:column;gap:10px"><div style="font:700 13px var(--mo);color:#2dd4bf">FROM 6 PILOT INTERVIEWS</div><div style="font:600 21px var(--sg);line-height:1.35">“We learn about a bad string from the revenue report.”</div><div style="font:500 13px var(--mo);color:#8aa0b6">Validate › Interviews · 14 Sep</div></div>'),
+      traction: () => at(1, 12, 1, 1, '<div style="font:800 34px var(--sg);letter-spacing:-.02em">Traction since the first pilot</div>') + at(1, 5, 2, 5, '<div style="display:flex;flex-direction:column;gap:22px"><div><div class="ps-ac" style="font:800 44px var(--sg);color:#2dd4bf">€410k</div><div style="font:500 15px var(--sg);color:#b6c4d3">ARR · Stripe · as of 31 Oct</div></div><div><div style="font:800 44px var(--sg)">6</div><div style="font:500 15px var(--sg);color:#b6c4d3">paying sites · HubSpot · 31 Oct</div></div></div>') + at(6, 12, 2, 5, '<div style="font:700 13px var(--mo);color:#8aa0b6;margin-bottom:6px">ARR BY QUARTER (€K)</div>' + bars([18, 34, 55, 82], ['Q1', 'Q2', 'Q3', 'Q4*'])) + at(1, 12, 6, 6, '<div style="font:500 13px var(--mo);color:#8aa0b6">* Q4 to 31 Oct. Figures linked to their records.</div>'),
+      market: () => at(1, 12, 1, 1, '<div style="font:800 34px var(--sg);letter-spacing:-.02em">Market</div>') + at(1, 12, 2, 5, '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;height:100%">' + J([['TAM', 'Not recorded'], ['SAM', 'Not recorded'], ['SOM', 'Not recorded']].map(x => '<div style="border:1px dashed rgba(182,196,211,.45);border-radius:12px;padding:18px"><div style="font:700 14px var(--mo);color:#8aa0b6">' + x[0] + '</div><div style="font:600 22px var(--sg);color:#8aa0b6;margin-top:10px;font-style:italic">' + x[1] + '</div></div>')) + '</div>'),
+      team: () => at(1, 12, 1, 1, '<div style="font:800 34px var(--sg);letter-spacing:-.02em">Team</div>') + at(1, 12, 2, 5, '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">' + J([['AL', 'Astrid Lund', 'CEO · 9 yrs grid operations'], ['MO', 'Mateo Ortiz', 'CTO · battery modelling'], ['SK', 'Sana Kapoor', 'Head of sales']].map(x => '<div style="display:flex;flex-direction:column;gap:10px"><div style="width:72px;height:72px;border-radius:50%;background:#1e3a52;display:grid;place-items:center;font:700 22px var(--sg);color:#2dd4bf">' + x[0] + '</div><div style="font:700 20px var(--sg)">' + x[1] + '</div><div style="font:500 15px var(--sg);color:#b6c4d3">' + x[2] + '</div></div>')) + '</div>'),
+      ask: () => at(1, 8, 2, 4, '<div style="font:700 15px var(--mo);color:#2dd4bf;letter-spacing:.08em">THE ASK</div><div style="font:800 56px var(--sg);letter-spacing:-.03em;margin-top:12px">€2.0m Seed</div><div style="font:500 22px var(--sg);color:#b6c4d3;margin-top:12px">18 months to 20 sites and a second market</div>') + at(9, 12, 2, 5, '<div style="display:flex;flex-direction:column;gap:10px;font:500 16px var(--sg);color:#c9d5e1"><div>55% product</div><div>30% sales</div><div>15% operations</div><div style="font:500 12px var(--mo);color:#8aa0b6">Use of funds · Raise › Round</div></div>')
+    };
+    const ORDER = [['cover', 'Cover', 'Opening'], ['problem', 'Problem', 'Opening'], ['traction', 'Traction', 'Evidence'], ['market', 'Market', 'Evidence'], ['team', 'Team', 'Company'], ['ask', 'The ask', 'Close']];
+    const slide = (k, w, o) => { o = o || {}; const h = Math.round(w * 9 / 16); return '<div class="ps-slide ps-th" style="width:' + w + 'px;height:' + h + 'px' + (o.ring ? ';box-shadow:0 0 0 2px #7c3aed' : '') + '" role="img" aria-label="Card: ' + k + '"><div class="ps-sin" style="transform:scale(' + (w / 960).toFixed(4) + ')">' + SLIDES[k]() + (o.wm ? '<div class="ps-wm" style="font-size:13px;right:18px;bottom:14px">Prepared for ' + o.wm + '</div>' : '') + '</div>' + (o.grid ? '<div class="ps-gridov"></div>' : '') + (o.over || '') + '</div>'; };
+
+    /* ---------- shells ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const side = () => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%;color:var(--ink)" aria-haspopup="listbox"><span>Halden Energy</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Raise' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const top = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account menu">AL</span></div></div>';
+    const TABS = ['Overview', 'Decks', 'Script & rehearsal', 'Review', 'Share & analytics', 'Notes'];
+    const tabs = (cur) => '<nav class="ps-tabs" aria-label="Pitch">' + J(TABS.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '<span class="ps-sep"></span></nav>';
+    const phead = (cur, sub, act) => '<div class="ps-ph"><div><span class="eye">Raise › Pitch</span><h1>' + (sub || 'Halden Energy — Seed deck') + '</h1></div><div class="ps-act">' + (act || btn('▶ Present', 'gh') + btn('Open editor', '')) + '</div></div>' + tabs(cur);
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="ps-shell" style="min-height:' + (o.h || 900) + 'px">' + side() + '<div class="ps-main">' + top + '<main class="ps-body">' + body + '</main></div><aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>' + (o.overlay || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 1100) + 'px;padding:22px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">' + inner + '</div>';
+    const box = (t, inner, o) => { o = o || {}; return '<section class="ps-card ' + (o.c || '') + '"' + (o.span ? ' style="grid-column:span ' + o.span + '"' : '') + '><div class="ps-ch"><h3>' + t + '</h3>' + (o.r ? '<span class="ps-r">' + o.r + '</span>' : '') + '</div>' + inner + '</section>'; };
+
+    /* ---------- PS-01 home ---------- */
+    const next = (t, p, b) => '<div class="ps-next" role="region" aria-label="Next step"><span class="stt pd" style="font-size:12px">' + SH.dot + 'Next</span><div><b>' + t + '</b><p>' + p + '</p></div>' + btn(b, 'p') + '</div>';
+    const homeDeck = () => '<div class="ps-hero"><div class="ps-card" style="padding:12px">' + slide('cover', 394) + '<div class="ps-ch"><div><b style="font-size:14px">Halden Energy — Seed deck</b><div class="mu" style="font-size:12px">12 cards · Investors · Seed · theme Harbor</div></div>' + btn('⋯', 'gh bsm', ' aria-label="Deck actions: Versions, Export, Brand kit, Templates"') + '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + st('Version saved', 'v7 saved 8 Nov, 16:40') + st('Unsaved changes', 'Working draft · 3 cards changed since v7') + '</div></div>'
+      + '<div style="display:flex;flex-direction:column;gap:14px">' + next('Review v7 before sharing it', 'Ines Moreau (Fjord Ventures) has a link to v6. v7 has not been checked yet.', 'Review v7') + '<div class="ps-g3"><div class="ps-stat"><small>Readiness of v7</small><b style="font-size:14px">' + st('Not checked') + '</b><em>Run Review to see what blocks sharing</em></div><div class="ps-stat"><small>Evidence coverage</small><span class="ps-num">9 of 12</span><em>cards with every figure linked</em></div><div class="ps-stat"><small>Cards not Done</small><span class="ps-num">2</span><em>of 12 · Market, Team</em></div></div>'
+      + box('Investor activity · last 7 days', '<ul class="ps-li"><li><div><b>Ines Moreau · Fjord Ventures</b><small>v6 · NDA signed · 3 visits · reached the ask</small></div>' + st('Active', 'Opened 2 h ago') + '</li><li><div><b>Tom Adeyemi · Kestrel Capital</b><small>v6 · NDA shown, not signed · 1 visit</small></div><span class="mo mu" style="font-size:11.5px">Yesterday</span></li><li><div><b>Priya Nair · Arcane Seed</b><small>v6 · link sent 6 Nov · not opened</small></div><span class="mo mu" style="font-size:11.5px">Not opened</span></li></ul>', { r: '<a href="#" style="font-size:12px;font-weight:700">Share & analytics ›</a>' }) + '</div></div>'
+      + '<div class="ps-g4">' + box('Script & rehearsal', '<span style="font-size:12.5px">Script saved for v6 · last rehearsal 11 m 40 s, 1 m 40 s over</span>', { r: '<a href="#">›</a>' }) + box('Comments', '<span style="font-size:12.5px">4 open on 3 cards · 1 assigned to you</span>', { r: '<a href="#">›</a>' }) + box('Notes from Axal HQ', '<span style="font-size:12.5px">“Lead with the pilot retention.” · Jonas, 5 Nov</span>', { r: '<a href="#">›</a>' }) + box('Start something else', '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><a href="#" style="font-size:12.5px;font-weight:700">New deck ›</a><a href="#" style="font-size:12.5px;font-weight:700">Templates ›</a><a href="#" style="font-size:12.5px;font-weight:700">Import a deck or document ›</a></div>') + '</div>';
+    const homeFirst = () => '<div class="ps-card lav" style="padding:28px 30px;gap:16px"><span class="eye">Pitch studio</span><h2 style="font-size:26px;font-weight:800;letter-spacing:-.02em">Turn your venture’s real data into an investor-ready pitch</h2><p style="font-size:13.5px;color:var(--mu);max-width:760px">Your records already hold 14 figures a deck can use: revenue from Stripe, customers from HubSpot, interviews from Validate. Every figure you place keeps its source.</p><div style="display:flex;gap:10px">' + btn('Generate from my data', 'p') + btn('Build step by step') + btn('Import a deck or document') + '</div></div>'
+      + '<div class="ps-g3">' + box('Generate from my data', '<p style="font-size:12.5px;color:var(--mu)">One press: a standard investor outline, filled from your records, on The Grid. You review every card before anything is kept.</p>' + priceCard('ok', { compact: true }), { r: '<span class="mo mu" style="font-size:11px">~2 min</span>' }) + box('Build step by step', '<p style="font-size:12.5px;color:var(--mu)">Choose the audience and round, pick the sources, edit the outline, then confirm the price before anything runs.</p>') + box('Import a deck or document', '<p style="font-size:12.5px;color:var(--mu)">A .pptx becomes editable cards. A PDF, DOCX or pasted text becomes an outline you approve card by card.</p><span>' + ENG('first-use entry · #4599') + '</span>') + '</div>'
+      + box('What your data can fill', '<div class="ps-g4">' + J([['Revenue', 'Stripe · 31 Oct', 'ok'], ['Customers', 'HubSpot · 31 Oct', 'ok'], ['Interviews', 'Validate · 14 Sep', 'ok'], ['Market size', 'Not recorded', '']].map(x => '<div class="ps-stat"><small>' + x[0] + '</small><b style="font-size:13px">' + (x[2] ? src(x[1], 'ok') : NR) + '</b></div>')) + '</div>', { r: '<a href="#" style="font-size:12px;font-weight:700">Sources ›</a>' });
+
+    /* ---------- pricing: five states, never "free" for unknown ---------- */
+    const PRICE = {
+      reading: ['reading', st('Reading price…'), '<b class="mo ps-skel" style="width:90px;height:18px;display:inline-block"></b>', 'Asking for a quote. Build waits until the price is known.', 'Build · waiting for price', true],
+      unav: ['unav', st('Price unavailable'), '<b class="mo">Unknown</b>', 'We couldn’t get a price for this run. It won’t start until one is confirmed: unknown is not free.', 'Try again', false],
+      ok: ['ok', st('Confirmed · no charge'), '<b class="mo">No charge</b>', 'Quote q_8f2 confirmed: this run uses recorded figures and templates only. Valid for 10 min.', 'Build deck', false],
+      met: ['met', st('Confirmed · metered'), '<b class="mo">holds $1.84</b>', 'Quote q_8f3 · 8 cards · Claude Sonnet for text, Imagen for 2 pictures. You’re charged what the run uses, up to the hold; the rest is released.', 'Build deck · holds $1.84', false],
+      stale: ['stale', st('Quote expired'), '<b class="mo" style="text-decoration:line-through;color:var(--mu)">$1.84</b>', 'The quote expired after 10 min or the outline changed. Get a new price before building.', 'Get a new price', false]
+    };
+    function priceCard(k, o) { o = o || {}; const p = PRICE[k]; return '<div class="ps-price ' + p[0] + '" role="status"><div class="ps-pl"><span>' + p[1] + '</span>' + p[2] + '</div>' + (o.compact ? '' : '<p>' + p[3] + '</p><div style="display:flex;justify-content:flex-end">' + btn(p[4], k === 'unav' || k === 'stale' ? '' : 'p', p[5] ? ' aria-disabled="true"' : '') + '</div>') + '</div>'; }
+
+    /* ---------- PS-02 new deck ---------- */
+    const STEPS = ['Audience & round', 'Sources', 'Outline', 'Price', 'Generate', 'Review'];
+    const steps = (i) => '<div class="ps-steps" role="list" aria-label="New deck steps">' + J(STEPS.map((s, j) => '<span role="listitem" class="' + (j < i ? 'done' : j === i ? 'on' : '') + '"' + (j === i ? ' aria-current="step"' : '') + '>' + (j + 1) + ' · ' + s + '</span>')) + '</div>';
+    const outline = (k) => '<ol class="ps-ol">' + J(ORDER.concat([['competition', 'Competition', 'Evidence'], ['business', 'Business model', 'Company']]).map((x, i) => '<li><span class="ps-h" aria-hidden="true">⋮⋮</span><span class="ps-n">' + String(i + 1).padStart(2, '0') + '</span><div><b>' + x[1] + '</b><small>' + ({ cover: 'Name, line and round from your company record', problem: 'From 6 Validate interviews', traction: 'ARR from Stripe, sites from HubSpot', market: 'No market size recorded · will be left for you', team: '3 people from Build › Team', ask: 'Round and use of funds from Raise', competition: 'From your Validate competitor list', business: 'Pricing from Build › Offer' }[x[0]]) + '</small></div>' + (x[0] === 'market' ? st('Not recorded', 'No data') : src(x[0] === 'cover' ? 'Company' : x[0] === 'traction' ? 'Stripe · HubSpot' : 'Recorded', 'ok')) + '</li>')) + '</ol>';
+    const newDeck = (pk) => phead('Decks', 'New deck', btn('Cancel', 'gh')) + steps(3) + '<div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start"><div style="display:flex;flex-direction:column;gap:14px">'
+      + box('1 · Audience & round', '<div style="display:flex;gap:18px;flex-wrap:wrap"><div class="ps-fld"><label>Audience</label><div class="ps-chips"><span class="ps-chip on">Investors</span><span class="ps-chip">Accelerator</span><span class="ps-chip">Partners</span><span class="ps-chip">Customers</span></div></div><div class="ps-fld"><label>Round</label><div class="ps-in">Seed · €2.0m · from Raise › Round</div></div></div>', { r: st('Done') })
+      + box('2 · Sources', '<div class="ps-g2">' + J([['Stripe', 'Synced 31 Oct, 23:10', 'ok'], ['HubSpot', 'Synced 31 Oct, 22:58', 'ok'], ['Validate interviews', '6 interviews · 14 Sep', 'ok'], ['Notion', 'Last sync 12 Aug · stale', 'st']].map(x => '<label class="ps-tog" style="border:1px solid var(--hair);border-radius:10px;padding:8px 10px"><span><b>' + x[0] + '</b><small>' + x[1] + '</small></span><span>' + (x[2] === 'st' ? st('Stale') : st('Fresh')) + '</span></label>')) + '</div>', { r: st('Done') })
+      + box('3 · Outline · 8 cards', outline() + '<p class="mu" style="font-size:12px">Drag or use Move up / Move down. Each line says where its content comes from. A card with no data is kept, empty, for you to fill.</p>', { r: btn('Regenerate outline · priced', 'gh bsm') })
+      + '</div><div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:0"><section class="ps-card"><div class="ps-ch"><h2>4 · Confirm the price</h2></div>' + priceCard(pk) + '<dl class="ps-kv"><dt>Builds</dt><dd>8 cards on The Grid</dd><dt>Text model</dt><dd>Claude Sonnet · from HQ presets</dd><dt>Pictures</dt><dd>2 · offered after you accept</dd><dt>Writes</dt><dd>A proposal. Nothing is a version until you accept and save.</dd></dl></section>' + box('Or in one click', '<p style="font-size:12.5px;color:var(--mu)">Same brief, standard outline, same price confirmation.</p>' + btn('Generate from my data'), { c: 'dash' }) + SAMPLE + '</div></div>';
+    const generating = () => phead('Decks', 'New deck', btn('Stop build', '')) + steps(4) + '<div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start"><section class="ps-card"><div class="ps-ch"><h2>Building 8 cards</h2><span class="mo mu" style="font-size:12px">1 m 12 s</span></div><div class="ps-bar" role="progressbar" aria-valuenow="5" aria-valuemin="0" aria-valuemax="8" aria-label="5 of 8 cards"><i style="width:62%"></i></div><ul class="ps-li">'
+      + J([['Cover', 'Done'], ['Problem', 'Done'], ['Traction · chart from Stripe', 'Done'], ['Market', 'Not recorded'], ['Team', 'Done'], ['The ask', 'Running'], ['Competition', 'Proposed'], ['Business model', 'Proposed']].map(x => '<li><span>' + x[0] + '</span>' + (x[1] === 'Not recorded' ? st('Not recorded', 'Left empty · no data') : x[1] === 'Proposed' ? '<span class="mo mu" style="font-size:11.5px">Queued</span>' : st(x[1])) + '</li>')) + '</ul><p class="mu" style="font-size:12px" aria-live="polite">You can leave this page; the build continues and the proposal waits under Ask, “1 waiting”.</p></section><section class="ps-card"><div class="ps-ch"><h2>Price</h2></div>' + priceCard('met', { compact: true }) + '<p style="font-size:12px;color:var(--mu)">Charged so far <b class="mo" style="color:var(--ink)">$0.97</b> of the $1.84 hold. Stop keeps the cards already built and releases the rest.</p></section></div>';
+    const proposal = () => phead('Decks', 'New deck', btn('Discard proposal', 'gh')) + steps(5) + '<div class="ps-card lav" style="flex-direction:row;align-items:center;gap:14px"><span class="stt pd">' + SH.dot + 'Proposed</span><div style="font-size:13px"><b>Your deck, proposed · 8 cards, 7 filled, 1 left for you.</b> Nothing is kept until you accept. Charged $1.62 of the $1.84 hold.</div><span style="margin-left:auto;display:flex;gap:8px">' + btn('Accept all') + btn('Accept all and open editor', 'p') + '</span></div>'
+      + '<div class="ps-g4">' + J(['cover', 'problem', 'traction', 'market', 'team', 'ask'].map((k, i) => '<section class="ps-card" style="padding:10px;gap:8px">' + slide(k, 252) + '<div class="ps-ch"><b style="font-size:12.5px">' + (i + 1) + ' · ' + ORDER[i][1] + '</b>' + (k === 'market' ? st('Not recorded', 'Needs data') : st('Proposed')) + '</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + (k === 'traction' ? src('Stripe · 31 Oct', 'ok') + src('HubSpot', 'ok') : k === 'problem' ? src('Validate · 14 Sep', 'ok') : k === 'market' ? '<span class="mu" style="font-size:11.5px">Add a market size to fill it</span>' : src('Company record', 'ok')) + '</div><div style="display:flex;gap:6px">' + btn('Keep', 'bsm') + btn('Leave out', 'gh bsm') + btn('↻', 'gh bsm', ' aria-label="Regenerate this card · priced"') + '</div></section>')) + '</div>' + '<p class="mu" style="font-size:12px">Cards 7 and 8 (Competition, Business model) follow below. Theme Harbor · change it any time; it never changes the app’s colours. Regenerate one card asks for its own price first.</p>';
+
+    /* ---------- PS-03 editor ---------- */
+    const ERAIL = '<nav class="ps-rail" aria-label="StudioOS"><span class="ps-lg" aria-hidden="true"></span>' + J([['Home', 'H'], ['Validate', 'V'], ['Build', 'B'], ['Raise', 'R', 1], ['Grow', 'G'], ['Network', 'N']].map(x => '<a href="#" class="ps-ri' + (x[2] ? ' on' : '') + '" aria-label="' + x[0] + '"' + (x[2] ? ' aria-current="page"' : '') + '>' + x[1] + '</a>')) + '</nav>';
+    const SAVE = {
+      saved: st('All changes saved', 'Draft saved · 16:52'),
+      unsaved: st('Unsaved changes', 'Saving soon…'),
+      saving: st('Saving…'),
+      offline: st('Offline', 'Offline · 4 edits on this device'),
+      conflict: st('Conflict', 'Card 3 changed elsewhere'),
+      ro: st('Read-only', 'Read-only')
+    };
+    const toolbar = (sv, o) => { o = o || {}; const ro = sv === 'ro'; return '<div class="ps-tool" role="toolbar" aria-label="Deck"><a href="#" class="ps-ibtn" aria-label="Back to Pitch">‹</a><div class="ps-dt"><b>Halden Energy — Seed deck</b><span>Raise › Pitch › Editor</span></div>' + (ro ? '' : '<button type="button" class="ps-ibtn" aria-label="Undo">↶</button><button type="button" class="ps-ibtn" aria-label="Redo"' + (o.noRedo ? ' aria-disabled="true"' : '') + '>↷</button><span class="ps-div"></span>') + '<span role="status">' + SAVE[sv] + '</span><span class="ps-vs" title="The last version investors can be sent">' + st('Version saved', 'v7') + '<span class="mu">' + (o.vline || '3 cards differ from v7') + '</span></span><span class="ps-sp"></span>' + (ro ? '' : btn('Save version', o.saveP ? 'p' : '')) + btn('▶ Present', 'gh') + btn('Review', 'gh') + (ro ? '' : btn('Share ▾', 'gh')) + btn('Export', 'gh') + '<button type="button" class="ps-ibtn" aria-label="More deck actions">⋯</button>' + (o.ask === false ? '' : '<button type="button" class="btn" style="border-color:var(--lavE);background:var(--lav);color:var(--vt)!important">Ask Eadwyn' + (o.waiting ? ' · ' + o.waiting + ' waiting' : '') + '</button>') + '</div>'; };
+    const leftCol = (o) => { o = o || {}; let n = 0; const sec = (name, ks) => '<div class="ps-sec"><span>' + name + '</span><span>+</span></div>' + J(ks.map(k => { n++; const on = k === (o.cur || 'traction'); return '<div class="ps-th2' + (on ? ' on' : '') + '"' + (on ? ' aria-current="true"' : '') + '><span class="ps-tn">' + n + '</span><div>' + slide(k, 170) + '<div class="ps-tm"><span>' + ORDER.find(x => x[0] === k)[1] + (o.changed && o.changed.indexOf(k) > -1 ? ' <b style="color:var(--vt)">●</b>' : '') + '</span>' + (k === 'market' || k === 'team' ? st('Not Done', 'To do') : st('Done')) + '</div></div></div>'; })); return '<aside class="ps-left" aria-label="Cards"><div style="display:flex;gap:6px">' + btn('+ Card', 'bsm') + btn('Filter', 'gh bsm') + '</div>' + sec('Opening', ['cover', 'problem']) + sec('Evidence', ['traction', 'market']) + sec('Company', ['team']) + '<div class="mu" style="font-size:11px;padding:2px 4px">+ 6 more cards · Appendix 2</div></aside>'; };
+    const SELTR = '<div class="ps-sel" style="left:41.66%;top:16.66%;width:58.33%;height:66.66%"><span class="ps-sl">Chart · c6–12 r2–5</span></div>';
+    const centerCol = (o) => { o = o || {}; const W = o.w || 700; return '<section class="ps-center" aria-label="Card 3 on The Grid">' + (o.ctx === false ? '' : '<div class="ps-ctx" role="toolbar" aria-label="Selected area">' + btn('Ask about this area', 'bsm', ' style="background:var(--lav);border-color:var(--lavE);color:var(--vt)!important"') + btn('Chart ▾', 'gh bsm') + btn('Data: Stripe ARR', 'gh bsm') + btn('Duplicate', 'gh bsm') + btn('⋯', 'gh bsm', ' aria-label="More for this area"') + '</div>') + slide('traction', W, { grid: o.grid !== false, over: (o.sel === false ? '' : SELTR) + (o.guide ? '<div class="ps-guide" style="left:41.66%;top:0;width:1px;height:100%"></div>' : '') + (o.held ? '<div class="ps-held" style="left:0;top:16.66%;width:41.6%;height:66.66%"><span>Sana Kapoor is editing this area</span></div>' : '') }) + '<div class="ps-notes"><b style="color:var(--ink)">Speaker notes</b> · “We went from one pilot to six paying sites in nine months.”</div></section>'; };
+    const rightCol = (tab, inner) => '<aside class="ps-right" aria-label="Properties"><nav class="ps-rt">' + J(['Design', 'Data', 'Eadwyn'].map(t => '<a href="#"' + (t === tab ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav><div class="ps-rb">' + inner + '</div></aside>';
+    const propsData = () => '<div class="ps-grp"><h3>Selected · Chart</h3><div class="ps-fld"><label>Bound to</label><div class="ps-in">ARR by quarter · Stripe ' + src('as of 31 Oct', 'ok') + '</div></div><div class="ps-fld"><label>Range</label><div class="ps-in">Q1–Q4 2026 · Q4 to date</div></div><div class="ps-fld"><label>Chart</label><span class="ps-seg"><span class="on">Bars</span><span>Line</span><span>Table</span></span></div></div><div class="ps-grp"><h3>Provenance</h3><p style="font-size:12px">Each bar reads a recorded figure. Edit the number here and it stops being linked; the card then says “Typed by you”.</p><a href="#" style="font-size:12px;font-weight:700">Open the record ›</a></div><div class="ps-grp"><h3>Layout</h3><div class="ps-fld"><label>Area</label><div class="ps-in mo">c6–12 · r2–5 · snaps to 12 × 6</div></div></div>';
+    const editor = (sv, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px;height:' + (o.h || 900) + 'px"><div class="ps-ed" style="height:' + (o.h || 900) + 'px">' + ERAIL + '<div style="display:flex;flex-direction:column;min-width:0;position:relative">' + toolbar(sv, o.tb) + (o.banner || '') + '<div class="ps-cols">' + leftCol(o.left) + (o.center || centerCol(o.c)) + (o.right || rightCol('Data', propsData())) + '</div>' + (o.overlay || '') + '</div></div></div>'; };
+    const banner = (c, inner, act) => '<div class="ps-banner ' + c + '" role="status">' + inner + '<span class="ps-r">' + (act || '') + '</span></div>';
+    const saveVersionDlg = () => '<div class="ps-sheet"><div class="ps-dlg" role="dialog" aria-modal="true" aria-labelledby="svh" style="width:560px"><div class="ps-dh"><h2 id="svh">Save version 8</h2><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ps-db"><p style="font-size:13px">Your working draft becomes <b>v8</b>, a frozen copy you can review, share and compare. The draft keeps saving on its own; only versions go to investors.</p><dl class="ps-kv"><dt>Changes from v7</dt><dd>3 cards: Traction, Team, The ask</dd><dt>Links on older versions</dt><dd>3 investor links stay on v6 until you move them</dd><dt>Name</dt><dd><div class="ps-in">After Kestrel feedback</div></dd></dl></div><div class="ps-df">' + btn('Cancel', 'gh') + btn('Save v8', 'p') + '</div></div></div>';
+
+    /* ---------- PS-04 Eadwyn contextual Ask ---------- */
+    const askPanel = (k) => {
+      const head = '<div class="ps-grp"><h3>Ask about this area</h3><div class="ps-in" style="justify-content:space-between"><span>Chart · c6–12 r2–5 · card 3</span>' + src('Stripe · 31 Oct', 'ok') + '</div></div>';
+      const ask = '<div class="ps-fld"><label for="ai1">What should change?</label><div class="ps-in ps-ta foc" id="ai1">Show ARR growth quarter on quarter, and label the Q4 bar as to-date.</div></div><div class="ps-fld"><label>Model</label><div class="ps-in">Claude Sonnet · set by HQ for charts <span class="mu" style="margin-left:auto">read-only</span></div></div>';
+      const props = (dim) => '<div class="ps-prop' + (dim ? ' ps-dim' : '') + '"><div class="ps-ch"><b style="font-size:12.5px">Proposal 1 of 2</b>' + st('Proposed') + '</div>' + slide('traction', 270) + '<div class="ps-quote">Bars by quarter with growth labels: +89%, +62%, +49%. Q4 marked “to 31 Oct”.</div><div style="display:flex;gap:4px;flex-wrap:wrap">' + src('Stripe · 4 figures', 'ok') + src('Calculated · growth %', '') + '</div><div class="ps-pr">' + btn('Accept', 'p bsm') + btn('Reject', 'gh bsm') + btn('Regenerate · priced', 'gh bsm') + '</div></div>';
+      if (k === 'confirm') return head + ask + priceCard('met') + '<p class="mu" style="font-size:11.5px">Nothing on the card changes until you accept a proposal. Accepting places it in your draft; it is not a version until you save one.</p>';
+      if (k === 'running') return head + '<div class="ps-price met"><div class="ps-pl">' + st('Running', 'Generating 2 variants') + '<b class="mo">holds $0.06</b></div><div class="ps-bar"><i style="width:55%"></i></div><p aria-live="polite">Reading 4 Stripe figures… drafting variant 1 of 2.</p><div style="display:flex;justify-content:flex-end">' + btn('Stop', 'gh bsm') + '</div></div>';
+      if (k === 'review') return head + props(false) + '<div class="ps-prop ps-dim"><div class="ps-ch"><b style="font-size:12.5px">Proposal 2 of 2 · line chart, monthly ARR</b>' + st('Proposed') + '</div><div class="ps-pr">' + btn('Preview', 'gh bsm') + btn('Accept', 'gh bsm') + btn('Reject', 'gh bsm') + '</div></div>' + '<p class="mu" style="font-size:11.5px">Charged $0.04 of the $0.06 hold. Your chart stays as it is until you accept.</p>';
+      return head + ask;
+    };
+    const askEditor = (k) => editor(k === 'review' ? 'unsaved' : 'saved', { tb: { waiting: k === 'review' ? 1 : 0 }, right: rightCol('Eadwyn', askPanel(k)), c: { w: 680 } });
+
+    /* ---------- PS-05 review ---------- */
+    const CHK = [
+      ['Completeness', [['12 of 12 cards present', 'Passed', ''], ['Market: no market size recorded', 'To fix', 'Add a figure or mark the card “intentionally qualitative” ' + ENG('card mark')], ['2 cards not Done (Market, Team)', 'Worth a look', 'Owner: Sana Kapoor']]],
+      ['Evidence & freshness', [['9 of 12 cards fully linked', 'Passed', '23 figures, each with its record'], ['Notion pipeline figure · last sync 12 Aug', 'Stale', 'Sync Notion or replace the figure'], ['ARR €410k matches Stripe', 'Passed', 'Check claims · 8 Nov 16:41']]],
+      ['Readability & layout', [['Text density on card 5 (Team)', 'Worth a look', '78 words; the theme suggests 50'], ['Clipped text', "Couldn't check", 'Card 9 could not be measured at 1920 × 1080 · Try again']]],
+      ['Technical preflight', [['Image resolution, alt text, contrast', 'Passed', '14 checks · 0 findings'], ['Off-theme card', 'Passed', '']]],
+      ['Disclosure & legal', [['NDA required for links to this version', 'Passed', 'Set on every new link by default'], ['Forward-looking statements notice', 'To fix', 'Card 12 projects revenue; add the notice from Legal ' + ENG('Legal rule')]]],
+      ['Approvals', [['Approval from Astrid Lund (CEO)', 'Needs approval', 'Requested 8 Nov · Share is held until approved']]]
+    ];
+    const review = (o) => { o = o || {}; return phead('Review', null, btn('Open editor') + btn('Share v7', 'p', ' aria-disabled="true"')) + '<div class="ps-card" style="flex-direction:row;align-items:center;gap:16px"><div><span class="eye">Checking</span><b style="font-size:16px;display:block">v7 · saved 8 Nov, 16:40</b><span class="mu" style="font-size:12px">The exact version investors would receive. Your working draft has 3 changed cards and is not part of this check.</span></div><div style="margin-left:auto;display:flex;gap:10px;align-items:center">' + J([['To fix', 2], ['Worth a look', 2], ["Couldn't check", 1], ['Stale', 1], ['Needs approval', 1], ['Passed', 6]].map(x => st(x[0], x[1] + ' ' + x[0].toLowerCase().replace("couldn't check", "couldn’t check")))) + '</div></div>'
+      + '<p class="mu" style="font-size:12.5px">No readiness score: each check says what it found, on which card, and what to do. A check that couldn’t run is not a pass.</p><div class="ps-g2">' + J(CHK.map(g => box(g[0], '<ul class="ps-chk">' + J(g[1].map(r => '<li><span>' + st(r[1]) + '</span><div><b>' + r[0] + '</b>' + (r[2] ? '<small>' + r[2] + '</small>' : '') + '</div><span>' + (r[1] === 'Passed' ? '' : btn(r[1] === 'Needs approval' ? 'Remind' : r[1] === "Couldn't check" ? 'Try again' : 'Go to card', 'gh bsm')) + '</span></li>')) + '</ul>')) ) + '</div>' + box('AI review of v7', '<p style="font-size:12.5px">Optional, priced. Reads the deck as an investor would and returns comments per card. Its own score is shown only if the reviewer returns one, labelled as the reviewer’s.</p><div style="display:flex;gap:10px;align-items:center">' + st('Not checked', 'Not run for v7') + priceCard('met', { compact: true }).replace('holds $1.84', 'holds $0.42') + btn('Review this version…', 'gh bsm') + '</div>'); };
+
+    /* ---------- PS-06 share ---------- */
+    const tog = (t, s, on, o) => { o = o || {}; return '<div class="ps-tog"><span><b>' + t + '</b>' + (s ? '<small>' + s + '</small>' : '') + '</span><span class="ps-sw' + (on ? ' on' : '') + (o.lk ? ' ps-lk' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') + '"' + (o.lk ? ' aria-disabled="true"' : '') + ' aria-label="' + t + '"></span></div>'; };
+    const recv = (name) => '<section class="ps-recv" aria-labelledby="rv"><div class="ps-ch"><h3 id="rv">What ' + name + ' will receive</h3><span class="mo mu" style="font-size:11px">exact preview</span></div><div class="ps-browser"><div class="ps-bu"><i></i><i></i><i></i><span style="margin-left:6px">axal.vc/d/k3P9…</span></div><div style="padding:14px;background:#f4f3f7;display:flex;flex-direction:column;gap:10px;color:#18181b"><div style="background:#fff;border:1px solid #ececf1;border-radius:10px;padding:12px;font-size:12px"><b style="font-size:13px">Halden Energy shared a deck with you</b><div style="color:#6b6577;margin-top:4px">Step 1 of 2 · Accept the NDA to view. Your email: ines@fjord.example</div></div>' + slide('cover', 382, { wm: 'Ines Moreau · Fjord Ventures' }) + '<div style="display:flex;justify-content:space-between;font:500 11px var(--mo);color:#6b6577"><span>v7 · 12 cards · appendix hidden</span><span>No download · expires 22 Nov</span></div></div></div><ul class="ps-li" style="font-size:12px"><li><span>Sees</span><b>v7 as saved 8 Nov, 16:40 · not your draft</b></li><li><span>Can</span><b>View · leave feedback</b></li><li><span>Cannot</span><b>Download · forward the link</b></li></ul></section>';
+    const share = (o) => { o = o || {}; return phead('Share & analytics', null, btn('Investor links (3)', 'gh')) + '<div class="ps-share"><div style="display:flex;flex-direction:column;gap:14px">'
+      + box('1 · Investor', '<div class="ps-in foc" role="combobox" aria-expanded="false"><b>Ines Moreau</b> · Fjord Ventures · ines@fjord.example<span class="mu" style="margin-left:auto">from Capital relationships</span></div><p class="mu" style="font-size:12px">One link per investor, so access, watermark and analytics are theirs alone. She already has a link to v6, opened 2 h ago.</p>')
+      + box('2 · What they get', '<div class="ps-g2"><div class="ps-fld"><label>Version or variant</label><div class="ps-in">v7 · saved 8 Nov <span class="mu" style="margin-left:auto">▾</span></div><small class="mu" style="font-size:11.5px">Frozen. Edits after this don’t reach her until you send a new version.</small></div><div class="ps-fld"><label>Included content</label><div class="ps-in">12 cards · appendix hidden · speaker notes hidden</div></div></div>' + '<div class="ps-tog"><span><b>Walkthrough recording</b><small>Attach your recorded pitch</small></span>' + LATER('#3837 · #4599') + '</div>')
+      + box('3 · Access', tog('NDA before viewing', 'Standard mutual NDA from Legal · v3', true) + '<div class="ps-tog"><span><b>Expires</b><small>The link stops opening after this date</small></span><span class="ps-chips"><span class="ps-chip">7 days</span><span class="ps-chip on">14 days</span><span class="ps-chip">30 days</span><span class="ps-chip">Never</span></span></div>' + tog('Download', 'PDF of the version, watermarked', false) + tog('Forwarding', 'Off: the link opens only for her email', false) + tog('Watermark on every card', '“Prepared for Ines Moreau · Fjord Ventures”, always on', true, { lk: true }) + tog('Time per slide', 'Measures seconds per card for this link. Off keeps visit counts only.', true))
+      + '<div class="ps-card" style="flex-direction:row;align-items:center;gap:10px">' + (o.gate ? st('Needs approval', 'Held · approval from Astrid Lund') + '<span class="mu" style="font-size:12px">and 2 Review items to fix in v7</span>' : st('Passed', 'v7 checked 8 Nov, 16:44') + '<span class="mu" style="font-size:12px">Review ran on the version you’re sending</span>') + '<span style="margin-left:auto;display:flex;gap:8px">' + btn('Cancel', 'gh') + btn('Create link for Ines', 'p', o.gate ? ' aria-disabled="true"' : '') + '</span></div></div>' + recv('Ines') + '</div>'; };
+    const LINKS = [['Ines Moreau', 'Fjord Ventures', 'v6', 'Signed', '22 Nov', 'Views 3 · Time 6 m 12 s', 'Active'], ['Tom Adeyemi', 'Kestrel Capital', 'v6', 'Shown', '20 Nov', 'Views 1 · visit counts only', 'Active'], ['Priya Nair', 'Arcane Seed', 'v6', 'Not opened', '20 Nov', 'Not opened', 'Active'], ['Lea Brandt', 'Nordlicht Angels', 'v5', '—', '1 Nov', 'Views 2 · Time 3 m 05 s', 'Expired'], ['Oskar Lind', 'typed in', 'v5', 'Signed', '—', 'Views 1 · Time 1 m 40 s', 'Withdrawn']];
+    const linksTbl = (o) => { o = o || {}; return '<table class="ps-tbl"><thead><tr><th>Investor</th><th>Version</th><th>NDA</th><th>Expires</th><th>Engagement</th><th>Status</th><th></th></tr></thead><tbody>' + J(LINKS.map((l, i) => '<tr' + (i === (o.on == null ? -1 : o.on) ? ' class="on"' : '') + '><td><b>' + l[0] + '</b><small>' + l[1] + '</small></td><td><b>' + l[2] + '</b>' + (l[2] !== 'v7' && l[6] === 'Active' ? '<small>v7 has 3 changed cards · Send v7</small>' : '') + '</td><td>' + (l[3] === 'Signed' ? st('Signed') : l[3] === '—' ? '<span class="mu">Not required</span>' : '<span class="mu">' + l[3] + '</span>') + '</td><td class="mo" style="font-size:12px">' + l[4] + '</td><td>' + (l[5] === 'Not opened' ? '<span class="mu">Not opened</span>' : '<a href="#">' + l[5] + '</a>') + '</td><td>' + st(l[6]) + '</td><td>' + (l[6] === 'Active' ? btn('Withdraw…', 'gh bsm') : '') + '</td></tr>')) + '</tbody></table>'; };
+
+    /* ---------- PS-07 analytics ---------- */
+    const spark = (vals, first) => '<div class="ps-spark" role="img" aria-label="Views per day, last 14 days">' + J(vals.map((v, i) => '<i class="' + (v === 0 ? 'z' : first.indexOf(i) > -1 ? 'f' : '') + '" style="height:' + (v * 80) + '%"></i>')) + '</div>';
+    const funnel = () => J([['Sent', 3, 100], ['Opened', 2, 67], ['NDA shown', 2, 67], ['Accepted', 1, 33], ['Reached the ask', 1, 33]].map(x => '<div class="ps-hb"><span>' + x[0] + '</span><div class="ps-bar"><i style="width:' + x[2] + '%"></i></div><b class="mo" style="text-align:right">' + x[1] + '</b></div>'));
+    const perSlide = (o) => { o = o || {}; return J([['1 · Cover', 22, '0 m 18 s'], ['2 · Problem', 48, '0 m 41 s'], ['3 · Traction', 100, '1 m 52 s'], ['4 · Market', 0, 'Not read'], ['5 · Team', 36, '0 m 30 s'], ['12 · The ask', 70, '1 m 09 s']].map(x => '<div class="ps-hb"><span>' + x[0] + '</span><div class="ps-bar" style="background:transparent">' + (x[1] ? '<i style="width:' + x[1] + '%"></i>' : '<i class="nr" style="width:100%"></i>') + '</div><span class="mo" style="text-align:right;font-size:11.5px' + (x[1] ? '' : ';color:var(--mu);font-style:italic') + '">' + x[2] + '</span></div>')); };
+    const analytics = () => phead('Share & analytics', null, btn('New investor link', 'p')) + '<div style="display:flex;gap:10px;align-items:center"><span class="ps-chips"><span class="ps-chip on">All versions</span><span class="ps-chip">v6</span><span class="ps-chip">v5</span></span><span class="ps-chips"><span class="ps-chip on">All links</span><span class="ps-chip">NDA links</span><span class="ps-chip">No-NDA links</span></span><span class="mu" style="margin-left:auto;font-size:12px">Last 14 days · 9 Nov, 09:10</span></div>'
+      + '<div class="ps-g4"><div class="ps-stat"><small>Visits</small><span class="ps-num">4</span><em>2 investors · 2 revisits</em></div><div class="ps-stat"><small>Most-read card</small><span style="font-size:15px;font-weight:800">3 · Traction</span><em>1 m 52 s avg · links with timing on</em></div><div class="ps-stat"><small>Reached the ask</small><span class="ps-num">1</span><em>of 2 who opened</em></div><div class="ps-stat"><small>Reactions & feedback</small><span style="font-size:14px">' + st('Not recorded', 'No summary yet') + '</span><em>' + ENG() + '</em></div></div>'
+      + '<div class="ps-g2">' + box('Views per day', spark([0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0], [1, 4]) + '<span class="mu" style="font-size:11.5px">Blue: first view of a link. A grey line is a measured zero, not missing data.</span>') + box('From link to the ask · v6', funnel() + '<span class="mu" style="font-size:11.5px">An open link has no NDA step; its row reads “Not required”.</span>') + '</div>'
+      + box('Investor links', linksTbl({ on: 0 }), { r: '<span class="mu" style="font-size:12px">Select a row for that investor’s journey</span>' });
+    const investor = () => phead('Share & analytics', 'Ines Moreau · Fjord Ventures', btn('Draft follow-up', 'p') + btn('Open in Capital relationships', 'gh')) + '<div class="ps-g4"><div class="ps-stat"><small>Version</small><b>v6 · NDA signed 6 Nov</b><em>Link expires 22 Nov</em></div><div class="ps-stat"><small>Visits</small><span class="ps-num">3</span><em>2 revisits</em></div><div class="ps-stat"><small>Time on deck</small><span class="ps-num">6 m 12 s</span><em>Time per slide on</em></div><div class="ps-stat"><small>Reached the ask</small><b>' + st('Done', 'Yes · 7 Nov, 21:14') + '</b></div></div>'
+      + '<div class="ps-g2">' + box('Time per card · all visits', perSlide() + '<span class="mu" style="font-size:11.5px">“Not read” means the card was never on screen, not zero seconds.</span>') + box('Journey', '<ul class="ps-tl">' + J([['6 Nov, 10:02', 'Link created for v6', 'o'], ['6 Nov, 18:40', 'Opened · accepted NDA', ''], ['6 Nov, 18:41–18:47', 'Read 9 cards · longest on Traction', ''], ['7 Nov, 21:10', 'Revisit · went to The ask', ''], ['9 Nov, 07:12', 'Revisit · 1 m on Traction', ''], ['—', 'Reaction or comment', 'o']].map(x => '<li><span class="ps-w">' + x[0] + '</span><span class="ps-d ' + x[2] + '"></span><span>' + x[1] + (x[0] === '—' ? ' · ' + NR + ' ' + ENG('reactions read') : '') + '</span></li>')) + '</ul>') + '</div>'
+      + '<div class="ps-card amb" style="flex-direction:row;align-items:center;gap:12px"><span class="stt xar">' + SH.ar + 'v7 differs</span><span style="font-size:12.5px">She read v6. v7 changed Traction, Team and The ask.</span><span style="margin-left:auto">' + btn('Send v7 to Ines…', 'bsm') + '</span></div>';
+
+    /* ---------- crops: state boards ---------- */
+    const homeStates = () => crop('<span class="eye">Studio home · loading, unreadable, plan gate, read-only</span><div class="ps-g2">'
+      + box('Loading', '<div class="ps-skel" style="height:150px"></div><div class="ps-skel" style="height:14px;width:60%"></div><div class="ps-skel" style="height:14px;width:40%"></div><span class="mu" style="font-size:12px" role="status">Loading your deck…</span>')
+      + box('Deck couldn’t be read', '<p style="font-size:12.5px">' + st('Unreadable', 'Couldn’t read your deck') + '</p><p class="mu" style="font-size:12px">Nothing is shown as empty or zero while the read fails. Your deck is not lost.</p>' + btn('Try again', 'bsm'), { c: '' })
+      + box('Plan doesn’t include the studio', '<p style="font-size:12.5px">' + st('Read-only', 'Raise + Grow plans include Pitch studio') + '</p><p class="mu" style="font-size:12px">From <code>GET /api/decks/access</code>. A failed read never opens the studio.</p>' + btn('See plans', 'bsm'))
+      + box('Investor activity unreadable, deck fine', '<p style="font-size:12.5px">' + st('Unreadable', 'Activity couldn’t be read') + '</p><p class="mu" style="font-size:12px">One failed read costs only its own panel; the next step falls back to “Open the editor”.</p>' + btn('Try again', 'gh bsm'))
+      + '</div>', 1000);
+    const priceStates = () => crop('<span class="eye">AI price confirmation · five states, one rule: unknown is never free</span><div class="ps-g3">' + J(['reading', 'unav', 'ok', 'met', 'stale'].map(k => '<div style="display:flex;flex-direction:column;gap:6px"><b style="font-size:12px">' + { reading: 'A · Reading', unav: 'B · Unavailable', ok: 'C · Confirmed, no charge', met: 'D · Confirmed, metered', stale: 'E · Stale or expired' }[k] + '</b>' + priceCard(k) + '</div>')) + '<div class="ps-card dash" style="gap:8px"><b style="font-size:12.5px">Rules</b><ul style="font-size:12px;display:flex;flex-direction:column;gap:5px;list-style:disc;padding-left:16px"><li>The run sends the accepted quote id; a changed brief or outline expires it (#4597).</li><li>“No charge” appears only when a quote says so.</li><li>“Unavailable” and “Reading” never start a run.</li><li>A hold is a ceiling, not the charge.</li></ul></div></div>', 1180);
+    const genFail = () => crop('<span class="eye">Creation failures</span><div class="ps-g2">'
+      + box('Out of AI tokens', '<p style="font-size:12.5px">' + st('Refused', 'Not enough AI tokens') + '</p><p class="mu" style="font-size:12px">Nothing ran and nothing was charged. Free steps (outline, recorded figures, templates) still work.</p><div style="display:flex;gap:6px">' + btn('Add tokens', 'bsm') + btn('Build without AI text', 'gh bsm') + '</div>')
+      + box('Build failed part-way', '<p style="font-size:12.5px">' + st('Failed', '5 of 8 cards built · 3 failed') + '</p><p class="mu" style="font-size:12px">The 5 are kept as a proposal. Charged $0.97; the rest of the hold is released.</p><div style="display:flex;gap:6px">' + btn('Retry the 3 · priced', 'bsm') + btn('Review the 5', 'gh bsm') + '</div>')
+      + box('AI generation switched off by HQ', '<p style="font-size:12.5px">' + st('Not switched on', 'Grid generation not switched on yet') + '</p><p class="mu" style="font-size:12px">From the context read (<code>grid_generate: false</code>). Templates and import still work.</p>' + btn('Browse templates', 'gh bsm'))
+      + box('Plan gate', '<p style="font-size:12.5px">' + st('Read-only', 'This build needs the Raise plan') + '</p><p class="mu" style="font-size:12px">A <code>tier_required</code> refusal links to plans, never to a token top-up.</p>' + btn('See plans', 'gh bsm'))
+      + '</div>', 1000);
+    const edStates = () => crop('<span class="eye">Editor · draft, version and connection states (toolbar line and banner)</span><div style="display:flex;flex-direction:column;gap:12px">'
+      + J([
+        ['Clean', SAVE.saved, '', 'Draft saved to the server. v7 is still the last version.'],
+        ['Typing', SAVE.unsaved, '', 'Each edit goes to this device at once and to the server 1.5 s after you stop.'],
+        ['Offline', SAVE.offline, banner('amb', '<b>You’re offline.</b> 4 edits are kept on this device and will sync when you reconnect. Save version, Share and AI wait.', ''), 'Present and Export of a saved version still work.'],
+        ['Recovery', st('Draft · on this device'), banner('lav', '<b>Restore unsaved changes from 14:32?</b> This device has 6 edits the server never received.', btn('Compare', 'gh bsm') + btn('Discard', 'gh bsm') + btn('Restore', 'p bsm')), 'Covers cards, order, removals, theme and audience (#4596).'],
+        ['Version saved', st('Version saved', 'v8 saved · 17:05'), banner('lav', '<b>v8 saved.</b> 3 investor links are on v6.', btn('Move links to v8…', 'bsm')), 'Draft saved and version saved never share a word or a colour.'],
+        ['Read-only', SAVE.ro, banner('amb', '<b>You can view this deck.</b> Astrid Lund owns it; ask her for edit access.', btn('Request access', 'gh bsm')), 'Edit controls are absent, not disabled-looking clutter.'],
+        ['Save failed', st('Failed', 'Couldn’t save 2 cards'), banner('neg', '<b>2 cards didn’t save.</b> They are kept on this device. The server answered 500.', btn('Try again', 'bsm')), 'Never “All changes saved” until the server confirms.']
+      ].map(r => '<div class="ps-card" style="padding:10px 12px;gap:8px"><div style="display:grid;grid-template-columns:120px 240px minmax(0,1fr);gap:12px;align-items:center"><b style="font-size:12.5px">' + r[0] + '</b><span>' + r[1] + '</span><span class="mu" style="font-size:12px">' + r[3] + '</span></div>' + (r[2] ? '<div style="border:1px solid var(--hair);border-radius:8px;overflow:hidden">' + r[2] + '</div>' : '') + '</div>')) + '</div>', 1180);
+    const conflictPanel = () => '<div class="ps-grp"><h3>Card 3 changed elsewhere</h3><p style="font-size:12px">Mateo Ortiz saved a different chart at 16:58 while you were editing. Neither version is lost.</p></div><div class="ps-cmp"><div class="mine"><b>Yours · this device</b>' + slide('traction', 125) + '<span class="mu">Bars by quarter, Q4 to date</span></div><div><b>Mateo’s · server</b>' + slide('traction', 125) + '<span class="mu">Line chart, monthly ARR</span></div></div><div style="display:flex;flex-direction:column;gap:6px">' + btn('Keep mine', 'p') + btn('Keep Mateo’s') + btn('Copy mine to a new card', 'gh') + '</div><p class="mu" style="font-size:11.5px">Other cards keep syncing. Save version waits until this is settled.</p>';
+    const askStates = () => crop('<span class="eye">Eadwyn on an area · failures and limits</span><div class="ps-g3">'
+      + box('AI run failed', '<p>' + st('Failed', 'No proposal returned') + '</p><p class="mu" style="font-size:12px">Model error after 14 s. Charged $0.00; the hold is released. Your chart is unchanged.</p>' + btn('Try again · same quote', 'bsm'))
+      + box('Price unavailable', priceCard('unav'))
+      + box('Quote expired', priceCard('stale'))
+      + box('Out of tokens', '<p>' + st('Refused', 'Not enough AI tokens') + '</p><p class="mu" style="font-size:12px">Ask turns off for this session and says why. Editing and free tools still work.</p>' + btn('Add tokens', 'bsm'))
+      + box('Area held by someone else', '<p>' + st('Read-only', 'Sana Kapoor is editing this area') + '</p><p class="mu" style="font-size:12px">Wait or ask Sana. Proposals can’t be placed into a held area.</p>')
+      + box('Accepted, then undone', '<p>' + st('Accepted', 'Undone') + '</p><p class="mu" style="font-size:12px">“Still charged $0.04”: undo restores the card, not the tokens.</p>')
+      + '</div>', 1180);
+    const revStates = () => crop('<span class="eye">Review · version and result states</span><div class="ps-g2">'
+      + box('Draft has changes the check didn’t read', '<p>' + st('Worth a look', 'Checked v7 · your draft differs') + '</p><p class="mu" style="font-size:12px">Sharing sends v7, which this result describes. To send your changes, save v8 and check it.</p><div style="display:flex;gap:6px">' + btn('Save v8 and check it', 'bsm') + btn('Keep v7', 'gh bsm') + '</div>')
+      + box('Result belongs to another version', '<p>' + st('Not checked', 'v8 was not checked') + '</p><p class="mu" style="font-size:12px">The check before you export read v7. A result is shown only beside its own version.</p>' + btn('Check v8', 'bsm'))
+      + box('Checks running', '<p>' + st('Checking…', 'Measuring 12 cards at 1920 × 1080') + '</p><div class="ps-bar"><i style="width:40%"></i></div>')
+      + box('A check couldn’t run', '<p>' + st("Couldn't check", 'Evidence check unreadable') + '</p><p class="mu" style="font-size:12px">Counted under Couldn’t check, never under Passed. Share asks you to confirm with it open.</p>' + btn('Try again', 'gh bsm'))
+      + '</div>', 1000);
+    const shareStates = () => crop('<span class="eye">Investor sharing · gates, status and revoke</span><div class="ps-g3">'
+      + box('Held by approval', '<p>' + st('Needs approval', 'Astrid Lund must approve v7') + '</p><p class="mu" style="font-size:12px">Create link is disabled with this reason; an approver sees Approve here.</p>')
+      + box('Cards not Done', '<p>' + st('Not Done', '2 cards are not Done') + '</p><p class="mu" style="font-size:12px">A confirm, not a block: “2 cards are not Done. Share anyway?”</p>')
+      + box('Preflight blocks export', '<p>' + st('To fix', '1 export-blocking finding in v7') + '</p><p class="mu" style="font-size:12px">Card 9 text is clipped at 1920 × 1080.</p>' + btn('Show me', 'gh bsm'))
+      + box('Withdraw a link', '<div role="dialog" aria-label="Withdraw" style="display:flex;flex-direction:column;gap:8px"><b style="font-size:13px">Withdraw Tom Adeyemi’s link?</b><p class="mu" style="font-size:12px">The link stops opening at once. His visits stay in analytics. You can send a new link later.</p><div style="display:flex;gap:6px;justify-content:flex-end">' + btn('Cancel', 'gh bsm') + btn('Withdraw link', 'bsm', ' style="background:var(--neg);border-color:var(--neg);color:#fff!important"') + '</div></div>')
+      + box('Link expired', '<p>' + st('Expired', 'Expired 1 Nov') + '</p><p class="mu" style="font-size:12px">Lea Brandt sees “This link has expired. Ask Halden Energy for a new one.”</p>' + btn('Send a new link', 'gh bsm'))
+      + box('Creating failed', '<p>' + st('Failed', 'Link not created') + '</p><p class="mu" style="font-size:12px">No link exists and nothing was emailed. Your settings are kept.</p>' + btn('Try again', 'bsm'))
+      + '</div>', 1180);
+    const absStates = () => crop('<span class="eye">Analytics · four kinds of “nothing”, never drawn alike</span><div class="ps-g4">'
+      + '<div class="ps-abs"><span>' + st('Tracking off') + '</span><span class="ps-big" style="color:var(--mu)">—</span><p>Time per slide is off for this link. Visit counts only. Turn it on for future visits; past visits stay untimed.</p></div>'
+      + '<div class="ps-abs"><span>' + st('Unreadable') + '</span><span class="ps-big" style="color:var(--mu)">?</span><p>Views couldn’t be read. Not zero: the read failed.</p>' + btn('Try again', 'gh bsm') + '</div>'
+      + '<div class="ps-abs"><span>' + st('Measured zero') + '</span><span class="ps-big">0</span><p>Measured: the link exists, timing is on, and nobody opened it in this period.</p></div>'
+      + '<div class="ps-abs"><span>' + st('Not recorded') + '</span><span class="ps-big ps-nr" style="font-size:18px">Not recorded</span><p>Nothing stores this yet (reactions summary), or the investor was typed in, so there is no relationship record.</p></div>'
+      + '</div>', 1180);
+
+    /* ---------- mobile ---------- */
+    const phone = (title, body, foot, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ps-phone"><div class="ps-pst"><span>9:41</span><span>●●● ▮</span></div><div class="ps-ptop"><a href="#" class="ps-pbtn" aria-label="Back">‹</a><b>' + title + '</b><a href="#" class="ps-pbtn" aria-label="More">⋯</a></div>' + (o.banner || '') + '<div class="ps-pbody">' + body + '</div>' + (foot ? '<div class="ps-pfoot">' + foot + '</div>' : '') + (o.sheet || '') + '</div></div>'; };
+    const ptabs = (cur) => '<div class="ps-ptabs">' + J(['Overview', 'Decks', 'Review', 'Share', 'Script'].map(t => '<span class="' + (t === cur ? 'on' : '') + '">' + t + '</span>')) + '</div>';
+    const MOB = {
+      PS08a: () => phone('Pitch', ptabs('Overview') + slide('cover', 362) + '<div style="display:flex;gap:6px;flex-wrap:wrap">' + st('Version saved', 'v7') + st('Unsaved changes', 'Draft · 3 cards') + '</div>' + next('Review v7 before sharing', 'Ines has v6. v7 isn’t checked.', 'Review').replace('class="ps-next"', 'class="ps-next" style="flex-wrap:wrap"') + '<ul class="ps-li"><li><div><b>Ines Moreau</b><small>v6 · 3 visits · reached the ask</small></div>' + st('Active', '2 h ago') + '</li><li><div><b>Tom Adeyemi</b><small>v6 · NDA not signed</small></div><span class="mu mo" style="font-size:11px">Yesterday</span></li></ul>', btn('Open deck', '')),
+      PS08b: () => phone('New deck', '<div class="ps-steps" style="font-size:9.5px"><span class="done">1</span><span class="done">2</span><span class="done">3</span><span class="on" aria-current="step">4 · Price</span><span>5</span><span>6</span></div><b style="font-size:17px">Confirm the price</b>' + priceCard('met', { compact: true }) + '<p class="mu" style="font-size:12.5px">8 cards · Claude Sonnet for text · 2 pictures offered after you accept. You’re charged what the run uses, up to the hold.</p><dl class="ps-kv" style="grid-template-columns:110px 1fr"><dt>Audience</dt><dd>Investors · Seed</dd><dt>Sources</dt><dd>Stripe, HubSpot, Validate</dd><dt>Outline</dt><dd>8 cards · 1 without data</dd></dl>', btn('Build deck · holds $1.84', 'p') + btn('Back to outline', 'gh')),
+      PS08c: () => phone('Card 3 · Traction', slide('traction', 362, { grid: false, over: '<div class="ps-sel" style="left:0;top:16.66%;width:41.6%;height:66.66%"></div>' }) + '<div class="ps-in ps-ta foc" style="font-size:14px">€410k<br><span class="mu">ARR · Stripe · as of 31 Oct</span></div><p class="mu" style="font-size:12px">Light editing on a phone: text, swap a recorded figure, reorder cards, accept proposals. Layout and new areas wait for a larger screen.</p><div style="display:flex;gap:8px">' + btn('Swap figure', 'gh') + btn('Ask Eadwyn', 'gh') + '</div>', '<div style="display:flex;justify-content:space-between;align-items:center"><span>' + st('Unsaved changes', 'Saving soon…') + '</span><span class="mu mo" style="font-size:11px">v7 unchanged</span></div>' + btn('Done', 'p')),
+      PS08d: () => phone('Halden — Seed deck', slide('traction', 362, { grid: false }) + '<p class="mu" style="font-size:12.5px">Card 3 of 12</p>', '', { banner: banner('lav', '<span><b>Restore unsaved changes from 14:32?</b><br>6 edits on this phone never reached the server.</span>', ''), sheet: '<div class="ps-psheet" role="dialog" aria-label="Restore"><span class="ps-grab"></span><b style="font-size:16px">Restore 6 edits from 14:32?</b><p class="mu" style="font-size:12.5px">Cards 3 and 5, the order of cards, and the theme. Restoring makes them your draft again; nothing goes to investors.</p>' + btn('Restore', 'p', ' style="min-height:48px"') + btn('Compare first', '', ' style="min-height:48px"') + btn('Discard them', 'gh', ' style="min-height:48px"') + '</div>' }),
+      PS08e: () => phone('Card 3 · conflict', '<p style="font-size:13px"><b>Mateo saved this card at 16:58</b> while you edited offline. Pick one; neither is lost.</p><div style="display:flex;flex-direction:column;gap:10px"><div class="ps-card" style="padding:10px;border-color:var(--vi)"><b style="font-size:12.5px">Yours · this phone</b>' + slide('traction', 330) + '</div><div class="ps-card" style="padding:10px"><b style="font-size:12.5px">Mateo’s · server</b>' + slide('traction', 330) + '</div></div>', btn('Keep mine', 'p') + '<div style="display:flex;gap:8px">' + btn('Keep Mateo’s') + btn('Copy mine to new card', 'gh') + '</div>', { banner: banner('amb', '<b>1 card in conflict</b> · others synced', '') }),
+      PS08f: () => phone('Review v7', ptabs('Review') + '<div class="ps-card" style="padding:12px"><b>v7 · saved 8 Nov, 16:40</b><span class="mu" style="font-size:12px">Your draft is not part of this check.</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">' + st('To fix', '2 to fix') + st('Worth a look', '2') + st("Couldn't check", '1') + st('Needs approval', '1') + '</div><ul class="ps-li">' + J([['To fix', 'Market: no market size'], ['To fix', 'Forward-looking notice missing'], ["Couldn't check", 'Card 9 not measured'], ['Needs approval', 'Astrid Lund']].map(r => '<li><div><b style="font-size:12.5px">' + r[1] + '</b><small>' + r[0] + '</small></div>' + st(r[0], ' ') + '</li>')) + '</ul>', btn('Go to first item', 'p')),
+      PS08g: () => phone('Share v7', ptabs('Share') + '<div class="ps-in" style="min-height:44px"><b>Ines Moreau</b> · Fjord Ventures</div>' + tog('NDA before viewing', '', true) + '<div class="ps-tog"><span><b>Expires</b></span><span class="mo">14 days ▾</span></div>' + tog('Download', '', false) + tog('Forwarding', '', false) + tog('Watermark', 'Always on', true, { lk: true }) + '<button type="button" class="disc" aria-expanded="false"><b>Preview what Ines receives</b><span>v7 · NDA first · no download</span><i aria-hidden="true">▾</i></button>', btn('Create link for Ines', 'p')),
+      PS08h: () => phone('Ines Moreau', '<div class="ps-g2" style="gap:8px"><div class="ps-stat"><small>Visits</small><span class="ps-num">3</span></div><div class="ps-stat"><small>Reached ask</small><b style="font-size:13px">Yes</b></div></div><b style="font-size:13px">Time per card</b>' + perSlide().replace(/grid-template-columns:150px/g, 'grid-template-columns:100px') + '<b style="font-size:13px">Latest</b><ul class="ps-tl"><li><span class="ps-w">9 Nov, 07:12</span><span class="ps-d"></span><span>Revisit · Traction</span></li><li><span class="ps-w">7 Nov, 21:10</span><span class="ps-d"></span><span>Went to The ask</span></li></ul>', btn('Draft follow-up', 'p'))
+    };
+
+    /* ---------- docs ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      PS00: () => dk('<h1>Current-state audit</h1><p>Read from <code>main</code> on 10 Nov 2026: <code>frontend/src/pages/raise/pitch/</code> (149 files), <code>deckV2Adapter.js</code>, and the Worker’s <code>deck_*.ts</code> routes. The studio is far more complete than its screens suggest: almost every v2 surface is wired; the friction is hierarchy, scattered controls and states that look alike.</p>'
+        + tbl(['Area', 'Built today', 'Friction', 'This pass'], [
+          ['Overview <code>/raise/pitch</code>', '<code>PitchOverview.jsx</code>: deck hero, six status cards, HQ note; “Not recorded” never 0', 'Six equal cards; no single next action; no import on first use (#4599)', 'One “Next” line chosen from state; investor activity beside the deck; import on first use'],
+          ['Decks', '<code>StudioHome.jsx</code>: deck card, Start from, one-click, templates, investor links, Spin-Out readiness', 'Home and Decks both feel like home; versions buried in ⋯', 'Decks = library and versions; Overview = what to do now'],
+          ['New deck', '<code>NewDeck.jsx</code> on one page; <code>OneClickBuild</code> on top; quote with hold; <code>quote_stale</code> requotes', 'Price shown in several places; one-click and guided look unrelated; no stepper', 'One stepper, one price card with five states, one-click as a shortcut into the same flow'],
+          ['Editor', '<code>PitchEditor.jsx</code>, <code>DeckToolbar</code>, <code>CardsStrip</code>, Grid, autosave (IndexedDB, If-Match, 409 resolve), presence, ⋯ sheets', 'Most controls in ⋯; “✓ Saved” reads like a version; restore/conflict desktop-only (fixed by #4596)', 'Three columns, document actions in the toolbar, draft vs version always shown side by side'],
+          ['Ask', '<code>AreaLightbox</code>, <code>AreaResults</code>, <code>DeckAsk</code>: per-area element, source and model chips, hold, Accept/Discard, variants, judge', 'A lightbox over the card hides the card it changes', 'Ask lives in the right column beside the selected area; proposal preview, then Accept / Reject / Regenerate'],
+          ['Review', '<code>PitchReview</code> (AI review), <code>CheckPanel</code> (claims), <code>PreflightPanel</code>, Wording, approvals in <code>commentsModel.preShareGate</code>', 'Four places; the AI review score dominates; version checked not always visible', 'One Review page for one saved version; groups; no score'],
+          ['Share & analytics', '<code>ShareDialog</code>, <code>InvestorLinksTable</code>, <code>ShareBoard</code>, <code>ViewerAnalyticsSheet</code>, <code>PublishPanel</code>', 'Settings-first dialog; recipient preview missing; walkthrough off', 'Investor first, live “what they receive” preview; links table with status and revoke'],
+        ]) + '<h2>Real, gated, missing</h2>' + tbl(['Status', 'Items'], [['Real on main', 'Overview, Decks, New deck + one-click + proposal review, batch build with Stop, autosave + restore + conflict, presence, card status, comments + approvals, check claims, preflight with dismissals, AI review, script and rehearsal, present + phone remote, export (PDF, PPTX, HTML, Google Slides, .odp), investor links (NDA, expiry, download, forwarding, watermark, variants, withdraw), time per slide, daily views, funnels, per-link journey, follow-up draft'], ['Gated', 'Studio behind plan (<code>/api/decks/access</code>); grid generation behind HQ switch (<code>grid_generate</code>); AI behind tokens (402 → Add tokens)'], ['Missing / off', 'Walkthrough attach (<code>deckV2Adapter.walkthrough</code> off, #3837, #4599); outline reorder for stage (<code>outlineReorder</code> off); first-use import entry (#4599); founder read of viewer reactions/feedback (viewers can post via <code>/share/:token/feedback</code>)']]) + '<p class="foot">Code-informed, not screenshot-verified.</p>'),
+      PS00B: () => dk('<h1>Information architecture and founder journey</h1><p>One navigation model. The StudioOS sidebar stays (Raise is current). Pitch has six tabs plus two full-screen modes. The editor keeps a collapsed StudioOS rail instead of a second header.</p>'
+        + tbl(['Place', 'Route', 'Job'], [['Overview', '<code>/raise/pitch</code>', 'What to do next, the deck, readiness, investor activity'], ['Decks', '<code>/raise/pitch/decks</code>', 'Library, versions, compare, templates, import'], ['Script & rehearsal', '<code>/raise/pitch/script</code>', 'Script per card, rehearsals'], ['Review', '<code>/raise/pitch/review</code>', 'Everything checked on one saved version'], ['Share & analytics', '<code>/raise/pitch/share</code>', 'Investor links, engagement, follow-up'], ['Notes', '<code>/raise/pitch/notes</code>', 'HQ ↔ founder thread'], ['Editor', '<code>/raise/pitch/edit</code>', 'Three-column workspace'], ['Present', '<code>/raise/pitch/present</code>', 'Presenter, audience, phone remote']])
+        + '<h2>End-to-end journey</h2><div class="ps-jr">' + J([['1', 'Data', 'Records and connectors with freshness'], ['2', 'Create', 'Audience → sources → outline → price → generate → review'], ['3', 'Edit', 'Grid, data binding, Eadwyn per area'], ['4', 'Save version', 'Freeze what investors may get'], ['5', 'Review', 'Check that exact version'], ['6', 'Share', 'One investor, one link, preview'], ['7', 'Engage', 'Journey, time per card, the ask'], ['8', 'Follow up', 'Draft follow-up, send a newer version']].map(x => '<div><span class="ps-n">' + x[0] + '</span><b>' + x[1] + '</b><span style="color:#6b6577">' + x[2] + '</span></div>')) + '</div>'
+        + '<h2>Two words that never share a look</h2><p><b>Draft</b> (working content, autosaved, never sent) and <b>Version</b> (frozen, numbered, the only thing Review checks and Share sends). The toolbar always shows both: “Draft saved · 16:52” and “v7 · 3 cards differ”.</p>'),
+      PS10: () => dk('<h1>Components and tokens</h1><h2>App chrome tokens (light / dark)</h2>' + J([['page', '#F4F3F7', '#0B1220'], ['surface', '#FFFFFF', '#111827'], ['hairline', '#ECECF1', '#374151'], ['ink', '#18181B', '#E5E7EB'], ['muted', '#6B6577', '#9CA3AF'], ['violet · primary, focus, selection', '#7C3AED', '#A78BFA'], ['lavender · proposed, AI', '#F4F0FE', 'rgba(167,139,250,.12)']].map(x => '<div class="ps-tok"><span>' + x[0] + '</span><span style="display:flex;gap:8px;align-items:center"><span class="ps-sw2" style="background:' + x[1] + '"></span><code>' + x[1] + '</code><span class="ps-sw2" style="background:' + x[2] + '"></span><code>' + x[2] + '</code></span><span></span></div>')) + '<p>Deck themes (Harbor here) live only inside the slide frame and never borrow chrome tokens; the chrome never borrows theme colours.</p>'
+        + tbl(['Component', 'Spec'], [['Status pill <code>stt</code>', 'Word + shape + colour; never colour alone. Shared words: Draft saved, Version saved, Unsaved, Offline, Conflict, Read-only, Proposed, To fix, Worth a look, Couldn’t check, Stale, Not recorded, Tracking off, Measured zero'], ['Next step', 'One per page, violet outline, one primary button. Picked from state: no deck → Generate; unchecked version → Review; checked → Share; new engagement → Follow up'], ['Price card', 'Five states (PS-02 B). Carries quote id; button label includes the hold'], ['Source chip', 'Record + as-of; amber when stale; “Typed by you” when unlinked'], ['Proposal', 'Lavender; preview, sources, Accept / Reject / Regenerate (priced)'], ['Grid selection', '2 px violet, label “Chart · c6–12 r2–5”, snapping guides in rose, held areas dashed sky with the person’s name'], ['Recipient preview', 'Browser frame, exact version, watermark, permissions as Sees / Can / Cannot'], ['Absence', 'Tracking off, Unreadable, Measured zero, Not recorded: four looks (PS-07 C)']])
+        + '<h2>Accessibility (WCAG 2.2 AA)</h2><p>Focus ring 2 px violet with 2 px offset; targets ≥ 24 px desktop, 44–48 px phone; toolbar is one <code>role="toolbar"</code> with arrow keys; tabs are links with <code>aria-current</code>; save state is a polite live region announced once per change; Grid areas reachable by keyboard (Tab to card, arrows between areas, Enter to select); dragging always has Move up / down. Contrast by token choice, to be verified in browser QA.</p>'),
+      PS10B: () => dk('<h1>State specification</h1>' + '<table class="ps-mx"><thead><tr><th>State</th><th>Home</th><th>New deck</th><th>Editor</th><th>Ask</th><th>Review</th><th>Share</th><th>Analytics</th></tr></thead><tbody>' + J([
+        ['Loading', 'Skeleton deck + “Loading your deck…”', 'Price “Reading…”', 'Skeleton strip and card', 'Price reading', '“Checking…” with progress', 'Preview skeleton', 'Skeleton tiles'],
+        ['Empty', 'First use: generate, build, import', '—', 'One empty card on the Grid', '—', '“Save a version to review it”', '“No investor links yet”', 'Measured zero only if links exist; else “No links yet”'],
+        ['Error / unreadable', 'Per panel, Try again', 'Price unavailable; build failed part-way', 'Save failed, kept on device', 'Run failed, nothing charged', 'Couldn’t check (never a pass)', 'Link not created', 'Unreadable, never 0'],
+        ['Offline', 'Cached deck, “Offline”', 'Build waits', '4 edits on this device', 'Ask waits', 'Last result, dated', 'Share waits', 'Last read, dated'],
+        ['Permission', 'Plan gate', 'tier_required → plans', 'Read-only, request access', 'Out of tokens → Add tokens', 'Founder runs; others read', 'Approval holds', 'Owner only'],
+        ['Unsaved / recovery', 'Draft line under deck', 'Proposal not kept until Accept', 'Restore from 14:32?', 'Proposal waits in Ask', 'Draft differs from checked version', 'Sends a version, never a draft', '—'],
+        ['Conflict', '—', '—', 'Keep mine / theirs / copy', 'Held area', '—', '—', '—'],
+        ['AI failure', '—', 'Retry the failed cards', '—', 'Try again, same quote', 'AI review failed', '—', '—'],
+        ['Pricing unavailable', '—', 'Unknown, Build disabled', '—', 'Unknown, Run disabled', 'AI review disabled', '—', '—']
+      ].map(r => '<tr><th scope="row">' + r[0] + '</th>' + J(r.slice(1).map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>'),
+      PS11: () => dk('<h1>Before / after, and deviations from the approved boards</h1>' + tbl(['Before', 'After', 'Why'], [['Six equal status cards on Overview', 'One Next step, then deck + readiness + investor activity', 'The brief’s P1: make the next action obvious'], ['“✓ Saved” for the draft', '“Draft saved · 16:52” beside “v7 · 3 cards differ”', 'Draft vs version must be unmistakable'], ['Ask in a lightbox over the card', 'Ask in the right column beside the selected area', 'The founder sees the area being changed while choosing'], ['Share settings first', 'Investor first, preview of what they receive', 'Design around the investor'], ['Review across four places with a score on top', 'One page per saved version, grouped, no score', 'No invented readiness score'], ['Absence states drawn alike', 'Four distinct looks', 'Tracking off ≠ unreadable ≠ zero ≠ not recorded']])
+        + '<h2>Deviations from Pitch Deck Studio v2 (D1604) and the Pitch boards (D4254)</h2>' + tbl(['Approved', 'This canvas', 'Rationale'], [['pd0: Share ▾ and Export inside ⋯ on the toolbar', 'Review, Share and Export are visible toolbar buttons', 'Brief: document-level actions in the toolbar'], ['pd4/pd14: Generate into N areas as a lightbox', 'Right-column Eadwyn tab; the lightbox remains for several areas at once', 'Keeps the card visible for one area'], ['PD14: AI review score shown when returned', 'Score moved to a labelled secondary line inside AI review', 'No readiness score; the AI score is the reviewer’s, not the deck’s'], ['ps1: six status cards', 'Next step + four compact cards', 'Hierarchy'], ['Share dialog (pd35)', 'Full Share page with live recipient preview; the dialog stays for quick links from the editor', 'Preview needs room']]) + '<p>Nothing is removed: every approved control is still reachable.</p>'),
+      PS12: () => dk('<h1>Handoff</h1>' + tbl(['Screen', 'Preserved', 'Frontend only', 'Backend required'], [
+        ['Overview', '<code>PitchOverview.jsx</code> reads; Not recorded rule', 'Next-step chooser; investor activity panel from existing link reads; import entry reusing <code>DocumentImport</code>', 'None (fan-out measured first, #4599)'],
+        ['New deck', '<code>NewDeck.jsx</code>, <code>OneClickBuild</code>, quote + hold, <code>quote_stale</code>, <code>tier_required</code>', 'Stepper; one price card; five price states', 'None after #4597 (quote id bound)'],
+        ['Editor', '<code>PitchEditor</code>, <code>DeckToolbar</code>, <code>CardsStrip</code>, <code>GridStage</code>, <code>deckAutosave.js</code>, presence', 'Three columns; Review/Share/Export in toolbar; draft vs version pair; right-column Design / Data / Eadwyn', 'None after #4596'],
+        ['Eadwyn', '<code>AreaLightbox</code>, <code>AreaResults</code>, <code>DeckAsk</code>, judge, holds', 'Right-column Ask for one area; proposal preview', 'None'],
+        ['Review', '<code>PitchReview</code>, <code>CheckPanel</code>, <code>PreflightPanel</code>, approval gate', 'One page per saved version; groups', '“Intentionally qualitative” mark for a card ◇; a forward-looking-statements rule from Legal ◇'],
+        ['Share', '<code>ShareDialog</code>, <code>InvestorLinksTable</code>, <code>PublishPanel</code>, watermark fixed on', 'Investor-first page; recipient preview', 'Walkthrough attach (#3837, #4599)'],
+        ['Analytics', '<code>ShareBoard</code>, <code>ViewerAnalyticsSheet</code>, funnels, Draft follow-up', 'Summary tiles; four absence looks', 'Founder read of reactions and feedback ◇'],
+        ['Mobile', 'Restore and conflict on phone (#4596)', 'Dedicated phone flows (PS-08)', 'None']])),
+      PS12B: () => dk('<h1>Implementation roadmap</h1><p>By impact, complexity and dependencies. Each slice is frontend-first and ships behind no new route unless marked ◇.</p><div class="ps-road">'
+        + '<section class="ps-card"><b>Now · high impact, low complexity</b><ol><li>Overview Next step + investor activity (no new reads)</li><li>Toolbar: draft vs version pair; Review, Share, Export visible</li><li>Price card component with five states, used in New deck and Ask</li><li>Four absence looks in analytics</li></ol><span class="mu" style="font-size:11.5px">Depends on: #4597 (closed), #4598 (closed)</span></section>'
+        + '<section class="ps-card"><b>Next · high impact, medium</b><ol><li>Review page for one saved version (merge CheckPanel, Preflight, AI review, approvals)</li><li>Share page, investor first, recipient preview</li><li>Editor right column: Design / Data / Eadwyn</li><li>Phone flows PS-08</li></ol><span class="mu" style="font-size:11.5px">Depends on: #4595 (closed), #4596 (closed); coordinates with #4734</span></section>'
+        + '<section class="ps-card"><b>Later · needs backend ◇</b><ol><li>First-use import and walkthrough attach (#4599, #3837)</li><li>Founder read of viewer reactions and feedback</li><li>“Intentionally qualitative” card mark and Legal’s forward-looking rule</li><li>Outline reorder for stage (<code>outlineReorder</code>)</li></ol><span class="mu" style="font-size:11.5px">Tracks under #3716</span></section></div>')
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'PS01') html = page(phead('Overview') + homeDeck() + SAMPLE, { h: 840 });
+    else if (B === 'PS01B') html = page(phead('Overview', 'Pitch studio', btn('Templates', 'gh')) + homeFirst(), { h: 900 });
+    else if (B === 'PS01C') html = homeStates();
+    else if (B === 'PS02') html = page(newDeck('met'), { h: 1180 });
+    else if (B === 'PS02B') html = priceStates();
+    else if (B === 'PS02C') html = page(generating(), { h: 760 });
+    else if (B === 'PS02D') html = page(proposal(), { h: 900 });
+    else if (B === 'PS02E') html = genFail();
+    else if (B === 'PS03') html = editor('saved', { tb: {} });
+    else if (B === 'PS03B') html = editor('unsaved', { tb: { saveP: true, vline: '4 cards differ from v7' }, left: { changed: ['traction', 'team'] }, c: { held: true, guide: true }, overlay: saveVersionDlg() });
+    else if (B === 'PS03C') html = edStates();
+    else if (B === 'PS03D') html = editor('conflict', { tb: {}, banner: banner('amb', '<b>Card 3 changed elsewhere.</b> Your other edits synced. Choose a version of card 3 to continue.', btn('Show both', 'bsm')), right: rightCol('Data', conflictPanel()), c: { ctx: false } });
+    else if (B === 'PS03E') html = editor('ro', { tb: { ask: false }, banner: banner('amb', '<b>You can view this deck.</b> Astrid Lund owns it. Editing, Save version and Share are not available to you.', btn('Request edit access', 'gh bsm')), c: { ctx: false, sel: false, grid: false }, right: rightCol('Data', '<div class="ps-grp"><h3>Card 3 · Traction</h3><p style="font-size:12px">2 figures, both linked.</p>' + src('Stripe · 31 Oct', 'ok') + src('HubSpot · 31 Oct', 'ok') + '</div><div class="ps-in ro">Fields are read-only for you</div>') });
+    else if (B === 'PS04') html = askEditor('confirm');
+    else if (B === 'PS04B') html = askEditor('running');
+    else if (B === 'PS04D') html = askEditor('review');
+    else if (B === 'PS04C') html = askStates();
+    else if (B === 'PS05') html = page(review(), { h: 1200 });
+    else if (B === 'PS05B') html = revStates();
+    else if (B === 'PS06') html = page(share(), { h: 1130 });
+    else if (B === 'PS06G') html = page(share({ gate: true }), { h: 1130 });
+    else if (B === 'PS06C') html = shareStates();
+    else if (B === 'PS07') html = page(analytics(), { h: 1080 });
+    else if (B === 'PS07B') html = page(investor(), { h: 860 });
+    else if (B === 'PS07C') html = absStates();
+    else if (B === 'PS09') html = editor('unsaved', { tb: { vline: '3 cards differ from v7', waiting: 1 }, right: rightCol('Eadwyn', askPanel('review')), c: { w: 680 } });
+    else if (B === 'PS09B') html = page(share(), { h: 1130 });
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(phead('Overview') + homeDeck() + SAMPLE, { h: 840 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

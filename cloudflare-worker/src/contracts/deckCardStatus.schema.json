@@ -1,0 +1,67 @@
+{
+  "$id": "deckCardStatus",
+  "title": "GET /api/decks/:id/card-status (D1579, #3826)",
+  "description": "The reply the deck v2 adapter's `cardStatus` method passes through: the deck and its version, whether any card carries a status (`tracked`), the filter applied (status all, todo, in_progress or done; assignee anyone, none or a person's id), every card's count, exactly the cards matching the filter with their status and assignee, the cards not Done (To do or In progress, whatever the filter) for the pre-share warning and the home deck card, and the people a card can be assigned to (D1570's rule) (`routes/deck_card_status.ts`). An untracked deck's cards have status null. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "version", "tracked", "filter", "total", "cards", "not_done", "people"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "tracked": { "type": "boolean" },
+    "filter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "assignee"],
+      "properties": {
+        "status": { "enum": ["all", "todo", "in_progress", "done"] },
+        "assignee": { "type": ["string", "integer"] }
+      }
+    },
+    "total": { "type": "integer", "minimum": 0, "maximum": 60 },
+    "cards": {
+      "type": "array", "maxItems": 60,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["index", "uid", "title", "status", "assignee"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "uid": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "$ref": "#/$defs/status" },
+          "assignee": { "type": ["object", "null"], "additionalProperties": false, "required": ["id", "name"], "properties": { "id": { "type": "integer", "minimum": 1 }, "name": {} } }
+        }
+      }
+    },
+    "not_done": {
+      "type": "object", "additionalProperties": false,
+      "required": ["count", "cards"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "cards": {
+          "type": "array", "maxItems": 60,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["index", "uid", "title", "status"],
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "uid": { "type": "string" },
+              "title": { "type": "string" },
+              "status": { "enum": ["todo", "in_progress"] }
+            }
+          }
+        }
+      }
+    },
+    "people": {
+      "type": "array", "maxItems": 100,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "kind"],
+        "properties": { "id": { "type": "integer", "minimum": 1 }, "name": {}, "kind": { "enum": ["founder", "advisor", "operating_partner"] } }
+      }
+    }
+  },
+  "$defs": {
+    "status": { "enum": ["todo", "in_progress", "done", null] }
+  }
+}

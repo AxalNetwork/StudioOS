@@ -1,0 +1,63 @@
+/**
+ * D594 (#1233) — who may see their archetype. The owner asked Session 1 to set
+ * the tiers ("B, you define what are the best pricing tiers", #976), and no new
+ * price was added: the archetype unlocks with each licence's existing paid plans.
+ *
+ *   Founder                  `subscription_tier` growth or studio (Validate + Build, or Raise + Grow, D683)
+ *   Investor                 effective `investor_tier` Professional or Institutional ($149 / $599),
+ *                            an active trial counting and a seat reading its primary's plan
+ *   Partner, advisor, admin  always: their licence is the paid tier
+ *   Spin-Out Lab participant always while `spinout_lab_active` is 1
+ *
+ * ONE CHECK, EVERY ROUTE. Each route that returns the caller's own archetype
+ * result asks `archetypeAccess` and, when locked, sends no archetype field at
+ * all (`withoutKeys` with `ARCHETYPE_KEYS`), never a hidden copy. Locking hides the result; it
+ * never stops the engine or deletes anything, so an upgrade shows it at once.
+ * The person's own answers, skills and values are never locked.
+ */
+import type { Env, User } from '../types';
+import { tierUpsell } from '../middleware/requireTier';
+import { investorUpsell } from '../middleware/requireInvestorTier';
+import { licenceMeetsTier } from './licencePlans';
+
+/** D1050: the plan by its catalogue key; its price is the plans read's, never typed here. */
+export type RequiredPlan = { licence: 'founder' | 'investor'; tier: 'growth' | 'professional'; name?: string; plan_key: string };
+export type ArchetypeAccess = { locked: false } | { locked: true; required_plan: RequiredPlan };
+
+/** Roles whose licence is the paid tier. */
+const ALWAYS_UNLOCKED = new Set(['admin', 'partner', 'advisor']);
+
+const FOUNDER_PLAN: RequiredPlan = { licence: 'founder', tier: 'growth', name: tierUpsell('growth').plan.name, plan_key: tierUpsell('growth').plan.plan_key };
+const INVESTOR_PLAN: RequiredPlan = { licence: 'investor', tier: 'professional', name: investorUpsell('professional').plan.name, plan_key: investorUpsell('professional').plan.plan_key };
+
+export async function archetypeAccess(env: Env, user: User | null | undefined, now = Date.now()): Promise<ArchetypeAccess> {
+  if (!user) return { locked: true, required_plan: FOUNDER_PLAN };
+  const role = String(user.role ?? '').toLowerCase();
+  if (ALWAYS_UNLOCKED.has(role) || (user.licences || []).some(licence => ALWAYS_UNLOCKED.has(licence))) return { locked: false };
+  if (Number((user as any).spinout_lab_active ?? 0) === 1) return { locked: false };
+  // A shared entitlement accepts either held licence's own paid plan (D4729: `licencePlans.ts` reads each).
+  // Founder is evaluated as Founder and Investor as Investor, so one licence's bypass never manufactures the other's plan.
+  if (await licenceMeetsTier(env, user, 'founder', 'growth', now)) return { locked: false };
+  if (await licenceMeetsTier(env, user, 'investor', 'professional', now)) return { locked: false };
+  return { locked: true, required_plan: role === 'investor' ? INVESTOR_PLAN : FOUNDER_PLAN };
+}
+
+/**
+ * The archetype fields of each read that carries one. Skills, values, the Axal
+ * values and the person's answers are not among them, and an assessment's
+ * `confidence` (its vectors') is not the archetype's.
+ */
+export const ARCHETYPE_KEYS = {
+  bestFit: ['archetype', 'archetypes'],
+  assessmentResult: ['archetype_slug', 'archetype_label'],
+  // A profile snapshot's archetype half: which one shows, the runner-up, how
+  // sure, by how much, the trait scores behind it, and its hysteresis state.
+  snapshot: ['displayed_slug', 'computed_slug', 'secondary_slug', 'confidence', 'margin', 'traits', 'hysteresis'],
+} as const;
+
+/** A copy of `obj` with `keys` removed. */
+export function withoutKeys<T extends Record<string, unknown>>(obj: T, keys: readonly string[]): Partial<T> {
+  const out: Record<string, unknown> = { ...obj };
+  for (const k of keys) delete out[k];
+  return out as Partial<T>;
+}

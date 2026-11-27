@@ -1,0 +1,33 @@
+#10 - LD — Public /team + Admin > Team
+What & Why
+Public /team page on axal.vc listing leadership + venture partners, driven by an admin-managed list in StudioOS. Default member: Guillaume Lauzier (CEO & Founder · Venture Partner) with LinkedIn + X icons.
+Two repos, one feature: schema, Worker routes, R2 photo storage, and Admin UI live in StudioOS (Cloudflare). The public /team page lives in the Jekyll marketing repo behind axal.vc and pulls from https://app.axal.vc/api/public/team (build-time fetch into _data/team.json with a committed fallback). /api/public/team must serve Access-Control-Allow-Origin: https://axal.vc.
+Done looks like
+* New D1 table team_members exists in prod with the seed row for Guillaume Lauzier (slug guillaume-lauzier, LinkedIn + X + website links).
+* GET /api/public/team returns published members ordered by display_order with the apex CORS header.
+* Admin routes (GET/POST/PUT/DELETE /api/admin/team* and POST /api/admin/team/:id/photo) cover list, add, edit, delete, and R2 photo upload.
+* Admin UI at /admin/team shows the table (name, title, published toggle, order, edit, delete), an edit form (photo upload, social links with auto-icon, focus-areas multi-select, long-bio textarea), and drag-to-reorder.
+* Public /team on axal.vc renders Guillaume's card with square photo, name, title, focus chips, and a social icon row (LinkedIn + X opening in new tabs).
+* Jekyll build hook fetches /api/public/team into _data/team.json before build; if the fetch fails, the committed _data/team.json fallback is used and the build still succeeds.
+* Adding a second member from Admin → next Jekyll build shows the new card.
+* Toggling published=0 hides a member from /team without delete.
+* Photo uploads round-trip from Admin → R2 → rendered card.
+* Mobile: 1-column stack at narrow widths.
+Out of scope
+* Per-member detail pages (/team/:slug).
+* Public list pagination or filters.
+* Email contact form on member cards.
+* Auto-syncing LinkedIn data.
+Steps
+1. Schema + seed — New migration creates team_members with the fields in the spec (id, slug UNIQUE, name, title, location, short_bio, long_bio, photo_r2_key, focus_areas_json, social_linkedin, social_x, social_website, social_email, display_order, published, timestamps) and inserts the Guillaume seed row.
+2. Worker routes — Public GET /api/public/team (CORS https://axal.vc, published-only, ordered). Admin CRUD + photo upload routes gated by admin role + Cf-Access. R2 photo route follows the existing magic-byte check pattern.
+3. Admin UI — New /admin/team page in StudioOS frontend with the table view + edit drawer/modal (photo upload, social fields with auto-icon, focus-area multi-select, long-bio textarea) and drag-to-reorder updating display_order.
+4. Jekyll integration — Add /team.md page + _includes/team.html partial in the marketing repo. Add a pre-build step in the Jekyll GitHub Actions workflow that curls /api/public/team into _data/team.json and falls back to the committed file on failure. Card layout reuses the platform's Public Directory styling at parity.
+5. Verify — Add Guillaume via seed, add a second test member from Admin, trigger a Jekyll rebuild, confirm both render. Toggle published off → confirm hidden. Upload a photo → confirm it appears on the public card.
+Relevant files
+* cloudflare-worker/sql/migrations/ (new file — next sequential number)
+* cloudflare-worker/src/routes/ (new team_public.ts + admin_team.ts)
+* cloudflare-worker/src/index.ts (route mounts — add both apex /api/public/team and /team matching patterns)
+* frontend/src/pages/admin/ (new AdminTeamPage.jsx)
+* (Jekyll repo) _includes/team.html, team.md, .github/workflows/*.yml
+* cloudflare-worker/src/util/url.ts (callbackBase pattern for CORS host)

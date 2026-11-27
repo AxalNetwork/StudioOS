@@ -1,0 +1,1455 @@
+/**
+ * D664 (#1477) — the Grow cycle's reads and the writes behind its new stores,
+ * mounted at /api/cycles/grow (#1469's shared read, D656).
+ *
+ *   GET  /overview?project=:pid                 the question, four figures, seven cards, and the
+ *                                               phone's focus, meter and index (D692; services/cycleFocus.ts)
+ *   GET  /modules/:slug?project=&q=&filter=&sort=&page=&page_size=
+ *                                               { module: { slug, name, records_title }, card,
+ *                                                 records: { cols, rows, total, page, page_size, filters, sorts } }
+ *     D691 (#1697): every row carries `id`, its record id (a uid, a posting
+ *     or obligation id, or a KPI key); `filter` is `key:value` pairs joined
+ *     with commas, all applied; `sorts[0]` is the default sort.
+ *   GET  /modules/:slug/export?project=&q=&filter=&sort=
+ *                                               D6124: a writer's CSV of the table's filtered rows, on four
+ *                                               modules (services/growExport.ts); `records.exportable` says so
+ *
+ *   GET  /modules/:slug/export?project=&q=&filter=&sort=
+ *     D6103 (#6103): Product improvement's Feedback or Revenue and traction's
+ *     KPIs (monthly history) as CSV, for a writer; `services/growExport.ts`.
+ *     The module read's `records.can_export` says whether this viewer may.
+ *
+ * WRITES (whoever `canAccessProject` lets write: the owner, a co-founder, a
+ * partner, an admin; an advisor reads only). The writers are
+ * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
+ * the row and logs it as `grow.<module>` with its record id (D690).
+ *   POST  /feedback                PATCH /feedback/:uid
+ *                                  D6865 part 2 (#6891): POST takes `reply_key` with origin `inbox_reply`, the Inbox
+ *                                  reply it is saved from (GR-24); a reply saved twice is a 409 naming the item
+ *   PATCH /feedback/themes         { project, from, to, merge? }  D6098 (#6098): rename one theme, or merge it
+ *                                  into another (`merge: true`; without it a merge is a 409 with the counts),
+ *                                  with the roadmap items that answer it; the read's `parts.themes` (writers only)
+ *                                  carries each theme's counts
+   POST  /feedback/told           { project, uids[], via }  D6865 (#6865): Mark told for several (GR-26); each
+                                  row that cannot be told (not shipped, did not ask, already told) is named
+   GET   /feedback/weight?project&theme  D6865: one theme's weight (GR-23), a writer's read; the list read's
+                                  `parts.counts` is everyone's
+ *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
+ *   POST  /channels/content        PATCH /channels/content/:uid   DELETE /channels/content/:uid
+ *     D1090 (#2955): Distribution's content calendar, typed by hand. A piece
+ *     from Notion is edited in Notion (409 here) and may be deleted (it stays
+ *     deleted). Distribution's read carries it as `parts.content_calendar`;
+ *     an unreadable calendar says so there and never blanks the channels.
+ *   POST  /kpis                    (Enter a KPI, decision 4)
+ *   POST  /roles                   PATCH /roles/:id          PATCH /applications/:id/stage
+ *   POST  /partners                PATCH /partners/:uid      PUT /partners/:uid/revenue/:month
+ *   DELETE /partners/:uid  DELETE /markets/:uid  DELETE /obligations/:id   { project }
+ *     D6115 (#6115): Remove, for a record added by mistake. A hard delete; a
+ *     partner with revenue or deals, or a held obligation, is refused (409)
+ *     with what to do instead. The record actions `remove` run the same writers.
+ *   POST  /partners/rank           { project, query }  #3938 GR17, the founder's press: rank the venture's
+ *                                  partners against a need (bge-m3, the reranker); no line is written
+ *   POST  /markets                 PATCH /markets/:uid
+ *   POST  /obligations             PATCH /obligations/:id    PUT /checklist/:key
+ *
+ * D840 part 3 (#2348): the founder's own Mercury. A fed module's read carries
+ * `parts.from_mercury`, the figures for the founder's company's members only
+ * (`services/mercury/growFeeds.ts`); anyone else gets `team_only`.
+ *   POST   /mercury/sync                           the founder only, from their own signed-in Mercury
+ *   POST   /mercury/partner-proposals/:id/accept   { growth_partner_uid? }  the founder only
+ *   POST   /mercury/partner-proposals/:id/dismiss                          the founder only
+ *   DELETE /mercury/facts/:id                      a writer on the founder's company; stays deleted
+ *
+ * D2407 (#2407 parts 1–2): the founder's own Beehiiv. Distribution's and Revenue
+ * and traction's reads carry `parts.from_beehiiv` (`services/beehiiv/grow.ts`),
+ * for anyone who may read the module (decision D1); a failed read is
+ * `unreadable` and the module still loads. Durable company-building's Updates
+ * rows carry `newsletter`, its Beehiiv post's figures (#2407 part 3). Every route below refuses a
+ * support session; the logs carry counts only.
+ *   GET    /beehiiv/publications?project=          the caller's own Beehiiv publications and the venture's link
+ *   PUT    /beehiiv/publication                    { project, publication_id | null } link, change or unlink
+ *   POST   /beehiiv/sync                           { project } the member whose Beehiiv serves the venture
+ *   POST   /beehiiv/channel-proposal/accept        { project, growth_channel_uid?, utm_source? } the same member
+ *   POST   /beehiiv/channel-proposal/dismiss       { project } the same member
+ *   DELETE /beehiiv/facts/:id?project=             a writer; it stays deleted
+ *   DELETE /beehiiv/posts/:id?project=             a writer; it stays deleted
+ *
+ * D5863 (#5863, part 2a of #2401): the founder's own TikTok. Distribution's and
+ * Revenue and traction's reads carry `parts.from_tiktok` (`services/tiktok/grow.ts`),
+ * for anyone who may read the module; a failed read is `unreadable` and the
+ * module still loads. A support session is refused; the logs carry counts only.
+ *   POST   /tiktok/sync                            { project } the member whose TikTok serves the venture (the first sync links it)
+ *   DELETE /tiktok/facts/:id?project=&kind=account|video  a writer; it stays deleted
+ * D5864 (#5864, part 2b): "Add TikTok as a channel", carried in Distribution's
+ * `parts.from_tiktok.proposal`. Accept creates the channel through `addChannel`.
+ *   POST   /tiktok/proposals/:id/accept            { project } the venture's founder only
+ *   POST   /tiktok/proposals/:id/dismiss           { project } the venture's founder only; final
+ * D5859 (#5859, part 2a of #2399): a linked Facebook Page. Distribution's and
+ * Revenue and traction's reads carry `parts.from_facebook` (`services/facebook/grow.ts`),
+ * for anyone who may read the module; a failed read is `unreadable` and the module
+ * still loads. A venture names one Page (owner, option A on #2399). A support
+ * session is refused; the logs carry counts only.
+ *   PUT    /facebook/page                          { project, page_id | null } the member whose connection chose the Page
+ *   POST   /facebook/sync                          { project } the member whose connection holds the venture's link
+ *   DELETE /facebook/facts/:id?project=            a writer; it stays deleted
+ *
+ * D1333 (#3481, part 2 of #2400): the overview read carries `publish` and each
+ * module read `parts.publish` — whether Publish to… shows (`can_publish`: the
+ * founder, not in a support session, with a place switched on), PUB8's empty
+ * states, and, for the venture's team, the last three sends from that page.
+ *
+ * Every request value is bound. A typed figure is `source: 'manual'`.
+ */
+import { customerEvidence, taggedByCountry } from '../services/growMarketCustomers';
+import { growProposalReceipts, rememberGrowProposal, undoGrowProposal } from '../services/growProposalReceipts';
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { canAccessProject } from '../services/projectAccess';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+import { railFor, refuseRun } from '../util/railContext';
+import { pageOf, settleCard, type Card } from '../services/cycleCards';
+import {
+  CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION,
+  channelRows, checklist, growFigures, marketRows, readiness, type Ctx, type GrowSlug,
+} from '../services/growCycle';
+import { growChanges } from '../services/growChanges';
+import { ensureProjectMetricsSchema } from './progress';
+import { KpiRefused, enterKpi, kpiMonths, kpiRows, type KpiRow } from '../services/growKpis';
+import {
+  CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
+  REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
+  logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setChecklistNotApplicable, setPartnerRevenue, updateChannel,
+  updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme, updatePartner, updateRole,
+} from '../services/growWriters';
+import { distributionOverview } from '../services/distribution/overview';
+import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCampaign, updateCampaign, campaignChannel, campaignItem, archiveCampaign } from '../services/growCampaigns';
+import { canAskAgain } from '../services/updateShare';
+import { isAdmin } from './_t13t14t15_helpers';
+import { growPhone } from '../services/cycleFocus';
+import { growAttention, unreadableGrowAttention } from '../services/growAttention';
+import { hasRecords } from '../services/records';
+import { GROW_EXPORT_ROW_CAP, exportCapSentence, feedbackCsv, growExportCsv, hasGrowExport, isGrowExportSlug, kpiCsv, kpiLineCount } from '../services/growExport';
+import { csvResponse, stamp } from '../services/csv';
+import { isSupportSession } from '../integrations/providers/mercury';
+import { publishPart } from '../services/publishSources';
+import {
+  GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
+} from '../services/mercury/growFeeds';
+import { projectEnabled } from '../integrations/companyScope';
+import { ConnectRefusal, type IntegrationRow } from '../integrations/registry';
+import { BeehiivReadError, beehiivId, beehiivReadsFor } from '../services/beehiiv/reads';
+import {
+  BEEHIIV_SLUGS, NEWSLETTER_NOT_LINKED, NEWSLETTER_UNREADABLE, newsletterByUpdate, SENTENCES as BEEHIIV_SENTENCES, acceptChannelProposal, beehiivPart as beehiivModulePart, deleteBeehiivRow,
+  dismissChannelProposal, linkOf as beehiivLinkOf, linkPublication, syncBeehiiv, unlinkPublication, type BeehiivSlug,
+} from '../services/beehiiv/grow';
+import { TikTokReadError, grantedScopes, tiktokReadsFor } from '../services/tiktok/client';
+import {
+  CHANNEL_NAME as TIKTOK_CHANNEL_NAME, CHANNEL_UTM as TIKTOK_CHANNEL_UTM, SENTENCES as TIKTOK_SENTENCES, TIKTOK_SLUGS, acceptTikTokProposal, claimVenture,
+  deleteTikTokRow, dismissTikTokProposal, linkOf as tiktokLinkOf, syncTikTok, tiktokPart as tiktokModulePart, type TikTokSlug,
+} from '../services/tiktok/grow';
+import { facebookPageGrants } from '../integrations/providers/facebook';
+import { facebookReads } from '../services/facebook/insights';
+import {
+  FACEBOOK_SLUGS, SENTENCES as FACEBOOK_SENTENCES, acceptFacebookProposal, dismissFacebookProposal, deleteFacebookFact, facebookPart as facebookModulePart, linkOf as facebookLinkOf,
+  linkPage as linkFacebookPage, syncFacebook, unlinkPage as unlinkFacebookPage, type FacebookSlug,
+} from '../services/facebook/grow';
+import { workspaceContext, workspaceMember } from './google_workspace';
+import { WorkspaceError } from '../services/google/workspace';
+import { feedbackCounts, markFeedbackToldMany, themeWeight } from '../services/feedbackLoop';
+import { codeAmount } from '../../../frontend/src/lib/money.js';
+import {
+  CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
+  readCalendar, readFromGoogle, syncMetricsSheets,
+} from '../services/google/growFeeds';
+import { withKpiTargets } from '../services/growKpiTargets';
+import { ownerShown } from '../services/obligationOwner';
+
+const r = new Hono<{ Bindings: Env }>();
+type C = Context<{ Bindings: Env }>;
+
+async function project(c: C, user: User, raw: unknown, write: boolean) {
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) throw new Refused(400, 'project is required', 'project');
+  const p = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(id).first<{ id: number; founder_id: number | null }>();
+  if (!p) throw new Refused(404, 'Project not found');
+  if (!(await canAccessProject(c.env, user, p, { write }))) throw new Refused(403, write ? 'You can read this venture but not change it' : 'Forbidden');
+  return p.id;
+}
+
+/** Whether the viewer may write this venture: third parties' names are for writers (decision 9). */
+async function writes(c: C, user: User, pid: number): Promise<boolean> {
+  const p = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(pid).first<{ id: number; founder_id: number | null }>();
+  return !!p && canAccessProject(c.env, user, p, { write: true });
+}
+
+function fail(c: C, e: unknown) {
+  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}), ...(e.extra ?? {}) }, e.status as 400);
+  if (e instanceof KpiRefused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
+  throw e;
+}
+
+/** `team` (D6107, #6107 Q3 = A): only the venture's team sees Distribution's PostHog visits; a card read passes `isTeamViewer`. */
+const ctxFor = (env: Env, projectId: number, team = false): Ctx => ({
+  env, projectId, now: Date.now(), team,
+  href: (slug) => `/grow/${slug}?project=${projectId}`,
+});
+
+async function cardFor(x: Ctx, slug: GrowSlug): Promise<Card> {
+  const meta = GROW_MODULES.find((m) => m.slug === slug)!;
+  return settleCard(meta, () => CARD_FNS[slug](x));
+}
+
+// GET /overview
+r.get('/overview', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    const x = ctxFor(c.env, pid, await isTeamViewer(c.env, user, pid));
+    const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
+    // D1333 (#3481): Publish to… from Overview, and what was published from here.
+    const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
+    let writer = false;
+    let attention;
+    try {
+      writer = !(await isSupportSession(c)) && await writes(c, user, pid);
+      attention = await growAttention(x, writer, { user, figures, cards });
+    }
+    catch { console.warn('[cycle_grow] attention availability unreadable'); attention = unreadableGrowAttention(x); }
+    const [changes, phone] = await Promise.all([growChanges(x, figures, writer), growPhone(x, user, figures, cards)]);
+    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, attention, changes, ...phone });
+  } catch (e) { return fail(c, e); }
+});
+
+// ── Records ─────────────────────────────────────────────────────────────────
+
+type Row = Record<string, unknown>;
+type Option = { value: string; label: string };
+type Filter = { key: string; label: string; options: Option[] };
+type Sort = { key: string; label: string };
+type RecordSet = { cols: string[]; rows: Row[]; parts?: Row; filters: Filter[]; sorts: Sort[] };
+
+const lower = (v: unknown) => String(v ?? '').toLowerCase();
+const today = (x: Ctx) => new Date(x.now).toISOString().slice(0, 10);
+
+/** The canvas's list titles (CO:630-636). */
+export const RECORDS_TITLE: Record<GrowSlug, string> = {
+  'product-improvement': 'Feedback', distribution: 'Channels', 'revenue-and-traction': 'KPIs', 'team-expansion': 'Open roles',
+  'partner-network': 'Partners', 'market-expansion': 'Markets', 'durable-company-building': 'Obligations',
+};
+
+const LABEL: Record<string, string> = {
+  customer: 'Customer', investor: 'Investor', team: 'Team', open: 'Open', planned: 'Planned', shipped: 'Shipped',
+  active: 'Active', testing: 'Testing', paused: 'Paused',
+  draft: 'Draft', pending_review: 'Pending review', published: 'Live', rejected: 'Needs changes',
+  reseller: 'Reseller', integration: 'Integration', agency: 'Agency', referral: 'Referral', co_marketing: 'Co-marketing', other: 'Other',
+  talking: 'Talking', terms: 'Terms', signed: 'Signed', ended: 'Ended',
+  considering: 'Considering', entering: 'Entering', served: 'Served', not_now: 'Not now',
+  governance: 'Governance', compliance: 'Compliance', risk: 'Risk', culture: 'Culture', tax: 'Tax',
+  overdue: 'Overdue', next_30: 'Next 30 days', next_90: 'Next 90 days', later: 'Later',
+  rev_share: 'Rev-share', services_fee: 'Services fee', referral_fee: 'Referral fee', none: 'None yet',
+};
+const fixed = (values: readonly string[]): Option[] => values.map((v) => ({ value: v, label: LABEL[v] ?? v }));
+/** Options from the values the rows hold, for a free-text field. */
+const present = (rows: Row[], key: string): Option[] =>
+  [...new Set(rows.map((r) => r[key]).filter((v): v is string => typeof v === 'string' && v.trim() !== ''))]
+    .sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: LABEL[v] ?? v }));
+
+export const ROLE_STATUSES = ['draft', 'pending_review', 'published', 'rejected'] as const;
+export const DUE_WINDOWS = ['overdue', 'next_30', 'next_90', 'later'] as const;
+
+/**
+ * An obligation's Due filter: overdue, the next 30 or 90 days, or later. A done or snoozed one is in
+ * none (D6122, GR-21: "1 snoozed (in no due window)"), whatever its date.
+ */
+export function dueWindow(due: string, status: string, on: string): string | null {
+  if (status === 'done' || status === 'snoozed') return null;
+  if (due < on) return status === 'overdue' ? 'overdue' : null;
+  const days = (Date.parse(`${due}T00:00:00Z`) - Date.parse(`${on}T00:00:00Z`)) / 86_400_000;
+  return days <= 30 ? 'next_30' : days <= 90 ? 'next_90' : 'later';
+}
+
+/** D6122 (GR-21): how many obligations sit in each due window; `none` counts the done and snoozed ones. */
+export function dueCounts(rows: Row[]): Record<string, number> {
+  const out: Record<string, number> = { overdue: 0, next_30: 0, next_90: 0, later: 0, none: 0 };
+  for (const r of rows) out[typeof r.due_window === 'string' && r.due_window in out ? r.due_window : 'none'] += 1;
+  return out;
+}
+
+/** A partner's terms as the row reads them: the typed terms, or the old free text when none are typed. */
+export function termsLine(p: Row): string | null {
+  if (p.terms_kind == null) return (p.terms as string | null) ?? null;
+  const amount = p.terms_pct != null ? `${p.terms_pct}%`
+    : p.terms_amount_cents != null ? codeAmount(Number(p.terms_amount_cents), String(p.terms_currency ?? 'usd').toUpperCase()) : null;
+  return [LABEL[String(p.terms_kind)] ?? String(p.terms_kind), amount].filter(Boolean).join(' · ');
+}
+
+async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean): Promise<RecordSet> {
+  const { env, projectId } = x;
+  if (slug === 'product-improvement') {
+    const q = await env.DB.prepare(
+      `SELECT f.uid, f.body, f.source, f.theme, f.roadmap_item_ref, f.roadmap_item_label, f.status, f.from_name, f.created_at,
+              f.from_email, f.from_company, f.notify_on_ship, f.told_at, f.told_via, f.shipped_on, f.origin, f.contact_uid,
+              c.name AS contact_name, c.audience AS contact_audience, c.status AS contact_status
+         FROM product_feedback f LEFT JOIN contacts c ON c.uid = f.contact_uid AND c.project_id = f.project_id
+        WHERE f.project_id = ? ORDER BY f.created_at DESC, f.id DESC`,
+    ).bind(projectId).all<Row>();
+    const rows = (q.results || []).map((f) => {
+      const { from_name, from_email, from_company, notify_on_ship, told_at, told_via, contact_uid, contact_name, contact_audience, contact_status, ...rest } = f;
+      // A customer's name is for the venture's writers; every reader sees the feedback (decision 9).
+      // D969: the linked roadmap item's id, so Edit feedback's chip opens on it.
+      // D6865 (#6865): the told state, the email, the company and the linked record are a writer's too (GR-28: an
+      // advisor reads without names, the Customer panel or Closing the loop). The origin and shipped date are everyone's.
+      const linked = !!contact_uid && contact_audience != null;
+      return { id: f.uid, ...rest, theme: f.theme ?? null, roadmap_item_ref: f.roadmap_item_ref ?? null, roadmap_item_label: f.roadmap_item_label ?? null,
+        origin: f.origin ?? null, shipped_on: f.shipped_on ?? null,
+        ...(writer ? { from_name, from_email: from_email ?? null, from_company: from_company ?? null,
+          notify_on_ship: Number(notify_on_ship) === 1, told_at: told_at ?? null, told_via: told_via ?? null,
+          contact: linked ? { uid: contact_uid, name: contact_name ?? null, audience: contact_audience, status: contact_status ?? null } : null } : {}) };
+    });
+    return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'], rows,
+      filters: [{ key: 'source', label: 'Source', options: fixed(FEEDBACK_SOURCES) }, { key: 'theme', label: 'Theme', options: present(rows, 'theme') },
+        { key: 'status', label: 'Status', options: fixed(FEEDBACK_STATUS) }],
+      sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
+      // D6098 (#6098): each theme's counts, for Rename or merge; a writer's only. A failed
+      // read draws no Rename and never blanks the feedback.
+      // D6865: the tab's three counts are everyone's (they name nobody); a failed read is null, never zeros.
+      parts: {
+        counts: await feedbackCounts(env, projectId).catch((e) => {
+          console.error('[cycle_grow] feedback counts unreadable:', (e as Error).name);
+          return null;
+        }),
+        ...(writer ? { themes: await feedbackThemes(env, projectId).catch((e) => {
+          console.error('[cycle_grow] feedback themes unreadable:', (e as Error).name);
+          return null;
+        }) } : {}),
+      } };
+  }
+  if (slug === 'distribution') {
+    const extra = new Map(((await env.DB.prepare('SELECT uid, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE project_id = ?')
+      .bind(projectId).all<Row>()).results || []).map((ch) => [String(ch.uid), ch]));
+    return { cols: ['Channel', 'State', 'Spend · 30 d', 'Customers', 'CAC'],
+      rows: (await channelRows(x)).map((ch) => {
+        const more = extra.get(ch.uid) ?? {};
+        return { id: ch.uid, ...ch, kind: more.kind ?? null, cac_bar_cents: more.cac_bar_cents ?? null, bar_currency: more.bar_currency ?? null,
+          spend_source: ch.spend_cents == null ? null : 'manual' };
+      }),
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer'), content_calendar: await calendarPart(env, projectId) },
+      filters: [{ key: 'state', label: 'State', options: fixed(CHANNEL_STATES) }],
+      sorts: [{ key: 'cac_cents', label: 'CAC' }, { key: '-cac_cents', label: 'Highest CAC' }, { key: 'name', label: 'Name' }] };
+  }
+  if (slug === 'revenue-and-traction') {
+    const rows = await withKpiTargets(env, projectId, await kpiRows(env, projectId, x.now));
+    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of', 'Target', 'Vs target'], rows,
+      filters: [{ key: 'source', label: 'Source', options: present(rows, 'source') }, { key: 'period', label: 'Period', options: present(rows, 'period').reverse() }],
+      sorts: [{ key: '-period', label: 'Period' }, { key: 'kpi', label: 'KPI' }] };
+  }
+  if (slug === 'team-expansion') {
+    const q = await env.DB.prepare(
+      `SELECT p.id, p.title, p.team, p.target_start, p.status,
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id) AS applicants,
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND (CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END) = 'interview') AS in_interview,
+              (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND (CASE WHEN a.stage_changed_at IS NOT NULL THEN a.stage ELSE a.status END) = 'offer') AS in_offer
+         FROM job_postings p WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'open', 'published', 'rejected') ORDER BY p.id DESC`,
+    ).bind(projectId).all<Row>();
+    const rows = (q.results || []).map((p) => ({ ...p, state: LABEL[String(p.status)] ?? p.status }));
+    return { cols: ['Role', 'Team', 'Applicants', 'In interview', 'Target start'], rows,
+      filters: [{ key: 'status', label: 'Stage', options: fixed(ROLE_STATUSES) }, { key: 'team', label: 'Team', options: present(rows, 'team') }],
+      sorts: [{ key: '-applicants', label: 'Applicants' }, { key: 'title', label: 'Role' }, { key: 'target_start', label: 'Target start' }] };
+  }
+  if (slug === 'partner-network') {
+    const q = await env.DB.prepare(
+      `SELECT g.uid, g.name, g.type, g.stage, g.terms, g.terms_kind, g.terms_pct, g.terms_amount_cents, g.terms_currency, g.renewal_on,
+              (SELECT SUM(amount_cents) FROM partner_revenue r WHERE r.partner_id = g.id) AS revenue_cents
+         FROM growth_partners g WHERE g.project_id = ? ORDER BY g.name COLLATE NOCASE`,
+    ).bind(projectId).all<Row>();
+    return { cols: ['Partner', 'Type', 'Stage', 'Terms', 'Revenue sourced'],
+      rows: (q.results || []).map((p) => ({ id: p.uid, ...p, terms: termsLine(p), revenue_cents: p.revenue_cents ?? null,
+        revenue_source: p.revenue_cents == null ? null : 'manual' })),
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'partner') },
+      filters: [{ key: 'type', label: 'Type', options: fixed(PARTNER_TYPES) }, { key: 'stage', label: 'Stage', options: fixed(PARTNER_STAGES) }],
+      sorts: [{ key: '-revenue_cents', label: 'Revenue' }, { key: 'name', label: 'Name' }] };
+  }
+  if (slug === 'market-expansion') {
+    const rows = await marketRows(env, projectId);
+    const replies = await marketRepliesRead(env, projectId);
+    const extra = new Map(((await env.DB.prepare('SELECT uid, geography_ref, size_cents, size_currency, size_source FROM markets WHERE project_id = ?')
+      .bind(projectId).all<Row>()).results || []).map((m) => [String(m.uid), m]));
+    // D6120 (#6120, GR-21, GR-23): what the list, its next step and Compare read beside the scores. Each read
+    // fails on its own: a failed one leaves its fields null (Not recorded on the page), never a zero.
+    const plan = await marketPlanCounts(env, projectId, today(x));
+    const countries = await marketCountries(env, projectId);
+    const tagged = await taggedByCountry(env, projectId);
+    const counts = Object.fromEntries(MARKET_STATES.map((s) => [s, rows.filter((m) => m.state === s).length]));
+    return { cols: ['Market', 'State', 'Readiness', 'Weakest part', 'Decision'],
+      rows: rows.map((m) => {
+        const rd = readiness(m); const more = extra.get(m.uid) ?? {};
+        const p = plan ? plan.get(m.uid) ?? EMPTY_PLAN : null;
+        const country = countries?.get(m.uid) ?? null;
+        return { id: m.uid, ...m, geography_ref: more.geography_ref ?? null, size_cents: more.size_cents ?? null, size_currency: more.size_currency ?? null,
+          size_source: more.size_source ?? null, readiness: rd.score,
+          readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest,
+          replies: replies ? replies.get(m.uid) ?? [] : null,
+          country_name: country?.name ?? null, country_region: country?.region ?? null,
+          customers: customerEvidence(tagged, more.geography_ref),
+          steps_total: p?.steps_total ?? null, steps_open: p?.steps_open ?? null, steps_overdue: p?.steps_overdue ?? null,
+          localisation_done: p?.localisation_done ?? null, localisation_open: p ? p.localisation_open : null };
+      }),
+      // D6120: the state chips count every market, whatever the filter; a read that failed says so.
+      parts: { state_counts: counts, can_write: writer, replies_state: replies ? 'ok' : 'unreadable', plan_state: plan ? 'ok' : 'unreadable' },
+      filters: [{ key: 'state', label: 'State', options: fixed(MARKET_STATES) }],
+      sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }] };
+  }
+  // durable-company-building
+  const ev = await env.DB.prepare(
+    `SELECT e.id, e.title, e.kind, e.event_type, e.due_date, e.owner_name, e.owner_user_id, o.name AS owner_user_name, e.completion_status, e.recurrence
+       FROM compliance_events e LEFT JOIN users o ON o.id = e.owner_user_id WHERE e.project_id = ? ORDER BY e.due_date`,
+  ).bind(projectId).all<Row>();
+  const obligations = (ev.results || []).map((event) => {
+    const kind = obligationKind(event);
+    const status = obligationState(event.completion_status, kind, String(event.due_date), today(x));
+    // D6790: `owner` is what every surface shows; `owner_user_id` is the picked team member, which the Edit carries.
+    return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name,
+      owner: ownerShown(event.owner_user_name, event.owner_name), owner_user_id: event.owner_user_id ?? null, status,
+      repeats: REPEATS_OF[String(event.recurrence)] ?? null, due_window: dueWindow(String(event.due_date), status, today(x)) };
+  });
+  // D6122 (GR-21): the due strip's counts, over every obligation whatever the page's filter, and the day they are counted from.
+  return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State', 'Repeats'], rows: obligations,
+    parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)),
+      due_counts: dueCounts(obligations), due_on: today(x) },
+    filters: [{ key: 'kind', label: 'Kind', options: fixed(OBLIGATION_KINDS) }, { key: 'due_window', label: 'Due', options: fixed(DUE_WINDOWS) }],
+    sorts: [{ key: 'due_at', label: 'Due' }, { key: '-due_at', label: 'Due latest' }] };
+}
+
+/** D1090: the content calendar beside the channels; a failed read says so on its own and never blanks them. */
+async function calendarPart(env: Env, projectId: number): Promise<Row> {
+  try { return { state: 'ready', items: await contentCalendar(env, projectId) }; } catch (e) {
+    console.error('[cycle_grow] content calendar unreadable:', (e as Error).name);
+    return { state: 'unreadable', reason: 'Unreadable: the content calendar could not be read' };
+  }
+}
+
+/** Customer and partner asks have no linked record; expose their replies beside the module's rows. */
+export async function updateAskReplies(env: Env, projectId: number, kind: 'customer' | 'partner'): Promise<Row[]> {
+  try {
+    const q = await env.DB.prepare(`SELECT r.uid, r.name, r.message, r.created_at, r.landed_module, r.landed_ref, r.landed_reason,
+      a.uid AS ask_uid, a.text AS ask_text FROM update_ask_replies r
+      JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
+      WHERE u.project_id = ? AND a.kind = ? ORDER BY r.id DESC`).bind(projectId, kind).all<Row>();
+    return q.results || [];
+  } catch { return []; }
+}
+
+async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|null; updates_reason: string|null; newsletter_reason?: string}> {
+  const { env, projectId } = x;
+  try {
+    const q = await env.DB.prepare(`SELECT id, uid, title, kind, author_user_id, period, period_start, period_end, status,
+      submitted_at, sent_at, updated_at FROM portfolio_updates WHERE project_id = ?
+      AND (sent_at IS NOT NULL OR status = 'submitted')
+      ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100`).bind(projectId).all<any>();
+    const updates = q.results || [];
+    if (!updates.length) return { updates: [], updates_reason: null };
+    const recipients = await env.DB.prepare(`SELECT update_id, audience, COUNT(*) AS sent,
+      SUM(CASE WHEN delivered_via IS NOT NULL THEN 1 ELSE 0 END) AS delivered,
+      SUM(CASE WHEN opened_at IS NOT NULL THEN 1 ELSE 0 END) AS opened
+      FROM update_recipients WHERE update_id IN (SELECT id FROM portfolio_updates WHERE project_id = ?
+        AND (sent_at IS NOT NULL OR status = 'submitted')
+        ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100)
+      GROUP BY update_id, audience`).bind(projectId).all<any>();
+    const asks = await env.DB.prepare(`SELECT a.id, a.update_id, a.asked_again_at, COUNT(r.id) AS replies
+      FROM update_asks a LEFT JOIN update_ask_replies r ON r.ask_id = a.id
+      WHERE a.update_id IN (SELECT id FROM portfolio_updates WHERE project_id = ?
+        AND (sent_at IS NOT NULL OR status = 'submitted')
+        ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100)
+      GROUP BY a.id`).bind(projectId).all<any>();
+    const byRecipients = new Map<number, any[]>();
+    for (const row of recipients.results || []) byRecipients.set(row.update_id, [...(byRecipients.get(row.update_id) || []), row]);
+    const byAsks = new Map<number, any[]>();
+    for (const row of asks.results || []) byAsks.set(row.update_id, [...(byAsks.get(row.update_id) || []), row]);
+    // D2407 part 3: a sent update's Beehiiv post's figures; null (with the reason) when there is none.
+    const newsletters = await newsletterByUpdate(env, projectId);
+    return { updates: updates.map((u) => {
+      const base = { uid: u.uid, title: u.title, kind: u.kind, period: u.period_start ? null : u.period,
+        period_start: u.period_start, period_end: u.period_end, sent_at: u.sent_at,
+        submitted_at: u.sent_at ? null : u.submitted_at,
+        href: u.author_user_id === viewer.id || isAdmin(viewer) ? `/updates/${u.uid}` : null };
+      if (!u.sent_at) return { ...base, href: null, label: "Submitted to the investors' inbox", sent_to: null,
+        delivered: null, opened: null, asks: null, replies: null, asks_to_ask_again: null, newsletter: null };
+      const rs = byRecipients.get(u.id) || [];
+      const as = byAsks.get(u.id) || [];
+      const count = (audience: string) => Number(rs.find((r) => r.audience === audience)?.sent ?? 0);
+      return { ...base, label: null, sent_to: { investors: count('investor'), team: count('team'), network: count('network') },
+        delivered: rs.reduce((n, r) => n + Number(r.delivered || 0), 0),
+        opened: rs.reduce((n, r) => n + Number(r.opened || 0), 0), asks: as.length,
+        replies: as.reduce((n, a) => n + Number(a.replies || 0), 0),
+        asks_to_ask_again: as.filter((a) => canAskAgain(u.sent_at, Number(a.replies || 0), a.asked_again_at, x.now)).length,
+        // D2407 part 3: the figures of the Beehiiv post this update's draft became.
+        newsletter: newsletters?.get(u.uid) ?? null };
+    }), updates_reason: null, newsletter_reason: newsletters ? NEWSLETTER_NOT_LINKED : NEWSLETTER_UNREADABLE };
+  } catch (e) {
+    console.warn('[cycle_grow] updates history unreadable', (e as Error).message);
+    return { updates: null, updates_reason: 'Unreadable: Updates history could not be read' };
+  }
+}
+
+/**
+ * Replies to "a market contact" asks of Share an update (D654, migration 437)
+ * whose ask links to a market, by that market — linked by this read, never copied.
+ */
+export async function marketReplies(env: Env, projectId: number): Promise<Map<string, Row[]>> {
+  return (await marketRepliesRead(env, projectId)) ?? new Map();
+}
+
+/** D6120 (#6120, GR-26): the same read, null when it failed, so the page says Unavailable rather than "no replies". */
+export async function marketRepliesRead(env: Env, projectId: number): Promise<Map<string, Row[]> | null> {
+  const out = new Map<string, Row[]>();
+  try {
+    const q = await env.DB.prepare(
+      `SELECT m.uid AS market_uid, r.uid, r.name, r.message, r.created_at FROM update_ask_replies r
+         JOIN update_asks a ON a.id = r.ask_id
+         JOIN portfolio_updates u ON u.id = a.update_id
+         JOIN markets m ON m.project_id = u.project_id AND CAST(m.id AS TEXT) = a.link_ref
+        WHERE u.project_id = ? AND a.kind = 'market' ORDER BY r.id DESC`,
+    ).bind(projectId).all<Row>();
+    for (const x of q.results || []) out.set(String(x.market_uid), [...(out.get(String(x.market_uid)) ?? []), x]);
+  } catch (e) {
+    console.warn('[cycle_grow] market replies unreadable', (e as Error).message);
+    return null;
+  }
+  return out;
+}
+
+type MarketPlan = { steps_total: number; steps_open: number; steps_overdue: number; localisation_done: number; localisation_open: string[] };
+const EMPTY_PLAN: MarketPlan = { steps_total: 0, steps_open: 0, steps_overdue: 0, localisation_done: 0, localisation_open: [...LOCALISATION_KEYS] };
+
+/**
+ * D6120 (#6120, GR-21, GR-23): each market's entry steps (all, open, overdue: due before `day` and not done) and
+ * its localisation checks (done, and the keys still open in their fixed order). Null when either store fails.
+ */
+export async function marketPlanCounts(env: Env, projectId: number, day: string): Promise<Map<string, MarketPlan> | null> {
+  try {
+    const steps = await env.DB.prepare(
+      `SELECT m.uid, COUNT(s.id) AS total, SUM(CASE WHEN s.id IS NOT NULL AND s.done_at IS NULL THEN 1 ELSE 0 END) AS open,
+              SUM(CASE WHEN s.done_at IS NULL AND s.due_on IS NOT NULL AND substr(s.due_on, 1, 10) < ? THEN 1 ELSE 0 END) AS overdue
+         FROM markets m LEFT JOIN market_entry_steps s ON s.market_id = m.id WHERE m.project_id = ? GROUP BY m.id`,
+    ).bind(day, projectId).all<{ uid: string; total: number; open: number | null; overdue: number | null }>();
+    const checks = await env.DB.prepare(
+      `SELECT m.uid, l.key FROM market_localisation l JOIN markets m ON m.id = l.market_id WHERE m.project_id = ? AND l.done_at IS NOT NULL`,
+    ).bind(projectId).all<{ uid: string; key: string }>();
+    const done = new Map<string, Set<string>>();
+    for (const c of checks.results || []) done.set(c.uid, (done.get(c.uid) ?? new Set()).add(c.key));
+    const out = new Map<string, MarketPlan>();
+    for (const s of steps.results || []) {
+      const ticked = done.get(s.uid) ?? new Set<string>();
+      out.set(s.uid, { steps_total: Number(s.total) || 0, steps_open: Number(s.open) || 0, steps_overdue: Number(s.overdue) || 0,
+        localisation_done: LOCALISATION_KEYS.filter((k) => ticked.has(k)).length, localisation_open: LOCALISATION_KEYS.filter((k) => !ticked.has(k)) });
+    }
+    return out;
+  } catch (e) {
+    console.warn('[cycle_grow] market plan counts unreadable', (e as Error).message);
+    return null;
+  }
+}
+
+/** D6120 (GR-21): the attached Research › Geographies country's name and region, by market; null when unreadable. */
+async function marketCountries(env: Env, projectId: number): Promise<Map<string, { name: string; region: string | null }> | null> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT m.uid, c.name, c.region FROM markets m JOIN research_countries c ON c.code = m.geography_ref WHERE m.project_id = ?`,
+    ).bind(projectId).all<{ uid: string; name: string; region: string | null }>();
+    return new Map((q.results || []).map((r) => [r.uid, { name: r.name, region: r.region ?? null }]));
+  } catch { return null; }
+}
+
+/**
+ * Search on every text field; `filter` is `key:value` pairs joined with commas
+ * (as the page joins them), every one applied; sort a field, `-` for descending.
+ */
+export function shapeRecords(rows: Row[], q: string, filter: string, sort: string): Row[] {
+  let out = rows;
+  if (q) out = out.filter((row) => Object.values(row).some((v) => typeof v === 'string' && lower(v).includes(lower(q))));
+  for (const pair of filter.split(',')) {
+    const at = pair.indexOf(':');
+    if (at <= 0) continue;
+    const [k, v] = [pair.slice(0, at).trim(), pair.slice(at + 1).trim()];
+    out = out.filter((row) => lower(row[k]) === lower(v));
+  }
+  if (sort) {
+    const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
+    // A missing value sorts last whichever way, never as a zero.
+    out = [...out].sort((a, b) => {
+      const av = a[key]; const bv = b[key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      return desc ? -cmp : cmp;
+    });
+  }
+  return out;
+}
+
+// GET /modules/:slug
+r.get('/modules/:slug', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    const meta = GROW_MODULES.find((m) => m.slug === c.req.param('slug'));
+    if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
+    const mod = { slug: meta.slug, name: meta.name, records_title: RECORDS_TITLE[meta.slug] };
+    const x = ctxFor(c.env, pid, await isTeamViewer(c.env, user, pid));
+    const card = await cardFor(x, meta.slug);
+    let recs: RecordSet;
+    const writer = await writes(c, user, pid);
+    try { recs = await recordsFor(x, meta.slug, user, writer); } catch (e) {
+      console.error('[cycle_grow] records unreadable:', meta.slug, (e as Error).message);
+      return c.json({ module: mod, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
+    }
+    const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
+    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
+    const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
+    // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
+    const parts = { ...(recs.parts ?? {}), ...(meta.slug === 'durable-company-building' ? { can_write: writer } : {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
+      ...(await tiktokPart(c, user, pid, meta.slug)),
+      ...(await facebookPart(c, user, pid, meta.slug)),
+      publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
+    // D6124: `exportable` tells the page to draw Export; the export route checks the same two things itself.
+    // D6103 adds Feedback and the KPIs to the modules with one (`hasGrowExport`).
+    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow'),
+      ...(writer && hasGrowExport(meta.slug) ? { exportable: true } : {}) }, ...(Object.keys(parts).length ? { parts } : {}) });
+  } catch (e) { return fail(c, e); }
+});
+
+// GET /modules/:slug/export?project=&q=&filter=&sort= — D6124 (#6124).
+// The table's rows as a CSV, every row its search, filters and sort select
+// (no page). A writer on the venture only: a reader is refused before anything
+// is read. A failed read is a refusal, never a file with a header and no rows.
+// D6103 (#6103): Feedback, or the KPIs with their monthly history. The
+// customer's name is the writer's column; no email is ever exported. Past
+// GROW_EXPORT_ROW_CAP rows it refuses (422) rather than cut the file short.
+// Each of these two is logged as `grow.<module>` with its row count before
+// the file is returned: no log row, no file.
+r.get('/modules/:slug/export', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    const slug = c.req.param('slug');
+    const meta = GROW_MODULES.find((m) => m.slug === slug);
+    if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
+    if (!hasGrowExport(meta.slug)) return c.json({ detail: `${meta.name} has no export` }, 404);
+    const x = ctxFor(c.env, pid);
+    let recs: RecordSet;
+    try { recs = await recordsFor(x, meta.slug, user, true); } catch (e) {
+      console.error('[cycle_grow] export unreadable:', meta.slug, (e as Error).name);
+      return c.json({ detail: `Unreadable: ${meta.source} could not be read, so nothing was exported` }, 503);
+    }
+    const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
+    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
+    if (isGrowExportSlug(meta.slug)) {
+      const asOf = today(x);
+      return csvResponse(growExportCsv(meta.slug, shaped, meta.source, asOf), `${meta.slug}-${pid}-${asOf}.csv`, { 'X-Export-Rows': String(shaped.length) });
+    }
+    // D6103: `project(..., true)` above admits a writer only, so the From column is always the writer's.
+    let body: string; let rows: number; let what: string;
+    if (meta.slug === 'product-improvement') {
+      if (shaped.length > GROW_EXPORT_ROW_CAP) throw new Refused(422, exportCapSentence(shaped.length, 'feedback rows'));
+      body = feedbackCsv(shaped, true, (v) => LABEL[String(v)] ?? v); rows = shaped.length; what = 'Feedback';
+    } else {
+      const kpis = [];
+      for (const row of shaped as KpiRow[]) kpis.push({ row, months: await kpiMonths(c.env, pid, row) });
+      rows = kpiLineCount(kpis);
+      if (rows > GROW_EXPORT_ROW_CAP) throw new Refused(422, exportCapSentence(rows, 'KPI months'));
+      body = kpiCsv(kpis); what = 'KPIs';
+    }
+    await logGrowWrite(c.env, pid, user.id, { module: meta.slug, entityId: null, action: `grow_${meta.slug === 'product-improvement' ? 'feedback' : 'kpis'}_exported`,
+      summary: `${what} exported as CSV: ${rows} row${rows === 1 ? '' : 's'}` });
+    return csvResponse(body, `${meta.slug === 'product-improvement' ? 'feedback' : 'kpis'}-${pid}-${stamp()}.csv`, { 'Cache-Control': 'no-store', 'X-Export-Rows': String(rows) });
+  } catch (e) { return fail(c, e); }
+});
+
+/** D840 part 3: a fed module's Mercury part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function mercuryPart(c: C, user: User, pid: number, slug: string): Promise<{ from_mercury?: unknown }> {
+  if (!(GROW_FEED_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    return { from_mercury: await growFromMercury(c.env, pid, slug as GrowFeedSlug, user, new Date().toISOString().slice(0, 10)) };
+  } catch (e) {
+    console.error('[cycle_grow] mercury part unreadable:', slug, (e as Error).name);
+    return { from_mercury: { state: 'unreadable', reason: 'Unreadable: the Mercury figures could not be read' } };
+  }
+}
+
+/** D2407: Distribution's and Revenue and traction's Beehiiv part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function beehiivPart(c: C, user: User, pid: number, slug: string): Promise<{ from_beehiiv?: unknown }> {
+  if (!(BEEHIIV_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    return { from_beehiiv: await beehiivModulePart(c.env, pid, slug as BeehiivSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] beehiiv part unreadable:', slug, (e as Error).name);
+    return { from_beehiiv: { state: 'unreadable', reason: BEEHIIV_SENTENCES.unreadable } };
+  }
+}
+
+// ── Writes ──────────────────────────────────────────────────────────────────
+// Each route gates the venture for writing, then hands the body to its writer.
+
+async function body(c: C): Promise<Record<string, unknown>> { return c.req.json().catch(() => ({})); }
+type Writer = (c: C, user: User, pid: number, b: Record<string, unknown>) => Promise<unknown>;
+const write = (fn: Writer, created = false) => async (c: C) => {
+  try {
+    const user = await requireAuth(c); const b = await body(c);
+    const pid = await project(c, user, b.project, true);
+    return c.json(await fn(c, user, pid, b) as object, created ? 201 : 200);
+  } catch (e) { return fail(c, e); }
+};
+const param = (c: C, k: string): string => c.req.param(k) ?? '';
+const intId = (v: string) => Number(v);
+
+// D4447 / #3722 Part A: plans only, through the same venture read/write gates.
+// D4485: static overview read, before parameter routes, through the existing venture gate.
+r.get('/distribution/overview', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await distributionOverview(c.env, pid, { week: c.req.query('week'), userId: user.id, canWrite: await writes(c, user, pid), canAddProspects: user.role === 'founder' }));
+  } catch (e) { return fail(c, e); }
+});
+r.get('/campaigns', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaigns(c.env, pid, { status: c.req.query('status'), q: c.req.query('q') }));
+  } catch (e) { return fail(c, e); }
+});
+// D4483: detail and creative reads use the same venture reader gate.
+r.get('/campaigns/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaign(c.env, pid, param(c, 'uid')));
+  } catch (e) { return fail(c, e); }
+});
+r.get('/campaigns/:uid/creatives', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaignCreatives(c.env, pid, param(c, 'uid')));
+  } catch (e) { return fail(c, e); }
+});
+r.put('/campaigns/:uid/creatives/:placement/:field', write((c, u, pid, b) => putCampaignCreative(c.env, pid, u, param(c, 'uid'), param(c, 'placement'), param(c, 'field'), b)));
+r.post('/campaigns', write((c, u, pid, b) => createCampaign(c.env, pid, u, b), true));
+r.patch('/campaigns/:uid', write((c, u, pid, b) => updateCampaign(c.env, pid, u, param(c, 'uid'), b)));
+r.put('/campaigns/:uid/channels/:channelUid', write((c, u, pid, b) => campaignChannel(c.env, pid, u, param(c, 'uid'), param(c, 'channelUid'), b)));
+r.delete('/campaigns/:uid/channels/:channelUid', write((c, u, pid, b) => campaignChannel(c.env, pid, u, param(c, 'uid'), param(c, 'channelUid'), b, true)));
+r.post('/campaigns/:uid/items', write((c, u, pid, b) => campaignItem(c.env, pid, u, param(c, 'uid'), b.kind, b.uid)));
+r.delete('/campaigns/:uid/items/:kind/:itemUid', write((c, u, pid) => campaignItem(c.env, pid, u, param(c, 'uid'), param(c, 'kind'), param(c, 'itemUid'), true)));
+r.delete('/campaigns/:uid', write((c, u, pid) => archiveCampaign(c.env, pid, u, param(c, 'uid'))));
+
+// D6315: content-free destinations are private to the member who accepted them.
+r.get('/proposal-receipts',async c=>{
+ try{const user=await requireAuth(c);const pid=await project(c,user,c.req.query('project'),false);
+ return c.json(await growProposalReceipts(c.env,pid,user.id,c.req.query('source')||''));}catch(e){return fail(c,e);}
+});
+async function undoSourceProposal(c:C,user:User,pid:number,b:Record<string,unknown>,source:'mercury'|'google'|'posthog'|'beehiiv',id:number|null){
+ if(await isSupportSession(c))throw new Refused(403,'A support session cannot undo a member’s connector acceptance.');
+ if(source==='mercury')await founderOf(c,user,pid);
+ const receipt=await c.env.DB.prepare(`SELECT uid FROM grow_proposal_receipts WHERE uid=? AND project_id=? AND accepted_by=? AND source=? AND (? IS NULL OR source_id=?) AND state='accepted'`).bind(typeof b.receipt_uid==='string'?b.receipt_uid:'',pid,user.id,source,id,id).first<{uid:string}>();
+ if(!receipt)throw new Refused(404,'No undoable acceptance of yours is on this venture.');
+ return undoGrowProposal(c.env,pid,user.id,receipt.uid);
+}
+r.post('/mercury/partner-proposals/:id/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'mercury',proposalId(c))));
+r.post('/google/proposals/:id/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'google',proposalId(c))));
+r.post('/posthog/proposals/:id/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'posthog',proposalId(c))));
+r.post('/beehiiv/channel-proposal/undo',write((c,u,p,b)=>undoSourceProposal(c,u,p,b,'beehiiv',null)));
+
+r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
+// D6865 (#6865): Mark told for several (GR-26), before `/feedback/:uid`.
+r.post('/feedback/told', write((c, u, pid, b) => markFeedbackToldMany(c.env, pid, u, b)));
+// D6865: one theme's weight (GR-23): people, their records, and recurring revenue in the last 60 days. It names
+// people, so it is a writer's read; an advisor gets the same refusal as any write.
+r.get('/feedback/weight', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    return c.json(await themeWeight(c.env, pid, c.req.query('theme')));
+  } catch (e) { return fail(c, e); }
+});
+// D6098 (#6098): before `/feedback/:uid`, so `themes` is never read as a uid.
+r.patch('/feedback/themes', write((c, u, pid, b) => renameFeedbackTheme(c.env, pid, u, b)));
+r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));
+r.post('/channels', write((c, u, pid, b) => addChannel(c.env, pid, u, b), true));
+r.patch('/channels/:uid', write((c, u, pid, b) => updateChannel(c.env, pid, u, param(c, 'uid'), b)));
+r.post('/channels/content', write((c, u, pid, b) => addContentItem(c.env, pid, u, b), true));
+r.patch('/channels/content/:uid', write((c, u, pid, b) => updateContentItem(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/channels/content/:uid', write((c, u, pid) => removeContentItem(c.env, pid, u, param(c, 'uid'))));
+r.put('/channels/:uid/spend/:month', write((c, u, pid, b) => setChannelSpend(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
+r.post('/kpis', write(async (c, u, pid, b) => {
+  await ensureProjectMetricsSchema(c.env);
+  const out = await enterKpi(c.env, pid, u.id, b);
+  await logGrowWrite(c.env, pid, u.id, { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entered',
+    summary: `KPI entered for ${out.as_of}` });
+  return out;
+}, true));
+r.post('/roles', write((c, u, pid, b) => openRole(c.env, pid, u, b), true));
+r.patch('/roles/:id', write((c, u, pid, b) => updateRole(c.env, pid, u, intId(param(c, 'id')), b)));
+r.patch('/applications/:id/stage', write((c, u, pid, b) => setApplicationStage(c.env, pid, u, intId(param(c, 'id')), b)));
+r.post('/partners', write((c, u, pid, b) => addPartner(c.env, pid, u, b), true));
+r.patch('/partners/:uid', write((c, u, pid, b) => updatePartner(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/partners/:uid', write((c, u, pid) => removePartner(c.env, pid, u, param(c, 'uid'))));
+// #3938 part 3 (D1478 task 4, job GR17): the founder's press orders the venture's
+// partners by fit with a need they type: retrieve (bge-m3), then rank (the
+// reranker), on `services/ai/matchRows.ts`. GR17 is a two-step job, so no line is
+// written (`line` is null). A writer on the venture only; an ended partnership is
+// not ranked; nothing here changes a partner.
+r.post('/partners/rank', async (c) => {
+  try {
+    const user = await requireAuth(c); const b = await body(c);
+    const pid = await project(c, user, b.project, true);
+    const query = typeof b.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    if (!query) throw new Refused(400, 'Say what you need a partner for', 'query');
+    const q = await c.env.DB.prepare(
+      `SELECT g.uid, g.name, g.type, g.stage, g.terms, g.terms_kind, g.terms_pct, g.terms_amount_cents, g.terms_currency
+         FROM growth_partners g WHERE g.project_id = ? AND g.stage <> 'ended' ORDER BY g.name COLLATE NOCASE LIMIT 60`,
+    ).bind(pid).all<Row>();
+    const candidates = (q.results || []).map((p) => ({
+      key: String(p.uid),
+      text: [String(p.name), `A ${String(p.type).replace(/_/g, ' ')} partner`, `Stage: ${String(p.stage)}`, termsLine(p) ? `Terms: ${termsLine(p)}` : null].filter(Boolean).join('. '),
+    }));
+    const rail = railFor(c, { page: 'Grow · Partner network', option: null });
+    const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.growPartnerNetwork, rail, guardText: query }, 'GR17');
+    let res;
+    try { res = await matchRows(query, candidates, deps, { top: 10, write: false }); } catch (e) {
+      if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+      throw e;
+    }
+    return c.json({ job: 'GR17', steps: res.steps, rows: res.rows.map((x) => ({ uid: x.key, position: x.position, line: x.line })) });
+  } catch (e) { return fail(c, e); }
+});
+r.put('/partners/:uid/revenue/:month', write((c, u, pid, b) => setPartnerRevenue(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
+r.post('/markets', write((c, u, pid, b) => addMarket(c.env, pid, u, b), true));
+r.patch('/markets/:uid', write((c, u, pid, b) => updateMarket(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/markets/:uid', write((c, u, pid) => removeMarket(c.env, pid, u, param(c, 'uid'))));
+r.post('/obligations', write((c, u, pid, b) => addObligation(c.env, pid, u, b), true));
+r.patch('/obligations/:id', write((c, u, pid, b) => updateObligation(c.env, pid, u, intId(param(c, 'id')), b)));
+r.delete('/obligations/:id', write((c, u, pid) => removeObligation(c.env, pid, u, intId(param(c, 'id')))));
+r.put('/checklist/:key', write(async (c, u, pid, b) => {
+  const key = param(c, 'key');
+  if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');
+  // D6789 (#6789): `{ not_applicable: true | false }` marks or clears Not applicable; `{ done }` ticks as before.
+  if (b.not_applicable !== undefined) {
+    if (typeof b.not_applicable !== 'boolean') throw new Refused(400, 'Say whether the item applies', 'not_applicable');
+    if (b.not_applicable) {
+      const item = (await checklist(c.env, pid)).find((i) => i.key === key);
+      if (item?.done && item.source === 'Spin-Out Lab') throw new Refused(409, 'The Spin-Out Lab ticked this item, so it applies', 'not_applicable');
+    }
+    return setChecklistNotApplicable(c.env, pid, u, key, b.not_applicable);
+  }
+  return setChecklistItem(c.env, pid, u, key, b.done === true);
+}));
+
+// ── D840 part 3: the founder's Mercury ─────────────────────────────────────
+
+/** The founder of the venture, whose Mercury it is; anyone else is refused. */
+async function founderOf(c: C, user: User, pid: number): Promise<void> {
+  if (!(await isVentureFounder(c.env, user, pid))) throw new Refused(403, 'Only the founder decides on what their Mercury proposes');
+}
+
+const DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'That proposal is not on this venture'],
+  decided: [409, 'That proposal was already decided'],
+  unknown_partner: [404, 'That partner is not on this venture'],
+};
+const proposalId = (c: C) => {
+  const id = Number(param(c, 'id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Refused(404, 'That proposal is not on this venture');
+  return id;
+};
+
+r.post('/mercury/sync', async (c) => {
+  try {
+    const user = await requireAuth(c); const b = await body(c);
+    const pid = await project(c, user, b.project, true);
+    await founderOf(c, user, pid);
+    if (await isSupportSession(c)) throw new Refused(403, 'A support session cannot read a member\'s bank account');
+    const counts = await syncGrowFromMercury(c.env, user.id, pid, new Date().toISOString().slice(0, 10));
+    await logGrowWrite(c.env, pid, user.id, { module: 'revenue-and-traction', entityId: pid, action: 'grow_mercury_synced', summary: 'Grow synced from Mercury' });
+    return c.json({ ok: true, counts });
+  } catch (e) {
+    if (e instanceof GrowSyncRefused) return c.json({ error: e.code, detail: e.sentence }, e.status);
+    return fail(c, e);
+  }
+});
+r.post('/mercury/partner-proposals/:id/accept', write(async (c, u, pid, b) => {
+  await founderOf(c, u, pid);
+  const id = proposalId(c);
+  if(b.growth_partner_uid!=null&&typeof b.growth_partner_uid!=='string')throw new Refused(400,'Choose a partner of this venture.');
+  const create = async (name: string) => (await addPartner(c.env, pid, u, { name, type: 'other' })).uid;
+  const out = await acceptPartnerProposal(c.env, pid, id, { growth_partner_uid: b.growth_partner_uid }, u.id, create);
+  if (out !== 'ok') throw new Refused(...DECIDED[out]);
+  await logGrowWrite(c.env, pid, u.id, { module: 'partner-network', entityId: id, action: 'grow_mercury_partner_accepted', summary: 'Mercury partner payment linked' });
+  const target=await c.env.DB.prepare('SELECT g.uid FROM mercury_partner_proposals p JOIN growth_partners g ON g.id=p.growth_partner_id WHERE p.id=? AND p.project_id=?').bind(id,pid).first<{uid:string}>();
+  const destination=await rememberGrowProposal(c.env,pid,u.id,'mercury',id,'partner',target!.uid,!b.growth_partner_uid);
+  return { ok: true, id, state: 'accepted', destination };
+}));
+r.post('/mercury/partner-proposals/:id/dismiss', write(async (c, u, pid) => {
+  await founderOf(c, u, pid);
+  const id = proposalId(c);
+  const out = await dismissPartnerProposal(c.env, pid, id, u.id);
+  if (out !== 'ok') throw new Refused(...DECIDED[out]);
+  await logGrowWrite(c.env, pid, u.id, { module: 'partner-network', entityId: id, action: 'grow_mercury_partner_dismissed', summary: 'Mercury partner payment dismissed' });
+  return { ok: true, id, state: 'dismissed' };
+}));
+r.delete('/mercury/facts/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    if (!(await isTeamViewer(c.env, user, pid))) throw new Refused(403, 'Only the venture\'s team can change its Mercury figures');
+    const id = Number(param(c, 'id'));
+    const slug = Number.isSafeInteger(id) && id > 0 ? await deleteGrowFact(c.env, pid, id) : null;
+    if (!slug) throw new Refused(404, 'That figure is not on this venture');
+    await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: 'grow_mercury_fact_deleted', summary: 'Mercury figure deleted' });
+    return c.json({ ok: true, id });
+  } catch (e) { return fail(c, e); }
+});
+
+// ── D2407 (#2407 parts 1–2): the founder's own Beehiiv ─────────────────────
+
+class BeehiivRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never Beehiiv's text. */
+export const BEEHIIV_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s Beehiiv.',
+  beehiiv_not_connected: 'Beehiiv is not connected. Sign in with Beehiiv on your Connectors page first.',
+  company_not_enabled: 'Your Beehiiv is not switched on for this venture’s company. Switch it on on the Beehiiv connector page.',
+  venture_served: 'A teammate’s Beehiiv already serves this venture. They can unlink it.',
+  publication_not_yours: 'That publication is not one your Beehiiv lists. Choose one from the list.',
+  bad_id: 'That is not a Beehiiv publication.',
+  not_linked: 'Choose a Beehiiv publication for this venture first.',
+  not_your_beehiiv: 'Only the member whose Beehiiv serves this venture can do this.',
+  sign_in_again: 'Beehiiv asked you to sign in again.',
+  rate_limited: 'Beehiiv asked us to wait. Try again in a minute.',
+  beehiiv_unreadable: 'Beehiiv could not be read. Nothing changed; try again.',
+  proposal_not_found: 'There is no channel proposal on this venture.',
+  proposal_decided: 'That proposal was already decided.',
+  unknown_channel: 'That channel is not on this venture.',
+  fact_not_found: 'That figure is not on this venture.',
+};
+
+const beehiivReadRefusal = (e: BeehiivReadError): BeehiivRefused =>
+  e.code === 'not_connected' ? new BeehiivRefused(409, 'beehiiv_not_connected')
+    : e.code === 'unauthorized' ? new BeehiivRefused(409, 'sign_in_again')
+      : e.code === 'rate_limited' ? new BeehiivRefused(429, 'rate_limited')
+        : e.code === 'bad_id' ? new BeehiivRefused(400, 'bad_id') : new BeehiivRefused(502, 'beehiiv_unreadable');
+
+const beehiiv = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new BeehiivRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof BeehiivRefused ? e : e instanceof BeehiivReadError ? beehiivReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: BEEHIIV_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+/** The caller's own active Beehiiv sign-in, switched on for the venture's company. */
+async function ownBeehiiv(c: C, user: User, pid: number): Promise<IntegrationRow> {
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'beehiiv' AND status = 'active' AND auth_type = 'oauth_mcp' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new BeehiivRefused(409, 'beehiiv_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new BeehiivRefused(409, 'company_not_enabled');
+  return row;
+}
+
+/** The venture's link, served by the caller's own active Beehiiv, still switched on for its company. */
+async function servedLink(c: C, user: User, pid: number) {
+  const link = await beehiivLinkOf(c.env, pid);
+  if (!link) throw new BeehiivRefused(409, 'not_linked');
+  if (link.owner_id !== Number(user.id)) throw new BeehiivRefused(403, 'not_your_beehiiv');
+  if (!link.active) throw new BeehiivRefused(409, 'beehiiv_not_connected');
+  if (!(await projectEnabled(c.env, link.integration_id, pid))) throw new BeehiivRefused(409, 'company_not_enabled');
+  return link;
+}
+
+r.get('/beehiiv/publications', beehiiv(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const row = await ownBeehiiv(c, user, pid);
+  const link = await beehiivLinkOf(c.env, pid);
+  const own = !!link && link.integration_id === Number(row.id);
+  let choices: Array<{ id: string; name: string | null }> | null = null;
+  let choicesError: string | null = null;
+  try { choices = await (await beehiivReadsFor(c.env, row)).publications(); } catch (e) {
+    if (!(e instanceof BeehiivReadError)) throw e;
+    choicesError = beehiivReadRefusal(e).code;
+    console.warn('[cycle_grow] beehiiv publications unreadable', { outcome: choicesError });
+  }
+  return c.json({
+    ok: true, project_id: pid,
+    link: own ? { publication_id: link!.publication_id, name: link!.publication_name } : null,
+    served_by: link && !own ? { name: link.owner_name } : null,
+    choices, choices_error: choicesError ? { code: choicesError, detail: BEEHIIV_REFUSALS[choicesError] } : null,
+  });
+}));
+
+r.put('/beehiiv/publication', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await ownBeehiiv(c, user, pid);
+  const mine = Number(row.id);
+  const existing = await beehiivLinkOf(c.env, pid);
+  if (existing && existing.integration_id !== mine) throw new BeehiivRefused(409, 'venture_served');
+  if (b.publication_id === null) {
+    if (await unlinkPublication(c.env, mine, pid)) {
+      await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_publication_unlinked', summary: 'Beehiiv publication unlinked' });
+    }
+    return c.json({ ok: true, project_id: pid, link: null });
+  }
+  const wanted = beehiivId(b.publication_id);
+  const chosen = (await (await beehiivReadsFor(c.env, row)).publications()).find((p) => p.id === wanted);
+  if (!chosen) throw new BeehiivRefused(400, 'publication_not_yours');
+  if (await linkPublication(c.env, { integrationId: mine, projectId: pid, userId: user.id, publication: chosen }) === 'served') throw new BeehiivRefused(409, 'venture_served');
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_publication_linked', summary: 'Beehiiv publication linked' });
+  return c.json({ ok: true, project_id: pid, link: { publication_id: chosen.id, name: chosen.name } });
+}));
+
+r.post('/beehiiv/sync', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const link = await servedLink(c, user, pid);
+  const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?').bind(link.integration_id).first<IntegrationRow>();
+  const reads = await beehiivReadsFor(c.env, row!);
+  const counts = await syncBeehiiv(c.env, reads, { integrationId: link.integration_id, projectId: pid, publicationId: link.publication_id, today: new Date().toISOString().slice(0, 10) });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(link.integration_id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_synced',
+    summary: `Grow synced from Beehiiv: ${counts.facts} figures, ${counts.posts} posts, ${counts.kept_deleted} kept deleted${counts.partial ? ', partial' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+const BEEHIIV_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'proposal_not_found'], decided: [409, 'proposal_decided'], unknown_channel: [404, 'unknown_channel'],
+};
+
+// Accept and Dismiss: plain paths, one per verb, so the API drift guard can read them.
+r.post('/beehiiv/channel-proposal/accept', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const link = await servedLink(c, user, pid);
+  if(b.growth_channel_uid!=null&&typeof b.growth_channel_uid!=='string')throw new Refused(400,'Choose a channel of this venture.');
+  const create = async () => (await addChannel(c.env, pid, user, { name: link.publication_name ?? 'Newsletter', utm_source: b.utm_source, kind: 'newsletter' })).uid;
+  const out = await acceptChannelProposal(c.env, pid, user.id, { growth_channel_uid: b.growth_channel_uid }, create);
+  if (out !== 'ok') throw new BeehiivRefused(...BEEHIIV_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_channel_accepted', summary: 'Beehiiv publication linked to a channel' });
+  const target=await c.env.DB.prepare('SELECT p.id,g.uid FROM beehiiv_publication_links p JOIN growth_channels g ON g.id=p.growth_channel_id WHERE p.project_id=?').bind(pid).first<{id:number;uid:string}>();
+  const destination=await rememberGrowProposal(c.env,pid,user.id,'beehiiv',target!.id,'channel',target!.uid,!b.growth_channel_uid);
+  return c.json({ ok: true, state: 'accepted', destination });
+}));
+r.post('/beehiiv/channel-proposal/dismiss', beehiiv(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  await servedLink(c, user, pid);
+  const out = await dismissChannelProposal(c.env, pid, user.id);
+  if (out !== 'ok') throw new BeehiivRefused(...BEEHIIV_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_beehiiv_channel_dismissed', summary: 'Beehiiv channel proposal dismissed' });
+  return c.json({ ok: true, state: 'dismissed' });
+}));
+
+const deleteBeehiiv = (store: 'beehiiv_grow_facts' | 'beehiiv_post_stats') => beehiiv(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteBeehiivRow(c.env, store, pid, id) : null;
+  if (!slug) throw new BeehiivRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: store === 'beehiiv_grow_facts' ? 'grow_beehiiv_fact_deleted' : 'grow_beehiiv_post_deleted',
+    summary: store === 'beehiiv_grow_facts' ? 'Beehiiv figure deleted' : 'Beehiiv post figures deleted' });
+  return c.json({ ok: true, id });
+});
+r.delete('/beehiiv/facts/:id', deleteBeehiiv('beehiiv_grow_facts'));
+r.delete('/beehiiv/posts/:id', deleteBeehiiv('beehiiv_post_stats'));
+
+/** D5863: Distribution's and Revenue and traction's TikTok part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function tiktokPart(c: C, user: User, pid: number, slug: string): Promise<{ from_tiktok?: unknown }> {
+  if (!(TIKTOK_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid), founder: await isVentureFounder(c.env, user, pid) };
+    return { from_tiktok: await tiktokModulePart(c.env, pid, slug as TikTokSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] tiktok part unreadable:', slug, (e as Error).name);
+    return { from_tiktok: { state: 'unreadable', reason: TIKTOK_SENTENCES.unreadable } };
+  }
+}
+
+// ── D5863 (#5863, part 2a of #2401): the founder's own TikTok ──────────────
+
+class TikTokRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never TikTok's text. */
+export const TIKTOK_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s TikTok.',
+  tiktok_not_connected: 'TikTok is not connected. Sign in with TikTok on your Connectors page first.',
+  company_not_enabled: 'Your TikTok is not switched on for this venture’s company. Switch it on on the TikTok connector page.',
+  venture_served: 'A teammate’s TikTok already serves this venture. Only they can sync it.',
+  serves_other_venture: 'Your TikTok already serves another venture. One TikTok account serves one venture.',
+  sign_in_again: 'TikTok asked you to sign in again.',
+  rate_limited: 'TikTok asked us to wait. Try again in a minute.',
+  tiktok_unreadable: 'TikTok could not be read. Nothing changed; try again.',
+  bad_kind: 'Say which TikTok figure: kind=account or kind=video.',
+  fact_not_found: 'That figure is not on this venture.',
+  not_founder: 'Only the venture’s founder decides what TikTok proposes.',
+  proposal_not_found: 'That proposal is not on this venture.',
+  proposal_decided: 'That proposal was already decided.',
+  channel_exists: 'This venture already has a channel with utm_source tiktok.',
+};
+
+const tiktokReadRefusal = (e: TikTokReadError): TikTokRefused =>
+  e.code === 'unauthorized' ? new TikTokRefused(409, 'sign_in_again')
+    : e.code === 'rate_limited' ? new TikTokRefused(429, 'rate_limited') : new TikTokRefused(502, 'tiktok_unreadable');
+
+const tiktok = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new TikTokRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof TikTokRefused ? e : e instanceof TikTokReadError ? tiktokReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: TIKTOK_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+r.post('/tiktok/sync', tiktok(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'tiktok' AND status = 'active' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new TikTokRefused(409, 'tiktok_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new TikTokRefused(403, 'company_not_enabled');
+  const claim = await claimVenture(c.env, { integrationId: Number(row.id), projectId: pid, userId: user.id });
+  if (claim === 'served') throw new TikTokRefused(409, 'venture_served');
+  if (claim === 'elsewhere') throw new TikTokRefused(409, 'serves_other_venture');
+  const link = await tiktokLinkOf(c.env, pid);
+  const reads = await tiktokReadsFor(c.env, row);
+  const counts = await syncTikTok(c.env, reads, {
+    integrationId: Number(row.id), projectId: pid, today: new Date().toISOString().slice(0, 10), scopes: grantedScopes(row), cursor: link?.video_cursor ?? null,
+  });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_tiktok_synced',
+    summary: `Grow synced from TikTok: ${counts.snapshots} snapshot, ${counts.videos} videos, ${counts.kept_deleted} kept deleted, ${counts.proposals} proposal${counts.partial ? ', partly synced' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+r.delete('/tiktok/facts/:id', tiktok(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const kind = c.req.query('kind');
+  if (kind !== 'account' && kind !== 'video') throw new TikTokRefused(400, 'bad_kind');
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteTikTokRow(c.env, kind, pid, id) : null;
+  if (!slug) throw new TikTokRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: kind === 'account' ? 'grow_tiktok_snapshot_deleted' : 'grow_tiktok_video_deleted',
+    summary: kind === 'account' ? 'TikTok audience snapshot deleted' : 'TikTok video figures deleted' });
+  return c.json({ ok: true, id });
+}));
+
+// ── D5864 (#5864, part 2b of #2401): "Add TikTok as a channel" ─────────────
+
+const TIKTOK_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'proposal_not_found'], decided: [409, 'proposal_decided'], channel_exists: [409, 'channel_exists'],
+};
+
+/** The venture's founder, writing, deciding proposal `:id`. A support session is already refused by `tiktok`. */
+async function tiktokDecision(c: C, user: User): Promise<{ pid: number; id: number }> {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  if (!(await isVentureFounder(c.env, user, pid))) throw new TikTokRefused(403, 'not_founder');
+  const id = Number(param(c, 'id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new TikTokRefused(404, 'proposal_not_found');
+  return { pid, id };
+}
+
+r.post('/tiktok/proposals/:id/accept', tiktok(async (c, user) => {
+  const { pid, id } = await tiktokDecision(c, user);
+  // The existing channel writer, as POST /channels calls it: no second writer of growth_channels.
+  const create = async () => (await addChannel(c.env, pid, user, { name: TIKTOK_CHANNEL_NAME, utm_source: TIKTOK_CHANNEL_UTM, kind: 'organic' })).uid;
+  const out = await acceptTikTokProposal(c.env, pid, id, user.id, create);
+  if (out !== 'ok') throw new TikTokRefused(...TIKTOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id, action: 'grow_tiktok_channel_accepted', summary: 'TikTok channel proposal accepted: 1 channel added' });
+  return c.json({ ok: true, id, state: 'accepted' });
+}));
+r.post('/tiktok/proposals/:id/dismiss', tiktok(async (c, user) => {
+  const { pid, id } = await tiktokDecision(c, user);
+  const out = await dismissTikTokProposal(c.env, pid, id, user.id);
+  if (out !== 'ok') throw new TikTokRefused(...TIKTOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id, action: 'grow_tiktok_channel_dismissed', summary: 'TikTok channel proposal dismissed' });
+  return c.json({ ok: true, id, state: 'dismissed' });
+}));
+
+// ── D1095 (#2960): From Google — a metrics Sheet into Revenue and traction, tagged Calendar events into Durable company-building.
+
+const GOOGLE_SLUGS: Record<string, 'revenue_and_traction' | 'durable_company_building'> = {
+  'revenue-and-traction': 'revenue_and_traction', 'durable-company-building': 'durable_company_building',
+};
+const GOOGLE_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'That proposal is not on this venture'],
+  decided: [409, 'That proposal was already decided'],
+};
+/** The member's own Workspace connection, checked as D1091's routes check it: support, admin, venture write, company. */
+async function googleMember(c: C, project: unknown) {
+  const user = await workspaceMember(c);
+  const { project: p, integration } = await workspaceContext(c, user, project);
+  return { user: user as User, pid: Number(p.id), integrationId: Number(integration.id) };
+}
+function googleFail(c: C, e: unknown) {
+  if (e instanceof WorkspaceError || e instanceof GoogleGrowRefused) return c.json({ error: e.code }, e.status as 400);
+  return fail(c, e);
+}
+
+// POST /google/sync — `part` is `sheets`, `calendar` or both; each part answers on its own.
+r.post('/google/sync', async (c) => {
+  try {
+    const b = await body(c);
+    const { user, pid, integrationId } = await googleMember(c, b.project);
+    const part = b.part === 'sheets' || b.part === 'calendar' ? b.part : null;
+    const today = new Date().toISOString().slice(0, 10);
+    const out: Record<string, unknown> = {};
+    if (part !== 'calendar') {
+      try { out.sheets = await syncMetricsSheets(c.env, integrationId, pid, user.id, today); }
+      catch (e) { out.sheets = { error: e instanceof WorkspaceError || e instanceof GoogleGrowRefused ? e.code : 'google_unreadable' }; }
+    }
+    if (part !== 'sheets') {
+      try {
+        const read = await readCalendar(c.env, user.id, today);
+        out.calendar = await proposeFromCalendar(c.env, integrationId, pid, calendarProposals(read.events), read.partial);
+      } catch (e) { out.calendar = { error: e instanceof WorkspaceError ? e.code : 'calendar_unreadable' }; }
+    }
+    await logGrowWrite(c.env, pid, user.id, { module: part === 'calendar' ? 'durable-company-building' : 'revenue-and-traction', entityId: pid,
+      action: 'grow_google_synced', summary: 'Grow synced from Google' });
+    return c.json({ ok: true, ...out });
+  } catch (e) { return googleFail(c, e); }
+});
+
+// GET /google/:slug?project= — what that module's From Google section draws.
+r.get('/google/:slug', async (c) => {
+  try {
+    const module = GOOGLE_SLUGS[param(c, 'slug')];
+    if (!module) throw new Refused(404, 'Google feeds this Grow module nothing');
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    const mine = await c.env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'google_workspace' AND status = 'active'")
+      .bind(user.id).first<{ id: number }>().catch(() => null);
+    return c.json({ module: param(c, 'slug'), ...(await readFromGoogle(c.env, pid, user.id, mine?.id ?? null, module)) });
+  } catch (e) { return googleFail(c, e); }
+});
+
+// POST /google/proposals/:id/accept — writes the obligation, then links it; refused as a typed one would be.
+r.post('/google/proposals/:id/accept', async (c) => {
+  try {
+    const b = await body(c);
+    const { user, pid, integrationId } = await googleMember(c, b.project);
+    const found = await pendingProposal(c.env, integrationId, pid, proposalId(c));
+    if (found.state !== 'ok') throw new Refused(...GOOGLE_DECIDED[found.state]);
+    const p = found.proposal;
+    const kind = p.kind === 'board_meeting' ? CALENDAR_TAGS.board.obligation : CALENDAR_TAGS.filing.obligation;
+    const { id } = await addObligation(c.env, pid, user, { title: p.title, due_at: p.date, kind }, 'google_calendar');
+    await decideProposal(c.env, integrationId, pid, p.id, user.id, { obligationId: id, eventId: p.event_id });
+    await logGrowWrite(c.env, pid, user.id, { module: 'durable-company-building', entityId: p.id, action: 'grow_google_proposal_accepted', summary: 'Calendar obligation accepted' });
+    const destination=await rememberGrowProposal(c.env,pid,user.id,'google',p.id,'obligation',id,true);
+    return c.json({ ok: true, id: p.id, state: 'accepted', obligation_id: id, destination });
+  } catch (e) { return googleFail(c, e); }
+});
+r.post('/google/proposals/:id/dismiss', async (c) => {
+  try {
+    const b = await body(c);
+    const { user, pid, integrationId } = await googleMember(c, b.project);
+    const found = await pendingProposal(c.env, integrationId, pid, proposalId(c));
+    if (found.state !== 'ok') throw new Refused(...GOOGLE_DECIDED[found.state]);
+    await decideProposal(c.env, integrationId, pid, found.proposal.id, user.id, null);
+    await logGrowWrite(c.env, pid, user.id, { module: 'durable-company-building', entityId: found.proposal.id, action: 'grow_google_proposal_dismissed', summary: 'Calendar obligation dismissed' });
+    return c.json({ ok: true, id: found.proposal.id, state: 'dismissed' });
+  } catch (e) { return googleFail(c, e); }
+});
+
+// DELETE /google/facts/:id?project= — a team member deletes a Sheet row; the next sync leaves it deleted.
+r.delete('/google/facts/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    if (!(await isTeamViewer(c.env, user, pid))) throw new Refused(403, 'Only the venture\'s team can change its Google Sheets figures');
+    const id = Number(param(c, 'id'));
+    if (!Number.isSafeInteger(id) || id <= 0 || !(await deleteSheetFact(c.env, pid, id))) throw new Refused(404, 'That figure is not on this venture');
+    await logGrowWrite(c.env, pid, user.id, { module: 'revenue-and-traction', entityId: id, action: 'grow_google_fact_deleted', summary: 'Google Sheets figure deleted' });
+    return c.json({ ok: true, id });
+  } catch (e) { return fail(c, e); }
+});
+
+// ── D5859 (#5859, part 2a of #2399): a linked Facebook Page ────────────────
+
+/** D5859: Distribution's and Revenue and traction's Facebook part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function facebookPart(c: C, user: User, pid: number, slug: string): Promise<{ from_facebook?: unknown }> {
+  if (!(FACEBOOK_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    return { from_facebook: await facebookModulePart(c.env, pid, slug as FacebookSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] facebook part unreadable:', slug, (e as Error).name);
+    return { from_facebook: { state: 'unreadable', reason: FACEBOOK_SENTENCES.unreadable } };
+  }
+}
+
+class FacebookRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never Facebook's text. */
+export const FACEBOOK_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s Facebook Pages.',
+  facebook_not_connected: 'Facebook is not connected. Connect it on your Connectors page first.',
+  company_not_enabled: 'Your Facebook is not switched on for this venture’s company. Switch it on on the Facebook connector page.',
+  page_not_chosen: 'That Page is not one you chose for this venture’s company. Choose it on the Facebook connector page first.',
+  facebook_page_not_granted: 'Facebook no longer lists that Page for your account. Choose your Pages again on the Facebook connector page.',
+  facebook_page_not_linked: 'No Facebook Page is linked to this venture yet. Link one first.',
+  venture_served: 'A teammate’s Facebook already serves this venture. Only they can change or sync it.',
+  page_elsewhere: 'That Page already feeds another venture. One Page feeds one venture.',
+  sign_in_again: 'Facebook asked you to sign in again.',
+  rate_limited: 'Facebook asked us to wait. Try again in a minute.',
+  facebook_unavailable: 'Facebook is not available yet.',
+  facebook_unreadable: 'Facebook could not be read. Nothing changed; try again.',
+  bad_page: 'Say which Page: a Page id, or null to unlink.',
+  fact_not_found: 'That figure is not on this venture.',
+  proposal_not_found: 'That proposal is not for this venture’s linked Facebook Page.',
+  proposal_decided: 'That proposal has already been decided. Reload to see its status.',
+  unknown_channel: 'Choose a channel of this venture.',
+  wrong_source: 'Choose the channel whose UTM source is facebook, or accept without choosing one to create it.',
+};
+
+const facebookReadRefusal = (e: ConnectRefusal): FacebookRefused =>
+  e.code === 'facebook_reconnect' ? new FacebookRefused(409, 'sign_in_again')
+    : e.code === 'facebook_rate_limited' ? new FacebookRefused(429, 'rate_limited')
+      : e.code === 'facebook_unavailable' ? new FacebookRefused(503, 'facebook_unavailable')
+        : new FacebookRefused(502, 'facebook_unreadable');
+
+const facebook = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new FacebookRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof FacebookRefused ? e : e instanceof ConnectRefusal ? facebookReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: FACEBOOK_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+/** The caller's own active Facebook connection, switched on for the venture's company. */
+async function facebookRow(c: C, user: User, pid: number): Promise<IntegrationRow> {
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'facebook' AND status = 'active' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new FacebookRefused(409, 'facebook_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new FacebookRefused(403, 'company_not_enabled');
+  return row;
+}
+
+r.put('/facebook/page', facebook(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await facebookRow(c, user, pid);
+  if (b.page_id === null) {
+    const held = await facebookLinkOf(c.env, pid);
+    if (held && held.integration_id !== Number(row.id)) throw new FacebookRefused(409, 'venture_served');
+    await unlinkFacebookPage(c.env, pid, Number(row.id));
+    await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_facebook_page_unlinked', summary: 'Facebook Page unlinked from this venture' });
+    return c.json({ ok: true, link: null });
+  }
+  const pageId = typeof b.page_id === 'string' && /^\d{1,32}$/.test(b.page_id) ? b.page_id : null;
+  if (!pageId) throw new FacebookRefused(400, 'bad_page');
+  const company = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(pid).first<{ company_id: number | null }>();
+  const chosen = (() => { try { return JSON.parse(row.config_json ?? '{}').pages_by_company?.[String(company?.company_id)]; } catch { return null; } })();
+  if (!Array.isArray(chosen) || !chosen.includes(pageId)) throw new FacebookRefused(403, 'page_not_chosen');
+  const page = (await facebookPageGrants(c.env, row)).find((p) => p.id === pageId);
+  if (!page) throw new FacebookRefused(403, 'facebook_page_not_granted');
+  const out = await linkFacebookPage(c.env, { integrationId: Number(row.id), projectId: pid, userId: user.id, pageId, pageName: page.name });
+  if (out !== 'ok') throw new FacebookRefused(409, out === 'served' ? 'venture_served' : 'page_elsewhere');
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_facebook_page_linked', summary: 'Facebook Page linked to this venture' });
+  return c.json({ ok: true, link: { page_id: pageId, page_name: page.name } });
+}));
+
+r.post('/facebook/sync', facebook(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await facebookRow(c, user, pid);
+  const link = await facebookLinkOf(c.env, pid);
+  if (!link) throw new FacebookRefused(409, 'facebook_page_not_linked');
+  if (link.integration_id !== Number(row.id)) throw new FacebookRefused(409, 'venture_served');
+  // Every sync re-reads the Pages the token lists, and refuses a Page it no longer lists.
+  const page = (await facebookPageGrants(c.env, row)).find((p) => p.id === link.page_id);
+  if (!page) throw new FacebookRefused(403, 'facebook_page_not_granted');
+  const counts = await syncFacebook(c.env, facebookReads(page.id, page.grant), {
+    integrationId: Number(row.id), projectId: pid, pageId: page.id, today: new Date().toISOString().slice(0, 10),
+    cursor: link.insights_cursor, backfilled: link.backfilled,
+  });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_facebook_synced',
+    summary: `Grow synced from Facebook: ${counts.followers} follower snapshot, ${counts.daily} daily figures, ${counts.kept_deleted} kept deleted${counts.partial ? ', partly synced' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+r.delete('/facebook/facts/:id', facebook(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteFacebookFact(c.env, pid, id) : null;
+  if (!slug) throw new FacebookRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: 'grow_facebook_fact_deleted', summary: 'Facebook figure deleted' });
+  return c.json({ ok: true, id });
+}));
+
+// D5860: the member whose active Facebook connection serves this venture, as for Sync and Beehiiv.
+async function facebookDecisionContext(c: C, user: User) {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await facebookRow(c, user, pid);
+  const link = await facebookLinkOf(c.env, pid);
+  if (!link) throw new FacebookRefused(409, 'facebook_page_not_linked');
+  if (link.integration_id !== Number(row.id)) throw new FacebookRefused(409, 'venture_served');
+  const id = Number(param(c, 'id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new FacebookRefused(404, 'proposal_not_found');
+  return { b, pid, id, link };
+}
+
+const FACEBOOK_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'proposal_not_found'], decided: [409, 'proposal_decided'],
+  unknown_channel: [404, 'unknown_channel'], wrong_source: [400, 'wrong_source'],
+};
+
+r.post('/facebook/proposals/:id/accept', facebook(async (c, user) => {
+  const { b, pid, id, link } = await facebookDecisionContext(c, user);
+  if (b.growth_channel_uid != null && (typeof b.growth_channel_uid !== 'string' || !b.growth_channel_uid.trim())) {
+    throw new FacebookRefused(400, 'unknown_channel');
+  }
+  const create = async () => (await addChannel(c.env, pid, user, {
+    name: (link.page_name || 'Facebook').slice(0, 120), utm_source: 'facebook', kind: 'organic',
+  })).uid;
+  const out = await acceptFacebookProposal(c.env, pid, id, user.id, link, b.growth_channel_uid ?? null, create);
+  if (out !== 'ok') throw new FacebookRefused(...FACEBOOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id,
+    action: 'grow_facebook_channel_accepted', summary: 'Facebook Page linked to a Distribution channel' });
+  return c.json({ ok: true, id, state: 'accepted' });
+}));
+
+r.post('/facebook/proposals/:id/dismiss', facebook(async (c, user) => {
+  const { pid, id, link } = await facebookDecisionContext(c, user);
+  const out = await dismissFacebookProposal(c.env, pid, id, user.id, link);
+  if (out !== 'ok') throw new FacebookRefused(...FACEBOOK_DECIDED[out]);
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: id,
+    action: 'grow_facebook_channel_dismissed', summary: 'Facebook channel proposal dismissed' });
+  return c.json({ ok: true, id, state: 'dismissed' });
+}));
+
+export default r;

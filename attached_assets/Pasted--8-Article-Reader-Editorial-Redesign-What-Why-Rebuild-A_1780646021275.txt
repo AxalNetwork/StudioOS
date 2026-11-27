@@ -1,0 +1,43 @@
+#8 - Article Reader: Editorial Redesign
+
+What & Why
+
+Rebuild ArticleReaderPage.jsx as a polished long-form reading experience — editorial hero, narrow reading column, sticky desktop TOC, reading progress bar, inline share, and a proper recommended-reading strip. The goal is Stripe Press–quality typography and layout in place of the current flat prose dump.
+
+Done looks like
+
+Opening an article shows a structured hero: category badge, large title, subtitle/deck, author byline with role chip, read time, and publish date — all with generous spacing.
+The reading column is capped at ~68 ch (≈680 px) and centred, with large body text and 1.8 line-height.
+H2s are visually distinct (heavy spacing above, hairline rule or weight contrast); H3s read as meaningful subheads, not slightly-bolder body.
+Blockquotes, callout boxes, key-takeaway blocks, image captions, tables, and code blocks are all styled distinctively within the prose column.
+A sticky table of contents appears in a right-side <aside> on ≥1280 px screens, generated dynamically from the rendered H2/H3 headings, with active-heading highlight as the user scrolls.
+On mobile/tablet the TOC collapses into a compact <details> disclosure block directly below the hero.
+A thin reading-progress bar sits fixed at the very top of the viewport (below the nav), filling left-to-right as the user scrolls.
+Share buttons appear inline after the hero metadata row and again at the foot of the article — same icons as today, better visual treatment.
+Tags and the recommended-reading grid sit below the article with clear visual separation.
+Dark mode works throughout: no hardcoded bg-white or text-gray-* without dark: pairs.
+All headings have auto-generated anchor IDs for deep-linking.
+The page is keyboard-navigable and meets WCAG AA contrast.
+Out of scope
+
+Changes to ArticlesPage.jsx (the feed/index page).
+Changes to the article authoring (ArticleAuthorPage.jsx) or admin queue pages.
+New backend fields — works with the existing API response shape (body_html, title, subtitle, author, author_role, author_website, sector, read_minutes, published_at, cover_url, tags).
+Custom fonts (stick to the existing font stack).
+Steps
+
+Reading progress bar — Add a fixed <div> at the top of the page that tracks window.scrollY / (document.body.scrollHeight - window.innerHeight) via a useReadingProgress hook and sets its width as a percentage. Style it as a 2px accent-coloured line, z-index above the nav.
+TOC extraction hook — Add a useTOC(bodyRef) hook that runs after the article HTML is injected into the DOM: query-selects all h2/h3 inside the body container, injects id slugs if absent, and returns a structured list of { id, text, level } entries. A second useActiveHeading(ids) hook uses IntersectionObserver to track which heading is currently in view.
+Editorial hero section — Replace the current flat header block with a structured <header> inside <article>: category badge (sector, uppercased with a subtle border), large H1 (clamp 2.5rem–3.5rem), subtitle in a lighter weight, then a metadata row with author avatar placeholder, author name/link, role chip, publish date, and read time. Below that, the inline <ShareBar> in a smaller, quieter style. Separate from the body with a hairline rule.
+Narrow reading column + prose overrides — Wrap the article body in a max-w-[68ch] centred column. Add a scoped article-prose CSS class (in index.css or a co-located <style>) that overrides Tailwind prose defaults: larger base font (1.125rem), line-height 1.8, margin-bottom between paragraphs 1.5em, H2 margin-top: 3em with padding-bottom: 0.4em and a bottom border, H3 margin-top: 2em as a spaced subhead. Style blockquotes with a left accent bar, callout/aside boxes with a tinted background, and <code> blocks with a subtle inset border.
+Desktop sticky TOC aside — On xl: screens, wrap the reading column and a <aside> in a two-column grid (column: 1fr 240px, gap 4rem). The aside renders the TOC list with position: sticky; top: 5rem, active item highlighted with the accent colour, smooth scroll to heading on click. TOC only renders when there are ≥2 headings.
+Mobile TOC disclosure — Below the hero (above the body) on <xl screens, render a <details><summary>Contents</summary>…</details> block that shows the same TOC list in a compact, bordered card. Default collapsed.
+Cover image + body assembly — Keep the existing cover image block but add a <figcaption> slot (use alt text if present). Inject the sanitised body_html into the reading column ref so the TOC hook can scan it.
+Footer: tags, bottom share bar, recommended reading — Style tags as small bordered pills. The bottom share bar uses a slightly larger treatment with a "Share this piece" label. The recommended-reading section (RecommendedCard) gets a typographic refresh: drop the gradient placeholder, use a flat tinted background, tighten the card to match the editorial register.
+Accessibility + dark mode pass — Audit every new element for dark: variants, sufficient contrast, aria-label on icon-only buttons, and keyboard focus rings. Ensure the TOC nav has aria-label="Table of contents" and active item has aria-current="true".
+Relevant files
+
+frontend/src/pages/ArticleReaderPage.jsx
+frontend/src/index.css
+frontend/src/components/PublicNav.jsx
+frontend/src/components/PublicFooter.jsx

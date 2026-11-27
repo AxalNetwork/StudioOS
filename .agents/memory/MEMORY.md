@@ -1,0 +1,23 @@
+# Memory index
+
+- [Test & tooling quirks](test-tooling-quirks.md) — nodejs-22 required; wrangler needs Node 22+; cloudflare-worker install needs --legacy-peer-deps; node:sqlite binds ?N by occurrence; Vite 8 uses oxc.target not esbuild.target; after fresh npm install clear frontend/node_modules/.vite or lazy chunks get "Importing a module script failed" / duplicate-React errors.
+- [GitHub access](github-access.md) — repo git OAuth is broken; use the GitHub connector via /tmp-installed @replit/connectors-sdk (listConnections('github') returns empty).
+- [Spin-Out Lab conventions](spinout-lab-conventions.md) — /spinout-lab: marketing when logged out, full app shell when logged in; its Worker test slices exact source strings, so new /state fields go in the wire handler.
+- [Apex asset ownership](apex-asset-ownership.md) — SUPERSEDED 2026-09-03 (read `CLAUDE.md` fact 4, `DECISIONS.md` D34/D36): since 2026-09-01 the `studioos` Worker serves both hosts' HTML and /assets/* from one `[assets]` build, and Cloudflare Pages is retired. The hazard that survives is the inverse — never add a path-scoped apex route.
+- [React Router redirect races](router-redirect-races.md) — guard redirects re-fire on urgent re-renders after auth/role flips; keep pending nav targets alive until the URL arrives.
+- [Owner work style](owner-work-style.md) — cancels queued follow-up tasks; wants direct in-session fixes, propose sparingly.
+- [Dev/Worker API parity](dev-worker-api-parity.md) — capability gaps must render as unavailable, never as empty data or invented values.
+- [D1 users column limit](d1-users-column-limit.md) — never ALTER users (at the 100-column cap); per-user state goes in sidecar tables joined by user_id.
+- [Deck data honesty](deck-data-honesty.md) — financial_models computed months are forecasts, never chart as traction; merged Problem/Ask slides still read validation/captable sections via prefixes.
+- [Fund money-column semantics](fund-money-semantics.md) — vc_funds.total_commitment is summed LP commitments, not the target; fund size lives in fund_size_cents; lpa_signed & slug are D1-only.
+- [Font LFS attribute quirk](font-lfs-attribute-quirk.md) — Space Grotesk is stored as a full blob despite *.woff2 LFS attributes; use a local .git/info override before pulling.
+- [Cloudflare cutover observability](cloudflare-cutover-observability.md) — Adaptive HTTP status counts work, but edge-TTFB fields do not; combine five-minute 5xx buckets with route/API probes.
+- [Production schema ownership](production-schema-ownership.md) — request-time DDL is dev/preview-only; production D1 migrations must create public-route schemas before deployment.
+- [Production auth verification](production-auth-verification.md) — do not assume the workspace JWT secret can mint tokens accepted by the deployed Worker; use a real production session or prove secret parity first.
+- [Pages build and routing](pages-build-routing.md) — SUPERSEDED 2026-09-03: there is no Cloudflare Pages project (retired, `DECISIONS.md` D36); the SPA fallback and the real asset 404s are the Worker's `not_found_handling` plus `index.ts`'s `/assets/*` handling, and the static headers are `frontend/public/_headers`.
+- [Investor deal scoping](investor-deal-scoping.md) — investor deal lists and deal-room reads must use the same relationship predicate in FastAPI and Worker.
+- [Desk edge-to-edge overrides](desk-edge-to-edge-overrides.md) — outer spacing resets must come after base desk rules or use higher specificity, otherwise later padding and max-width declarations restore the gap.
+- [Build cadence data honesty](build-cadence-data-honesty.md) — calendar events and roadmap changes are not operating rituals or review outcomes without explicit cadence records.
+- [Merge and rebase resolution](merge-rebase-resolution.md) — finish an active merge before rebasing; in rebase conflicts, stage 2 is upstream and stage 3 is the replayed commit.
+- [Preview workflow binding](preview-workflow-binding.md) — FastAPI must bind 0.0.0.0 for Replit to detect port 8000; keep that backend port internal to Vite.
+- [Local D1 system tables](d1-local-system-tables.md) — workerd owns `_cf_KV`/`_cf_METADATA`; exclude them from baselines and empty-target guards.

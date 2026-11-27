@@ -1,0 +1,34 @@
+{
+  "skill": "seo-search-intent-mapping",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "SEO Search Intent Mapping",
+        "task_scope": "Clusters search queries by intent and journey stage, mapping them to pages and content gaps rather than keyword lists.",
+        "evidence": [
+          "intent cluster to target page"
+        ],
+        "omitted_field": "search volume"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for intent cluster to target page."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "intent cluster to target page"
+    ],
+    "must_say_not_recorded": [
+      "search volume"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

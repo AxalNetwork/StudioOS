@@ -1,0 +1,66 @@
+
+Select alert #3959
+Log Injection
+Medium
+#3959 opened 20 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :578
+main
+
+Select alert #3958
+Log Injection
+Medium
+#3958 opened 20 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :523
+main
+
+Select alert #3957
+Log Injection
+Medium
+#3957 opened 20 hours ago • Detected by CodeQL in backend/.../routes/public_profiles.py :505
+main
+
+Select alert #3960
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3960 opened 20 hours ago • Detected by Semgrep OSS in backend/.../models/migrations.py :2270
+main
+
+Select alert #3918
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3918 opened 3 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :1170
+main
+
+Select alert #3917
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3917 opened 3 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :575
+main
+
+Select alert #3916
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3916 opened 3 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :556
+main
+
+Select alert #3915
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3915 opened 3 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :504
+main
+
+Select alert #3914
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3914 opened 3 days ago • Detected by Semgrep OSS in backend/.../models/migrations.py :278
+main
+
+Select alert #3913
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3913 opened 3 days ago • Detected by Semgrep OSS in backend/.../routes/progress.py :329
+main
+
+Select alert #3912
+Semgrep Finding: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+Error
+#3912 opened 3 days ago • Detected by Semgrep OSS in backend/.../routes/progress.py :126
+main

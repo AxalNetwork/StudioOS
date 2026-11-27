@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Community › Advisors &amp; Partners</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Advisors &amp; Partners</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">The page an admin uses to run the studio’s network of advisors and operating partners: who is in it, where each person stands, under what terms, and what they have done. The Demo Day deck list is one tab of it. Drawn for an admin, with one Super Admin board. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Advisors Partners Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['AP1', 'Overview · Admin · desktop 1440', 'Two rows of tiles, what needs the admin now, then who is in the network by stage, sessions per week, skills against what founders ask for, and active deals by type. Chart labels are HTML text, and every chart has View as table.', [D('AP1')]],
+      ['AP2', 'Overview · Super Admin · desktop 1440', 'The same page in the HQ shell, with the Content strip, the HQ badge and the Scope: HQ line. No control differs.', [D('AP2')]],
+      ['AP3', 'People · desktop 1440', 'Every advisor, operating partner and deck-only name. The table scrolls sideways inside its card and the person column stays in place. Two rows are picked, so the bulk bar shows.', [D('AP3')]],
+      ['AP4', 'Person · advisor · lightbox', 'Opened from a row, drawn as a centred lightbox: profile, standing, work, terms, deck and history, with Pause and Hide at its foot.', [D('AP4')]],
+      ['AP5', 'Firms · desktop 1440', 'Partner accounts with no firm, then every firm with its deal, directory listing and settlements due.', [D('AP5')]],
+      ['AP6', 'Firm · lightbox', 'Accounts, public directory, deals, settlements (read only), the partner profile and office hours.', [D('AP6')]],
+      ['AP7', 'Deck roster · desktop 1440', 'The ordered list that feeds the Team & Network slide, with the line after row 6 and a live slide preview.', [D('AP7')]],
+      ['AP8', 'Deck card dialog', 'Add a person, with one inline error; and an existing card linked to an account, whose profile fields come from the account.', [D('AP8a', 'Add', 680), D('AP8b', 'Edit · linked account', 680)]],
+      ['AP9', 'Confirm dialogs', 'a Hide from deck · b Archive (NEW) · c Pause in network (NEW, reason required) · d Detach account.', [D('AP9a', 'a · Hide', 680), D('AP9b', 'b · Archive', 680), D('AP9c', 'c · Pause', 680), D('AP9d', 'd · Detach', 680)]],
+      ['AP10', 'Attach account to firm', 'The admin chooses both the account and the firm. The refused case is one sentence.', [D('AP10', false, 680)]],
+      ['AP11', 'States', 'Loading, then the empty network, an unreadable chart, not recorded demand and sessions, an empty deck roster, a search with no match, and the moved notice.', [D('AP11a', 'Loading'), D('AP11b', 'Other states', 1200)]],
+      ['AP12', 'No permission', 'A member who is not an admin, a studio whose admin access HQ paused, and a subsidiary studio where settlements stay with HQ.', [D('AP12a', 'Not an admin', 1440, 720), D('AP12b', 'Access paused', 1440, 720), D('AP12c', 'Subsidiary · Firms tab', 900)]],
+      ['AP13', 'Phone · 390 wide', 'Overview stacked, people as cards with Filters and Sort, the person as a full-screen page, and the deck roster with Up and Down instead of drag.', [P('AP13a', 'Overview'), P('AP13b', 'People'), P('AP13c', 'Person'), P('AP13d', 'Deck roster')]],
+      ['AP14', 'Overview · dark · desktop 1440', 'AP1 in the dark colours, charts included.', [D('AP14')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

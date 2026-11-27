@@ -1,0 +1,450 @@
+# cloudflare-worker/test — what the worker guarantees
+
+`network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
+
+`research_global_funds_7326.test.ts` replays the worldwide manager import over
+the real fund migrations and through directory reads: preserves historical
+rows, reports, saved references, UID redirects and source reviews; suppresses
+duplicate managers, including declared vehicle-number suffixes and known legacy
+vehicle identities; preserves source takedowns and manual HQ mappings on replay;
+and verifies country facets, provenance and unknown financial/LP values.
+
+`aggregator_false_zeros_d301.test.ts` checks real SQLite aggregator counts, unreadable tables and draft suppression. Its first-day booking regression pins the clock so the seeded timestamp and preview share the exact window boundary.
+
+`admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
+branch refusal even with an elevation row, stale/non-TOTP sessions, the
+production cool-off prefix, and successful billing-audited writes over
+canonical SQLite tables with Stripe stubbed.
+
+`deck_qa_d1559.test.ts` mounts `deck_qa.ts` and `cycle_raise.ts` over the real migrated schema (migration 736) and checks that no likely-question answer, founder's answer or kept note states a figure no binding carries, that real objections rank first, the founder-only gates, and the kept answers' write-back, staleness and refusals.
+
+`deck_brand_kit_d1562.test.ts` mounts `deck_brand_kit.ts` and `decks.ts` over the real migrated schema (migration 737) and checks the kit write, a font that is not offered, an image that is not a kept image of the venture, the kit read (`kit.deck`, `font_options`, `pick`), Apply brand as one new version with no model, and a contrast failure that writes nothing.
+
+`program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
+newest-wins HQ storage, monthly source counts, partial failures, roles,
+throttling and the dated in-use read with synthetic SQLite records.
+
+```
+node --experimental-strip-types --no-warnings \
+     --import ./cloudflare-worker/test/_ts-loader.mjs \
+     --test 'cloudflare-worker/test/*.test.ts' 'cloudflare-worker/test/*.test.mjs'
+```
+Usually you just want `npm run test:drift`, which runs this plus everything else.
+
+`financial_access_2460.test.ts` mounts the financial, revenue and legal routers
+over the real SQLite schema. It checks every outside role, residual founder
+ids, company boundaries, unchanged models after refused writes, and owner/admin
+access. It also pins the separate deal-room partner reader and the recompute
+edit gate so future read-only relationships cannot acquire writes accidentally.
+
+`authz_share_links_d4570.test.ts` (#4570, D4570 slice 3) asks the share-link routes through the real Worker on the
+migrated schema: the cap table scenario and venture links and the scoring report link refuse a forged, unstored,
+cross-kind, spent or revoked token and every account the link does not name, with nothing of the record in the
+refusal and no view, open or audit row written; another founder or an admin cannot revoke or mint the owner's link.
+
+`authz_calendar_writes_d4570.test.ts` (#4570, D4570 slice 4) asks the calendar's eight record writes (IC meeting RSVP,
+cancel and reschedule; check-in cancel and reschedule; manual-row edit and delete; push to the caller's calendar) through
+the real Worker on the migrated schema, as every account that is not a party, an attendee in the wrong role, a disabled
+party and no credentials: refused, nothing of the record named, and no row, copy mapping or audit row changed and no
+call made to the calendar provider. A non-party gets the same status and body as for a missing id on every one of them.
+
+`authz_exports_downloads_d4570.test.ts` (#4570, D4570 part 5) asks ten export and download routes through the real
+Worker on the migrated schema: the competitor and deck-review exports, a wellbeing resource's file, a webinar's
+calendar entry, both calendar feeds, and the deck print, publication, analytics and video source links. Every
+non-party, a removed enrolment, a disabled owner, no credentials, a session without a token and a forged, tampered,
+expired, replaced, wrong-scope or other-route token are refused alike, with nothing named, no row changed and no stored
+object opened; the rightful party then gets each file.
+
+`authz_money_d4570.test.ts` (#4570, D4570 part 6) asks ten money routes through the real Worker on the migrated
+schema: a company's receiving instructions and their reveal, a session charge on both mounts, an engagement invoice
+and its mark-paid, an order's invoice PDF, a saved card's detach, an LPA signature and the retired commitment
+withdraw. Every non-party, a co-founder, a withdrawn investor, another LP in the same fund, an LP without KYC, an
+admin where the record is a member's, a support session, a disabled party and no credentials are refused, with nothing
+named, no row changed, no reveal recorded and no charge or detach sent; the rightful party then gets each answer.
+
+`authz_venture_scores_d4570.test.ts` (#4570, D4570 part 8) asks the six venture-scorecard routes (the full read,
+sharing, trajectory, the investor's deal read, corrections and recompute) through the mounted router on the full
+schema. Another venture's founder, an advisor with no share or a share switched off, a removed co-founder, a roster
+advisor, an investor by venture id or off the deal, a disabled founder and no credentials are refused, with nothing of
+the venture named and no score, correction, sharing or log row changed; each rightful party then gets its read.
+
+`authz_partner_d4570.test.ts` (#4570, D4570 part 9) asks the 43 `/api/partner` ledger routes (delivery, offers and
+product testing) through the mounted routers on the full schema. Another firm's partner gets 404, a founder, investor
+or advisor 403, an account with no firm 400, no credentials or a disabled account 401, with nothing named and no row or
+file changed; the firm's own partner then passes every gate. An unknown consent-link token answers 404 and writes
+nothing. Its first test fails if a ledger route under `/api/partner` is missing from it.
+
+`bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
+masked resolver previews and source add validation over the real migrations,
+with all network access refused.
+
+Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
+from the actual schema or a specific migration file — not against mocks. A
+handler that would fail on D1 because of an unknown column fails here too,
+which is the whole point: D1 rejects the entire statement, so one bad column
+name silently empties a screen in production.
+
+`_ts-loader.mjs` strips types at import; `fixtures/` holds shared rows.
+D1528 (#3847): `_agent_engine_fixture.ts` is the agent engine's world: the real migrated schema, the scope objects as `ScopeCore`s over in-memory storage, a fake Workflow binding and queue, a step harness that memoises by step name and can crash before a result is saved, and a fake `agentRun` that keeps E2's one-hold promise. `agent_engine_d1528.test.ts` (the loop, the queue, the routes, erasure), `agent_runtime_contract.test.ts` (the runtime contract, every case on `do` and on `sdk`, whose Agent the fixture fakes as `FakeSdkHost`, and the `do` → `sdk` → `do` switch) and `agent_engine_bindings_d1528.test.ts` (wrangler.toml's three tables and a branch's config) run on it; each case removes its copy of the template as it closes. #3852: `agents_sdk_rules_3852.test.ts` holds the Agents SDK runtime to its three rules (no model call but through `run()`, no SDK tool, no approval but the approvals queue), the exact pin and the wiring.
+`_baseline.mjs` pulls one table's `CREATE TABLE` out of `schema_baseline.sql` so a
+fixture is the schema production has rather than a hand-copy that drifts from it —
+three tests had each grown their own copy of that reader, and one of the copies
+had already been caught reading a column name production does not use.
+`baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+`_schema_once.mjs` (D4133) builds the whole schema (the baseline and every
+migration above `BASELINE_CUTOFF`) once per run into `node_modules/.cache/studioos-schema/`, keyed by a hash of those files,
+and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { below: N })`
+is the schema as it stood before migration N. A test that needs the migrated
+schema calls it rather than replaying the files, which took 4–10 s per file.
+`schema_once_d4133.test.ts` holds the copy to a fresh build.
+`_schema_budget.mjs` (D8467) is what keeps that true. `_ts-loader.mjs` imports it, so every Worker test
+process counts the whole migration files it executes; two chains' worth is allowed (one build of the schema, and
+as much again for cuts or for re-running a migration) and each one past that throws, naming the file and the helper to call instead. The shared
+build is not counted. `scripts/test-schema-replays.txt` lists the files that were over when the rule arrived;
+a file leaves that list by being fixed, and a new file is added only when it is about the build itself.
+`SCHEMA_REPLAY_REPORT=<file>` turns the refusal off and writes each file's count, one JSON line per test file.
+`schema_replay_budget_8467.test.mjs` holds it to that on a three-migration chain of its own.
+D1174 regressions live in the use-of-funds, Raise card/record, financial
+integrity and access suites. Synthetic Mercury rows prove accepted mappings,
+private owner/session/company scope, missing versus zero, and local read
+failure; the provider is forbidden. Cash timing and the shared split reader
+are checked against the actual Worker services.
+
+`_engine_schema.mjs` (D757) gives a world whose sessions reach the Validate engine
+what it reads: migrations 453, 465 and 487, `queue_jobs`, and the member and venture
+columns `writableSession` checks.
+`_guard_stub.mjs` (D763) answers Llama Guard's calls on a stubbed `env.AI` and passes
+every other call through: the guard fails closed inside `run()`, so a stub that does not
+answer it refuses every member run. It answers free, so a test keeps its own run's figures.
+`_fake_ai.mjs` (D1511) is the fake Workers AI binding the deck v2 suites run on: recorded
+outputs, never a model, and each failure a real binding gives injected on demand (a 429,
+error 3040, a timeout, a guard block, bad JSON, over-capacity text, a non-image answer).
+`schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
+and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
+cannot see, since reading the source tells you a `WeakMap` is there but not that it
+is consulted with the binding as its key.
+`_codeOnly.mjs` gives a source-scanning test the code without the prose, plus
+`callArgs` for reading one call's arguments past the braces a regex chokes on —
+an assertion that bans a shape fails on the comment explaining why that shape is
+gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
+the first `)`.
+
+`_recorded_ai.mjs` (D1511 part 2) answers a whole one-click build from recordings
+(`fixtures/fake_ai_recordings.json`, venture `fixtures/oneClickVenture.ts`), so the visual-regression
+server (`frontend/tests/visual/server.ts`) draws the accepted deck with no model; `recorded_ai_d1511.test.ts`
+holds it to the one-click bar and runs the seven injected failures through it.
+
+D1119: `admin_programs_d954.test.ts` also checks part 4's six audit actions,
+claim window/kind counts, strategic requests, successful zeroes and independent
+failed reads against the migrated SQLite schema.
+
+D1159: `fund_admin_d1159.test.ts` covers named distribution lines without
+arithmetic changes, both new Admin acts and their audit, frozen/support/member
+refusals, preserved institutional GP scope, and independent booklet queue reads.
+Every external fetch is forbidden; no Mercury call reaches a provider.
+
+| File | Guarantee |
+| --- | --- |
+| `capital_access_d1191.test.ts` | D1191: real-route access, staff summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the canonical schema. |
+| `dataroom_deck_sources_d1602.test.ts` | D1602: migrated data-room source permissions, quotes, billed extraction, code readers, citations, stale versions and withdrawal. |
+| `dataroom_deck_sources_d1602.mutations.mjs` | D1602: reproducible isolated-loader mutation proof, with passing original controls before and after; source files are never edited. |
+| `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
+| `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
+
+`workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart, concurrency and settlement identity (D5570 part 2).
+`swarm_audit_do_5586_p2.test.mjs` hosts the audited swarm admission in a real SQLite Durable Object with a real D1: request, settle and a venture snapshot round-trip, the audit copy survives a D1 failure and a restart (D5586 part 2).
+`workspace_admission_do_5586_p3.test.mjs` reaches the real `WorkspaceAdmission` class through its binding with the typed client (Miniflare, real D1): #5570 admission and the swarm round-trip across a restart, another venture refused before any stub call and inside the object, `admission_unbound` without a binding, the audit still copied to D1 (D5586 part 3). `workspace_admission_client_5586_p3.test.ts` covers the client without a runtime and the wrangler.toml wiring.
+`_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
+
+## Conventions
+
+- Build the database from the migration the feature actually ships with, so the
+  test and production see the same columns.
+- Assert the **response shape**, not just the status. A route that returns a
+  bare array where the SPA expects `{ items }` renders nothing and throws
+  nothing.
+- Cover the deny path. Most bugs worth catching here are a scope that returned
+  too much, not a query that returned too little.
+- `schema_guards.test.mjs` is the cross-cutting one: it walks the whole worker
+  source and asserts repo-wide rules, and it is usually the file to extend when
+  a new invariant needs holding.
+- **A remote call that never answers is not an error, so no `catch` sees it.**
+  `auth_path_bounded.test.mjs` holds the auth path to a deadline on every awaited
+  remote call, and runs the rate-limit middleware and the schema bootstrap
+  against stubs whose promises never settle. Test a stall, not just a failure:
+  the 30s sign-in outage of 2026-09-12 passed every existing test (D74).
+
+D642: `usage_storage_d642.test.ts` exercises caller-only storage aggregates through JWT/Hono and the canonical SQLite schema (including migration 323), covering company independence, unknown sizes, partial failures, precision and recording attribution.
+
+D1167: `storage_plans_d1167.test.ts` pins the owner's storage table, resolves
+effective plans and recorded persona/LP entitlements against canonical SQLite
+DDL, and holds the anonymous public plans projection and general catalogue to
+the same allowances, with read failures and privacy/read-only counterexamples.
+
+D691: `compliance_events_columns_d691.test.ts` builds the full baseline and every
+post-cutoff migration with foreign keys on. It checks Grow obligation writes,
+API state mappings, seeded compliance events and calendar reads, and bans SQL
+references to the absent migration-034 columns throughout Worker source.
+
+D754: `whatsapp_switch_on_d754.test.ts` holds the two independent chat rollout
+switches, authenticated off acknowledgements, hydrated canary membership, Axal’s
+own-number guards, WhatsApp media deadlines/expiry and split calling reasons to
+real SQLite fixtures with every provider stubbed. Its in-process mutation checks
+run the same positive scenarios before restoring ordinary modules.
+
+D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It also preserves historical receipts when HQ adopts their price, bounds ordinary reads to one purchase lookup, handles absent legacy tables without hiding genuine failures, and covers authentication. It embeds thirteen mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.
+
+D895: `pitch_worker_d895.test.ts` mounts the deck, branding, NDA and pitch-link
+record routes over the migrated schema with synthetic data. It covers read-only
+admins, advisor denial, admitted cofounders, measured runway, absent versus zero
+review scores/counts, owner-plan export branding, live brand-kit selection,
+founder/Lab score separation, canonical pairwise NDA state and one activity row
+per completed write. `decks.autofill.test.ts` also checks AI-only coverage is zero.
+
+`deck_share_null_limit_d895.test.ts` covers migration 549's data, index, foreign-key
+and sequence preservation, nullable fresh/legacy bootstraps, NULL module links,
+finite editor caps, concurrent claims and unchanged expiry/revocation/browser guards.
+
+D992: `partner_profile_verdicts_d992.test.ts` holds profile verdict validation,
+explicit clearing, omission, audit recipients and route refusals to the full
+migrated SQLite schema; it also records the shared plan policy's admin exemption.
+
+D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews and disconnect using `_google_workspace_fake.mjs`; `fed_ownership.test.ts` holds the shared ledger-owner helper; `google_workspace_feeds.test.ts` pins the empty feed registry, audience and eight read fragments. No real Google host is called.
+
+D1144: `pmf_store_d1144.test.ts` exercises migration 598, signed change-only snapshots, scoped module/history/Re-score, checklist confidence and atomic audit/rollback on SQLite. `pmf_engine.test.ts` keeps the shared pure engine and collector contract.
+
+`deal_context_d1150.test.ts` executes migration 600 and real source tables for
+derived stages, per-user/firm visit markers and private notes, including audit
+rollback, no admin bypass, NDA exclusion and anonymous change metadata.
+
+`deal_workroom_d1153.test.ts` mounts D1153's routes over canonical SQLite DDL and
+migration 595: investor-only access, the room's door and one open request, the
+round as a count and a total with no other investor named, and a withdrawal that
+needs a reason and records it only when it withdrew.
+
+D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
+
+D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, read-only support, audited initialization, cross-venture ids, Base projection, partial legacy splits and financial reconciliation, legacy-only metadata and concurrent edit conflicts, stale-copy repair errors, orphan milestone deletion, copies, racing deletion and hire audits, zero/missing values, precedence, bounded runway history, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
+
+`calendar_d1206.test.ts` checks mounted Free-investor reads and subscriptions,
+Professional-only IC creation, advisor fallback ownership, partial-source error
+codes and safe diagnostics, and Calendly exclusion from both provider copies.
+It also checks local-licence scopes, HQ elevation, constant-query populated memberships, private-kind exclusions,
+unavailable remote coverage and personal sync/export isolation after a scope
+read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed subscriptions
+with token ownership, revocation and join-link boundaries intact.
+Staff-view audit tests verify both existing stores contain only scope/window
+details, repeated views are recorded, and personal/refused/invalid reads create
+no staff-view audit entry.
+Every provider call is stubbed or refused; all rows are synthetic.
+
+| File | Purpose |
+|---|---|
+| `raise_evidence_d1263.test.ts` | D1263: source dates/labels, founder decisions, privacy, refresh and atomic evidence trails over real SQLite. |
+`kyb_d1231.test.ts` drives migration 616 through Hono/auth and real SQLite:
+owner-check explanations, fixed-expiry KYB reconciliation and invalidation,
+studio/role/step-up/freeze refusals, masked/audited showings, private Access-gated
+R2 streams, rejection purge/retry, atomic audit/upload rollback, source discovery,
+imports and licensed studios. Twenty injected route faults run against the same
+scenarios before and after restoration. All external fetches are refused.
+
+D1231 follow-up: company member reads reflect expiry and legal edits; company submitter/membership self-review and unsubmitted corporate profiles are covered. Twenty-seven injected faults cover routes, the member status projection and submission-state derivation, each checked before and after restoration.
+
+D1231 concurrency tests cover displayed If-Match tokens, source edits during a request, staff-created cases without false submitters, dismissed imports and collision-safe migration of legacy reviewer assignments/history.
+
+| File | Purpose |
+| --- | --- |
+| `deal_insights_d1151.test.ts` | Real SQLite tests of D1151 deal access, NDA masks, publication, aggregates and sourced sharing. |
+| `messages_retirement_d1345.test.ts` | Phase 1: real mounted 410s and own-LP / own-advisor Email recipient scopes on migrated SQLite. |
+| `messages_drop_d1345.test.ts` | Post-rollout phase: migration `202611022352_retire_messages` asserts all four retired Messages stores are empty before dropping them, preserving Email. Release only after the retirement Worker is confirmed live. |
+#4568 R2-04: `runtime_ddl_4568.test.ts` holds the cohort applications bootstrap, through the real cron tick, to no ALTER against an up-to-date database across fresh isolates, to one bootstrap on a database missing the columns, to a thrown `cohort_schema_not_ready` that is retried on a genuine failure, and to a safe concurrent start; and holds `check-runtime-ddl`'s ratchet to refusing growth, a new blind file and a stale entry.
+#4567 (D4567): `_d1_bench.ts` is the D1 contention benchmark's harness. It meters every statement the Worker's own services issue over `_storage_schema.ts`'s migrated template, seeded with #4566's synthetic fixtures and with inference stubbed. It drives mixes A–E, closed loop or ramp, and checks the invariants afterwards. `d1_benchmark_4567.test.ts` is its tiny, deterministic CI case; `npm run bench:d1` runs it at scale.
+
+#4568 (D4568): `usage_indexes_4568.test.ts` holds migration 202611070806's two partial indexes and `agentArea` to what they must not change: plans before and after, `chargedFor` against a reference model, identical money across a whole mix with and without the indexes, and the dependency matrix. `_d1_bench.ts`'s `indexControl` and `withoutCandidates` are its before-and-after measurements.
+
+D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
+
+| File | Purpose |
+| --- | --- |
+| `session_processing_recovery_3711.test.ts` | No-audio legacy recovery, transcript-hash summary reuse and private stage failure diagnostics for #3711. |
+| `stripe_mode_d1433.test.ts` | D1433 (#3703): mode-stamped catalogue, checkout readiness before provider calls, webhook receipts/retries/concurrency and signature timestamp boundaries; mocked Stripe only. |
+| `project_deck_hard_delete_3747.test.ts` | #3747: migrated SQLite deck/share/note/image cleanup, venture isolation, 500-object R2 pages, rollback, durable retries and per-sweep schema discovery; synthetic records only. |
+| `deck_atomic_save_3748.test.ts` | #3748: migration 713 preserves duplicate deck payloads and enforces unique version/current rows. |
+| `work_board_3969.test.ts` | D1614 W1 (#3969): authenticated project-only boards, task fields, moves, close reasons, dependency races, actor events, unavailable reads, migration 762 over legacy rows, the engine's own mount and the readiness hook, over real SQLite. |
+| `work_items_3993.test.ts` | D1614 W7 (#3993): per-project numbering and the company 404, cleaned comment Markdown, mentions and their notices, an agent's comment and cost, an agent that cannot close, review (approve, request changes with a comment), drafts that need Accept (and a racing accept), labels and milestones with filters and sort, and migration 763 over legacy rows, over real SQLite. |
+| `deck_grid_diagram_d1542.test.ts` | D1542 (#3780): the `grid_diagram` job: every number stripped ("$3M ARR" → "ARR"), the family of types (Flow, Cycle and Matrix generate; the rest are later), overflow refused by `fitProblems` and each node's box, the plan on the Diagrams group's model, a proposal nothing saves before Accept, and `POST /api/decks/:id/diagrams/check` against its contract. |
+| `deck_record_diagrams_pin_d1542.test.ts` | D1542 (#3780): the one-click path's `recordDiagrams` pinned, its whole output for one venture, the composer's blocks drawn from it, and no reach into the `grid_diagram` job. |
+| `grow_campaigns_d4447.test.ts` | D4447 (#4447): real-SQLite campaign plans, gates, validation, scoped links, attribution and missing/unreadable figures. |
+| `general_counsel_4421.test.ts` | #4421: canonical role metadata on proposal/queue reads, owner isolation, spoof prevention and the shared run instruction. |
+
+D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.
+
+`team_allowlists_4422.test.ts` checks D4422 scope inheritance, manager/plan/approval bounds, atomic audit and use-time revocation, including agent MCP calls, over real SQLite.
+
+| `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |
+| `comarketing_split_4439.test.ts` | D4439: investor refuses every member read/write; partners/founders keep their existing access; HQ reads historical investor pitches. |
+| `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
+| `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
+| `account_licences_4472.test.ts` | D4472: additional licence union, grants, auth, atomic appointment rollback and co-marketing admission/revocation with primary-only HQ. |
+| `campaign_options_4487.test.ts` | Venture-isolated segment/work selectors and existing writer gates for Distribution campaign form options (D4487). |
+
+- `grow_overview_4485.test.ts` — Distribution's scoped monthly figures, spend provenance, ISO week, writer-only replies, personal connection isolation and independent failures (D4485).
+`grow_ads_4490.test.ts` checks migrated Ads reads, missing months, Mercury precedence, team visibility, authentication and venture isolation.
+| `distribution_ask_4488.test.ts` | D4488 metered proposals, venture/allowance gates and safe acceptance without sends. |
+| `grow_inbox_4494.test.ts` | D4494: real SQLite mounted Inbox reads, per-member scope/read receipts, null on failures, no sends, and Outlook lookup/paging safety. |
+
+`redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
+advisor CTA and stored search-result URLs after redirect retirement (#4415).
+
+`ai_gateway_slice_4556.test.ts` (D4556) runs one third-party model through AI Gateway on a stubbed binding over the real AI budget migrations: every switch, config, task, data-class and Advisor refusal makes no call, success settles once from the exact reported usage, missing usage is never zero, retries honour `retry-after` within a bound, a timeout is unknown completion and is not retried, payload logging is off on every call, and no Advisor module can import the provider path.
+
+`upstream_lease_d5338.test.ts` (D5338) drives the shared upstream lease in the real `AiGovernor` class over a storage map that outlives the instance (`_ai_governor_fixture.ts`): several tenants and two products on one quota, a restart, an eviction and a deploy, an expired, late or duplicate release, a missing or failing binding, bounded waiting, retries counted against the same lease, a timeout keeping its slot as completion unknown, one charge per execution, and the publications caller passing the lease.
+
+`lab_admission_evidence_4657.test.ts` (D4657) runs the Lab's real routes and services on `_storage_schema.ts`'s migrated template. It covers:
+- `/start` refusing an account that was never admitted, a sanctioned one, a graduate and one whose cohort opens later;
+- an explicit legacy enrollment;
+- a retryable 503 for a read that fails;
+- milestones that need saved work from the founder's own project, and a replay that pays once;
+- the reconciler catching up a lost grant and unrecorded work;
+- the bounded cron walk;
+- the activation writing the enrollment, and the gate following it;
+- every completion rule run on the real schema.
+
+`_lab_evidence.ts` is its helper, and the helper other Lab tests use: it applies the enrollment migration and writes the invented saved work that proves a milestone.
+
+`lab_lifecycle_4658.test.ts` (D4658) runs the Lab's lifecycle services and routes on the migrated template. It covers:
+- a stale week never written over a higher one;
+- a graduate never reopened by a start, a reinstatement or the activation;
+- the cycle activation interrupted at its batch, then resumed until it converges, completing only when every applicant is done and duplicating nothing on a rerun;
+- approval against withdrawal in both orders, including the race where the approval lands between the withdrawal's read and its write;
+- notification retry: failed and cut-off sends, the conditional re-claim, and abandonment.
+
+`lab_graduation_venture_4659.test.ts` (D4659) runs the Lab's routes and services on the migrated template. It covers:
+- the graduation view pinned to the catalog;
+- incorporation recorded before weeks 1–3, which is not graduation, and the credential issued once the rule is met;
+- several projects needing the founder's choice, and an older project never proving a step;
+- binding the only project, rename, deletion, and a live venture never switched;
+- the public lists naming the venture;
+- the migration's credential, single-project and needs-choice paths;
+- a held credential grandfathered until it is revoked.
+D4856 (#4856): `catalog_modes_4856.test.ts` holds Platform's catalogue summary to `getCatalog`'s mode rule (current, other and unknown rows), and `storage_populations_4856.test.ts` holds the storage read's members, staff and unattributed populations to their sum.
+
+#4569 (D4569): `_topology_model_4569.mjs` is the synthetic topology model of D4569's options A (one D1) and D (balance homes keyed by the payer, with a directory, home markers and an outbox relay), over in-memory node:sqlite with `poc_` tables; a test of the design, imported by nothing in `src`. `d1_topology_4569.test.mjs` drives it at 1, 10 and 1,000 tenants with a hot member, cross-company work, scope and sponsor moves, a member move behind a stale cache, injected settlement faults, outages and concurrent same-key retries, asserts the financial invariants after each, and shows each guard and each check is load-bearing.
+
+D5074 (#5074): `data_room_capabilities_5074.test.ts` holds the Data room read's `capabilities` to the writes' enforcement for the founder, an accepted co-founder, an advisor member, an investor, an ordinary admin, a Super Admin and the support read, capability by capability, and pins `frontend/test/_data_room_capabilities.mjs` to the Worker's map.
+
+D5065 (#5065): `build_systems_states_d5065.test.ts` holds Operating Systems to one connection-state model — the shared state module in `src/services` — across the module read and the one-record read: active, error, revoked, disabled, an unrecognised status, a kind that maps nothing, and Workspace. It pins that a mapped connection is never "Not connected", that no record's pill, State fact and subtitle can disagree, that the primary action is Manage for a healthy system, Reconnect for a failing or disconnected one and Choose connector for an unmapped kind, that Workspace names the sync and sync-log fields that do not apply instead of reading as a missing row, and that another member's private connector name stays private in every state. Its mutation section breaks each guarded line on disk and re-runs this file in a child process filtered to the tests that must then fail, because the record read reaches the Build record specs through the cycle-records route and only a real import of the mutated tree exercises it; the source is restored in a `finally`. It also pins the SPA's tile map in `frontend/src/pages/cycles/CycleCharts.jsx` to the Worker's states, because a state with no tile of its own is drawn as Not connected.
+D4647 (#4647): `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter-end default, `frontend/src/lib/reportingPeriod.js`, to the Worker — to `portfolioMetrics.ts`'s `completedPeriod` for which quarter and to `fundReportBuild.ts`'s `lastClosedQuarter` for its last day — every month across a leap year and two year boundaries, so the page cannot drift from either. It also holds the civil-date behaviour, because the old default read a local midnight and printed its UTC instant, which is the day before the quarter end for every reader east of UTC.
+
+D5673: `cloudflare_sources_5673.test.ts` covers paginated provider metadata, real SQLite replay/CAS and protected source reads.
+
+D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, independent SQLite/R2 metadata checks, silent consumer/canary loss and guard mutations.
+D5674: `cloudflare_bot_5674.test.ts` checks content-free stage routing, existing episode keys and evidence-qualified recovery.
+
+D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback, host replay/cleanup and promotion guards without a customer meeting.
+| `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
+| `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
+| `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+| `workspace_containment_5567.test.ts` | D5567 part 4: the fail-closed containment gate (evidence source/freshness from an injected clock, egress per network mode, metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment credential scan, and the real compute VM start options and image user; synthetic only. |
+| `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
+| `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
+| `workspace_checkpoint_r2_5568_p2.test.ts` | D5568 part 2: the R2 checkpoint adapter on a faultable in-memory bucket: key, namespace and prefix scope, checksum on put, read-back loss, null and corruption, corruption at rest, paging, the fenced delete, and the service's typed refusals through it; mutations R1 to R7 in its header. |
+| `workspace_checkpoint_store_5568_p2.test.mjs` | D5568 part 2: the pointer and runner stores on a real SQLite Durable Object with the adapter on a real Miniflare R2 bucket (test-only object): racing commits, restart, a runner cancel fencing the old writer, rollback, the store's refusals, the fenced head, retention GC; mutations S1 to S7 in its header. |
+| `workspace_placement_5570.test.ts` | D5570: placement order and reasons, Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a restarted instance, reconcile-before-free, bill once; injected clock, synthetic only. |
+| `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
+| `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
+| File | Guarantee |
+| --- | --- |
+| `mail_conversation_history_4662.test.ts` | D4662: validated durable sent identity and quote snapshots, draft deletion, migration backfill, tied pages and uncertain outcomes with a non-delivering adapter. |
+| `platform_signal_summary_5672.test.ts` | D5672: synthetic authorization and unavailable-reader behavior. |
+| `security_triage_5680.test.ts` | D5680: synthetic authorization and unavailable-reader behavior. |
+| `_compute_world_4557.ts` | D4557: synthetic migrated SQL, R2, VM and canonical grant world. |
+| `compute_bridge_4557.test.ts` | D4557: real broker/Workflow/proposal, scope, quota, callback and erasure journeys. |
+| `compute_host_4557.test.ts` | D4557: persisted host lifecycle, cancellation, replay and artifact validation. |
+| `compute_vm_4557.test.ts` | D4557: native adapter image, scheduling, readiness and stop faults. |
+| `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
+| `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
+| `azure_jobs_executor_5571.test.ts` | D5571: disabled Azure Container Apps Jobs adapter on a synthetic ARM endpoint: digest-pinned secret-free template, fail-closed capabilities, ambiguous start located without a second start, status mapping, quota/revoked-identity/cross-region refusals; shared start reservations, durable refusal outcomes and pending-stop reconciliation. |
+
+`package_offers_5024.test.ts` exercises real commercial package acceptance over
+the complete SQLite schema and authenticated routers: frozen prices and
+composition, grant conflicts, atomic rollback and competing decisions, policy
+versions and offer-bound agreements, normal branch delivery failure, and
+read-only historical contract values. Seeded HQ-only/unready items are refused
+without weakening Program Grants; successful cases publish a compatible test
+catalogue version only in the fixture.
+| `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
+| `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |
+| `build_feature_removal_6024.test.ts` | D6024: real record gates, protected/racing references, FK cascades and atomic actor audit, must-have demotion, canonical metrics and retained plan history. |
+
+`shared_arr_retention_6178.test.ts` covers recorded ARR/net retention, founder snapshot/context/save/send, source proof, unit rejection, Report Figures parity, sent immutability and investor sharing/NDA boundaries.
+`consultation_slot_6394.test.ts` (#6394) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+| `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
+`investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+`advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+| `network_intro_offers_6637.test.ts` | D6637: real migrated SQLite authorization, consent, failure and concurrency regressions. |
+| `network_tie_candidates_6636.test.ts` | D6636: real migrated SQLite authorization, consent, failure and concurrency regressions. |
+
+| `deal_flow_attention_6424.test.ts` | D6424: mounted per-firm stale rules, visible unanswered diligence requests, firm/reviewer isolation, null/unreadable counts and support refusal. |
+| `file_recovery_6428.test.mjs` | D6428: runs synthetic-only Python recovery regressions through the standard Worker test suite. |
+| `deal_activity_sources_6430.test.ts` | D6430: mounted real-SQLite data-room grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and per-source failures. |
+| `licence_agreement_revision_6562.test.ts` | D6562: recorded rendered-input snapshots, truthful comparisons, independent readiness, legacy uncertainty, frozen text and unready-send refusal over the full migrated schema. |
+| `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
+
+| `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
+| `approval_board_pages_5876.test.ts` | Mounted summary and active-page queries across the three approval lanes (#5876). |
+| `research_global_funds_7325.test.mjs` | D7325: evidence validation, canonical catalogue preservation, source takedowns, country facets, duplicate suppression, replay and fault-injection checks on real SQLite. |
+
+| File | What it covers |
+|---|---|
+| `error_privacy_7256.test.ts` | D7256: HTTP error privacy, bounded logs, owner/admin diagnostics and preserved validation/auth refusal contracts. |
+| `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `research_global_funds_7585.test.ts` | D7585: historical preservation, original verification dates, independent source citation, competing manager identities, country filters and in-memory guard mutations for the next worldwide import. |
+| `research_companies_registers_d7316.test.mjs` | D7316 part 2: native registry identity/status and retained-hold admission; record/file hash tampering; shared-domain/name conflicts; immutable evidence and exact SQL ownership; real-schema insert-only replay, unknown metrics, and source-ledger overwrite refusal. |
+| `grow_export_6103.test.ts` | D6103: Grow's Feedback and KPI CSV exports: writers only (and `records.can_export`), the table's search/filter/sort, names for writers and never an email, monthly KPI history in cents with currency, empty never 0, formula cells neutralised, the 5,000-row cap refused with a sentence, each export logged. |
+| `positions_today_d6226.test.ts` | D6226: the positions list, analytics and per-company reads carry the Worker's UTC `today` under a fixed clock; analytics `as_of` stays null without a date. |
+| `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
+
+| `research_recording_7587.test.mjs` | D7587: real Workers requests prove an abandoned bootstrap cannot strand the next request, with per-binding readiness. |
+| `research_email_7587.test.ts` | D7587: elevated HQ interview mail context, ordinary-admin and branch refusal, transcript exclusion and no invented address. |
+| File | What it covers |
+|---|---|
+
+| `file_recovery_6653.test.mjs` | D6653: include independent file recovery Python fixtures in the standard Worker runner. |
+| `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
+| `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
+| `skill_passage_citations_7700.test.ts` | D7700: selected-document passage citation qualification, file/ref/sequence/read-state isolation, missing/unknown/duplicate/capped evidence and preserved dotted paths under evaluator version 5. |
+| `fund_session_schema_7701.test.ts` | D7701: data-preserving fund target CHECK expansion, all session/duty fields, indexes, foreign keys, constraints and deleted AUTOINCREMENT high-water marks on populated and empty tables. |
+
+`research_company_publishers_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_insert_guard_7810.test.ts` verifies the D7810 contract against synthetic inputs and the canonical migrated schema.
+`research_company_read_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+
+`research_company_read_guard_7819.test.ts` verifies the D7819 contract against synthetic inputs and the canonical migrated schema.
+`positions_unavailable_6201.test.ts` (D6201) checks each failed Portfolio distributions, KPI definition and submission read against real SQLite without successful empty-set fallbacks.
+`research_project_subject_notes_7818.test.ts` verifies the D7818 contract against synthetic inputs and the canonical migrated schema.
+`icp_complete_archive_6003.test.ts` (D6003) exercises confirmed, scoped archive, logging, retained interview history, stale refusal, active options and the real list sorts.
+| `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
+| `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
+| `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+| `fund_lp_maintenance_6237.test.ts` | D6237: mounted gates, contact identity, commitment floor, deletion history and rollback. |
+| `csv_safe_parity_7811.test.ts` | D7811: shared formula-safe CSV cases without changing legacy exports. |
+
+| `market_figure_writers_7705.test.ts` | D7705: real-SQLite create/answer actor history, zero preservation, refused-answer fallback, atomic rollback and literal/dynamic writer inventory. |
+| `research_comparison_members_7815.test.ts` | D7815: overlapping mounted add-member requests in all arrival orders preserve the live limit, distinct positions and duplicate response. |
+| `portfolio_reporting_settings_6214.test.ts` | Rule history, inherited defaults, GP ownership, attributed writes, stale revisions and period/stage rules. |
+| `work_graph_media_storage_5583.test.ts` | D5583 part 2: bounded admission, scoped classes, immutable snapshots, existing blob readback, class-specific reconciliation, cross-project refusal and cost/audit. |
+| `work_graph_media_quota_5583.test.ts` | D5583 part 2: actual migrated cumulative owner quota, dedup, owner transfer and legacy blob migration integrity, synthetic data only. |
+| `portfolio_saved_views_6209.test.ts` | Private Portfolio views: SQLite ownership, page isolation, optimistic writes, access refusals, validation and unreadable reads. |
+| `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
+
+`research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
+
+`formation_hq_actions_6698.test.ts` exercises HQ authorization, evidence gates, atomic conflict refusal, case ownership, audit attribution and the Formation Approvals lane against the migrated schema.
+| `formation_rules_6704.test.ts` | D6704: deterministic fixture comparisons, append-only suggestions/choices/memos, flag and structure gates. |
+
+- `research_fund_shortlist_7845.test.ts` — D7845 atomic shortlist, withholding, ownership and replay checks.
+| `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
+- `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
+`capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Raise · Fundraising readiness</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Fundraising readiness</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">Is this venture ready to raise? A Product-market fit score built only from what the founder recorded in Validate, the raise kit from Raise, and every gap that raises either. Missing data lowers confidence and is never a zero; every input names its source. Sample today is [21 Oct 2026]. Drawers are drawn as centred lightboxes, and Eadwyn’s rail stays collapsed to a spine.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Fundraising Readiness Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['RD1', 'Fundraising readiness · Founder · desktop 1440 · light', 'The scores, the inputs, the gaps, the raise kit checklist and the score history. Product-market fit [64] rests only on what was recorded in Validate; missing data lowers confidence and is never a zero. The second frame is the runway tile with no Mercury connection.', [D('RD1'), D('RD1r', 'Runway · no Mercury connection', 520)]],
+      ['RD2', 'Input · Claims supported · lightbox over RD1', 'A centred lightbox rather than a side drawer. The method, each claim with its status and strongest evidence, and H3 waiting for its fit.', [D('RD2')]],
+      ['RD3', 'Input · Paying demand', 'The pilot Mercury verified, the letter with a file and the one without, and the grade mix they make.', [D('RD3', false, 820)]],
+      ['RD4', 'How Product-market fit is scored', 'Model v1.0: the ten inputs with their rules and weights, the grades, confidence and its floor, the bands, and what is not in this score.', [D('RD4', false, 1100)]],
+      ['RD5', 'Checklist item · Traction proof', 'A computed check on typed fields: what it read and twelve rows of its history.', [D('RD5', false, 820)]],
+      ['RD6', 'Re-score', 'The seven computed items and the Product-market fit score. Team is scored on its record, not here.', [D('RD6', false, 760)]],
+      ['RD7', 'Score Team', 'The one item the founder scores. There is no Measured for a score you give yourself.', [D('RD7', false, 760)]],
+      ['RD8', 'Score history', 'Twelve months: dashed where not enough was recorded, dotted before Model v1.0, with the pivot marked.', [D('RD8', false, 1300)]],
+      ['RD9', 'Product pull', 'Before a product is live it is Not expected yet and leaves the count; with PostHog it reads three measures.', [D('RD9a', 'A · Before a product is live', 640), D('RD9b', 'B · With PostHog', 640)]],
+      ['RD10', 'After a Pivot', 'All records shows interviews from before the pivot, greyed and not counted.', [D('RD10', false, 1000)]],
+      ['RD11', 'Eadwyn · Explain this score', 'Three sentences, each citing the inputs it reads. Nothing changes until a person keeps it.', [D('RD11', false, 900)]],
+      ['RD12', 'Validate overview hand-off', 'A chip on Validate’s overview header opens this page.', [D('RD12', false, 1300)]],
+      ['RD13', 'Admin and Super Admin', 'The same page for a venture they support, with a line saying so. The second frame is the Super Admin in the HQ shell.', [D('RD13', 'Admin'), D('RD13h', 'Super Admin · HQ shell')]],
+      ['RD14', 'Empty · new venture', 'Not enough recorded, every input dashed, and the raise kit not scored yet.', [D('RD14')]],
+      ['RD15', 'Loading', 'Header and tabs at once; tiles and rows read.', [D('RD15')]],
+      ['RD16', 'Error and partial', 'A · the score could not be read while the raise kit is current. B · one input unreadable: the score is drawn without it, with confidence lowered.', [D('RD16a', 'A · Score could not be read', 1300), D('RD16b', 'B · One input unreadable', 1300)]],
+      ['RD17', 'No access', 'Investor, Operating Partner, Advisor and Explorer.', [D('RD17', false, 1000)]],
+      ['RD18', 'Phone · 390 wide', 'Tiles stacked and the inputs as a list, an input as a bottom sheet, and the gaps.', [P('RD18a', 'Scores and inputs'), P('RD18b', 'An input as a bottom sheet'), P('RD18c', 'Gaps')]],
+      ['RD19', 'Dark', 'RD1 in the dark colours.', [D('RD19')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

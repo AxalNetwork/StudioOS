@@ -1,0 +1,102 @@
+# integrations — the connector framework
+
+What every third-party connection shares: the registry of providers, how
+credentials and OAuth state are kept, which company a connection may write
+into, and what each connector delivered to which module. The HTTP surface is
+`../routes/integrations.ts` (`/api/connectors`, D650); provider-specific code
+lives in `providers/`.
+
+| File | What it does |
+| --- | --- |
+| `registry.ts` | The single source of truth for providers: `REGISTRY` (one descriptor each: status, tier, auth type, OAuth scopes), `CONNECTOR_METADATA` (category, what it pulls and sends, the modules it feeds, the permission sentences), `registerProvider` / `getProviderImpl`, `IntegrationRow`, `ensureIntegrationsSchema` and `publicDescriptor`, which adds `feed_modules` beside the plain `feeds` strings (D686). |
+| `contract.ts` | D848 (#2469): the one connector contract. `ConnectorAdapter` (key, `pattern` `mcp` or `api`, `capabilities`, `tools`, `connect`, `disconnect`, `revoke`, `execute`, `health`, `classifyError`), the five health states and six error categories, `categoryOfStatus`, `healthOfCategory`, `checkToolInput`, `ConnectorError`, and `registerConnectorAdapter` / `getConnectorAdapter`. An adapter reuses its provider's own route functions; GitHub and Stripe adopt it in `providers/`, Mercury once #2468 merges. `cloudflare-worker/test/connector_contract_d848.test.ts` holds both adapters to it. |
+| `connectorPages.ts` | Each connector's page, as data (D753): tagline, long description, the tools Axal VC runs through it (each with the source fragments of its calls), Eadwyn prompts, maker, service, sign-in, endpoints, added month, links and `verified_on`; Mercury by audience, LinkedIn as a first-party page, and WhatsApp and Telegram as `CHANNEL_PAGES` (D753 C1; `channelPage(key)` for #1878's directory handler). `trustFor`, `pageDescriptor` (by viewer, through `audienceFor`), `connectorPagePath`, `CATEGORY_ORDER`; `FIRST_PARTY_CARDS` (LinkedIn's card facts) and `directoryKeyFor` (a directory request's registry and page key, D753 W2). Read only through `pageDescriptor` and `registry.ts`' one re-export line. It imports only types and `audienceFor` from `./registry`, reads no registry value at its top level (the two form a cycle), and imports no provider or service. `cloudflare-worker/test/connector_pages_d753.test.ts` holds every fact to the code. |
+| `moduleLabels.ts` | `MODULE_LABELS` and `MODULE_HREFS`: each fed module's name and the page that shows its data (D686). Its own file because `fed.ts` imports `registry.ts`, so the registry cannot import `fed.ts` back. `moduleHref` answers `null` for an unknown key. |
+| `fed.ts` | "Now fed by" (D655): `fedCounts` counts what each connector delivered to each module from `connector_fed_items`, with the module's `href`. A connector that records nothing gets `count: null` and a reason, never 0. With a `projectId`, it counts only that project's rows (D782's Code system). GitHub's Operating systems reads the connection, so it gets `count: null` and its reason. Re-exports `MODULE_LABELS`. |
+| `githubFeeds.ts` | D782: what the GitHub connector feeds, as the code builds it. `GITHUB_LANDINGS` lists each kind a sync reads, its module and its store; `GITHUB_READ_BY` lists the modules that read the connection itself. The connector page's claims are held to it, and Operating systems' sync lines are worded from it (`syncArrivals`, `syncErrorWords`). No side effects, so the Build route imports it without registering the provider. |
+| `vercelFeeds.ts` | D1096: what the Vercel connector feeds. `VERCEL_LANDINGS` names each landing, its module, its store and the part that builds it; a landing is claimed only once its store is set. `VERCEL_READ_BY` lists the modules that read the connection itself (Operating systems). The registry's `pulls` and `feeds` are read from it (`vercel_build_feeds.test.ts`). No side effects. |
+| `mercuryFeeds.ts` | D840 (#2346): what a member's own Mercury feeds, as the code builds it. `MERCURY_FEEDS` lists each use by role, with its module (or none) and the MCP tools a sign-in calls for it; D840's parts 2–4 add theirs. Part 4 (#2349) adds the investor's five sections, with `INVESTOR_LANDS` (fact, proposal or statement) and `PORTFOLIO_NOTE`; `GET /api/mercury/investor` answers from them. The registry's personal `feeds` and the connector page's tools are held to it by `cloudflare-worker/test/mercury_feeds_d840.test.ts`. No imports, no side effects. |
+| `notionFeeds.ts` | D1085 (#2950): what a founder's own Notion feeds, as the code builds it. `NOTION_FEEDS` gains a feed as each of Notion parts 3–6 lands (D1087: Customer research and Market intelligence; D1089: Capital relationships and Data room; D1090: Distribution and Product improvement), with its module and the `NOTION_READ_TOOLS` it calls; the registry's `pulls` and `feeds` read it. No imports, no side effects. |
+| `secrets.ts` | Credential encryption over `../services/columnCipher.ts`, with the row's uid in the AAD, and the masked previews the list endpoints show. Never logs plaintext. |
+| `oauth.ts` | PKCE pairs, signed state tokens and `consumeOauthState`. The state's `extra` carries per-connect values (the selected company, a Salesforce sandbox flag, the literal `build` return token) so the callback never trusts its query string. |
+| `companyScope.ts` | Which providers write project-backed data, and whether a connection is enabled for a company or project. A missing scope row denies the write. |
+| `cartaScopes.ts` | #2634: separate founder issuer and investor read scopes, selected by the authenticated role; never a union. |
+| `cartaInvestor.ts` | #2634: one-page, bounded Carta investor reads and explicit field projections; no stakeholder names/emails, provider payload storage or derived money totals. Missing values stay null. |
+| `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused), `extraScopes` (the scopes named in that refusal's log line) and the validation of a connector's settings patch. |
+| `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
+| `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
+| `mcpClient.ts` | D847 (#2468): the Worker as an MCP client of any provider, through one client. `openMcpSession` speaks both eras (`legacy` with `initialize` and the session id, `modern` `2026-07-28` with `_meta` and the `Mcp-*` headers, `auto` probing), with a per-session POST budget, 10-second deadlines, a 25-second wall, a 2 MB body cap and redirects refused; it offers only the record's read tools the server lists, and logs every unknown, annotated, invalid or changed tool as one `mcp_tool_drift` line. D855 §4 (#3733): a failed answer carrying one of the record's `rate_limit_headers` at `0` is `rate_limited`, whatever its status. Discovery, registration (pre-registered, CIMD, DCR), PKCE, RFC 9207 `iss`, the leased refresh and revoke. Never imports `../mcp/` (StudioOS's own MCP server, D784). |
+| `customMcp.ts` | D852 (#2475): remote MCP servers a member adds, behind `CUSTOM_MCP_ENABLED`. The URL and address guard (https, no IP literal or private name, public addresses only after DNS over HTTPS), `guardedFetcher` (the only fetcher the shared client gets for a custom server), a connection's record (`customProvider`: its approved read tools pinned, no write tool), configure and sign-in, listing (descriptions marked untrusted), approval, `callCustomTool`, health and drift, and revoke (everything deleted). D1343 adds `mail_send`: one write tool the member designates to send their email, pinned, the connector's single setup tool, called only through `sendThroughCustom` with a one-use ticket. D1496 part 5 (#3844) adds `grantableTools`, a pure read of the stored row: the approved, pinned, undrifted read tools a team agent may be granted, never the mail send tool. |
+| `mcpSignIn.ts` | D1080 (#2945): what the generic MCP sign-in (`../routes/connector_mcp_oauth.ts`) shares: which records it serves (`genericMcpProvider`: not Mercury's, which keeps its own route), their callback and CIMD paths, D751 readiness for a record, the pre-registered client's loader from HQ › Integration keys, `mcpCallbackUrl` for `CALLBACK_URL`, and the revoke a disconnect runs before the row is deleted. |
+| `posthogFeeds.ts` | D1385 (#3731): what a founder's own PostHog feeds, as the code builds it, `notionFeeds.ts`'s shape plus each feed's section and whether it lands as a fact or a proposal. Empty until PostHog parts 3–6 land; the registry's `pulls` and `feeds` read it. No imports, no side effects. |
+| `mcpProviders.ts` | D847: `MCP_PROVIDERS`, one frozen record per MCP provider (Mercury's first, then Notion's, D1085, WhatsApp Business's, D856, PostHog's, D1385, with its fixed read-only headers, its one connection header and its CIMD scope ceiling, and Linear's read-only one, D855 §4): its server URLs and hosts, scopes, read and write tools (none without a publishing issue), registration order, era, budget, tool pins, the headers that signal a spent limit, and D840's legacy names. Imports nothing. |
+| `beehiivFeeds.ts` | D2407 (#2407): what a founder's own Beehiiv feeds, as the code builds it, `posthogFeeds.ts`'s shape plus whether each feed is built yet. The registry's `pulls` and `feeds` read the built entries only; the Updates row's newsletter figures wait for part 3. No imports, no side effects. |
+
+## Who sees a provider
+
+`audienceFor(provider, viewer)` answers `open`, `preview`, `personal` or `none`;
+a `none` provider is answered everywhere as if its key did not exist (404
+`unknown_provider`). The viewer is `{ role, hq, venture }`, built in one place
+per caller (`viewerOf` in `../routes/integrations.ts`, Mercury's own connect).
+
+- **Roles (D710, D879).** `personal_roles` and `preview_roles` — Mercury. A
+  `preview` role (an admin on HQ) reads the founder's card and page, connects
+  nothing and reads no connection, and is told that Axal VC's own accounts live
+  in HQ › Fund administration › Bank accounts (`HQ_ACCOUNTS_NOTE`). D879
+  (#2552) removed D710's `entity_roles`: Axal VC's accounts are never a
+  connector, only `/api/admin/mercury` (`../services/mercury/`).
+- **The venture audience (D757 §2.11).** `audience_rule: 'venture'` — Zoom —
+  makes a provider founder-facing: `personal` for a viewer who can hold a
+  venture, `none` for everyone else. `venture` is `canHoldValidateSource` in
+  `../routes/_founder_validate_helpers.ts`: an admin, a `founder`, or an active
+  Lab member with a `founder_id` whatever their role. `/available`,
+  `/directory/:key`, `/connect`, both OAuth starts (before any state is
+  written) and the callback all read it. `GET /api/channels` and its
+  link and connect routes apply the same rule to Telegram, WhatsApp and Meet.
+  An existing connection keeps Disconnect.
+
+Zoom also carries `used_by`, `suggests` (Validate module keys, each in
+`moduleLabels.ts`) and `distribution`, read from `ZOOM_APP_AUDIENCE` by
+`zoomDistribution` (absent, empty or unknown is `own_account`).
+
+## GitHub's sync (D655, #1906)
+
+`providers/github.ts` lands issues on `roadmap_okrs` and pull requests on
+`mvp_features`, each through its `connector_fed_items` row. **A founder's
+deletion stands**: a re-sync never re-creates a deleted row, and unlinks its
+ledger row (`local_id` NULL), so `fed.ts` counts the item as arrived but not
+linked. **A large sync continues on the next run**: each page is one ledger
+read and one D1 batch, the run counts its subrequests against
+`SYNC_SUBREQUEST_BUDGET` (8,000 of the Worker's 10,000), and at the budget it
+stops "Partly synced", keeping a KV cursor so the next Sync starts where it
+stopped. `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives the
+whole flow against a stubbed GitHub. After the loop, `providers/github/roadmap.ts`
+gives Product roadmap its milestone groups and targets, one `roadmap_releases`
+row per release through the same ledger, and Shipped marks on evidence only
+(D782, #2111). Then `providers/github/mvp.ts` makes each fed must-have follow
+its pull request, written only when GitHub's state moves, and records each
+release's checks on the must-haves through the ledger (D782, #2112).
+
+## Subfolders
+
+- `providers/` — one file per provider implementation; see its README.
+- `mappings/` — field and stage maps for the CRM providers
+  (`hubspot_stages.ts`, `salesforce_fields.ts`).
+
+## Adding here
+
+A new provider goes in `providers/` with an entry in `REGISTRY`,
+`CONNECTOR_METADATA` **and `CONNECTOR_PAGES`** (every registry entry needs
+metadata and a page), with its tools taken from its calls. A new fed module
+needs a label and a page in `moduleLabels.ts`. Shared connector logic that is
+not one provider's goes in this folder; anything with HTTP belongs in
+`../routes/`.
+
+A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.
+
+D1091 (#2956): `fedOwnership.ts` checks the one-owner ledger for explicit links to roadmap OKRs and MVP features; `googleWorkspaceFeeds.ts` lists what each Workspace part feeds (D1093, #2958: spec Docs as Solution design proposals and a mapped roadmap Sheet into Product roadmap, written by `../services/google/buildFeeds.ts`). The Google Workspace directory entry remains Coming soon pending its approved screen.
+
+D1081 (#2946): `lovableFeeds.ts` holds Lovable's four planned launch/app-link
+landings. Only shipped inbound entries become metadata pulls and feeds; none
+have shipped in part 1. Lovable is a directory page with `auth_type: 'none'`,
+not a provider implementation or an account connection.

@@ -1,0 +1,80 @@
+Objective
+  Admin Console > Users > <user> currently shows blanks for FOUNDER_ID
+  and PARTNER_ID, no Last Active timestamp, and a placeholder for the
+  onboarding transcript with no ongoing-advisor transcript at all.
+  These IDs are required as merge fields on every contract Axal signs
+  with a founder or partner.
+
+ID generation
+  Schema (idempotent migrations):
+    ALTER TABLE users ADD COLUMN founder_public_id TEXT UNIQUE;
+    ALTER TABLE users ADD COLUMN partner_public_id TEXT UNIQUE;
+  Format:
+    FOUNDER_ID: 'AXF-' + base32 of next sequence (e.g. AXF-1A2B3C4D)
+    PARTNER_ID: 'AXP-' + base32 of next sequence (e.g. AXP-9X8Y7Z6W)
+  Assignment rules:
+    - When users.role becomes 'founder' AND users.founder_id (internal
+      FK to founders) is set, generate FOUNDER_ID if missing.
+    - When a partner_deals row is signed and active, generate
+      PARTNER_ID if missing.
+    - Both IDs are stable for life — never recycle even after account
+      deletion (audit trail).
+  Backfill:
+    One-shot migration assigns IDs to every existing user that
+    qualifies, in created_at order.
+
+Last Active
+  Schema:
+    ALTER TABLE users ADD COLUMN last_active_at DATETIME;
+  Update path:
+    Add a global middleware in the Worker that on every authenticated
+    request stamps users.last_active_at = NOW() — but throttled so we
+    don't write on every single request. Use KV bucket
+    `last_active:{user_id}` with 5-minute TTL; write to D1 only when
+    KV miss.
+
+Onboarding Conversation tab
+  Already exists (the screenshot shows the empty state). Wire it to
+  read from the onboarding-chatbot table. Endpoint:
+    GET /api/admin/users/:id/conversations/onboarding
+      → { messages: [{ role, content, model, ts, extracted_persona? }],
+          summary, persona, completed_at }
+  Display:
+    - List of messages with date+time and role.
+    - Top header: role/persona extracted, completion %.
+    - "Replay this conversation" button (admin only — read-only view
+      of what the user saw).
+
+Ongoing Conversation tab (NEW)
+  New tab next to Onboarding. Wires to advisor_messages /
+  advisor_conversations tables (from the Personal Advisor work).
+  Endpoint:
+    GET /api/admin/users/:id/conversations/advisor?limit=20&offset=0
+      → { conversations: [{ id, started_at, last_message_at,
+                              persona, message_count, completion_pct }] }
+    GET /api/admin/users/:id/conversations/advisor/:conversation_id
+      → { messages: [{ role, content, ts, question_id, written_to,
+                        model, latency_ms, token_in, token_out }] }
+  Display:
+    - Left rail: list of conversations as clickable cards (date+time,
+      message count, completion ring).
+    - Right pane: full message log with sparkle icon next to
+      assistant messages whose tool calls wrote to a page (with the
+      written_to path shown).
+    - Admin can filter by date range, search content, export CSV.
+
+Audit
+  Every admin view of a conversation transcript writes to
+  admin_audit_log (admin_user_id, viewed_user_id, conversation_id,
+  viewed_at). Surfaced in Trust Center > Admin oversight.
+
+Acceptance
+  - Admin opening a Founder profile sees a non-empty FOUNDER_ID; a
+    Partner sees PARTNER_ID.
+  - Last Active shows date+time in admin's locale.
+  - Onboarding tab renders the real transcript for users who have one.
+  - Ongoing tab renders a list of advisor conversations + drilldown.
+  - Admin actions in this view are logged.
+  - IDs feed contract merge fields {{counterparty.founder_id}} and
+    {{counterparty.partner_id}} automatically (verify by sending a
+    test envelope).

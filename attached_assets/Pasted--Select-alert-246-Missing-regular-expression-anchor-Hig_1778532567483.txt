@@ -1,0 +1,152 @@
+
+Select alert #246
+Missing regular expression anchor
+High
+Test
+#246 opened 50 minutes ago • Detected by CodeQL in frontend/.../e2e/calendar_oauth.spec.js :21
+main
+
+Select alert #116
+Potential file system race condition
+High
+#116 opened 5 days ago • Detected by CodeQL in cloudflare-worker/scripts/check-console.mjs :28
+main
+
+Select alert #6
+Information exposure through an exception
+Medium
+#6 opened 5 days ago • Detected by CodeQL in backend/.../routes/references.py :435
+main
+
+Select alert #5
+Information exposure through an exception
+Medium
+#5 opened 5 days ago • Detected by CodeQL in backend/.../routes/marketplace.py :707
+main
+
+Select alert #115
+Missing origin verification in `postMessage` handler
+Medium
+#115 opened 5 days ago • Detected by CodeQL in frontend/public/sw.js :181
+main
+
+Select alert #114
+Missing origin verification in `postMessage` handler
+Medium
+Documentation
+#114 opened 5 days ago • Detected by CodeQL in docs/sw.js :181
+main
+
+Select alert #210
+Log Injection
+Medium
+#210 opened yesterday • Detected by CodeQL in backend/.../routes/projects.py :367
+main
+
+Select alert #30
+Log Injection
+Medium
+#30 opened 5 days ago • Detected by CodeQL in backend/.../routes/wellbeing.py :248
+main
+
+Select alert #29
+Log Injection
+Medium
+#29 opened 5 days ago • Detected by CodeQL in backend/.../routes/wellbeing.py :248
+main
+
+Select alert #28
+Log Injection
+Medium
+#28 opened 5 days ago • Detected by CodeQL in backend/.../services/notify.py :211
+main
+
+Select alert #27
+Log Injection
+Medium
+#27 opened 5 days ago • Detected by CodeQL in backend/.../routes/legal.py :2633
+main
+
+Select alert #26
+Log Injection
+Medium
+#26 opened 5 days ago • Detected by CodeQL in backend/.../services/github_service.py :139
+main
+
+Select alert #25
+Log Injection
+Medium
+#25 opened 5 days ago • Detected by CodeQL in backend/.../services/email_service.py :171
+main
+
+Select alert #24
+Log Injection
+Medium
+#24 opened 5 days ago • Detected by CodeQL in backend/.../services/email_service.py :171
+main
+
+Select alert #23
+Log Injection
+Medium
+#23 opened 5 days ago • Detected by CodeQL in backend/.../services/email_service.py :154
+main
+
+Select alert #22
+Log Injection
+Medium
+#22 opened 5 days ago • Detected by CodeQL in backend/.../services/email_service.py :154
+main
+
+Select alert #21
+Log Injection
+Medium
+#21 opened 5 days ago • Detected by CodeQL in backend/.../services/audit.py :107
+main
+
+Select alert #20
+Log Injection
+Medium
+#20 opened 5 days ago • Detected by CodeQL in backend/.../services/audit.py :107
+main
+
+Select alert #19
+Log Injection
+Medium
+#19 opened 5 days ago • Detected by CodeQL in backend/.../services/audit.py :107
+main
+
+Select alert #18
+Log Injection
+Medium
+#18 opened 5 days ago • Detected by CodeQL in backend/.../services/audit.py :105
+main
+
+Select alert #191
+Overwritten property
+Error
+#191 opened 5 days ago • Detected by CodeQL in frontend/.../lib/api.js :952
+main
+
+Select alert #190
+Overwritten property
+Error
+#190 opened 5 days ago • Detected by CodeQL in frontend/.../lib/api.js :340
+main
+
+Select alert #46
+Redundant assignment
+Error
+#46 opened 5 days ago • Detected by CodeQL in backend/.../services/calendar_unified.py :564
+main
+
+Select alert #229
+Useless assignment to local variable
+Warning
+#229 opened yesterday • Detected by CodeQL in cloudflare-worker/.../routes/admin_contracts.ts :1023
+main
+
+Select alert #228
+Useless assignment to local variable
+Warning
+#228 opened yesterday • Detected by CodeQL in cloudflare-worker/.../routes/admin_contracts.ts :1010
+main

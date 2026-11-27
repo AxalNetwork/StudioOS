@@ -1,0 +1,303 @@
+{
+  "DELETE /api/partner/delivery/blockers/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/delivery/deliverables/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/delivery/engagements/:engagementId/hours/:personId/:period": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement); a PUT names only a person attached to the firm (requireOwnHolder, 400). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/delivery/milestones/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/delivery/status-reports/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/offers/engagements/:engagementId/source": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/offers/fit-rules/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownFitRule, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/offers/proof/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownProofItem, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/offers/surfaces/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownSurface, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "DELETE /api/partner/testing/programmes/:uid/logo": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a programme the firm owns (ownProgramme, owner_kind partner and owner_partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "GET /api/partner/delivery/engagements/:engagementId/blockers": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "GET /api/partner/delivery/engagements/:engagementId/milestones": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "GET /api/partner/delivery/engagements/:engagementId/report-draft/:period": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "GET /api/partner/delivery/engagements/:engagementId/reviews": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "GET /api/partner/offers/proof-consents/:token/claim": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The client's route a consent link opens (D4672): the link's random token is the capability and no account is needed. An unknown, oversized or altered token answers 404 consent_not_found naming nothing and writing nothing, whoever calls. The claim page shows the firm's name, a masked address and the pinned claim only. Codes are single-use, expire, are limited to CODE_MAX_ATTEMPTS tries and rate-limited per request, and the firm cannot answer its own request (partner_proof_consent_integrity_d4672.test.ts)."
+  },
+  "GET /api/partner/testing/programmes/:uid/applicants": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a programme the firm owns (ownProgramme, owner_kind partner and owner_partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/delivery/blockers/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/delivery/deliverables/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/delivery/milestones/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/delivery/seats/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/offers/fit-rules/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownFitRule, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/offers/proof/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownProofItem, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/offers/surfaces/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownSurface, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PATCH /api/partner/testing/programmes/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a programme the firm owns (ownProgramme, owner_kind partner and owner_partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/engagements/:engagementId/blockers": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/engagements/:engagementId/deliverables": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/engagements/:engagementId/milestones": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/engagements/:engagementId/seats": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement); the holder must be attached to the firm (requireOwnHolder, 400). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/seats/:id/revoke": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/status-reports/:id/amendments": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/delivery/status-reports/:id/send": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a child row whose engagement belongs to the firm (ownChild joins engagements.partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/offers/proof-consents/:token/code": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The client's route a consent link opens (D4672): the link's random token is the capability and no account is needed. An unknown, oversized or altered token answers 404 consent_not_found naming nothing and writing nothing, whoever calls. The claim page shows the firm's name, a masked address and the pinned claim only. Codes are single-use, expire, are limited to CODE_MAX_ATTEMPTS tries and rate-limited per request, and the firm cannot answer its own request (partner_proof_consent_integrity_d4672.test.ts)."
+  },
+  "POST /api/partner/offers/proof-consents/:token/respond": {
+    "review": "optional_auth",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The client's route a consent link opens (D4672): the link's random token is the capability and no account is needed. An unknown, oversized or altered token answers 404 consent_not_found naming nothing and writing nothing, whoever calls. The claim page shows the firm's name, a masked address and the pinned claim only. Codes are single-use, expire, are limited to CODE_MAX_ATTEMPTS tries and rate-limited per request, and the firm cannot answer its own request (partner_proof_consent_integrity_d4672.test.ts)."
+  },
+  "POST /api/partner/offers/proof/:id/consent-request": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownProofItem, partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/offers/proof/:id/consents/:consentId/withdraw": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through the firm's own row (ownProofItem, partner_id), and the consent must belong to that item. Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/testing/applications/:uid/decline": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an application of a programme the firm owns (decide \u2192 ownProgramme, 404 otherwise). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/testing/applications/:uid/pick": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an application of a programme the firm owns (decide \u2192 ownProgramme, 404 otherwise). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "POST /api/partner/testing/programmes/:uid/submit": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a programme the firm owns (ownProgramme, owner_kind partner and owner_partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PUT /api/partner/delivery/engagements/:engagementId/health": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PUT /api/partner/delivery/engagements/:engagementId/hours/:personId/:period": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement); a PUT names only a person attached to the firm (requireOwnHolder, 400). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PUT /api/partner/delivery/engagements/:engagementId/status-reports/:period": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PUT /api/partner/offers/engagements/:engagementId/source": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through an engagement of the firm (requireOwnEngagement), and the surface named must be the firm's own (ownSurface). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  },
+  "PUT /api/partner/testing/programmes/:uid/logo": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_partner_d4570.test.ts",
+    "note": "The caller's firm is read from their own account (users.partner_id); the record is reached only through a programme the firm owns (ownProgramme, owner_kind partner and owner_partner_id). Another firm's partner gets 404 naming nothing; a founder, investor or advisor 403; a partner or admin account with no firm 400; no credentials or a disabled account 401. No refusal writes a row or a file."
+  }
+}

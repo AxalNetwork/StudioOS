@@ -1,0 +1,367 @@
+{
+  "$id": "deckInstruct",
+  "title": "POST /api/decks/:id/areas/instruct/quote and POST /api/decks/:id/areas/instruct (D1521, #3773)",
+  "description": "What the deck v2 adapter's `instruct` method passes through. Without `run`, the quote of an instruction on the grid selection: #3764's areas quote (per-area lines that sum to the area's hold, each area's gates and refusal, the total hold, `quote_uid` and its expiry), for at most six areas of one card. With `run`, the one run it admitted under one hold and one Idempotency-Key: the batch, whether this was a replay, the selection it was scoped to, what was asked (`instruction` or an action), one proposal per runnable area (read, accepted and discarded through the areas routes) and the areas refused on their own. Nothing is placed by either reply. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "class",
+    "hold_microusd",
+    "refused"
+  ],
+  "properties": {
+    "class": {
+      "enum": [
+        "areas"
+      ]
+    },
+    "hold_microusd": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "refused": {
+      "description": "The quote: how many areas are refused (an integer). The run: each refused area `{ key, card_uid, area_id, element, gates, refusal }`. No `type`, so both hold."
+    },
+    "quote_uid": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "runs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "areas": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "card_uid",
+          "area_id",
+          "element",
+          "kind",
+          "model",
+          "model_label",
+          "variants",
+          "gates",
+          "refusal",
+          "lines",
+          "hold_microusd"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "card_uid": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": "string"
+          },
+          "element": {
+            "type": "string"
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variants": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "gates": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "image_check",
+              "plan",
+              "records"
+            ],
+            "properties": {
+              "image_check": {
+                "type": "boolean"
+              },
+              "plan": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "records": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "refusal": {
+            "description": "Null when the area runs; else `{ code, message }`. No `type`, so null holds."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "count",
+                "per_microusd",
+                "microusd"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "per_microusd": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "microusd": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "free": {
+                  "const": true
+                },
+                "included": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "hold_microusd": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "batch_uid": {
+      "type": "string"
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "action": {
+      "enum": [
+        "instruction",
+        "shorten",
+        "expand",
+        "rewrite",
+        "more_visual"
+      ]
+    },
+    "selection": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "card_uid",
+          "area_id"
+        ],
+        "properties": {
+          "card_uid": {
+            "type": "string"
+          },
+          "area_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/proposal"
+      }
+    }
+  },
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "card_uid",
+        "area_id",
+        "element",
+        "mode",
+        "kind",
+        "batch_uid",
+        "state",
+        "outcome",
+        "accepted_variant",
+        "replaces_block",
+        "variants",
+        "created_at",
+        "decided_at",
+        "expires_at"
+      ],
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "card_uid": {
+          "type": "string"
+        },
+        "area_id": {
+          "type": "string"
+        },
+        "element": {
+          "type": "string"
+        },
+        "mode": {
+          "const": "variants"
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "batch_uid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "running",
+            "ready",
+            "failed",
+            "accepted",
+            "discarded",
+            "expired"
+          ]
+        },
+        "outcome": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepted_variant": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "replaces_block": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "variants": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/variant"
+          }
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "decided_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expires_at": {
+          "type": "string"
+        }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n",
+        "seed",
+        "model_label",
+        "cost_microusd",
+        "seconds",
+        "state",
+        "error",
+        "payload",
+        "critique"
+      ],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model_label": {
+          "type": "string"
+        },
+        "cost_microusd": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "ready",
+            "failed",
+            "stopped",
+            "waiting",
+            "running"
+          ]
+        },
+        "error": {
+          "description": "Null when the variant is ready; else `{ code, message }`. No `type`, so null holds."
+        },
+        "payload": {
+          "description": "What Accept places: `{ kind: 'text', before, after }`, `{ kind: 'block', block }`, `{ kind: 'image', image }` or `{ kind: 'blocks', blocks, bindings }`; null when it failed. No `type`, so null holds."
+        },
+        "critique": {
+          "description": "The free code critique of a text variant (`fits`, `contrast_aa`, `density_ok`, each true, false or null when not checked); null otherwise. No `type`, so null holds."
+        }
+      }
+    }
+  }
+}

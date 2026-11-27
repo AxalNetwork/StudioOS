@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Competitor Evidence and Criteria · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies · #7809 page 3 of 5 · addendum to RS-13, RS-14 and RS-15 (D7041 to D7043)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Competitor evidence — define a buyer and use case once, tell known companies from leads, open the passage behind a claim, carry findings into a project and compare on buying criteria</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Boards RCE-00 to RCE-13 continue the landed Research Companies canvases (RS-13 setup and results, RS-14 saved analyses, RS-15 comparisons) and the project page of Research v2 (RS-02 C findings, RS-02 D comparisons), which are not redrawn: each board marks only what is new. Routes: /research/companies/:id (setup, results, saved versions), /research/companies/:analysisId/:candidateId, /research/projects/:uid/findings and /comparisons. The analysis is for whoever Companies admits; projects for a held Founder licence, an active Spin-Out Lab or an admin. A saved context names the buyer, use case and criteria; candidates are resolved directory companies or research leads; a claim shows its statement type, passage, Published and Retrieved dates and any conflict; four evidence gaps (Not found, Not offered, Source unavailable, Outdated) are never blank or zero. The relevance figure is retired (question 8, A); no fit score, rank or completeness figure appears. A pricing claim is a dated quotation, “As published: …”, never a price. States follow Platform States (Unavailable on screen). Violet dashed ◇K tags name the ◇ KEY line and the issue that builds it; amber ⚑ tags mark owner questions, option A drawn. FND-P18 (#7738) and RST-23 (#7703) are cited, not redrawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 21 Nov 2026 · checked against main a2677f7615 · every company, context, project, person, source, quotation and date is invented and bracketed; no row is a real company or fund</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="14">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Competitor Evidence and Criteria Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RCE-00', 'Journey and vocabulary', 'Context → run → resolved companies and leads → a claim → attach to a project → criteria → snapshot. Statement types; the four evidence gaps against Platform States; the words table against the Research Markets canvases (#7703). Shared by #7851 to #7854.', [W('RCE00')]],
+      ['RCE-01', 'Setup with a saved competitive context', 'RS-13 A2 as landed, with a context picker above the groups (saved, create, none) and the chosen context and its version named on the subject card. The context form with ordered criteria and a keyboard equivalent; a context changed elsewhere refuses the save and keeps your text. ◇K10 #7835. Built by #7851.', [F('RCE01', false, 1560), C('RCE01B', 'Create or edit a context', 1300, 600), C('RCE01C', 'Context changed elsewhere', 1100, 280)]],
+      ['RCE-02', 'Results: resolved companies beside research leads', 'RS-13 B1 with two lists. Resolved: each candidate with its directory record and publisher, Site not verified, Direct or Adjacent only with evidence read or set by you, and the context criteria (Supported with sources, or Unknown) in place of the relevance figure (⚑ Q8). Leads: name, why, what would resolve it, Not classified; Resolve, Keep as lead, Remove. Eadwyn suggests names as leads and proposes a class change on rerun. ◇K11. Built by #7852.', [F('RCE02', false, 1810), C('RCE02B', 'Resolve a lead', 1000, 590), C('RCE02C', 'Subject on hold, record no longer served, earlier run', 1300, 420)]],
+      ['RCE-03', 'Claim support: statement type, dates and conflict', 'The RS-13 B1 support panel plus statement type, passage, Published and Retrieved, Checked by Axal, the criterion answered, and two disagreeing sources side by side. A pricing claim as published; a source with no passage; a version saved before claims. ◇K12. Built by #7852.', [C('RCE03', false, 1340, 610), C('RCE03B', 'Pricing claim, no passage, before claims', 1340, 310)]],
+      ['RCE-04', 'The four evidence gaps side by side', 'Not found, Not offered, Source unavailable and Outdated in a claim row, a matrix cell and the export, with what each means. Text beyond the read limit reads Not read by this run. ◇K12. Built by #7852.', [C('RCE04', false, 1400, 600)]],
+      ['RCE-05', 'Attach a saved version to a Research Project', 'From the saved analysis of RS-14 A2: the Add to research Sheet with a project choice, the fixed line about the study, the findings to carry with their passages, an Eadwyn interpretation kept as generated (⚑ Q7) and two lines with no source that stay (⚑ Q6). Unsaved edits first, attaching, attached, already attached. ◇K13. Built by #7853.', [F('RCE05', false, 1000), C('RCE05B', 'Unsaved edits, attaching, result, already attached', 1300, 270)]],
+      ['RCE-06', 'Findings citing the attached version', 'RS-02 C as landed with carried findings citing the analysis, version, source and retrieved date with the passage, read from the project copy. After a refresh the citation keeps version 3; after detaching it reads Attachment removed. ◇K13. Built by #7853.', [F('RCE06', false, 1360), C('RCE06B', 'After a refresh and after detaching', 1100, 260)]],
+      ['RCE-07', 'Choose criteria and read the matrix', 'On the project Comparisons tab (RS-15 C): the chosen criteria, the chooser grouped Customer, Product, Commercial model, Market, Differentiation with drag order and a keyboard equivalent, and a matrix whose cells carry value, statement type, source and date or one of the four gaps; a conflict shows both; Differentiation is Interpretation; the Commercial model quotation and its link to RST-23. Columns On hold, Withdrawn and Removed. A fund frame from FND-P18. ◇K14. Built by #7854.', [F('RCE07', false, 1440), C('RCE07B', 'Choose criteria', 1200, 620), C('RCE07F', 'Fund frame · from FND-P18', 1300, 700)]],
+      ['RCE-08', 'Current values, a named snapshot and export', 'Take snapshot with a title; the switch between current values and a snapshot, always labelled; Saved, Not saved, Outcome unknown; a value withheld since; export of current values or a snapshot with scope and count; past the cap, no file; deleting names its snapshots. Fund frame: snapshot switch, a withdrawn column and a cite-only export (⚑ #7842, drawn to A, not for build until answered). ◇K14. Built by #7854.', [C('RCE08', false, 1400, 590), C('RCE08F', 'Fund frame · snapshot and cite-only export', 1300, 480)]],
+      ['RCE-09', 'States for the analysis and the handoff', 'Loading, no saved context, every candidate a lead, a line with no claim, Not recorded, claims Unavailable while candidates stay, Refused for an Advisor, saving, save failed with text kept, context changed elsewhere, the FND-S04 leave guard, a record no longer served. Shared by #7851, #7852, #7853.', [C('RCE09', false, 1440, 610)]],
+      ['RCE-10', 'States for the matrix', 'Loading, no criteria, no snapshot yet, Not recorded per cell, table Unavailable, Refused, snapshot not saved, the snapshot cap, export preparing, zero rows and failed with no file, an archived project read and export only. Built by #7854.', [C('RCE10', false, 1440, 580)]],
+      ['RCE-11', 'Tablet 768 and phone 390', 'The matrix one criterion at a time as RS-15 D, with the quotation wrapping and the link line; resolved and leads as two lists of cards; the claim as a sheet; Attach and the context form as bottom sheets. 44px targets. Shared by the four.', [C('RCE11T', 'Tablet 768 · matrix', 768, 1100), P('RCE11A', 'Resolved and leads'), P('RCE11B', 'Claim sheet'), P('RCE11C', 'Matrix · one criterion'), P('RCE11D', 'Attach · bottom sheet'), P('RCE11E', 'Context form · bottom sheet')]],
+      ['RCE-12', 'Dark · desktop 1440 and phone 390', 'RCE-02, RCE-03 and RCE-07 on the dark tokens, and the phone matrix; states keep their words and shapes.', [F('RCE12', 'RCE-02 dark', 1810), C('RCE12B', 'RCE-03 dark', 1340, 610), F('RCE12C', 'RCE-07 dark', 1440), P('RCE12P', 'Phone matrix dark')]],
+      ['RCE-13', 'Keyboard, focus and handoff', 'Focus order for each new block, where focus returns, live announcements and table semantics for the matrix; then the handoff: checked on main, each ◇K line with its issue, the ⚑ questions with option A, frontend-only work and the BUILD ISSUES line.', [W('RCE13'), W('RCE13B')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

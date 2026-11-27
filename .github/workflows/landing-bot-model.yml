@@ -1,0 +1,195 @@
+name: Landing bot model runner
+
+# #6473: the one model runner the landing bot's conflict resolver, main repair
+# and red-PR repair call. Claude, then Codex, then Gemini; the keys and the
+# repository's code never share a job. It pushes, comments and labels nothing:
+# its output is the artifact `landing-bot-model-patch` (patch.json plus
+# manifest.json), which callers re-check with main's code before using.
+# scripts/landing-bot/model/README.md has the design and the caps.
+# #6475: a task with `merge_sha` runs in merge mode: each round merges that
+# commit into the branch first (stage.mjs) and edits the conflicted tree.
+# #8506: `prepare` resolves the controller (scripts/landing-bot from main) to
+# ONE commit; every round's edit and verify check out that commit, never a
+# branch name, and the caller's publish step must run the same one (the
+# `controller` output). The patch carries a record of it (model/record.mjs).
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: A branch of this repository to edit
+        type: string
+        required: true
+      task:
+        description: The task file as JSON (scripts/landing-bot/model/task.mjs)
+        type: string
+        required: true
+    outputs:
+      outcome:
+        description: passed or no_patch
+        value: ${{ jobs.result.outputs.outcome }}
+      round:
+        description: The round whose patch passed, if any
+        value: ${{ jobs.result.outputs.round }}
+      controller:
+        description: The controller commit every job of this attempt ran (#8506); the publish step must run it too
+        value: ${{ jobs.prepare.outputs.controller }}
+      head:
+        description: The commit the rounds edited and verified (#8506)
+        value: ${{ jobs.prepare.outputs.sha }}
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: A branch of this repository to edit (smoke test)
+        type: string
+        required: true
+      task:
+        description: The task file as JSON
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  prepare:
+    name: Validate the task
+    if: github.repository == 'AxalNetwork/StudioOS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+      controller: ${{ steps.controller.outputs.sha }}
+      rounds: ${{ steps.task.outputs.rounds }}
+      merge: ${{ steps.task.outputs.merge }}
+    steps:
+      # #8506: once per attempt. A caller runs on main, so its own commit is the controller and its publish step
+      # (checked out at github.sha) runs the same code; a dispatch from elsewhere takes main's head, read once here.
+      - name: Resolve the controller to one commit
+        id: controller
+        env:
+          RUN_REF: ${{ github.ref }}
+          RUN_SHA: ${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          if [ "$RUN_REF" = refs/heads/main ]; then sha="$RUN_SHA"; else sha=$(git ls-remote --heads "$REPO_URL" refs/heads/main | cut -f1); fi
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::the controller commit could not be resolved"; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Controller: $sha" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.controller.outputs.sha }}
+          path: runner
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Validate and clamp the task
+        id: task
+        env:
+          TASK: ${{ inputs.task }}
+        run: node runner/scripts/landing-bot/model/prepare.mjs --out in
+      - name: Resolve the branch to a commit of this repository
+        id: ref
+        env:
+          REF: ${{ inputs.ref }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          node runner/scripts/landing-bot/model/prepare.mjs --ref "$REF"
+          sha=$(git ls-remote --heads "$REPO_URL" "refs/heads/$REF" | cut -f1)
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::refs/heads/$REF is not a branch of this repository"; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-model-task
+          path: in/task.json
+          retention-days: 7
+
+  round1:
+    needs: prepare
+    # A called workflow cannot raise what its caller grants: the round's edit job asks for these two.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/landing-bot-model-round.yml
+    with:
+      round: 1
+      previous: 0
+      sha: ${{ needs.prepare.outputs.sha }}
+      controller: ${{ needs.prepare.outputs.controller }}
+      merge: ${{ needs.prepare.outputs.merge == 'true' }}
+
+  round2:
+    needs: [prepare, round1]
+    if: needs.round1.outputs.outcome == 'verify_failed' && needs.prepare.outputs.rounds >= 2
+    # A called workflow cannot raise what its caller grants: the round's edit job asks for these two.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/landing-bot-model-round.yml
+    with:
+      round: 2
+      previous: 1
+      sha: ${{ needs.prepare.outputs.sha }}
+      controller: ${{ needs.prepare.outputs.controller }}
+      merge: ${{ needs.prepare.outputs.merge == 'true' }}
+
+  round3:
+    needs: [prepare, round2]
+    if: needs.round2.outputs.outcome == 'verify_failed' && needs.prepare.outputs.rounds >= 3
+    # A called workflow cannot raise what its caller grants: the round's edit job asks for these two.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/landing-bot-model-round.yml
+    with:
+      round: 3
+      previous: 2
+      sha: ${{ needs.prepare.outputs.sha }}
+      controller: ${{ needs.prepare.outputs.controller }}
+      merge: ${{ needs.prepare.outputs.merge == 'true' }}
+
+  result:
+    name: Publish the passing patch
+    needs: [round1, round2, round3]
+    if: always() && needs.round1.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      outcome: ${{ steps.pick.outputs.outcome }}
+      round: ${{ steps.pick.outputs.round }}
+    steps:
+      - name: Pick the round that passed verify
+        id: pick
+        env:
+          R1: ${{ needs.round1.outputs.outcome }}
+          R2: ${{ needs.round2.outputs.outcome }}
+          R3: ${{ needs.round3.outputs.outcome }}
+        run: |
+          round=''
+          for i in 1 2 3; do v="R$i"; if [ "${!v}" = passed ]; then round=$i; fi; done
+          if [ -n "$round" ]; then echo "outcome=passed" >> "$GITHUB_OUTPUT"; else echo "outcome=no_patch" >> "$GITHUB_OUTPUT"; fi
+          echo "round=$round" >> "$GITHUB_OUTPUT"
+          echo "Model runner: ${round:+round $round passed}${round:-no patch} (rounds: ${R1:-none} ${R2:-} ${R3:-})" >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.pick.outputs.round != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: landing-bot-model-edit-${{ steps.pick.outputs.round }}
+          path: patch
+      - if: steps.pick.outputs.round != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: landing-bot-model-patch
+          path: |
+            patch/patch.json
+            patch/manifest.json
+            patch/record.json
+          retention-days: 7

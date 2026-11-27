@@ -1,0 +1,222 @@
+# Axal VC / StudioOS – Security & Quality Audit
+
+_Date: 2026-06-25 · Scope: read-only static review of the production Cloudflare
+Worker API (`cloudflare-worker/`), the React SPA (`frontend/`), and deployment
+config (`wrangler.toml`, CI). Mental checklist: OWASP Secure Coding Practices +
+ASVS L1/L2._
+
+---
+
+## Architecture & Threat Surface Overview
+
+Per `CLAUDE.md` (canonical), production is a single **Hono app on Cloudflare
+Workers** at `app.axal.vc`, entry `cloudflare-worker/src/index.ts`
+(~124k LOC of TypeScript across ~120 route modules). State lives in **D1**
+(`studioos-db`); the FastAPI in `backend/` is **Replit-dev-only and never
+deployed**, so it is out of the production threat model and was not deep-audited.
+
+Primary trust boundaries:
+
+- **Edge → API**: every `/api/*` request passes CORS → security headers →
+  rate-limit → observability → last-active → CSRF, then per-route auth.
+- **Auth**: dual-mode — `Authorization: Bearer <JWT>` (legacy / websockets /
+  signed download URLs) and an `HttpOnly studioos_auth` cookie (SPA). JWT is
+  **HS256**, secret strength asserted at boot.
+- **Authorization**: role-based (`admin`/`partner`/`founder`/`investor`/`guest`)
+  via `requireAuth`/`requireAdmin`/`requireRole`, plus founder-ownership IDOR
+  guards and TOTP step-up on high-risk surfaces.
+- **Data**: PII column encryption (`KEK_PII`), Stripe billing, R2 object
+  storage, multiple third-party OAuth/integrations (Google, LinkedIn, Slack,
+  Telegram, Stripe).
+
+**Overall posture: strong.** This is a mature, security-aware codebase. SQL is
+parameterized, cookies are hardened, the JWT algorithm is pinned (no
+alg-confusion), CSRF uses double-submit, the markdown renderer escapes and
+scheme-allowlists, and no hardcoded secrets were found. Findings below are
+mostly hardening and a few fail-open / broad-authz tradeoffs to revisit — not
+active criticals.
+
+---
+
+## Summary
+
+- No hardcoded secrets, no SQL injection, and no stored-XSS were found in the
+  production worker. The big-ticket OWASP categories are handled deliberately.
+- Biggest residual risks are **fail-open behaviors** (rate limiter on KV
+  outage; scoring-HMAC key reuse outside prod) and **intentionally broad
+  authorization** (`canAccessFounderResource` lets investor/partner bypass
+  founder ownership), all self-documented as "Phase 0.1 / tighten later."
+- A `sql.unsafe()` escape hatch exists and is used in ~15 modules; every current
+  use is parameterized or fed from hardcoded column allowlists, but it is a
+  footgun with no automated guard.
+- Quick wins: pin/upgrade the one dev-only `esbuild` advisory, add a lint guard
+  around `sql.unsafe`, and decide fail-open vs fail-closed for the rate limiter
+  explicitly.
+
+---
+
+## High-Severity Findings (must fix)
+
+_None identified in the production worker during this review._ The patterns that
+would normally land here (auth bypass, injection, secret leakage, stored XSS)
+were checked and found mitigated — see "Notes" for the verification trail and
+the manual-pentest follow-ups that could still surface a high.
+
+---
+
+## Medium-Severity Findings
+
+### M1 — Rate limiter fails **open** on KV failure
+- **Files:** `cloudflare-worker/src/middleware/rateLimit.ts` (~L208–211).
+- **Detail:** When `bumpCounter(env.RATE_LIMITS, …)` throws (KV unavailable),
+  the bucket is `continue`d and the request proceeds unthrottled.
+- **Impact:** During a KV outage, brute-force / enumeration / cost-abuse
+  protections on auth and AI endpoints silently vanish.
+- **Fix:** Make the decision explicit and per-bucket. For sensitive buckets
+  (login, register, password/OTP, AI spend) fail **closed** (return 429/503);
+  keep fail-open only for low-risk read buckets. At minimum, emit a metric/alert
+  on KV failure so an outage is visible rather than silent.
+
+### M2 — Broad founder-resource authorization bypass
+- **Files:** `cloudflare-worker/src/auth.ts` `canAccessFounderResource`
+  (and `canViewLpData` / `canViewPartnerDemand`).
+- **Detail:** `admin || partner || investor` short-circuit to `true` for *any*
+  founder-owned row, regardless of relationship. Marked "Phase 0.1 split —
+  tighten in Phase 4."
+- **Impact:** Any authenticated investor/partner can read every founder's
+  resources guarded only by this helper — a cross-tenant data-exposure (IDOR)
+  risk for sensitive founder data (data rooms, financials).
+- **Fix:** Replace the blanket role bypass with a relationship predicate
+  (e.g. partner assigned to the venture, investor with an active deal/seat).
+  Audit which routes rely solely on this helper for tenancy isolation.
+
+### M3 — `sql.unsafe()` escape hatch with no guardrail
+- **Files:** `cloudflare-worker/src/db.ts` (defines `.unsafe`); used in
+  `analyticsReports.ts`, `calendar.ts`, `routes/linkedin.ts`,
+  `routes/projects.ts`, `routes/matches.ts`, `routes/network.ts`,
+  `routes/admin_contracts.ts`, `routes/monitoring_analytics.ts`,
+  `routes/partners.ts`, `routes/dd.ts`.
+- **Detail:** All current call sites bind parameters and build dynamic
+  fragments (column lists, `IN (?, ?)` placeholders) from **hardcoded
+  allowlists**, so no injection exists today. But `.unsafe` takes a raw SQL
+  string, and there is no test/lint preventing a future call from interpolating
+  user input.
+- **Fix:** Add a `check-*` drift test (mirroring the existing `test:drift`
+  suite) that greps for `sql.unsafe(` containing a `${...}` that isn't a
+  whitelisted identifier, or wrap dynamic-column building in a helper that only
+  accepts keys from a known set.
+
+### M4 — Scoring HMAC key reuse fallback (non-prod)
+- **Files:** `cloudflare-worker/src/auth.ts` `assertScoringHmacSecret`.
+- **Detail:** In dev/preview, the Epic-5 score-integrity HMAC falls back to
+  `JWT_SECRET` when `SCORING_HMAC_SECRET` is unset, colliding the score-signing
+  key with the auth-signing key. Prod requires the explicit secret (good).
+- **Impact:** Cross-purpose key reuse; a leak of one key compromises both in any
+  environment relying on the fallback. Low blast radius since prod is excluded.
+- **Fix:** Provision a distinct `SCORING_HMAC_SECRET` in all environments and
+  drop the fallback, or derive a domain-separated subkey (HKDF) from a single
+  master rather than reusing `JWT_SECRET` verbatim.
+
+---
+
+## Low-Severity / Hardening
+
+- **L1 — `esbuild` advisory (GHSA-g7r4-m6w7-qqqr).** Dev-only, Windows-only
+  dev-server arbitrary file read; transitive via Vite/Wrangler tooling. Not in
+  the deployed worker. Run `npm audit fix` / bump to keep the tree clean.
+- **L2 — Markdown preview self-XSS surface.** `ArticleAuthorPage.jsx`
+  (`renderPreview` → `dangerouslySetInnerHTML`) renders the author's own draft
+  in their own browser. Self-only; reader-facing HTML goes through the safe
+  server renderer (see Notes). Consider routing preview through the same
+  server-side `renderMarkdown` for consistency.
+- **L3 — Turnstile fail-open in dev/preview.** `services/turnstile.ts` correctly
+  fails **closed** in production but returns `true` when the secret is unset in
+  dev. Acceptable; ensure preview that faces the internet sets the secret.
+- **L4 — Lazy `ALTER TABLE` migrations on request path.**
+  `routes/linkedin.ts` runs schema migrations on first request and swallows
+  errors. Functionally fine (columns are hardcoded) but couples request latency
+  to DDL and hides failures. Prefer the `sql/` migration flow per `CLAUDE.md`.
+- **L5 — Confirm structured logging excludes secrets.** Numerous
+  `console.error/warn` calls log error objects; spot-checks were clean, but a
+  pass to ensure tokens/PII never reach logs (esp. OAuth/Stripe/Telegram error
+  paths) is worth scheduling.
+
+---
+
+## Dependency Risks
+
+| Package | Where | Severity | Note / Remediation |
+| ------- | ----- | -------- | ------------------ |
+| `esbuild` 0.27.3–0.28.0 | transitive (dev tooling) | Low | GHSA-g7r4-m6w7-qqqr, dev-server only, Windows only. `npm audit fix`. Not in deployed worker. |
+| `jose` | worker (JWT/JWK verify) | — | Vetted lib, kept current — good. Keep pinned & monitor. |
+| `@simplewebauthn/*` 13.x | passkeys | — | Current major. Monitor for advisories. |
+| `wrangler` ~4.98 | deploy tooling | — | Current. |
+
+`npm audit --omit=dev` reports **1 low** vulnerability only. No high/critical in
+the production dependency graph.
+
+---
+
+## Testing & Linting Status
+
+| Command | Result |
+| ------- | ------ |
+| `npm audit --omit=dev` | 1 low (esbuild, dev-only) — see L1 |
+| Repo grep for hardcoded secrets (`sk_live_`, `AKIA`, `ghp_`, `xox*`, PEM, `AIza`) | No real secrets — only prefix-matching code & tests |
+| Static review of auth/JWT/cookie/CSRF/CORS/SQL/markdown paths | Documented above |
+
+Note: `npm test` is a placeholder (`exit 1`); the real suite is `npm run
+test:drift` (TS typecheck + drift + scenario tests). It was **not** executed as
+part of this read-only pass since no code was changed. Run it before any fix PR.
+
+---
+
+## Notes & Follow-up
+
+**Verification trail (why the high-severity section is empty):**
+- *SQL injection:* `getSQL` tagged template parameterizes via
+  `db.prepare().bind()`. `sql.unsafe` call sites reviewed — dynamic fragments
+  come from hardcoded allowlists (`projects.ts` `baseFields`/`privilegedFields`,
+  `linkedin.ts` `REQUIRED_COLS`, `network.ts` placeholder lists,
+  `analyticsReports.ts` filter list) — no user-controlled identifiers reach SQL.
+- *AuthN:* JWT HS256 with `algorithms: ['HS256']` pinned on verify (blocks
+  alg-confusion / `none`); `JWT_SECRET` ≥32 bytes asserted at boot. Cookies:
+  `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age`. CSRF double-submit on
+  mutating cookie-auth verbs.
+- *XSS:* `services/newsRender.ts` HTML-escapes input first, then applies inline
+  transforms; link/image URLs are allowlisted to `http(s)`/root-relative
+  (protocol-relative and `javascript:` blocked). Reader HTML is server-rendered
+  through this path.
+- *Secrets/CORS:* no secrets in `wrangler.toml` `[vars]` (all via `wrangler
+  secret put`); CORS origin is a strict allowlist with `credentials: true`.
+
+**Assumptions:** D1 row-level tenancy relies on app-layer checks (no native
+RLS) — M2 matters most here. The `backend/` FastAPI was treated as non-prod per
+`CLAUDE.md` and not audited.
+
+**Recommended for manual pen-testing later:**
+1. Authorization matrix fuzzing across all `/api/*` routes per role (find any
+   handler missing `requireAuth`/`requireRole` or relying on M2's broad bypass).
+2. Admin **impersonation** Bearer flow + TOTP step-up bypass attempts.
+3. Stripe webhook signature verification and billing state-machine abuse.
+4. OAuth callback handling (state/nonce, open-redirect on
+   `OAUTH_CALLBACK_BASE_URL`).
+5. R2 signed-download URL scoping / object-key traversal.
+
+---
+
+## OWASP ASVS Posture (rough mapping)
+
+| Area | Current | Gap to next level |
+| ---- | ------- | ----------------- |
+| V2 Authentication | **~L2** | Distinct per-purpose secrets everywhere (M4); document session-fixation/replay handling for `jti`. |
+| V3 Session Mgmt | **~L2** | Cookies hardened; verify idle+absolute timeout and server-side revocation coverage. |
+| V4 Access Control | **L1, approaching L2** | M2 is the blocker — replace blanket role bypass with relationship predicates; add automated authz tests. |
+| V5 Validation/Encoding | **~L2** | Centralize schema validation (Zod-style) on all bodies; guard `sql.unsafe` (M3). |
+| V7 Errors/Logging | **L1→L2** | Confirm no secret/PII in logs (L5); structured log schema. |
+| V9 Communications | **L2** | TLS at edge, HSTS set, external calls use HTTPS — good. |
+| V14 Config | **L1→L2** | Resolve fail-open decisions (M1), clear dev/preview secret provisioning, dependency hygiene (L1). |
+
+**To reach a clean ASVS L2 overall:** close M1–M4, add an automated
+per-route authorization test matrix, and adopt centralized request-body schema
+validation. L1 is effectively met today.

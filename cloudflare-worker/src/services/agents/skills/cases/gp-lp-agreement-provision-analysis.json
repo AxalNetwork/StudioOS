@@ -1,0 +1,34 @@
+{
+  "skill": "gp-lp-agreement-provision-analysis",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "synthetic_fixture": true,
+        "skill_name": "GP and LP Agreement Provision Analysis",
+        "task_scope": "Structures key GP/LP provisions for review including authority, economics, duties, conflicts, transfers and reporting.",
+        "evidence": [
+          "GP authority and LP rights"
+        ],
+        "omitted_field": "distribution waterfall definition"
+      },
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for GP authority and LP rights."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "GP authority and LP rights"
+    ],
+    "must_say_not_recorded": [
+      "distribution waterfall definition"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

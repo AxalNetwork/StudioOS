@@ -1,0 +1,32 @@
+{
+  "GET /api/partner-onboard/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "GET /api/partner-onboard/:token/status": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/partner-onboard/:token/finalize": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/partner-onboard/:token/profile": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/partner-onboard/:token/propose": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/partner-onboard/:token/select": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}
