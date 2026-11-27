@@ -32,5 +32,9 @@ test('RequireAuth keys the redirect on location.key, and the email link starts t
   assert.match(app, /!pendingNextRedirected\(location\.key\)/);
   assert.match(app, /markPendingNextRedirected\(location\.key\)/);
   const sync = read('frontend/src/hooks/useAuthSync.jsx');
-  assert.match(sync, /params\.has\('google'\) \|\| params\.has\('google_signup'\) \|\| params\.get\('magic'\) === 'ok'/);
+  const marker = sync.slice(sync.indexOf('const [postOAuthMarker]'), sync.indexOf('const [oauthBootstrapping'));
+  assert.match(marker, /params\.has\('google'\) \|\| params\.has\('google_signup'\)/);
+  assert.match(marker, /params\.get\('magic'\) === 'ok'/);
+  // D4580 part 2 (#4580): Apple's callback lands with `apple=ok` (`apple_signup=1` for a new account).
+  assert.match(marker, /params\.get\('apple'\) === 'ok' \|\| params\.has\('apple_signup'\)/);
 });

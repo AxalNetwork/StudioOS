@@ -78,7 +78,7 @@ import {
   verifyAppleIdToken,
 } from '../services/appleIdToken';
 import type { AppleIdentity } from '../services/appleIdToken';
-import { sanitizeRedirect } from './auth_google';
+import { sanitizeRedirect, withLandingMarker } from './auth_google';
 import type { RouteMount } from '../util/routeRegistry';
 
 const authApple = new Hono<{ Bindings: Env }>();
@@ -443,7 +443,7 @@ authApple.post('/callback', async (c) => {
       await sql`INSERT INTO activity_logs (action, details, actor, user_id)
                 VALUES ('apple_account_linked', ${`linked apple_sub (email_mismatch=${mismatch}, relay=${identity.privateEmail})`}, ${eh}, ${uid})`;
       const back = sanitizeRedirect(state.redirect);
-      return c.redirect(`${appUrl(c.env)}${back}${back.includes('?') ? '&' : '?'}apple_linked=1`, 303);
+      return c.redirect(`${appUrl(c.env)}${withLandingMarker(back, 'apple_linked=1')}`, 303);
     }
 
     const resolved = await resolveAppleSignin(c, sql, identity, { name: nameFromAppleUser(form.user), lane: state.lane });
@@ -457,7 +457,7 @@ authApple.post('/callback', async (c) => {
     const requested = sanitizeRedirect(state.redirect);
     const landing = resolved.newSignup && requested === '/dashboard' ? '/onboarding' : requested;
     return c.redirect(
-      `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}apple=ok${resolved.newSignup ? '&apple_signup=1' : ''}`,
+      `${appUrl(c.env)}${withLandingMarker(landing, `apple=ok${resolved.newSignup ? '&apple_signup=1' : ''}`)}`,
       303,
     );
   } catch (e: any) {

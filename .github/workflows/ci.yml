@@ -1053,6 +1053,12 @@ jobs:
       - name: Fund report print (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/report_print_6250.spec.js --retries=0 --trace off
+      # #4580 (D4580-p2): the return to Grow after each Sign In v2 method at 1440 and 390 — the email link (and an
+      # expired one) through tests/e2e/_helpers.js' local Worker and outbox, the code, passkey, Apple and Google with
+      # mocked callbacks, each cancel or refusal retried. Same docs/ and fixtures pattern; no account, no email.
+      - name: Grow return after sign-in (local Worker, fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/grow_return_4580.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
