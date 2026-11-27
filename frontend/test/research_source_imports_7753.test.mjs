@@ -17,6 +17,7 @@ import SourceImportRun from '../src/pages/research/imports/SourceImportRun.jsx';
 import {
   CHUNK_BOUND, ImportProblem, PACE_MS, SENTENCES, buildPlan, checkPackage, createRun, emptyClasses, judge, listDigest,
   missingClass, previewRequests, readPackage, refusalSentence, removalWord, sha256Text,
+  hasLoneSurrogate,
 } from '../src/pages/research/imports/importRun.js';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -558,4 +559,10 @@ test('both pages draw their first frame: the gate marks, the crumb and a skeleto
   assert.match(one, /Run 00000000/);
   assert.match(one, /Counts only: no record content on this page/);
   assert.match(one, /Loading the run/);
+});
+
+test('a lone surrogate is caught without a regex lookbehind (Safari before 16.4 cannot parse one)', () => {
+  // Mutation checked: the low-surrogate branch removed, and a high surrogate accepted without its pair.
+  for (const ok of ['', 'plain', 'caf\u00e9', '\uD83D\uDE00', 'a\uD83D\uDE00b\uD83D\uDE00']) assert.equal(hasLoneSurrogate(ok), false, JSON.stringify(ok));
+  for (const bad of ['\uD800', 'x\uD800', '\uD800x', '\uDC00', 'x\uDC00y', '\uDE00\uD83D', '\uD83D\uD83D\uDE00']) assert.equal(hasLoneSurrogate(bad), true, JSON.stringify(bad));
 });

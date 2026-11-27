@@ -41,7 +41,22 @@ const SOURCE_KEY = /^[a-z][a-z0-9_.-]{0,99}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const CODE = /^[a-z][a-z0-9_]{0,59}$/;
 const SEP = '\u001f';
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+/**
+ * True when a string holds a UTF-16 surrogate that is not half of a pair. A loop, not a regex: the
+ * lookbehind a regex needs cannot parse in Safari/iOS before 16.4 (safari_regex_compat_3592).
+ */
+export function hasLoneSurrogate(text) {
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const next = text.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) { i++; continue; }
+      return true;
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) return true;
+  }
+  return false;
+}
 
 /* ------------------------------------------------------------------ fixed sentences */
 
@@ -161,7 +176,7 @@ export function listDigest(members) {
 /* ------------------------------------------------------------------ reading and checking the file */
 
 function wellFormed(value) {
-  if (typeof value === 'string') return !LONE_SURROGATE.test(value);
+  if (typeof value === 'string') return !hasLoneSurrogate(value);
   if (Array.isArray(value)) return value.every(wellFormed);
   return value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
 }
@@ -207,7 +222,7 @@ export async function checkPackage(doc, { sha256, size }) {
     if (!key || byKey.has(key)) throw new ImportProblem('bad_source', { source: key });
     const cols = s.columns;
     if (!Array.isArray(cols) || cols.length === 0 || cols.length > MAX_COLUMNS || new Set(cols).size !== cols.length ||
-        cols.some((c) => typeof c !== 'string' || c.length === 0 || c.length > 200 || LONE_SURROGATE.test(c))) {
+        cols.some((c) => typeof c !== 'string' || c.length === 0 || c.length > 200 || hasLoneSurrogate(c))) {
       throw new ImportProblem('bad_source', { source: key });
     }
     if (!isCount(s.expected_records) || !isCount(s.expected_cells) || typeof s.digest !== 'string' || !HEX64.test(s.digest)) {
