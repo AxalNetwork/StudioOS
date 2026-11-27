@@ -2,6 +2,12 @@
   "GET /api/work-graph/releases/pending": {
     "kind": "filter"
   },
+  "GET /api/work-graph/swarm/audit": {
+    "kind": "filter"
+  },
+  "GET /api/work-graph/swarm/capacity": {
+    "kind": "filter"
+  },
   "POST /api/work-graph/releases/attestations": {
     "kind": "target"
   },
