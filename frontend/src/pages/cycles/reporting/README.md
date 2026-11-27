@@ -10,5 +10,7 @@ Grow's Reporting desk, Duties and one report, from the owner's canvas "Reporting
 | `ReportingDialogs.jsx` | The in-page dialogs: Give an expected date, Reminder settings, Send and Correct, each keeping its refusal |
 | `printing/` | #6094: the isolated light print document, native print control and audience-safe frozen projection |
 | `ReportPage.jsx` | One report: the four-step builder for a draft (founders only), and the sent report with Correct, read only for anyone else the Worker admits |
+| `questionsModel.js` | D6225 (#6225): the rules of a report's questions on both sides: each side's pill words, what a question is about, the founders' counts line, a figure's live question count, the counter and what a box may send |
+| `ReportQuestions.jsx` | D6225: the investor's "Your questions" in the reader (with the composer and Withdraw) and the founders' Questions section on a sent report (with Reply), over `/api/report-questions` |
 
 **Adding to it:** a number comes from a Worker read, never from the page; a figure with no value is a dash with the Worker's reason. The page sends choices (in or out, a reason, a share), never a figure's value, except the founders' own typed figures. Who may write is the Worker's `can_write` (the desk) or `view: 'team'` (a report), never the role alone. A change opens a dialog in the page; never a browser pop-up.

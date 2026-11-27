@@ -11,6 +11,8 @@ import {
 import Sheet from '../../ui/Sheet.jsx';
 import ReportPrintButton from '../cycles/reporting/printing/ReportPrintButton.jsx';
 import { figuresCsv, figuresCsvName } from './portfolioReportsModel';
+import { InvestorQuestions } from '../cycles/reporting/ReportQuestions.jsx';
+import { figureChip } from '../cycles/reporting/questionsModel.js';
 
 /**
  * D1061 (#2931) — the company page's blocks (RPT10, RPT11, RPT13): Figures as
@@ -27,6 +29,10 @@ import { figuresCsv, figuresCsvName } from './portfolioReportsModel';
  * for a sent report, the period for one still owed) with "‹ Reports" back
  * and the period's own pill, and "Ask for this report" pinned at its foot.
  * Every press is at least 44px tall there.
+ *
+ * D6225 (#6225, GRQ22–GRQ22b): the reader ends with the investor's own
+ * questions to the company's founders (`InvestorQuestions`), and each figure
+ * row carries "Question about this figure" and its live question count.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:border-axal-violet/40 disabled:opacity-50 max-sm:min-h-11 max-sm:flex-1 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-violet-400/60';
@@ -222,6 +228,9 @@ export function ReportReader({ uid, company, onClose, row = null }) {
   const [state, setState] = useState({ status: 'loading', report: null });
   const [docError, setDocError] = useState('');
   const [tick, setTick] = useState(0);
+  // D6225: the figure a question is about ({ key }), or the whole report ({ key: null }); and the investor's own questions.
+  const [asking, setAsking] = useState(null);
+  const [mine, setMine] = useState({ questions: [], canAsk: false });
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading', report: null });
@@ -231,6 +240,7 @@ export function ReportReader({ uid, company, onClose, row = null }) {
   const r = state.report;
   const mods = r ? readerModules(r) : { groups: [], leftOut: [] };
   const title = r ? (r.title || `${periodWord(r.period?.label)} report`) : 'Report';
+  const figureMap = Object.fromEntries(mods.groups.flatMap((g) => g.figures.map((f) => [f.key, { label: f.label, value: f.value ?? null }])));
   // RPT21: on a phone the reader is a full-screen sheet with "‹ Reports" in place of the dialog's head.
   return (
     <Sheet label="Report" eyebrow={narrow ? undefined : `Report from ${company}`} title={narrow ? undefined : title} onClose={onClose} width={640} testId="company-reader"
@@ -256,6 +266,12 @@ export function ReportReader({ uid, company, onClose, row = null }) {
                     <span className="font-semibold text-axal-ink dark:text-gray-100">{f.label}</span>
                     <span className="tabular-nums">{f.value ?? 'Not recorded'}</span>
                     <span className="w-full text-[11.5px] text-axal-muted dark:text-gray-400">{[f.source, f.asOf ? `as of ${f.asOf}` : null].filter(Boolean).join(' · ')}</span>
+                    {figureChip(mine.questions, f.key) || mine.canAsk ? (
+                      <span className="flex w-full flex-wrap items-center gap-2">
+                        {figureChip(mine.questions, f.key) ? <span className="inline-flex w-fit items-center rounded-full border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[11px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-200" data-testid={`company-reader-figure-chip-${f.key}`}>{figureChip(mine.questions, f.key)}</span> : null}
+                        {mine.canAsk ? <button type="button" className={`${LINK} inline-flex min-h-[32px] items-center bg-transparent p-0 text-[12px] max-sm:min-h-11`} onClick={() => setAsking({ key: f.key })} data-testid={`company-reader-ask-${f.key}`}>Question about this figure</button> : null}
+                      </span>
+                    ) : null}
                   </div>
                 ))}
               </section>
@@ -275,7 +291,8 @@ export function ReportReader({ uid, company, onClose, row = null }) {
               )) : <p className={MUTED}>No statement is attached to this report.</p>}
               {docError ? <p role="alert" className="m-0 text-[12px] text-amber-800 dark:text-amber-300">{docError}</p> : null}
             </section>
-            <p className={MUTED}>Questions about this report go to the company. A report carries no asks to reply to.</p>
+            <InvestorQuestions reportUid={r.uid || uid} company={company} period={periodWord(r.period?.label)} figures={figureMap} asking={asking} onAsking={setAsking}
+              onQuestions={(questions, canAsk) => setMine({ questions, canAsk })} />
           </>
         ) : null}
       </div>
