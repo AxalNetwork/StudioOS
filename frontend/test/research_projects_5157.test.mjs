@@ -67,7 +67,8 @@ test('evidence rows keep index state and answerability apart and name where each
   const progress = progressFractions(READ);
   assert.deepEqual(progress.answerable, { n: 1, of: 2 });
   assert.equal(progress.keyQuestions.state, 'not_recorded');
-  assert.deepEqual(PROJECT_TABS.filter((t) => t.built).map((t) => t.slug), ['overview', 'evidence', 'findings', 'comparisons', 'brief']);
+  // D7729: Study is the sixth tab.
+  assert.deepEqual(PROJECT_TABS.filter((t) => t.built).map((t) => t.slug), ['overview', 'evidence', 'findings', 'comparisons', 'brief', 'study']);
 });
 
 test('the form: question required, title optional on create, empty text clears on edit', () => {
@@ -78,7 +79,8 @@ test('the form: question required, title optional on create, empty text clears o
   assert.deepEqual(draftBody({ question: ' Q ', title: '', objective: ' O ', scope: '', exclusions: '' }, { creating: true }), { question: 'Q', objective: 'O' });
   // Mutation checked: send nothing for an emptied field on edit → a cleared scope is never cleared.
   assert.deepEqual(draftBody({ question: 'Q', title: 'T', objective: '', scope: '', exclusions: 'E' }), { question: 'Q', title: 'T', objective: null, scope: null, exclusions: 'E' });
-  assert.deepEqual(newFromSearch('?new=1&question=EU%20GPUs'), { open: true, question: 'EU GPUs' });
+  // D7729: a plain link carries no origin; the origin cases are in study_core_7729.test.mjs.
+  assert.deepEqual(newFromSearch('?new=1&question=EU%20GPUs'), { open: true, question: 'EU GPUs', origin: null });
   assert.equal(newResearchHref('  EU GPUs  '), '/research/projects?new=1&question=EU%20GPUs');
   assert.equal(newResearchHref(''), '/research/projects?new=1');
 });
