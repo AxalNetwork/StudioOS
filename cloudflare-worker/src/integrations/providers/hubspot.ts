@@ -39,6 +39,7 @@ import { loadDealstageMap, studioStageToHubspot, hubspotStageToStudio, type Stud
 import { enabledCompanyIds, projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import { acquireRefreshLease } from '../refreshLease';
 import { runSystemMove } from '../../services/dealTransitions';
+import { ownerDealsChangedSinceSql, ownerDealByCrmIdSql } from '../crmDealScope';
 
 const HS_API = 'https://api.hubapi.com';
 const HS_AUTH = 'https://app.hubspot.com';
@@ -518,13 +519,7 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
 
   // ── outbound: push StudioOS deals modified since last sync that belong to this user.
   const localDeals = await c.env.DB.prepare(
-    'SELECT d.id, d.status, d.hubspot_deal_id, d.updated_at ' +
-    'FROM deals d ' +
-    'LEFT JOIN projects p ON p.id = d.project_id ' +
-    'LEFT JOIN founders f ON f.id = p.founder_id ' +
-    'WHERE f.user_id = ? AND datetime(d.updated_at) > datetime(?) ' +
-    'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1) ' +
-    'ORDER BY datetime(d.updated_at) DESC LIMIT 100',
+    ownerDealsChangedSinceSql('hubspot_deal_id'),
   ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id).all<{
     id: number; status: string; hubspot_deal_id: string | null;
   }>();
@@ -561,11 +556,7 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
         const localStage = hubspotStageToStudio(map, hd.properties.dealstage || '');
         if (!localStage) continue;
         const local = await c.env.DB.prepare(
-          'SELECT d.id, d.status, d.stage_changed_at FROM deals d ' +
-          'LEFT JOIN projects p ON p.id = d.project_id ' +
-          'LEFT JOIN founders f ON f.id = p.founder_id ' +
-          'WHERE d.hubspot_deal_id = ? AND f.user_id = ? ' +
-          'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
+          ownerDealByCrmIdSql('hubspot_deal_id'),
         ).bind(hd.id, row.user_id, row.id).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (local && local.status !== localStage) {
           await runSystemMove(c.env, { dealId: local.id, to: localStage, source: 'hubspot' });
@@ -649,13 +640,9 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
         // portals, so a webhook event must only ever mutate the deal owned
         // by the same user as the integration row that received it. Mirror
         // the inbound-sync join (deals→projects→founders) and require
-        // `founders.user_id = row.user_id`.
+        // the integration owner's founder (D8964: `users.founder_id`, see ../crmDealScope.ts).
         const local = await c.env.DB.prepare(
-          'SELECT d.id, d.status, d.stage_changed_at FROM deals d ' +
-          'LEFT JOIN projects p ON p.id = d.project_id ' +
-          'LEFT JOIN founders f ON f.id = p.founder_id ' +
-          'WHERE d.hubspot_deal_id = ? AND f.user_id = ? ' +
-          'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
+          ownerDealByCrmIdSql('hubspot_deal_id'),
         ).bind(String(ev.objectId), row.user_id, row.id).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (local) {
           const next = hubspotStageToStudio(map, ev.propertyValue);
