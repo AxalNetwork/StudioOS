@@ -199,7 +199,7 @@ test('mounted: the header row gets the page scoped export, and its click writes 
     assert.equal(lines[0], COMPANY_CSV_HEADER.join(','));
     assert.equal(lines.length, 3);
     assert.equal(lines[2], "rcd_3,'=cmd,Germany,2019,https://acme.example,robotics,Open Registry,https://registry.example/acme,CC-BY-4.0,2026-10-01");
-    assert.match(ui.text(), new RegExp(`Downloaded ${name.replace(/\./g, '\\.')}`));
+    assert.ok(ui.text().includes(`Downloaded ${name}`));
   } finally {
     URL.createObjectURL = hadURL.create;
     URL.revokeObjectURL = hadURL.revoke;

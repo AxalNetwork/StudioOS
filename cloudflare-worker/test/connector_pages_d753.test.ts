@@ -125,6 +125,8 @@ const SOURCES: Record<string, string[]> = {
   beehiiv: ['services/beehiiv/reads.ts', 'services/beehiiv/drafts.ts', 'integrations/providers/beehiiv.ts'],
   // D5863: the Display API reads are the client's; the sign-in, refresh and revoke stay in tiktokOAuth.ts (the TOKEN_EXCHANGE side).
   tiktok: ['services/tiktok/client.ts'],
+  // D8815: a founder's Grow reads are named in reads.ts and sent by the shared xClient.ts (HQ's posting stays HQ's).
+  x: ['services/x/reads.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { checkAiGateways, SOURCES, ALLOWED } from '../check-ai-gateways.mjs';
+import { checkAiGateways, codeFacts, SOURCES, ALLOWED } from '../check-ai-gateways.mjs';
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const TOML = read('wrangler.toml');
@@ -15,7 +15,7 @@ function setVar(toml, table, key, value) {
   assert.ok(start >= 0, `table ${table} exists`);
   let end = lines.findIndex((l, i) => i > start && /^\[/.test(l.trim()));
   if (end < 0) end = lines.length;
-  const at = lines.findIndex((l, i) => i > start && i < end && new RegExp(`^${key}\\s*=`).test(l.trim()));
+  const at = lines.findIndex((l, i) => i > start && i < end && /^([^=\s]+)\s*=/.exec(l.trim())?.[1] === key);
   const line = `${key} = ${JSON.stringify(value)}`;
   if (value === null) { if (at >= 0) lines.splice(at, 1); }
   else if (at >= 0) lines[at] = line;
@@ -103,4 +103,12 @@ test('code: a renamed gateway requirement in the source fails instead of passing
   const p = 'cloudflare-worker/src/services/agents/agentRun.ts';
   const r = run(TOML, { ...SRC, [p]: SRC[p].replace("'gateway_required'", "'gateway_needed'") });
   assert.deepEqual(r.failures.map((f) => `${f.rule} ${f.file} ${f.key}`), [`code ${p} gatewayRefusal 'gateway_required'`]);
+});
+
+test('code: each required model declaration reports its own absence', () => {
+  const file = 'cloudflare-worker/src/services/ai/catalogue.ts';
+  for (const name of ['PROVIDER_MODELS', 'GATEWAY_TEXT_MODELS']) {
+    const facts = codeFacts({ ...SRC, [file]: SRC[file].replace(`export const ${name}`, `export const RENAMED_${name}`) });
+    assert.deepEqual(facts.failures.map((failure) => failure.key), [name]);
+  }
 });

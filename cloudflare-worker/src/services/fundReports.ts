@@ -1,6 +1,6 @@
 /** D631: recorded fund facts and audited, immutable issued report periods. */
 import type { Env } from '../types';
-import { sendFundReportNotices, withFundReportDelivery } from './fundReportNotices';
+import { readLpDeliveries, recordFundReportOpened, sendFundReportNotices, withFundReportDelivery } from './fundReportNotices';
 import { deleteReportWithoutStatement, reportHasStatement } from './mercury/investorFeeds';
 import { effectiveDisplayName } from './profileExpansion';
 import { fundFigures } from './fundReportBuild';
@@ -80,7 +80,8 @@ export async function readFundPage(env:Env,fund:any,canManage:boolean){
   documents_reason:'Other fund documents are not recorded in a fund document list. The attached LPA is shown when recorded.',
   lpa,can_manage:canManage,currency:'USD'};
 }
-export async function readFundPeriod(env:Env,fundId:number,periodId:number,canManage:boolean){
+/** `viewerId` is the LP reading an issued period (never a manager): D6240 records that account's first opening. */
+export async function readFundPeriod(env:Env,fundId:number,periodId:number,canManage:boolean,viewerId?:number){
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
  if(!row||(!canManage&&row.status!=='issued'))throw new FundReportRefusal('not_found',404);
  const shaped=shapeFundPeriod(row);
@@ -92,7 +93,11 @@ export async function readFundPeriod(env:Env,fundId:number,periodId:number,canMa
  const period=withDelivery&&original ? {...withDelivery,corrects_period:original.period} : withDelivery;
  // D6249: a draft reads as it did. An issued period adds what was frozen at issue, who issued it, and what corrects it.
  if(period?.status!=='issued')return period;
- return {...period,...await issuedFigures(env,row),...await issuerName(env,row.issued_by),corrected_by_period_id:await correctedBy(env,fundId,row.id)};
+ const issued={...period,...await issuedFigures(env,row),...await issuerName(env,row.issued_by),corrected_by_period_id:await correctedBy(env,fundId,row.id)};
+ // D6240: a manager reads each LP's delivery; an LP's own read is recorded once it has been served.
+ if(canManage)return {...issued,...await readLpDeliveries(env,row.id)};
+ if(viewerId!==undefined)await recordFundReportOpened(env,row.id,viewerId);
+ return issued;
 }
 const PACK_SCHEMA='lp_quarterly_report/1';
 /** D6249: a frozen JSON object, or a throw. Unlike `parse`, an empty or absent string is not `{}`. */

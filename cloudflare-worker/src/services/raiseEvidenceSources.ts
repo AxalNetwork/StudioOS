@@ -56,11 +56,26 @@ export const EVIDENCE_RULES: readonly EvidenceRule[] = [
   // D5837 (#5837): never collected from every line. A row exists only once the founder chose one line of one exact revision for
   // one claim (`raise_ledger_selections`); its one area follows that claim's surface, so it is never proposed (`buildCandidates`).
   { kind:'ledger-fact', dataset:'ledger', source_table:'raise_ledger_selections', areas:[READINESS,NARRATIVE,FUNDS,MODEL], backs:['cash_balance','revenue','profit'], source:'connector', days:365, summary:'A figure the founder chose from one revision of a ledger statement is recorded.' },
+  // D5842 part 2 (#5842): one week of the venture's selected Search Console property, one metric, chosen by the founder for one
+  // claim (`raise_search_console_selections`). Organic search activity: it backs only organic-search claims, never paying
+  // customers, revenue or conversions (`searchConsoleMayBack`, `claimMayBack` in raiseClaims.ts).
+  { kind:'search-console-aggregate', dataset:'searchConsole', source_table:'raise_search_console_selections', areas:[NARRATIVE], backs:['organic_search','organic_search_clicks','organic_search_impressions','organic_search_ctr','distribution'], source:'connector', days:90, summary:'Organic Google web search activity for one week of the venture’s selected property is recorded; it is not paying customers, revenue or attributed conversions.' },
 ];
 /** D5837: the evidence kind of a founder-chosen ledger fact, and the table it stands on. */
 export const LEDGER_EVIDENCE_KIND='ledger-fact';
 export const LEDGER_EVIDENCE_TABLE='raise_ledger_selections';
 export const isLedgerEvidence=(r:{kind:string}):boolean=>r.kind===LEDGER_EVIDENCE_KIND;
+/** D5842 part 2: the evidence kind of a founder-chosen Search Console aggregate, and the table it stands on. */
+export const SEARCH_CONSOLE_EVIDENCE_KIND='search-console-aggregate';
+export const SEARCH_CONSOLE_SELECTION_TABLE='raise_search_console_selections';
+export const isSearchConsoleEvidence=(r:{kind:string}):boolean=>r.kind===SEARCH_CONSOLE_EVIDENCE_KIND;
+/**
+ * D5842 part 2: the kinds that exist only as a founder's own choice of one exact source value (D5837 §6). Never proposed
+ * by the hourly builder, never confirmed in place after a correction, never in an admin's read, the scoring pack or a
+ * model's input; each travels to a shared view only with its own context.
+ */
+export const FOUNDER_CHOSEN_KINDS:readonly string[]=[LEDGER_EVIDENCE_KIND,SEARCH_CONSOLE_EVIDENCE_KIND];
+export const isFounderChosen=(r:{kind:string}):boolean=>FOUNDER_CHOSEN_KINDS.includes(r.kind);
 
 /** Static, venture-bound selectors. Sync timestamps are never observation dates. */
 const QUERIES = {
@@ -138,6 +153,22 @@ const QUERIES = {
     JOIN integrations i ON i.id=f.integration_id AND i.provider_key=f.provider AND i.status='active' AND i.user_id=s.selected_by
     JOIN users u ON u.id=i.user_id AND u.is_active=1 JOIN projects p ON p.id=s.project_id AND p.deleted_at IS NULL AND p.founder_id=u.founder_id
     WHERE s.project_id=? AND s.selected_by=? AND s.status='current'`,
+  // D5842 part 2: a current selection whose property is still the venture's selected one with access granted, served by an
+  // active connection switched on for the venture's company, chosen by a founder who is still active and owns the venture.
+  // The week's current revisions and fingerprints ride along, so a correction changes the fingerprint ("changed"); a
+  // withdrawn, replaced, revoked or unselected source drops the row. Never a top page, a query or another property.
+  searchConsole: `SELECT s.uid,s.area,s.metric,s.week_start,s.week_end,s.unit,s.value,s.revision_key,s.fingerprints,
+    (SELECT group_concat(x.source_revision,'.') FROM (SELECT d.source_revision FROM search_console_daily_totals d WHERE d.project_id=s.project_id AND d.site_url=s.site_url
+      AND d.search_type='web' AND d.data_date BETWEEN s.week_start AND s.week_end ORDER BY d.data_date) x) AS current_revision_key,
+    (SELECT group_concat(x.fingerprint,',') FROM (SELECT d.fingerprint FROM search_console_daily_totals d WHERE d.project_id=s.project_id AND d.site_url=s.site_url
+      AND d.search_type='web' AND d.data_date BETWEEN s.week_start AND s.week_end ORDER BY d.data_date) x) AS current_fingerprints
+    FROM raise_search_console_selections s
+    JOIN search_console_selections v ON v.project_id=s.project_id AND v.site_url=s.site_url AND v.access_state='ok'
+    JOIN projects p ON p.id=s.project_id AND p.deleted_at IS NULL
+    JOIN users u ON u.id=s.selected_by AND u.is_active=1 AND u.founder_id=p.founder_id
+    WHERE s.project_id=? AND s.status='current' AND EXISTS(SELECT 1 FROM integrations i JOIN integration_companies ic ON ic.integration_id=i.id AND ic.company_id=p.company_id AND ic.enabled=1
+      JOIN user_company_links l ON l.company_id=ic.company_id AND l.user_id=i.user_id
+      WHERE i.user_id=v.user_id AND i.provider_key='google_search_console' AND i.status='active' AND i.auth_type='oauth2')`,
 } as const;
 /** Exact source IDs for a displayed page/decision; the hourly builder deliberately has no ID filter. */
 const SOURCE_IDS:Record<Dataset,string>={
@@ -153,6 +184,7 @@ const SOURCE_IDS:Record<Dataset,string>={
  filings83b:' AND id IN (SELECT value FROM json_each(?))',receipts:' AND m.id IN (SELECT value FROM json_each(?))',responses:' AND r.id IN (SELECT value FROM json_each(?))',
  prospects:' AND id IN (SELECT value FROM json_each(?))',models:' AND id IN (SELECT value FROM json_each(?))',
  ledger:' AND s.uid IN (SELECT value FROM json_each(?))',
+ searchConsole:' AND s.uid IN (SELECT value FROM json_each(?))',
 };
 export type EvidenceSourceRef=Pick<EvidenceCandidate,'kind'|'source_ref'>;
 /** Datasets bound to one member's own connection: the founder reading, or the founder who accepted a shared item. */
@@ -221,6 +253,16 @@ export function ledgerMaterial(r:DataRow):DataRow{
     source_key:s(r.source_key),line_label:s(r.line_label),amount:s(r.amount),amount_minor:s(r.amount_minor),currency:s(r.currency),basis:s(r.basis),
     precision:Number(r.precision),observed_on:s(r.observed_on),superseded_by:s(r.superseded_by)};
 }
+/**
+ * D5842 part 2: one Search Console selection as its fingerprint reads it, fixed keys in a fixed order with fixed types, so
+ * the item written when the founder pins (`raiseSearchConsoleSelections.ts`) and the row read back here hash alike. The
+ * current revisions and fingerprints are in it: a correction Google made since the pin changes the hash.
+ */
+export function searchConsoleMaterial(r:DataRow):DataRow{
+  const s=(v:unknown)=>v==null?null:String(v);
+  return {uid:s(r.uid),area:s(r.area),metric:s(r.metric),week_start:s(r.week_start),week_end:s(r.week_end),unit:s(r.unit),value:r.value==null?null:Number(r.value),
+    revision_key:s(r.revision_key),fingerprints:s(r.fingerprints),current_revision_key:s(r.current_revision_key),current_fingerprints:s(r.current_fingerprints)};
+}
 /** D5837: a ledger amount in the currency's minor units, exactly, or null when it cannot be (finer than the currency, or past 2^53). */
 export function ledgerMinorUnits(amountMinor:string,precision:number,exponent:number|null):number|null{
   if(exponent==null||!/^-?\d+$/.test(amountMinor)||precision>exponent)return null;
@@ -269,6 +311,10 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
       case 'ledger-fact': {const r=ledgerMaterial(row),area=EVIDENCE_AREAS.find(a=>a===r.area);if(!area||!r.uid)throw new Error('source_unreadable');
         const minor=ledgerMinorUnits(String(r.amount_minor),Number(r.precision),exponentOf(String(r.currency)));
         out.push({row:r,ref:String(r.uid),date:r.observed_on,value:minor,unit:minor==null?undefined:'cents',provider:String(r.provider),areas:[area]});break;}
+      case 'search-console-aggregate': {const r=searchConsoleMaterial(row),area=EVIDENCE_AREAS.find(a=>a===r.area);
+        if(!area||!r.uid||!['clicks','impressions','ctr'].includes(String(r.metric))||(r.unit!=='count'&&r.unit!=='ratio')||num(r.value)==null)throw new Error('source_unreadable');
+        // The reference carries the metric, so a claim check knows which organic figure the item measures (`<uid>:<metric>`).
+        out.push({row:r,ref:`${r.uid}:${r.metric}`,date:r.week_end,value:r.value,unit:String(r.unit),provider:'google_search_console',areas:[area]});break;}
     }
   }
   return out;
@@ -296,6 +342,17 @@ async function ruleCandidates(rule:EvidenceRule,rows:DataRow[],projectId:number,
  */
 export async function ledgerCandidate(env:Env,projectId:number,row:DataRow,now=new Date().toISOString()):Promise<EvidenceCandidate>{
   const rule=EVIDENCE_RULES.find(r=>r.kind===LEDGER_EVIDENCE_KIND)!;
+  const [candidate]=await ruleCandidates(rule,[row],projectId,await snapshotKey(env).catch(()=>null),now);
+  if(!candidate)throw new Error('source_unreadable');
+  return candidate;
+}
+
+/**
+ * D5842 part 2: the candidate one Search Console selection makes, built by the same code `collectEvidenceSources` runs on
+ * the row the `searchConsole` query returns. The pin writes its item from this before the selection exists.
+ */
+export async function searchConsoleCandidate(env:Env,projectId:number,row:DataRow,now=new Date().toISOString()):Promise<EvidenceCandidate>{
+  const rule=EVIDENCE_RULES.find(r=>r.kind===SEARCH_CONSOLE_EVIDENCE_KIND)!;
   const [candidate]=await ruleCandidates(rule,[row],projectId,await snapshotKey(env).catch(()=>null),now);
   if(!candidate)throw new Error('source_unreadable');
   return candidate;

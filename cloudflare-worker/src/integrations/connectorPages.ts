@@ -243,16 +243,20 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
     verified_on: null,
   },
-  // D2403 part 2 (#2403): the sign-in only. The Grow feeds are part 3 and Post to X is part 4; until then the page
-  // names no tool, and the registry claims no feed (`xFeeds.ts`, `x_connector_2403.test.ts`).
+  // D2403 part 2 (#2403): the sign-in. D8815 (#8815, part 3a): the two Grow facts, whose tools follow `xFeeds.ts`
+  // (`x_grow_8815.test.ts`); their calls are `services/x/reads.ts`'s. Post to X is part 4.
   x: {
     tagline: 'Connect your own X account: read first, publishing off until you turn it on.',
     long_description: [
       'Sign in with X to let Axal read your follower count and your own posts’ figures. Connecting asks X for read permissions only.',
+      'You press each sync from Grow: your follower count lands in Revenue and traction, beside revenue and never as revenue, and your newest 200 posts’ impressions and engagement land in Distribution, by post and by month. Reposts are left out. Only your venture’s team sees them. A figure you delete stays deleted. Each sync counts against your monthly X reads.',
       'Publishing is off. Turning it on is a second sign-in that adds posting permissions; nothing is ever posted until you press Post, and you can retract it. Available on paid founder plans.',
-      'Disconnecting revokes Axal’s access at X.',
+      'Disconnecting revokes Axal’s access at X and removes every figure your X fed.',
     ],
-    tools: [],
+    tools: [
+      tool('audience', 'followers and monthly reach', 'read', 'Reads your follower count as a dated snapshot each sync, and totals your posts’ impressions and engagement by month.', 'revenue_and_traction', ['/users/me', '/users/:id/tweets']),
+      tool('posts', 'your posts and their figures', 'read', 'Reads your newest 200 posts, reposts left out, each with its date, impressions, likes, reposts, replies, quotes and bookmarks. Never the text.', 'distribution', ['/users/me', '/users/:id/tweets']),
+    ],
     never_does: ['StudioOS never posts, replies, likes or follows on X by itself.', 'StudioOS never reads your followers’ identities or other people’s posts.'],
     prompts: [],
     prompts_reason: notRead('X'),
