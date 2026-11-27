@@ -328,6 +328,108 @@ export function emptyEligible({ counts, areas, area = null, q = '' } = {}) {
   return { text: 'No published skill yet.', way };
 }
 
+// ---------------------------------------------------------------- D8768 part 3: keyboard, live line and the TMS09 states
+
+/**
+ * TMS15's listbox: the row ↑ / ↓ / Home / End move to, from `at` in a list of `n` rows; null for any other key (the
+ * caller lets it through). It stops at the ends rather than wrapping, so a screen reader hears the last row twice
+ * instead of jumping to the top unannounced.
+ */
+export function listboxMove(at, key, n) {
+  if (!(n > 0)) return null;
+  const i = Number.isInteger(at) && at >= 0 && at < n ? at : 0;
+  switch (key) {
+    case 'ArrowDown': return Math.min(n - 1, i + 1);
+    case 'ArrowUp': return Math.max(0, i - 1);
+    case 'Home': return 0;
+    case 'End': return n - 1;
+    default: return null;
+  }
+}
+
+/**
+ * TMS15: Space on a row. Only an `eligible` row is ticked or unticked; any other row stays as it is and says why
+ * (its state's word, then the reason and recovery), so a keyboard user hears what a sighted one reads on the row.
+ */
+export function spaceOnRow(s, picked) {
+  const e = eligibilityOf(s);
+  const name = s?.name || 'This skill';
+  if (e.state === 'eligible') return { tick: true, say: picked?.has?.(s.uid) ? `${name} removed from your picks.` : `${name} picked.` };
+  const why = eligibilityWhy(e);
+  return { tick: false, say: `${name}: ${ELIGIBILITY[e.state]?.word || 'not available'}.${why ? ` ${why}` : ''}` };
+}
+
+/**
+ * TMS15's live line, said politely after each search or area change: "3 can attach, 3 blocked in Finance". It counts
+ * the rows shown, so it always matches the list a person is looking at.
+ */
+export function pickerLiveLine(rows, { area = null, q = '' } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const n = (st) => list.filter((s) => eligibilityOf(s).state === st).length;
+  const where = area ? `in ${areaOf(area)?.name || area}` : 'in all areas';
+  const needle = String(q || '').trim();
+  const head = `${n('eligible')} can attach, ${n('blocked')} blocked ${where}`;
+  const tail = [n('attached') ? `${n('attached')} attached` : null, n('unreadable') ? `${n('unreadable')} couldn’t be read` : null].filter(Boolean);
+  return `${head}${needle ? ` for “${needle}”` : ''}${tail.length ? `; ${tail.join(', ')}` : ''}.`;
+}
+
+/** TMS09 Loading: the counts line before the read lands. Every figure is "—", never 0. */
+export const COUNTS_LOADING = '— listed · — published · — can attach · — attached · — blocked by policy · — couldn’t be read';
+
+/** "10:42", the local time a list was read at; null without a valid time. */
+export function readAtWords(at) {
+  const d = at instanceof Date ? at : at == null ? null : new Date(at);
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** TMS09 Offline: what is kept and what waits. `n` picks; `at` when the list was read. */
+export function offlineWords(n, at = null) {
+  const when = readAtWords(at);
+  const picks = n > 0 ? `Your ${n} ${n === 1 ? 'pick is' : 'picks are'} kept; ` : '';
+  return `${when ? `The list is from ${when}. ` : ''}${picks}${n > 0 ? 'adding' : 'Adding'} waits until you’re back.`;
+}
+
+/** TMS09 Failure: the list could not be read. Never "No skills", and never a guess. */
+export const pickerFailureWords = (n = 0) => `Nothing below is a guess, and this isn’t “No skills”.${n > 0 ? ` Your ${n} ${n === 1 ? 'pick is' : 'picks are'} kept.` : ''}`;
+
+/** The refusals a skill can meet between the read and the save: a gate that changed in the meantime (TMS09 race). */
+const RACE_CODES = new Set(['skill_suspended', 'skill_retired', 'tool_not_approved', 'capability_missing', 'version_not_published', 'not_found']);
+
+/**
+ * TMS09 "Refused at save · race": the Worker refused one picked skill (`skill_uid`) because a gate changed after the
+ * list was read. The save is one list, so nothing changed; the refused skill is unticked and the other picks stay
+ * for one more Add. Null when the refusal is not about one of `chosen`.
+ */
+export function raceRefusal(out, chosen) {
+  if (!out || out.available || !RACE_CODES.has(out.code) || !out.skill_uid) return null;
+  const hit = (Array.isArray(chosen) ? chosen : []).find((s) => s.uid === out.skill_uid);
+  if (!hit) return null;
+  const why = out.code === 'skill_suspended' ? 'HQ suspended it a moment ago'
+    : out.code === 'skill_retired' ? 'Axal retired it a moment ago'
+      : out.code === 'tool_not_approved' ? 'a tool it needs is no longer approved'
+        : out.code === 'capability_missing' ? 'this agent no longer holds a capability it needs'
+          : 'it is no longer published here';
+  const rest = chosen.length - 1;
+  return {
+    uid: hit.uid,
+    text: `${hit.name} was not added: ${why} (${out.code}). Nothing changed. ${rest > 0 ? `It is taken out of your picks; Add again for the other ${rest}.` : 'It is taken out of your picks.'}`,
+  };
+}
+
+/**
+ * TMS02's "Your agents" line on a skill's page, from `/skills/:uid/assignable`'s counts (the agents the caller
+ * manages): "1 attached · 1 can attach · 1 blocked". Null without counts; "couldn’t be read" only when some could not.
+ */
+export function yourAgentsLine(c) {
+  if (!c || !Number.isFinite(c.eligible) || !Number.isFinite(c.listed)) return null;
+  // `countEligibility` over agents: `listed` is every agent judged, one state each.
+  const total = c.listed;
+  const parts = [`${c.attached} attached`, `${c.eligible} can attach`, `${c.blocked} blocked`];
+  if (c.unreadable) parts.push(`${c.unreadable} couldn’t be read`);
+  return `Your ${total} ${total === 1 ? 'agent' : 'agents'} · ${parts.join(' · ')}`;
+}
+
 /** TMS08 (owner's Q2 open in D8769; built to option A): the wizard's Next on the Skills step says when it goes on without any. */
 export const wizardSkillsNext = (picked) => (picked > 0 ? 'Next: model and cap' : 'Next: model and cap, with no skills');
 

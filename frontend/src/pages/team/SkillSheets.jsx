@@ -7,9 +7,11 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { AgentRadar, CostExplainer, EligibilityChip, JobLines, RunCostLine, SkillRow, TaxChips } from './SkillParts.jsx';
 import {
-  AREAS, LEVELS, OUTPUT_KINDS, RELEASE_NOTE_MAX, assignGroups, assignRows, costChangeWords, countsLine, eligibilityOf, eligibilityWhy, emptyEligible,
-  parseSkillMd, pickerRows, previewRadar, problemWords, radarVector, releaseNoteBody, scopeLine,
+  AREAS, COUNTS_LOADING, ELIGIBILITY, LEVELS, OUTPUT_KINDS, RELEASE_NOTE_MAX, assignGroups, assignRows, costChangeWords, countsLine, eligibilityOf, eligibilityWhy,
+  emptyEligible, listboxMove, offlineWords, parseSkillMd, pickerFailureWords, pickerLiveLine, pickerRows, previewRadar, problemWords, raceRefusal, radarVector,
+  releaseNoteBody, scopeLine, spaceOnRow,
 } from './skillsModel.js';
+import useOnline from '../learning/useOnline.js';
 
 /**
  * D1612 (#3952), v2 boards by #4224 (D4116) — the skill sheets: SK3 Assign
@@ -50,13 +52,6 @@ function Box({ on, disabled }) {
 
 function Refusal({ text }) {
   return text ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="skill-sheet-refusal">{text}</p> : null;
-}
-
-/** The read states every sheet shares: Reading…, switched off, could not be read. */
-function ReadState({ block, what }) {
-  if (!block) return <p className={`m-0 ${MUTED}`}>Reading…</p>;
-  if (block.unreadable) return <p role="alert" className="m-0 text-[13px] font-semibold text-axal-destructive dark:text-red-300">{what} could not be read.</p>;
-  return <HonestBlock>{block.reason}</HonestBlock>;
 }
 
 // ---------------------------------------------------------------- SK3
@@ -113,7 +108,15 @@ export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
   const [block, setBlock] = useState(null);
   const [picked, setPicked] = useState(() => new Set());
   const [refusal, setRefusal] = useState('');
-  useEffect(() => { let alive = true; agents.assignable(skill.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [skill.uid]);
+  const [readAt, setReadAt] = useState(null);
+  const [reads, setReads] = useState(0);
+  const online = useOnline();
+  useEffect(() => {
+    let alive = true;
+    setBlock(null);
+    agents.assignable(skill.uid).then((b) => { if (alive) { setBlock(b); if (b?.available) setReadAt(new Date()); } });
+    return () => { alive = false; };
+  }, [skill.uid, reads]);
   const rows = block?.available ? assignRows(block.value?.agents, skill, personaOf) : [];
   const free = rows.filter((a) => eligibilityOf(a).state === 'eligible');
   const counts = block?.available ? countsLine(block.value?.counts) : null;
@@ -129,11 +132,12 @@ export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!picked.size} onClick={save} data-testid="assign-skill-save">{picked.size ? `Add to ${picked.size} ${picked.size === 1 ? 'agent' : 'agents'}` : 'Add'}</button>
+          <button type="button" className={BTN_PRIMARY} disabled={!picked.size || !online} onClick={save} data-testid="assign-skill-save">{picked.size ? `Add to ${picked.size} ${picked.size === 1 ? 'agent' : 'agents'}` : 'Add'}</button>
         </div>
       )}>
       <div className="flex flex-col gap-3 px-5 py-5">
-        {!block?.available ? <ReadState block={block} what="The agents" /> : !rows.length ? <HonestBlock>No agent on a Team you edit yet.</HonestBlock> : (
+        {!online ? <OfflineNote picks={picked.size} at={readAt} testId="assign-skill-offline" /> : null}
+        {!block?.available ? <PickerReadState block={block} what="The agents" picks={picked.size} onRetry={() => setReads((n) => n + 1)} testPrefix="assign-skill" /> : !rows.length ? <HonestBlock>No agent on a Team you edit yet.</HonestBlock> : (
           <>
             <div className="flex flex-wrap items-center gap-2 rounded-axal-md border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] font-semibold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">
               {picked.size} of {free.length} agents selected
@@ -153,14 +157,16 @@ export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
 
 // ---------------------------------------------------------------- D8768: the one picker
 
-/** TMS06: a skill's job, needs, output and cost inside a picker, with Back that keeps the picks and returns focus. */
+/** TMS06: a skill's job, needs, output and cost inside a picker, with Back (or Esc) that keeps the picks and returns focus. */
 function PickerDetail({ s, onBack }) {
   const back = useRef(null);
   useEffect(() => { back.current?.focus?.(); }, []);
   const e = eligibilityOf(s);
+  // TMS15: Esc goes back to the list, not out of the drawer (the Sheet skips an Escape already handled).
+  const onKey = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation?.(); onBack(); } };
   return (
-    <section className="flex flex-col gap-2 rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700" aria-label={`${s.name}: details`} data-testid="skill-picker-detail">
-      <button ref={back} type="button" className={`w-fit ${BTN_TEXT}`} onClick={onBack} data-testid="skill-picker-back">‹ Back to the list</button>
+    <section className="flex flex-col gap-2 rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700" aria-label={`${s.name}: details`} onKeyDown={onKey} data-testid="skill-picker-detail">
+      <button ref={back} type="button" className={`w-fit max-sm:min-h-[44px] ${BTN_TEXT}`} onClick={onBack} data-testid="skill-picker-back">‹ Back to the list</button>
       <span className="flex flex-wrap items-center gap-2"><b className="text-[14px] text-axal-ink dark:text-gray-100">{s.name}</b><EligibilityChip e={e} /></span>
       <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-200">{s.description || <Unrecorded />}</p>
       <JobLines s={s} />
@@ -176,31 +182,64 @@ function PickerDetail({ s, onBack }) {
  * D8768: the one skill picker, shared by an existing agent's Add skills drawer (TMS04–TMS06) and the Add-an-agent
  * wizard (TMS07, TMS08). It draws what the Worker's one rule answered (`eligibility` on each row, `counts`, `areas`):
  * natural fit first and labelled, every published skill listed, only `eligible` tickable, every other state with its
- * reason and recovery. Search (`/` focuses it) and the area filter narrow what is shown and never drop a pick, and a
- * skill's details open in place and come back with the picks and focus kept.
+ * reason and recovery. Search and the area filter narrow what is shown and never drop a pick, and a skill's details
+ * open in place and come back with the picks and focus kept.
+ *
+ * Part 3 (TMS15's keyboard): the rows are a multi-select listbox with one tab stop. `/` focuses search; ↑ ↓ Home End
+ * move; Space ticks an eligible row and says why any other stays unticked; Enter opens details and Esc there comes
+ * back to the same row; Esc in search clears the words before it closes the drawer. A polite live line says what the
+ * list now holds ("3 can attach, 3 blocked in Finance") after each search or area change. On a phone the search,
+ * area chips and rows are 44 px targets.
  */
 export function SkillPicker({ value, exclude, picked, onTick, testPrefix, toolsLine = false }) {
   const [q, setQ] = useState('');
   const [area, setArea] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [active, setActive] = useState(0);
+  const [said, setSaid] = useState('');
   const search = useRef(null);
+  const options = useRef(new Map());
   const all = (Array.isArray(value?.skills) ? value.skills : []).filter((s) => !exclude?.has(s.uid));
   const inArea = area ? all.filter((s) => (s.taxonomy || []).some((t) => t.category_slug === area)) : all;
   const rows = pickerRows(inArea, q);
   const listedAreas = (value?.areas || []).filter((a) => a.listed > 0);
+  const at = rows.length ? Math.min(active, rows.length - 1) : 0;
+  const focusRow = (i) => {
+    setActive(i);
+    const s = rows[i];
+    if (s) { try { options.current.get(s.uid)?.focus?.(); } catch { /* focus is a convenience */ } }
+  };
   const onKey = (e) => {
-    if (e.key === '/' && e.target?.tagName !== 'INPUT' && e.target?.tagName !== 'TEXTAREA') { e.preventDefault(); search.current?.focus(); }
+    if (e.key === '/' && e.target?.tagName !== 'INPUT' && e.target?.tagName !== 'TEXTAREA') { e.preventDefault(); search.current?.focus?.(); }
+  };
+  const onSearchKey = (e) => {
+    if (e.key === 'Escape' && q) { e.preventDefault(); e.stopPropagation?.(); setQ(''); setSaid(''); setActive(0); }
+    else if (e.key === 'ArrowDown' && rows.length) { e.preventDefault(); focusRow(0); }
+  };
+  const onListKey = (e) => {
+    const to = listboxMove(at, e.key, rows.length);
+    if (to != null) { e.preventDefault(); focusRow(to); return; }
+    const s = rows[at];
+    if (!s) return;
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      const r = spaceOnRow(s, picked);
+      if (r.tick) onTick(s.uid);
+      setSaid(r.say);
+    } else if (e.key === 'Enter') { e.preventDefault(); setDetail(s.uid); }
   };
   const open = detail ? all.find((s) => s.uid === detail) : null;
   const back = () => {
     const uid = detail;
     setDetail(null);
-    setTimeout(() => { try { document.getElementById?.(`${testPrefix}-details-${uid}`)?.focus?.(); } catch { /* focus is a convenience */ } }, 0);
+    setTimeout(() => { try { options.current.get(uid)?.focus?.(); } catch { /* focus is a convenience */ } }, 0);
   };
   if (open) return <PickerDetail s={open} onBack={back} />;
   const eligible = rows.filter((s) => eligibilityOf(s).state === 'eligible');
   const empty = !eligible.length ? emptyEligible({ counts: value?.counts, areas: value?.areas, area, q }) : null;
   const counts = countsLine(value?.counts);
+  const live = said || pickerLiveLine(rows, { area, q });
+  const narrowTo = (next) => { setSaid(''); setActive(0); if ('q' in next) setQ(next.q); if ('area' in next) setArea(next.area); };
   return (
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div className="flex flex-col gap-2" onKeyDown={onKey} data-testid={`${testPrefix}-picker`}>
@@ -208,48 +247,88 @@ export function SkillPicker({ value, exclude, picked, onTick, testPrefix, toolsL
       <label className="relative flex items-center">
         <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 text-axal-muted dark:text-gray-400" />
         <span className="sr-only">Search by job, what it needs or what you get</span>
-        <input ref={search} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills ( / )" aria-keyshortcuts="/"
-          className={`${FIELD} h-9 w-full pl-8 text-[12.5px]`} data-testid={`${testPrefix}-search`} />
+        <input ref={search} type="search" value={q} onChange={(e) => narrowTo({ q: e.target.value })} onKeyDown={onSearchKey} placeholder="Search skills ( / )" aria-keyshortcuts="/"
+          aria-controls={`${testPrefix}-listbox`} className={`${FIELD} h-9 w-full pl-8 text-[12.5px] max-sm:h-11`} data-testid={`${testPrefix}-search`} />
       </label>
       {listedAreas.length ? (
         <div role="group" aria-label="Area" className="flex flex-wrap gap-1.5">
           {[{ area: null, name: 'All' }, ...listedAreas.map((a) => ({ area: a.area, name: AREAS.find((x) => x.axis === a.area)?.name || a.area, a }))].map((x) => (
-            <button key={x.name} type="button" aria-pressed={area === x.area} onClick={() => setArea(x.area)}
-              className={`inline-flex min-h-[28px] items-center rounded-axal-pill border px-2.5 text-[12px] ${area === x.area ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
+            <button key={x.name} type="button" aria-pressed={area === x.area} onClick={() => narrowTo({ area: x.area })}
+              className={`inline-flex min-h-[28px] items-center rounded-axal-pill border px-2.5 text-[12px] max-sm:min-h-[44px] max-sm:px-3.5 ${area === x.area ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
               data-testid={`${testPrefix}-area-${x.area || 'all'}`}>{x.name}{x.a ? ` · ${x.a.eligible}/${x.a.listed}` : ''}</button>
           ))}
         </div>
       ) : null}
+      <p role="status" aria-live="polite" className="sr-only" data-testid={`${testPrefix}-live`}>{live}</p>
       {empty ? (
         <div role="status" className="flex flex-col gap-1.5 rounded-axal-md border border-dashed border-axal-hairline px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-200" data-testid={`${testPrefix}-empty`}>
           <span>{empty.text}</span>
-          {empty.way ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => { setQ(''); setArea(empty.way.area); }} data-testid={`${testPrefix}-way`}>{empty.way.text} Show them</button> : null}
+          {empty.way ? <button type="button" className={`w-fit max-sm:min-h-[44px] ${BTN_TEXT}`} onClick={() => narrowTo({ q: '', area: empty.way.area })} data-testid={`${testPrefix}-way`}>{empty.way.text} Show them</button> : null}
           {picked.size ? <span className={MUTED}>{`Your ${picked.size} ${picked.size === 1 ? 'pick is' : 'picks are'} kept.`}</span> : null}
         </div>
       ) : null}
-      <div role="group" aria-label="Skills" className="flex flex-col">
-        {rows.map((s) => {
-          const e = eligibilityOf(s);
-          const why = eligibilityWhy(e);
-          const off = e.state !== 'eligible';
-          const on = picked.has(s.uid);
-          return (
-            <div key={s.uid} className={off ? 'opacity-80' : ''}>
-              <label className={off ? '' : 'cursor-pointer'}>
-                <input type="checkbox" className="sr-only" checked={on} disabled={off} onChange={() => onTick(s.uid)} data-testid={`${testPrefix}-${s.uid}`} />
-                <SkillRow s={s} version={s.version} why={why} state={e} check={<Box on={on} disabled={off} />}
-                  toolState={(t) => (e.state === 'blocked' && e.code === 'tool_not_approved' && e.tool?.key === t.key ? 'no' : 'ok')}>
-                  <button type="button" id={`${testPrefix}-details-${s.uid}`} className={BTN_TEXT} onClick={(ev) => { ev.preventDefault(); setDetail(s.uid); }} data-testid={`${testPrefix}-details-${s.uid}`}>Details</button>
-                </SkillRow>
-              </label>
-              {toolsLine && Array.isArray(s.tools_to_grant) && s.tools_to_grant.length && on ? (
-                <span className={`block pb-2 pl-7 ${MUTED}`} data-testid={`${testPrefix}-tools-${s.uid}`}>{`Step 3 will ask you to approve ${s.tools_to_grant.join(', ')}.`}</span>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+      {rows.length ? (
+        <div role="listbox" id={`${testPrefix}-listbox`} aria-label="Skills" aria-multiselectable="true" onKeyDown={onListKey} className="flex flex-col" data-testid={`${testPrefix}-listbox`}>
+          {rows.map((s, i) => {
+            const e = eligibilityOf(s);
+            const why = eligibilityWhy(e);
+            const off = e.state !== 'eligible';
+            const on = picked.has(s.uid);
+            return (
+              <div key={s.uid} role="option" aria-selected={on} aria-disabled={off} tabIndex={i === at ? 0 : -1}
+                ref={(n) => { if (n) options.current.set(s.uid, n); else options.current.delete(s.uid); }}
+                onFocus={() => setActive(i)} aria-label={`${s.name}, ${ELIGIBILITY[e.state]?.word || ''}${e.fit ? ', natural fit' : ''}`}
+                className={`rounded-axal-md outline-none focus-visible:ring-2 focus-visible:ring-axal-violet max-sm:min-h-[44px] dark:focus-visible:ring-violet-400 ${off ? 'opacity-80' : ''}`}
+                data-testid={`${testPrefix}-option-${s.uid}`}>
+                <label className={off ? '' : 'cursor-pointer'}>
+                  <input type="checkbox" className="sr-only" tabIndex={-1} aria-hidden="true" checked={on} disabled={off} onChange={() => onTick(s.uid)} data-testid={`${testPrefix}-${s.uid}`} />
+                  <SkillRow s={s} version={s.version} why={why} state={e} check={<Box on={on} disabled={off} />}
+                    toolState={(t) => (e.state === 'blocked' && e.code === 'tool_not_approved' && e.tool?.key === t.key ? 'no' : 'ok')}>
+                    <button type="button" tabIndex={-1} className={`max-sm:min-h-[44px] ${BTN_TEXT}`} onClick={(ev) => { ev.preventDefault(); setActive(i); setDetail(s.uid); }} data-testid={`${testPrefix}-details-${s.uid}`}>Details</button>
+                  </SkillRow>
+                </label>
+                {toolsLine && Array.isArray(s.tools_to_grant) && s.tools_to_grant.length && on ? (
+                  <span className={`block pb-2 pl-7 ${MUTED}`} data-testid={`${testPrefix}-tools-${s.uid}`}>{`Step 3 will ask you to approve ${s.tools_to_grant.join(', ')}.`}</span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * TMS09 for the pickers: a list that could not be read says so, never "No skills", keeps the picks and offers Try
+ * again; loading shows the counts as "—"; switched off is said as it was. `picks` is how many are held.
+ */
+function PickerReadState({ block, what, picks = 0, onRetry, testPrefix }) {
+  if (!block) {
+    return (
+      <div aria-busy="true" className="flex flex-col gap-1.5" data-testid={`${testPrefix}-loading`}>
+        <span className={`font-mono text-[11.5px] ${MUTED}`}>{COUNTS_LOADING}</span>
+        <p className={`m-0 ${MUTED}`}>Reading {what.toLowerCase()}…</p>
+      </div>
+    );
+  }
+  if (!block.unreadable) return <HonestBlock>{block.reason}</HonestBlock>;
+  return (
+    <div role="alert" className="flex flex-col gap-1.5 rounded-axal-md border border-red-300 bg-red-50 px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-red-800 dark:bg-red-900/20 dark:text-gray-100" data-testid={`${testPrefix}-failed`}>
+      <b className="text-axal-destructive dark:text-red-300">{what} couldn’t be read.</b>
+      <span>{pickerFailureWords(picks)}</span>
+      {onRetry ? <button type="button" className={`w-fit max-sm:min-h-[44px] ${BTN_SECONDARY}`} onClick={onRetry} data-testid={`${testPrefix}-retry`}>Try again</button> : null}
+    </div>
+  );
+}
+
+/** TMS09 Offline: the list stays, the picks stay, and adding waits. */
+function OfflineNote({ picks, at, testId }) {
+  return (
+    <p role="status" className="m-0 flex items-start gap-2 rounded-axal-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-100" data-testid={testId}>
+      <TriangleAlert size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
+      <span><b>You’re offline.</b> {offlineWords(picks, at)}</span>
+    </p>
   );
 }
 
@@ -260,17 +339,38 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   const [block, setBlock] = useState(null);
   const [picked, setPicked] = useState(() => new Set());
   const [refusal, setRefusal] = useState('');
-  useEffect(() => { let alive = true; agents.availableSkills(agent.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [agent.uid]);
+  const [readAt, setReadAt] = useState(null);
+  const [reads, setReads] = useState(0);
+  const online = useOnline();
+  // TMS09: a re-read (Try again, or after a refusal at save) keeps the picks; only the list is read again.
+  useEffect(() => {
+    let alive = true;
+    setBlock(null);
+    agents.availableSkills(agent.uid).then((b) => { if (alive) { setBlock(b); if (b?.available) setReadAt(new Date()); } });
+    return () => { alive = false; };
+  }, [agent.uid, reads]);
   const have = useMemo(() => new Set((current || []).map((s) => s.uid)), [current]);
   // The picks are read from the whole answer, never the filtered rows: a search or an area never drops one.
   const all = block?.available && Array.isArray(block.value?.skills) ? block.value.skills.filter((s) => !have.has(s.uid)) : [];
-  const chosen = all.filter((s) => picked.has(s.uid));
+  // Only what the latest read says can be attached is sent: a pick that a re-read found blocked waits, unsent.
+  const chosen = all.filter((s) => picked.has(s.uid) && eligibilityOf(s).state === 'eligible');
   const tick = (uid) => setPicked((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const save = async () => {
     setRefusal('');
     const next = [...(current || []).map((s) => ({ uid: s.uid, version: s.pinned_version })), ...chosen.map((s) => ({ uid: s.uid, version: s.version }))];
     const out = await agents.setAgentSkills(agent.uid, next);
-    if (!out.available) { setRefusal(out.reason); return; }
+    if (!out.available) {
+      // TMS09 "Refused at save · race": a gate changed after the read. Untick that skill, keep the rest, read again.
+      const race = raceRefusal(out, chosen);
+      if (race) {
+        setPicked((s) => { const n = new Set(s); n.delete(race.uid); return n; });
+        setRefusal(race.text);
+        setReads((n) => n + 1);
+        return;
+      }
+      setRefusal(out.reason);
+      return;
+    }
     onSaved?.(out.value);
   };
   const preview = previewRadar(radar, chosen);
@@ -282,13 +382,14 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!chosen.length} onClick={save} data-testid="add-skills-save">{chosen.length ? `Add ${chosen.length} ${chosen.length === 1 ? 'skill' : 'skills'}` : 'Add'}</button>
+          <button type="button" className={BTN_PRIMARY} disabled={!chosen.length || !online} onClick={save} data-testid="add-skills-save">{chosen.length ? `Add ${chosen.length} ${chosen.length === 1 ? 'skill' : 'skills'}` : 'Add'}</button>
         </div>
       )}>
       <div className="flex flex-col gap-3 px-5 py-5">
         <AgentRadar vector={chosen.length ? preview : radarVector(radar)} radar={radar} height={180} label={chosen.length ? 'With your picks.' : 'Now.'} />
         <RunCostLine est={cost} />
-        {!block?.available ? <ReadState block={block} what="The skills it could take" />
+        {!online ? <OfflineNote picks={picked.size} at={readAt} testId="add-skills-offline" /> : null}
+        {!block?.available ? <PickerReadState block={block} what="The skills it could take" picks={picked.size} onRetry={() => setReads((n) => n + 1)} testPrefix="add-skills" />
           : <SkillPicker value={block.value} exclude={have} picked={picked} onTick={tick} testPrefix="add-skill" />}
         <Refusal text={refusal} />
       </div>
@@ -306,6 +407,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
  */
 export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList }) {
   const [block, setBlock] = useState(null);
+  const [reads, setReads] = useState(0);
   // D4121 AG3: what the agent would cost per run with these skills, before it is added (its cap comes at Review).
   const kind = scope.kind === 'company' ? 'company' : 'project';
   const scopeId = kind === 'company' ? scope.company?.uid : scope.project?.id;
@@ -324,11 +426,15 @@ export function SkillsStep({ scope, role, model, persona, picked, setPicked, onL
       if (picked == null) setPicked(new Set(list.filter((s) => { const e = eligibilityOf(s); return e.state === 'eligible' && e.fit; }).slice(0, 3).map((s) => s.uid)));
     });
     return () => { alive = false; };
-  }, [role, persona]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role, persona, reads]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!block?.available) {
+    // TMS09: loading shows "—" counts; a failed read says so with Try again and keeps the picks; switched off is said.
     return (
       <div className="flex flex-col gap-2" data-testid="add-agent-skills">
-        {block ? <HonestBlock>{block.unreadable ? 'The skills this agent could take could not be read.' : 'Skills aren’t open yet.'} You can add skills from the agent’s profile later.</HonestBlock> : <p className={`m-0 ${MUTED}`}>Reading…</p>}
+        {block && !block.unreadable
+          ? <HonestBlock>Skills aren’t open yet. You can add skills from the agent’s profile later.</HonestBlock>
+          : <PickerReadState block={block} what="The skills this agent could take" picks={picked?.size || 0} onRetry={() => setReads((n) => n + 1)} testPrefix="add-agent-skills" />}
+        {block?.unreadable ? <span className={MUTED}>You can also go on and add skills from the agent’s profile later.</span> : null}
       </div>
     );
   }

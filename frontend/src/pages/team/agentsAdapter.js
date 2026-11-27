@@ -69,10 +69,12 @@ export async function through(call, sent = null) {
   } catch (e) {
     const status = e?.status ?? e?.response?.status ?? null;
     const code = e?.code || e?.data?.code || e?.data?.error || null;
+    // D8768 part 3: a refused skill list names the skill it stopped at (`skill_uid`), so the picker can untick it.
+    const which = typeof e?.data?.skill_uid === 'string' ? { skill_uid: e.data.skill_uid } : {};
     if (status === 404 && (code === 'team_agents_off' || code === 'custom_mcp_off')) return unavailable(code === 'custom_mcp_off' ? 'Connected read-only tools aren’t switched on yet.' : AGENTS_OFF_REASON);
     if (['model_not_allowed', 'tool_not_allowed', 'invalid_allowlists', 'allowlists_unreadable'].includes(code) && e?.message) return { available: false, refused: true, code, reason: e.message };
     if (status === 403 && code === 'plan_required') return { available: false, locked: 'plan', reason: refusalWords('plan_required') };
-    if (status === 403) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code) };
+    if (status === 403) return { available: false, refused: true, code, ...which, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code) };
     if (status === 422 && code === 'rule_floor') {
       // #3840 names the section; the floor item outlined is the first one the rules sent dropped (TM4c).
       if (e?.data?.section === 'may_do_automatically') return { available: false, refused: true, code, highlight: null, reason: refusalWords('auto_floor') };
@@ -90,7 +92,7 @@ export async function through(call, sent = null) {
       const decided = d.decided_by || d.status ? { by: d.decided_by, at: d.decided_at || d.decided_by?.at || null, decision: d.decision || d.status || d.decided_by?.decision || null } : null;
       return { available: false, refused: true, code, decided, reason: refusalWords(code, d.decided_by?.name) };
     }
-    if ((status === 400 || status === 402 || status === 409 || status === 422 || status === 503) && code) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code, e?.data?.decided_by?.name) };
+    if ((status === 400 || status === 402 || status === 409 || status === 422 || status === 503) && code) return { available: false, refused: true, code, ...which, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code, e?.data?.decided_by?.name) };
     return { available: false, unreadable: true, reason: 'could not be read' };
   }
 }
