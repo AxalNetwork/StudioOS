@@ -30,6 +30,7 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `claude_file_map_workers_9063.test.mjs` | #9063: CLAUDE.md's file map has a row, saying how it ships, for every folder a wrangler config names; root documents carry no dead relative link. |
 | `macbook_worker_7881.test.mjs` | D7881: exact dispatch ownership, bounded busy/offline/API fallback, cancellation, failure identities and real Mac test failure propagation. |
 | `macbook_admission_7881.test.mjs` | D7881: active parent delegation, exact source and plan artifact, complete same-repository merge-queue provenance, and final liveness recheck. |
 | `macbook_workflow_7881.test.mjs` | D7881: trusted checkout ordering, plan selection, original gate semantics, trace transfer, owned-child cancellation and run-scoped cleanup, with mutation/restoration cases. |

@@ -42,7 +42,9 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    workflow that is now deleted, together with the Pages Advanced Mode
    `_worker.js` that ran only there; on 2026-09-03 its dashboard had shown
    "Production" rows for two commits whose Worker deploy failed at the
-   migration step. Nothing ships a build anywhere but the Worker. The static
+   migration step. Nothing ships the production frontend build anywhere but the
+   `studioos` Worker (the pull-request previews and the other Workers this
+   repo deploys are in the file map). The static
    security headers on the SPA HTML come from `frontend/public/_headers`
    (built to `docs/_headers`), which Workers static assets read natively and
    apply to every assets-binding response; `scripts/check-spa-live.mjs`
@@ -67,21 +69,35 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    the previous deploy's `docs/assets` and retention ledger from the Actions
    cache before building and saves them after shipping
    (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare
-   Pages are both decommissioned; the Worker is the only host.
+   Pages are both decommissioned; the Worker is the SPA's only host.
 
 ## File map
 
 | Path                  | Role                                                      |
 | --------------------- | --------------------------------------------------------- |
 | `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker on both hosts |
-| `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
+| `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production) — the `studioos` Worker (`wrangler.toml`), shipped by `cloudflare-worker-deploy.yml` |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
-| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — deployed as its own Worker and Cloudflare Container (#3588), `MEETING_BOT=canary` (Super Admins only); the live Meet/Zoom check is open on #3588 |
+| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — deployed as its own Worker and Cloudflare Container (#3588), `MEETING_BOT=canary` (Super Admins only); the live Meet/Zoom check is open on #3588. `studioos-meeting-bot` (`wrangler.meeting-bot.toml`), shipped by `meeting-bot-deploy.yml` on a push to `main` while `MEETING_BOT_DEPLOY_ENABLED` is `true` |
+| `merge-control/`      | Merge Control, the webhook Worker for issue leases and merge-queue clean-up (D5618) — `studioos-merge-control` (`wrangler.merge-control.toml`). D5618 has the owner make the first deployment by hand; `merge-control-deploy.yml` deploys it on a push to `main` only while `MERGE_CONTROL_DEPLOY_ENABLED` is `true` |
+| `cloudflare-worker-tail/` | The tail consumer `studioos-tail`, which archives the `studioos` Worker's logs to R2; `wrangler.toml` binds it in `[[tail_consumers]]`. No workflow deploys it: the header of its `wrangler.toml` gives the manual `wrangler deploy` |
+| `cloudflare-archive-observer/` | Disabled candidate (D5676), `studioos-archive-observer-disabled` (`wrangler.jsonc`). `archive-observer-deploy.yml` deploys it only while `ARCHIVE_OBSERVER_DEPLOY_ENABLED` is `true` |
+| `agent-compute/`      | Staged compute host (D4557), no production deployment: the preview Worker in `wrangler.agent-compute.toml` ships only through the owner-gated dispatch `agent-compute-preview.yml`; `agent-compute-image.yml` dry-runs it on pull requests |
+| `workspace-engine/`   | Disabled coding-workspace candidate (D5566). No workflow deploys it; `workspace-image.yml` dry-runs `workspace-engine/wrangler.toml` on pull requests |
+| `engineering-notifications/` | Inactive Worker proposal (D5664): its `wrangler*.jsonc` name nothing provisioned and no workflow deploys it |
+| `engineering-slack/`  | Inactive Worker proposal (D5665): its `wrangler.jsonc` names nothing provisioned and no workflow deploys it |
+| `scripts/`            | Build, guard and CI scripts. One is a Worker: `scripts/pr-preview-worker.mjs` serves each pull request's `docs/` build, with no bindings, as `studioos-pr-<n>` (`wrangler.pr-preview.toml`), shipped and deleted by `pr-preview-deploy.yml` |
+| `infra/`              | Records of Cloudflare resources made outside the repo (branch registry, runner images); nothing here is built or served. `branch-provision.yml` would deploy one Worker per branch entry and has never run |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
 | `docs/`               | Built frontend bundle, **not committed** (D529) — the Worker's `[assets]` directory, built by `npm run build`; its `_headers` sets the static security headers |
+
+Each folder's README says how it ships and what it needs first. Two more
+top-level folders hold no code that runs: `agents/` (the agent manifests,
+D8079) and `spin-out-lab-pipeline/` (generated Spin-Out Lab design canvases,
+never built or served).
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
 prose a person wrote; `docs/` is build output a person must never edit. The
