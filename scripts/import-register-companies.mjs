@@ -4,6 +4,8 @@
  * Source-native BRREG, PRH and RIK identity records are independently checked.
  * This does not change Wikidata review admission or its worldwide coverage gates.
  * No network access, database connection, inferred financials or generated reviews.
+ * D8963 (#8963): SEC EDGAR operating-company registrants are the first source outside
+ * Europe. SQL for a registry is emitted only once its terms review is recorded.
  */
 import { createHash } from 'node:crypto';
 import { closeSync, constants, createReadStream, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
@@ -33,17 +35,66 @@ const admittedRows = new WeakMap();
 const BLOCKED = ['facebook.com', 'instagram.com', 'linkedin.com', 'twitter.com', 'x.com', 'youtube.com', 'youtu.be',
   'tiktok.com', 'wikidata.org', 'wikipedia.org', 'crunchbase.com', 'google.com', 'goo.gl', 'bit.ly', 'linktr.ee',
   'archive.org', 'wixsite.com', 'blogspot.com', 'wordpress.com', 'notion.site', 'proff.no', 'gulesider.no', '1881.no'];
+// Each register names its country, region and the uid prefix of its rows; the
+// notes say what an admitted row does and does not establish.
+const EUROPE_NOTES = Object.freeze({
+  country_basis: 'Official incorporation registry jurisdiction; not a verified headquarters location.',
+  website_scope: 'Homepage reported to the official company registry. Reachability and current domain ownership are not independently verified.',
+  status_note: 'Accepted corporate legal form and current registry status; not an investment or ongoing-trading assessment.',
+});
 export const REGISTRIES = Object.freeze({
-  BRREG: Object.freeze({ code: 'NO', country: 'Norway', prefix: 'no-brreg:', name: 'Brønnøysund Register Centre (BRREG)',
+  BRREG: Object.freeze({ code: 'NO', country: 'Norway', region: 'Europe', notes: EUROPE_NOTES, prefix: 'no-brreg:', name: 'Brønnøysund Register Centre (BRREG)',
     license: 'NLOD-2.0', licenseUrl: 'https://data.norge.no/nlod/en/2.0', host: 'data.brreg.no',
     url: (id) => `https://data.brreg.no/enhetsregisteret/api/enheter/${id}` }),
-  PRH: Object.freeze({ code: 'FI', country: 'Finland', prefix: 'fi-prh:', name: 'Finnish Patent and Registration Office (PRH)',
+  PRH: Object.freeze({ code: 'FI', country: 'Finland', region: 'Europe', notes: EUROPE_NOTES, prefix: 'fi-prh:', name: 'Finnish Patent and Registration Office (PRH)',
     license: 'CC-BY-4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/', host: 'avoindata.prh.fi',
     url: (id) => `https://avoindata.prh.fi/opendata-ytj-api/v3/companies?businessId=${id}` }),
-  RIK: Object.freeze({ code: 'EE', country: 'Estonia', prefix: 'ee-rik:', name: 'Estonian Centre of Registers and Information Systems (RIK)',
+  RIK: Object.freeze({ code: 'EE', country: 'Estonia', region: 'Europe', notes: EUROPE_NOTES, prefix: 'ee-rik:', name: 'Estonian Centre of Registers and Information Systems (RIK)',
     license: 'CC-BY-4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/', host: 'avaandmed.ariregister.rik.ee',
     url: (id) => `https://ariregister.rik.ee/eng/company/${id}` }),
+  // D8963: EDGAR's registrant record (data.sec.gov/submissions/CIK##########.json).
+  // CIK is the SEC's registrant identifier; EDGAR also registers people and funds,
+  // so only operating companies incorporated in a U.S. state or DC are admitted.
+  SEC: Object.freeze({ code: 'US', country: 'United States', region: 'North America', prefix: 'us-sec:',
+    name: 'U.S. Securities and Exchange Commission (SEC EDGAR)', license: 'US-SEC-public-information',
+    licenseUrl: 'https://www.sec.gov/privacy', host: 'data.sec.gov', hosts: Object.freeze(['data.sec.gov', 'www.sec.gov']),
+    passive: /^(?:60|61|62|65|67)/u,
+    notes: Object.freeze({
+      country_basis: 'SEC-recorded U.S. state of incorporation; not a verified headquarters location.',
+      website_scope: 'Website recorded in the SEC EDGAR registrant record. Reachability and current domain ownership are not independently verified.',
+      status_note: 'SEC operating-company registrant with a recent periodic report and no later registration termination; not a solvency, investment or ongoing-trading assessment.',
+    }),
+    url: (id) => `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${id}` }),
 });
+
+/**
+ * D8963 (#8963): the terms-review record of each register. SQL for a register's rows
+ * is refused until its record is 'reviewed' with the licence the register's
+ * manifests carry. A pending record names why the terms were not read; it is never
+ * marked reviewed from a licence identifier alone (D7810).
+ */
+export const REGISTER_TERMS_REVIEWS = Object.freeze({
+  BRREG: Object.freeze({ state: 'reviewed', licence_id: 'NLOD-2.0', licence_url: 'https://data.norge.no/nlod/en/2.0',
+    terms_url: 'https://data.brreg.no/enhetsregisteret/api/dokumentasjon/en/index.html', reviewed_on: '2026-11-19', record: 'D7316 part 2' }),
+  PRH: Object.freeze({ state: 'reviewed', licence_id: 'CC-BY-4.0', licence_url: 'https://creativecommons.org/licenses/by/4.0/',
+    terms_url: 'https://avoindata.prh.fi/en/info/swagger-ui', reviewed_on: '2026-11-19', record: 'D7316 part 2' }),
+  RIK: Object.freeze({ state: 'reviewed', licence_id: 'CC-BY-4.0', licence_url: 'https://creativecommons.org/licenses/by/4.0/',
+    terms_url: 'https://avaandmed.ariregister.rik.ee/en', reviewed_on: '2026-11-19', record: 'D7316 part 2' }),
+  SEC: Object.freeze({ state: 'pending', licence_id: 'US-SEC-public-information', licence_url: 'https://www.sec.gov/privacy',
+    terms_url: 'https://www.sec.gov/privacy', reviewed_on: null, record: 'D8963',
+    pending_reason: 'The session network policy refused www.sec.gov and data.sec.gov (CONNECT 403) on 2026-11-27, so the SEC website policy and EDGAR access terms were not read or quoted.' }),
+});
+const httpsUrl = (value) => { try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; } };
+/** Why a register's terms review does not allow SQL, or null when it does. */
+export function termsReviewProblem(registry, review = REGISTER_TERMS_REVIEWS[registry]) {
+  const policy = REGISTRIES[registry];
+  if (!policy || !review) return 'no terms-review record';
+  if (review.state !== 'reviewed') return `terms review ${review.state ?? 'missing'}${review.pending_reason ? `: ${review.pending_reason}` : ''}`;
+  if (review.licence_id !== policy.license) return 'reviewed licence differs from the licence the source manifests carry';
+  if (!httpsUrl(review.licence_url) || !httpsUrl(review.terms_url)) return 'reviewed licence and terms links must be HTTPS';
+  if (!day(review.reviewed_on) || !clean(review.record)) return 'review date and decision record are required';
+  return null;
+}
 const COLUMNS = ['uid', 'name', 'website', 'country', 'founded_year', 'sector', 'source_name', 'source_url', 'source_license', 'as_of'];
 
 /** Canonical source projection: object keys sorted recursively, array order retained. */
@@ -94,16 +145,28 @@ export function sourceWebsite(value) {
   if (domain.split('.').some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label))) return null;
   return { website, domain };
 }
+// D8963: EDGAR periodic reports show a current registrant; a Form 15 ends or suspends reporting.
+const SEC_PERIODIC = new Set(['10-K', '10-K/A', '10-KT', '10-KT/A', '10-Q', '10-Q/A', '10-QT', '10-QT/A']);
+const SEC_TERMINATION = new Set(['15-12B', '15-12G', '15-15D', '15-12B/A', '15-12G/A', '15-15D/A']);
+const US_JURISDICTIONS = new Set(('AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH '
+  + 'NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY').split(' '));
+function nativeId(registry, record) {
+  if (registry === 'BRREG') return String(record?.organisasjonsnummer ?? '');
+  if (registry === 'PRH') return clean(record?.businessId?.value);
+  if (registry === 'SEC') { const cik = String(record?.cik ?? ''); return /^\d{1,10}$/u.test(cik) ? cik.padStart(10, '0') : cik; }
+  return String(record?.ariregistri_kood ?? '');
+}
 function nativeWebsites(registry, record, asOf) {
   if (registry === 'BRREG') return [record?.hjemmeside];
   if (registry === 'PRH') return [record?.website?.url];
+  if (registry === 'SEC') return [record?.website];
   return (record?.yldandmed?.sidevahendid ?? []).filter((r) => r.liik === 'WWW' && current(r, asOf, 'lopp_kpv', 'algus_kpv')).map((r) => r.sisu);
 }
 
 /** Derive identity solely from captured native registry fields, never candidate flags. */
 export function projectPrimaryRecord(registry, record, asOf) {
   if (!REGISTRIES[registry] || !record || typeof record !== 'object' || Array.isArray(record)) return { reason: 'invalid_primary_record' };
-  let id, name, form, sector = null, industryCode = null, foundedYear = null;
+  let id, name, form, sector = null, industryCode = null, foundedYear = null, incorporationState;
   if (registry === 'BRREG') {
     id = String(record.organisasjonsnummer ?? ''); name = clean(record.navn); form = record.organisasjonsform?.kode;
     if (!/^\d{9}$/u.test(id)) return { reason: 'invalid_registry_id' };
@@ -142,7 +205,7 @@ export function projectPrimaryRecord(registry, record, asOf) {
     if (labels.length > 1) return { reason: 'ambiguous_native_sector' };
     sector = labels[0] ?? null; industryCode = clean(record.mainBusinessLine?.type) || null;
     // PRH registrationDate is not a founding date.
-  } else {
+  } else if (registry === 'RIK') {
     const data = record.yldandmed ?? {};
     id = String(record.ariregistri_kood ?? ''); name = clean(record.nimi); form = data.oiguslik_vorm;
     if (!/^\d{8}$/u.test(id)) return { reason: 'invalid_registry_id' };
@@ -171,10 +234,29 @@ export function projectPrimaryRecord(registry, record, asOf) {
     if (primary.length > 1) return { reason: 'ambiguous_native_sector' };
     sector = clean(primary[0]?.emtak_tekstina) || null; industryCode = clean(primary[0]?.emtak_kood) || null;
     // RIK esmaregistreerimise_kpv is not a founding date.
+  } else {
+    id = nativeId(registry, record); name = clean(record.name);
+    if (!/^\d{10}$/u.test(id) || /^0+$/u.test(id)) return { reason: 'invalid_registry_id' };
+    // EDGAR registers people, funds and other filers too; only operating companies qualify.
+    if (record.entityType !== 'operating') return { reason: 'noncompany_legal_form' };
+    // EDGAR records the state of incorporation, not a legal form.
+    form = null; incorporationState = clean(record.stateOfIncorporation);
+    if (!US_JURISDICTIONS.has(incorporationState)) return { reason: 'missing_incorporation_evidence' };
+    const recent = record.filings?.recent, forms = recent?.form, dates = recent?.filingDate;
+    if (!Array.isArray(forms) || !Array.isArray(dates) || forms.length !== dates.length) return { reason: 'missing_native_filing_history' };
+    const filed = forms.map((type, i) => [clean(type).toUpperCase(), dates[i]]);
+    // An undated or future Form 15 never hides a termination.
+    if (filed.some(([type, date]) => SEC_TERMINATION.has(type) && !(day(date) && date <= asOf))) return { reason: 'inactive_or_insolvent_or_unknown_status' };
+    const latest = (types) => filed.filter(([type, date]) => types.has(type) && day(date) && date <= asOf).map(([, date]) => date).sort().at(-1) ?? null;
+    const periodic = latest(SEC_PERIODIC), terminated = latest(SEC_TERMINATION);
+    if (terminated && (!periodic || terminated >= periodic)) return { reason: 'inactive_or_insolvent_or_unknown_status' };
+    if (!periodic || Number(periodic.slice(0, 4)) < Number(asOf.slice(0, 4)) - 2) return { reason: 'missing_recent_corporate_activity_evidence' };
+    industryCode = clean(String(record.sic ?? '')) || null; sector = clean(record.sicDescription) || null;
+    // EDGAR records no formation date.
   }
   const digits = String(industryCode ?? '').replace(/\D/gu, '');
   if (!digits || /^0+$/u.test(digits) || !sector) return { reason: 'unknown_native_activity' };
-  if (/^(?:64|66|68|701)/u.test(digits)) return { reason: 'passive_property_financial_or_head_office_activity' };
+  if ((REGISTRIES[registry].passive ?? /^(?:64|66|68|701)/u).test(digits)) return { reason: 'passive_property_financial_or_head_office_activity' };
   if (!validName(name)) return { reason: 'invalid_name' };
   const supplied = nativeWebsites(registry, record, asOf);
   const websites = supplied.map(sourceWebsite);
@@ -183,7 +265,8 @@ export function projectPrimaryRecord(registry, record, asOf) {
   websites.sort((a, b) => Number(!b.website.startsWith('http://')) - Number(!a.website.startsWith('http://'))
     || a.website.length - b.website.length || cmp(a.website, b.website));
   return { row: { registration_id: id, name, legal_form: form, ...websites[0], sector, industry_code: industryCode,
-    founded_year: foundedYear, source_website_values: supplied, country_code: REGISTRIES[registry].code } };
+    founded_year: foundedYear, source_website_values: supplied, country_code: REGISTRIES[registry].code,
+    ...(incorporationState ? { incorporation_state: incorporationState } : {}) } };
 }
 
 function validateManifest(manifest, asOf) {
@@ -193,7 +276,7 @@ function validateManifest(manifest, asOf) {
     || manifest.source_license_url !== policy.licenseUrl || !DIGEST.test(manifest.records_sha256 ?? '')
     || !clean(manifest.records_file) || !Array.isArray(manifest.upstream_snapshots) || !manifest.upstream_snapshots.length) throw new Error(`Invalid primary source manifest ${manifest?.id ?? '(missing id)'}`);
   const authorizedUrl = (value) => {
-    try { const url = new URL(value); return url.protocol === 'https:' && url.hostname === policy.host && !url.username && !url.password && !url.port; } catch { return false; }
+    try { const url = new URL(value); return url.protocol === 'https:' && (policy.hosts ?? [policy.host]).includes(url.hostname) && !url.username && !url.password && !url.port; } catch { return false; }
   };
   if (!authorizedUrl(manifest.source_url) || manifest.upstream_snapshots.some((row) => !authorizedUrl(row.source_url) || !DIGEST.test(row.sha256 ?? ''))) throw new Error(`Unrecognized official source provenance ${manifest.id}`);
 }
@@ -223,15 +306,15 @@ export async function loadPrimaryEvidence(manifestFiles, { asOf } = {}) {
         let record;
         try { record = JSON.parse(line); } catch { throw new Error(`Invalid JSON in ${manifest.id} record ${count + 1}`); }
         const result = projectPrimaryRecord(manifest.registry, record, asOf);
-        const id = manifest.registry === 'BRREG' ? String(record.organisasjonsnummer ?? '')
-          : manifest.registry === 'PRH' ? clean(record.businessId?.value) : String(record.ariregistri_kood ?? '');
+        const id = nativeId(manifest.registry, record);
         const identity = `${manifest.registry}:${id}`, key = `${manifest.id}|${id}`, recordHash = primaryRecordSha256(record);
         const priorHash = evidence.identityHashes.get(identity);
         if (priorHash && priorHash !== recordHash) evidence.conflicts.add(identity);
         evidence.identityHashes.set(identity, recordHash);
         evidence.records.set(key, freezePlain({ ...result, primary_record_sha256: recordHash, source_manifest_id: manifest.id }));
         const nativeName = manifest.registry === 'BRREG' ? record.navn : manifest.registry === 'PRH'
-          ? (record.names ?? []).find((r) => String(r.type) === '1' && r.version === 1 && current(r, asOf))?.name : record.nimi;
+          ? (record.names ?? []).find((r) => String(r.type) === '1' && r.version === 1 && current(r, asOf))?.name
+          : manifest.registry === 'SEC' ? record.name : record.nimi;
         const name = normalizeName(nativeName ?? '');
         if (name && id) {
           const nameKey = `${REGISTRIES[manifest.registry].code}|${name}`;
@@ -302,7 +385,7 @@ export function prepareRegisterSnapshot(candidates, existing, { asOf, baselineOb
     const uid = `${policy.prefix}${proof.registration_id}`, sourceUrl = policy.url(proof.registration_id);
     if ((raw.uid != null && raw.uid !== uid) || (raw.source_name != null && raw.source_name !== policy.name)
       || (raw.source_url != null && raw.source_url !== sourceUrl) || (raw.source_license != null && raw.source_license !== policy.license)) { reject(raw, 'candidate_provenance_mismatch'); continue; }
-    const country = observed.countries.get(policy.code) ?? { code: policy.code, name: policy.country, region: 'Europe' };
+    const country = observed.countries.get(policy.code) ?? { code: policy.code, name: policy.country, region: policy.region };
     const overrides = observed.overrides.get(`company_country|${country.name}`);
     if (overrides && (overrides.length !== 1 || overrides[0] !== policy.code)) { reject(raw, 'existing_country_override_conflict'); continue; }
     const sectorOverride = observed.overrides.get(`company_sector|${proof.sector ?? ''}`);
@@ -313,9 +396,7 @@ export function prepareRegisterSnapshot(candidates, existing, { asOf, baselineOb
       quality_holds_sha256: holdHash,
       retrieved_at: manifest.retrieved_at, as_of: manifest.retrieved_at.slice(0, 10),
       candidate_sha256: primaryRecordSha256(raw), market_slug: sectorOverride ? sectorOverride.find(Boolean) ?? null : COMPANY_SECTOR_RULES[normalizeLabel(proof.sector ?? '')] ?? null,
-      country_basis: 'Official incorporation registry jurisdiction; not a verified headquarters location.',
-      website_scope: 'Homepage reported to the official company registry. Reachability and current domain ownership are not independently verified.',
-      status_note: 'Accepted corporate legal form and current registry status; not an investment or ongoing-trading assessment.',
+      ...policy.notes,
       founded_year_note: raw.registry === 'BRREG' && proof.founded_year !== null ? 'Source-reported formation date (stiftelsesdato).' : 'Not recorded: registration date is not inferred to be a founding date.',
       unsupported_metrics: { revenue: null, valuation: null, funding_total: null, employee_count: null },
       evidence_fields: ['name', 'website', 'country', ...(proof.sector ? ['sector'] : []), ...(proof.founded_year !== null ? ['founded_year'] : [])],
@@ -338,6 +419,8 @@ export function prepareRegisterSnapshot(candidates, existing, { asOf, baselineOb
     accepted_sha256: primaryRecordSha256(accepted), primary_manifest_files: evidence.manifest_files,
     quality_holds_count: qualityHolds.length, quality_holds_sha256: holdHash,
     primary_source_manifests: [...evidence.manifests.values()],
+    source_terms_reviews: Object.fromEntries([...new Set(accepted.map((row) => row.registry))].sort(cmp)
+      .map((registry) => [registry, { ...REGISTER_TERMS_REVIEWS[registry], sql_allowed: termsReviewProblem(registry) === null }])),
     scope: 'Primary registry corporate identity and source-listed homepage; no generated review decisions, financial enrichment or live site verification.' } };
 }
 
@@ -381,6 +464,10 @@ ON CONFLICT(company_id,field_name,source_url) DO NOTHING;`;
 /** Only exact objects admitted by this compiler can produce SQL; audit copies cannot. */
 export function registerMigrationStatements(rows) {
   for (const row of rows) if (!admittedRows.has(row) || admittedRows.get(row) !== primaryRecordSha256(row)) throw new Error(`SQL requires an unchanged primary-register admitted row: ${row?.uid ?? '(missing UID)'}`);
+  for (const registry of new Set(rows.map((row) => row.registry))) {
+    const problem = termsReviewProblem(registry);
+    if (problem) throw new Error(`SQL withheld for ${registry} until its source terms are reviewed (${problem})`);
+  }
   const statements = [], countries = new Map();
   for (const row of rows) countries.set(row.country_code, { code: row.country_code, name: row.country, region: row.region });
   for (const country of [...countries.values()].sort((a, b) => cmp(a.code, b.code))) statements.push(`INSERT INTO research_countries(code,name,region) VALUES (${[country.code, country.name, country.region].map(sqlValue).join(',')}) ON CONFLICT(code) DO NOTHING;`);
@@ -406,7 +493,8 @@ export function registerMigrationStatements(rows) {
 }
 export function registerMigration(rows, asOf) {
   if (!day(asOf)) throw new Error('Invalid as-of date');
-  return `-- D7316 (#7316): proposed additive company import from official registers, ${asOf}.\n-- Sources: BRREG NLOD-2.0; PRH and RIK CC-BY-4.0. Source records are normalized.\n-- Registry-listed websites are not independently checked for reachability or ownership.\n-- No financial data, generated review decisions, updates or deletions.\n-- Worldwide acceptance is reported separately and is not implied by this plan.\n${registerMigrationStatements(rows).join('\n\n')}\n`;
+  const sec = rows.some((row) => row.registry === 'SEC') ? `-- D8963: SEC EDGAR ${REGISTRIES.SEC.license}, terms reviewed ${REGISTER_TERMS_REVIEWS.SEC.reviewed_on}.\n` : '';
+  return `-- D7316 (#7316): proposed additive company import from official registers, ${asOf}.\n-- Sources: BRREG NLOD-2.0; PRH and RIK CC-BY-4.0. Source records are normalized.\n${sec}-- Registry-listed websites are not independently checked for reachability or ownership.\n-- No financial data, generated review decisions, updates or deletions.\n-- Worldwide acceptance is reported separately and is not implied by this plan.\n${registerMigrationStatements(rows).join('\n\n')}\n`;
 }
 function writeJson(filename, value) { mkdirSync(dirname(resolve(filename)), { recursive: true }); writeFileSync(filename, `${JSON.stringify(value, null, 2)}\n`); }
 
@@ -449,6 +537,17 @@ export async function main(argv = process.argv.slice(2)) {
   const prepared = prepareRegisterSnapshot(JSON.parse(candidatesBytes), JSON.parse(existingBytes), {
     asOf: args['as-of'], baselineObservedAt: args['baseline-observed-at'], evidence, qualityHolds: JSON.parse(holdsBytes),
   });
+  // D8963: a register whose terms are not reviewed yields a dry run: report and audit, no SQL or statements.
+  const withheld = Object.entries(prepared.report.source_terms_reviews).filter(([, review]) => !review.sql_allowed).map(([registry]) => registry);
+  if (withheld.length) {
+    const report = { ...prepared.report, candidates_file_sha256: hash(candidatesBytes), existing_file_sha256: hash(existingBytes),
+      quality_holds_file_sha256: hash(holdsBytes), sql_withheld_for_terms_review: withheld, statement_count: 0,
+      database_writes_performed: false, original_worldwide_gate_preserved: true };
+    writeJson(args.report, report);
+    writeJson(args.audit, { ...report, rejected_rows: prepared.rejected, admitted_rows: prepared.accepted });
+    console.error(JSON.stringify({ accepted: report.accepted, rejected: report.rejected, sql_withheld_for_terms_review: withheld }, null, 2));
+    return 2;
+  }
   const statements = registerMigrationStatements(prepared.accepted), sql = registerMigration(prepared.accepted, args['as-of']);
   writeSqlPlan(args.out, sql);
   const report = { ...prepared.report, candidates_file_sha256: hash(candidatesBytes), existing_file_sha256: hash(existingBytes),
