@@ -21,7 +21,7 @@ function standWords() {
   return Object.fromEntries([...body[1].matchAll(/(\w+):\s*'([^']+)'/g)].map((m) => [m[1], m[2]]));
 }
 
-const T0 = Date.now() + 30 * 3_600_000;
+const T0 = Date.parse('2026-12-03T10:00:00.000Z'); // a fixed start: the People list does not depend on the time
 const iso = (ms) => new Date(ms).toISOString();
 const BOOKING = {
   id: 'advisor_booking:60', kind: 'advisor_booking', source_id: 60, title: 'Advisor session — Pricing',
