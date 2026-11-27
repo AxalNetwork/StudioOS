@@ -16,6 +16,7 @@ import { validateConnectorSettings } from '../integrations/connectorRules';
 import { dismissHealthEvent } from '../services/vercel/health';
 import { UNREADABLE as VERCEL_UNREADABLE, hostingSystems, vercelRuntime } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
+import { isProjectManager } from '../services/projectAccess';
 import type { Card } from '../services/cycleCards';
 import { buildPhone, part } from '../services/cycleFocus';
 import { buildAttention, buildSignals, readPlanPreview, unreadableAttention, unreadablePlan } from '../services/buildAttention';
@@ -29,6 +30,7 @@ import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, deleteRoadmapItem, moveRoadmapIt
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
 import { connectionAction, connectionWhy, notConnectedTools, systemsPart, systemsWithoutCompany, toolSyncLines, withLastFailures } from '../services/operatingSystemsView';
+import { NO_COMPANY_REASON, lastGoodReads, projectBinding } from '../services/connectorBinding';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 import { csvCell } from '../services/capTableRegister';
@@ -1328,7 +1330,10 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     ? { name: getDescriptor(failedSystem.provider_key)?.display_name ?? SYSTEM_LABEL[failing!], since: failureDate(failedSince), href: connectHref(failedSystem.provider_key, p.id), failing: stateOf(failing!) === 'failing' }
     : failingTool ? { name: getDescriptor(failingTool.provider_key)!.display_name, since: failureDate(failingTool.last_error_at), href: connectHref(failingTool.provider_key, p.id), failing: true } : null;
   const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!]) : toolNext),
+  // D8774 (BLS08 A): with no company, the owner's one action is to link one, inside Build, and come back to the setup.
+  // Anyone else is told whose it is in Connect a tool; the card offers them nothing they cannot do.
+  const linkNext = p.company_id == null && isProjectManager(viewer, p) ? { text: 'Link to a company', href: linkCompanyHref(p.id) } : null;
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? NO_COMPANY_REASON : empty ? 'No systems connected yet. Each system and its state appear here.' : null, p.company_id == null ? linkNext : empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     // Used by shows the recorded Used by, else what the system feeds.
     rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k), edit = systemEdit(k)!; const state = stateOf(k);
@@ -1350,10 +1355,11 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
       // D5078 (#5078, BD12): the Build-feeding tools the company has not connected, with what each would feed and Connect.
       not_connected: p.company_id == null ? [] : notConnectedTools(tools.map(tool => String(tool.provider_key)), p.id),
-      state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
+      state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? NO_COMPANY_REASON : null,
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
-      code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
-      syncs: syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
+      // D8774: with no company, the viewer's own GitHub is named at account scope only: connected, and feeding nothing here.
+      code: code?.code ?? { state: 'not_recorded', systems: [], reason: NO_COMPANY_REASON, account: opts.parts ? await accountGithub(env, viewer.id) : null },
+      syncs: syncs ?? { state: 'not_recorded', rows: [], reason: NO_COMPANY_REASON },
       hosting,
     } } } : {}) };
 
@@ -1392,12 +1398,22 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
     const { action, reason } = connectionAction(conn, state, viewer.id, viewerMember, connectHref('github', p.id));
     return { action: action ? { text: action.text, href: action.href } : null, reason: [connectionWhy(conn, state, sees(g.user_id)), reason].filter(Boolean).join(' ') || null };
   };
+  // D8774: when each connection last read THIS venture, one statement for them all.
+  const reads = await lastGoodReads(env, github, p.id, (id) => sees(Number(github.find(g => Number(g.id) === id)?.user_id)));
   const systems = await Promise.all(github.map(async (g) => {
     const repositories = repositoriesOf(g.config_json);
-    const fed = (await fedCounts(env, g.id, 'github', null, p.id)).filter(m => (m.count ?? 0) > 0);
+    const counted = await fedCounts(env, g.id, 'github', null, p.id);
+    const fed = counted.filter(m => (m.count ?? 0) > 0);
+    // Every row here is enabled for the venture's company (the JOIN above), so the company scope holds;
+    // the venture scope and the read decide whether it feeds this venture.
+    const binding = projectBinding({
+      providerKey: 'github', status: g.status, companyId: p.company_id, companyEnabled: true, projectId: p.id, configJson: g.config_json,
+      lastGoodRead: reads.get(Number(g.id)) ?? null, fedTotal: counted.reduce((n, m) => n + (m.count ?? 0), 0), sees: sees(g.user_id),
+    });
     return {
       kind: 'code', system: 'Code', provider: 'GitHub', source: 'connection', source_label: 'From the GitHub connection',
       state: g.status === 'active' ? 'Connected' : g.status === 'error' ? 'Failing' : 'Not connected',
+      binding,
       last_sync: g.last_synced_at ?? null, failed_at: g.last_error_at ?? null,
       repositories: sees(g.user_id) ? repositories : null, repositories_total: repositories.length,
       feeds: fed.map(m => ({ module: m.module, label: m.label, href: m.href ? `${m.href}?project_id=${p.id}` : null, count: m.count })),
@@ -1406,7 +1422,21 @@ async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: b
       ...codeAction(g),
     };
   }));
-  return { code: { state: systems.length ? 'ok' : 'empty', systems, reason: systems.length ? null : 'No GitHub connection is enabled for this company.' } };
+  // D8774: none enabled for the company; the viewer's own GitHub, if any, is connected at account scope only.
+  const account = systems.length ? null : await accountGithub(env, viewer.id);
+  return { code: { state: systems.length ? 'ok' : 'empty', systems, account,
+    reason: systems.length ? null : account ? 'Your GitHub is connected to your account but not turned on for this venture’s company, so it feeds nothing here.' : 'No GitHub connection is enabled for this company.' } };
+}
+
+/** D8774: where the owner links a venture to a company, inside Build, returning to the setup (BLS02). */
+const linkCompanyHref = (projectId: number) => `/build/connect?project_id=${encodeURIComponent(String(projectId))}&link=company`;
+
+/** The viewer's own GitHub at account scope: its state, never its config. Null when they have none. */
+async function accountGithub(env: Env, userId: number): Promise<{ provider: 'GitHub'; state: 'connected' | 'failing' | 'disconnected' } | null> {
+  const row = await env.DB.prepare("SELECT status FROM integrations WHERE user_id = ? AND provider_key = 'github' ORDER BY id LIMIT 1").bind(userId).first<{ status: string }>();
+  if (!row) return null;
+  const state = systemStateOf(row, row.status);
+  return { provider: 'GitHub', state: state === 'connected' ? 'connected' : state === 'failing' ? 'failing' : 'disconnected' };
 }
 
 const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer, opts?: ReadOpts) => Promise<ModuleRead>> = {
@@ -1458,7 +1488,7 @@ app.get('/overview', async c => {
     : number(rFacts?.items) === 0 ? figure('roadmap_shipped', 'Roadmap shipped this month', null, 'items', 'okr_column_moves', 'not_recorded', 'No roadmap items recorded yet.')
       : figure('roadmap_shipped', 'Roadmap shipped this month', number(rFacts?.shipped_this_month), 'items', 'okr_column_moves', 'ok');
   const connected = sBad ? unreadableFigure('systems_connected', 'Systems connected', 'integration_companies')
-    : project.company_id == null ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'The project has no company scope.')
+    : project.company_id == null ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'This venture is not in a company yet.')
       : number(sFacts?.mapped) === 0 ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'No systems mapped yet.')
         : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
   const cards = results.map(r => r.card);

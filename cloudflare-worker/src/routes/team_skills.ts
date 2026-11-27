@@ -26,7 +26,7 @@
  *
  * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
  *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
- *        { tokens_per_run, est_usd_per_run (the dearest run), cheapest, baseline, runs, monthly_at_cap, delta, hint },
+ *        { tokens_per_run, est_usd_per_run (the dearest run), cheapest, baseline, runs, monthly_at_cap, delta, hint, basis (D8769) },
  *        or { available: false }
  *   GET  /:scope/:id/cost-estimate?model=&role=&persona=&skills=&cap_microusd=   an agent not yet added (AG3)
  *
@@ -1034,6 +1034,8 @@ async function teamPersonas(c: C, scope: Scope): Promise<Set<string>> {
 
 const shape = (e: Estimate) => (e.available ? { skills: e.skills, tokens_per_run: e.tokens_per_run, est_usd_per_run: e.est_usd_per_run } : null);
 const THRESHOLDS = { max_skills: RUN_COST_CONFIG.specialistMaxSkills };
+/** D8769: one run as `estimate` prices it: the instructions, a typical request and the dearest skill in; a typical proposal out; at what the sponsor pays. */
+const BASIS = { request_tokens: RUN_COST_CONFIG.requestTokens, output_tokens: RUN_COST_CONFIG.outputTokens, priced_at: 'sponsor' } as const;
 
 /**
  * The answer both estimate routes give, never a 0 for an unknown price. A run
@@ -1064,6 +1066,8 @@ async function costAnswer(c: C, input: {
     delta: deltaOf(before, after),
     hint,
     thresholds: THRESHOLDS,
+    // D8769 (#8769): what the figure assumes, so the page states its basis instead of restating these numbers.
+    basis: BASIS,
   });
 }
 

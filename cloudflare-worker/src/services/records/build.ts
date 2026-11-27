@@ -22,6 +22,7 @@ import {
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
+import { NO_COMPANY_REASON } from '../connectorBinding';
 import { logCycleWriteStatement } from '../cycleActivity';
 import { mintDownloadToken } from '../signedDownload';
 import { customKpis, KPI_KEYS, KPI_LABEL, CUSTOM_PREFIX } from '../growKpis';
@@ -1611,7 +1612,7 @@ const operatingSystems: ModuleSpec = {
     } },
     { key: 'companies', title: 'Companies', side: true, async read(ctx, id) {
       const s = await systemOf(ctx, id);
-      if (s.companyId == null) return notRecorded('This project has no company scope for connectors.');
+      if (s.companyId == null) return notRecorded(NO_COMPANY_REASON);
       if (s.workspace || !s.connection) {
         const own = await ctx.env.DB.prepare('SELECT company_name FROM company_profiles WHERE id = ?').bind(s.companyId).first<Any>();
         return s.connection ? { rows: [{ a: own?.company_name ?? 'This venture’s company', b: 'on' }] } : notRecorded('Not connected yet.');

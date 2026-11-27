@@ -169,7 +169,7 @@ test('4. Systems: no company is one prerequisite with no rows; with one, a state
   // `next` taking the first Connect before a Reconnect → "Connect Payroll" for the owner too.
   const { db, env } = fixture();
   const none = (await read(env, 303)).parts.systems;
-  assert.deepEqual([none.state, none.rows, none.reason], ['not_recorded', [], 'This project has no company scope for connectors.']);
+  assert.deepEqual([none.state, none.rows, none.reason], ['not_recorded', [], 'This venture is not in a company yet, so no connected tool feeds it.']);
   db.exec('INSERT INTO user_company_links VALUES (3, 10)'); // the admin is a company member
   connection(db, 41, 2, 'hubspot'); connection(db, 42, 1, 'salesforce', 'error'); connection(db, 43, 2, 'stripe', 'revoked');
   db.exec(`INSERT INTO project_core_systems(project_id, kind, integration_id, updated_by) VALUES (101, 'crm', 41, 2), (101, 'accounting', 42, 1), (101, 'bank', 43, 2)`);

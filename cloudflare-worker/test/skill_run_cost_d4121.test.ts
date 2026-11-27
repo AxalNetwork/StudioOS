@@ -262,3 +262,20 @@ test('7: SK3 — each agent on the assignable read carries what a run with the s
   const unpriced = r.body.agents.find((a: any) => a.uid === UNPRICED);
   if (unpriced) assert.equal(unpriced.run_cost_change_microusd, null, 'an unpriced model is not a 0');
 });
+
+test('8: D8769 (#8769) — the roster carries each agent\'s skill count, and the estimate states its own basis', async () => {
+  // Mutations checked: skill_count sent as a constant 0 → Vesta's 1 fails; `basis` dropped from costAnswer → the deepEqual fails;
+  // the count read without the agent filter → Tessaly's 0 reads Vesta's pin and fails.
+  const w = world();
+  const s = skill(w, 801, 2000);
+  const list = async () => (await call(w, MEMBER, 'GET', '/api/teams/company/co-uid-1/agents')).body.agents as any[];
+  assert.deepEqual((await list()).map((a) => [a.uid, a.skill_count]), [[CFO, 0], [UNPRICED, 0], [BIG, 0]], 'a recorded 0 is 0');
+  pin(w, 1, 801);
+  const after = await list();
+  assert.equal(after.find((a) => a.uid === CFO).skill_count, 1);
+  assert.equal(after.find((a) => a.uid === BIG).skill_count, 0, 'another agent\'s pin is not counted');
+  const draft = await call(w, MEMBER, 'GET', `/api/teams/company/co-uid-1/cost-estimate?model=${encodeURIComponent(MODEL)}&role=research_analyst&persona=ryssa&skills=${s.uid}`);
+  assert.equal(draft.status, 200, draft.text);
+  assert.deepEqual(draft.body.basis, { request_tokens: RUN_COST_CONFIG.requestTokens, output_tokens: RUN_COST_CONFIG.outputTokens, priced_at: 'sponsor' });
+  assert.deepEqual((await est(w, CFO)).body.basis, draft.body.basis, 'both estimate routes give the same basis');
+});
