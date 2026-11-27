@@ -142,7 +142,10 @@ export default function FounderBuildRoadmap() {
   });
 
   const refresh = async () => { if (selectedId) setGraph(await api.roadmapGraph(selectedId)); };
-  const handlers = canWrite ? { newScenario: () => setDialog({ kind: 'scenario', scenario: null }) } : {};
+  // A reader without write access gets no handler, so the builder drops New scenario
+  // for them (an undefined callback is not supplied); the object stays a literal so
+  // check-zone-handlers can read which handlers this page supplies.
+  const handlers = { newScenario: canWrite ? () => setDialog({ kind: 'scenario', scenario: null }) : undefined };
   const zero = status === 'ready' && items.length === 0;
   const primary = status !== 'ready' || zero || !canWrite ? null
     : view === 'dependencies' && items.length >= 2 ? <button type="button" className="fb-roadmap-primary" data-testid="button-open-dependencies" onClick={() => setDialog({ kind: 'dependencies' })}>Edit dependency links</button>
