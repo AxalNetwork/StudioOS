@@ -264,8 +264,14 @@ networkfx.get('/syndicates/:id', async (c) => {
   const rows = await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ${id}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
   const lead = Number(rows[0].created_by) === Number(user.id);
-  const own = lead || user.role === 'admin' ? [] : await sql`SELECT 1 FROM syndicate_members WHERE syndicate_id = ${id} AND user_id = ${user.id}`;
+  // D9018: the caller's own row, read for everyone (an admin or lead may also be
+  // a member). It answers the member check and becomes `my_line`; it is keyed
+  // on the caller's id, so no other member's line can reach it.
+  const own = await sql`SELECT commitment_cents, status, joined_at FROM syndicate_members WHERE syndicate_id = ${id} AND user_id = ${user.id}`;
   if (!lead && user.role !== 'admin' && !own.length) { await sql.end(); return c.json({ error: 'Only the lead, members and admins can read this syndicate.' }, 403); }
+  const myLine = own.length
+    ? { commitment_cents: Number((own[0] as any).commitment_cents) || 0, status: (own[0] as any).status ?? null, joined_at: (own[0] as any).joined_at ?? null }
+    : null;
   const members = lead ? await sql`SELECT m.*, u.name FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at` : [];
   let project = null;
   if ((rows[0] as any).deal_id) {
@@ -274,7 +280,7 @@ networkfx.get('/syndicates/:id', async (c) => {
   }
   const totals = await sql`SELECT COUNT(*) as n, COALESCE(SUM(commitment_cents), 0) as committed FROM syndicate_members WHERE syndicate_id = ${id}`;
   await sql.end();
-  return c.json({ ...rows[0], project, members, show_member_names: lead, member_count: parseInt(totals[0]?.n) || 0, committed_cents: parseInt(totals[0]?.committed) || 0 });
+  return c.json({ ...rows[0], project, members, show_member_names: lead, my_line: myLine, member_count: parseInt(totals[0]?.n) || 0, committed_cents: parseInt(totals[0]?.committed) || 0 });
 });
 
 networkfx.post('/syndicates', async (c) => {
