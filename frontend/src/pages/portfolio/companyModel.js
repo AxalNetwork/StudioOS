@@ -63,14 +63,14 @@ export function companyTabHref(uid, tab = 'overview') {
 }
 
 /**
- * The document title (addendum PFA16). The company's name appears only once
- * an authorised read has named it; until then, and for a company that is not
- * held or could not be read, the title is generic.
+ * The document title (addendum PFA16): the screen, never the company. D8681 (#8681): a tab title is
+ * read aloud by screen readers, shown in the tab strip, history and window switchers, so it names
+ * the screen and its tab ("Financials · Company · Portfolio · Axal VC") and never the company's
+ * name. The page's own heading and crumb still name it.
  */
-export function companyDocTitle(name, tab = 'overview') {
-  if (!name) return 'Company · Portfolio · Axal VC';
+export function companyDocTitle(tab = 'overview') {
   const t = COMPANY_TABS.find((x) => x.id === tab);
-  return t && t.id !== 'overview' ? `${name} · ${t.label} · Portfolio · Axal VC` : `${name} · Portfolio · Axal VC`;
+  return t && t.id !== 'overview' ? `${t.label} · Company · Portfolio · Axal VC` : 'Company · Portfolio · Axal VC';
 }
 
 /* -------------------------------------------------------------- the reads */

@@ -59,7 +59,7 @@ export const WORKSPACE_SCREENS = Object.freeze([
   ['/branch/approvals', 'Approvals'],
   // /help itself is public (the registry's Help Center); a member's tickets are not.
   ['/help/tickets', 'Support tickets · Help'],
-  // Deals' own model (dealFlowModel.js) names each tab after this; a deal room names nothing more.
+  // Deals' own model (dealFlowModel.js) names each tab after this; a deal room says "Deal room" (DealRoomPage), never the deal.
   ['/deals', 'Deal flow'],
   ['/trust/me', 'Trust'],
   ['/account', 'Settings'],

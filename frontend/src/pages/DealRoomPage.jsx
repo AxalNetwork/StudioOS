@@ -50,6 +50,9 @@ function fmtMoney(n, currency = 'USD') {
   return dealMoney(n, currency) ?? 'Not recorded';
 }
 
+// D8681 (#8681): the tab names the screen, never the deal's project; the page's heading still names it.
+export const DEAL_ROOM_TITLE = 'Deal room · Axal VC';
+
 export default function DealRoomPage() {
   // D1148 (#2421): each tab is its own address under /deals/:dealId. D4815 part 4
   // (#5903, DE04): the eight tabs hold every view, each still at its own address.
@@ -101,7 +104,7 @@ export default function DealRoomPage() {
     setLoading(true); setError(null);
     setDeal((d) => (d && String(d.id) === String(dealId) ? d : null));
     api.getDeal(dealId)
-      .then(d => { if (!current()) return; setDeal(d); document.title = `${d.project_name || 'Deal'} · Deal · Axal VC`; })
+      .then(d => { if (!current()) return; setDeal(d); document.title = DEAL_ROOM_TITLE; })
       .catch(e => { reportError('DealRoom:getDeal', e); if (current()) setError(e || { status: 0 }); })
       .finally(() => { if (current()) setLoading(false); });
   };

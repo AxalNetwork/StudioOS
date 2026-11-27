@@ -358,7 +358,7 @@ test('the title while mounted, restored after; Details from today\'s fields, a m
   const m = await mount(page('stripe'));
   document.title = document.title || 'Before';
   try {
-    assert.equal(document.title, 'Stripe · Connectors · Axal VC');
+    assert.equal(document.title, 'Connector · Connectors · Axal VC'); // D8681: the screen, never the connector's name
   } finally { await m.unmount(); f.restore(); }
   assert.equal(pageTitle({ state: 'unknown' }), 'Connectors · Axal VC');
   const rows = Object.fromEntries(detailsRows(CAT.find((p) => p.key === 'stripe')).map((r) => [r.label, r]));

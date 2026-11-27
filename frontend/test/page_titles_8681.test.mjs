@@ -9,7 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import React, { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
@@ -19,6 +19,9 @@ import {
   SAFE_TITLE, TITLE_BRAND, WORKSPACE_SCREENS, isPublicTitlePath, routeTitleFor, screenTitle, titleNow, useRouteTitle,
 } from '../src/lib/pageTitles.js';
 import { ogTagsFor } from '../src/lib/ogRegistry.js';
+import { companyDocTitle } from '../src/pages/portfolio/companyModel.js';
+import { pageTitle as connectorPageTitle } from '../src/pages/account/connectorPageModel.js';
+import { channelPageTitle } from '../src/pages/account/channelPageModel.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
@@ -165,4 +168,118 @@ test('D8681: App mounts the title before its routes, and a crashed route falls b
   assert.match(app, /function RouteTitle\(\) \{[\s\S]{0,200}useRouteTitle\(useLocation\(\)\.pathname, \{ loading: !!loading && !user \}\)/);
   const boundary = read('../src/components/RouteErrorBoundary.jsx');
   assert.match(boundary, /componentDidCatch\([\s\S]{0,600}document\.title = SAFE_TITLE/);
+});
+
+// ── no record value in any title (the issue's "Avoid member names and sensitive records in titles") ──
+//
+// Every place in frontend/src that sets the tab title: `document.title = …`, `usePageMeta({ title })`,
+// `<SitePage title>`, `useProgramsTitle(…)` and Portfolio's `docTitle` prop. A string literal with no
+// `${…}`, or a same-file `const NAME = '<literal>'`, is static and passes. Anything else must be listed
+// in ALLOWED with why it cannot carry a member's name or a workspace record: a new title built from a
+// read fails here until someone decides it may.
+const TITLE_SETTERS = [
+  [/document\.title\s*=(?!=)\s*([^;\n]+)/g, 'document.title'],
+  [/usePageMeta\(\{[^)]*?\btitle:\s*([^,\n}]+)/g, 'usePageMeta'],
+  [/<SitePage\b[^>]*?\btitle=(\{[^\n]*?\}|"[^"]*")/g, 'SitePage'],
+  [/useProgramsTitle\(([^;\n]+)\);/g, 'useProgramsTitle'],
+  [/\bdocTitle=(\{[^\n]*?\}|"[^"]*")/g, 'docTitle'],
+];
+
+// `file | expression` → why it names no member and no workspace record.
+const RESTORES = 'puts back the title it found on mount';
+const ALLOWED = {
+  // Plumbing: the value comes from a caller this inventory already covers, or is put back on leaving.
+  'lib/pageTitles.js | titleNow(pathname, { loading })': 'the D8681 table: static labels only (tests above)',
+  'components/RouteErrorBoundary.jsx | SAFE_TITLE': 'the brand',
+  'lib/seo.js | fullTitle': 'usePageMeta’s own title plus the site name; each caller is listed here',
+  'lib/seo.js | prevTitle': RESTORES,
+  'pages/account/ChannelPage.jsx | previous': RESTORES,
+  'pages/account/ConnectorPage.jsx | previous': RESTORES,
+  'pages/founder/RoundCallPage.jsx | previous': RESTORES,
+  'pages/admin/programs/useProgramsTitle.js | prev': RESTORES,
+  'pages/portfolio/PortfolioFrame.jsx | before': RESTORES,
+  'pages/portfolio/PortfolioFrame.jsx | docTitle': 'its `docTitle` prop or portfolioTitle(tab); every docTitle= caller is listed here',
+  'pages/founder/RoundCallPage.jsx | title': "the literal 'Round calls · Axal VC'",
+  'pages/admin/programs/useProgramsTitle.js | programsTitle(page, scope)': 'its callers, listed here',
+  // Workspace screens: computed, but only from static labels (each pinned by the next test).
+  'pages/account/ChannelPage.jsx | title': 'channelPageTitle: the channel’s fixed card title (WhatsApp, Telegram), never a record',
+  'pages/account/ConnectorPage.jsx | title': 'pageTitle: "Connector · Connectors · Axal VC", never the connector’s name (D8681)',
+  'pages/investor/PortfolioCompanyPage.jsx | {companyDocTitle(tab)}': 'the tab’s label, never the company (D8681)',
+  'pages/portfolio/CompanyPreview.jsx | {previewDocTitle(companyDocTitle(current))}': 'the same, plus "Investor preview"',
+  'pages/portfolio/PortfolioPreview.jsx | {docTitle}': 'previewDocTitle(portfolioTitle(tab)): a tab label',
+  'pages/investor/dealflow/StudioLens.jsx | DEALS_PAGE_TITLES.root': 'Deals’ static titles (dealFlowModel.js)',
+  'workspaces/investor/InvestorDealsRoutes.jsx | pageTitle': 'dealsPageTitle(): Deals’ static titles by zone',
+  'pages/admin/programs/ProgramFrame.jsx | `${page.title} · Programs`': 'a programme’s name from the frontend PAGES table or the programme registry: the firm’s own catalogue, the names the public /programs pages publish; never a member or an application',
+  "pages/admin/programs/ProgramsCatalogue.jsx | 'Programs', scope?.kind === 'branch' ? scope.label : superAdmin ? 'HQ' : null": 'the viewer’s own branch (an office of the firm), never a member or a record',
+  // Public pages: their titles are public content the page exists to publish, the text the prerender
+  // bakes or a search engine indexes. None is a workspace screen.
+  'pages/ArticleReaderPage.jsx | title': 'a published article’s own title (public /articles/:slug)',
+  'pages/insights/PublicInsight.jsx | publication.title': 'a published Insight’s title (public)',
+  'pages/docs/DocsLayout.jsx | guideMeta?.title': 'a Help guide’s title (static help content)',
+  "pages/AuthorProfilePage.jsx | {author?.name || 'Author'}": 'a public author profile: the byline the author published under',
+  'pages/influencer/HandlePage.jsx | {isLive ? `${d.name}': 'a public invite page whose owner chose to publish their name on it',
+  "pages/jobs/PublicJobDetailPage.jsx | {job?.title || 'Jobs'}": 'a published job posting’s title (public)',
+  'pages/site/DoorPage.jsx | {meta.title}': 'PRODUCT_PAGES’ static marketing copy',
+  'pages/site/LegalDocument.jsx | {title}': 'each legal page passes its own static document name',
+  'pages/programs/ProgramKeyPage.jsx | {program.og.title}': 'the programme registry’s public Open Graph title',
+  'pages/programs/kit.jsx | {program.og.title}': 'the programme registry’s public Open Graph title',
+  'pages/CirclesPage.jsx | {CIRCLES_COPY.title}': 'static marketing copy',
+  'pages/events/PublicEventsPage.jsx | {EVENTS_COPY.title}': 'static marketing copy',
+  'pages/jobs/PublicJobsPage.jsx | {JOBS_COPY.title}': 'static marketing copy',
+};
+
+/** True for a string literal with no interpolation, or a `const NAME = '<literal>'` the same file defines. */
+function isStatic(expr, source) {
+  const e = expr.replace(/^\{([\s\S]*)\}$/, '$1').trim();
+  if (/^(['"])[^'"]*\1$/.test(e)) return true;
+  if (/^`[^`$]*`$/.test(e)) return true;
+  if (/^[A-Z][A-Z0-9_]*$/.test(e)) return new RegExp(`const ${e} = (['"])[^'"\`$]*\\1;`).test(source);
+  return false;
+}
+
+function titleSetters() {
+  const root = new URL('../src/', import.meta.url);
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const at = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
+      if (entry.isDirectory()) walk(at);
+      else if (/\.(m?js|jsx|tsx?)$/.test(entry.name)) {
+        const source = readFileSync(at, 'utf8');
+        const file = decodeURIComponent(at.pathname.slice(root.pathname.length));
+        for (const [re, kind] of TITLE_SETTERS) for (const m of source.matchAll(re)) found.push({ file, kind, expr: m[1].trim(), source });
+      }
+    }
+  };
+  walk(root);
+  return found;
+}
+
+test('D8681: no tab title in frontend/src is built from a member’s name or a workspace record', () => {
+  const found = titleSetters();
+  assert.ok(found.length > 40, `the inventory reads every title setter (found ${found.length})`);
+  const unexplained = found.filter((s) => !isStatic(s.expr, s.source) && !Object.hasOwn(ALLOWED, `${s.file} | ${s.expr}`));
+  assert.deepEqual(unexplained.map((s) => `${s.file} | ${s.kind} | ${s.expr}`), [],
+    'a title built from a value: make it a screen-only label ("<Screen> · Axal VC"), or list it in ALLOWED with why it names no member or record');
+  // Every allowance still matches something, so the list cannot keep a stale entry.
+  const seen = new Set(found.map((s) => `${s.file} | ${s.expr}`));
+  assert.deepEqual(Object.keys(ALLOWED).filter((k) => !seen.has(k)), [], 'an ALLOWED entry no longer matches a title setter');
+  // The deal room's title is a fixed screen label.
+  assert.match(read('../src/pages/DealRoomPage.jsx'), /export const DEAL_ROOM_TITLE = 'Deal room · Axal VC';/);
+});
+
+test('D8681: the deal room, a Portfolio company and a connector page name the screen, never the record', () => {
+  const NAME = 'Ada Lovelace Robotics';
+  // Portfolio: the tab label and the screen, whatever the company is called.
+  assert.equal(companyDocTitle(), 'Company · Portfolio · Axal VC');
+  assert.equal(companyDocTitle('financials'), 'Financials · Company · Portfolio · Axal VC');
+  for (const tab of ['overview', 'financials', 'reports', 'support', 'activity', NAME]) {
+    assert.match(companyDocTitle(tab), /^((Financials|Reports|Support|Activity) · )?Company · Portfolio · Axal VC$/, tab);
+  }
+  // A connector: the record's display name never reaches the tab.
+  const ready = { state: 'ready', p: { key: 'stripe', display_name: NAME } };
+  assert.equal(connectorPageTitle(ready), 'Connector · Connectors · Axal VC');
+  assert.equal(connectorPageTitle({ state: 'unknown' }), 'Connectors · Axal VC');
+  // A channel page: its fixed card title only.
+  assert.equal(channelPageTitle({ state: 'ready', key: 'whatsapp', name: NAME }), 'WhatsApp Business · Connectors · Axal VC');
 });
