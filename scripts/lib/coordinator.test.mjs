@@ -1,6 +1,7 @@
 // #6312: the coordinator's label, slot, staleness, marker, delta and digest rules.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { recentPulls } from '../coordinator.mjs';
 import {
   planLabels, slotOf, isStandardSlotLabel, slotPicker, slotLoad, classifyProposal, proposalLabels,
   marker, parseMarkers, alreadyDone, staleReasons, renderNote, planFromFindings, deltaSelect,
@@ -194,9 +195,27 @@ test('delta revisits dependents and explicit events without declaring any gate r
   assert.deepEqual([...pick], [[1, 'dependency #34 changed'], [2, 'event concerns this issue']]);
 });
 
+test('a busy or unreadable PR feed keeps verified rows and identifies incomplete evidence', () => {
+  const since = '2026-11-26T00:00:00Z';
+  const pull = { updated_at: '2026-11-26T01:00:00Z', merged_at: '2026-11-26T01:00:00Z' };
+  const page = Array.from({ length: 100 }, () => pull);
+  const capped = recentPulls(since, () => page);
+  assert.equal(capped.rows.length, 1000);
+  assert.match(capped.incomplete, /page cap/);
+  const interrupted = recentPulls(since, path => {
+    if (path.endsWith('&page=1')) return page;
+    throw new Error('read failed');
+  });
+  assert.equal(interrupted.rows.length, 100);
+  assert.match(interrupted.incomplete, /could not be read/);
+  assert.deepEqual(recentPulls(since, () => [pull]), { rows: [pull], incomplete: null });
+});
+
 test('topic merges #8518/#8529/#8585/#8591 need verified main files; a partial PR does not close', () => {
   const repo = 'AxalNetwork/StudioOS', blob = 'a'.repeat(40), mainSha = 'b'.repeat(40);
-  const prs = [8518, 8529, 8585, 8591].map(number => ({ number, baseRepo: repo, mergedAt: '2026-11-25', base: 'topic', state: 'closed', relationship: 'partial', inclusion: 'not_an_ancestor' }));
+  // The four issue records were delivered through #8567, #8582, #8602 and #8600.
+  // These synthetic GitHub rows model the period before their final main inclusion.
+  const prs = [8567, 8582, 8602, 8600].map(number => ({ number, baseRepo: repo, mergedAt: '2026-11-25', base: 'topic', state: 'closed', relationship: 'partial', inclusion: 'not_an_ancestor' }));
   const documents = number => ({ pr: number, path: `topic/${number}.mjs`, blob });
   const verification = { scope_complete: true, source_prs: prs.map(pr => pr.number), main_paths: prs.map(pr => documents(pr.number)) };
   const finding = { verdict: 'close_done', verification };

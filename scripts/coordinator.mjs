@@ -99,7 +99,9 @@ const requireRun = (runId, recorded) => {
   if (recorded && recorded !== runId) throw new Error(`--run ${runId} does not match the run ${recorded} this folder was planned for`);
 };
 
-const canonicalLabels = issue => ({ ...slim(issue), labels: labelsOf(issue).sort() });
+const canonicalLabels = issue => ({ ...slim(issue), labels: labelsOf(issue).sort(),
+  assignees: (issue.assignees || []).map(assignee => assignee.login).sort(),
+  milestone: issue.milestone?.number ?? null, locked: !!issue.locked });
 const issueNumbers = value => [...new Set((String(value || '').match(/#[1-9]\d*\b/g) || []).map(value => Number(value.slice(1))))];
 const ownNote = (comment, note) => note && comment.user?.login === note.login && comment.body === note.body;
 const digestComments = comments => issueEvidenceDigest(comments.map(c => [c.id, c.updated_at, c.user?.login, c.author_association, c.body]));
@@ -213,22 +215,25 @@ function delta(out, since) {
     const n = Number(/\/issues\/(\d+)$/.exec(c.issue_url)?.[1]);
     if (n && (!lastNoteAt[n] || c.created_at > lastNoteAt[n])) lastNoteAt[n] = c.created_at;
   }
-  const merged = recentPulls(since);
+  const { rows: merged, incomplete } = recentPulls(since);
   const changed = changedDependencies(snap.issues, since);
   const pick = deltaSelect({ issues: snap.issues, since, lastNoteAt, mergedPrBodies: merged.map(p => p.body), changedDependencies: changed, repo: REPO });
   const list = [...pick].map(([number, why]) => ({ number, why }));
-  writeJson(join(out, 'delta.json'), { since, list });
+  writeJson(join(out, 'delta.json'), { since, list, incomplete });
   console.log(`delta since ${since}: ${list.length} of ${snap.issues.length} open issues to re-read (${merged.length} PRs merged since)`);
+  if (incomplete) console.log(`delta PR evidence incomplete: ${incomplete}`);
 }
 
-function recentPulls(since) {
+export function recentPulls(since, read = path => gh('GET', path)) {
   const rows = [];
   for (let page = 1; page <= 10; page++) {
-    const list = gh('GET', `/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=${page}`);
+    let list;
+    try { list = read(`/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=${page}`); }
+    catch { return { rows, incomplete: 'a recent PR page could not be read' }; }
     rows.push(...list.filter(p => p.merged_at && p.updated_at > since));
-    if (list.length < 100 || list.at(-1).updated_at <= since) return rows;
+    if (list.length < 100 || list.at(-1).updated_at <= since) return { rows, incomplete: null };
   }
-  throw new Error('recent pull evidence exceeded the report cap');
+  return { rows, incomplete: 'recent PR evidence exceeded the page cap' };
 }
 
 function changedDependencies(issues, since, eventIssues = []) {
@@ -250,7 +255,7 @@ function report(out, since = new Date(Date.now() - 36 * 36e5).toISOString(), eve
   const issues = all.filter(issue => !issue.pull_request).map(slim);
   const openPulls = all.filter(issue => issue.pull_request);
   const eventIssues = [...selectedIssues, ...prRelationships(event.pull_request?.body, REPO).keys(), ...(event.issue && !event.issue.pull_request ? [event.issue.number] : [])];
-  const recent = recentPulls(since);
+  const { rows: recent, incomplete: incompletePulls } = recentPulls(since);
   const changed = changedDependencies(issues, since, [...eventIssues, ...recent.map(pr => pr.number), event.pull_request?.number].filter(Boolean));
   const lastNoteAt = {};
   for (const comment of pages(`/issues/comments?since=${encodeURIComponent(since)}`)) {
@@ -292,10 +297,11 @@ function report(out, since = new Date(Date.now() - 36 * 36e5).toISOString(), eve
     const action = suggestion?.action || 'none';
     counts[action] = (counts[action] || 0) + 1;
   }
-  const unique = issueEvidenceDigest({ mainSha, entries });
+  const unique = issueEvidenceDigest({ mainSha, incompletePulls, entries });
   const deferred = ordered.length - entries.length;
-  writeJson(join(out, 'report.json'), { mainSha, since, id: unique, counts, deferred, entries });
+  writeJson(join(out, 'report.json'), { mainSha, since, id: unique, counts, deferred, incompletePulls, entries });
   console.log(`report ${unique.slice(0, 12)} on ${mainSha}: ${entries.length} checked, ${deferred} deferred. No GitHub writes.`);
+  if (incompletePulls) console.log(`PR evidence incomplete: ${incompletePulls}`);
   for (const row of entries) console.log(`${row.url} — ${row.suggestion?.action || 'no proposed change'}${row.suggestion?.reason ? ` (${row.suggestion.reason})` : ''}`);
 }
 
@@ -356,6 +362,10 @@ async function apply(dir, runId, go) {
       if (currentMain !== mainSha) throw new Error('recorded main moved');
       const current = readFacts(s.number, mainSha, pages('/pulls?state=open'), { note, extraIssues: base.extraIssues, extraPulls: base.extraPulls, handbackComment: base.handbackComment });
       if (gh('GET', '/commits/main').sha !== mainSha) throw new Error('recorded main moved during revalidation');
+      const issueNow = canonicalLabels(gh('GET', `/issues/${s.number}`));
+      if (issueEvidenceDigest(issueNow) !== issueEvidenceDigest(current.issue)) throw new Error('issue moved during revalidation');
+      const claimNow = readClaim(s.number, issueNow, current.comments.filter(comment => !ownNote(comment, note)), base.handbackComment);
+      if (issueEvidenceDigest(claimNow) !== issueEvidenceDigest(current.facts.claim)) throw new Error('claim moved during revalidation');
       return { ...current, noteDone: current.comments.some(comment => ownNote(comment, note)) };
     };
     let result;
