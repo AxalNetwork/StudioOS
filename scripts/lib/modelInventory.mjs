@@ -155,13 +155,19 @@ export function providerRows(catalogueText, table) {
 /** A route's own price table: the ids its keys name, resolving `[CONST]` keys through `const CONST = 'id'`. */
 export function localPriceIds(text, name) {
   const t = stripComments(text);
-  const m = new RegExp(`const ${name}\\b[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};?`).exec(t);
-  if (!m) return [];
+  let table = null;
+  const values = new Map();
+  for (const d of t.matchAll(/\bconst ([A-Za-z_$][\w$]*)/g)) {
+    const rest = t.slice(d.index + d[0].length);
+    if (!table && d[1] === name) table = /^[^=]*=\s*\{([\s\S]*?)\n\};?/.exec(rest);
+    const value = /^\s*=\s*'([^']+)'/.exec(rest);
+    if (value && !values.has(d[1])) values.set(d[1], value[1]);
+  }
+  if (!table) return [];
   const ids = [];
-  for (const k of m[1].matchAll(/^\s*(?:\[(\w+)\]|'([^']+)'|"([^"]+)")\s*:/gm)) {
+  for (const k of table[1].matchAll(/^\s*(?:\[([A-Za-z_$][\w$]*)\]|'([^']+)'|"([^"]+)")\s*:/gm)) {
     if (k[1]) {
-      const c = new RegExp(`const ${k[1]}\\s*=\\s*'([^']+)'`).exec(t);
-      if (c) ids.push(c[1]);
+      if (values.has(k[1])) ids.push(values.get(k[1]));
     } else ids.push(k[2] ?? k[3]);
   }
   return ids;
@@ -217,8 +223,9 @@ export function buildInventory({ files, wrangler }) {
     if (LISTING_FILES.has(f.rel)) continue;
     const text = callableText(f);
     for (const m of text.matchAll(ID_LITERAL)) model(m[2]).surfaces.add(f.rel);
+    const words = new Set(text.match(/\w+/g) ?? []);
     for (const [id, t] of tableOf) {
-      if (t.accessors.some((a) => new RegExp(`\\b${a}\\b`).test(text))) model(id).surfaces.add(f.rel);
+      if (t.accessors.some((a) => words.has(a))) model(id).surfaces.add(f.rel);
     }
   }
   for (const w of wranglerModels(wrangler)) model(w.id).surfaces.add(`wrangler.toml ${w.key}`);
