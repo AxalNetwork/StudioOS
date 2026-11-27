@@ -26,8 +26,13 @@
  *   meeting_ended     the call ended before it was let in.
  *
  * The browser is behind `TeamsPage`, so this file has no dependency and its
- * tests drive it on recorded screens. B8 (#2586) gives it a Playwright page.
- * Every selector is in `teamsSelectors.ts`.
+ * tests drive it on recorded screens. The packaged factory gives it the
+ * Playwright driver in `teams/page.ts` (D5812, #5812). Every selector is in
+ * `teamsSelectors.ts`.
+ *
+ * `diagnostic()` (D5812) is the last join screen it read, as `teams_<screen>`
+ * from the fixed `TeamsScreen` list only (`TEAMS_STAGES`), so a failed run
+ * says where it stopped (D1368) without any page text.
  */
 import { AdapterFailure } from '../types.ts';
 import type { AudioFrame, Clock, FailureCode, JoinRequest, MeetingAdapter, RosterChange, SpeakerChange, Unsubscribe } from '../types.ts';
@@ -52,6 +57,8 @@ export interface TeamsPage {
   fill(selector: string, text: string): Promise<void>;
   /** The call's audio as the page captures it: mono float samples in [-1, 1] at `rate` Hz. */
   onAudio(on: (samples: Float32Array, rate: number) => void): Unsubscribe;
+  /** D5812: the adapter is admitted; the page may capture from now on (still only for a subscribed listener). */
+  startCapture?(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -94,6 +101,9 @@ export const SCREEN_CODE: Readonly<Partial<Record<TeamsScreen, FailureCode>>> = 
   denied: 'not_admitted',
 });
 
+/** D5812: the join stages a failed run may report, `teams_<screen>`; nothing else is ever reported. */
+export const TEAMS_STAGES: readonly string[] = Object.freeze([...SCREENS.map(([s]) => `teams_${s}`), 'teams_unknown']);
+
 const has = async (page: TeamsPage, p: Probe) => (await page.query(p.selector, p.attrs)).length > 0;
 
 export async function screenOf(page: TeamsPage): Promise<TeamsScreen> {
@@ -108,6 +118,8 @@ export class TeamsAdapter implements MeetingAdapter {
   private readonly pollMs: number;
   private readonly joinTimeoutMs: number;
   private left = false;
+  /** The last screen read while joining or waiting; reported by `diagnostic()`. */
+  private stage: TeamsScreen | null = null;
   /** Who is in the call, by Teams' id, as the roster last read them. */
   private readonly people = new Map<string, string>();
 
@@ -126,7 +138,7 @@ export class TeamsAdapter implements MeetingAdapter {
     let asked = false;
     for (;;) {
       if (req.signal.aborted) throw new AdapterFailure('platform_blocked');
-      const screen = await screenOf(this.page);
+      const screen = this.stage = await screenOf(this.page);
       const code = SCREEN_CODE[screen];
       if (code) throw new AdapterFailure(code);
       if (screen === 'lobby' || screen === 'in_call') return;
@@ -146,8 +158,12 @@ export class TeamsAdapter implements MeetingAdapter {
   async admitted(signal: AbortSignal): Promise<void> {
     for (;;) {
       if (signal.aborted) throw new AdapterFailure('not_admitted');
-      const screen = await screenOf(this.page);
-      if (screen === 'in_call') return;
+      const screen = this.stage = await screenOf(this.page);
+      if (screen === 'in_call') {
+        // D5812: capture starts at admission; the core still hears nothing until the notice is posted.
+        try { await this.page.startCapture?.(); } catch { /* no capture: no audio */ }
+        return;
+      }
       const code = SCREEN_CODE[screen];
       if (code) throw new AdapterFailure(code);
       await this.clock.sleep(this.pollMs);
@@ -214,6 +230,12 @@ export class TeamsAdapter implements MeetingAdapter {
       const screen = await screenOf(this.page);
       if (screen === 'ended') { fired = true; on(); }
     });
+  }
+
+  /** D5812: where joining stopped, as one of `TEAMS_STAGES`; null before the first read. */
+  diagnostic(): string | null {
+    const step = this.stage === null ? null : `teams_${this.stage}`;
+    return step !== null && TEAMS_STAGES.includes(step) ? step : null;
   }
 
   async leave(): Promise<void> {
