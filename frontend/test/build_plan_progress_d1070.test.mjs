@@ -233,7 +233,7 @@ function handler(over = {}) {
     const method = options.method || 'GET';
     for (const [k, f] of Object.entries(over)) if (url.includes(k) && (!f.method || f.method === method)) return f.answer(url, options);
     if (/\/cycles\/build\/plan\/handoffs\?/.test(url) && method === 'GET') return response({ handoffs: HANDOFFS });
-    if (/\/cycles\/build\/plan\/handoffs\?/.test(url)) return response({ provider: 'lovable', text: 'Build a clickable prototype.\n\nAxal VC plan item VB-1111', prompt_chars: 521, link: 'https://lovable.dev/?autosubmit=true#prompt=Build', handoffs: [] });
+    if (/\/cycles\/build\/plan\/handoffs\?/.test(url)) return response({ provider: 'lovable', text: 'Build a clickable prototype.\n\nAxal VC plan item VB-1111', prompt_chars: 521, link: 'https://lovable.dev/#prompt=Build', handoffs: [] });
     if (/\/cycles\/build\/plan\/links\?/.test(url)) return response({ links: LINKS });
     if (/\/cycles\/build\/plan\/links\/[^/]+\/(accept|dismiss)/.test(url)) return response({ uid: LINK_WAIT, status: 'accepted' });
     if (/\/cycles\/build\/evidence\?/.test(url)) return response(TRAIL);
@@ -424,6 +424,7 @@ test('mounted VB6–VB8: Send to… chooses nothing for the founder, says what e
     assert.ok(r.props('plan-send')['aria-labelledby']);
     assert.equal(r.props('plan-send')['data-width'], 640);
     assert.match(r.textOf('plan-send-opens'), /Build a clickable prototype in Lovable\./);
+    assert.match(r.textOf('plan-send-opens'), /Lovable waits for you to press send there\./, 'D8773: the tab says Lovable does not send by itself');
     assert.equal(r.props('plan-send-prepare').disabled, true, 'nothing is chosen for the founder');
     await r.change(`plan-send-item-${MUST}`, 'on');
     assert.equal(writes(r).length, 0, 'choosing sends nothing');
@@ -436,7 +437,10 @@ test('mounted VB6–VB8: Send to… chooses nothing for the founder, says what e
     // D8773 (Q3, A): the four checks the send ran, named, and what they do not cover; never "passed" or "no names".
     assert.match(r.textOf('plan-send-privacy'), /^No matches for the four checks below\.Email addresses.*Phone numbers.*Tax, bank and card numbers.*Recorded full legal names.*Not covered: interviewees’ names/);
     assert.doesNotMatch(r.textOf('plan-send-privacy'), /passed|no names|This venture’s interviewees/);
-    assert.equal(r.props('plan-send-open').href, 'https://lovable.dev/?autosubmit=true#prompt=Build');
+    assert.equal(r.props('plan-send-open').href, 'https://lovable.dev/#prompt=Build');
+    // D8773 (owner, 2026-11-27): no autosubmit; the sheet says Lovable waits for the founder's send.
+    assert.doesNotMatch(r.props('plan-send-open').href, /autosubmit/);
+    assert.match(r.textOf('plan-send-result-lovable'), /Lovable waits for you to press send there\./);
     assert.equal(r.props('plan-send-open').target, '_blank', 'it opens in the founder\'s own tool');
   } finally { await r.close(); }
 });

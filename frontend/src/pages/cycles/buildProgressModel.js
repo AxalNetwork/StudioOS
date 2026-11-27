@@ -35,13 +35,13 @@ export const providerWord = (id) => PROVIDERS.find((p) => p.id === id)?.label ||
 
 /** What each tab opens, said before anything is prepared ("Each tab says what it opens"). */
 export const OPENS = {
-  lovable: 'Build a clickable prototype in Lovable. It opens Lovable in a new tab with one prompt for these items. You build there with your own Lovable account.',
+  lovable: 'Build a clickable prototype in Lovable. It opens Lovable in a new tab with one prompt for these items. Lovable waits for you to press send there. You build there with your own Lovable account.',
   github: 'Open one GitHub issue per item, each carrying its marker. GitHub opens a new issue with the text; you submit it there.',
   notion: 'One page per item, with its evidence and its marker, to copy or download and paste into Notion.',
   vercel: 'Put your repository on the web with your own Vercel account. It opens Vercel’s import page. Axal VC cannot deploy or change anything on Vercel.',
 };
 export const FOOTNOTE = {
-  lovable: 'Opens Lovable in a new tab with this prompt. You build there with your own Lovable account. Axal VC does not see what you build until you link it.',
+  lovable: 'Opens Lovable in a new tab with this prompt. Lovable waits for you to press send there. You build there with your own Lovable account. Axal VC does not see what you build until you link it.',
   github: 'GitHub opens a new issue with this text. You submit it there. It links back here when it arrives through your GitHub connection.',
   github_unconnected: 'Without a connection, copy each issue and paste it into GitHub yourself.',
   notion: 'Paste it into Notion. Notion reports nothing back, so what happens there is not recorded here.',
