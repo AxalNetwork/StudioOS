@@ -17,6 +17,21 @@ import {
 
 const partnernet = new Hono<{ Bindings: Env }>();
 
+/**
+ * D6256 (#9016) — a support session reads a member's partner network and never
+ * changes it: no tie, request, interaction, reminder, activity row or book
+ * contact is written as the member. Registered before every handler, so each
+ * write under /api/partnernet, and any one added later, is refused before it
+ * reads its body or touches the store. Reads keep their own rules.
+ */
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+partnernet.use('*', async (c, next) => {
+  if (!READ_METHODS.has(c.req.method) && (await selectJwt(c))?.payload.impersonated_by) {
+    return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot change a member’s partner network. Nothing was saved.' });
+  }
+  await next();
+});
+
 const REL_TYPES = new Set(['co_investor', 'advisor_founder', 'operator_partner', 'strategic_alliance', 'advisor_mentee']);
 const ACTION_TYPES = new Set([
   'dashboard_view', 'deal_review', 'syndicate_join', 'syndicate_create', 'referral_convert',
