@@ -1,7 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../../lib/api.js';
+import { accountLicencesApi } from '../../../lib/api/accountLicences.js';
+import { dealFlowApi } from '../../../lib/api/dealFlow.js';
+import { dealViewsApi } from '../../../lib/api/dealViews.js';
 import { reportError } from '../../../lib/log';
+import FirmStatusBlocks, { useRead } from './FirmStatusBlocks.jsx';
+import FirmDealFit, { useDealFitSession } from './FirmDealFit.jsx';
+import FirmTeamSeats from './FirmTeamSeats.jsx';
+import { firmCompleteness, seatsIncluded } from './firmSettingsModel.js';
+
+/**
+ * D6287 part 2: every read and write the status blocks, the fit panel and Team
+ * seats make, looked up at call time so a test can replace one method.
+ * The two deal reads draw their own plan refusal, so the paywall modal stays shut.
+ */
+export const firmSettingsClient = {
+  kycStatus: () => api.kycStatus(),
+  fundsList: () => api.fundsList(),
+  licences: () => accountLicencesApi.mine(),
+  seats: () => api.listInvestorSeats(),
+  inviteSeat: (email) => api.inviteInvestorSeat(email),
+  revokeSeat: (id) => api.revokeInvestorSeat(id),
+  dealFlow: () => dealFlowApi.flowInline(),
+  dealFit: (ids) => dealViewsApi.fitInline(ids),
+};
 
 const SECTORS = ['AI/ML', 'Climate', 'Fintech', 'Healthtech', 'Consumer', 'Enterprise SaaS', 'Crypto', 'Bio', 'Defense', 'Robotics', 'Energy'];
 const STAGES = ['Pre-seed', 'Seed', 'Series A', 'Series B+', 'Growth'];
@@ -40,7 +63,7 @@ function OptionGroup({ name, label, options, draft, onChange }) {
   );
 }
 
-export function InvestorFirmEditor({ profile, onSave }) {
+export function InvestorFirmEditor({ profile, onSave, onEdit }) {
   const [changes, setChanges] = useState({});
   const [saveState, setSaveState] = useState('idle');
   const draft = { ...profile, ...changes };
@@ -48,6 +71,7 @@ export function InvestorFirmEditor({ profile, onSave }) {
   function change(key, value) {
     setChanges((previous) => ({ ...previous, [key]: value }));
     setSaveState('idle');
+    onEdit?.();
   }
 
   async function save(event) {
@@ -141,13 +165,28 @@ export function InvestorFirmEditor({ profile, onSave }) {
   );
 }
 
-export default function InvestorFirmSettings({ companyLink }) {
+function Completeness({ profile }) {
+  const c = firmCompleteness(profile);
+  if (!c) return null;
+  return c.complete
+    ? <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" data-testid="firm-complete">✓ Complete</span>
+    : <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300" data-testid="firm-complete">▲ Needs: {c.needs.join(', ')}</span>;
+}
+
+export default function InvestorFirmSettings({ companyLink, client = firmSettingsClient }) {
   const { hash, search } = useLocation();
   const from = new URLSearchParams(search).get('from');
   const back = from === 'home' ? { to: '/studio', label: 'Back to Investor Home' }
     : from === 'deal-flow' ? { to: '/deals', label: 'Back to Deal flow' } : null;
   const [attempt, setAttempt] = useState(0);
   const [read, setRead] = useState({ status: 'loading' });
+  // The licences and seats reads are shared by the status blocks and Team seats.
+  const [licencesRead, retryLicences] = useRead(() => client.licences(), (e) => reportError('FirmSettings:licences', e));
+  const [seatsRead, retrySeats] = useRead(() => client.seats(), (e) => reportError('FirmSettings:seats', e));
+  const licences = useMemo(() => ({ read: licencesRead, retry: retryLicences }), [licencesRead, retryLicences]);
+  const seats = useMemo(() => ({ read: seatsRead, retry: retrySeats }), [seatsRead, retrySeats]);
+  const included = seatsIncluded(licencesRead);
+  const fit = useDealFitSession(client);
 
   useEffect(() => {
     let active = true;
@@ -166,26 +205,41 @@ export default function InvestorFirmSettings({ companyLink }) {
   }, [hash, read.status]);
 
   return (
-    <main className="mx-auto w-full min-w-0 max-w-4xl space-y-4 px-4 py-6 md:px-7">
+    <main className="mx-auto w-full min-w-0 max-w-6xl space-y-4 px-4 py-6 md:px-7">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Firm Settings</h1>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold">Firm Settings</h1>
+          {read.status === 'ready' && <Completeness profile={read.profile} />}
+        </div>
         {companyLink && <Link to={companyLink.to} className="break-words text-sm font-medium text-violet-700 underline dark:text-violet-300">{companyLink.label}</Link>}
       </header>
       {back && <Link to={back.to} className="text-sm font-medium text-violet-700 underline dark:text-violet-300">{back.label}</Link>}
-      {read.status === 'loading' && <p role="status">Loading firm settings…</p>}
-      {read.status === 'error' && (
-        <div role="status" className={GROUP}>
-          <p>Firm settings unavailable.</p>
-          <button type="button" className="font-semibold underline" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0 space-y-4">
+          {read.status === 'loading' && <p role="status">Loading firm settings…</p>}
+          {read.status === 'error' && (
+            <div role="status" className={GROUP}>
+              <p className="font-semibold">Firm settings unavailable.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">No form is shown, so nothing on this page can overwrite what is saved. The status blocks read separately.</p>
+              <button type="button" className="font-semibold underline" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
+            </div>
+          )}
+          {read.status === 'ready' && (
+            <InvestorFirmEditor profile={read.profile} onEdit={fit.prime} onSave={async (body) => {
+              const before = await fit.beforeSave();
+              const { profile } = await api.saveInvestorProfile(body);
+              if (!profile) throw new Error('Profile missing from save response');
+              setRead({ status: 'ready', profile });
+              fit.afterSave(before);
+            }} />
+          )}
+          {fit.round && <FirmDealFit client={client} round={fit.round} onRead={fit.remember} />}
+          <FirmTeamSeats client={client} read={seatsRead} retry={retrySeats} included={included} />
         </div>
-      )}
-      {read.status === 'ready' && (
-        <InvestorFirmEditor profile={read.profile} onSave={async (body) => {
-          const { profile } = await api.saveInvestorProfile(body);
-          if (!profile) throw new Error('Profile missing from save response');
-          setRead({ status: 'ready', profile });
-        }} />
-      )}
+        <aside aria-label="Firm status" className="order-first min-w-0 lg:order-none">
+          <FirmStatusBlocks client={client} profileRead={read} licences={licences} seats={seats} included={included} />
+        </aside>
+      </div>
     </main>
   );
 }
