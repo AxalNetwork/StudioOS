@@ -163,3 +163,12 @@ test('#6267: ventureNdaStatus is the deal page\'s read, moved, and deal_workroom
   const researchSrc = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/research.ts'), 'utf8');
   assert.doesNotMatch(researchSrc.slice(researchSrc.indexOf("research.get('/diligence'")), /FROM pairwise_ndas/);
 });
+
+// D6162 (#6162): a data-room link names its venture as `?project_id=N`, so each room on the list
+// carries that id beside its uid, as a number, and only for a room the investor holds a live grant to.
+test('#6162: each room on the list carries its venture id, as a number, beside its uid', async () => {
+  const db = freshDb();
+  const items = (await get(db, ME, '/diligence')).body.items;
+  assert.deepEqual(items.map((i: any) => [i.grant_uid, i.project_id, i.project_uid]), [['g-room', 7, 'p-room']]);
+  assert.deepEqual((await get(db, OTHER, '/diligence')).body.items, [], 'no grant, no venture id');
+});
