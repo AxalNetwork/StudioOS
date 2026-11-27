@@ -9,7 +9,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 | `backlog/` | 27 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 4 | The dc-runtime bundle every canvas loads. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
-| `assets/`, `scraps/`, `uploads/` | — | Images from the export. Not part of the 107. |
+| `assets/`, `uploads/` | — | Images from the export. Not part of the 107. |
+| `scraps/` | 1 | `Data Room.dc.html`, set aside from `backlog/` (the 2026-10-26 note below). Not part of the 107. |
 
 The `integrated/` count read 54 until 2026-09-05 while the folder held 56 —
 two canvases were filed without the number moving. It is 61 now, counted rather
