@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Lightbox, Sheet, Unrecorded } from '../../ui';
 import { PersonAvatar } from './AgentMark.jsx';
 import AgentCard, { AgentArchetypeBadge, AgentAvatar, RiskScale } from './AgentCard.jsx';
@@ -10,9 +10,11 @@ import { SkillsStep } from './SkillSheets.jsx';
 import { previewRadar } from './skillsModel.js';
 import { SKILL_AXES } from '../../lib/assessmentMeta.js';
 import {
-  COMPARE_MAX, NOT_RECORDED, agentValueBars, filterOptions, fitLine, gallery, galleryCount, onTeamKeys, pronouns, rolesFor,
+  COMPARE_MAX, NOT_RECORDED, agentValueBars, filterOptions, fitLine, gallery, galleryCount, onTeamKeys, personaWork, pronouns, rolesFor,
   toggleCompare, workLabel,
 } from './personaModel.js';
+import ModelChoice from './ModelChoice.jsx';
+import { allowedModels, capRunsLine, modelOffer, per100Line } from './agentChoiceModel.js';
 
 /**
  * D4119 (#4119, AG2–AG4; D1497 TM3a–TM3c before it) — "Add an AI agent", a
@@ -32,6 +34,15 @@ import {
  *            work the agent's rule book starts from, the sponsor (you) and a
  *            monthly cap above $0.
  *
+ * D8769 (#8769, TMM03, TMM05, TMM06, TMM10E): Who searches by name or work
+ * (`gallery` reads `personaWork`), with "Good for" as the first filter, and
+ * each card leads with the work the persona is good for; the persona's values
+ * and story stay on the card. Model and cap opens on `ModelChoice` (models by
+ * the work they support, the team's allowlist, the per-100-runs estimate, and
+ * token prices on demand), then the sponsor and the cap with how many runs it
+ * pays for (`capRunsLine`). Below `md` a bar at the foot of the step keeps the
+ * chosen model, its estimate and the cap in view, with a button to the cap.
+ *
  * THE AREA OF WORK. The Worker still keys a rule book by a role and requires
  * `role_key` on add (D4117 §5), so the step names each by its work
  * ("Finance", "Legal"; `workLabel`), never a job title, suggested from the
@@ -47,7 +58,6 @@ import {
 const grantKey = (uid, tool) => `${uid}::${tool}`;
 const STEPS = ['Who', 'Skills', 'Model and cap'];
 const EYE = 'font-mono text-[10.5px] font-semibold uppercase tracking-[.11em] text-axal-muted dark:text-gray-400';
-const tokenRate = (label, value) => Number.isFinite(Number(value)) ? `${label} $${Number(value).toLocaleString('en-US', { maximumFractionDigits: 6 })} / 1M tokens` : `${label} ${NOT_RECORDED}`;
 
 /** TM3c: one rule book section, a row that opens in place. */
 function RuleRow({ label, text }) {
@@ -133,9 +143,9 @@ export function WhoStep({ block, scopeName, onTeam, chosen, setChosen }) {
     <div className="flex flex-col gap-3" data-testid="add-agent-who">
       <p className={`m-0 ${MUTED}`}>{`Choose who joins ${scopeName}. Each agent is a named character with fixed values. You choose skills next. A named person accepts everything an agent proposes.`}</p>
       <div className="flex flex-wrap items-center gap-2" role="search">
-        <input className={`${FIELD} min-w-[160px] flex-1`} type="search" placeholder="Search by name" aria-label="Search by name" value={f.q} onChange={set('q')} data-testid="agent-search" />
+        <input className={`${FIELD} min-w-[160px] flex-1`} type="search" placeholder="Search by name or work" aria-label="Search by name or work" value={f.q} onChange={set('q')} data-testid="agent-search" />
+        <select className={FIELD} aria-label="Good for" value={f.fit} onChange={set('fit')} data-testid="agent-filter-fit">{opts.fit.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
         <select className={FIELD} aria-label="Top core value" value={f.value} onChange={set('value')} data-testid="agent-filter-value">{opts.value.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-        <select className={FIELD} aria-label="Natural fit" value={f.fit} onChange={set('fit')} data-testid="agent-filter-fit">{opts.fit.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
         <select className={FIELD} aria-label="Risk" value={f.risk} onChange={set('risk')} data-testid="agent-filter-risk">{opts.risk.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
         <span className={`ml-auto font-mono text-[11.5px] ${MUTED}`} data-testid="agent-count">{galleryCount(shown, all)}</span>
       </div>
@@ -149,9 +159,9 @@ export function WhoStep({ block, scopeName, onTeam, chosen, setChosen }) {
                 onClick={() => pick(p)} onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(p); } }}
                 className={p.on_team ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'} data-testid={`agent-pick-${p.key}`}>
                 <AgentCard persona={p} legend={legend} onTeam={p.on_team} selected={on}
+                  lead={<><span className={EYE}>Good for</span><span className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid={`agent-work-${p.key}`}>{personaWork(p).join(' · ') || NOT_RECORDED}</span></>}
                   footer={(
                     <>
-                      <span className={`font-mono text-[11px] ${MUTED}`}>0 skills · cost per run <Unrecorded /></span>
                       <button type="button" aria-pressed={inCompare} className={`ml-auto rounded-axal-pill border px-2.5 py-0.5 text-[11.5px] font-semibold ${inCompare ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
                         onClick={(e) => { e.stopPropagation(); setCompare((c) => toggleCompare(c, p.key)); }} onKeyDown={(e) => e.stopPropagation()}
                         disabled={!inCompare && compare.length >= COMPARE_MAX} data-testid={`agent-compare-toggle-${p.key}`}>{inCompare ? '✓ Compare' : 'Compare'}</button>
@@ -208,8 +218,15 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
   const [refusal, setRefusal] = useState('');
   const [skillPicks, setSkillPicks] = useState(null);
   const [skillList, setSkillList] = useState([]);
+  // D8769 (#8769): the team's allowed models (D4422) and the chosen model's estimate (D4121).
+  const [allowBlock, setAllowBlock] = useState(null);
+  const [chosenEst, setChosenEst] = useState(null);
+  const capRef = useRef(null);
   useEffect(() => { let alive = true; agents.toolChoices().then((b) => { if (alive) setTools(b); }); return () => { alive = false; }; }, []);
   useEffect(() => { let alive = true; agents.personas().then((b) => { if (alive) setPersonasBlock(b); }); return () => { alive = false; }; }, []);
+  const scopeKind = scope?.kind === 'company' ? 'company' : 'project';
+  const scopeId = scope?.kind === 'company' ? scope?.company?.uid : scope?.project?.id;
+  useEffect(() => { let alive = true; agents.readAllowlists(scopeKind, scopeId).then((b) => { if (alive) setAllowBlock(b); }); return () => { alive = false; }; }, [scopeKind, scopeId]);
   const onTeam = useMemo(() => onTeamKeys(team), [team]);
   const persona = personasBlock?.available ? (personasBlock.value?.personas || []).find((p) => p.key === chosen) || null : null;
   const name = persona?.name || 'the agent';
@@ -221,7 +238,9 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
   const picked = (roles || []).find((r) => r.key === roleKey);
   const pickedModel = (models || []).find((m) => m.id === model);
   const capOk = Number(cap) > 0;
-  const ready = step === 0 ? !!persona : step === 1 ? true : !!pickedModel && !!picked && capOk;
+  const capRuns = capOk ? capRunsLine(chosenEst, Math.round(Number(cap) * 1e6)) : null;
+  // D8769: a model the plan or the team's allowlist refuses cannot be added, even if it was chosen before the allowlist was read.
+  const ready = step === 0 ? !!persona : step === 1 ? true : !!pickedModel && modelOffer(pickedModel, allowedModels(allowBlock)) === 'ok' && !!picked && capOk;
   const chosenSkills = skillList.filter((sk) => skillPicks?.has(sk.uid));
   const servers = tools?.available && Array.isArray(tools.value?.servers) ? tools.value.servers : [];
   const grants = useTools ? servers.flatMap((sv) => (sv.tools || []).filter((t) => granted.has(grantKey(sv.integration_uid, t.name))).map((t) => ({ integration_uid: sv.integration_uid, tool: t.name }))) : [];
@@ -229,9 +248,7 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
   const titles = [`Choose who joins ${scopeName}`, `Choose skills for ${name}`, `Model and cap for ${name}`];
   const add = async () => {
     setRefusal('');
-    const kind = scope.kind === 'company' ? 'company' : 'project';
-    const id = scope.kind === 'company' ? scope.company.uid : scope.project.id;
-    const out = await agents.addAgent(kind, id, {
+    const out = await agents.addAgent(scopeKind, scopeId, {
       role_key: roleKey, persona_key: persona.key, model_id: model, tool_grants: grants,
       monthly_cap_microusd: Math.round(Number(cap) * 1e6),
       // D1612 (SK6, A2 #3956): the skills step's picks, sent only when there are any.
@@ -264,20 +281,22 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
           <>
             {persona ? <AgentCard persona={persona} legend={personasBlock?.value?.values} size="compact" sub={`Area of work · ${areaOfWork} · ${chosenSkills.length} skill${chosenSkills.length === 1 ? '' : 's'}`} /> : null}
             <p className={`m-0 ${MUTED}`}>{`Pick the model ${name} runs on and the most ${pronouns(persona) === 'She/her' ? 'her' : pronouns(persona) === 'He/him' ? 'his' : 'its'} runs may spend each month.`}</p>
-            <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Platform model</h3>
-            {Array.isArray(models) && models.length ? (
-              <div role="radiogroup" aria-label="Platform model" className="flex flex-col gap-1.5">
-                {models.map((m) => (
-                  <label key={m.id} className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-axal-md border px-3 py-2 ${model === m.id ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-900/30' : 'border-axal-hairline dark:border-gray-700'}`}>
-                    <input type="radio" name="model" checked={model === m.id} onChange={() => setModel(m.id)} className="accent-violet-600" />
-                    <span className="min-w-0 flex-1">
-                      <b className="block text-[13px] text-axal-ink dark:text-gray-100">{m.label}{m.kind ? ` · ${m.kind}` : ''}</b>
-                      <span className={MUTED}>{`${tokenRate('Input', m.input_usd_per_million)} · ${tokenRate('Output', m.output_usd_per_million)}`}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            ) : <HonestBlock>The models offered on your plan could not be read. That is not the same as none.</HonestBlock>}
+            <ModelChoice models={models} model={model} setModel={setModel} allowBlock={allowBlock} onEstimate={setChosenEst}
+              draft={{ kind: scopeKind, id: scopeId, role: roleKey, persona: persona?.key || null, skills: chosenSkills.map((sk) => sk.uid) }} />
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Sponsor</span>
+              <span className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100"><PersonAvatar initials={initials(me?.name)} size={30} />You{me?.name ? ` (${me.name})` : ''}</span>
+              <span className={MUTED}>{`${name} runs as you and is paid from your AI tokens, up to the monthly cap.`}</span>
+              <span className="sr-only">{WHO_PAYS}</span>
+            </div>
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Monthly cap</span>
+              <input ref={capRef} inputMode="decimal" className={`${FIELD} w-40`} value={cap} onChange={(e) => setCap(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="$" aria-describedby="add-agent-cap-runs" data-testid="add-agent-cap" />
+              <span className={MUTED} id="add-agent-cap-runs">
+                {capRuns ? <span className="block font-semibold text-axal-ink dark:text-gray-100" data-testid="add-agent-cap-runs">{capRuns}</span> : null}
+                Must be more than $0. Runs pause when the cap is reached. You can raise it later.
+              </span>
+            </label>
             <div className="flex items-start gap-3">
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold text-axal-ink dark:text-gray-100" id="add-agent-tools-label">May use your connected tools (read-only)</span>
@@ -337,19 +356,15 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
                 {onEditRulebook ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => onEditRulebook(picked.key)} data-testid="add-agent-edit-rulebook">Edit for this company</button> : null}
               </div>
             ) : null}
-            <div className="flex flex-col gap-1">
-              <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Sponsor</span>
-              <span className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100"><PersonAvatar initials={initials(me?.name)} size={30} />You{me?.name ? ` (${me.name})` : ''}</span>
-              <span className={MUTED}>{`${name} runs as you and is paid from your AI tokens, up to the monthly cap.`}</span>
-              <span className="sr-only">{WHO_PAYS}</span>
-            </div>
-            <label className="flex flex-col gap-1">
-              <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Monthly cap</span>
-              <input inputMode="decimal" className={`${FIELD} w-40`} value={cap} onChange={(e) => setCap(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="$" data-testid="add-agent-cap" />
-              <span className={MUTED}>Must be more than $0. Runs pause when the cap is reached. You can raise it later.</span>
-            </label>
             <p className="m-0 rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-ink dark:bg-violet-900/20 dark:text-gray-100">{`Everything ${name} makes is a proposal. A named person accepts it in Approvals.`}</p>
             {refusal ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{refusal}</p> : null}
+            <div role="region" aria-label={`Your choice for ${name}`} className="sticky bottom-0 -mx-5 flex flex-wrap items-center gap-2 border-t border-axal-hairline bg-white px-5 py-2 md:hidden dark:border-gray-700 dark:bg-gray-900" data-testid="add-agent-phone-bar">
+              <span className="min-w-0 flex-1 text-[12.5px] text-axal-ink dark:text-gray-100">
+                <b className="block truncate">{pickedModel ? pickedModel.label : 'No model chosen'}</b>
+                <span className={`block truncate ${MUTED}`}>{[pickedModel ? (per100Line(chosenEst) || 'Estimate unavailable') : null, capOk ? `Cap $${cap}/month` : 'No cap yet'].filter(Boolean).join(' · ')}</span>
+              </span>
+              <button type="button" className={BTN_TEXT} onClick={() => capRef.current?.focus?.()} data-testid="add-agent-phone-cap">{capOk ? 'Change cap' : 'Set the cap'}</button>
+            </div>
           </>
         ) : null}
       </div>
