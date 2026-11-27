@@ -39,5 +39,6 @@ export default function useSendCheck({ kind, deck, kit = null, refresh = null })
   const gate = ready ? gateOf(pf.groups, kind) : null;
   const resultKey = pf.result?.key ?? null;
   const confirmed = Boolean(resultKey) && confirmedKey === resultKey;
-  return { pf, gate, ready, confirmed, confirm: () => setConfirmedKey(resultKey), blocked: !ready || (Boolean(gate?.open) && !confirmed) };
+  // D8772 (#8772) part 3: `confirm(false)` takes the confirmation back (Export's checkbox can be unticked).
+  return { pf, gate, ready, confirmed, confirm: (on = true) => setConfirmedKey(on ? resultKey : null), blocked: !ready || (Boolean(gate?.open) && !confirmed) };
 }

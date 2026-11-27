@@ -266,6 +266,6 @@ test('PD17 mounted: the two options apply to PowerPoint and PDF, and travel with
     await v.settle();
     await v.press(v.by('pitch-export-run'));
     // D8771 (#8771): the dialog opens on the investor copy — no notes, the Sources appendix.
-    assert.deepEqual(sent, [[40, 'pptx', { notes: false, sources: true }], [40, 'pdf', { notes: false, sources: false }]]);
+    assert.deepEqual(sent, [[40, 'pptx', { notes: false, sources: true, confirmed: [] }], [40, 'pdf', { notes: false, sources: false, confirmed: [] }]], 'D8772 part 3: nothing to confirm, none confirmed');
   } finally { await v.unmount(); }
 });

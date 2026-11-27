@@ -127,7 +127,7 @@ const CHIP = {
 };
 
 /** One finding (pf2): the slide number, where, the defect, why it matters, and its actions. */
-function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, onDismiss, onRetry = null, retrying = false, rowRef = null, testId }) {
+function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, showWord = SHOW_ME, showLabel = null, onDismiss, onRetry = null, retrying = false, rowRef = null, testId }) {
   const askable = !readOnly && Boolean(fix);
   return (
     <li className={`${BOX} flex gap-3`} aria-label={row.label} tabIndex={rowRef ? -1 : undefined} ref={rowRef} data-finding-id={row.id} data-testid={testId}>
@@ -143,7 +143,7 @@ function FindingRow({ row, n, stale = false, readOnly = false, compact = false, 
         {!compact && row.detail ? <span className={MUTED}>{row.detail}</span> : null}
         {!compact && row.fix ? <span className={MUTED}>{row.fix}</span> : null}
         <span className="mt-1 flex flex-wrap items-center gap-1.5">
-          {onShow && (row.card != null || row.firstCard != null) ? <button type="button" className={GHOST} aria-label={row.showLabel} onClick={() => onShow(row)} data-testid={`${testId}-show`}>{SHOW_ME}</button> : null}
+          {onShow && (row.card != null || row.firstCard != null) ? <button type="button" className={GHOST} aria-label={showLabel ?? row.showLabel} onClick={() => onShow(row)} data-testid={`${testId}-show`}>{showWord}</button> : null}
           {!compact && onDismiss && row.dismissible && !readOnly ? <button type="button" className={GHOST} aria-label={row.dismissLabel} onClick={() => onDismiss(row)} data-testid={`${testId}-dismiss`}>{DISMISS}</button> : null}
           {/* #3661 pf5c: a slide that couldn't be checked is tried again on its own. */}
           {onRetry && row.slide != null ? (
@@ -340,8 +340,17 @@ export function PreflightPanel({ pf, version, readOnly = false, draft = false, r
  * is no slide to jump to (`onShow` is left out there). One body, so both checks
  * read the same, and `prefix` only tells their rows apart in a test.
  */
-export function GateBody({ gate, progress = null, onShow = null, prefix = 'pitch-preflight-gate' }) {
+/**
+ * D8772 part 3 (PTF05): `show` words the row's Show button for where it leaves the founder —
+ * Export's "Show in your draft" — as `{ word, label(row), can(row) }`; a row `can` refuses has none.
+ */
+export function GateBody({ gate, progress = null, onShow = null, show = null, prefix = 'pitch-preflight-gate' }) {
   const [openLook, setOpenLook] = useState(false);
+  const shown = (r) => ({
+    onShow: onShow && (!show?.can || show.can(r)) ? onShow : null,
+    ...(show?.word ? { showWord: show.word } : {}),
+    ...(show?.label ? { showLabel: show.label(r) } : {}),
+  });
   if (progress) return <Checking progress={progress} testId={`${prefix}-checking`} />;
   if (!gate) return null;
   const showLook = !gate.fix.length || openLook;
@@ -354,7 +363,7 @@ export function GateBody({ gate, progress = null, onShow = null, prefix = 'pitch
       <span className={`text-[14px] font-extrabold ${headTone}`} role="status" aria-label={head.announce} data-testid={headId}>{head.tone === 'ok' ? '✓ ' : ''}{head.text}</span>
       {gate.fix.length ? (
         <Group title="To fix first" count={gate.fix.length} testId={`${prefix}-fix-list`}>
-          <Clustered rows={gate.fix} testId={`${prefix}-fix-list`} row={(r) => <FindingRow row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />} />
+          <Clustered rows={gate.fix} testId={`${prefix}-fix-list`} row={(r) => <FindingRow row={r} compact {...shown(r)} testId={`${prefix}-row-${r.id}`} />} />
         </Group>
       ) : null}
       {gate.look.length && gate.fix.length ? (
@@ -364,7 +373,7 @@ export function GateBody({ gate, progress = null, onShow = null, prefix = 'pitch
       ) : null}
       {gate.look.length && showLook ? (
         <Group title={GROUPS.look} note={GROUP_NOTES.lookGate} count={gate.look.length} testId={`${prefix}-look`}>
-          <Clustered rows={gate.look} testId={`${prefix}-look`} row={(r) => <FindingRow row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />} />
+          <Clustered rows={gate.look} testId={`${prefix}-look`} row={(r) => <FindingRow row={r} compact {...shown(r)} testId={`${prefix}-row-${r.id}`} />} />
         </Group>
       ) : null}
       {gate.waitLine ? <span className={MUTED} data-testid={`${prefix}-wait`}>{gate.waitLine}</span> : null}

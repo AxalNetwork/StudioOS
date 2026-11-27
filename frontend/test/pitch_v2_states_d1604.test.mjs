@@ -119,7 +119,7 @@ test('the .odp export goes through api.deckExportOdp to POST /api/decks/:id/expo
     assert.match(v.textOf('pitch-export-where'), /In the \.odp file/);
     await v.click('pitch-export-run');
     const posts = v.requests.filter((q) => q.method === 'POST');
-    assert.deepEqual(posts.map((q) => [new URL(q.url, 'https://x.test').pathname, q.body]), [['/api/decks/10/export/odp', { notes: false, sources: true }]], 'D8771: the investor copy by default');
+    assert.deepEqual(posts.map((q) => [new URL(q.url, 'https://x.test').pathname, q.body]), [['/api/decks/10/export/odp', { notes: false, sources: true, confirmed: [] }]], 'D8771: the investor copy by default; D8772 part 3: none confirmed');
     assert.deepEqual(v.saved, ['Synthetic-seed-deck-v4.odp']);
     assert.equal(v.textOf('pitch-export-done'), 'Exported Slides-suite file (.odp) of v4. The export is recorded.');
     assert.ok(v.requests.filter((q) => q.url.includes('/decks/10/exports')).length >= 2, 'the ledger is read again after the export');
@@ -127,7 +127,7 @@ test('the .odp export goes through api.deckExportOdp to POST /api/decks/:id/expo
   assert.equal('exportOdp' in adapter, false, 'a surface whose route is on main is not in the seam');
   assert.equal(adapter.availability('exportOdp'), null);
   const dialog = codeOnly(read('ExportDialog.jsx'));
-  assert.match(dialog, /api\.deckExportOdp\(version\.id, \{ notes, sources \}\)/);
+  assert.match(dialog, /api\.deckExportOdp\(version\.id, \{ notes, sources, confirmed \}\)/);
   assert.doesNotMatch(dialog, /deckV2Adapter/);
 });
 

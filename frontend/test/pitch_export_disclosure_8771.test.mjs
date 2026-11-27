@@ -156,7 +156,7 @@ async function mounted(handle) {
     async confirmChecks() {
       for (let i = 0; i < 40 && byId('pitch-export-checking'); i += 1) await flush();
       assert.ok(!byId('pitch-export-checking'), 'the check finished');
-      if (byId('pitch-export-gate-anyway')) await v.click('pitch-export-gate-anyway');
+      if (byId('pitch-export-gate-anyway')) await v.tick('pitch-export-gate-anyway', true); // D8772 part 3: a checkbox now
     },
     async close() { await act(async () => root.unmount()); globalThis.fetch = previous.fetch; URL.createObjectURL = previous.createObjectURL; restore(); },
   };
@@ -199,7 +199,9 @@ test('3. mounted: the investor copy by default, the working copy’s acknowledgm
     assert.equal(v.props('pitch-export-run').disabled, true, 'a new combination asks again');
     await v.tick('pitch-export-ack-check', true);
     await v.click('pitch-export-run');
-    assert.deepEqual(v.posts().map((q) => q.body), [{ format: 'pptx', notes: true, sources: true }]);
+    // D8772 part 3: the export carries the ids of the warnings its check confirmed, for the ledger row.
+    const confirmed = ['density:0:h:0', 'sources:3:c:0', 'placeholder:10:m:0', 'sources:10:m:0'];
+    assert.deepEqual(v.posts().map((q) => q.body), [{ format: 'pptx', notes: true, sources: true, confirmed }]);
     assert.equal(v.textOf('pitch-export-done'), 'Exported PowerPoint of v7. The export is recorded.');
     assert.equal(v.textOf('pitch-export-done-what'), 'PowerPoint of v7 · Working copy · 13 slides');
     assert.equal(v.textOf('pitch-export-done-settings'), 'Speaker notes included · Sources appendix included');
@@ -226,7 +228,8 @@ test('4. mounted: a failure keeps its settings, and Try again sends the same exp
     await v.click('pitch-export-run');
     assert.ok(v.has('pitch-export-failed') && !v.has('pitch-export-completed'));
     await v.click('pitch-export-retry');
-    assert.deepEqual(v.posts().map((q) => q.body), [{ format: 'pptx', notes: true, sources: true }, { format: 'pptx', notes: true, sources: true }]);
+    const confirmed = ['density:0:h:0', 'sources:3:c:0', 'placeholder:10:m:0', 'sources:10:m:0'];
+    assert.deepEqual(v.posts().map((q) => q.body), [{ format: 'pptx', notes: true, sources: true, confirmed }, { format: 'pptx', notes: true, sources: true, confirmed }]);
     assert.ok(v.has('pitch-export-completed') && !v.has('pitch-export-failed'));
     assert.equal(v.textOf('pitch-export-done-hash'), 'Fingerprint bbbbbbbbbbbb…');
     assert.ok(!v.has('pitch-export-done-report'), 'no report header, no report line');
