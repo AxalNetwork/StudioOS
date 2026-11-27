@@ -43,19 +43,40 @@ D5605 rows 1 to 4. The `main` ruleset carries the merge queue; the platform
 paths ruleset requires the owner's review for the privileged path list (#8067
 keeps that list in one place).
 
+Mirrored from the #8060 STATUS of 2026-11-21 (phase 1, D8060). The live name of
+the `main` ruleset is `main: required checks`, so its keys use that name: the
+check keys a ruleset by its live name, and the STATUS asks that the live rule
+is not renamed to fit a placeholder. The required-checks row,
+`ruleset[main: required checks].required_status_checks`, is #8641's: it holds
+the seven contexts from #7899's receipt (the seventh, `Dependency Review`, was
+added on 2026-11-23; the six the STATUS recorded are out of date). The disabled
+`Code Quality Copilot review for default branch` ruleset is listed because it
+exists. No `platform paths` ruleset exists yet (phase 2 waits on #8061), so its
+rows stay to be recorded and `rulesets.names` drifts, as it should, the day it
+is created. The queue's build concurrency (`5`), minimum group (`1`), wait to
+meet the minimum (`5` minutes) and status-check timeout (`90` minutes) were
+applied too, but the check does not read them yet, so they are recorded in
+D8060 rather than as rows here (a row the check cannot read fails the run).
+
 | Setting | Expected | Planned by the admin issue | Recorded by |
 | --- | --- | --- | --- |
-| `rulesets.names` | to be recorded | `main`, `platform paths` | #8060 |
-| `ruleset[main].enforcement` | to be recorded | `active` | #8060 |
-| `ruleset[main].target` | to be recorded | `branch` | #8060 |
-| `ruleset[main].include` | to be recorded | the default branch | #8060 |
-| `ruleset[main].bypass_actors` | to be recorded | `none` (after the owner's go on #8060) | #8060 |
-| `ruleset[main].rules` | to be recorded | pull request, merge queue, required status checks, non fast-forward, deletion | #8060 |
-| `ruleset[main].required_status_checks` | `test:drift (full suite), worker (typecheck), frontend (build), api ↔ worker drift, applied migrations unchanged, scan, Dependency Review` | every context from GitHub Actions, required on pull requests and in the merge queue since 2026-11-23 16:59:40 Europe/Zurich (#7899's console receipt, linked in D8641). Production's push-event admission waits only for the first six; `Dependency Review` never runs on a push | #7899 |
-| `ruleset[main].strict_required_status_checks` | to be recorded | as D5605 | #8060 |
-| `ruleset[main].merge_queue.merge_method` | to be recorded | `SQUASH` | #8060 |
-| `ruleset[main].merge_queue.max_entries_to_merge` | to be recorded | `5` (D5605 row 4) | #8060 |
-| `ruleset[main].merge_queue.grouping_strategy` | to be recorded | as D5605 | #8060 |
+| `rulesets.names` | `Code Quality Copilot review for default branch, main: required checks` | `main`, `platform paths` | #8060 |
+| `ruleset[Code Quality Copilot review for default branch].enforcement` | `disabled` | left disabled | #8060 |
+| `ruleset[main: required checks].enforcement` | `active` | `active` | #8060 |
+| `ruleset[main: required checks].target` | `branch` | `branch` | #8060 |
+| `ruleset[main: required checks].include` | `~DEFAULT_BRANCH` | the default branch | #8060 |
+| `ruleset[main: required checks].exclude` | `none` | none | #8060 |
+| `ruleset[main: required checks].bypass_actors` | `none` | `none` (after the owner's go on #8060) | #8060 |
+| `ruleset[main: required checks].rules` | `deletion, merge_queue, non_fast_forward, pull_request, required_status_checks` | pull request, merge queue, required status checks, non fast-forward, deletion | #8060 |
+| `ruleset[main: required checks].required_status_checks` | `test:drift (full suite), worker (typecheck), frontend (build), api ↔ worker drift, applied migrations unchanged, scan, Dependency Review` | every context from GitHub Actions, required on pull requests and in the merge queue since 2026-11-23 16:59:40 Europe/Zurich (#7899's console receipt, linked in D8641). Production's push-event admission waits only for the first six; `Dependency Review` never runs on a push | #7899 |
+| `ruleset[main: required checks].strict_required_status_checks` | `false` | as D5605 | #8060 |
+| `ruleset[main: required checks].pull_request.required_approving_review_count` | `0` | `0` (owner review is the platform paths ruleset's) | #8060 |
+| `ruleset[main: required checks].pull_request.require_code_owner_review` | `false` | `false` | #8060 |
+| `ruleset[main: required checks].pull_request.dismiss_stale_reviews_on_push` | `false` | `false` | #8060 |
+| `ruleset[main: required checks].pull_request.require_last_push_approval` | `false` | `false` | #8060 |
+| `ruleset[main: required checks].merge_queue.merge_method` | `SQUASH` | `SQUASH` | #8060 |
+| `ruleset[main: required checks].merge_queue.max_entries_to_merge` | `5` | `5` (D5605 row 4) | #8060 |
+| `ruleset[main: required checks].merge_queue.grouping_strategy` | `ALLGREEN` | as D5605 | #8060 |
 | `ruleset[platform paths].enforcement` | to be recorded | `active` | #8060 |
 | `ruleset[platform paths].target` | to be recorded | `branch` | #8060 |
 | `ruleset[platform paths].include` | to be recorded | the default branch | #8060 |
@@ -68,37 +89,62 @@ keeps that list in one place).
 
 ## Repository settings (#8060, #8062)
 
+Mirrored from the #8060 and #8062 STATUS records of 2026-11-21 (D8060, D8062).
+`repo.secret_scanning` stays to be recorded: the #8062 record lists push
+protection as on but does not report secret scanning itself.
+
 | Setting | Expected | Planned by the admin issue | Recorded by |
 | --- | --- | --- | --- |
-| `repo.allow_auto_merge` | to be recorded | `true` (D5605 row 3) | #8060 |
-| `repo.allow_update_branch` | to be recorded | `true` (always suggest updating branches) | #8060 |
-| `repo.delete_branch_on_merge` | to be recorded | `true` | #8062 |
-| `repo.has_wiki` | to be recorded | `false` | #8062 |
-| `repo.has_discussions` | to be recorded | as it is | #8062 |
+| `repo.allow_auto_merge` | `true` | `true` (D5605 row 3) | #8060 |
+| `repo.allow_update_branch` | `true` | `true` (always suggest updating branches) | #8060 |
+| `repo.delete_branch_on_merge` | `true` | `true` | #8062 |
+| `repo.has_wiki` | `false` | `false` | #8062 |
+| `repo.has_discussions` | `false` | as it is | #8062 |
 | `repo.secret_scanning` | to be recorded | `enabled` | #8062 |
-| `repo.secret_scanning_push_protection` | to be recorded | `enabled` | #8062 |
-| `repo.dependabot_security_updates` | to be recorded | `enabled` | #8062 |
-| `repo.private_vulnerability_reporting` | to be recorded | `true` | #8062 |
+| `repo.secret_scanning_push_protection` | `enabled` | `enabled` | #8062 |
+| `repo.dependabot_security_updates` | `enabled` | `enabled` | #8062 |
+| `repo.private_vulnerability_reporting` | `true` | `true` | #8062 |
 
 ## Actions (#8062)
 
+Mirrored from the #8062 STATUS of 2026-11-21 (D8062). The allowlist is the
+corrected one (17 full references, saved by 19:17 UTC), not the 14-entry list
+first saved: GitHub matches a pattern against the whole `uses:` string, so a
+sub-action such as `actions/cache/restore` needs its own entry. Re-checked on
+2026-11-27 against every `uses:` of `.github/workflows/*.yml` on main: each of
+the 16 directly used references is listed, and `oven-sh/setup-bun` is the one
+the pinned `anthropics/claude-code-action` calls from its own `action.yml`.
+The only references not in the list are this repository's own reusable
+workflows (`./.github/workflows/…` and
+`AxalNetwork/StudioOS/.github/workflows/capacity-planner.yml@…`), which the
+`selected` policy allows as the owner's own. A workflow that bumps a pin, or
+adds an action, needs the admin slot to add the new reference first, and this
+row to change with it.
+
 | Setting | Expected | Planned by the admin issue | Recorded by |
 | --- | --- | --- | --- |
-| `actions.enabled` | to be recorded | `true` | #8062 |
-| `actions.allowed_actions` | to be recorded | `selected` | #8062 |
-| `actions.selected.github_owned_allowed` | to be recorded | as entered | #8062 |
-| `actions.selected.verified_allowed` | to be recorded | as entered | #8062 |
-| `actions.selected.patterns_allowed` | to be recorded | every `uses:` of `.github/workflows/*.yml`, pinned at its SHA | #8062 |
-| `actions.workflow.default_permissions` | to be recorded | `read` | #8062 |
-| `actions.workflow.can_approve_pull_request_reviews` | to be recorded | `false` | #8062 |
-| `actions.fork_pr_approval` | to be recorded | `all_external_contributors` | #8062 |
+| `actions.enabled` | `true` | `true` | #8062 |
+| `actions.allowed_actions` | `selected` | `selected` | #8062 |
+| `actions.selected.github_owned_allowed` | `false` | as entered (both broad allowances off, D8062) | #8062 |
+| `actions.selected.verified_allowed` | `false` | as entered | #8062 |
+| `actions.selected.patterns_allowed` | `actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9, actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9, actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510, actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294, actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333, actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3, actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1, actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0, actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9, anthropics/claude-code-action@ec7c223ff45a0763d3d5e530c74403d14f8ddd10, astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2, github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066, github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066, github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066, ossf/scorecard-action@23f22cd43608bae7a1f1fa2603d7314dee9538a5, oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6` | every `uses:` of `.github/workflows/*.yml`, pinned at its SHA | #8062 |
+| `actions.sha_pinning_required` | `true` | `true` (require full-length SHA) | #8062 |
+| `actions.workflow.default_permissions` | `read` | `read` | #8062 |
+| `actions.workflow.can_approve_pull_request_reviews` | `false` | `false` | #8062 |
+| `actions.fork_pr_approval` | `all_external_contributors` | `all_external_contributors` | #8062 |
 
 ## Organisation (#8062)
 
+Mirrored from the #8062 STATUS of 2026-11-21 (D8062). Public repository
+creation was not changed (the console locks it; GitHub documents the
+restriction under Enterprise Cloud), and the organisation-wide allowed-actions
+policy was not applied (other organisation repositories use unpinned tags).
+Both wait on the owner's answer on #8062, so their rows stay to be recorded.
+
 | Setting | Expected | Planned by the admin issue | Recorded by |
 | --- | --- | --- | --- |
-| `org.two_factor_requirement_enabled` | to be recorded | `true` | #8062 |
-| `org.default_repository_permission` | to be recorded | `read` | #8062 |
+| `org.two_factor_requirement_enabled` | `true` | `true` | #8062 |
+| `org.default_repository_permission` | `read` | `read` | #8062 |
 | `org.members_can_create_public_repositories` | to be recorded | `false` | #8062 |
 | `org.members_can_create_private_repositories` | to be recorded | as the owner decides | #8062 |
 
@@ -108,28 +154,60 @@ The audit's `development` is `preview`; its `security` is `production-ops`.
 Reviewers are a count and a type (`User`, `Team`), never a person. Secret and
 variable names only; a value is never read.
 
+Mirrored from the #8063 STATUS of 2026-11-21 (D8063). `preview`, `staging`,
+`production` and `production-ops` each deploy from one branch rule named `main`
+and no tag (`custom`, the contract `scripts/verify-production-environment.mjs`
+checks), not from protected branches. `production` and `staging` keep the
+stored names that end in a thin space (U+2009), so their `name_exact` is
+`false`; the STATUS kept those identities on purpose, for their deployment
+history. Still to be recorded:
+
+- `environments.names`: the STATUS lists the environments it changed, not the
+  whole list (it names `scan-remediation` as left unchanged, and the
+  `pr-preview` name the current preview jobs still use, without an
+  inventory).
+- every `secret_names` and `variable_names` row except `landing-bot`'s: the
+  STATUS read them as empty on 2026-11-21, before the credential cutover it
+  lists as outstanding (#8064, #8069), and later requests on #8063 (the preview
+  token on 2026-11-26, the D8754 moves) change them. The 2026-11-21 inventory
+  is in D8063.
+- the `production-backup` and `production-monitoring` rows (#8754). The owner
+  confirmed on 2026-11-26 that both exist with their own secrets and deploy
+  from `main` only, but no record gives the branch-policy mode, the reviewer
+  count or the names.
+
+Administrator bypass (off on all four, still on for `landing-bot`) is applied
+but not read by the check, so it is recorded in D8063 only.
+
 | Setting | Expected | Planned by the admin issue | Recorded by |
 | --- | --- | --- | --- |
 | `environments.names` | to be recorded | `preview`, `staging`, `production`, `production-ops`, `production-backup`, `production-monitoring` (D8754), `landing-bot` (plus `agent-compute-preview`, `scan-remediation` where they exist) | #8063 |
-| `environment[preview].required_reviewers` | to be recorded | `0` | #8063 |
+| `environment[preview].required_reviewers` | `0` | `0` | #8063 |
+| `environment[preview].wait_timer` | `0` | `0` | #8063 |
+| `environment[preview].branch_policy` | `custom` | `main` only | #8063 |
+| `environment[preview].branch_policies` | `main (branch)` | `main (branch)` | #8063 |
 | `environment[preview].secret_names` | to be recorded | `CLOUDFLARE_API_TOKEN` (#8064) | #8063 |
-| `environment[staging].required_reviewers` | to be recorded | `0` | #8063 |
-| `environment[staging].branch_policy` | to be recorded | `main` only | #8063 |
-| `environment[staging].branch_policies` | to be recorded | `main (branch)` if custom | #8063 |
-| `environment[production].name_exact` | to be recorded | `true` (the stored name had a trailing thin space on 2026-11-17) | #8063 |
-| `environment[production].required_reviewers` | to be recorded | `1` | #8063 |
-| `environment[production].reviewer_types` | to be recorded | `User` (the owner) | #8063 |
-| `environment[production].prevent_self_review` | to be recorded | as the owner decides | #8063 |
-| `environment[production].wait_timer` | to be recorded | `0` | #8063 |
-| `environment[production].branch_policy` | to be recorded | `protected` | #8063 |
-| `environment[production].branch_policies` | to be recorded | `n/a` when protected | #8063 |
+| `environment[staging].name_exact` | `false` | keep the stored name (D8063) | #8063 |
+| `environment[staging].required_reviewers` | `0` | `0` | #8063 |
+| `environment[staging].wait_timer` | `0` | `0` | #8063 |
+| `environment[staging].branch_policy` | `custom` | `main` only | #8063 |
+| `environment[staging].branch_policies` | `main (branch)` | `main (branch)` if custom | #8063 |
+| `environment[production].name_exact` | `false` | `true` (the stored name had a trailing thin space on 2026-11-17; D8063 kept it) | #8063 |
+| `environment[production].required_reviewers` | `1` | `1` | #8063 |
+| `environment[production].reviewer_types` | `User` | `User` (the owner) | #8063 |
+| `environment[production].prevent_self_review` | `false` | as the owner decides | #8063 |
+| `environment[production].wait_timer` | `0` | `0` | #8063 |
+| `environment[production].branch_policy` | `custom` | `protected` (applied as one `main` branch rule, D8063) | #8063 |
+| `environment[production].branch_policies` | `main (branch)` | `n/a` when protected | #8063 |
 | `environment[production].secret_names` | to be recorded | the `production` rows of `production-credential-inventory.json` | #8063 |
 | `environment[production].variable_names` | to be recorded | as recorded | #8063 |
-| `environment[production-ops].name_exact` | to be recorded | `true` | #8063 |
-| `environment[production-ops].required_reviewers` | to be recorded | `1` | #8063 |
-| `environment[production-ops].reviewer_types` | to be recorded | `User` (the owner) | #8063 |
-| `environment[production-ops].wait_timer` | to be recorded | `0` | #8063 |
-| `environment[production-ops].branch_policy` | to be recorded | `protected` | #8063 |
+| `environment[production-ops].name_exact` | `true` | `true` | #8063 |
+| `environment[production-ops].required_reviewers` | `1` | `1` | #8063 |
+| `environment[production-ops].reviewer_types` | `User` | `User` (the owner) | #8063 |
+| `environment[production-ops].prevent_self_review` | `false` | as the owner decides | #8063 |
+| `environment[production-ops].wait_timer` | `0` | `0` | #8063 |
+| `environment[production-ops].branch_policy` | `custom` | `protected` (applied as one `main` branch rule, D8063) | #8063 |
+| `environment[production-ops].branch_policies` | `main (branch)` | `n/a` when protected | #8063 |
 | `environment[production-ops].secret_names` | to be recorded | the `production-ops` rows of `production-credential-inventory.json` | #8063 |
 | `environment[production-ops].variable_names` | to be recorded | as recorded | #8063 |
 | `environment[production-backup].name_exact` | to be recorded | `true` | #8063 |
@@ -142,8 +220,10 @@ variable names only; a value is never read.
 | `environment[production-monitoring].branch_policy` | to be recorded | `main` only | #8063 |
 | `environment[production-monitoring].secret_names` | to be recorded | the `production-monitoring` rows of `production-credential-inventory.json` | #8063 |
 | `environment[production-monitoring].variable_names` | to be recorded | as recorded | #8063 |
-| `environment[landing-bot].secret_names` | to be recorded | the App key names from #8061 | #8061 |
-| `environment[landing-bot].branch_policy` | to be recorded | as recorded | #8063 |
+| `environment[landing-bot].secret_names` | `LANDING_BOT_APP_ID, LANDING_BOT_APP_PRIVATE_KEY` | the App key names from #8061 | #8063 |
+| `environment[landing-bot].required_reviewers` | `0` | as recorded | #8063 |
+| `environment[landing-bot].branch_policy` | `custom` | as recorded | #8063 |
+| `environment[landing-bot].branch_policies` | `main (branch)` | as recorded | #8063 |
 
 ## GitHub Apps (#8061)
 

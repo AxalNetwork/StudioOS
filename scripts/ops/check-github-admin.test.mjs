@@ -75,9 +75,34 @@ test('the committed baseline parses: every section has a table, every key is kno
     assert.ok(sections.has(s), `${s} has rows`);
     assert.match(text, new RegExp(`^## ${s}`, 'm'), `${s} has a heading`);
   }
-  // Until #8060–#8066 report, every value is "to be recorded" (update this when a STATUS is mirrored).
-  // D8641: the required contexts are mirrored from #7899's receipt.
-  assert.deepEqual(rows.filter(r => r.expected !== null).map(r => r.key), ['ruleset[main].required_status_checks']);
+  // D8060, D8062, D8063 (#8840): the applied #8060, #8062 and #8063 values are mirrored; nothing else is.
+  const recorded = rows.filter(r => r.expected !== null);
+  const sectionsRecorded = [...new Set(recorded.map(r => r.section))].sort();
+  assert.deepEqual(sectionsRecorded, ['Actions', 'Environments', 'Organisation', 'Repository settings', 'Rulesets']);
+  const byKey = Object.fromEntries(rows.map(r => [r.key, r.expected]));
+  // Keys use the live ruleset name. D8641: the required contexts are mirrored from #7899's receipt, under that name.
+  assert.equal(byKey['rulesets.names'], 'Code Quality Copilot review for default branch, main: required checks');
+  assert.equal(byKey['ruleset[main: required checks].bypass_actors'], 'none');
+  // The baseline lists them as the console does; parsing normalizes a list to sorted order, as the live read is.
+  assert.equal(byKey['ruleset[main: required checks].required_status_checks'], 'Dependency Review, api ↔ worker drift, applied migrations unchanged, frontend (build), scan, test:drift (full suite), worker (typecheck)');
+  assert.ok(!('ruleset[main].required_status_checks' in byKey), 'no row is keyed by a ruleset name that does not exist');
+  assert.ok(rows.filter(r => r.name === 'platform paths').every(r => r.expected === null), 'phase 2 is not applied');
+  assert.equal(byKey['org.members_can_create_public_repositories'], null);
+  // The corrected allowlist: 17 full references, sub-actions listed on their own, every one pinned at a full SHA.
+  const allowed = byKey['actions.selected.patterns_allowed'].split(', ');
+  assert.equal(allowed.length, 17);
+  assert.ok(allowed.every(ref => /^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)*@[0-9a-f]{40}$/.test(ref)), 'every reference is SHA-pinned');
+  for (const ref of ['actions/cache/restore', 'actions/cache/save', 'github/codeql-action/init', 'github/codeql-action/analyze', 'github/codeql-action/upload-sarif']) {
+    assert.ok(allowed.some(a => a.startsWith(`${ref}@`)), `${ref} has its own entry`);
+  }
+  // Applied as one `main` branch rule, not protected branches; the thin-space names were kept.
+  for (const env of ['preview', 'staging', 'production', 'production-ops']) {
+    assert.equal(byKey[`environment[${env}].branch_policy`], 'custom', env);
+    assert.equal(byKey[`environment[${env}].branch_policies`], 'main (branch)', env);
+  }
+  assert.equal(byKey['environment[production].name_exact'], 'false');
+  // Apps, runner groups and cloud have no record yet.
+  assert.ok(rows.filter(r => ['GitHub Apps', 'Runner groups', 'Cloud'].includes(r.section)).every(r => r.expected === null));
   assert.ok(!looksSecret(text.replace(/`[^`]*`/g, '')) && !/\b\d{7,}\b/.test(text), 'the baseline carries no id or secret');
 });
 
@@ -90,6 +115,68 @@ test('parseBaseline: backticked values, "to be recorded", and refusals for unkno
   assert.match(errors.join('\n'), /must be backticked/);
   assert.deepEqual(parseBaseline('no table').errors, ['the baseline has no setting rows']);
   assert.equal(normalize(' b, a ,c '), 'a, b, c');
+});
+
+/**
+ * The consoles as the #8060, #8062 and #8063 STATUS records of 2026-11-21 describe them, in the REST
+ * shapes the reader reads. Invented ids; the action pins are read from the committed baseline.
+ */
+function recordedConsole(patterns) {
+  const R = `/repos/${REPO}`;
+  const custom = { protected_branches: false, custom_branch_policies: true };
+  const owner = [{ type: 'required_reviewers', prevent_self_review: false, reviewers: [{ type: 'User', reviewer: { login: 'example-owner' } }] }];
+  const environments = [
+    { name: 'preview', protection_rules: [], deployment_branch_policy: custom },
+    { name: 'staging ', protection_rules: [], deployment_branch_policy: custom },
+    { name: 'production ', protection_rules: owner, deployment_branch_policy: custom },
+    { name: 'production-ops', protection_rules: owner, deployment_branch_policy: custom },
+    { name: 'landing-bot', protection_rules: [], deployment_branch_policy: custom },
+  ];
+  const routes = {
+    [`${R}/actions/permissions`]: { enabled: true, allowed_actions: 'selected', sha_pinning_required: true },
+    [`${R}/actions/permissions/selected-actions`]: { github_owned_allowed: false, verified_allowed: false, patterns_allowed: patterns },
+    [`${R}/actions/permissions/workflow`]: { default_workflow_permissions: 'read', can_approve_pull_request_reviews: false },
+    [`${R}/actions/permissions/fork-pr-contributor-approval`]: { approval_policy: 'all_external_contributors' },
+    [R]: { allow_auto_merge: true, allow_update_branch: true, delete_branch_on_merge: true, has_wiki: false, has_discussions: false,
+      security_and_analysis: { secret_scanning: { status: 'enabled' }, secret_scanning_push_protection: { status: 'enabled' }, dependabot_security_updates: { status: 'enabled' } } },
+    [`${R}/private-vulnerability-reporting`]: { enabled: true },
+    [`${R}/rulesets?includes_parents=true`]: [{ id: 1, name: 'main: required checks' }, { id: 2, name: 'Code Quality Copilot review for default branch' }],
+    [`${R}/rulesets/1`]: { enforcement: 'active', target: 'branch', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } }, bypass_actors: [],
+      rules: [{ type: 'deletion' }, { type: 'non_fast_forward' },
+        { type: 'pull_request', parameters: { required_approving_review_count: 0, require_code_owner_review: false, dismiss_stale_reviews_on_push: false, require_last_push_approval: false } },
+        // D8641: the seven contexts #7899's receipt records, in the order the console lists them.
+        { type: 'required_status_checks', parameters: { strict_required_status_checks_policy: false, required_status_checks: ['test:drift (full suite)', 'worker (typecheck)', 'frontend (build)', 'api ↔ worker drift', 'applied migrations unchanged', 'scan', 'Dependency Review'].map(context => ({ context })) } },
+        { type: 'merge_queue', parameters: { merge_method: 'SQUASH', max_entries_to_build: 5, min_entries_to_merge: 1, max_entries_to_merge: 5, min_entries_to_merge_wait_minutes: 5, grouping_strategy: 'ALLGREEN', check_response_timeout_minutes: 90 } }] },
+    [`${R}/rulesets/2`]: { enforcement: 'disabled', target: 'branch', conditions: { ref_name: { include: ['~DEFAULT_BRANCH'] } }, bypass_actors: [], rules: [] },
+    [`${R}/environments`]: { total_count: environments.length, environments },
+    '/orgs/ExampleOrg': { two_factor_requirement_enabled: true, default_repository_permission: 'read', members_can_create_public_repositories: true, members_can_create_private_repositories: true },
+  };
+  for (const env of environments) {
+    const path = `${R}/environments/${encodeURIComponent(env.name)}`;
+    routes[`${path}/deployment-branch-policies`] = { total_count: 1, branch_policies: [{ name: 'main', type: 'branch' }] };
+    routes[`${path}/secrets`] = { total_count: 0, secrets: env.name === 'landing-bot' ? [{ name: 'LANDING_BOT_APP_PRIVATE_KEY' }, { name: 'LANDING_BOT_APP_ID' }] : [] };
+    routes[`${path}/variables`] = { total_count: 0, variables: [] };
+  }
+  return routes;
+}
+
+test('the committed baseline matches the consoles the #8060, #8062 and #8063 records describe, with no drift', async () => {
+  const text = readFileSync(new URL(`../../${BASELINE}`, import.meta.url), 'utf8');
+  const patterns = parseBaseline(text).rows.find(r => r.key === 'actions.selected.patterns_allowed').expected.split(', ');
+  const github = fakeGitHub(recordedConsole([...patterns].reverse()));
+  const outcome = await checkCommand({ baselineText: text, reader: github.reader, repository: REPO, log: () => {} });
+  const having = status => outcome.results.filter(r => r.status === status);
+  assert.deepEqual(having('drift').map(r => `${r.key}: ${r.expected} != ${r.live}`), []);
+  assert.equal(outcome.drift, 0);
+  assert.equal(having('match').length, 63);
+  // A console that moves back to the old values is caught: the queue maximum and the bypass list.
+  const moved = recordedConsole(patterns);
+  moved[`/repos/${REPO}/rulesets/1`].rules[4].parameters.max_entries_to_merge = 30;
+  moved[`/repos/${REPO}/rulesets/1`].bypass_actors = [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }];
+  moved[`/repos/${REPO}/actions/permissions/selected-actions`].patterns_allowed = patterns.filter(p => !p.startsWith('actions/cache/restore@'));
+  const back = await checkCommand({ baselineText: text, reader: fakeGitHub(moved).reader, repository: REPO, log: () => {} });
+  assert.deepEqual(back.results.filter(r => r.status === 'drift').map(r => r.key).sort(),
+    ['actions.selected.patterns_allowed', 'ruleset[main: required checks].bypass_actors', 'ruleset[main: required checks].merge_queue.max_entries_to_merge']);
 });
 
 // One fixture per section: a matching row, a drifted row and a to-be-recorded row.

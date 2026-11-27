@@ -129,15 +129,18 @@ export const RESEARCH_STORE_GAPS = {
   // D495 (#1023) — THE INVESTOR'S MARKETS ZONE DRAWS THESES, not saved
   // analyses: its filters are Active · Parked · Retired · Builder, and each row
   // is a thesis, what it has sourced, and a written read. No store holds a
-  // thesis, and whether one belongs to the investor or the firm is the owner's
-  // call (question 5 on #1023). This entry takes precedence over `markets` for
-  // the investor (`storeGapFor`).
+  // thesis. Whether one belongs to the investor or the firm was question 5 on
+  // #1023, which closed unanswered; it was asked again on #6274 and the owner
+  // answered 5 A on 2026-11-15: a thesis is the investor's own, a firm share
+  // can come later (D6274). The store itself is still unbuilt, so the card is
+  // blocked on a store, not a decision. This entry takes precedence over
+  // `markets` for the investor (`storeGapFor`).
   'markets:investor': {
-    eyebrow: 'Blocked on a decision',
+    eyebrow: 'Blocked on a store',
     blocks: 'a thesis',
     heading: 'Market readings are stored. Theses are not, yet.',
     what: 'Each thesis with its state (active, parked or retired), the deals it has sourced, and a written read, so a thesis that sources nothing can be retired on the record.',
-    why: 'No thesis is stored, and no deal records the thesis that sourced it. Whether a thesis belongs to you or to your firm is the owner’s decision, asked on #1023, and nothing here invents one. What this page holds today is the taxonomy’s markets by tracked sector and your comparable readings.',
+    why: 'No thesis is stored, and no deal records the thesis that sourced it. The owner has decided that a thesis is yours, not your firm’s (#6274); the store that would hold one is not built yet, and nothing here invents one. What this page holds today is the taxonomy’s markets by tracked sector and your comparable readings.',
   },
   companies: {
     eyebrow: 'Blocked on a store',

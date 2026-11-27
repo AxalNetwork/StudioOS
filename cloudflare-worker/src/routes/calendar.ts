@@ -30,6 +30,7 @@ import type { CalendarEvent } from '../services/calendar';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
+import { hiddenDealIds, hiddenJson } from '../services/dealPreparation';
 import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } from '../services/calendar/myEvents';
 import { CALENDAR_FEED_SCOPE, FEED_SCOPE, feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken, type FeedScope } from '../services/calendar/feedTokens';
 import {
@@ -1141,15 +1142,24 @@ calendar.get('/people', safe('people_pick', 'Could not search people', async (c)
   return c.json({ error: 'for_required', detail: "Say who the search is for: 'ic' or 'checkin'." }, 400);
 }));
 
-/** D1207 — the deals the caller can open, by venture name, for New IC meeting's Deal field. */
+/**
+ * D1207 — the deals the caller can open, by venture name, for New IC meeting's Deal field.
+ *
+ * D5454 (#5454, R4): a deal whose preparation is never released or unknown is not offered to anyone, staff included
+ * (`hiddenDealIds('transactional')`, bound before the LIMIT). A withdrawn or archived release stays: every caller
+ * `userMayReadDeal` admits is deal staff, the venture's founder or an investor already invited or committed, which is
+ * exactly the audience D5454 §3 keeps for an unlisted release. A guard failure fails the request (`safe`'s 500).
+ */
 calendar.get('/deals', safe('deal_pick', 'Could not search deals', async (c) => {
   const user = await requireAuth(c);
   const q = (new URL(c.req.url).searchParams.get('q') || '').trim().slice(0, 80).toLowerCase();
+  const hidden = hiddenJson(await hiddenDealIds(c.env, 'transactional'));
   const rows = await c.env.DB.prepare(
     `SELECT d.id, d.status, p.name FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE p.deleted_at IS NULL AND (? = '' OR instr(lower(p.name), ?) > 0)
+        AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
       ORDER BY p.name, d.id LIMIT 200`,
-  ).bind(q, q).all() as { results?: { id: number; status: string; name: string }[] };
+  ).bind(q, q, hidden).all() as { results?: { id: number; status: string; name: string }[] };
   const items: any[] = [];
   for (const d of rows.results || []) {
     if (items.length >= PICK_MAX) break;

@@ -14,7 +14,9 @@ The Ops canvas's deal-room screens (`design/canvases/integrated/ops-data.js`:
 | `DealRoomJoin.jsx` | The quota read (`GET /deals/dealroom/quota`), the quota line and note, and confirmed request/leave through the shared Lightbox (D1237). A refusal stays in the dialog; a completed Leave says so (D4815). |
 | `DealRoomsPanel.jsx` | `/deals/rooms` (D4815): live deals and invitation requests (D1237), viewed as All live deals, You can open or Requested. A name and Open deal link only when the Worker explicitly returns `can_read: true`; requesting a room alone grants no access; unreadable access offers Try again. |
 | `DealInvitationsTab.jsx` | The Invitations tab (admin). |
-| `DealTransfersTab.jsx` | The Transfers tab and "Record a transfer" (admin, partner). |
+| `DealTransfersTab.jsx` | The Transfers tab and "Record a transfer" (admin, partner); D5914: the record is a DX14 dialog with the open-condition warning (`transfer-gate`) and the phone verifier. |
+| `DealActionDialog.jsx` | D5914 (#5914, DE14): the one shell for the consequential deal dialogs (Pass, Move to diligence, Commit, Withdraw, Record transfer): the shared Lightbox's focus trap and return, the refusal in the Worker's words, and Return to HQ in Super Admin Investor preview (D5915). |
+| `dealActionModel.js` | D5914: the shell's rules, pure: the refusal's words, the preview test, Commit's checks and firm line, Withdraw's line, the transfer gate's warning. |
 | `DealReferencesTab.jsx` | The reference calls card on Diligence (admin, investor): Delete and Record consent confirmed through the shared Lightbox, the deal page's card styling and the canvas's consent and notes pills (D6182). |
 | `DealSyndicates.jsx` | The company's syndicates, and a syndicate's drawer with its confirmed close. Given a deal, also the open syndicates its invitation shows, counted and never named, with the DL13 join dialog (D6200). |
 
