@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
+import { useRouteTitle } from './lib/pageTitles';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
   clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
@@ -2706,6 +2707,10 @@ function AppInner() {
   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
 
   return (
+    <>
+    {/* D8681 (#8681): the tab title of every screen, reset on each navigation. Mounted BEFORE the routes, so
+        its effect runs first and a page that sets a narrower title of its own (a Deals tab, a Help guide) wins. */}
+    <RouteTitle />
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
 <Routes location={lensLocation || location}>
@@ -4305,7 +4310,18 @@ function AppInner() {
     </Routes>
 </RouteErrorBoundary>
 </Suspense>
+    </>
   );
+}
+
+// D8681 (#8681): the browser tab title, from the address alone (`lib/pageTitles.js`). The real location, not a
+// lens's background one: the tab names the screen the address names. While a session with no cached user loads,
+// a workspace path says only "Axal VC" (a page or a sign-in redirect is not decided yet); the background re-sync
+// of a cached user decides nothing, so it leaves the title alone.
+function RouteTitle() {
+  const { user, loading } = useAuth() || {};
+  useRouteTitle(useLocation().pathname, { loading: !!loading && !user });
+  return null;
 }
 
 // Task #6 — Mount the tier paywall once at the app shell so any 402
