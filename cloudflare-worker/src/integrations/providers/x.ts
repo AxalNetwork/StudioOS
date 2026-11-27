@@ -14,6 +14,8 @@
  * apart from HQ's `x:refresh:<id>`) and writes both rotated tokens in one
  * statement; a refused refresh marks the row `error`. Disconnect revokes both
  * tokens at X, best effort, and the route then deletes the row.
+ *
+ * D8815 (#8815, part 3a): disconnect also deletes the Grow facts the connection fed (`services/x/growFeeds.ts`).
  */
 import type { Context } from 'hono';
 import type { Env } from '../../types';
@@ -27,6 +29,7 @@ import { ConnectRefusal, registerProvider, type IntegrationRow, type ProviderImp
 import { decryptCredentials, encryptCredentials } from '../secrets';
 import { acquireRefreshLease } from '../refreshLease';
 import { X_PUBLISH_SCOPES, X_READ_SCOPES, X_WRITE_SCOPES } from '../xScopes';
+import { purgeXConnection } from '../../services/x/growFeeds';
 
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, 'x');
@@ -184,6 +187,9 @@ const provider: ProviderImpl = {
     let credentials: Record<string, unknown> | null = null;
     try { credentials = await decryptCredentials(c.env, row.uid, row.credentials_enc); } catch { /* nothing to revoke */ }
     if (credentials) await revokeAll(c.env, [credentials.access_token, credentials.refresh_token]);
+    // D8815: the connection's Grow facts, their ledger rows and its venture link go with it, whether or not X
+    // answered the revoke, as the row itself does. The founder's monthly read budget stays.
+    await purgeXConnection(c.env, row.id);
   },
 };
 
