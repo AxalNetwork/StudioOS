@@ -27,7 +27,7 @@ export const warnBox = `${box} border-amber-200 bg-amber-50 text-amber-900 dark:
 export const okBox = `${box} border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200`;
 export const infoBox = `${box} border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300`;
 export const fieldInput = 'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-sm:min-h-[44px]';
-const STEPS = ['Choose file', 'Review and reason', 'Result'];
+const IMPORT_STEPS = ['Choose file', 'Review and reason', 'Result'];
 const ROWS_SHOWN = 8;
 const REVS_SHOWN = 6;
 
@@ -76,7 +76,7 @@ export function ReasonField({ id, value, onChange, error, disabled }) {
 function Steps({ at }) {
   return (
     <ol className="flex flex-wrap gap-2 text-[11.5px] font-semibold" aria-label="Steps" data-testid="pricing-import-steps">
-      {STEPS.map((s, i) => (
+      {IMPORT_STEPS.map((s, i) => (
         <li key={s} aria-current={i === at ? 'step' : undefined}
           className={i === at ? 'text-violet-700 dark:text-violet-300' : 'text-gray-500 dark:text-gray-400'}>
           {i + 1}. {s}
