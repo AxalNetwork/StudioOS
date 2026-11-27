@@ -315,7 +315,7 @@ const BASE_JOB_DIGESTS={
   "fast":'066a8e32945222c9',
   "landing":'bea23ba6bac95c0c',
   "gate":'a0da00b955654e3e', // D8626: refuses a routed candidate while main does not require ci-capacity/full-suite.
-  "selection-shadow":'41ac4055f5a3c941',
+  "selection-shadow":'e8bedf3c1ab7b9d6', // D5610-p3 (#5610): needs classify; exact-name trace lookup at or before the base; this attempt's classified record.
   "classify":'d594dedf4e520c73',
   "visual":'5b5e4e49f1e0e4e3', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #8524 (D8524-p2): the eSign signer journey step.
   "drift":'d870bd539b8eced2',
