@@ -36,6 +36,7 @@ import {
   applyAmendments, readCallAmendments, readFundCall, correctFundCall, withdrawFundCall, type AmendOutcome,
 } from '../services/fundCallLedger';
 import { callNoticeSummaries } from '../services/fundNoticeStore';
+import { lineBankReversed, resolveReversal, reversalsForLines, type BankReversalRow } from '../services/capitalCallBankReversals';
 import {
   FUND_I_SLUG, assertFundCallPayable, capitalCallReference, fundPayeeOf, payInstructionsFor, revealPayInstructions,
 } from '../services/payInstructions';
@@ -202,6 +203,22 @@ funds.get('/lp-portal', async (c) => {
     callsRecorded = false;
   }
 
+  // D9017: a line whose receipted wire the bank reversed says so to its own
+  // investor until a person resolves it: when it was seen and when it was
+  // resolved, nothing more. Only the caller's own lines are read. A failed
+  // read is `bank_reversals_recorded: false` and no line carries the field,
+  // never a null that would say the bank reversed nothing.
+  let reversalsRecorded = callsRecorded;
+  try {
+    if (calls.length) {
+      const reversals = await reversalsForLines(c.env, calls.map((cc: any) => Number(cc.id)));
+      calls = calls.map((cc: any) => ({ ...cc, bank_reversed: lineBankReversed(reversals, Number(cc.id)) }));
+    }
+  } catch (e) {
+    console.error('[funds] lp-portal bank reversals unreadable', e);
+    reversalsRecorded = false;
+  }
+
   // D708 decision 11: each unpaid line on Fund I says where to pay, masked,
   // with the reference to quote, or why it cannot. Never the number: that is
   // `GET /:id/capital-calls/lines/:lineId/pay-instructions`, which records it.
@@ -265,6 +282,7 @@ funds.get('/lp-portal', async (c) => {
     ...(readOnly ? { unlinked_commitment: unlinked } : {}),
     capital_calls: calls,
     capital_calls_recorded: callsRecorded,
+    bank_reversals_recorded: reversalsRecorded,
     distributions: distRows,
     performance: perfByLp,
     // The signer and the firms an LP-facing document names, per fund the caller
@@ -1343,7 +1361,59 @@ funds.get('/:id/capital-calls/:callId', async (c) => {
   } catch {
     notices = { status: 'unreadable', rows: null };
   }
-  return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...read, notices });
+  // D9017: the call's bank reversals in full, open ones first, so the GP can
+  // resolve one, and each line's `bank_reversed` ({ detected_at, resolved_at }
+  // or null). Read apart like the rest: unreadable, the lines carry no field
+  // rather than a null that would say the bank reversed nothing.
+  let bankReversals: { status: 'ready'; rows: BankReversalRow[] } | { status: 'unreadable'; rows: null };
+  try {
+    bankReversals = { status: 'ready', rows: await reversalsForLines(c.env, read.call.lines.map((l: any) => Number(l.id))) };
+  } catch {
+    bankReversals = { status: 'unreadable', rows: null };
+  }
+  const rows = bankReversals.rows;
+  const call = rows ? { ...read.call, lines: read.call.lines.map((l: any) => ({ ...l, bank_reversed: lineBankReversed(rows, Number(l.id)) })) } : read.call;
+  return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...read, call, bank_reversals: bankReversals, notices });
+});
+
+const REVERSAL_NOT_FOUND = { code: 'bank_reversal_not_found', message: 'That bank reversal is not on this fund.' };
+
+/**
+ * D9017: resolve a bank reversal on one of this fund's call lines, `{ note }`
+ * (10 to 1,000 characters: what the GP or the Admin found and did). The GP of
+ * record or an Admin; a support session is refused (`capital_call.bank_reversal`).
+ * Who, when and the note are written on the reversal, which keeps them; the
+ * receipt, the line, paid-in and deployed capital are not touched (D8534 b).
+ */
+funds.post('/:id/capital-calls/bank-reversals/:uid/resolve', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.bank_reversal');
+  const uid = c.req.param('uid');
+  if (!/^[0-9a-f-]{8,64}$/i.test(uid)) return refuse(c, 404, REVERSAL_NOT_FOUND);
+  const body = await c.req.json<{ note?: string }>().catch(() => ({} as any));
+  const note = typeof body?.note === 'string' ? body.note.trim() : '';
+  if (note.length < 10 || note.length > 1000) {
+    return refuse(c, 400, {
+      code: 'note_required',
+      message: 'Say what you found and what was done, in 10 to 1,000 characters. The note is kept with your name.',
+    });
+  }
+  const out = await resolveReversal(c.env, { fundId, uid, userId: Number(user.id), note });
+  if (out.kind === 'not_found') return refuse(c, 404, REVERSAL_NOT_FOUND);
+  if (out.kind === 'already_resolved') {
+    return refuse(c, 409, {
+      code: 'bank_reversal_resolved',
+      message: 'This bank reversal is already resolved; its resolution is kept as it was recorded.',
+      extra: { bank_reversal: out.reversal },
+    });
+  }
+  // No note text in the audit row (decision 4: no bank or free text there).
+  await auditFundAct(c.env, user, 'capital_call.bank_reversal', {
+    fund_id: fundId, line_id: out.reversal.capital_call_id, reversal_uid: uid,
+  });
+  return c.json({ ok: true, bank_reversal: out.reversal });
 });
 
 /** The refusal for an amendment that did not happen. */
