@@ -21,6 +21,7 @@ import { doNamespace } from '../../util/doNamespace';
 import type { Scope } from '../workGraphContracts';
 import { workspaceRefusal, type WorkspaceRefusal, type WorkspaceResult } from './workspaceSpec';
 import type { LeaseState } from './workspaceAdmission';
+import type { RetentionResult } from './swarmRetention';
 import { ventureKey, type SwarmFacts, type SwarmRequest, type SwarmResult, type SwarmState, type TicketState, type VenturePolicy, type Lane, type WorkClass } from './swarmAdmission';
 
 /** The one coordinator's name (`idFromName`). See the header for why every venture shares it. */
@@ -35,6 +36,8 @@ export type Venture = { tenant_id: number; company_id: number };
 export type AdmissionClientCode = 'admission_unbound' | 'admission_unavailable' | 'wrong_tenant' | 'invalid_admission_call';
 export type AdmissionClientRefusal = WorkspaceRefusal & { reasons: string[] };
 export type ClientResult<T> = SwarmResult<T> | AdmissionClientRefusal;
+/** D5586-p4: what one retention call retired (`swarmRetention.ts`). */
+export type RetentionResultValue = Extract<RetentionResult, { ok: true }>['value'];
 
 /** What `admission.request` answers for the caller's own run: its slot after an admission pass. */
 export type AdmissionSlotView = { state: LeaseState; generation: number; lease_expires_at: number | null; compute_reserve_microusd: number; duplicate: boolean };
@@ -148,4 +151,23 @@ export type WorkspaceAdmissionClient = ReturnType<typeof workspaceAdmissionClien
 export async function swarmSnapshotFor(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>, scope: Scope): Promise<ClientResult<SwarmState>> {
   if (!validCaller(scope)) return clientRefusal('invalid_admission_call', 422);
   return workspaceAdmissionClient(env, scope).swarm.snapshotFor({ tenant_id: scope.tenantId, company_id: scope.companyId });
+}
+
+/**
+ * D5586 part 4: one bounded retention call on the coordinator (`swarmRetention.ts`), for a scheduler. It is
+ * coordinator-wide and names no venture, so it is not a method of the venture-scoped client, and no route calls it.
+ * Never throws: no binding is `admission_unbound`, anything unreadable is `admission_unavailable`.
+ */
+export async function runSwarmRetention(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>): Promise<ClientResult<RetentionResultValue>> {
+  if (!env?.WORKSPACE_ADMISSION) return clientRefusal('admission_unbound', 503);
+  try {
+    const ns = doNamespace(env, env.WORKSPACE_ADMISSION);
+    const res = await ns.get(ns.idFromName(WORKSPACE_ADMISSION_OBJECT)).fetch('https://workspace-admission/retire', { method: 'POST' });
+    if (res.status !== 200) return clientRefusal('admission_unavailable', 503);
+    const body: unknown = await res.json();
+    if (!isResult(body)) return clientRefusal('admission_unavailable', 503);
+    return body as ClientResult<RetentionResultValue>;
+  } catch {
+    return clientRefusal('admission_unavailable', 503);
+  }
 }

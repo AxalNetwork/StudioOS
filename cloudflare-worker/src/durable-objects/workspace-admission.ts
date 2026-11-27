@@ -21,7 +21,8 @@
 import type { Env } from '../types';
 import { DurableWorkspaceAdmissionStore } from '../services/agents/workspaceAdmissionStore';
 import { createAdmissionControl, type AdmissionLimits, type ProviderStateReader } from '../services/agents/workspaceAdmission';
-import { swarmOf, ventureKey } from '../services/agents/swarmAdmission';
+import { swarmOf, ticketOwnerKey, ventureKey } from '../services/agents/swarmAdmission';
+import { retireSwarmAdmission } from '../services/agents/swarmRetention';
 import { createAuditedSwarmAdmission } from '../services/agents/swarmAudit';
 import { WORKSPACE_ADMISSION_OBJECT, clientRefusal, scopeRefusal, type WorkspaceAdmissionOp } from '../services/agents/workspaceAdmissionClient';
 
@@ -45,7 +46,9 @@ export class WorkspaceAdmission implements DurableObject {
   protected observe(): ProviderStateReader { return UNREAD; }
 
   async fetch(req: Request): Promise<Response> {
-    if (req.method !== 'POST' || new URL(req.url).pathname !== '/op') return json({ error: 'not_found' }, 404);
+    const path = new URL(req.url).pathname;
+    if (req.method !== 'POST' || (path !== '/op' && path !== '/retire')) return json({ error: 'not_found' }, 404);
+    if (path === '/retire') return this.retire();
     let body: { op?: unknown; caller?: unknown; args?: unknown };
     try { body = await req.json(); } catch { return json(clientRefusal('invalid_admission_call', 422)); }
     const name = (this.state.id as { name?: unknown })?.name;
@@ -59,6 +62,20 @@ export class WorkspaceAdmission implements DurableObject {
     }
   }
 
+  /**
+   * D5586 part 4: one bounded retention call (`swarmRetention.ts`), coordinator-wide and venture-blind. It takes no
+   * caller and no arguments, so nothing a request carries can widen it; the object is reached only through its binding.
+   */
+  private async retire(): Promise<Response> {
+    const name = (this.state.id as { name?: unknown })?.name;
+    if (typeof name === 'string' && name !== WORKSPACE_ADMISSION_OBJECT) return json(clientRefusal('wrong_coordinator', 403));
+    try {
+      return json(await retireSwarmAdmission(new DurableWorkspaceAdmissionStore(this.state.storage), () => this.clock()));
+    } catch {
+      return json(clientRefusal('admission_unavailable', 503), 500);
+    }
+  }
+
   private async apply(op: WorkspaceAdmissionOp, caller: { tenantId: number; companyId: number }, args: unknown[]): Promise<unknown> {
     const store = new DurableWorkspaceAdmissionStore(this.state.storage);
     const clock = () => this.clock();
@@ -66,11 +83,11 @@ export class WorkspaceAdmission implements DurableObject {
     const swarm = createAuditedSwarmAdmission({ store, clock, admission, db: this.env.DB });
     const venture = { tenant_id: caller.tenantId, company_id: caller.companyId };
     const own = ventureKey(venture);
-    /** The stored owner of a uid: its #5570 slot's tenant, and whether a swarm ticket holds it (and whose). */
-    const ownerOf = (uid: string) => store.transaction(s => {
-      const t = swarmOf(s).tickets[uid];
-      return { slotTenant: s.slots[uid]?.tenant_id ?? null, ticket: t ? ventureKey(t) : null };
-    });
+    /**
+     * The stored owner of a uid: its #5570 slot's tenant, and whether a swarm ticket holds it (and whose). A ticket that
+     * retention retired (part 4) still names its venture, so its uid stays the swarm's and stays another venture's.
+     */
+    const ownerOf = (uid: string) => store.transaction(s => ({ slotTenant: s.slots[uid]?.tenant_id ?? null, ticket: ticketOwnerKey(swarmOf(s), uid) }));
     const [a, b, c] = args as any[];
     switch (op) {
       case 'admission.request': {
