@@ -34,8 +34,8 @@
  *   npm run build                                   (repo root)
  *   cd frontend && npx --no-install playwright test -c playwright.config.js tests/e2e/studio_founder_first_screen_8729.spec.js --trace off
  *
- * CI runs it in the `visual` job of `.github/workflows/ci.yml`, after that job
- * builds the SPA, with the job's pinned Chromium (`PW_CHROMIUM_PATH`).
+ * Not yet a step in the `visual` job of `.github/workflows/ci.yml`: workflow
+ * files are the owner's to change (T2), and D8729-p3 records the proposed step.
  */
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
