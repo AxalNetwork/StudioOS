@@ -13,11 +13,15 @@
  * Operator review (Super Admin reads; writes behind the write bar):
  *   GET    /admin/entries?status=staged|published|suppressed|archived|all&kind=&cursor=&limit=  with readiness
  *   GET    /admin/reviews?status=pending|kept_separate|resolved|dismissed|all&after=&limit=
- *   POST   /admin/entries/:uid/publish   { idempotency_key, reason }  an organisation only; people are held (#7739)
+ *   POST   /admin/entries/:uid/publish   { idempotency_key, reason }  an organisation, or a person (professional
+ *                                         projection only; owner answer B, D7674 part 4)
  *   POST   /admin/entries/:uid/suppress  { idempotency_key, reason }
  * Organisation-only controlled apply (D7674 part 2; Super Admin behind the write bar, not a support session):
  *   POST   /admin/organisation-apply     a reviewed organisation upload; re-planned on the server, applied in
  *                                         resumable batches, read back (`services/networkDirectoryApply.ts`)
+ * People-only controlled apply (D7674 part 4; the same gate; `services/networkDirectoryPeopleApply.ts`):
+ *   POST   /admin/people-apply           a reviewed people upload of professional fields only (name, LinkedIn
+ *                                         profile, geography, sectors, affiliations); contact fields are refused
  * Reviewed merge, redirects, aliases and review decisions (D7674 part 3; Super Admin read, writes behind the write
  * bar and not a support session; `services/networkDirectoryMerge.ts`):
  *   GET    /admin/entries/:uid                  one entry's state, readiness, merges, observations, reviews, aliases
@@ -40,7 +44,8 @@ import {
   DirectoryRefusal, changeInput, deleteOverlay, operatorEntries, operatorReviews, overlayInput, publishEntry,
   readEntry, readOverlay, searchDirectory, suppressEntry, writeOverlay,
 } from '../services/networkDirectory';
-import { APPLY_LIMITS, applyEnvelope, applyOrganisationManifest } from '../services/networkDirectoryApply';
+import { APPLY_LIMITS, applyEnvelope, applyOrganisationManifest, type ApplyResult } from '../services/networkDirectoryApply';
+import { applyPeopleManifest, peopleEnvelope } from '../services/networkDirectoryPeopleApply';
 import {
   addAlias, aliasInput, decideReview, decisionInput, mergeEntries, mergeInput, operatorEntry, withdrawAlias,
 } from '../services/networkDirectoryMerge';
@@ -248,33 +253,44 @@ async function uploadBody(c: Ctx): Promise<Record<string, unknown>> {
  * One audit row for a call that wrote anything, with ids and counts only. The apply is already committed, so a
  * failed audit write is logged and the call still answers what happened (D7674 part 2).
  */
-async function auditApply(c: Ctx, admin: User, details: Record<string, unknown>) {
+async function auditApply(c: Ctx, admin: User, action: string, details: Record<string, unknown>) {
   try {
-    await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_organisation_apply', details);
+    await logAdminAction(c.env, admin.id, (admin as any).email ?? '', action, details);
   } catch (e) {
     console.warn('[network_directory] apply audit failed', (e as Error)?.name ?? 'unknown');
   }
 }
 
-directory.post('/admin/organisation-apply', async (c) => {
+/**
+ * One controlled apply (organisation or people contract): the write bar, then no support session, then the
+ * byte-capped upload, the contract's envelope and its apply. The two contracts never share a route (D7674 part 4).
+ */
+async function controlledApply(c: Ctx, action: string, run: (env: Env, body: Record<string, unknown>) => Promise<ApplyResult>) {
   const admin = (await requireSuperAdminWriteBar(c)) as User;
   if ((await selectJwt(c))?.payload.impersonated_by) {
     return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot apply a directory import.' });
   }
   try {
-    const out = await applyOrganisationManifest(c.env, applyEnvelope(await uploadBody(c), c.env));
+    const out = await run(c.env, await uploadBody(c));
     if (out.wrote) {
-      await auditApply(c, admin, { run_uid: out.run_uid, status: out.status, applied_batches: out.applied_batches, pending_batches: out.pending_batches });
+      await auditApply(c, admin, action, { run_uid: out.run_uid, status: out.status, applied_batches: out.applied_batches, pending_batches: out.pending_batches });
     }
     return c.json(out, out.status === 'complete' ? 200 : 202);
   } catch (e) {
     // A failed or unreconciled call that may have written is audited too.
     if (e instanceof DirectoryRefusal && e.extra.wrote === true) {
-      await auditApply(c, admin, { run_uid: e.extra.run_uid, status: e.code, applied_batches: e.extra.applied_batches });
+      await auditApply(c, admin, action, { run_uid: e.extra.run_uid, status: e.code, applied_batches: e.extra.applied_batches });
     }
     return answer(c, e);
   }
-});
+}
+
+directory.post('/admin/organisation-apply', (c) => controlledApply(c, 'network_directory_organisation_apply',
+  (env, b) => applyOrganisationManifest(env, applyEnvelope(b, env))));
+
+/* People-only controlled apply (D7674 part 4; `services/networkDirectoryPeopleApply.ts`): professional fields only. */
+directory.post('/admin/people-apply', (c) => controlledApply(c, 'network_directory_people_apply',
+  (env, b) => applyPeopleManifest(env, peopleEnvelope(b, env))));
 
 export default directory;
 export const mount: RouteMount = { path: '/api/network/directory', router: directory, before: [network] };

@@ -3,8 +3,9 @@
  *
  * Members read only published entries that are not withdrawn, through one professional projection: no
  * account link, no private source cell, no review item and no duplicate candidate leaves this file
- * through a member read. Operators review readiness and publish organisations; a person is never
- * published here, because the owner has not authorised the people-record import (#7739 Q3 B).
+ * through a member read. A person's projection is narrower still (owner answer B, D7674 part 4): name,
+ * a strict `linkedin.com/in/` profile, geography, sectors and affiliations, never a website, contact
+ * channel, investing status or other source text. Operators review readiness and publish entries.
  * Nothing in this file creates an account, a membership, a relationship, a notice or an outreach.
  */
 import type { Env } from '../types';
@@ -41,8 +42,34 @@ const parseList = (v: unknown): string[] => {
   catch { return []; }
 };
 
-/** The professional projection. Account links, source row ids and raw cells are not in it. */
+/** The only profile link a person's projection carries: https, linkedin.com (or www.), `/in/` and one slug. */
+export const PERSON_PROFILE = /^https:\/\/(?:www\.)?linkedin\.com\/in\/(?:[A-Za-z0-9-]|%[0-9A-Fa-f]{2}){3,100}\/?$/;
+
+/**
+ * A person's professional-only projection (owner answer B, 2026-11-27): name, a strict LinkedIn profile,
+ * geography and sectors, with the verification state and the source's name and date. No website, stage,
+ * category, investing status or previous-investment text, whatever the row holds; a stored profile link that
+ * is not a strict LinkedIn profile reads `null`.
+ */
+export function projectPerson(row: any) {
+  const profile = typeof row.profile_url === 'string' && PERSON_PROFILE.test(row.profile_url) ? row.profile_url : null;
+  return {
+    uid: row.uid,
+    kind: 'person' as Kind,
+    name: row.display_name,
+    first_name: row.first_name ?? null,
+    last_name: row.last_name ?? null,
+    profile_url: profile,
+    geography: row.geography ?? null,
+    sectors: parseList(row.sectors_json),
+    verification: row.verification_status,
+    source: { name: row.source_name ?? null, observed_at: row.observed_at },
+  };
+}
+
+/** The professional projection. Account links, source row ids and raw cells are not in it. A person's is `projectPerson`. */
 export function projectEntry(row: any) {
+  if (row.kind === 'person') return projectPerson(row);
   return {
     uid: row.uid,
     kind: row.kind as Kind,
@@ -356,8 +383,7 @@ export async function operatorEntries(env: Env, opts: { status?: string | null; 
   const page = rows.slice(0, limit);
   const entries = [];
   for (const r of page) {
-    entries.push({ ...projectEntry(r), publication_status: r.publication_status, readiness: await readiness(env, r.uid),
-      people_publication_held: r.kind === 'person' });
+    entries.push({ ...projectEntry(r), publication_status: r.publication_status, readiness: await readiness(env, r.uid) });
   }
   const last = page[page.length - 1];
   return { entries, total: Number(total?.n ?? 0), next_cursor: rows.length > limit && last ? encodeCursor({ n: last.display_name, u: last.uid }) : null };
@@ -425,7 +451,8 @@ async function replayed(env: Env, key: string, uid: string, action: 'publish' | 
 }
 
 /**
- * Publish one organisation. The event is written first, conditioned on the entry still being staged, and the
+ * Publish one entry: an organisation, or a person, whom members then read through the professional-only person
+ * projection (owner answer B, D7674 part 4; until then people were held, #7739 Q3 B). The event is written first, conditioned on the entry still being staged, and the
  * entry is moved only when that event exists, in one batch: a concurrent second request finds the entry no
  * longer staged and writes nothing. The answer is read back from the database, not assumed.
  */
@@ -434,9 +461,6 @@ export async function publishEntry(env: Env, actorId: number, uid: string, input
   if (prior) return prior;
   const entry = await entryRow(env, uid);
   if (!entry) throw refuse(404, 'entry_not_found', 'There is no directory entry with that reference.');
-  if (entry.kind === 'person') {
-    throw refuse(409, 'people_publication_held', 'People are not published from this directory: the owner has not authorised the people-record import (#7739). Organisations can be published.');
-  }
   if (entry.verification_status === 'withdrawn') throw refuse(409, 'entry_withdrawn', 'A withdrawn entry cannot be published.');
   if (entry.publication_status === 'published') throw refuse(409, 'already_published', 'This entry is already published.');
   if (entry.publication_status !== 'staged') throw refuse(409, 'entry_not_staged', 'Only a staged entry can be published. A suppressed or archived entry stays as it is.');
@@ -447,7 +471,7 @@ export async function publishEntry(env: Env, actorId: number, uid: string, input
     env.DB.prepare(
       `INSERT INTO network_directory_publication_events (uid, idempotency_key, entry_uid, action, from_status, to_status, checked_source_record_uid, reason, actor_user_id)
        SELECT ?, ?, uid, 'publish', 'staged', 'published', ?, ?, ? FROM network_directory_entries
-        WHERE uid = ? AND kind = 'organization' AND publication_status = 'staged' AND verification_status <> 'withdrawn'`,
+        WHERE uid = ? AND publication_status = 'staged' AND verification_status <> 'withdrawn'`,
     ).bind(eventUid, input.key, ready.checked_source_record_uid, input.reason, actorId, uid),
     env.DB.prepare(
       `UPDATE network_directory_entries SET publication_status = 'published'
