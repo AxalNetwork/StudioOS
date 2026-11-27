@@ -317,6 +317,11 @@
       "channel": "#axalvc-actions-prompt-eval-gate"
     },
     {
+      "id": null,
+      "path": ".github/workflows/queue-stalled.yml",
+      "channel": "#axalvc-actions-queue-stalled"
+    },
+    {
       "id": 385334346,
       "path": ".github/workflows/record-page-contracts.yml",
       "channel": "#axalvc-actions-record-page-contracts"

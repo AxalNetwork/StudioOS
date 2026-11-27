@@ -1,0 +1,92 @@
+name: Merge queue stalled
+
+# D7125-p2 (#7125): run the merge-queue stall check when a merge_group CI run
+# completes, so `[alert] merge queue stalled` opens within minutes of the
+# failure that makes it true. The */15 schedule in github-alerts.yml stays as
+# the fallback; 22 scheduled runs in six days were all it got (2026-11-25).
+#
+# `workflow_run` is admitted by WF-4 (frontend/test/workflow_security_4571.test.mjs,
+# TRUSTED_WORKFLOW_RUN): GitHub reads this file from the default branch, so
+# what runs is main's code. The completed run is data only: its event and
+# repository are checked in `if:` and nothing else of it is read here; the
+# script lists queue runs through the API itself. No ref, no artifact.
+#
+# A chain of 30 candidates completes within minutes. The job's concurrency
+# group is the scheduled job's, cancel-in-progress false: one check runs, one
+# waits, and a newer one replaces the waiting one (GitHub cancels it, which
+# the workflow-failure reporter ignores), so a burst costs at most two checks
+# in a row and the last one reads the newest runs. Cancelled and skipped queue
+# runs start nothing.
+#
+# The steps equal github-alerts.yml's queue-stalled job, the watchdog that opens
+# `[alert] merge queue stall check failing` after two failed checks included.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  queue-stalled:
+    name: Merge queue stalled
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.event.workflow_run.event == 'merge_group' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    concurrency:
+      group: github-alerts-queue-stalled
+      cancel-in-progress: false
+    # D7125: checks to read each failed queue job's ci-failure-id annotations;
+    # pull-requests to list open PRs that change a failing test (possible repairs).
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          # merge-policy.mjs (imported through scripts/lib) loads merge-control/src/lib (D8314).
+          sparse-checkout: |
+            scripts
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Restore the count of failed stall checks
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/queue-stall-checker.json
+          key: queue-stall-checker-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: queue-stall-checker-v1-
+      - id: check
+        name: Check the merge queue for a stall
+        timeout-minutes: 4
+        run: node scripts/github-alerts.mjs queue-stalled
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+      # D7125-p2: runs even when the check crashed; imports nothing the check imports.
+      - name: Open an alert when the stall check fails twice in a row
+        if: always() && github.ref == 'refs/heads/main'
+        run: node scripts/queue-stall-checker.mjs
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          STATE_FILE: ${{ runner.temp }}/queue-stall-checker.json
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+      - name: Save the count of failed stall checks
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/queue-stall-checker.json
+          key: queue-stall-checker-v1-${{ github.run_id }}-${{ github.run_attempt }}
