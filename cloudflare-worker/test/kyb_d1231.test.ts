@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { stripTypeScriptTypes } from 'node:module';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -13,25 +13,44 @@ import { resyncKycKyb } from '../src/services/trust.ts';
 import { APPROVAL_SOURCES, approvalBoard, laneCounts } from '../src/services/approvalSources.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { schemaPath } from './_schema_once.mjs';
 
 const ROOT = process.cwd(), JWT_SECRET = 'test-'.repeat(12);
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
-const migrations = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).filter(f => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
-const schema = [read('cloudflare-worker/sql/schema_baseline.sql'), ...migrations.filter(f => migrationNumber(f) > BASELINE_CUTOFF).map(f => read(`cloudflare-worker/sql/migrations/${f}`))];
-const ddl = (() => {
-  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  schema.forEach(s => db.exec(s));
-  const result = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END").all() as any[]).map(r => r.sql as string);
-  db.close(); return result;
+/**
+ * #8595: the schema's DDL only (no migration rows), tables then indexes, views and triggers, built ONCE
+ * into a private file. The schema itself comes from the run's shared build (`schemaPath()`, D4133) rather
+ * than a build of its own, and every fixture opens its own copy of the DDL file instead of replaying the
+ * 3,500-odd statements (about a second each time, and the mutation checks open some seventy fixtures).
+ */
+const SCRATCH = (() => {
+  const cache = resolve(ROOT, 'node_modules/.cache/studioos-schema');
+  mkdirSync(cache, { recursive: true, mode: 0o700 });
+  const dir = mkdtempSync(join(cache, 'kyb-d1231-'));
+  process.once('exit', () => rmSync(dir, { recursive: true, force: true }));
+  return dir;
 })();
+const DDL_FILE = (() => {
+  const built = new DatabaseSync(schemaPath(), { readOnly: true });
+  let ddl: string[];
+  try {
+    ddl = (built.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END").all() as any[]).map(r => r.sql as string);
+  } finally { built.close(); }
+  const file = join(SCRATCH, 'ddl.sqlite');
+  const db = new DatabaseSync(file, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  try { db.exec('BEGIN'); ddl.forEach(s => db.exec(s)); db.exec('COMMIT'); } finally { db.close(); }
+  return file;
+})();
+let copies = 0;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error('No external provider may be reached by KYB tests'); };
 test.after(() => { globalThis.fetch = originalFetch; });
 
 function fixture(router = kyb, memberRouter = trust) {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  ddl.forEach(s => db.exec(s));
+  const file = join(SCRATCH, `fixture-${++copies}.sqlite`);
+  copyFileSync(DDL_FILE, file);
+  const db = new DatabaseSync(file, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  db.exec('PRAGMA synchronous = OFF');
   db.exec(`INSERT INTO users (id, role, name, email, kyc_status) VALUES
     (1,'admin','Super','super@example.test','approved'), (2,'admin','Admin','admin@example.test','approved'),
     (3,'investor','Investor','investor@example.test','pending'), (4,'partner','Partner','partner@example.test','approved'),

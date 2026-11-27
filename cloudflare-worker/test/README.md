@@ -68,6 +68,12 @@ schema. Another venture's founder, an advisor with no share or a share switched 
 advisor, an investor by venture id or off the deal, a disabled founder and no credentials are refused, with nothing of
 the venture named and no score, correction, sharing or log row changed; each rightful party then gets its read.
 
+`authz_partner_d4570.test.ts` (#4570, D4570 part 9) asks the 43 `/api/partner` ledger routes (delivery, offers and
+product testing) through the mounted routers on the full schema. Another firm's partner gets 404, a founder, investor
+or advisor 403, an account with no firm 400, no credentials or a disabled account 401, with nothing named and no row or
+file changed; the firm's own partner then passes every gate. An unknown consent-link token answers 404 and writes
+nothing. Its first test fails if a ledger route under `/api/partner` is missing from it.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
@@ -91,6 +97,13 @@ and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { belo
 is the schema as it stood before migration N. A test that needs the migrated
 schema calls it rather than replaying the files, which took 4–10 s per file.
 `schema_once_d4133.test.ts` holds the copy to a fresh build.
+`_schema_budget.mjs` (D8467) is what keeps that true. `_ts-loader.mjs` imports it, so every Worker test
+process counts the whole migration files it executes; two chains' worth is allowed (one build of the schema, and
+as much again for cuts or for re-running a migration) and each one past that throws, naming the file and the helper to call instead. The shared
+build is not counted. `scripts/test-schema-replays.txt` lists the files that were over when the rule arrived;
+a file leaves that list by being fixed, and a new file is added only when it is about the build itself.
+`SCHEMA_REPLAY_REPORT=<file>` turns the refusal off and writes each file's count, one JSON line per test file.
+`schema_replay_budget_8467.test.mjs` holds it to that on a three-migration chain of its own.
 D1174 regressions live in the use-of-funds, Raise card/record, financial
 integrity and access suites. Synthetic Mercury rows prove accepted mappings,
 private owner/session/company scope, missing versus zero, and local read
@@ -139,6 +152,8 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
 `workspace_admission_store_5570.test.mjs` verifies real Durable Object transaction, restart, concurrency and settlement identity (D5570 part 2).
+`swarm_audit_do_5586_p2.test.mjs` hosts the audited swarm admission in a real SQLite Durable Object with a real D1: request, settle and a venture snapshot round-trip, the audit copy survives a D1 failure and a restart (D5586 part 2).
+`workspace_admission_do_5586_p3.test.mjs` reaches the real `WorkspaceAdmission` class through its binding with the typed client (Miniflare, real D1): #5570 admission and the swarm round-trip across a restart, another venture refused before any stub call and inside the object, `admission_unbound` without a binding, the audit still copied to D1 (D5586 part 3). `workspace_admission_client_5586_p3.test.ts` covers the client without a runtime and the wrangler.toml wiring.
 `_containment_fixture_5567.ts` supplies synthetic owner-registry evidence to broker integration tests; no live provider attestation.
 
 ## Conventions
@@ -333,6 +348,8 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `workspace_containment_5567.test.ts` | D5567 part 4: the fail-closed containment gate (evidence source/freshness from an injected clock, egress per network mode, metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment credential scan, and the real compute VM start options and image user; synthetic only. |
 | `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
 | `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
+| `workspace_checkpoint_r2_5568_p2.test.ts` | D5568 part 2: the R2 checkpoint adapter on a faultable in-memory bucket: key, namespace and prefix scope, checksum on put, read-back loss, null and corruption, corruption at rest, paging, the fenced delete, and the service's typed refusals through it; mutations R1 to R7 in its header. |
+| `workspace_checkpoint_store_5568_p2.test.mjs` | D5568 part 2: the pointer and runner stores on a real SQLite Durable Object with the adapter on a real Miniflare R2 bucket (test-only object): racing commits, restart, a runner cancel fencing the old writer, rollback, the store's refusals, the fenced head, retention GC; mutations S1 to S7 in its header. |
 | `workspace_placement_5570.test.ts` | D5570: placement order and reasons, Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a restarted instance, reconcile-before-free, bill once; injected clock, synthetic only. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
@@ -347,6 +364,7 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_vm_4557.test.ts` | D4557: native adapter image, scheduling, readiness and stop faults. |
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
+| `azure_jobs_executor_5571.test.ts` | D5571: disabled Azure Container Apps Jobs adapter on a synthetic ARM endpoint: digest-pinned secret-free template, fail-closed capabilities, ambiguous start located without a second start, status mapping, quota/revoked-identity/cross-region refusals; shared start reservations, durable refusal outcomes and pending-stop reconciliation. |
 
 `package_offers_5024.test.ts` exercises real commercial package acceptance over
 the complete SQLite schema and authenticated routers: frozen prices and
@@ -410,8 +428,24 @@ catalogue version only in the fixture.
 | `market_observation_imports_7709.test.ts` | D7709: stored editions, linked revisions, missing values, bounded and resumable imports, body-free failed/partial receipts, races, actor audits and HQ write/read gates over every migration. |
 | `skill_safe_scenarios_7700.test.ts` | D7700: selected-document SAFE case shape, revised identity and complete maturity evidence. |
 | `fund_session_runtime_7701.test.ts` | D7701: selected fund scheduling, native reader readiness, access changes and zero-charge refusals. |
+| `fund_lp_maintenance_6237.test.ts` | D6237: mounted gates, contact identity, commitment floor, deletion history and rollback. |
+| `csv_safe_parity_7811.test.ts` | D7811: shared formula-safe CSV cases without changing legacy exports. |
 
+| `market_figure_writers_7705.test.ts` | D7705: real-SQLite create/answer actor history, zero preservation, refused-answer fallback, atomic rollback and literal/dynamic writer inventory. |
+| `research_comparison_members_7815.test.ts` | D7815: overlapping mounted add-member requests in all arrival orders preserve the live limit, distinct positions and duplicate response. |
+| `portfolio_reporting_settings_6214.test.ts` | Rule history, inherited defaults, GP ownership, attributed writes, stale revisions and period/stage rules. |
+| `work_graph_media_storage_5583.test.ts` | D5583 part 2: bounded admission, scoped classes, immutable snapshots, existing blob readback, class-specific reconciliation, cross-project refusal and cost/audit. |
+| `work_graph_media_quota_5583.test.ts` | D5583 part 2: actual migrated cumulative owner quota, dedup, owner transfer and legacy blob migration integrity, synthetic data only. |
 | `portfolio_saved_views_6209.test.ts` | Private Portfolio views: SQLite ownership, page isolation, optimistic writes, access refusals, validation and unreadable reads. |
 | `fund_zone_drafts_d6242.test.ts` | D6242: the `funds/lps` and `funds/reporting` drafts read one LP's or one draft period's records behind `requireFundGp`, refuse before the model with nothing to read, refuse a draft quoting an unrecorded figure, and write only the draft row. |
 
 `research_study_questions_7720.test.ts` mounts study question and decision routes over the migrated schema: owner/support/archived gates, version races, evidence snapshots, SQL counts, append-only history, limits and batch rollback.
+
+`formation_hq_actions_6698.test.ts` exercises HQ authorization, evidence gates, atomic conflict refusal, case ownership, audit attribution and the Formation Approvals lane against the migrated schema.
+| `formation_rules_6704.test.ts` | D6704: deterministic fixture comparisons, append-only suggestions/choices/memos, flag and structure gates. |
+
+- `research_fund_shortlist_7845.test.ts` — D7845 atomic shortlist, withholding, ownership and replay checks.
+| `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
+- `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
+`capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.
+- `role_qualification_8688.test.ts` — D8688: the five role scenarios and a pending-review control, run through the real Worker on local synthetic data with a second tenant each. Their scenarios and fail-closed fixture are in `_role_qualification_8688.ts`, which `scripts/qualification/role-matrix.mjs` also runs.

@@ -5,7 +5,7 @@ import SkillRadar from '../../components/play/SkillRadar.jsx';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
 import { areaVars } from '../../lib/skillAreas.js';
 import { BTN_SECONDARY, MONO, MUTED } from './teamUi.jsx';
-import { authorLine, costLine, energyOf, hintLine, outputWords, radarLines, runCostWords, skillTokensLine, tagChip, usedBy } from './skillsModel.js';
+import { ELIGIBILITY, authorLine, costLine, eligibilityOf, energyOf, hintLine, inputsLine, outputWords, radarLines, runCostWords, skillTokensLine, tagChip, usedBy } from './skillsModel.js';
 
 /**
  * D1612 (#3952), v2 boards by #4224 (D4116) — the pieces every skill screen
@@ -91,6 +91,39 @@ export function CostExplainer() {
   );
 }
 
+const TONE = {
+  draft: 'border-dashed border-axal-hairline text-axal-muted dark:border-gray-600 dark:text-gray-400',
+  plain: 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200',
+  go: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  done: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200',
+  warn: 'border-2 border-amber-400 bg-amber-50 text-amber-900 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-100',
+  error: 'border-2 border-red-300 bg-red-50 text-axal-destructive dark:border-red-800 dark:bg-red-900/20 dark:text-red-300',
+};
+
+/** D8768 (TMS00): a state's own word, glyph and border, as the Worker's one rule answered it. */
+export function EligibilityChip({ row, e: given }) {
+  const e = given || eligibilityOf(row);
+  const look = ELIGIBILITY[e.state];
+  if (!look) return null;
+  return (
+    <span className={`${CHIP} ${TONE[look.tone]}`} data-testid="eligibility-chip" data-state={e.state}>
+      <span aria-hidden="true">{look.glyph}</span>{look.word}
+    </span>
+  );
+}
+
+/** D8768 (TMS01): Needs, You get and Run cost, each "Not recorded" when the read has no answer, never blank. */
+export function JobLines({ s }) {
+  const needs = inputsLine(s?.inputs);
+  return (
+    <span className="flex flex-col gap-0.5 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="skill-job-lines">
+      <span data-testid="skill-needs"><b>Needs:</b> {needs || <Unrecorded />}</span>
+      <span><b>You get:</b> {outputWords(s) || <Unrecorded />}</span>
+      <CostLine s={s} />
+    </span>
+  );
+}
+
 /** SK1: a directory card: its energy image, name, area chips, tools, run cost and "Used by". */
 export function SkillCard({ s, onOpen, onAssign, canAssign }) {
   return (
@@ -107,8 +140,8 @@ export function SkillCard({ s, onOpen, onAssign, canAssign }) {
       <span className={MUTED}>{authorLine(s)}</span>
       <TaxChips tags={s.taxonomy} />
       <ToolChips tools={s.tools} />
-      {outputWords(s) ? <span className="text-[12.5px] text-axal-ink dark:text-gray-200"><b>Proposes:</b> {outputWords(s)}</span> : null}
-      <CostLine s={s} />
+      <JobLines s={s} />
+      {s.status === 'draft' ? <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="skill-draft-why">Not published yet, so it can’t be attached.</span> : null}
       <div className="mt-auto flex items-center gap-2 border-t border-axal-hairline pt-2.5 dark:border-gray-800">
         <span className="min-w-0 flex-1"><UsedBy n={s.used_by} /></span>
         {canAssign && s.status === 'published'
@@ -120,7 +153,7 @@ export function SkillCard({ s, onOpen, onAssign, canAssign }) {
 }
 
 /** SK4, SK5: a skill in a list, with its pinned version and whatever the screen puts on the right. */
-export function SkillRow({ s, version, retired, why, toolState, check, children }) {
+export function SkillRow({ s, version, retired, why, toolState, check, state, children }) {
   return (
     <div className="flex items-start gap-2.5 border-t border-axal-hairline py-2.5 dark:border-gray-800" data-testid={`skill-row-${s.uid}`}>
       {check || null}
@@ -128,6 +161,8 @@ export function SkillRow({ s, version, retired, why, toolState, check, children 
         <span className="flex flex-wrap items-center gap-2">
           <b className="text-[13.5px] text-axal-ink dark:text-gray-100">{s.name}</b>
           {version != null ? <span className={`${CHIP} border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200`}>v{version}</span> : null}
+          {state ? <EligibilityChip e={state} /> : null}
+          {state?.fit ? <span className={`${CHIP} border-axal-lavender-edge text-axal-violet-deep dark:border-violet-800 dark:text-violet-300`} data-testid="skill-fit">Natural fit</span> : null}
           {retired ? <span className={`${CHIP} border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200`}>Retired · still pinned</span> : null}
         </span>
         <ToolChips tools={s.tools} stateOf={toolState} />

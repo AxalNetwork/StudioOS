@@ -25,7 +25,7 @@ const ZONE = readFileSync(resolve(process.cwd(), 'frontend/src/pages/investor/de
 
 const OPEN = {
   uid: 'd-open', title: 'Fixture decision', status: 'voting', created_by: 1,
-  roster: { available: false, eligible: null, to_vote: null, members: [], reason: 'No voting roster is set for this decision.' },
+  roster: { available: false, eligible: null, to_vote: null, members: [], reason: 'No voting roster is set for this decision, so who may vote is not recorded.' },
   tally: { yes: 1, no: 0, abstain: 1, recused: 1 }, votes_cast: 3, rationales: 2,
   votes: [
     { user_id: 1, user_name: 'Partner One', vote: 'yes', rationale: 'Within thesis', created_at: '2026-11-07 10:12:00' },
@@ -68,23 +68,40 @@ test('DE07 strip: votes cast leave the recusal out, and the meeting is drawn onl
   assert.doesNotMatch(other, /10 Nov 2026/);
 });
 
-test('the decision card shows eligible voters (Not recorded), voted and recused, and one row per vote', () => {
-  const out = html(h(DecisionCard, { decision: OPEN }));
+test('the decision card explains a missing roster and keeps one row per recorded vote', () => {
+  const out = html(h(DecisionCard, { decision: OPEN, user: { id: 4 } }));
   assert.match(out, /<dt>Eligible voters<\/dt><dd[^>]*><span[^>]*>Not recorded<\/span><\/dd>/);
+  assert.match(out, /<dt>To vote<\/dt><dd[^>]*><span[^>]*>Not recorded<\/span><\/dd>/);
+  assert.ok(out.includes(OPEN.roster.reason));
   assert.match(out, /<dt>Voted<\/dt><dd[^>]*>2<\/dd>/);
   assert.match(out, /<dt>Recused<\/dt><dd[^>]*>(?:<span[^>]*>⊘ <\/span>)1 <span[^>]*>· beside the tally<\/span><\/dd>/);
-  // D6144: with a roster set, eligible and to-vote are its figures; with none read at all, Unavailable (never Not recorded, never 0).
-  const rostered = html(h(DecisionCard, { decision: { ...OPEN, roster: { available: true, eligible: 5, to_vote: 2, members: [] } } }));
-  assert.match(rostered, /<dt>Eligible voters<\/dt><dd[^>]*>5<\/dd>/);
-  assert.match(rostered, /<dt>To vote<\/dt><dd[^>]*>2<\/dd>/);
   const unread = html(h(DecisionCard, { decision: { ...OPEN, roster: undefined } }));
   assert.match(unread, /<dt>Eligible voters<\/dt><dd[^>]*><span[^>]*>Unavailable<\/span><\/dd>/);
-  assert.doesNotMatch(unread, /<dt>To vote<\/dt>/);
+  assert.match(unread, /<dt>To vote<\/dt><dd[^>]*><span[^>]*>Unavailable<\/span><\/dd>/);
+  assert.doesNotMatch(unread, /No voting roster is set/);
   assert.match(out, /Partner.*Vote.*Rationale.*Recorded/s);
   assert.match(out, /7 Nov 2026, 10:12/);
   // An abstention with no reason reads Not recorded, not blank.
   const abstain = /data-testid="commit-vote-abstain"[\s\S]*?(?=data-testid="commit-vote-)/.exec(out)[0];
   assert.match(abstain, /Not recorded/);
+});
+
+test('DX27 A: the roster supplies both counts and names you only while your vote is outstanding', () => {
+  const roster = {
+    available: true, eligible: 4, to_vote: 1,
+    members: [...OPEN.votes.map(({ user_id, vote }) => ({ user_id, vote })), { user_id: 4, vote: null }],
+  };
+  const decision = { ...OPEN, roster };
+  const waiting = html(h(DecisionCard, { decision, user: { id: '4' } }));
+  assert.match(waiting, /<dt>Eligible voters<\/dt><dd[^>]*>4<\/dd>/);
+  assert.match(waiting, /<dt>To vote<\/dt><dd[^>]*>1 · you<\/dd>/);
+  for (const user of [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 5 }, undefined]) {
+    const other = html(h(DecisionCard, { decision, user }));
+    assert.match(other, /<dt>To vote<\/dt><dd[^>]*>1<\/dd>/);
+  }
+  const completed = { ...roster, to_vote: 0, members: [...roster.members.slice(0, 3), { user_id: 4, vote: 'no' }] };
+  const done = html(h(DecisionCard, { decision: { ...decision, roster: completed }, user: { id: 4 } }));
+  assert.match(done, /<dt>To vote<\/dt><dd[^>]*>0<\/dd>/);
 });
 
 test('a recusal looks and reads differently from an abstention', () => {
@@ -188,7 +205,7 @@ test('long method text sits under How this works, not on the record', () => {
   assert.match(how, /<details[^>]*><summary[^>]*>How this works/);
   assert.match(how, /An abstention is a vote cast/);
   const record = html(h(DecisionCard, { decision: OPEN })) + html(h(ConditionsCard, { conditions: [] }));
-  assert.doesNotMatch(record, /An abstention is a vote cast|No voting roster/);
+  assert.doesNotMatch(record, /An abstention is a vote cast|No quorum is stored/);
   assert.match(codeOnly(ZONE), /<MinutesCard minutes=\{minutesBlock\} forDecision=\{sameMeeting\} decisionLabel=\{minutesDecision\}>[\s\S]*?<HowThisWorks \/>/);
 });
 

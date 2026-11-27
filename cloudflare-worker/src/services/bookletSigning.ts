@@ -123,7 +123,14 @@ async function send(env: Env, booklet: BookletRow, stage: BookletStage, opts: {
     throw textChanged();
   }
   if (!await recordStage(env, booklet, out.envelope_uuid, stage)) {
-    throw alreadySent((await bookletSigning(env, booklet)).state);
+    // A concurrent send that found this envelope already pending may have
+    // recorded it as this stage while this send was still mailing it (D8536's
+    // ledger reads widen that window). The row then holds this very envelope:
+    // this send landed, and it is the one that answers with the token.
+    const held = await env.DB.prepare(
+      'SELECT envelope_uuid FROM fund_booklet_envelopes WHERE booklet_id = ? AND stage = ?',
+    ).bind(booklet.id, stage).first<{ envelope_uuid: string }>();
+    if (held?.envelope_uuid !== out.envelope_uuid) throw alreadySent((await bookletSigning(env, booklet)).state);
   }
   return out;
 }

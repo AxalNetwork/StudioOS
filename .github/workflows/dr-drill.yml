@@ -8,6 +8,10 @@ name: Monthly DR Drill
 # (D263).
 #
 # Schedule: 1st of the month at 06:00 UTC. Also runnable on demand.
+#
+# D8531: the drill job's marker and summary keep restore correctness, the
+# recovery point age (RPO) and the recovery time (RTO) apart, and record the
+# file drill as passed, failed or not run; "proven" needs both.
 
 on:
   schedule:
@@ -33,6 +37,13 @@ env:
 
 jobs:
   drill:
+    # D8531: recovery counts as proven only when the D1 restore and the file
+    # drill both pass in the same run, so the D1 drill runs after the file
+    # drill (skipped or not) and records its result in drill-d1.json and the
+    # job summary. `!cancelled()` keeps it running when the file drill was
+    # skipped or failed.
+    needs: independent-file-drill
+    if: ${{ !cancelled() }}
     environment: production-ops
     runs-on: ubuntu-latest
     permissions:
@@ -97,6 +108,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
           DR_DRILL_DB_FILE: ${{ runner.temp }}/dr-drill-${{ github.run_id }}-${{ github.run_attempt }}.db
+          # D8531: success, failure, skipped or cancelled; the marker says passed, failed or not run.
+          FILE_DRILL_RESULT: ${{ needs.independent-file-drill.result }}
         run: bash scripts/dr-drill.sh
 
       - name: Delete this run’s throwaway database

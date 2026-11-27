@@ -19,6 +19,7 @@
  */
 import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
+import { pilotReturn } from '../integrations/pilotReturn';
 import { revokeAndDisconnectGoogle } from './calendar';
 import { cartaAudience } from '../integrations/cartaScopes';
 import type { Context } from 'hono';
@@ -543,7 +544,12 @@ integrations.put('/:uid/companies', async (c) => {
     if (!member) return c.json({ error: 'company_not_linked' }, 403);
   }
   const actor = await hashEmail(user.email);
+  // D8774 (BLS07): a GitHub connection feeds one venture (`config.project_id`). When the new set leaves out that
+  // venture's company, the venture and its repositories are let go in the same batch, so a later sync is not refused
+  // with `github_project_not_enabled` and no page reads the connection as still choosing repositories there.
+  const released = await releasedConfig(c.env, row.config_json, ids);
   await c.env.DB.batch([
+    ...(released ? [c.env.DB.prepare('UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(released, row.id)] : []),
     c.env.DB.prepare('UPDATE integration_companies SET enabled = 0 WHERE integration_id = ?').bind(row.id),
     ...ids.map((id) => c.env.DB.prepare(
       'INSERT INTO integration_companies (integration_id, company_id, enabled) VALUES (?, ?, 1) ' +
@@ -552,8 +558,26 @@ integrations.put('/:uid/companies', async (c) => {
     c.env.DB.prepare('INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)')
       .bind(user.id, actor, 'connector_company_scope_changed', JSON.stringify({ integration_id: row.id, company_ids: ids })),
   ]);
-  return c.json({ ok: true, company_ids: await enabledCompanyIds(c.env, row.id) });
+  return c.json({ ok: true, company_ids: await enabledCompanyIds(c.env, row.id), ...(released ? { project_released: true } : {}) });
 });
+
+/**
+ * D8774: the connection's config without its venture and repositories when the
+ * company set `ids` no longer holds the company of the venture it feeds (or that
+ * venture is gone); null when nothing changes. Only a config naming a venture
+ * is touched.
+ */
+export async function releasedConfig(env: Env, configJson: string | null, ids: number[]): Promise<string | null> {
+  const cfg = safeJson<Record<string, unknown>>(configJson, {});
+  const bound = Number(cfg.project_id);
+  if (!('project_id' in cfg) || cfg.project_id == null) return null;
+  const project = Number.isSafeInteger(bound) && bound > 0
+    ? await env.DB.prepare('SELECT company_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(bound).first<{ company_id: number | null }>()
+    : null;
+  if (project && project.company_id != null && ids.includes(Number(project.company_id))) return null;
+  const { project_id: _project, repositories: _repositories, ...rest } = cfg;
+  return JSON.stringify(rest);
+}
 
 // ───────────────────────────────────────────────────────────────────── connect
 
@@ -870,8 +894,10 @@ integrations.post('/:uid/sync', async (c) => {
  * `repositories_more` says how many were left out.
  */
 export const SYNC_LOG_REPOSITORY_CHARS = 2500;
-export function syncLogPayload(out: { counts?: Record<string, number | boolean>; repositories?: string[] }): Record<string, unknown> | undefined {
-  if (!out.repositories) return out.counts;
+export function syncLogPayload(out: { counts?: Record<string, number | boolean>; repositories?: string[]; project_id?: number }): Record<string, unknown> | undefined {
+  // D8774: a sync that read one venture names it, so a page can say when THIS venture was last read.
+  const venture = Number.isSafeInteger(out.project_id) ? { project_id: out.project_id } : {};
+  if (!out.repositories) return out.counts && Object.keys(venture).length ? { ...out.counts, ...venture } : out.counts;
   const kept: string[] = [];
   let used = 0;
   for (const r of out.repositories) {
@@ -879,7 +905,7 @@ export function syncLogPayload(out: { counts?: Record<string, number | boolean>;
     kept.push(r); used += r.length + 3;
   }
   const more = out.repositories.length - kept.length;
-  return { ...(out.counts ?? {}), repositories: kept, ...(more > 0 ? { repositories_more: more } : {}) };
+  return { ...(out.counts ?? {}), repositories: kept, ...(more > 0 ? { repositories_more: more } : {}), ...venture };
 }
 
 // ─────────────────────────────────────────────── D655: progress, fed, repositories
@@ -1511,6 +1537,10 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // D2403: "Turn on publishing" asks X for the publish set; the provider reads it from the state, never the callback's query.
   if (provider === 'x') extra.x_publish = c.req.query('publish') === '1';
   if (provider === 'typeform') extra.typeform_region = c.req.query('region') === 'eu' ? 'eu' : 'us';
+  const pilot = pilotReturn(provider, c.req.query('return_to'), c.req.query('project_id'));
+  if (pilot) {
+    extra.pilot_provider = provider; extra.return_to = c.req.query('return_to'); extra.project_id = pilot.projectId;
+  }
   // D5834: the venture a QuickBooks company is bound to; `connect` reads it from the state and checks the member can edit it.
   if (provider === 'quickbooks') {
     const qbProject = Number(c.req.query('project_id'));
@@ -1563,13 +1593,14 @@ integrations.get('/oauth/:provider/start', async (c) => {
  * surface an error fragment the page renders inline.
  */
 export function returnBase(extra: Record<string, unknown> | null | undefined): string {
-  return extra?.return_to === 'build' ? '/build/connect' : '/integrations';
+  return pilotReturn(extra?.pilot_provider, extra?.return_to, extra?.project_id)?.path
+    || (extra?.return_to === 'build' ? '/build/connect' : '/integrations');
 }
 
 /** The return's query: the outcome, then Build's venture when the sign-in started from Build (#1597). */
 export function returnQuery(extra: Record<string, unknown> | null | undefined, outcome: string): string {
   const id = Number(extra?.project_id);
-  const venture = extra?.return_to === 'build' && Number.isSafeInteger(id) && id > 0 ? `&project_id=${id}` : '';
+  const venture = (extra?.return_to === 'build' || !!pilotReturn(extra?.pilot_provider, extra?.return_to, extra?.project_id)) && Number.isSafeInteger(id) && id > 0 ? `&project_id=${id}` : '';
   return `${returnBase(extra)}?${outcome}${venture}`;
 }
 

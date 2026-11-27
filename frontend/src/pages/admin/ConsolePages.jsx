@@ -21,6 +21,8 @@ import KycConsole from './consoles/KycConsole';
 import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
 import { BankAccountsPanel, BankAccountsRail } from './consoles/BankAccountsConsole';
+import StudioProgramAccess from './programs/StudioProgramAccess';
+import { ViewPresentationLink } from '../programs/AdminPresentationLinks';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
@@ -238,14 +240,19 @@ export function ProductTestingHqPage() {
       <HeaderMenuItem to="/admin/accounts" data-testid="testing-more-accounts">Testers in Accounts</HeaderMenuItem>
     </>
   );
-  // D1202 (TST7): New program is the header's, a lightbox over Programs.
+  // D1202 (TST7): New program is the header's, a lightbox over Programs. #6965: this page is
+  // Product testing's detail (its catalogue door), so its presentation leads, as on every other one.
   const actions = (
-    <Link to="/admin/platform/product-testing/programs?new=1"
-      className="inline-flex min-h-[34px] items-center justify-center rounded-[9px] bg-axal-violet px-3.5 text-[13px] font-bold text-white no-underline hover:bg-axal-violet-deep max-sm:min-h-[44px] dark:bg-violet-500 dark:hover:bg-violet-400"
-      data-testid="testing-new-programme">New program</Link>
+    <>
+      <ViewPresentationLink programKey="product-testing" />
+      <Link to="/admin/platform/product-testing/programs?new=1"
+        className="inline-flex min-h-[34px] items-center justify-center rounded-[9px] bg-axal-violet px-3.5 text-[13px] font-bold text-white no-underline hover:bg-axal-violet-deep max-sm:min-h-[44px] dark:bg-violet-500 dark:hover:bg-violet-400"
+        data-testid="testing-new-programme">New program</Link>
+    </>
   );
   return (
     <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line={TESTING_LINE} tabs={tabs} more={more} actions={actions} testId="admin-platform-product-testing">
+      {view.tab === 'overview' ? <StudioProgramAccess programKey="product-testing" superAdmin /> : null}
       <ProductTestingTabBody view={view} reads={reads} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
     </ConsolePage>
   );

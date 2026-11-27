@@ -11,7 +11,7 @@
  *   · the pick is deterministic by stage × audience (× sector);
  *   · every HQ seed passes its contract and scores ≥ 80 on the rubric.
  *
- * The real migrated schema in memory (no file copies).
+ * The real migrated schema in memory, built once per run and copied into each test's own database (#8590).
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_templates_d1535.test.ts
@@ -19,7 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckTemplates, { __resetSeedForTest } from '../src/routes/deck_templates.ts';
@@ -29,16 +29,12 @@ import { deckRubric } from '../src/services/decks/rubric.ts';
 import { sanitizeSlides } from '../src/routes/decks.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 const schemaOf = (m: 'templates' | 'myTemplates' | 'saveAsTemplate') => JSON.parse(readFileSync(new URL(`../src/contracts/${CONTRACTS[m].schema}`, import.meta.url), 'utf8'));
 
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1535-only-not-a-real-credential'.repeat(2);
 
 const H = (id: string, text: string, grid: any, style = 'heading') => ({ id, kind: 'text', style, text, grid });
@@ -62,7 +58,7 @@ function template(over: Record<string, unknown> = {}) {
 async function world() {
   __resetSeedForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  loadSchema(db); // #8590: the migrated schema built once per run (D4133), copied into this test's own database
   const u = db.prepare('INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (?, ?, ?, ?, ?, 1, ?)');
   u.run(2, 'founder', 100, 'Synthetic founder', 'f@example.invalid', 'studio'); u.run(4, 'founder', 400, 'Other founder', 'o@example.invalid', 'studio');
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100),(4,'Other venture',400)");

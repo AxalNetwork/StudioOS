@@ -1,4 +1,9 @@
 /**
+ * GitHub health alerts for Slack: which transitions open or close an `[alert]
+ * ...` issue (main red, reviewer calling no model, Actions queue backed up),
+ * the failing tests in a future-clock TAP log, and the Slack text. Owned by
+ * `../github-alerts.mjs`.
+ *
  * GitHub health alerts for a Slack channel: the pure half. The CLI that does
  * the effects (GitHub API, Slack webhook) is `../github-alerts.mjs`.
  *
@@ -27,6 +32,8 @@ export const ALERT_KINDS = Object.freeze({
   'queue-deadline': { title: '[alert] merge queue candidate nearing response deadline', label: 'Merge queue deadline' },
   'queue-stalled': { title: '[alert] merge queue stalled', label: 'Merge queue' },
   'file-backup': { title: '[alert] file recovery backup unhealthy', label: 'File recovery backup' },
+  // D8754: scheduled backups and monitoring that did not run, wait on an approval, or lack their credential.
+  'ops-schedules': { title: '[alert] scheduled production operations not running', label: 'Scheduled production operations' },
   scan: { title: SCAN_ALERT_TITLE, label: 'Main scan' },
   // D5398: the nightly future-clock run is stateful too. It used to post on every failing night and keep no issue,
   // so a date-bound test was announced again each night and nothing said when it was fixed.
@@ -455,6 +462,11 @@ export function message(kind, action, facts = {}) {
     return `:warning: *Active merge-queue candidates nearing the response deadline.*${run}${issue}\n${rows.length?rows.map(c=>`#${c.pr} (${c.sha.slice(0,12)}), age ${c.ageMinutes} min: ${c.pending.map(p=>`${p.name}${p.unknown?' (unknown/unreadable)':''}`).join(', ')}`).join('\n'):'Candidate evidence is unknown; inspect the reporter run.'}\nPending required checks are named above; this warning changes no timeout, queue entry or retry policy.`;
   }
   if (kind === 'file-backup') return `:warning: *File recovery backup unhealthy* (${facts.backupReason || 'unavailable'}).${run}${issue} Check the private heartbeat and both copies; no live object content is included in this alert.`;
+  if (kind === 'ops-schedules') {
+    const reasons = Array.isArray(facts.opsReasons) && facts.opsReasons.length ? facts.opsReasons.join(', ') : 'unavailable';
+    const age = Number.isSafeInteger(facts.ageHours) ? ` The newest successful D1 backup is ${facts.ageHours} h old (objective: 24 h).` : '';
+    return `:rotating_light: *Scheduled production operations are not running* (${reasons}).${age}${run}${issue}\nA run waiting on approval holds the backup or the probe until someone approves it in the environment. See D8754 and documentation/operations/D1_RECOVERY.md.`;
+  }
   if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
   if (kind === 'future-clock') {
     // D7124: a break date and where the names are; the names themselves stay in the run summary (D5663).

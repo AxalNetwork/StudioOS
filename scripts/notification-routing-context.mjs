@@ -1,3 +1,5 @@
+// D5666: GET-only GitHub PR/ruleset/linked-issue/claim metadata adapter.
+//
 // D5666: read-only context adapter; never imports a GitHub writer, claim mutator, review/repair dispatcher or merge client.
 import { parseClaim } from './lib/claims.mjs';
 export async function readRoutingContext({ read, repository, prNumber, linkedIssues = [] }) {

@@ -419,6 +419,9 @@ test('6: Record a decision starts with the new interview evidence checked, and t
     assert.ok(m.text().includes('2 of 5 needed before a verdict is given.'));
     await m.choose('evidence', 'pain-4-2');
     assert.equal(propsOf(box('pain-4-2')).checked, false, 'the founder unticked it');
+    // D6018 (#6018): the form starts with no decision and requires a rationale.
+    await m.choose('decision', 'proceed');
+    await m.input('reasoning', 'Synthetic rationale');
     await m.submit();
     assert.deepEqual(saved[0].evidence, ['pain-3-9']);
   } finally { await m.unmount(); }

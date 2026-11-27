@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 /**
+ * #6684: read-only incorporation state by jurisdiction id (orders by status, a
+ * Stripe one-time price yes/no, template bodies and counsel approvals, ids
+ * outside the six, multi-paid projects, a US beneficial-ownership step); counts
+ * and yes/no only.
+ *
  * #6684 (E4 of #6680) — which incorporation products can be paid for, which
  * have approved templates, and which have orders. READ ONLY: every database
  * statement is a SELECT (checked before it runs), and Stripe is only listed.

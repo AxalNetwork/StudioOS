@@ -33,12 +33,9 @@ export const OIDC_CONSUMERS = [
 ];
 /**
  * Jobs that read a cloud credential without an environment, each with why and who removes it.
- * file-backup is a scheduled alert: production-ops has a required reviewer, so naming it would hold every
- * alert run for approval. The owner chooses its home on #8069 (D8069, "Owner gates").
+ * None: D8754 gave the scheduled file-backup alert its home, production-monitoring, which has no reviewer.
  */
-export const EXCEPTIONS = [
-  { workflow: 'github-alerts.yml', job: 'file-backup', reason: 'scheduled read-only backup health check; home pending the owner (D8069)' },
-];
+export const EXCEPTIONS = [];
 /** The deploy and ops workflows #8069 names: each declares `permissions` per job and none at the top. */
 export const JOB_PERMISSION_WORKFLOWS = [
   'cloudflare-worker-deploy.yml', 'merge-control-deploy.yml', 'meeting-bot-deploy.yml', 'archive-observer-deploy.yml',
@@ -122,13 +119,13 @@ test('D8069: the named deploy and ops workflows exist, and every exception still
   }
 });
 
-test('D8069: the preview jobs enter `preview`, the production deploys `production`, every DR and recovery job `production-ops`', () => {
+test('D8069: the preview jobs enter `preview`, the production deploys `production`, every DR and recovery job `production-ops`, the scheduled backup `production-backup` (D8754)', () => {
   const env = (f, j) => environmentName(YAML.parse(load(f)).jobs[j]);
   assert.equal(env('pr-preview-deploy.yml', 'deploy'), 'preview');
   assert.equal(env('pr-preview-deploy.yml', 'delete'), 'preview');
   assert.match(load('pr-preview-deploy.yml'), /name: 'preview' \}\);/, 'resolve checks the environment the jobs enter');
   for (const f of ['cloudflare-worker-deploy.yml', 'merge-control-deploy.yml', 'meeting-bot-deploy.yml', 'archive-observer-deploy.yml']) assert.equal(env(f, 'deploy'), 'production', f);
-  assert.equal(env('backup-d1.yml', 'backup'), 'production-ops');
+  assert.equal(env('backup-d1.yml', 'backup'), 'production-backup', 'D8754: the scheduled backup waits for no reviewer');
   assert.equal(env('dr-drill.yml', 'drill'), 'production-ops');
   assert.equal(env('file-recovery.yml', 'snapshot'), 'production-ops');
   assert.equal(env('dr-drill.yml', 'independent-file-drill'), 'production-ops', 'the synthetic drill reads the outside copy keys');

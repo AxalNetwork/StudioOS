@@ -42,7 +42,7 @@ export type StatusBody = {
   investors: { in_pipeline: number; active_conversations: number; in_diligence: number; committed: number };
   readiness: { areas: SnapshotArea[] };
   next_steps: Array<{ label: string; text: string }>;
-  tools: Array<{ key: string; label: string; state: 'connected' | 'not_connected' | 'unreadable'; words: string; as_of: string | null }>;
+  tools: Array<{ key: string; label: string; state: 'connected' | 'not_connected' | 'disconnected' | 'unreadable'; words: string; as_of: string | null }>;
 };
 
 /** The materials RA-02 lists, in its order. */
@@ -62,7 +62,8 @@ export function materialWords(slug: string, state: string): string | null {
   return CARD_WORD[state] ?? null;
 }
 
-const TOOL_WORD = { connected: 'Connected', not_connected: 'Not connected', unreadable: 'Unavailable' } as const;
+// D8258: a lost connection is its own word, never Connected or Unavailable.
+const TOOL_WORD = { connected: 'Connected', not_connected: 'Not connected', disconnected: 'Disconnected', unreadable: 'Unavailable' } as const;
 const IN_TALKS = ['contacted', 'meeting', 'diligence'];
 
 class Unreadable extends Error {}

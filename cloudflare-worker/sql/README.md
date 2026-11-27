@@ -9,6 +9,7 @@ and is not kept in sync.
 | `schema_baseline.sql` | The production-derived schema for bootstrapping a fresh database. |
 | `migrations/` | **Forward-only, numbered (up to 799) or stamped `YYYYMMDDHHMM_` (D4106), and the thing that actually runs.** |
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
+| `forward-fixes/` | The rehearsed forward fix a `manual` migration names (`-- forward-fix:`, D8532). Not migrations: nothing applies them on deploy. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
 | `migrations/716_deck_area_batches.sql` | D1502 (#3753): a deck generation run (`deck_area_batches`, one active per deck, `idem_key` unique) and its steps (`deck_area_batch_steps`), under one quote and one parent hold. |
 
@@ -83,6 +84,7 @@ HEAD metadata after deployment; the migration never reads or deletes objects.
 | `migrations/202611151315_6272_ask_history_cleared.sql` | D6272 (#6272): `research_ask_sessions.cleared_at` — Ask's Clear history hides the caller's sessions and Restore sets it back to NULL; nothing is deleted. Additive, no backfill. |
 | `migrations/202611161505_6195_commitment_route_preference.sql` | D6195 (#6195): `commitments.route_preference` (direct, syndicate, fund or NULL) — the investor's preference only; the studio sets the closing line's route. Additive, no backfill; NULL reads "No preference recorded". |
 | `migrations/202611150148_5454_deal_preparations.sql` | D5454 (#5454, ADP-01): `deal_preparations` (issuer company and project scope, deployment scope, independent preparation and publication states, revision pointers) and immutable `deal_preparation_revisions` (triggers). A never-released draft owns no deal row (CHECK). New tables, re-runnable, no backfill. |
+| `migrations/202611161619_6960_package_service_delivery.sql` | D6960 (#6960) adds an optional, versioned HQ service description to a package item. |
 | `migrations/202611171541_7116_wellness_program.sql` | D7116 (#7116) registers the global Wellness program and its personal Wellbeing link. |
 | `migrations/202611161338_6925_investor_cohort_readiness.sql` | D6925 corrects the build status and original purpose of the unopened global investor cohort program. |
 | `migrations/202611181350_7325_verified_global_fund_managers.sql` | D7325 (#7325): source-backed worldwide manager additions, conservative identity guards and country facets; existing vehicles, references and source verdicts survive replay. Generated from the dated research manifest. |

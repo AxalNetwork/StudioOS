@@ -11,10 +11,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import cofounder from '../src/routes/cofounder.ts';
@@ -22,15 +21,11 @@ import advisors from '../src/routes/advisors.ts';
 import { MATCH_DEPS, defaultMatchDeps, type MatchDeps } from '../src/services/ai/matchRows.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-3938-ne1-surfaces-0123456789ab';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const ME = 1;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db); // #8588: the migrated schema built once per run (D4133), copied into this test's own database
   const u = db.prepare("INSERT INTO users (id, uid, role, name, email, is_active) VALUES (?, ?, ?, ?, ?, 1)");
   u.run(ME, 'u-me', 'founder', 'Fay Founder', 'fay@example.test');
   u.run(2, 'u-ada', 'founder', 'Ada Lovelace', 'ada@example.test');

@@ -1,0 +1,116 @@
+{
+  "DELETE /api/progress/discovery/interview/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/progress/metrics/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/progress/mvp-scope/feature/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/progress/pain-groups/:groupId": {
+    "kind": "target"
+  },
+  "DELETE /api/progress/roadmap/okr/:id": {
+    "kind": "target"
+  },
+  "GET /api/progress/discovery/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/progress/discovery/:projectId/waitlist": {
+    "kind": "target"
+  },
+  "GET /api/progress/lifecycle/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/progress/metrics/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/progress/metrics/:projectId/definitions": {
+    "kind": "target"
+  },
+  "GET /api/progress/metrics/:projectId/series": {
+    "kind": "target"
+  },
+  "GET /api/progress/metrics/:projectId/summary": {
+    "kind": "target"
+  },
+  "GET /api/progress/metrics/:projectId/targets": {
+    "kind": "target"
+  },
+  "GET /api/progress/mvp-scope/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/progress/pain-groups/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/progress/roadmap/:projectId": {
+    "kind": "target"
+  },
+  "GET /api/progress/roadmap/:projectId/weeks": {
+    "kind": "target"
+  },
+  "GET /api/progress/signals/:projectId": {
+    "kind": "target"
+  },
+  "PATCH /api/progress/pain-groups/:groupId": {
+    "kind": "target"
+  },
+  "POST /api/progress/discovery/:projectId": {
+    "kind": "target"
+  },
+  "POST /api/progress/discovery/:projectId/waitlist/:signupId/follow-up": {
+    "kind": "target"
+  },
+  "POST /api/progress/discovery/:projectId/waitlist/:signupId/invite": {
+    "kind": "target"
+  },
+  "POST /api/progress/discovery/:projectId/waitlist/:signupId/promote": {
+    "kind": "target"
+  },
+  "POST /api/progress/metrics/:projectId": {
+    "kind": "target"
+  },
+  "POST /api/progress/metrics/:projectId/import-csv": {
+    "kind": "target"
+  },
+  "POST /api/progress/metrics/:projectId/import-stripe": {
+    "kind": "target"
+  },
+  "POST /api/progress/mvp-scope/:projectId": {
+    "kind": "target"
+  },
+  "POST /api/progress/pain-groups/:projectId/assign": {
+    "kind": "target"
+  },
+  "POST /api/progress/pain-groups/:projectId/assign-many": {
+    "kind": "target"
+  },
+  "POST /api/progress/roadmap/:projectId": {
+    "kind": "target"
+  },
+  "POST /api/progress/roadmap/okr/:id/move": {
+    "kind": "target"
+  },
+  "PUT /api/progress/discovery/interview/:id": {
+    "kind": "target"
+  },
+  "PUT /api/progress/lifecycle/:projectId": {
+    "kind": "target"
+  },
+  "PUT /api/progress/metrics/:projectId/definitions": {
+    "kind": "target"
+  },
+  "PUT /api/progress/metrics/:projectId/targets": {
+    "kind": "target"
+  },
+  "PUT /api/progress/metrics/snapshot/:id": {
+    "kind": "target"
+  },
+  "PUT /api/progress/mvp-scope/feature/:id": {
+    "kind": "target"
+  },
+  "PUT /api/progress/roadmap/okr/:id": {
+    "kind": "target"
+  }
+}

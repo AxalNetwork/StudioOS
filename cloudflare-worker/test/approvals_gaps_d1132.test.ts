@@ -190,12 +190,12 @@ test('inbox: each lane carries its group and its split by age band; a failed lan
 });
 
 test('inbox: the groups are the page model\'s, lane by lane', () => {
-  const model = readFileSync(resolve(ROOT, 'frontend/src/pages/admin/approvals/approvalsModel.js'), 'utf8');
+  const model = readFileSync(resolve(ROOT, 'frontend/src/pages/admin/approvals/approvalsLanesModel.js'), 'utf8');
   const fromModel: Record<string, string> = {};
   for (const m of model.matchAll(/\{ key: '([a-z_]+)', group: '([a-z]+)'/g)) fromModel[m[1]] = m[2];
   const hqBlock = model.slice(model.indexOf('export const HQ_LANES'), model.indexOf('export const isHqLane'));
   for (const m of hqBlock.matchAll(/\{ key: '([a-z_]+)'/g)) fromModel[m[1]] = 'hq';
-  assert.deepEqual(Object.keys(fromModel).length, 29);
+  assert.deepEqual(Object.keys(fromModel).sort(), [...APPROVAL_SOURCES, ...HQ_APPROVAL_SOURCES].map(s => s.key).sort());
   assert.deepEqual({ ...LANE_GROUP }, fromModel);
   // And every lane the Worker reads has a group.
   for (const s of [...APPROVAL_SOURCES, ...HQ_APPROVAL_SOURCES]) assert.ok(INBOX_GROUPS.includes(LANE_GROUP[s.key]), s.key);

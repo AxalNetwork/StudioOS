@@ -16,7 +16,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   ok, LOADING, UNREADABLE, afterCloseFigures, captableCard, transferRows, paperRows,
@@ -24,7 +23,6 @@ import {
 import { AfterCloseFigures, CaptableCard } from '../src/pages/investor/deals/ClosingWorkspace.jsx';
 
 const h = React.createElement;
-const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const WS = codeOnly(readFileSync('frontend/src/pages/investor/deals/ClosingWorkspace.jsx', 'utf8'));
 
 const CLOSED = {

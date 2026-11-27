@@ -1,4 +1,10 @@
 /**
+ * D5573: the six workspace invariants (tenant isolation, reviewed deploy, no
+ * double effect, checkpoints kept, no stranded compute, revoked/disallowed
+ * never execute) over one normalized observation set; an unexercised check
+ * fails. `fromReconcileRows` reads #4594's `RECONCILE` rows. Tests in
+ * `workspaceInvariants.test.mjs`.
+ *
  * D5573 (#5573): the six workspace-engine invariants, each a pure function over one normalized observation set, so
  * the same verdict can later be computed for a hosted run (#4594's `RECONCILE` rows enter through
  * `fromReconcileRows`). Counts, synthetic ids and outcomes only; no tokens, file contents or log text.

@@ -547,7 +547,8 @@ export function withdrawError(reason) {
   return null;
 }
 
-export const SYNDICATES_LINE = 'The syndicates you lead or belong to on this company. A syndicate you are not in is not listed: today’s read shows only your own.';
+// D6200 (#6200): an invitation to this deal also lists the company's open syndicates you may join, counted, never named.
+export const SYNDICATES_LINE = 'The syndicates you lead or belong to on this company, and the open ones your invitation to this deal lets you join. Members are counted, never named; only a syndicate’s lead sees names.';
 
 // ---------------------------------------------------------------- D5906 DX9 the Investment tab (DE09)
 

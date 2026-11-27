@@ -23,10 +23,10 @@ import grow from '../src/pages/cycles/defs/grow.jsx';
 import { fnOf } from '../src/pages/cycles/adapters/index.js';
 import { RECORDS } from '../src/pages/cycles/adapters/grow.js';
 import MarketsHome, { ComparePanel } from '../src/pages/cycles/MarketsHome.jsx';
-import MarketRecord from '../src/pages/cycles/MarketRecord.jsx';
+import MarketRecord, { historyLine } from '../src/pages/cycles/MarketRecord.jsx';
 import { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import {
-  compareSummary, diffWords, evidenceFor, partnerLine, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue,
+  compareSummary, customerLine, diffWords, evidenceFor, indexLines, handoffLinks, marketView, nextStep, planLine, sizeLabel, stateChips, stepOverdue, partnerLine,
 } from '../src/pages/cycles/marketsModel.js';
 
 const h = React.createElement;
@@ -116,7 +116,7 @@ test('the evidence strip counts what Research holds and says Not recorded for wh
     signals: [{ match: 'country' }, { match: 'country' }, { match: 'region' }], company_count: 214, fund_count: 19,
     companies_by_market: [{ name: 'Robotics', count: 38 }, { name: 'Logistics', count: 22 }, { name: 'Other', count: 1 }],
     demand: { status: 'not_recorded', reason: 'Demand data is global only.' } });
-  assert.deepEqual(ev.demand.map((e) => [e.state, e.label]), [['value', 'Signals naming Portugal: 2'], ['not_recorded', 'Per-country demand'], ['not_recorded', 'Customers or sign-ups from Portugal']]);
+  assert.deepEqual(ev.demand.map((e) => [e.state, e.label]), [['value', 'Signals naming Portugal: 2'], ['not_recorded', 'Per-country demand'], ['not_recorded', 'Prospects and customers tagged Portugal']]);
   assert.equal(ev.demand[0].asOf, '1 Nov 2026');
   assert.equal(ev.regulation[0].label, 'Signals naming only Europe: 1');
   assert.equal(ev.regulation[1].state, 'not_recorded');
@@ -280,6 +280,62 @@ test('Markets owns its page and its record in Grow’s def, and the old addresse
   assert.equal(matched('/grow/market-expansion/new'), '/grow/:slug/new');
 });
 
+// D8255 (#8255). Mutation checked: a "not named" list read as a value-less line (fails); a missing figure shown as 0 (fails);
+// an unreadable source shown as Not recorded (fails); the as-of day dropped (fails); the record not passing its indices (fails).
+test('indices: a value shows its source, edition and day; no figure is Not recorded; a failed read is Unavailable', () => {
+  const read = { state: 'ok', lines: [
+    { key: 'wgi', publisher: 'World Bank', citation_url: 'https://example.test/wgi', state: 'ok', edition: '2024', as_of: '2025-09-30',
+      values: [{ indicator: 'GE.PER.RNK', label: 'Government effectiveness, percentile rank', value: 74.5 }, { indicator: 'RL.PER.RNK', label: 'Rule of law, percentile rank', value: 0 }] },
+    { key: 'fatf', publisher: 'FATF', state: 'not_recorded', edition: null, as_of: null, values: [], reason: 'FATF’s list has no recorded licence, so it is not read (D1259).' }] };
+  const [wgi, fatf] = indexLines('Portugal', read);
+  assert.equal(wgi.state, 'value');
+  assert.equal(wgi.label, 'World Bank governance indicators 2024, Portugal: Government effectiveness 74.5 · Rule of law 0 (percentile rank, 0 to 100)');
+  assert.equal(wgi.asOf, '30 Sep 2025');
+  assert.equal(wgi.source, 'https://example.test/wgi');
+  assert.deepEqual([fatf.state, fatf.label], ['not_recorded', 'FATF high-risk list']);
+  assert.match(fatf.reason, /no recorded licence/);
+  const [none] = indexLines('Chile', { state: 'ok', lines: [{ key: 'wgi', publisher: 'World Bank', state: 'not_recorded', edition: '2024', values: [], reason: 'The World Bank 2024 edition holds no figure for this country.' }] });
+  assert.equal(none.state, 'not_recorded');
+  const [named] = indexLines('Chile', { state: 'ok', lines: [{ key: 'fatf', publisher: 'FATF', state: 'not_named', edition: 'Oct 2026', as_of: '2026-10-24', values: [] }] });
+  assert.deepEqual([named.state, named.label, named.asOf], ['value', 'FATF high-risk list Oct 2026: Chile is not named', '24 Oct 2026']);
+  const [down] = indexLines('Chile', { state: 'ok', lines: [{ key: 'wgi', publisher: 'World Bank', state: 'unreadable', reason: 'World Bank’s figures could not be read.' }] });
+  assert.equal(down.state, 'unavailable');
+  assert.equal(indexLines('Chile', { state: 'unreadable' })[0].state, 'unavailable');
+  assert.equal(indexLines('Chile', undefined)[0].state, 'not_recorded');
+  assert.equal(evidenceFor({ item: { name: 'Portugal' }, as_of: {}, signals: [] }, undefined, undefined, read).regulation.length, 3);
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners, m\.customers, m\.indices\)/, 'the record hands its indices to the evidence strip');
+});
+
+// D8253 (#8253). Mutation checked: a 0 count read as a value (fails); unreadable shown as Not recorded (fails);
+// the `> 0` guard dropped (fails).
+test('evidence: tagged prospects and customers are a value, none tagged is Not recorded, a failed read is Unavailable', () => {
+  assert.deepEqual(customerLine('Portugal', { state: 'ok', tagged: 12, reason: null }), { state: 'value', label: 'Prospects and customers tagged Portugal: 12', asOf: null });
+  assert.equal(customerLine('Portugal', { state: 'ok', tagged: 0, reason: null }).state, 'not_recorded', 'a 0 is never shown as a count');
+  assert.equal(customerLine('Portugal', { state: 'not_recorded', tagged: null, reason: 'No prospect or customer is tagged with this country.' }).state, 'not_recorded');
+  assert.equal(customerLine('Portugal', { state: 'unreadable', tagged: null, reason: 'The prospects and customers could not be read.' }).state, 'unavailable');
+  assert.equal(customerLine('Portugal', undefined).state, 'not_recorded');
+  const geo = { item: { name: 'Portugal', region: 'Europe' }, as_of: {}, signals: [] };
+  assert.equal(evidenceFor(geo, undefined, { state: 'ok', tagged: 3 }).demand.at(-1).label, 'Prospects and customers tagged Portugal: 3');
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners, m\.customers, m\.indices\)/, 'the record hands its customer counts to the evidence strip');
+});
+
+// D8252 (#8252). Mutation checked: the changes list dropped (fails); a legacy line parsed as a list (fails); a source
+// holding "; " split in two (fails); "and N more" glued onto the value before it (fails).
+test('History: a line with values shows each change under the update; a legacy line reads as it did', () => {
+  assert.deepEqual(historyLine('Market updated: Regulation score 2 → 4; Decision Not decided → Enter by Ana'),
+    { text: 'Market updated by Ana', changes: ['Regulation score 2 → 4', 'Decision Not decided → Enter'] });
+  assert.deepEqual(historyLine('Market updated by Ana'), { text: 'Market updated by Ana', changes: [] });
+  assert.deepEqual(historyLine('Market updated'), { text: 'Market updated', changes: [] });
+  assert.deepEqual(historyLine('Market updated: Demand source Not recorded → Calls; two by Ana').changes, ['Demand source Not recorded → Calls; two']);
+  assert.deepEqual(historyLine('Market updated: State Considering → Entering; and 3 more by Ana').changes, ['State Considering → Entering', 'and 3 more']);
+  assert.equal(historyLine('Market updated: no field changed by Ana').text, 'Market updated, no field changed by Ana');
+  const html = ssr(h(MarketRecord, { record: RECORD(), activity: [
+    { a: 'Market updated: Regulation score 2 → 4 by Ana', b: '2026-11-12 16:20:00' }, { a: 'Market updated by Ana', b: '2026-11-01 09:00:00' }], ...handlers }));
+  const hist = html.slice(html.indexOf('data-testid="market-history"'));
+  assert.equal((hist.match(/data-testid="market-history-changes"/g) || []).length, 1, 'only the line with values has a list');
+  assert.match(text(hist), /Market updated by Ana Regulation score 2 → 4/);
+});
+
 // D8251 (#8251). Mutation checked: a reader given the buttons (fails); the empty state dropped (fails); Unavailable shown as
 // none (fails); the source dropped from a card (fails); the current score dropped from a score card (fails).
 test('proposals: cards with their sources, buttons only for a writer, an empty state, Unavailable when the read failed', () => {
@@ -333,5 +389,5 @@ test('partners: the record lists the linked partners, an empty state when none, 
   assert.equal(partnerLine('Portugal', []).state, 'not_recorded');
   assert.equal(partnerLine('Portugal', null).state, 'unavailable');
   assert.equal(partnerLine('Portugal', undefined).state, 'not_recorded');
-  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners\)/, 'the record hands its partners to the evidence strip');
+  assert.match(readFileSync(new URL('../src/pages/cycles/MarketRecord.jsx', import.meta.url), 'utf8'), /evidenceFor\(geo\.data, m\.partners, m\.customers, m\.indices\)/, 'the record hands its partners to the evidence strip');
 });

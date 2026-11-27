@@ -24,6 +24,7 @@ import { INVESTOR_QUOTAS, type InvestorTier } from '../middleware/requireInvesto
 import { paidInvestorTier } from './investorTiers';
 import { classifyStripeError } from '../util/stripeError';
 import { findCatalogProductByPriceId } from './catalog';
+import { invoiceSubscriptionId } from './stripeInvoiceShape';
 
 export type PlanMeta =
   | { kind: 'tier'; tier: 'growth' | 'studio' }
@@ -559,7 +560,8 @@ export async function reconcileIncompleteRows(
  */
 export async function recordRenewalFailure(env: Env, invoice: Record<string, unknown>): Promise<number | null> {
   if (invoice.billing_reason !== 'subscription_cycle') return null;
-  const subId = typeof invoice.subscription === 'string' ? invoice.subscription : null;
+  // D8510: the subscription from either invoice shape (pre-Basil or Basil).
+  const subId = invoiceSubscriptionId(invoice);
   if (!subId) return null;
   const userId = await subscriptionOwner(env, subId);
   if (!userId) return null;

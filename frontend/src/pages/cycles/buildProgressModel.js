@@ -35,13 +35,13 @@ export const providerWord = (id) => PROVIDERS.find((p) => p.id === id)?.label ||
 
 /** What each tab opens, said before anything is prepared ("Each tab says what it opens"). */
 export const OPENS = {
-  lovable: 'Build a clickable prototype in Lovable. It opens Lovable in a new tab with one prompt for these items. You build there with your own Lovable account.',
+  lovable: 'Build a clickable prototype in Lovable. It opens Lovable in a new tab with one prompt for these items. Lovable waits for you to press send there. You build there with your own Lovable account.',
   github: 'Open one GitHub issue per item, each carrying its marker. GitHub opens a new issue with the text; you submit it there.',
   notion: 'One page per item, with its evidence and its marker, to copy or download and paste into Notion.',
   vercel: 'Put your repository on the web with your own Vercel account. It opens Vercel’s import page. Axal VC cannot deploy or change anything on Vercel.',
 };
 export const FOOTNOTE = {
-  lovable: 'Opens Lovable in a new tab with this prompt. You build there with your own Lovable account. Axal VC does not see what you build until you link it.',
+  lovable: 'Opens Lovable in a new tab with this prompt. Lovable waits for you to press send there. You build there with your own Lovable account. Axal VC does not see what you build until you link it.',
   github: 'GitHub opens a new issue with this text. You submit it there. It links back here when it arrives through your GitHub connection.',
   github_unconnected: 'Without a connection, copy each issue and paste it into GitHub yourself.',
   notion: 'Paste it into Notion. Notion reports nothing back, so what happens there is not recorded here.',
@@ -50,7 +50,12 @@ export const FOOTNOTE = {
 /** Said in the sheet before the press: preparing is what records the send (D1068 §1). */
 export const PREPARE_NOTE = 'Preparing records that you sent these items to this tool, so it shows on Progress. Nothing opens until you press it.';
 export const NOT_CONNECTED = 'Not connected';
-export const PRIVACY_PASSED = 'Privacy check passed: no names, emails or quotes.';
+/**
+ * D8773 (#8773, owner Q3 option A): the send's check is `lintForSend` alone
+ * (`services/buildHandoffs.ts`), so the sheet names its four checks and what
+ * they do not cover, and never certifies that no names are present.
+ */
+export { SEND_CHECKS, SEND_CHECK_OK, SEND_NOT_COVERED } from './lovable/lovableModel';
 
 /** The items a founder may send: accepted and landed (a door is opened, never sent). */
 export function sendable(plan) {

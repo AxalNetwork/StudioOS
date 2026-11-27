@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 /**
+ * D4130 (not a check): cuts `npm run test:drift` into the parts CI runs in
+ * parallel, derived from `package.json` — the frontend and worker suites as
+ * `--test-shard` shards (`SHARDS`), everything else as `rest`. `--list` prints
+ * the parts; `<part>` runs one. `frontend/test/ci_suite_parts_4130.test.mjs`
+ * holds the union to the suite and ci.yml's matrix to the parts. Locally, run
+ * the whole suite with `npm run test:drift`.
+ *
  * D5609 (#5609): test:drift parts derived from package scripts. SHARDS is the
  * only count source. --plan <timings.json> writes suite-plan.json and emits
  * a compact JSON array of names; --without-rest omits rest from that array.
@@ -7,6 +14,7 @@
  * the current package command with explicit files. No node count sharding.
  * --list prints names only; local npm run test:drift remains unchanged.
  * --plan --equal-weights reads no timings file (D7108 part 2: merge_group).
+ * D8693: every plan ci.yml writes, on every event, is `--plan --equal-weights`.
  *
  * D6464 (#6464): under merge_group only, a node:test command also writes its
  * failed tests (lib/failedTestsReporter.mjs). When it fails and every failed
@@ -193,6 +201,17 @@ export function timingsOf(input) {
   return Object.fromEntries(Object.entries(input.tests).map(([file, row]) => [file, row.wallMs]));
 }
 
+/**
+ * D8626: whether this part was routed to the capacity coordinator, so this job only reports it. Only a planned
+ * Worker part, only in a merge-queue run, and only with the exact pair ci.yml derives from the trusted planner's
+ * `accepted` output: anything else, including a part of another script, runs here as it always has.
+ */
+export function routedToCoordinator(env, part) {
+  return env.CAPACITY_ROUTED === 'true' && env.GITHUB_EVENT_NAME === 'merge_group' && part?.script === 'test:worker'
+    && /^worker-\d+-of-\d+$/.test(part.name ?? '')
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(env.CAPACITY_REQUEST_ID ?? '');
+}
+
 function main(argv) {
   if (argv[0] === '--main-artifact') {
     const artifacts = JSON.parse(readFileSync(argv[1], 'utf8')).artifacts;
@@ -238,6 +257,12 @@ function main(argv) {
   if (!part) {
     console.error(`test-drift-parts: unknown part "${arg}". Parts: ${parts.map((p) => p.name).join(', ')}`);
     return 2;
+  }
+  // D8626: a merge-queue Worker part the capacity coordinator accepted runs there, and its result is the
+  // App-owned ci-capacity/full-suite check on this commit; running it here too would test it twice.
+  if (routedToCoordinator(process.env, part)) {
+    console.log(`${part.name} runs through the capacity coordinator, request ${process.env.CAPACITY_REQUEST_ID}; its result is ci-capacity/full-suite on this commit.`);
+    return 0;
   }
   // Direct test commands have no npm pretest hook (D5612). Read-only
   // planner modes keep stdout reserved for their machine-readable result.

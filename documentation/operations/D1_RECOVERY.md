@@ -93,6 +93,9 @@ created, so nothing has to be re-requested.
 
 `backup-d1.yml` runs `wrangler d1 export` daily and puts the file in R2 under
 `studioos-backups`, keyed per database, with a manifest beside it (§5, D4558).
+It runs in the `production-backup` environment, which has no reviewer, so it never waits for a person (D8754).
+The hourly `ops-schedules` alert opens when no successful backup started in 26 hours, a run waits on an
+approval, the schedule did not fire, or the run failed at its secret check.
 `scripts/restore-d1.sh` imports one into a database you name. Since D5337 it
 runs **the drill's own code** (`scripts/dr-restore-lib.sh`): the same manifest
 check, chunked import and row-count comparison, so a green drill (§5) is
@@ -153,7 +156,18 @@ It needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and `wrangler`,
    parent tables first and foreign-key cycles broken at a nullable column,
    then indexes, views and triggers. Each chunk is its own
    `wrangler d1 execute --remote --file`.
-7. **Compares every table's row count** with the manifest.
+7. **Compares the table sets before any count** (D8531): the manifest's
+   tables, the tables the export creates and the restored database's
+   `sqlite_master`, by name. A table the manifest lists that the restore does
+   not hold (**missing**) or one the restore holds that the manifest does not
+   list (**extra**) stops it with `table_set_differs`, each named with its
+   kind (`table`, `virtual table`, `rows only`, `restored as a view`).
+   Engine-owned tables (`sqlite_*`, D1's `_cf_*`) are never missing or extra:
+   `sqlite_sequence` is counted, and statistics (`sqlite_stat1`..`4`) are not
+   restored or counted.
+8. **Compares every counted table's row count** with the manifest. A count
+   that cannot be read is **unreadable** (with wrangler's error codes); a
+   different number is **mismatched**.
 
 The backup, the plaintext and the chunks are removed on every exit. The script
 prints names, counts, sizes, hashes and times only. It never prints a row, and
@@ -168,7 +182,7 @@ It exits non-zero and prints one `reason=<code>` line:
 | 1, before anything is imported | `target_unnamed`, `target_invalid`, `target_is_production`, `target_missing`, `target_not_eu`, `target_not_empty`, `target_unreadable`, `confirmation_mismatch`, `key_missing`, `point_invalid`, `copy_unconfigured`, `age_missing`, `tool_missing`, `source_invalid`, `source_missing` |
 | 2, before anything is imported | `manifest_missing`, `manifest_invalid`, `key_mismatch`, `size_mismatch`, `sha256_mismatch`, `migration_unknown`, `stale` (older than `DR_MAX_BACKUP_AGE_HOURS`), `ciphertext_missing`, `ciphertext_mismatch`, `decrypt_failed` |
 | 2, during the import | `split_failed`; `chunk_<n>_of_<total>` (the log names the tables that chunk writes, and their parents); `chunks_incomplete` |
-| 3, after the import | `row_counts_differ` (the log names the tables); `row_counts_unreadable` (a table in the manifest is missing) |
+| 3, after the import | `table_set_differs` (the log names each missing or extra table and its kind); `table_set_unreadable` (the restored table list could not be read); `row_counts_unreadable` (a count failed: the log names the table and wrangler's error codes); `row_counts_differ` (the log names the tables) |
 
 After a failed import, the target is partly written. Delete it and create a
 new one before trying again.
@@ -259,6 +273,37 @@ drill red, with the reason in `drill-d1.json`. A failed chunk now names the
 tables it writes. The marker records the recovery point, its age and the
 drill's duration: the RPO and RTO the drill actually measured.
 
+**Run 7 (2026-11-20, D8531).** Attempt 2 of run 44774210223 imported all
+460 chunks and passed the smoke checks, then stopped on `row_counts_unreadable`
+with "a table in the manifest is missing from the restore". That message was
+a guess the code made; it never looked. Rebuilt offline (a fresh schema from
+the migrations, exported in `wrangler d1 export`'s shape, manifested, split,
+imported, compared), the table sets agree, and the failing query was the
+count itself: it joined 40 `COUNT(*)` terms with `UNION ALL`, and D1 refuses
+a compound SELECT of more than five terms ("too many terms in compound
+SELECT", reproduced on wrangler's local D1). #7919 already counts with scalar
+subqueries. The same rebuild found the object kinds the manifest lists as
+tables but the export never creates: `sqlite_sequence` and, once the source
+has run `ANALYZE` or `PRAGMA optimize`, `sqlite_stat1` (the export writes
+`ANALYZE sqlite_schema;` and the rows, and the replay stopped on "no such
+table: sqlite_stat1"). The splitter now drops the statistics, and the
+comparison treats both as engine-owned. See D8531.
+
+**Three results, and "proven" needs the file restore (D8531).** `drill-d1.json`
+and the job summary record apart:
+
+| Field | What it says |
+| --- | --- |
+| `correctness` | `passed` or `failed`, with its `code` (the failing reason) and the `table_set` (missing, extra, unreadable, mismatched: names only) |
+| `recovery_point_age` | the RPO: the restored point's age in seconds, the 24 h target, met or missed |
+| `recovery_time` | the RTO: the run's duration, the 4 h target, met or missed; not measured when the restore failed |
+| `file_drill` | `passed`, `failed` or `not run`: the `independent-file-drill` job of the same run |
+| `recovery_proven`, `verdict` | proven only when the D1 restore and the file drill both passed; a run with the file drill skipped says "D1 only: not proven" |
+
+A met timing target never turns a failed correctness check into a pass. The
+file drill runs only with `FILE_DR_PREVIEW_ENABLED=true` (an owner decision),
+so until then every passing run says "D1 only: not proven".
+
 It also does not exercise Time Travel at all — Time Travel needs no backup
 file and cannot be drilled against a throwaway database, because it only ever
 acts on the real one.
@@ -308,8 +353,8 @@ nothing is copied.
      prefix or a rule the provider offers for it.
 3. **Make a write-only key** that can only put objects and read their metadata
    (`PutObject`, `HeadObject`) in that bucket. It must not be able to delete,
-   list or read object content. Store it in the `production-ops` environment secrets
-   `DR_COPY_ACCESS_KEY_ID` and `DR_COPY_SECRET_ACCESS_KEY`.
+   list or read object content. Store it in the `production-backup` environment secrets
+   `DR_COPY_ACCESS_KEY_ID` and `DR_COPY_SECRET_ACCESS_KEY` (D8754; the drill still reads its own keys in `production-ops`).
 4. **Make the owner's key, offline:** `age-keygen -o d1-recovery.key`.
    - Keep the file on two offline media in two places, never in the
      repository, a CI secret or the copy's bucket.

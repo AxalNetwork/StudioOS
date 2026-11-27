@@ -472,13 +472,14 @@ const pillText = (body: any) => body.pills.map((p: any) => (typeof p === 'string
 const RECORD_CANVAS: Record<string, { id: string | number; facts: string[]; main: string[]; side: string[] }> = {
   'solution-design': { id: 1, facts: ['Pain theme', 'Hypothesis', 'Impact', 'Effort'], main: ['Description', 'Risks'], side: ['Appears in', 'Brief'] },
   'prototype-mvp': { id: 1, facts: ['Owner', 'Due', 'Hypothesis', 'Tests run'], main: ['Test sessions', 'Findings'], side: ['Linked', 'Release checklist'] },
-  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date'], main: ['Dependencies', 'Feedback it answers'], side: ['GitHub'] },
+  // D8776 (#8776, BLR01B): the item shows its quarter beside its column; its key results and quarter view are a side section.
+  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date', 'Quarter'], main: ['Dependencies', 'Feedback it answers'], side: ['Quarter, links and scenarios', 'GitHub'] },
   'founding-team': { id: 'h-1', facts: ['Role', 'Equity', 'Vesting', 'Vested today'], main: ['Vesting timeline', 'Contributions'], side: ['Documents', 'Cap table'] },
   'company-creation': { id: 'step-2', facts: ['Filing', 'Jurisdiction', 'Due', 'Proof'], main: ['Steps', 'Reminders'], side: ['Linked'] },
   'operating-systems': { id: 'crm', facts: ['State', 'Last sync', 'Sync', 'Feeds'], main: ['Sync log', 'Permissions'], side: ['Companies'] },
 };
 
-test('test 1: each of the six records returns its canvas title, sub, four facts and section titles', async () => {
+test('test 1: each of the six records returns its canvas title, sub, facts (four, five on a roadmap item) and section titles', async () => {
   const db = recorded();
   for (const [slug, want] of Object.entries(RECORD_CANVAS)) {
     const r = await one(db, slug, want.id);
@@ -532,7 +533,7 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
   db.close();
 });
 
-test('test 2: filings read decision 8, and a lab- or obligation- row declares no write', async () => {
+test('test 2: filings show reminder history and dates, and a lab- or obligation- row declares no write', async () => {
   const db = recorded();
   // D5066 (#5066): four explicit proof states, never null+reason for "not
   // due yet" (step-4) or a vague "Key recorded" for a pre-461 typed key that
@@ -543,13 +544,24 @@ test('test 2: filings read decision 8, and a lab- or obligation- row declares no
   assert.deepEqual(pillText((await one(db, 'company-creation', 'step-1')).body), ['Issued'], 'a done EIN reads Issued');
   db.exec(`UPDATE formation_steps SET state = 'done' WHERE id = 5`);
   assert.deepEqual(pillText((await one(db, 'company-creation', 'step-5')).body), ['Filed']);
+  db.prepare(`INSERT INTO filing_reminder_deliveries (source, filing_id, user_id, due_date, reminder_date, project_id, sent_at)
+    VALUES ('step', 2, ?, ?, ?, ?, ?), ('step', 2, ?, ?, ?, ?, ?)`)
+    .run(FOUNDER, day(10), day(-4), P, day(-4) + ' 05:35:00', 20, day(10), day(10), P_OTHER, day(10) + ' 05:35:00');
   const soon = (await one(db, 'company-creation', 'step-2')).body;
   assert.deepEqual(pillText(soon), ['Due in 10 days']);
   assert.match(soon.sub, /· 10 days left$/);
   assert.deepEqual(pillText((await one(db, 'company-creation', 'step-3')).body), ['Overdue']);
   assert.deepEqual(section(soon, 'steps').rows.map((r: any) => [r.a, r.c]), [
     ['Fill the election', 'Done'], ['Mail by certified post', 'Open'], ['Upload proof of mailing', 'Open']]);
-  assert.deepEqual(section(soon, 'reminders').rows, [{ a: 'Not recorded', b: 'No reminder is sent for filings.', tone: 'grey' }]);
+  const readableDate = (date: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(date));
+  assert.deepEqual(section(soon, 'reminders').rows, [
+    { a: 'Sent', b: readableDate(day(-4)) + ' · 05:35', tone: 'ok' },
+    { a: 'Scheduled', b: readableDate(day(10)), tone: 'grey' },
+  ]);
+  db.exec('UPDATE formation_steps SET due_date = NULL WHERE id = 2');
+  assert.deepEqual(section((await one(db, 'company-creation', 'step-2')).body, 'reminders').rows.at(-1),
+    { a: 'Not recorded', b: 'No due date recorded.', tone: 'grey' });
   assert.deepEqual(section(soon, 'linked').rows.find((r: any) => r.a === 'Founder stock'), { a: 'Founder stock', b: 'Ana Wren', href: `/build/founding-team/h-1?project=${P}` });
   assert.deepEqual(section((await one(db, 'company-creation', 'step-1')).body, 'steps').rows.map((r: any) => r.a), ['Apply for the EIN', 'Upload the EIN letter']);
   const obligation = await one(db, 'company-creation', 'obligation-1');

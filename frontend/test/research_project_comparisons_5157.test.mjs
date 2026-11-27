@@ -177,7 +177,10 @@ test('Comparisons tab: Compare sends one kind of ticked subjects; Delete asks fi
     await change(m, 'input-new-comparison-title', ' Two clouds ');
     await submit(m, 'form-new-comparison');
     // Mutation checked: keep the fund in a mixed selection → uids carry 'northwind'.
-    assert.deepEqual(created, [['p1', { kind: 'company', uids: ['q-nebula', 'q-aster'], title: 'Two clouds' }]]);
+    assert.equal(created.length, 1);
+    const [projectUid, { request_id, ...selection }] = created[0];
+    assert.match(request_id, /^[a-zA-Z0-9-]{16,80}$/, 'the save carries its idempotency key');
+    assert.deepEqual([projectUid, selection], ['p1', { kind: 'company', uids: ['q-nebula', 'q-aster'], title: 'Two clouds' }]);
     await press(m, 'button-delete-comparison-k1');
     // Mutation checked: delete on the first press → removed is non-empty here.
     assert.deepEqual(removed, []);

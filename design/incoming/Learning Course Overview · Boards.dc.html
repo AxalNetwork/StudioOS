@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Course Overview · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · Course overview · #8664 · part of the 25 Nov audit series #8662–#8670, release work #8288</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning course overview — what you leave with, what it asks, and a syllabus that tells 7 required from 10</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The course page at /learning/courses/:slug, drawn for the observed course Evidence-based pitch narratives inside the existing founder shell (Learning sits in the Account menu; Eadwyn is the one rail). The first screen puts the practical output (a 2,000-character decision memo and a reusable claim register), the audience, the 1 h 25 min estimate, the 7 required and 3 optional lessons and Start together; Start opens the first required lesson and Resume follows D5356’s rule. The syllabus names Required or Optional on every row, counts lessons once, gives titles the full row width and says once that lesson lengths are not recorded. Outcomes unfold progressively; resources appear only when attached; no certificate card. States follow the Platform States words (Not recorded, None, Unavailable). Violet dashed ◇ tags mark data or backend work (#8288 or proposed); amber ⚑ tags mark owner choices drawn as option A; Synthetic marks states not seen in production. Keys carry the LCO prefix.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · the course name, slug, lesson 1, the exercise, the exam and its policy are observed on axal.vc (25 Nov); bracketed lesson and module titles, outcomes, prerequisites, resources, [Maya Ruiz], [Northwind Labs] and [Iris Chen] are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Course Overview Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LCO-00', 'Journey, evidence and key', 'The route from Learning to Start, Resume and completion, desktop and phone; each 25 Nov observation mapped to the board that answers it; the annotation key and the state words.', [W('LCO00')]],
+      ['LCO-01', 'Overview · not started · desktop 1440', 'Output, audience, estimate, 7 required (5 readings, 1 exercise, 1 exam) and 3 optional beside Start lesson 1, which names the lesson it opens. The syllabus fills eight columns; outcomes, prerequisites, details and resources sit beside it.', [F('LCO01', false, 1340)]],
+      ['LCO-02', 'Resume and completion · desktop', 'Resume lesson 6 with 3 of 7 required (43%), the lesson marked Resume here. Completion at 7 of 7 with two optional lessons still unopened; optional lessons never change completion.', [F('LCO01B', 'Resume · 3 of 7 required', 1340), F('LCO01C', 'Completed · 7 of 7 required', 1340)]],
+      ['LCO-03', 'Author preview · draft', 'The observed Super Admin view: a draft banner saying who can open the course, Draft on the band and in details, the draft exam marked on its row, Edit in Studio, and no Resources or Certificate card.', [F('LCO02', false, 1400)]],
+      ['LCO-04', 'Phone 390 · the same route', 'Overview top with the band and a sticky Start; the syllabus at full row width with status under the title; module 2 and outcomes; Resume; completion; author preview; outcomes expanded with details and resources; Unavailable and loading.', [P('LCO10', '1 · Overview'), P('LCO11', '2 · Syllabus, module 1'), P('LCO12', '3 · Module 2 and outcomes'), P('LCO13', '4 · Resume'), P('LCO14', '5 · Completed'), P('LCO15', 'Author preview · draft'), P('LCO16', 'About, details, resources'), P('LCO17', 'Unavailable and loading')]],
+      ['LCO-05', 'Syllabus components', 'Lesson row variants (next, in progress, completed, optional, exercise and exam summaries, draft exam, a lesson that opens nothing), module headers, the All · Required only filter, the legend and status words. Lesson lengths: none, some and all recorded.', [C('LCO03', 'Rows, headers, filter', 1300, 860), C('LCO04', 'Lesson lengths', 1300, 800)]],
+      ['LCO-06', 'Resources, credentials and About', 'Resources available, none attached and an unlinked title; the old right column; credential option A (nothing) and B (one line on the exam row). Outcomes collapsed and expanded, prerequisites, and the not-recorded cases.', [C('LCO05', 'Resources and credentials', 1300, 540), C('LCO06', 'Outcomes and prerequisites', 1300, 600)]],
+      ['LCO-07', 'Page states', 'Loading, Unavailable with Retry, no such course, no lessons yet, no required lesson (no percentage) and a first required lesson that is not published.', [C('LCO07', false, 1300, 700)]],
+      ['LCO-08', 'Focus order, names and wrapping', 'The focus order after the shell, accessible names for lesson links, the filter, Start and outcomes; headings and landmarks; the longest title at desktop, 520px and phone.', [C('LCO08', false, 1300, 650)]],
+      ['LCO-09', 'Engineering handoff', 'What main has with files, frontend-only changes, ◇ data and backend work, ⚑ owner questions with option A, the acceptance list mapped to boards, and coordination with #8288 and the sibling canvases.', [W('LCO09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -120,3 +120,33 @@ export function libraryError(e) {
   const code = e?.data?.error || e?.data?.code || e?.code || null;
   return (code && REFUSALS[code]) || 'Nothing was added. Try again.';
 }
+
+/**
+ * D6913 part 3 (RS-15): how long the room stays open to this file, from the Worker's `room.access`. A grant with no
+ * end reads "No expiry set"; a reference with no live grant (lapsed, or read without one) has no access line at all.
+ */
+export function accessWords(d) {
+  const a = d?.room?.access;
+  if (!a) return null;
+  const until = dayWords(a.until);
+  return until ? `Available until ${until}` : 'No expiry set';
+}
+
+/**
+ * RS-15: an Ask source that is a room file. The citation names a document; the Library row with that uid says whether
+ * it came from a room. Null for any other source, and for one no longer in the Library (its room is not known).
+ */
+export function citationRoom(ct, items) {
+  const uid = ct?.document_uid;
+  if (!uid) return null;
+  const d = (items || []).find((x) => x?.uid === uid);
+  const r = roomOf(d);
+  if (!r) return null;
+  return { ...r, title: rowTitle(d), access: accessWords(d), inAsk: r.lost ? 'Not answerable' : (d.in_ask ? 'Yes' : 'No') };
+}
+
+/** RS-15 lapsed: the passage is withheld once the room no longer reaches its file; the answer keeps its own text. */
+export function withheldPassage(answeredAt) {
+  const day = dayWords(answeredAt);
+  return `The passage is no longer shown. The answer keeps its text as it was given${day ? ` on ${day}` : ''}.`;
+}

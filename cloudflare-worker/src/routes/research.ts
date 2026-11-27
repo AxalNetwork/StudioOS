@@ -54,7 +54,7 @@ import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundAllocationNote, fundOverlapNote } from '../services/researchFundRead';
 import { MyFundsQueryError, catalogueHolder, fundIdentity, listMyFunds, parseMyFundsQuery, publicRecordFor } from '../services/researchMyFunds';
-import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkDetail, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
+import { BENCHMARK_NOT_FOUND, PEER_BASE_REQUIRED, benchDto, benchmarkChanged, benchmarkDetail, historySnapshot, ownedBenchmark, type BenchRow } from '../services/researchBenchmarks';
 import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, EVIDENCE_PARTS, getCompany, getCompanyPart, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { admitsCompanies, refuseCompanies } from '../services/researchCompaniesAccess';
@@ -93,7 +93,7 @@ import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldE
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
-import { reconcileRoomRefs, roomFileStillThere } from '../services/roomLibrary';
+import { reconcileRoomRefs, roomFileStillThere, roomRefAccess } from '../services/roomLibrary';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
@@ -189,16 +189,27 @@ interface DocRow {
  * `moved`, `library_off`). It is read only, and it is never downloaded from here: the room's own download, with its
  * log and its NDA gate, is the one path to its bytes.
  */
-type RoomRef = { project_uid: string | null; project_name: string | null; added_at: string; lost_at: string | null; lost_reason: string | null };
+type RoomRef = {
+  project_uid: string | null; project_name: string | null; added_at: string; lost_at: string | null; lost_reason: string | null;
+  access?: { until: string | null } | null;
+};
+/**
+ * D6913 part 3 (RS-15): a live reference also carries its access (`roomRefAccess`), so an Ask citation can say how long
+ * the room stays open: `until` is the grant's end, null when the founder set none. A lapsed reference, or one read
+ * without its grant (`roomRefOfDoc`), carries no access at all rather than a guessed one.
+ */
 const roomDto = (ref: RoomRef | null | undefined) => (ref ? {
   project_uid: ref.project_uid, project_name: ref.project_name, added_at: ref.added_at, lost_at: ref.lost_at, lost_reason: ref.lost_reason,
+  access: ref.access ? { until: ref.access.until ?? null } : null,
 } : null);
 async function roomRefsOf(env: Env, userId: number): Promise<Map<number, RoomRef>> {
   const rows = await env.DB.prepare(
     `SELECT r.document_id, r.added_at, r.lost_at, r.lost_reason, p.uid AS project_uid, p.name AS project_name
        FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.owner_user_id = ?`,
   ).bind(userId).all<any>().catch(() => ({ results: [] as any[] }));
-  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), x as RoomRef]));
+  // D6913 part 3: each live reference's grant end, read by the room-library service (it owns the grant rule).
+  const access = await roomRefAccess(env, userId).catch(() => new Map<number, { until: string | null }>());
+  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), { ...x, access: access.get(Number(x.document_id)) ?? null } as RoomRef]));
 }
 async function roomRefOfDoc(env: Env, documentId: number): Promise<RoomRef & { project_id: number; file_id: number } | null> {
   return env.DB.prepare(
@@ -4966,15 +4977,18 @@ research.post('/benchmarks', async (c) => {
 
 research.delete('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
-  // Its named constituents go with it (migration 303). D1 does not enforce the
-  // foreign key's cascade inside a batch, so the rows are removed by hand,
-  // owner-scoped, before the benchmark itself.
+  // Its named constituents (migration 303) and its history (D6277) go with it.
+  // D1 does not enforce the foreign key's cascade inside a batch, so the rows
+  // are removed by hand, owner-scoped, before the benchmark itself.
   const row = await c.env.DB.prepare(
     `SELECT id FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
   ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
   if (!row) return c.json({ detail: 'Not found' }, 404);
   await c.env.DB.prepare(
     `DELETE FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_history WHERE benchmark_id = ? AND owner_user_id = ?`
   ).bind(row.id, user.id).run();
   await c.env.DB.prepare(
     `DELETE FROM research_benchmarks WHERE id = ? AND owner_user_id = ?`
@@ -4997,6 +5011,10 @@ research.delete('/benchmarks/:uid', async (c) => {
 //
 // A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
 // banner reads the comparison in front of it.
+//
+// A RESTATEMENT IS KEPT (D6277). PATCH copies the row as it was into
+// `research_benchmark_history` when one of the six fields or the reading
+// changes, and the read returns `history`, newest first (null if unreadable).
 
 research.get('/benchmarks/:uid', async (c) => {
   const user = await requireAuth(c);
@@ -5042,7 +5060,10 @@ research.patch('/benchmarks/:uid', async (c) => {
   // D6278: a figure typed by hand is no longer the fund's recorded one, so an
   // edit that changes "Ours" drops the link to where it was copied from.
   const handEdited = has('our_value') && next.our_value !== row.our_value;
-  await c.env.DB.prepare(
+  // D6277: a save that restates a value first keeps the row as it was, in the
+  // same batch as the update; a save that changes nothing keeps nothing.
+  const at = nowIso();
+  const update = c.env.DB.prepare(
     `UPDATE research_benchmarks
         SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
             peer_as_of = ?, reading = ?, updated_at = ?,
@@ -5052,9 +5073,12 @@ research.patch('/benchmarks/:uid', async (c) => {
       WHERE id = ? AND owner_user_id = ?`
   ).bind(
     next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
-    next.peer_as_of, next.reading, nowIso(), handEdited ? 1 : 0, handEdited ? 1 : 0, handEdited ? 1 : 0,
+    next.peer_as_of, next.reading, at, handEdited ? 1 : 0, handEdited ? 1 : 0, handEdited ? 1 : 0,
     row.id, user.id,
-  ).run();
+  );
+  await c.env.DB.batch(benchmarkChanged(row, next)
+    ? [historySnapshot(c.env, row.id, user.id, at), update]
+    : [update]);
   const fresh = await ownedBenchmark(c.env, user.id, row.uid);
   return c.json(await benchmarkDetail(c, user, fresh as BenchRow));
 });

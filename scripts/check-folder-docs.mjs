@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * A folder that carries weight without explaining itself, or a README naming a
+ * file that does not exist.
+ *
  * check-folder-docs — every folder that matters explains itself, and the
  * explanation is checked against reality.
  *
@@ -104,7 +107,7 @@ const DOCUMENTED = new Map([
   ['frontend/test',                   'what the frontend guarantees'],
   ['cloudflare-worker/src',           'the production worker'],
   ['cloudflare-worker/src/routes',    'the production API surface'],
-  ['cloudflare-worker/src/durable-objects', 'the Durable Object classes index.ts re-exports, one per binding in wrangler.toml (D5581 part 2 made it eight)'],
+  ['cloudflare-worker/src/durable-objects', 'the Durable Object classes index.ts re-exports, one per binding in wrangler.toml (D5586 part 3 made it nine)'],
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
   ['cloudflare-worker/src/services/useOfFunds', 'Use of funds scenarios, projections and cap-table links'],
   ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
@@ -116,10 +119,12 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
+  ['cloudflare-worker/sql/forward-fixes', 'the rehearsed forward fix a manual migration names (D8532, D5585-p15)'],
   ['cloudflare-worker/test',          'what the worker guarantees'],
   ['scripts',                         'build, deploy and the CI guards'],
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
+  ['scripts/baselines/company-scope', 'one company-scope ledger per route family (D8526)'],
   ['scripts/ci',                      'CI evidence, provider boundaries and verified tool acquisition'],
   ['scripts/ci/runners',              'Runner bootstrap, supervisor lifecycle, execution boundaries, export and recovery evidence'],
   ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],

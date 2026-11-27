@@ -115,6 +115,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `buildSystemStates.js` | D4846 part 2 (#6032, BD14 A, BD14m): pure. Build's six system states (Not recorded, Not expected yet, Unavailable, Waiting, Needs attention, Read only) from a record cell's or a phone pill's word, and the overview's module reads counted for the one "N of M modules read" notice. No unknown becomes a negative. |
 | `BuildStates.jsx` | D4846 part 2: `BuildStateTag` (one chip per state; the platform three through D5129's `StateChip`), `phoneStateRow` and `BuildPartialNotice` (D5129's `PartialBanner`, Retry for the failed cards only). |
 | `ResearchPipeline.jsx` | D6001 (#6001): Customer research's recruiting controls, a writer's only: Add a lead beside Record a session, each row's Move stage (the interview record's `set-stage`), and the Waitlist leads panel (Invite, Follow up, the promoted sign-up's interview) the card's waitlist link lands on; a failed waitlist read says so |
+| `VerdictHome.jsx` | D6018: V10/V11 evidence snapshot, recorded decision and decision history, shared by phone. |
 | `FoundingTeamHome.jsx` | D6037: BD31/BD35 founding record, holder filings, equity, agreements and hiring. |
 | `ValidateExperiments.jsx` | D6017: V9 venture-wide experiment cards on desktop and phone. |
 
@@ -181,3 +182,5 @@ individual contact sheets and recorded marketing-permission summary.
 
 D6093 (#6093): Reporting phone writers get the existing Share/Reminder settings menu in CycleBar beside Eadwyn, with 44px targets and Escape/back dismissal. Readers get neither write action, including on an empty desk; desktop and the pinned Prepare bar retain their behavior. This is the authorized departure from RPT20’s no-More header.
 `kpiTargetCells.js` (D6102) formats recorded targets and direction-aware comparisons, retaining unknown values and the venture-specific Focus link.
+
+`TypeformJourney.jsx`, `typeformJourneyModel.js` — D5830: selected survey, explicit import/mapping and private reviewed evidence; no automatic confirmation or publication.

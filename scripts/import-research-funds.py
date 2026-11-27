@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# Migration 378: the fund directory and its reports, rebuilt from the two public
+# spreadsheets in `attached_assets/` (D535). `parse_shai` reads the third list
+# from a CSV with that sheet's shape; `fixtures/shai-goldman-sample.csv` is the
+# fixture. Those rows are US cents under the list's own name (1A) and are not
+# written into migration 378. Since D7166 (#7166) the EuroTech list is keyed by
+# vehicle (manager plus fund number) and `eurotech-migration STEM` writes its
+# re-import as a new migration; run with no argument it refuses, because 378 is
+# applied.
 """Rebuild `research_fund_directory`/`research_fund_directory_reports` from the
 two public spreadsheets in `attached_assets/`, as migration 378.
 
@@ -445,8 +453,9 @@ def clean_shai_csv(raw: str) -> str:
 def write_shai_migration(directory: dict[str, dict], out: Path, number: str, as_of: str) -> int:
     """Write the third list's uid-keyed upserts as migration `number` at `out`.
 
-    The number is S1's to give (#1081); the importer never picks one. Returns
-    how many rows it writes.
+    `number` is the migration's name as its header and the source note cite
+    it: migration 429's number when it was written, a D4106 stem from the CLI
+    since D8605. The importer never picks one. Returns how many rows it writes.
     """
     body = shai_upsert_sql(directory, as_of)
     header = (
@@ -466,7 +475,10 @@ def write_shai_migration(directory: dict[str, dict], out: Path, number: str, as_
         '-- row with the same uid is replaced: D597 (migration 413) withholds Deep\n'
         '-- Tech, so without this the firm would be shown by no list.\n'
         '-- Re-runnable: the same deletes, then uid-keyed INSERT OR REPLACE.\n'
+        '-- A reviewed Network link whose fund is no longer listed is set to\n'
+        '-- needs_review (D8605).\n'
     )
+    bridge = '\n'.join(bridge_statements(with_moves=False)) + '\n'
     purge = (
         'DELETE FROM research_fund_directory_reports WHERE fund_uid IN '
         '(SELECT uid FROM research_fund_directory WHERE source_name = %s);\n'
@@ -482,7 +494,7 @@ def write_shai_migration(directory: dict[str, dict], out: Path, number: str, as_
             sql(SHAI_SOURCE),
         )
     )
-    out.write_text(header + purge + body + trailer)
+    out.write_text(header + purge + body + bridge + trailer)
     return body.count('INSERT OR REPLACE')
 
 
@@ -512,12 +524,63 @@ UID_REFERENCES = (
 )
 
 
+BRIDGE_TABLE = 'network_directory_research_links'
+
+
+def bridge_statements(with_moves: bool) -> list[str]:
+    """D8605 (#8605): keep the Network-to-Research bridge honest after a list import.
+
+    The bridge holds a fund uid as a plain reference, so a re-import never fails
+    on it. A link is never silently re-pointed: a uid move can turn a manager
+    key into a vehicle row, so every moved link is set to `needs_review`, and a
+    withdrawn link stays withdrawn.
+
+    With `with_moves`, a link whose fund uid is gone and has a recorded move is
+    carried to the new uid, but only when that uid is listed, holds no link yet,
+    and no other link on a gone uid moves onto it, so the bridge's unique index
+    can never fail the migration. Then, for every import, a reviewed link whose
+    fund is no longer in the catalogue (not carried, or its row left the list)
+    is set to `needs_review`. Both statements are correct on an empty bridge and
+    on a replay. They need the bridge, so a file carrying them must sort after
+    BRIDGE_READY_STAMP (`is_bridge_ready_stem`).
+    """
+    b = BRIDGE_TABLE
+    gone = f'NOT EXISTS (SELECT 1 FROM research_fund_directory d WHERE d.uid = {b}.fund_directory_uid)'
+    gone_l = 'NOT EXISTS (SELECT 1 FROM research_fund_directory d3 WHERE d3.uid = l.fund_directory_uid)'
+    lines = []
+    if with_moves:
+        target = f'(SELECT m.new_uid FROM {MOVES_TABLE} m WHERE m.old_uid = {b}.fund_directory_uid)'
+        lines.append(
+            f"UPDATE {b} SET fund_directory_uid = {target}, "
+            f"status = CASE status WHEN 'withdrawn' THEN 'withdrawn' ELSE 'needs_review' END "
+            f'WHERE {gone} '
+            f'AND EXISTS (SELECT 1 FROM research_fund_directory d2 WHERE d2.uid = {target}) '
+            f'AND NOT EXISTS (SELECT 1 FROM {b} o WHERE o.fund_directory_uid = {target}) '
+            f'AND (SELECT COUNT(*) FROM {b} l JOIN {MOVES_TABLE} m2 ON m2.old_uid = l.fund_directory_uid '
+            f'WHERE {gone_l} AND m2.new_uid = {target}) = 1;'
+        )
+    lines.append(f"UPDATE {b} SET status = 'needs_review' WHERE status = 'reviewed' AND fund_directory_uid IS NOT NULL AND {gone};")
+    return lines
+
+
 def is_migration_stem(text: str) -> bool:
     """A D4106 migration stem: UTC minute, issue number, slug."""
     return re.fullmatch(r'\d{12}_\d+_[a-z0-9_]+', text) is not None
 
 
-def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
+# D8605: the migration that makes the bridge's Research uids plain and adds
+# `needs_review`. A list import carries `bridge_statements`, so it must run
+# after it: a numbered file, or a stem stamped at or before this minute, sorts
+# earlier and would break every fresh schema build.
+BRIDGE_READY_STAMP = '202611251148'
+
+
+def is_bridge_ready_stem(text: str) -> bool:
+    """A D4106 stem that sorts after the bridge migration (D8605)."""
+    return is_migration_stem(text) and text[:12] > BRIDGE_READY_STAMP
+
+
+def eurotech_vehicle_migration(today: date, stem: str, bridge: bool = True) -> tuple[str, dict]:
     """D7166 (#7166): the EuroTech list again, one row per vehicle, sizes fixed.
 
     Returns the migration text and its counts. Only EuroTech rows and their
@@ -525,6 +588,11 @@ def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
     migration 378 used whose vehicle now has another uid is recorded in
     `research_fund_directory_uid_moves`, and the columns that hold a directory
     uid are moved with it.
+
+    `bridge` (D8605) adds the Network link statements and their header lines.
+    Migration 202611180052_7166 was written before the bridge existed, so it is
+    reproduced with `bridge=False`; every list import written from now on keeps
+    the default.
     """
     moves: dict[str, str] = {}
     directory, reports, rows = parse_euro(today, moves)
@@ -544,6 +612,10 @@ def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
         '--    378 read that as full euros, a millionth of the size. It is millions.',
         "-- 3. Moves. Each 378 uid that no longer names a row maps to the vehicle 378's",
         '--    row showed, and every saved reference to it is moved with it.',
+        *([
+            '-- 4. Network links (D8605). A link on a moved uid is carried and set to',
+            "--    needs_review; a reviewed link whose fund is gone is set to needs_review.",
+        ] if bridge else []),
         '--',
         "-- Only this list's rows and reports are replaced. Re-runnable: the same",
         '-- deletes, uid-keyed upserts, and updates that find nothing left to move.',
@@ -569,6 +641,8 @@ def eurotech_vehicle_migration(today: date, stem: str) -> tuple[str, dict]:
             f'WHERE {extra}{column} IN (SELECT old_uid FROM {MOVES_TABLE} '
             'WHERE old_uid NOT IN (SELECT uid FROM research_fund_directory));'
         )
+    if bridge:
+        lines.extend(bridge_statements(with_moves=True))
     counts = {'rows_read': rows, 'vehicles': len(directory), 'reports': len(reports), 'moves': len(moves)}
     return '\n'.join(lines) + '\n', counts
 
@@ -651,32 +725,37 @@ def main() -> None:
     print('migration_bytes', MIGRATION.stat().st_size)
 
 
-def is_migration_number(text: str) -> bool:
-    """A migration number as the folder names them: three or four digits, nothing else."""
-    return re.fullmatch(r'\d{3,4}', text) is not None
+def shai_directory(today: date) -> tuple[dict[str, dict], int, int]:
+    """The directory the third list's migration is written from: EuroTech and
+    Deep Tech first, then the third list's rows no served list holds. Returns
+    it with the row count before the third list and how many it added."""
+    directory, _reports, _rows = parse_euro(today)
+    parse_deep(directory)
+    before = len(directory)
+    added = parse_shai(directory, SHAI, defer_to=SERVED_SOURCES)
+    return directory, before, added
 
 
 def main_shai(argv: list[str]) -> None:
     """`shai-clean RAW` writes the committable copy to attached_assets/;
-    `shai-migration NUMBER` writes migration NUMBER from it. Neither touches
-    migration 378, and neither reads or writes a database."""
+    `shai-migration STEM` writes migration STEM from it, and
+    `eurotech-migration STEM` the EuroTech list. A STEM is a D4106 name stamped
+    after the bridge migration (D8605): both migrations carry its statements.
+    None touches migration 378, and none reads or writes a database."""
     if argv[0] == 'shai-clean' and len(argv) == 2:
         SHAI.write_text(clean_shai_csv(Path(argv[1]).read_text(encoding='utf-8-sig')))
         print('shai_clean_written', SHAI.relative_to(ROOT))
         return
-    if argv[0] == 'shai-migration' and len(argv) == 2 and is_migration_number(argv[1]):
-        directory, _reports, _rows = parse_euro(date.today())
-        parse_deep(directory)
-        before = len(directory)
-        added = parse_shai(directory, SHAI, defer_to=SERVED_SOURCES)
-        out = ROOT / 'cloudflare-worker/sql/migrations' / f'{argv[1]}_research_fund_directory_shai_list.sql'
+    if argv[0] == 'shai-migration' and len(argv) == 2 and is_bridge_ready_stem(argv[1]):
+        directory, before, added = shai_directory(date.today())
+        out = ROOT / 'cloudflare-worker/sql/migrations' / f'{argv[1]}.sql'
         written = write_shai_migration(directory, out, argv[1], date.today().isoformat())
         print('directory_rows_before', before)
         print('shai_rows_added', added)
         print('shai_rows_written', written)
         print('migration', out.relative_to(ROOT))
         return
-    if argv[0] == 'eurotech-migration' and len(argv) == 2 and is_migration_stem(argv[1]):
+    if argv[0] == 'eurotech-migration' and len(argv) == 2 and is_bridge_ready_stem(argv[1]):
         text, counts = eurotech_vehicle_migration(date.today(), argv[1])
         out = ROOT / 'cloudflare-worker/sql/migrations' / f'{argv[1]}.sql'
         out.write_text(text)
@@ -684,7 +763,7 @@ def main_shai(argv: list[str]) -> None:
             print(key, value)
         print('migration', out.relative_to(ROOT))
         return
-    raise SystemExit('usage: import-research-funds.py [shai-clean RAW_CSV | shai-migration NUMBER | eurotech-migration STEM]')
+    raise SystemExit(f'usage: import-research-funds.py [shai-clean RAW_CSV | shai-migration STEM | eurotech-migration STEM]; a STEM is stamped after {BRIDGE_READY_STAMP} (D8605)')
 
 
 if __name__ == '__main__':

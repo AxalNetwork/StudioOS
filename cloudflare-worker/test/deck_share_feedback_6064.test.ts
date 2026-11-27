@@ -11,7 +11,8 @@
  *   5. The cap: at most 200 rows, `truncated` says so.
  *   6. A missing table or by-uid column reads as no feedback; any other failure is Unreadable (500).
  *
- * In-memory SQLite: the baseline and every post-cutoff migration. Synthetic names only.
+ * In-memory SQLite: a copy of the schema built once per run (baseline and every post-cutoff
+ * migration, `_schema_once.mjs`). Synthetic names only.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_share_feedback_6064.test.ts
@@ -19,18 +20,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckShareFeedback, { FEEDBACK_CAP, shareFeedback } from '../src/routes/deck_share_feedback.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-6064-share-feedback-0123456789ab';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const FOUNDER = 3, OTHER = 4, COFOUNDER = 5, ADVISOR = 6, VIEWER = 7, ADMIN = 8;
 const P = 5, OTHER_P = 6, V1 = 10, V2 = 11, ELSEWHERE = 12, PAT = 7;
 const SLIDES = [
@@ -42,10 +39,14 @@ const SLIDES = [
 const VIEWER_EMAIL = 'vera.viewer@example.test';
 const CONTACT = 'call-me@example.test';
 
+/**
+ * #8594: the schema (baseline plus every post-cutoff migration) is built once per run by
+ * `_schema_once.mjs` (D4133); each fixture loads its own in-memory copy of it, rows included,
+ * and seeds its own rows on top.
+ */
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Oz Other', 'oz@example.test', 1002);

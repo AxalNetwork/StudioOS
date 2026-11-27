@@ -49,6 +49,67 @@ export const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
 export const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
   + 'without its base is arithmetic wearing a metric’s clothes.';
 
+/** The six fields and the reading: what a restatement changes, and what history keeps. */
+export const HISTORY_FIELDS = [
+  'metric', 'our_value', 'peer_value', 'peer_source', 'peer_sample_size', 'peer_as_of', 'reading',
+] as const;
+type HistoryField = typeof HISTORY_FIELDS[number];
+export type BenchValues = Pick<BenchRow, HistoryField>;
+
+const same = (a: unknown, b: unknown) =>
+  (a === null || a === undefined ? null : String(a)) === (b === null || b === undefined ? null : String(b));
+
+/** True when `next` restates any of the six fields or the reading of `row`. */
+export function benchmarkChanged(row: BenchRow, next: Record<HistoryField, unknown>): boolean {
+  return HISTORY_FIELDS.some((k) => !same(row[k], next[k]));
+}
+
+/**
+ * The statement that copies the caller's stored row, as it is before a change
+ * made at `changedAt`, into its history. Batch it AHEAD of the update.
+ */
+export function historySnapshot(env: Env, benchmarkId: number, userId: number, changedAt: string) {
+  return env.DB.prepare(
+    `INSERT INTO research_benchmark_history
+       (benchmark_id, owner_user_id, metric, our_value, peer_value, peer_source,
+        peer_sample_size, peer_as_of, reading, changed_at)
+     SELECT id, owner_user_id, metric, our_value, peer_value, peer_source,
+            peer_sample_size, peer_as_of, reading, ?
+       FROM research_benchmarks WHERE id = ? AND owner_user_id = ?`
+  ).bind(changedAt, benchmarkId, userId);
+}
+
+interface HistoryRow extends BenchValues { changed_at: string }
+
+const historyDto = (r: HistoryRow) => ({
+  metric: r.metric,
+  our_value: r.our_value,
+  peer_value: r.peer_value,
+  peer_source: r.peer_source,
+  peer_sample_size: r.peer_sample_size,
+  peer_as_of: r.peer_as_of,
+  reading: r.reading,
+  changed_at: r.changed_at,
+});
+
+/** The earlier versions of a benchmark, newest first; null when they could not be read. */
+async function benchmarkHistory(env: Env, benchmarkId: number, userId: number) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT metric, our_value, peer_value, peer_source, peer_sample_size, peer_as_of, reading, changed_at
+         FROM research_benchmark_history
+        WHERE benchmark_id = ? AND owner_user_id = ?
+        ORDER BY changed_at DESC, id DESC
+        LIMIT 200`
+    ).bind(benchmarkId, userId).all<HistoryRow>();
+    return (rows.results || []).map(historyDto);
+  } catch (error) {
+    // Unreadable is not "none": the page says Unavailable, never an empty history.
+    console.warn('[research] benchmark history unreadable', error);
+    return null;
+  }
+}
+
 interface ConstituentRow {
   id: number; uid: string; benchmark_id: number; owner_user_id: number;
   name: string; value: string | null; as_of: string | null; position: number; created_at: string;
@@ -87,6 +148,7 @@ export async function benchmarkDetail(c: Context<{ Bindings: Env }>, user: any, 
   return {
     item,
     constituents,
+    history: await benchmarkHistory(env, row.id, userId),
     // Only a comparison has a sample to be thin, or a count to disagree with.
     thin: n !== null && n < BENCH_THIN_AT,
     sample_note: n !== null && n < BENCH_THIN_AT

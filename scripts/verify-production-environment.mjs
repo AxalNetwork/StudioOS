@@ -1,3 +1,4 @@
+/** D7145 release preflight that requires the exact main-only production deployment policy before credentials are used. */
 /** D7145: require a single, literal main branch policy before using release credentials. */
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';

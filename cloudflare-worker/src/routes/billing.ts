@@ -38,6 +38,7 @@ import {
   type StripeErrorKind,
 } from '../util/stripeError';
 import { refuse } from '../util/refusal';
+import { planSubscriptionKey, planSwapKey } from '../util/stripeKey';
 import { assertStripeMoneyKind, type StripeMoneyKind } from '../services/moneyRails';
 
 // Epic 6 — Market Intel Pro billing surface.
@@ -81,6 +82,21 @@ export function stripePathOf(path: string): string {
   return bare.length > 1 ? bare.replace(/\/+$/, '') : bare;
 }
 
+/**
+ * D8510 (#8510): the Stripe API version every platform call names. Unset
+ * (null) until the owner reads the account's default version in Stripe
+ * Workbench and posts it on #8510; while unset no `Stripe-Version` header is
+ * sent, which is the behaviour before D8510. Never set to a guess: the
+ * value, the invoice fixtures (`test/stripe_api_version_8510.test.ts`) and
+ * the webhook destination's version move together in one reviewed change.
+ */
+export const STRIPE_API_VERSION: string | null = null;
+
+/** The version header for `version`, or none when it is unset. Pure. */
+export function stripeVersionHeaders(version: string | null = STRIPE_API_VERSION): Record<string, string> {
+  return version ? { 'Stripe-Version': version } : {};
+}
+
 export async function stripeCall<T>(
   env: Env,
   path: string,
@@ -107,6 +123,7 @@ export async function stripeCall<T>(
   const params = new URLSearchParams(body);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${key}`,
+    ...stripeVersionHeaders(),
   };
   // Stripe replays the original response for 24h when the same Idempotency-Key
   // recurs — protects money-movement calls (e.g. /refunds) from double-submits
@@ -785,7 +802,7 @@ billing.post('/plan/checkout', async (c) => {
     const sub = await stripeCall<{
       id: string; status: string;
       latest_invoice?: { payment_intent?: { client_secret?: string } };
-    }>(c.env, '/subscriptions', subParams, { moneyKind: 'platform_plan' });
+    }>(c.env, '/subscriptions', subParams, { moneyKind: 'platform_plan', idempotencyKey: planSubscriptionKey(user.uid, priceId) });
     const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
     if (!clientSecret) {
       // Zero-due first invoice (e.g. a trial) → already active/trialing.
@@ -1357,7 +1374,12 @@ billing.post('/subscription/swap/confirm', async (c) => {
     // D707: the swap re-stamps `metadata[kind]`, so it stamps the matching money kind too.
     const moneyKind = params['metadata[kind]'] === 'investor' ? 'investor_tier' as const
       : params['metadata[kind]'] === 'tier' ? 'platform_plan' as const : undefined;
-    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params, { moneyKind });
+    // #8523: a double press of Confirm is one proration; the key names the held price and the target, so a
+    // deliberate swap back and forth later (a different window) is a new change.
+    const fromPriceId = String(sub.items?.data?.[0]?.price?.id ?? '');
+    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params, {
+      moneyKind, idempotencyKey: planSwapKey(Number(user.id), subId, fromPriceId, priceId),
+    });
     // Align D1 immediately (webhook will re-affirm). Scoped to the calling user.
     if (scope === 'investor' && mapped?.investorTier) {
       const t = mapped.investorTier as InvestorTier;
@@ -2234,7 +2256,9 @@ async function handleStripeEvent(
         // invoice's subscription takes Stripe's status when Stripe says it is
         // live. Never fails the webhook.
         const { repairIncompleteFromStripe } = await import('../services/planSubscription');
-        await repairIncompleteFromStripe(env, obj.subscription);
+        // D8510: the subscription from either invoice shape (pre-Basil or Basil).
+        const { invoiceSubscriptionId } = await import('../services/stripeInvoiceShape');
+        await repairIncompleteFromStripe(env, invoiceSubscriptionId(obj));
         // D1274: a subscription's promo redemption, from its first paid invoice.
         const { recordInvoiceRedemption } = await import('../services/promoUsage');
         await recordInvoiceRedemption(env, obj);

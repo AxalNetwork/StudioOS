@@ -138,6 +138,10 @@ documentation/architecture/PAGE_INVENTORY.md
 # #4570: the authorization inventory is build output. `node scripts/build-auth-inventory.mjs`
 # writes it; CI keeps it in the `routing-docs` artifact; `--check` in test:guards checks the ledger.
 documentation/architecture/AUTH_INVENTORY.json
+documentation/architecture/STRIPE_IDEMPOTENCY_INVENTORY.json
+
+# D8526: the company-scope inventory is build output; `--check` in test:guards checks its ledger.
+documentation/architecture/COMPANY_SCOPE_INVENTORY.json
 
 # D5612 (#5612): three generated modules are build output, never committed.
 # `node scripts/build-generated.mjs` writes them; every build, typecheck and
@@ -145,6 +149,8 @@ documentation/architecture/AUTH_INVENTORY.json
 cloudflare-worker/src/routes/_registry.ts
 frontend/src/lib/apiModules.generated.js
 cloudflare-worker/src/services/agents/skillLibrary.generated.ts
+# D8519 (#8519): the model inventory is build output too; `node scripts/build-model-inventory.mjs` writes it, `--check` gates it.
+documentation/architecture/MODEL_INVENTORY.json
 # D4574 H3 (#4574): the skill library's entries, the static asset the same generator writes beside it.
 frontend/public/skill-library/
 
@@ -185,3 +191,4 @@ private-payloads/
 # D5505: local guard and preflight diagnostics, regenerated for each invocation.
 /guard-results.json
 /preflight-results.json
+wrangler.agent-compute.approved.json

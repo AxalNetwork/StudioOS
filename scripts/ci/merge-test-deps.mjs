@@ -5,10 +5,11 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const LISTS = ['reads', 'directories', 'modules', 'sqlite', 'children'];
-const EXPECTED = [
+export const EXPECTED = [
   'frontend/test/*.test.mjs',
   'cloudflare-worker/test/*.test.{ts,mjs}',
   'meeting-bot/test/*.test.ts',
+  'merge-control/test/*.test.ts',
   'scripts/lib/*.test.mjs',
 ];
 

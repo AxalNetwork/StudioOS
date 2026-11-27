@@ -1,4 +1,10 @@
-/** D4526: validate the staged, newly authored HQ drafts without database or model calls. */
+/**
+ * D4526: validates 70 staged HQ definitions and cases with the supported
+ * importer; no database or model calls.
+ *
+ * D4526: validate the staged, newly authored HQ drafts without database or
+ * model calls.
+ */
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';

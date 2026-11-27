@@ -15,6 +15,9 @@ import { checkChanges, checkPatch, hasConflictMarkers } from '../../scripts/land
 import { editMain } from '../../scripts/landing-bot/model/edit.mjs';
 import { scrubbedEnv, verifyMain } from '../../scripts/landing-bot/model/verify.mjs';
 import { makeProviders, NAMES } from '../../scripts/landing-bot/model/providers.mjs';
+// #8506: the run every edit and verify call in this file belongs to, and the controller commit it ran.
+const IDENT = { repository: 'AxalNetwork/StudioOS', run_id: '7001', run_attempt: '1' };
+const CTRL = 'c'.repeat(40);
 import { parseJobs, assertWorkflow } from '../../scripts/landing-bot/workflowGuard.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -120,7 +123,7 @@ test('#6473: a patch touching a forbidden file, or adding conflict markers, is n
   const taskFile = join(out, 'task.json');
   writeFileSync(taskFile, JSON.stringify(taskOf()));
   const markers = stub('claude', (call) => { call.turn(); call.tool('write_file', { path: 'frontend/src/pages/sum.js', content: '<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n' }); return { stop: 'done' }; });
-  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env: {}, providers: { claude: markers } });
+  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: {}, providers: { claude: markers } });
   assert.equal(r.outcome, 'no_patch');
   assert.match(r.problems.join(), /adds conflict markers/);
   assert.deepEqual(readdirSync(out).sort(), ['result.json', 'task.json'], 'no patch or manifest');
@@ -137,7 +140,7 @@ test('#6473: a good round emits a patch and manifest that verify re-checks with 
   const out = mkdtempSync(join(tmpdir(), 'lbm-out-'));
   const taskFile = join(out, 'task.json');
   writeFileSync(taskFile, JSON.stringify(taskOf({ verify: [['node', '-e', "import('./frontend/src/pages/sum.js').then(m => { if (m.sum(1, 2) !== 3) process.exit(1) })"]] })));
-  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env: {}, providers: { claude: stub('claude', fix) } });
+  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: {}, providers: { claude: stub('claude', fix) } });
   assert.deepEqual([r.outcome, r.files], ['patched', ['frontend/src/pages/sum.js']]);
   const manifest = JSON.parse(read(join(out, 'manifest.json')));
   assert.deepEqual([manifest.base_sha, manifest.provider, manifest.round], [SHA, 'claude', 1]);
@@ -145,7 +148,7 @@ test('#6473: a good round emits a patch and manifest that verify re-checks with 
   const patch = JSON.parse(read(join(out, 'patch.json')));
   assert.match(checkPatch({ ...patch, files: [{ ...patch.files[0], content: 'evil' }] }, manifest, ['frontend/src/pages/sum.js'], () => 'export const sum = (a, b) => a - b;\n').join(), /does not match the manifest/);
   assert.match(checkPatch(patch, manifest, ['frontend/src/pages/sum.js'], () => 'changed since').join(), /not the file the patch was made from/);
-  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env: process.env });
+  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v'), round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: process.env });
   assert.equal(v.passed, true);
 });
 
@@ -154,15 +157,15 @@ test('#6473: a failed verify yields no patch, and its output feeds the next roun
   const out = mkdtempSync(join(tmpdir(), 'lbm-out-'));
   const taskFile = join(out, 'task.json');
   writeFileSync(taskFile, JSON.stringify(taskOf({ verify: [['node', '-e', 'console.log("still red"); process.exit(1)']] })));
-  await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env: {}, providers: { claude: stub('claude', fix) } });
-  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env: process.env });
+  await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: {}, providers: { claude: stub('claude', fix) } });
+  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v'), round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: process.env });
   assert.equal(v.passed, false);
   assert.match(v.failure_text, /still red/);
   // Round 2 sees the failure as the data file verify-failure.txt, from the original checkout.
   let seen = null;
   const reader = stub('claude', (call) => { call.turn(); seen = call.tool('read_data', { name: 'verify-failure.txt' }); return { stop: 'done' }; });
   const out2 = join(out, 'r2');
-  const r2 = await editMain({ task: taskFile, work: repo(), out: out2, round: '2', base: SHA, feedback: join(out, 'v', 'verify.json') }, { env: {}, providers: { claude: reader } });
+  const r2 = await editMain({ task: taskFile, work: repo(), out: out2, round: '2', base: SHA, controller: CTRL, feedback: join(out, 'v', 'verify.json') }, { identity: IDENT, env: {}, providers: { claude: reader } });
   assert.match(seen, /still red/);
   assert.equal(r2.outcome, 'no_patch');
   const result = read(WF('landing-bot-model.yml'));
@@ -175,8 +178,8 @@ test('#6473: a test that prints its environment shows no key in any log or artif
   const taskFile = join(out, 'task.json');
   writeFileSync(taskFile, JSON.stringify(taskOf({ verify: [['node', 'print-env.mjs']] })));
   const env = { ...process.env, ANTHROPIC_API_KEY: KEY, OPENAI_API_KEY: KEY, GEMINI_API_KEY: KEY, GITHUB_TOKEN: `ghs_${'FIXTURE'.repeat(4)}`, ACTIONS_RUNTIME_TOKEN: 'rt-FIXTURE' };
-  await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env, providers: { claude: stub('claude', fix) } });
-  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env });
+  await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env, providers: { claude: stub('claude', fix) } });
+  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v'), round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env });
   assert.equal(v.passed, false);
   assert.match(v.failure_text, /"CI":"true"/, 'the command did print its environment');
   const grep = spawnSync('grep', ['-r', '-l', '-e', 'FIXTURE', out], { encoding: 'utf8' });
@@ -192,7 +195,7 @@ test('#6473: the edit side can run nothing: no child_process in the modules the 
   assert.ok(safeRef('agent/claude/6473-x') && !safeRef('--upload-pack=x') && !safeRef('a..b') && !safeRef('${{ x }}'));
 });
 
-test('#6473: the workflow: edit has no write permission and runs only main\'s runner; verify has no secret or environment', () => {
+test('#6473: the workflow: edit has no write permission and runs only the pinned runner; verify has no secret or environment', () => {
   const round = read(WF('landing-bot-model-round.yml'));
   const { jobs } = parseJobs(round);
   const edit = jobs.find((j) => j.id === 'edit');
@@ -207,7 +210,8 @@ test('#6473: the workflow: edit has no write permission and runs only main\'s ru
     assert.doesNotMatch(r, /npm (?:run|test|install|exec)|npx|node (?!runner\/scripts\/landing-bot\/model\/|-e )|\bwork\/[\w./-]+\.(?:m?js|sh|ts)\b|bash work|sh work/, r);
   }
   assert.match(runs.join('\n'), /npm ci --prefix runner\/scripts\/landing-bot\/model --ignore-scripts/);
-  assert.match(editBody, /ref: main\n {10}path: runner/);
+  // #8506: the runner is the controller commit the caller resolved once, never a branch name.
+  assert.match(editBody, /ref: \$\{\{ inputs\.controller \}\}\n {10}path: runner/);
   assert.equal(verify.environment, null);
   assert.doesNotMatch(verify.lines.join('\n'), /secrets\.|vars\.|id-token|environment:|: write\b/);
   assert.match(verify.lines.join('\n'), /permissions:\n {6}contents: read/);
@@ -232,13 +236,13 @@ test('#6473: verify refuses an allowed file that became a symbolic link, and rea
   const out = mkdtempSync(join(tmpdir(), 'lbm-out-'));
   const taskFile = join(out, 'task.json');
   writeFileSync(taskFile, JSON.stringify(taskOf({ verify: [['node', '-e', '0']] })));
-  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA }, { env: {}, providers: { claude: stub('claude', fix) } });
+  const r = await editMain({ task: taskFile, work: dir, out, round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: {}, providers: { claude: stub('claude', fix) } });
   assert.equal(r.outcome, 'patched');
   // The file the patch was made from is swapped for a link to the same text after the edit job.
   const target = join(dir, 'frontend/src/pages/sum.js');
   renameSync(target, join(dir, 'moved.js'));
   symlinkSync(join(dir, 'moved.js'), target);
-  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env: process.env });
+  const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v'), round: '1', base: SHA, controller: CTRL }, { identity: IDENT, env: process.env });
   assert.equal(v.passed, false);
   assert.ok(v.problems.includes('frontend/src/pages/sum.js is a symbolic link'), JSON.stringify(v.problems));
 });

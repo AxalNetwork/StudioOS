@@ -78,3 +78,8 @@ program), `App.jsx` or another program's files.
   action is participation; Print, sign in and an enquiry are quieter and apart.
 - A revision of a PDF is a new file (`-v2`) and a change to the entry's `pdf` and `edition`;
   the page's address never changes.
+
+D7121 part 3 registers Wellness through `catalog/wellness.js`. Its literal
+public route and approved page/deck remain in `pages/wellbeing/`; the shared
+PDF command delegates to the existing bespoke renderer. The admin header
+separates View presentation from the eligible Open My Wellbeing action.

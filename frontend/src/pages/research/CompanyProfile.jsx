@@ -30,6 +30,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { Card, DataState } from '../../ui';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
+import { windowText } from './indexWindow.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
   NOT_RECORDED, UNREADABLE, analysisHref, indexRows, latestOnly, relatedSignals,
@@ -44,6 +45,8 @@ import { RestoredStatus } from './CompaniesAccess.jsx';
 import { EVIDENCE_COLLECTIONS, UNSOURCED, collectionState, notRecordedFields, replaceCollection } from './companyProfileRead.js';
 import { EvidenceDrawer, EvidenceSection, KeyMetrics, KindBadge, NotRecordedGroup, SectorPeers } from './CompanyEvidence.jsx';
 
+import { CompanyPublisherProvider, SourceDetails, PublisherBoundary } from './CompanySource.jsx';
+
 export { KeyMetrics, SectorPeers, UNSOURCED };
 
 const SECTIONS = [
@@ -54,6 +57,7 @@ const SECTIONS = [
 const h2 = 'text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100';
 const lede = 'mt-1 text-[12px] leading-relaxed text-axal-muted';
 const faint = 'text-[11px] text-axal-faint';
+const UNAVAILABLE = 'Unavailable';
 
 /** A read in flight, failed, or answered. */
 function useRead(fn, deps) {
@@ -92,7 +96,7 @@ export function MarketContext({ tracked, market }) {
   return (
     <section id="market" className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>{head}<p className={lede}>The six indexes for the tracked sector this company’s label maps to. Each runs 0 to 100, worldwide, by month.</p></div>
+        <div>{head}<p className={lede}>The six indexes for the tracked sector this company’s label maps to. Each runs 0 to 100, worldwide; each score covers the window printed under it.</p></div>
         <Link to={`/research/markets/sector/${encodeURIComponent(tracked.slug)}`} className="text-[12px] font-semibold text-axal-violet underline">Open {tracked.name || tracked.slug} →</Link>
       </div>
       {market.loading ? <Loading what="the market indexes" /> : market.error ? <Unreadable what="The market read" onRetry={market.retry} /> : (
@@ -101,13 +105,13 @@ export function MarketContext({ tracked, market }) {
             <Card key={r.key} padding="sm">
               <div className="flex items-baseline justify-between"><span className="text-[12px] font-bold text-axal-muted">{r.label}</span>{r.state === 'recorded' && r.change ? <span className="text-[11px] text-axal-faint">{r.change}</span> : null}</div>
               {r.state === 'recorded'
-                ? <div className="mt-1 text-lg font-extrabold text-axal-ink dark:text-gray-100">{r.value}<span className="ml-1 text-[11px] font-normal text-axal-faint">{r.period}{r.month_to_date ? ' · month to date' : ''}</span></div>
+                ? <div className="mt-1 text-lg font-extrabold text-axal-ink dark:text-gray-100">{r.value}<span className="ml-1 text-[11px] font-normal text-axal-faint">{windowText(r)}</span></div>
                 : <div className="mt-1"><div className="text-[13px] font-bold text-axal-faint">{NOT_RECORDED}</div><p className={faint}>{r.reason}</p></div>}
             </Card>
           ))}
         </div>
       )}
-      <p className={faint}>Mapped by sector label to {tracked.name || tracked.slug} ({tracked.method === 'manual' ? 'by hand' : 'by rule'}). market_intel_indexes · global · monthly.</p>
+      <p className={faint}>Mapped by sector label to {tracked.name || tracked.slug} ({tracked.method === 'manual' ? 'by hand' : 'by rule'}). market_intel_indexes · global.</p>
     </section>
   );
 }
@@ -138,10 +142,18 @@ function FundList({ title, read, more, canOpen = true }) {
   );
 }
 
+/**
+ * D7813: the Funds section's matching rule, in words. Headquarters is where the
+ * fund's manager is based, not where it invests; the three shown in each list
+ * are the first by name (the directory's default order), not a ranking.
+ */
+export const FUNDS_RULE = 'Headquarters is where the fund’s manager is based, not where it invests. Each list shows the first three funds by name, not a ranking.';
+
 export function Funds({ tracked, focusRead, hqRead, country, links = { funds: true } }) {
   return (
     <section id="funds" className="space-y-3">
-      <div><h2 className={h2}>Funds</h2><p className={lede}>Funds whose stated focus maps to this company’s tracked sector, and funds headquartered in its country. Focus and HQ are free text, matched through the crosswalk.</p></div>
+      <div><h2 className={h2}>Funds</h2><p className={lede}>Funds whose stated focus maps to this company’s tracked sector, and funds headquartered in its country. Focus and HQ are free text, matched through the crosswalk.</p>
+        <p data-testid="company-funds-rule" className={lede}>{FUNDS_RULE}</p></div>
       <div className="grid gap-3 lg:grid-cols-2">
         {tracked?.slug ? <FundList title={`Focus maps to ${tracked.name || tracked.slug}`} read={focusRead} canOpen={links.funds} more={directoryHref({ focus: tracked.slug })} />
           : <Card><h3 className="text-[13px] font-bold">By focus</h3><p className="mt-1 text-[12px] text-axal-muted"><strong>{NOT_RECORDED}.</strong> No tracked sector to match a focus on.</p></Card>}
@@ -184,26 +196,22 @@ export function Signals({ market, geography, tracked }) {
 }
 
 /**
- * D596 — which register a directory record comes from, read off the row:
- * Companies House (the OGL v3.0 attribution line, which the licence requires
- * to be shown) or Wikidata (CC0). A row names its own source; none is assumed.
+ * D7813: the Evidence section's badge. It is never a bare number, and never 0
+ * when a collection failed: every collection read gives "N records"; some
+ * failed gives the count that was read and the word partial; all failed gives
+ * Unavailable and no number. `label` is the full sentence for the hover.
  */
-export function recordSource(item) {
-  if (item?.source_name === 'Companies House') {
-    return {
-      label: 'Companies House · OGL v3.0', short: 'Companies House (OGL v3.0)', link: 'View the Companies House record ↗',
-      attribution: item.source_license || 'Contains public sector information licensed under the Open Government Licence v3.0.',
-      fields: 'Name, country, founded year (from the incorporation date) and sector label (from the SIC code)',
-    };
-  }
-  return {
-    label: 'Wikidata · CC0', short: 'Wikidata (CC0)', link: 'View the Wikidata record ↗', attribution: null,
-    fields: 'Name, website, country, founded year and sector label',
-  };
+export function evidenceBadge(d) {
+  const all = EVIDENCE_COLLECTIONS.length;
+  const failed = EVIDENCE_COLLECTIONS.filter((c) => collectionState(d?.[c.key]) === 'unreadable').length;
+  const n = EVIDENCE_COLLECTIONS.reduce((sum, c) => sum + (collectionState(d?.[c.key]) === 'unreadable' ? 0 : (d?.[c.key]?.rows || []).length), 0);
+  const records = `${n.toLocaleString('en-US')} ${n === 1 ? 'record' : 'records'}`;
+  if (failed === all) return { state: 'unavailable', text: UNAVAILABLE, label: `Evidence: ${UNAVAILABLE}. None of the ${all} collections could be read; this is not zero.` };
+  if (failed) return { state: 'partial', text: `${n.toLocaleString('en-US')} read · partial`, label: `Evidence: ${records} read; ${failed} of ${all} collections could not be read.` };
+  return { state: 'ok', text: records, label: `Evidence: ${records} across ${all} collections.` };
 }
 
-/** The header: identity, sector label and tracked sector, and the directory record. */
-export function CompanyHeader({ item, tracked, research = null }) {
+export function CompanyHeader({ item, tracked, research = null, sources = null }) {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
@@ -226,17 +234,16 @@ export function CompanyHeader({ item, tracked, research = null }) {
         <p className={faint}>Opens the analysis setup with this company filled in. Nothing runs until you press Analyze.</p>
         <Card padding="sm" className="space-y-1">
           <div className="text-[11px] font-bold text-axal-muted">Directory record</div>
-          <div className="text-[12px] text-axal-ink dark:text-gray-100">{recordSource(item).label}</div>
-          <p className={faint}>{recordSource(item).fields}{item.as_of ? ` · as of ${item.as_of}` : ''}</p>
-          {recordSource(item).attribution ? <p className={faint}>{recordSource(item).attribution}</p> : null}
-          {item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer" className="text-[12px] text-axal-violet underline">{recordSource(item).link}</a> : null}
+          <SourceDetails record={item} />
+          {sources?.status === 'unreadable' ? <p className={faint}>Fields from this source: Unreadable</p>
+            : item.source_name && sources?.status === 'ok' && sources.rows?.some(row => row.source_name === item.source_name && row.field_name) ? <p className={faint}>Fields from this source: {[...new Set(sources.rows.filter(row => row.source_name === item.source_name && row.field_name).map(row => row.field_name))].join(', ')}</p> : null}
         </Card>
       </div>
     </div>
   );
 }
 
-export default function CompanyProfile({ role }) {
+function CompanyProfileBody({ role }) {
   const { uid } = useParams();
   const { pathname, search } = useLocation();
   const links = useResearchLinks(role);
@@ -291,17 +298,19 @@ export default function CompanyProfile({ role }) {
 
   let d = company.data;
   if (parts.uid === uid) for (const [k, v] of Object.entries(parts.data)) d = replaceCollection(d, k, v);
-  const evidenceTotal = EVIDENCE_COLLECTIONS.reduce((n, c) => n + (collectionState(d[c.key]) === 'unreadable' ? 0 : (d[c.key]?.rows || []).length), 0);
-  const counts = { peers: d.peers?.status === 'ok' ? d.peers.total : null, evidence: evidenceTotal };
+  // D7813: a failed collection is never counted as zero records (`evidenceBadge`).
+  const evidence = evidenceBadge(d);
+  const counts = { peers: d.peers?.status === 'ok' ? d.peers.total : null, evidence: evidence.text };
+  const hovers = { evidence: evidence.label };
   return (
     <div data-testid="company-profile" className="space-y-6">
       <RestoredStatus path={`${pathname}${search}`} />
       <nav aria-label="Breadcrumb" className="text-[12px] text-axal-muted"><Link to={results.href} state={{ via: 'breadcrumb' }} className="underline">Companies</Link> / <span className="text-axal-ink dark:text-gray-100">{d.item.name}</span></nav>
       {back}
-      <CompanyHeader item={d.item} tracked={tracked}
+      <CompanyHeader item={d.item} tracked={tracked} sources={d.sources}
         research={canAddToResearch(role) ? <ResearchActions kind="company" item={{ uid: d.item.uid || uid, name: d.item.name }} /> : null} />
       <nav aria-label="Sections" className="flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">
-        {SECTIONS.map(([id, name]) => <a key={id} href={`#${id}`} className="inline-flex min-h-[44px] items-center gap-1 whitespace-nowrap px-3 py-2 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">{name}{counts[id] != null ? <span className="rounded-full bg-axal-ground px-1.5 text-[10.5px] font-bold dark:bg-gray-800">{counts[id]}</span> : null}</a>)}
+        {SECTIONS.map(([id, name]) => <a key={id} href={`#${id}`} className="inline-flex min-h-[44px] items-center gap-1 whitespace-nowrap px-3 py-2 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">{name}{counts[id] != null ? <span data-testid={`section-badge-${id}`} title={hovers[id]} className={`rounded-full px-1.5 text-[10.5px] font-bold ${id === 'evidence' && evidence.state !== 'ok' ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200' : 'bg-axal-ground dark:bg-gray-800'}`}>{counts[id]}</span> : null}</a>)}
       </nav>
       <KeyMetrics d={d} onInspect={onInspect} />
       <SectorPeers item={d.item} peers={d.peers} />
@@ -310,7 +319,9 @@ export default function CompanyProfile({ role }) {
       <Signals tracked={tracked} market={slug ? market : null} geography={code ? geography : null} />
       <EvidenceSection d={d} name={d.item.name} onInspect={onInspect} onRetry={retryCollection} retrying={parts.uid === uid ? parts.retrying : {}} />
       <EvidenceDrawer open={inspect} d={d} onClose={closeInspect} />
-      <p className={faint}>Company records come from Wikidata (CC0) or, for UK companies, Companies House (Open Government Licence v3.0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
+      <p className={faint}><PublisherBoundary />; website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
     </div>
   );
 }
+
+export default function CompanyProfile(props) { return <CompanyPublisherProvider><CompanyProfileBody {...props} /></CompanyPublisherProvider>; }

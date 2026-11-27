@@ -234,7 +234,8 @@ test('Settings and Availability are the shell\'s: HQ sets member access on perks
   const avail = await mounted('/admin/programs/perks/availability', worker(ADMIN), ADMIN);
   try {
     assert.match(avail.textOf('programs-generic-availability'), /can be offered to studios/);
-    assert.ok(avail.has('programs-generic-manage-grants'));
+    assert.ok(avail.has('studio-program-access'));
+    assert.ok(!avail.has('programs-generic-manage-grants'), 'a studio Admin cannot manage HQ grants');
   } finally { await avail.close(); }
 
   const down = () => response({ error: 'down' }, 503);

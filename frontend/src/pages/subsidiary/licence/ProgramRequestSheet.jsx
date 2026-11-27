@@ -19,7 +19,7 @@ import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import { reportError } from '../../../lib/log';
 import {
   ASKED_MAX, ASKS, NOTE_MAX, TERM_LABEL, answerSentence, askableTerms, asksFor, buildProgramRequest,
-  openCount, requestablePrograms, termValue,
+  openCount, requestablePrograms, studioProgramAccess, termValue,
 } from '../../../lib/studioPrograms';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -27,9 +27,12 @@ const INPUT = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark
 const EYE = 'mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400';
 
 export default function ProgramRequestSheet({
-  open, programs, requests, initialProgram = null, initialAsk = null, onClose, onSent, api = licenceRequestsApi,
+  open, programs, requests, grantRequests = requests, initialProgram = null, initialAsk = null, onClose, onSent, api = licenceRequestsApi,
 }) {
-  const offered = useMemo(() => requestablePrograms(programs), [programs]);
+  const offered = useMemo(() => requestablePrograms(programs).filter((p) => {
+    if (p.standing === 'not_recorded') return studioProgramAccess(p, grantRequests).action?.kind === 'request';
+    return true;
+  }), [programs, grantRequests]);
   const [key, setKey] = useState('');
   const [ask, setAsk] = useState('');
   const [term, setTerm] = useState('');
@@ -68,7 +71,7 @@ export default function ProgramRequestSheet({
 
   async function send(e) {
     e.preventDefault();
-    if (atLimit) return;
+    if (busy || atLimit) return;
     const built = buildProgramRequest({ program, ask, term, asked, why });
     if (!built.ok) { setErr(built.message); return; }
     setBusy(true); setErr('');

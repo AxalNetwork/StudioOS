@@ -28,6 +28,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      # D7152: read only while RELEASE_ROLLBACK_MODE is `act`.
+      republish_rolled_back:
+        description: 'Publish a commit that automatic rollback took off production (D7152)'
+        required: false
+        type: boolean
+        default: false
 
 # D5501: a pending candidate waits for checks without holding the write lock.
 permissions: {}
@@ -51,6 +58,28 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      # D8517 (#8517) - SHADOW MODE. Report the slot, task and provenance verdict of every pull
+      # request merged since the last successful production deploy. It reads with the token this
+      # job already holds (contents and actions read, nothing widened), writes only the job
+      # summary, and can never change the release: continue-on-error here, `|| true` on each
+      # command and the script's own exit 0. Turning it into a gate is the owner's decision.
+      - name: Report commit provenance (shadow)
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          previous=$(gh api "repos/$REPO/actions/workflows/cloudflare-worker-deploy.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null || true)
+          [[ "$previous" =~ ^[0-9a-f]{40}$ ]] || previous=""
+          # Checkout keeps no credential, so give git the job's own read token for these fetches only.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --no-tags --quiet --unshallow origin 2>/dev/null || true
+          node scripts/ci/agent-provenance.mjs --shadow --candidate "$GITHUB_SHA" --previous "$previous" || true
+          exit 0
+
       - name: Wait for all six required checks
         id: candidate
         env:
@@ -185,6 +214,25 @@ jobs:
           overwrite: true
           retention-days: 3
 
+      # D8508 (#8508) — layer 1, static: the AI gateway slugs and agent
+      # settings agree across wrangler.toml's tables (or carry an allowlisted
+      # reason), a switched-on path has its gateway, and each agent account's
+      # model is priced. Reads files only: no credential, no Cloudflare call.
+      - name: Check AI gateway and agent settings
+        run: node scripts/check-ai-gateways.mjs
+
+      # D8508-p2 (#8508) — layer 2, live and read-only, with the release token
+      # (owner answer A, 2026-11-26): each gateway [env.production.vars] names
+      # exists, AGENT_AI_GATEWAY_TOKEN is bound to the Worker (by name), each
+      # account alias resolves. Stops only on "missing" on a switched-on route;
+      # a missing Advisor or deck gateway warns (owner answer A) and "could not
+      # be read" warns. Prints names and states only.
+      - name: Check AI gateways and the agents token on the account
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/check-ai-gateways-live.mjs
+
       - name: Verify required production queues
         id: queues
         env:
@@ -233,6 +281,18 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git diff --quiet HEAD --
           node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once | tee "$RUNNER_TEMP/release-evidence/final-admission.json"
+
+      # D7152 (#7152): only in `act` mode, a commit automatic rollback took off
+      # production is not published again unless the dispatch says
+      # `republish_rolled_back`. Skipped while RELEASE_ROLLBACK_MODE is unset
+      # or `report`, which never roll back.
+      - name: Hold a commit automatic rollback took off production
+        if: vars.RELEASE_ROLLBACK_MODE == 'act'
+        env:
+          RELEASE_ROLLBACK_MODE: ${{ vars.RELEASE_ROLLBACK_MODE }}
+          REPUBLISH_ROLLED_BACK: ${{ inputs.republish_rolled_back }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-rollback.mjs gate
 
       - name: Apply pending D1 migrations
         id: migrations
@@ -378,6 +438,121 @@ jobs:
           SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-previous.json
           SKIP_LIVE_SMOKE: '0'
         run: node scripts/check-spa-live.mjs
+
+  # D7152 (#7152): automatic rollback, OFF unless the repository variable
+  # RELEASE_ROLLBACK_MODE is `report` or `act` (the job is skipped otherwise).
+  # When spa-smoke failed it retries the smoke once; a second failure on a
+  # release the D7151 classifier called `auto` or `auto-additive` is the
+  # trigger. `report` logs "would roll back to <version>" and changes nothing;
+  # `act` runs `wrangler rollback` to the recorded previous version under the
+  # release lock, re-runs the smoke on it, pages if either fails, and makes the
+  # restored build the last good deploy in the retention ledger (DEPLOY.md
+  # §2.1). `manual` is never rolled back: it alerts with the reasons and the
+  # §3 fix-forward. Rules in scripts/lib/releaseRollback.mjs.
+  rollback:
+    name: automatic rollback decision
+    needs: [deploy, spa-smoke]
+    if: always() && needs.deploy.result == 'success' && (vars.RELEASE_ROLLBACK_MODE == 'report' || vars.RELEASE_ROLLBACK_MODE == 'act')
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: studioos-production-release
+      queue: max
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify the production environment branch policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-environment.mjs
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cloudflare-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      - name: Restore this release's evidence
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: production-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence
+
+      - name: Restore this deploy's smoke inputs
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: spa-smoke-inputs
+          path: ${{ runner.temp }}/spa-smoke
+
+      - name: Decide, and in act mode roll back and verify
+        id: decide
+        continue-on-error: ${{ vars.RELEASE_ROLLBACK_MODE != 'act' }}
+        env:
+          RELEASE_ROLLBACK_MODE: ${{ vars.RELEASE_ROLLBACK_MODE }}
+          FIRST_SMOKE: ${{ needs.spa-smoke.result }}
+          SMOKE_HOSTS: 'https://axal.vc https://app.axal.vc'
+          SMOKE_CURRENT_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-current.json
+          SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-previous.json
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-rollback.mjs decide "$RUNNER_TEMP/release-evidence"
+
+      # Act only: the rolled-back build is not the last good deploy.
+      - name: Restore the assets this release saved
+        if: always() && steps.decide.outputs.rolled_back == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+
+      - name: Make the restored build the last good deploy
+        if: always() && steps.decide.outputs.rolled_back == 'true'
+        run: node scripts/release-rollback.mjs ledger docs/.asset-retention.json "$RUNNER_TEMP/spa-smoke/spa-smoke-previous.json"
+
+      - name: Save the retention ledger after the rollback
+        if: always() && steps.decide.outputs.rolled_back == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}-rolled-back
+
+      - name: Mark this commit rolled back
+        if: always() && steps.decide.outputs.rolled_back == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-rolled-back-${{ github.sha }}
+          path: ${{ runner.temp }}/release-evidence/rollback-decision.*
+          overwrite: true
+          retention-days: 90
+
+      - name: Retain the rollback decision
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-rollback-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence/rollback-decision.*
+          if-no-files-found: warn
+          retention-days: 14
 
   # Step 9 as its own job (D253). It still runs only after HQ's deploy, and it
   # still turns the workflow red on a disagreement, but it no longer shares a

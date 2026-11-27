@@ -55,6 +55,8 @@ function worker(user, extra = {}) {
     const method = String(options.method || 'GET').toUpperCase();
     const [path] = url.split('?');
     if (path === '/api/auth/me') return response(user);
+    if (path === '/api/licence/mine/programs' && extra.licence) return response(extra.licence);
+    if (path === '/api/licence/mine/requests' && extra.requests) return response(extra.requests);
     if (method !== 'GET') return extra.write ? extra.write(path, method, options) : never();
     if (path === '/api/admin/programs/operator-fellowship') return response(DETAIL);
     if (path === '/api/admin/programs/ghost') return refusal('unknown_program', 404);
@@ -102,6 +104,25 @@ const Table = () => h(Suspense, { fallback: null }, h(Routes, null,
   h(Route, { path: '/admin/programs/perks', element: h('p', { 'data-testid': 'literal-perks' }, 'Perks page') }),
   adminProgramsGenericRoutes({ guard: (_roles, element) => element })));
 
+test('D7121: Wellness admin detail separates its public presentation from the personal workspace and honors the module gate', async () => {
+  for (const [key, studioOnly] of [['wellness', null], ['axal-wellness', null], ['wellness', 'lic-private']]) {
+    const handle = (url) => url === '/api/auth/me' ? response(ADMIN)
+      : url === '/api/admin/programs/' + key ? response({ ...DETAIL, approved_proposal: null,
+        program: { ...DETAIL.program, key, name: 'Wellness', modules: ['wellbeing'], studio_only: studioOnly } })
+        : never();
+    const view = await mounted('/admin/programs/' + key, h(Table), handle, ADMIN);
+    try {
+      assert.equal(view.has('programs-view-presentation'), studioOnly === null);
+      if (studioOnly === null) assert.equal(view.props('programs-view-presentation').href, '/programs/wellness');
+      assert.equal(view.has('programs-wellness-open'), studioOnly === null);
+      if (studioOnly === null) {
+        assert.equal(view.props('programs-wellness-open').href, '/wellbeing');
+        assert.equal(view.textOf('programs-wellness-open'), 'Open My Wellbeing');
+      }
+    } finally { await view.close(); }
+  }
+});
+
 test('the model: rows for the registry row and the approved spec, with the not-operational fields named', () => {
   assert.equal(genericKeyFrom('/admin/programs/operator-fellowship'), 'operator-fellowship');
   assert.equal(genericKeyFrom('/admin/programs/operator-fellowship/how-it-runs'), 'operator-fellowship');
@@ -130,6 +151,8 @@ test('a custom program: create → open → edit → publish → revisit resolve
   const view = await mounted('/admin/programs/operator-fellowship', h(Table), worker(SUPER), SUPER);
   try {
     assert.ok(view.has('programs-generic-overview'));
+    assert.equal(view.props('programs-generic-manage-grants').href, '/admin/licences/programs?program=operator-fellowship#grants-grid');
+    assert.ok(!view.requests.some((r) => r.url.startsWith('/api/licence/mine/')), 'HQ does not request a studio snapshot');
     assert.match(view.textOf('programs-header'), /Operator Fellowship/);
     assert.match(view.textOf('programs-generic-meta-purpose'), /Operators embedded in a venture\./);
     assert.match(view.textOf('programs-generic-meta-status'), /Proposed/);
@@ -263,6 +286,44 @@ test('D4873: Participation says it is not recorded, never 0; Settings lets HQ se
     assert.ok(!admin.has('programs-generic-access'), 'only HQ sets it');
     assert.equal(admin.textOf('programs-generic-access-value'), 'Not open to members yet');
   } finally { await admin.close(); }
+});
+
+
+test('the program page resolves the Administrator’s own licence and reuses its exact program action', async () => {
+  const path = '/admin/programs/operator-fellowship';
+  const key = 'operator-fellowship';
+  const row = { program_key: key, standing: 'not_recorded', word: 'Not recorded' };
+  const licence = { linked: true, licence: { uid: 'lic-north', brand_name: 'North Studio' }, programs: [row] };
+  const linked = await mounted(path, h(Table), worker(ADMIN, { licence, requests: { items: [], complete: true } }), ADMIN);
+  try {
+    assert.match(linked.textOf('studio-program-access'), /North Studio/);
+    assert.equal(linked.props('studio-program-action').href, '/admin/my-licence/programs?program=operator-fellowship&action=request');
+    assert.ok(linked.requests.some((r) => r.url === '/api/licence/mine/requests?program=operator-fellowship'));
+    assert.ok(!linked.has('programs-generic-manage-grants'));
+    assert.ok(linked.requests.every((r) => !r.url.startsWith('/api/admin/program-grants') && r.method === 'GET'));
+  } finally { await linked.close(); }
+  const unlinked = await mounted(path, h(Table), worker(ADMIN, { licence: { linked: false, licence: null }, requests: { items: [] } }), ADMIN);
+  try {
+    assert.equal(unlinked.props('studio-licence-enquiry').href, '/contact?topic=licence&program=operator-fellowship');
+    assert.ok(!unlinked.requests.some((r) => r.url.includes('/licence/mine/requests')));
+    assert.ok(!unlinked.has('studio-program-action'));
+  } finally { await unlinked.close(); }
+});
+
+
+test('a studio sees only this program’s accepted HQ service and no enrolment action', async () => {
+  const program = { program_key: 'operator-fellowship', standing: 'hq_only', word: 'Runs at HQ', grant: null };
+  const service = { program_key: program.program_key, description: 'HQ schedules the sessions.', package_name: 'Full service',
+    package_version: 2, starts_on: '2027-01-01', ends_on: '2027-12-31' };
+  const licence = { linked: true, licence: { uid: 'lic-n' }, programs: [program],
+    hq_services: [service, { ...service, program_key: 'product-testing', description: 'A different service.' }] };
+  const v = await mounted('/admin/programs/operator-fellowship', h(Table), worker(ADMIN, { licence, requests: { items: [] } }), ADMIN);
+  try {
+    assert.match(v.textOf('studio-program-services'), /Services delivered by HQ.*HQ schedules the sessions.*Full service · version 2.*View on my studio licence/);
+    assert.doesNotMatch(v.textOf('studio-program-services'), /different service/);
+    assert.equal(v.has('studio-program-action'), false);
+    assert.ok(v.requests.every((request) => request.method === 'GET'));
+  } finally { await v.close(); }
 });
 
 test('the global Wellness capability opens only the viewer’s own workspace, including on a fallback key', async () => {

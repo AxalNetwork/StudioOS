@@ -60,6 +60,11 @@ regexes = [
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.
   '''\bsynthetic-d1135-secret\b''',
+  # D8688 (#8688): the role qualification's local fixture signing keys, one per
+  # synthetic deployment (HQ and the two test-only branches), each repeated
+  # twice for length. They sign only JWTs minted inside the isolated local run;
+  # no deployment holds them. Pinned literally, as D1135 does.
+  '''d8688-(hq|branch-[ab])-fixture-signing-key-''',
   # D6495 (#6495): this exact literal only signs JWTs inside the D5074
   # in-memory capability fixture, whose fetch stub forbids external calls.
   # Anchors preserve detection for prefixed/suffixed values and other seeds.
@@ -71,6 +76,10 @@ regexes = [
   # every Stripe call in that suite goes to an in-test fake. Pinned as the
   # literal, as D1135 is, rather than rewriting the PR branch's history.
   '''\bsk_test_d4570_fixture\b''',
+  # D8523 (#8523): the Stripe key in stripe_keys_d8523.test.ts is a fixture;
+  # every Stripe call in that suite goes to the test's captured fetch. Pinned
+  # as the literal, as D4570-p6 is, rather than rewriting the PR's history.
+  '''\bsk_test_synthetic_d8523\b''',
   # D7127 (#7127): the D1 backup upload test's synthetic Cloudflare token id,
   # '0123456789abcdef'.repeat(2): sequential hex, because the script under test
   # accepts only a 32-hex id. Anchored to the exact literal; pinned rather than
@@ -157,6 +166,13 @@ regexes = [
   # the commit that added this one stays in the pull request's scan range, so
   # it is pinned here rather than rewritten.
   '''\btest-secret-for-practice-earnings-4834\b''',
+  # D6237 (#6237): the synthetic JWT signing seed first committed in
+  # cloudflare-worker/test/fund_lp_maintenance_6237.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The test now imports the shared harness seed, but
+  # the commit that added this one stays in the pull request's scan range, so
+  # it is pinned here rather than rewritten.
+  '''\bsynthetic-lp-maintenance-6237-secret\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

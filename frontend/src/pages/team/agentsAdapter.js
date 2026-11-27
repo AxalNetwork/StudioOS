@@ -44,7 +44,7 @@
  */
 import { teamAgentsApi } from '../../lib/api/teamAgents.js';
 import { FLOOR, RULEBOOK_SECTIONS, refusalWords } from './teamModel.js';
-import { fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './skillsModel.js';
+import { fromWorkerEligible, fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './skillsModel.js';
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
@@ -218,8 +218,13 @@ export const importSkill = (kind, id, markdown) => (kind === 'company'
 export const agentSkills = (uid) => throughSkill(() => teamAgentsApi.agentSkills(uid));
 /** `PUT /api/teams/agents/:uid/skills { skills: [{ uid, version }] }` → the same shape. */
 export const setAgentSkills = (uid, skills) => throughSkill(() => teamAgentsApi.setAgentSkills(uid, skills));
-/** `GET /api/teams/agents/:uid/skills/available` → `{ skills }`, each with `blocked`. */
-export const availableSkills = (uid) => throughSkill(() => teamAgentsApi.availableSkills(uid));
+/**
+ * `GET /api/teams/agents/:uid/skills/available` → D8768: `{ skills, counts, areas }`, every published skill as a card
+ * with the Worker's `eligibility` (one rule at every picker; natural fit only sorts).
+ */
+export const availableSkills = async (uid) => shaped(await throughSkill(() => teamAgentsApi.availableSkills(uid)), fromWorkerEligible);
+/** D8768: `GET /api/teams/:scope/:id/skills/eligible?role=&persona=` → the same shape, for an agent not yet added, with `tools_to_grant`. */
+export const eligibleSkills = async (scope, id, draft) => shaped(await throughSkill(() => teamAgentsApi.eligibleSkills(scope, id, draft)), fromWorkerEligible);
 /** `GET /api/teams/skills/:uid/agents` → `{ agents }` the member can see. */
 export const skillAgents = (uid) => throughSkill(() => teamAgentsApi.skillAgents(uid));
 /** `GET /api/teams/skills/:uid/assignable` → `{ agents }`, each with `assigned` and `blocked`. */
@@ -255,6 +260,23 @@ export async function extendSkill(uid, body) {
     const code = e?.code || e?.data?.code || e?.data?.error || null;
     if (status === 404 && code === 'team_agents_off') return unavailable();
     if (code && [400, 403, 404, 409, 422].includes(status)) return { available: false, refused: true, code, reason: e?.message || null };
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
+/**
+ * #4538 (D4538 part 5, SK-20): `POST /api/teams/skills/:uid/rebase` (`:uid` the company extension) → `{ skill, base }`,
+ * a new company draft on Axal's newest version; nothing is published or attached. A refusal keeps the Worker's code and
+ * the conflicting `part` it names, so the dialog can show it on that part; an answer with no code is unreadable.
+ */
+export async function rebaseSkill(uid, body) {
+  try {
+    return { available: true, value: await teamAgentsApi.rebaseSkill(uid, body) };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    const part = typeof e?.data?.part === 'string' ? e.data.part : null;
+    if (code && [400, 403, 404, 409, 422].includes(status)) return { available: false, refused: true, code, part, reason: e?.message || null };
     return { available: false, unreadable: true, reason: 'could not be read' };
   }
 }

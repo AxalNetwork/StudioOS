@@ -1,0 +1,14 @@
+{
+  "GET /api/fills/sheet": {
+    "kind": "filter"
+  },
+  "POST /api/fills/:id/undo": {
+    "kind": "target"
+  },
+  "POST /api/fills/record": {
+    "kind": "target"
+  },
+  "POST /api/fills/rows/accept": {
+    "kind": "target"
+  }
+}

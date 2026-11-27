@@ -37,9 +37,9 @@ export const PROGRAMS = [
 ];
 
 /** The groups in order, each with how many programs it spans (the grid's header row). */
-export function programGroups() {
+export function programGroups(programs = PROGRAMS) {
   const out = [];
-  for (const p of PROGRAMS) {
+  for (const p of programs) {
     const last = out[out.length - 1];
     if (last && last.group === p.group) last.span += 1;
     else out.push({ group: p.group, span: 1 });

@@ -309,7 +309,7 @@ test('coverage: every source once, counted, and each explanation lives only in t
   // Loading is not complete and not missing.
   const loading = coverageSources({ summary: null, statements: null, disputes: null, refunds: null, ceilings: null, period: '2026-Q4' });
   assert.equal(coverageCount(loading).complete, 0);
-  assert.equal(coverageCount(loading).loading, 9, 'every read still out is Loading; only the ledger is known Not recorded');
+  assert.equal(coverageCount(loading).loading, 10, 'every read still out is Loading; only the ledger is known Not recorded');
 
   const page = [
     html(React.createElement(RevenueHeader, { period: '2026-Q4', periods: periodOptions('2026-Q4'), onPeriod() {}, scope: null, scopes: [], onScope() {}, readAt: SUMMARY.read_at, nowMs: NOW, sources, onCoverage() {} })),

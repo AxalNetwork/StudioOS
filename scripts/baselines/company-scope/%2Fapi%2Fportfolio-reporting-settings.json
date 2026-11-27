@@ -1,0 +1,11 @@
+{
+  "GET /api/portfolio-reporting-settings/:fund": {
+    "kind": "target"
+  },
+  "GET /api/portfolio-reporting-settings/books": {
+    "kind": "filter"
+  },
+  "PUT /api/portfolio-reporting-settings/:fund": {
+    "kind": "target"
+  }
+}

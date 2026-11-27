@@ -261,6 +261,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `verdict_v10_6018.test.mjs` | Unselected form, evidence gaps, Stop policy and recorded-decision separation. |
+| `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
 | `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |
 | `validate_experiments_6017.test.mjs` | V9 experiment state cards, missing reads and result actions. |
 
@@ -282,9 +284,19 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 
 | `runner_isolation_7905.test.mjs` | D7905: real-engine evidence contracts, isolated candidate commands, per-run cleanup and fail-closed bootstrap. |
 | `included_compute_7907.test.mjs` | D7907: the github-8 included-compute pool at the catalog, bootstrap, admission and executor boundaries, equal budgets, and the bounded canary's source pin, report and workflow shape. |
+| `csv_safe_parity_7811.test.mjs` | D7811: shared formula-safe literal cases and opt-in serialization parity. |
+| `csv_private_copies_7811.test.mjs` | D7811: file-keyed pending CSV copies and detection of new private escapers. |
+| `_csv_safe_7811.mjs` | D7811: one literal CSV case table shared with Worker tests. |
 
+| `research_changed_interfaces_7815.test.mjs` | D7815: actual project Compare retry/status recovery, tab results return and stale catalogue/dossier responses after route changes. |
+| `portfolio_reporting_settings_6214.test.mjs` | Reporting settings loading, partial reads, read-only defaults and GP save states. |
+| `revenue_metrics_5952.test.mjs` | D5952: quarterly ledger metric states, currency/period joins, per-licence receipts and AI, automatic promo report and coverage metadata; rendered components over synthetic envelopes. |
+| `fund_report_reader_6250.test.mjs` | Issued report prose, frozen figures, attribution, correction links, absence and Print. |
 | `perk_console_offers_8398.test.mjs` | D8398: partner console Offers controls, labels, typography and failed reads. |
 | `fund_zone_drafts_6242.test.mjs` | D6242: the LP summary's material is on the drawer, figure for figure; the bands do not run with nothing to read; Refused / Unavailable run words; the letter's Accept fills the unsaved editor and only Save draft writes. |
 | `queue_deadline_5974.test.mjs` | D5974: active-candidate age, pending names, unknown evidence, native recheck and durable transition regressions. |
 
+`company_attribution_7812.test.mjs` walks the canonical publisher reference across company table, responsive cards, profile and analysis subject attribution, including missing/unreviewed provenance and field-read failure.
 `hosted_readers_8345.test.mjs` exercises trusted hosted-reader acquisition and bridge composition with real signatures, HTTP clients, SQLite budgets and S09 inspection ports; provider/native/eligibility observations are synthetic, and the default hosted execution boundary remains absent.
+| `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |
+`capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.

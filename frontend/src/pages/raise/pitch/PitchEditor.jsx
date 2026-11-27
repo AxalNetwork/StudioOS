@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -20,6 +20,8 @@ import { NEW_PATH } from './newDeckModel';
 import { deckSaveFailure } from './pitchSafeErrors.js';
 import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
+import DeckMoreMenu from './DeckMoreMenu';
+import EditorInspector from './EditorInspector';
 import DeckBar from './DeckBar';
 import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
@@ -60,10 +62,10 @@ import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine }
 import usePreflight from './usePreflight';
 import { isQualitative, markLabel } from './versionReviewModel';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
-import { gateOf, overlayOf, stepOf, workingDeck } from './preflightUiModel';
+import { gateOf, overlayOf, repairOf, stepOf, workingDeck } from './preflightUiModel';
 import PreflightOverlay from './PreflightOverlay';
 import {
-  ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_PLACEHOLDER, NO_CARDS,
+  ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_HELPER, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
@@ -143,6 +145,8 @@ const PILL_VIO = `${PILL} border-axal-lavender-edge bg-axal-lavender text-axal-v
 const PILL_MU = `${PILL} border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400`;
 const SKEL = 'animate-pulse rounded-[9px] bg-axal-hairline dark:bg-gray-800';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+
+const EditorRail = createContext(null);
 
 const idle = { status: 'idle', data: null };
 /** Below `lg` (1024 px): the Cards strip is a row above the stage. */
@@ -262,7 +266,7 @@ export default function PitchEditor() {
     actionRef.current?.(id);
   }, [readOnly, editorOn]);
   const tools = current?.id ? (
-    <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} preflight={chrome?.preflight ?? null} readOnly={readOnly} phone={phone}
+    <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} preflight={chrome?.preflight ?? null} readOnly={readOnly} phone={phone} showMore={phone || !chrome} showExport reviewTo={`/raise/pitch/review${ventureQuery(projectId)}`}
       onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} history={chrome?.history ?? null}
       editors={presence.editors} youId={youId} />
   ) : null;
@@ -280,6 +284,7 @@ export default function PitchEditor() {
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
   const shell = {
+    editorReady: deck.status === 'ok' && model.status === 'ok',
     query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null, deckId: current?.id ?? null,
     // The bar's Edit/Comment: Comment opens the selected card's comments, Edit closes them (the editor's own sheet).
     commenting: Boolean(chrome?.commenting), compact: phone,
@@ -335,17 +340,17 @@ export default function PitchEditor() {
   );
 }
 
-function Shell({ children, query, title, ask, tools, heading, overlay = null, deckId = null, commenting = false, onMode = null, compact = false }) {
+function Shell({ children, query, title, ask, tools, heading, overlay = null, deckId = null, commenting = false, onMode = null, compact = false, editorReady = false }) {
   // D1604 (§5): the rail is the element groups' models and the deck's usage.
   const groups = useMemo(() => deckRail(deckId), [deckId]);
   const rail = <WorkerRail workspace="Raise" role="founder" groups={groups} note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
   // D4254 P1 slice 2 (#4274, psE): the deck bar takes the header's place while a deck is open.
   const askOn = ask && !ask.readOnly && ask.projectId != null;
   const bar = (
-    <DeckBar q={query} heading={heading} tools={tools} ask={askOn ? <DeckAsk {...ask} /> : null}
+    <DeckBar q={query} heading={heading} tools={tools} ask={askOn && (compact || !editorReady) ? <DeckAsk {...ask} /> : null}
       commenting={commenting} onMode={onMode} readOnly={Boolean(ask?.readOnly)} compact={compact} />
   );
-  return <PitchPage rail={rail} crumb={{ query, trail: title, tools, heading }} ask={ask} bar={bar} testId="pitch-editor"><PitchMovedNotice />{children}{overlay}</PitchPage>;
+  return <EditorRail.Provider value={{rail, ask: askOn ? <DeckAsk {...ask} /> : null}}><PitchPage rail={editorReady && !compact ? null : rail} crumb={{ query, trail: title, tools, heading }} ask={ask} bar={bar} testId="pitch-editor"><PitchMovedNotice />{children}{overlay}</PitchPage></EditorRail.Provider>;
 }
 
 /** PD24: the header at once; the strip and the card as grey skeletons. */
@@ -407,6 +412,7 @@ export function editReducer(state, action) {
 
 function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onOpenAsk = null, onChrome, actionRef, onSend = null, presence = null, youId = null }) {
   const [aiOn] = useAssistMode('raise');
+  const inspectorRail = useContext(EditorRail);
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
   // D1515: the working deck lives in one reducer with its 100-step history; every edit below is an op.
@@ -456,6 +462,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const gp = dirty ? gatePf : pf;
   const [gate, setGate] = useState(null);
   const [finding, setFinding] = useState(null);
+  // D8772 (PTF04): the finding the founder left the check from, and the order it was listed in, so Back focuses it (or the next).
+  const [returnTo, setReturnTo] = useState(null);
   const colours = cardColours(theme, kitData);
   // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
   const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
@@ -780,6 +788,20 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     setSheet(null); setGate(null); setFinding(row.id);
   };
   const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
+  // D8772 (PTF02–PTF04): the repair a source finding offers on its tile, in the draft, and the way back to the same check, re-run on the draft.
+  const stripRow = finding ? stripRows.find((r) => r.id === finding) || null : null;
+  const stripBlock = stripRow && Number.isInteger(stripRow.card) ? (cards[stripRow.card]?.blocks || []).find((b) => b?.id === stripRow.block) || null : null;
+  const repair = !readOnly && stripRow ? repairOf(stripRow, stripBlock, items) : null;
+  const runRepair = (r) => {
+    const c = stripRow ? cards[stripRow.card] : null;
+    if (!c || r?.state !== 'ready') return;
+    setCard(stripRow.card, { ...c, blocks: (c.blocks || []).map((b) => (b?.id === stripRow.block ? r.block : b)) }, { label: r.edit });
+  };
+  const backToCheck = () => {
+    setReturnTo({ id: finding, order: stripRows.map((r) => r.id) });
+    setFinding(null); setSheet('preflight');
+    if (!readOnly && !pf.current && !pf.running) pf.run();
+  };
   const gateView = gate && !gp.running && gp.current ? gateOf(gp.groups, gate) : null;
   useEffect(() => {
     if (!gate || gp.running) return;
@@ -801,7 +823,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     <>
       {!readOnly ? <AiOffBanner state={off} /> : null}
       {finding && !sheet && !gate ? (
-        <FindingStrip rows={stripRows} id={finding} onStep={show} onBack={() => { setFinding(null); setSheet('preflight'); }} onClose={() => setFinding(null)} />
+        <FindingStrip rows={stripRows} id={finding} repair={repair} onRepair={runRepair} onStep={show} onBack={backToCheck} onClose={() => setFinding(null)} />
       ) : null}
       {/* D1370 (#3661, PF3): the finding drawn on its slide, as it was checked. */}
       {finding && !sheet && !gate && pf.snapshot ? (() => {
@@ -819,7 +841,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={placeCard} onProposals={onProposals} />
         </>
       ) : (
-        <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
+        <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[180px_minmax(0,1fr)_280px]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
             <CardsStrip theme={theme} cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
               onCardAction={cardAction} orientation={narrow ? 'row' : 'column'} people={people}
@@ -858,11 +880,17 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
               <ArrangeSet card={card} selection={selection} aspect={aspectOf(theme?.aspect)} model={model} onCard={(next) => setCard(sel, next)} />
             ) : null}
             {card ? <DecorLayers card={card} selection={selection} readOnly={readOnly} onSelection={setPickState} /> : null}
-            {card && !readOnly && chosen.length ? (
-              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} model={model} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
-                onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
-                onPlace={placeCard} onProposals={onProposals} />
+            {card && (one || !areas) ? (
+              <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max}
+                onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} />
             ) : null}
+          </div>
+          <EditorInspector design={<>
+            <div className="flex flex-wrap items-center gap-2"><span className={EYE}>Deck and card tools</span>
+              <DeckMoreMenu onPick={act} readOnly={readOnly} labels={{appendix:appendixLabel,...(readOnly?{notes:'Leave a note'}:{})}} outOfTokens={outOfTokens}
+                blocked={{...(!counts.undo?{undo:'Nothing to undo.'}:{}),...(!counts.redo?{redo:'Nothing to redo.'}:{})}}/>
+            </div>
+            <div className="flex flex-wrap gap-2">{[['theme','Theme'],['structure','Structure'],['brand','Brand kit'],['background','Background']].map(([key,label])=><button key={key} type="button" className={GHOST} onClick={()=>act(key)}>{label}</button>)}</div>
             {card && !readOnly && (one || !areas) ? (
               <BlockTools card={card} cardIndex={sel} area={one} model={model} charts={charts} images={images} items={items}
                 deckId={base.deck.id} accent={colours.accent}
@@ -881,11 +909,17 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onPlace={placeCard}
                 onAddCard={(c) => { edit({ type: 'insertCard', index: cards.length, card: withNewUid(c) }, { label: 'New card' }); setSel(cards.length); setPickState(NO_PICK); }} />
             ) : null}
-            {card && (one || !areas) ? (
-              <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max}
-                onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} />
+            {!one && areas ? <p className={MUTED}>Select an area on the Grid to edit its design.</p> : null}
+          </>} data={<SourcesPanel items={items} status={sources.status} onRetry={sources.retry} stale={staleMap}/>}
+            eadwyn={<>{inspectorRail?.ask}
+            {card && !readOnly && chosen.length ? (
+              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} model={model} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
+                onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
+                onPlace={placeCard} onProposals={onProposals} />
             ) : null}
-          </div>
+              {inspectorRail?.rail}
+            </>}/>
+
         </div>
       )}
 
@@ -956,7 +990,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <StageSheet deckId={base.deck.id} readOnly={readOnly} dirty={dirty} onReordered={saved} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'preflight' ? (
-        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
+        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} draft={dirty} returnTo={returnTo} onReturned={() => setReturnTo(null)} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
           onTokens={onTokens} onProposals={onProposals} onOpenAsk={onOpenAsk} onShow={show} onClose={() => setSheet(null)} />
       ) : null}
       {gate && (gp.running || gateView?.open) ? (
@@ -1426,7 +1460,8 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
       {card ? (
         <label className={`${CARD} flex flex-col gap-1.5 p-3`}>
           <span className={EYE}>Speaker notes · card {sel + 1}</span>
-          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck data-testid="pitch-editor-phone-notes" onChange={(e) => onNotes(e.target.value)} />
+          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck aria-describedby="pitch-editor-phone-notes-helper" data-testid="pitch-editor-phone-notes" onChange={(e) => onNotes(e.target.value)} />
+          <span id="pitch-editor-phone-notes-helper" className={MUTED} data-testid="pitch-editor-phone-notes-helper">{NOTES_HELPER}</span>
         </label>
       ) : null}
       {card && !readOnly && all.length ? (

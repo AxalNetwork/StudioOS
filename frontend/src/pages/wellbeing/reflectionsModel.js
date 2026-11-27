@@ -226,3 +226,41 @@ export function summaryLines(s) {
     weeks: { n: weeks.length, note: weeks.length ? `weeks of ${weeks.length > 1 ? `${weeks.slice(0, -1).join(', ')} and ${weeks.at(-1)}` : weeks[0]}` : 'no weekly reflection touches this month' },
   };
 }
+
+// ── WLM-03W: "Your last four weeks, in words" (D7118 part 3) ─────────────────────────────────────────────────
+
+/** The four week starts ending with this week's, oldest first, by calendar arithmetic on the Worker's own dates. */
+export function lastFourWeeks(currentStart) {
+  const p = parts(currentStart);
+  if (!p) return [];
+  return [21, 14, 7, 0].map((back) => new Date(Date.UTC(p.y, p.m - 1, p.d - back)).toISOString().slice(0, 10));
+}
+
+export const NO_ENTRY = '— no entry';
+export const UNREAD = 'couldn’t be read';
+export const FOUR_WEEKS_FOOT = 'A week or a question you left blank reads “no entry”, never 0. Your own numbers, not a score.';
+
+/**
+ * The table: one column per week, one row per weekly question answered in at least one of the four weeks, in the
+ * canvas's order. A week with no reflection, or a question left blank, reads "— no entry", never 0; a reflection that
+ * could not be read says so rather than looking blank. Null when nothing was answered in the four weeks.
+ */
+export function fourWeekTable(currentStart, reflections) {
+  const starts = lastFourWeeks(currentStart);
+  if (!starts.length) return null;
+  const byStart = new Map((reflections || []).filter((r) => r?.cadence === 'week')
+    .map((r) => [r.period_start, r]));
+  const weeks = starts.map((s) => byStart.get(s) || null);
+  const cell = (r, key) => {
+    if (!r) return { text: NO_ENTRY, empty: true };
+    if (r.readable === false) return { text: UNREAD, empty: true };
+    const v = r.scores?.[key];
+    return v == null ? { text: NO_ENTRY, empty: true } : { text: String(v), empty: false };
+  };
+  const rows = QUESTIONS.week
+    .filter((x) => weeks.some((r) => r && r.readable !== false && r.scores?.[x.key] != null))
+    .map((x) => ({ key: x.key, label: x.label, cells: weeks.map((r) => cell(r, x.key)) }));
+  if (!rows.length) return null;
+  const columns = starts.map((s) => { const q = parts(s); return { start: s, label: `${q.d} ${MONTHS[q.m - 1]}` }; });
+  return { columns, rows };
+}

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# D5602: bounded opaque Semgrep fingerprints using its existing Python runtime;
+# parity-checked against the Node contract.
 """D5602: emit opaque Semgrep fingerprints using the scanner's existing Python runtime."""
 import hashlib
 import json

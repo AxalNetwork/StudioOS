@@ -75,7 +75,8 @@ test('/studio draws the fixed blocks and the founder default’s modules', () =>
     assert.match(t, new RegExp(zone), `${zone} is missing`);
   }
   assert.match(t, /Week 2 · Day 11/);
-  assert.match(t, /NovaCraft AI · Fay Founder · Cohort 4/);
+  // D8729 (#8729, SFD03): the venture is the page's heading; the line under it is the founder's.
+  assert.match(t, /Studio · your ventureNovaCraft AIWeek 2 · Day 11Fay Founder · Cohort 4: everything you have built/);
   assert.doesNotMatch(t, /Continue where you left off/);
   assert.match(t, /Customise/);
   assert.match(t, /Have you ever owned a revenue number end to end\?/);
@@ -149,7 +150,11 @@ test('empty is said as empty: nothing waiting', () => {
 test('with no company record the strip says so', () => {
   const reads = { ...READS, project: null, lifecycle: null, scores: null };
   assert.equal(summaryOf(reads).find((x) => x.k === 'Readiness').state, NOT_RECORDED);
-  assert.match(render(reads), /No company record yet/);
+  // D8729 (#8729, SFD09): with no venture the page is the first-venture path; the strip keeps its reason.
+  const t = render(reads);
+  assert.match(t, /Start your first venture/);
+  assert.match(renderToStaticMarkup(createElement(MemoryRouter, null,
+    createElement(FounderStudioBody, { user: USER, reads, onRetry: () => {}, studio: STUDIO }))), /title="No company record yet, so nothing has been scored\."/);
 });
 
 test('the zones with no store say Not recorded with the reason, and draw nothing', () => {

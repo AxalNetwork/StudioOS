@@ -569,6 +569,10 @@ export interface Env {
   // D5585 part 7 (#5585): `on` opens the Super-Admin release routes (`routes/admin_work_graph_releases.ts`). Unset
   // (the default) or any other value, every one of them refuses 404 `release_admin_off` before any D1 read.
   WORK_GRAPH_RELEASE_ADMIN?: string;
+  // D5585 part 9 (#5585): `on` opens the public site-record read (`routes/release_sites_public.ts`,
+  // GET /api/public/release-sites/:tenant/:company/:site). Unset (the default) or any other value, it refuses 404
+  // `release_sites_off` before any D1 or R2 read. The owner sets it.
+  WORK_GRAPH_RELEASE_SITES?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
@@ -609,6 +613,8 @@ export interface Env {
   WORK_GRAPH_LEASE?: DurableObjectNamespace;
   /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
   WORK_GRAPH_LEASES?: string;
+  // D5586 part 3 (#5586): #5570's admission coordinator (`services/agents/workspaceAdmissionClient.ts`). Optional: without it every client call answers `admission_unbound`.
+  WORKSPACE_ADMISSION?: DurableObjectNamespace;
   /** D5582 part 3: Super Admin drafting routes, only "preview" on a preview deployment enables them. */
   WORK_GRAPH_DRAFTING?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.

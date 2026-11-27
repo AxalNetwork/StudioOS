@@ -11,15 +11,16 @@
  *   5. og:image per link: only while public views are on; until then the private card stays.
  *   6. The include switches survive publishing; the deck gate (another venture's founder, no session).
  *
- * In-memory SQLite: the baseline and every post-cutoff migration. Synthetic names only.
+ * In-memory SQLite: the baseline and every post-cutoff migration, built once per run and copied into each
+ * test's own database (`_schema_once.mjs`, #8461). Synthetic names only.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckInvestorLinks from '../src/routes/deck_investor_links.ts';
@@ -31,9 +32,6 @@ import {
 import { parseShareInclude } from '../src/services/decks/shareInclude.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1564-publish-0123456789abcdef';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const ADMIN = 1, FOUNDER = 3, OTHER = 4;
 const P = 5, OTHER_P = 6, DECK = 6, PROSPECT = 7;
 const SITE = 'https://partner.example.test';
@@ -48,8 +46,8 @@ const SLIDES = [
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  // #8461: the baseline and every post-cutoff migration, built once per run (D4133) and copied into this handle.
+  loadSchema(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', null);
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

@@ -23,6 +23,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
@@ -46,8 +49,21 @@ function freshBuild(): DatabaseSync {
 const BUILT_DDL = (freshBuild().prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
   ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 
+const SEEDED_OPTIONS = { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true };
+// #8437: the replayed schema and its seed are built once, into a file; each test opens its own copy of that file.
+const SCRATCH = mkdtempSync(join(tmpdir(), 'build-writes-d690-'));
+process.once('exit', () => rmSync(SCRATCH, { recursive: true, force: true }));
+const SEEDED_FILE = join(SCRATCH, 'seeded.sqlite');
+let copies = 0;
+
 function seeded() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  const file = join(SCRATCH, `${++copies}.sqlite`);
+  copyFileSync(SEEDED_FILE, file);
+  return new DatabaseSync(file, SEEDED_OPTIONS);
+}
+
+{
+  const db = new DatabaseSync(SEEDED_FILE, SEEDED_OPTIONS);
   for (const s of BUILT_DDL) { try { db.exec(s); } catch { /* a view or trigger naming an object replayed later */ } }
   db.exec(`INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES
     (${FOUNDER}, 'founder', 'Ana Wren', 'ana@example.test', 1, 1001), (${TEAMMATE}, 'founder', 'Tomas Reyes', 'tomas@example.test', 1, NULL),
@@ -65,7 +81,7 @@ function seeded() {
   db.exec(`INSERT INTO entities (id, name, entity_type, jurisdiction) VALUES (${ENTITY}, 'Kestrel Works Inc', 'project', 'DE')`);
   db.exec(`INSERT INTO entity_obligations (id, uid, entity_id, title, due_date, status, kind, cadence) VALUES (12, 'o12', ${ENTITY}, 'Franchise tax', '2026-11-01', 'open', 'franchise_tax', 'annual')`);
   db.exec(`INSERT INTO spinout_applications (id, user_id, company_name, idea, status, answers_json) VALUES (13, ${FOUNDER}, 'Kestrel Works', 'Reconciliation', 'accepted', '{"origin":"university","institution":"Example Institute","ip":[]}')`);
-  return db;
+  db.close();
 }
 
 const app = new Hono<any>();

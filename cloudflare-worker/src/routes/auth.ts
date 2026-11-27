@@ -5,8 +5,8 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES, supportOperatorOf } from '../auth';
 import { branchOf } from '../util/branch';
-import { sendVerificationEmail } from '../services/email';
-import { send as sendEmail } from '../services/email/send';
+import { sendBound } from '../services/email/send';
+import { issuanceOf } from '../services/email/deliveryContract';
 import { insertCanaryRows } from '../services/magicLinkInsertCanary';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
 import { verifyTurnstile } from '../services/turnstile';
@@ -231,6 +231,21 @@ function rateGate(c: any, verdict: RateVerdict, denyCopy: string): any | null {
   return c.json({ error: LIMITER_DOWN_COPY, code: 'rate_limiter_unavailable' }, 503);
 }
 
+/**
+ * D8536 part 3 — whether a refused send may be tried again: only for the
+ * contract's transient reasons (the provider's token call failed, or it
+ * answered non-2xx), which the ledger row records. Suppression, missing
+ * credentials or no recipient would refuse again.
+ */
+async function transientRefusal(env: Env, ref: string): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare('SELECT reason FROM email_send_refs WHERE ref = ?').bind(ref).first<{ reason: string | null }>();
+    return row?.reason === 'provider_auth' || row?.reason === 'provider_refused';
+  } catch {
+    return false;
+  }
+}
+
 async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<{ sent: boolean; verificationUrl: string; tokenStored: boolean }> {
   const rawToken = generateToken();
   const tokenHash = await hashToken(rawToken);
@@ -248,46 +263,41 @@ async function sendVerification(env: Env, email: string, name: string, userId: n
     return { sent: false, verificationUrl, tokenStored: false };
   }
 
-  // Task #2 (IB) — route through the unified send() pipeline first. It
-  // renders the `auth_verify_email` template, mirrors into
-  // notifications_inbox, and enqueues an `email_send` job (with
-  // automatic DLQ on permanent failure). The legacy
-  // sendVerificationEmail() stays as a fallback ONLY if the unified
-  // pipeline throws before enqueueing — the queue itself handles its
-  // own retries so we don't double-send on transient SMTP errors.
+  // Task #2 (IB) — the unified send() pipeline renders the
+  // `auth_verify_email` template and records the send.
+  //
+  // `immediate: true` — verification emails are user-interactive (the
+  // visitor is sitting on a loading button waiting for the link), so we
+  // deliver synchronously instead of enqueueing. Without this, send()
+  // returned ok:true the moment the job hit JOB_QUEUE, and the API replied
+  // `email_sent: true` even when Gmail later failed inside the queue
+  // consumer, so the user saw "Email sent" and never received anything.
+  // Synchronous delivery gives a truthful answer we can surface as
+  // `email_sent: false`, so RegisterPage's emailWarning shows the
+  // verification_url fallback.
+  //
+  // D8536 part 3: under the delivery contract. The subject is the account,
+  // which names its own address while it holds a token, and the attempt is
+  // this token's issuance. A send refused for a transient reason is tried
+  // once more (nothing left, so a second email is impossible); that replaces
+  // the old fallback to the legacy sender, which could mail the link a second
+  // time after a send that timed out. A send that timed out may have arrived
+  // and is not repeated.
+  // The bell is not mirrored: the account is not signed in yet, and a row
+  // there would hold a usable link.
+  const ref = { flow: 'sign_in' as const, subject: { kind: 'user_verification' as const, id: userId }, attempt: await issuanceOf(rawToken) };
   try {
-    const { send } = await import('../services/email/send');
-    // `immediate: true` — verification emails are user-interactive
-    // (the visitor is sitting on a loading button waiting for the
-    // link), so we deliver synchronously instead of enqueueing.
-    // Without this, send() returned ok:true the moment the job hit
-    // JOB_QUEUE, and the API replied `email_sent: true` even when
-    // Gmail later failed inside the queue consumer (expired refresh
-    // token, mailbox bounce, queue not draining), so the user saw
-    // "Email sent" and never received anything. Synchronous delivery
-    // also gives us a truthful `delivered` flag we can surface to the
-    // user as `email_sent: false` so RegisterPage's emailWarning kicks
-    // in and shows the dev fallback verification_url.
-    const r = await send(
-      env,
-      'auth_verify_email',
-      email,
-      { name, verify_url: verificationUrl, app_url: env.APP_URL },
-      { userId, immediate: true },
-    );
-    if (r.ok && r.delivered !== false) return { sent: true, verificationUrl, tokenStored };
-    console.warn(`[AUTH] unified send() returned not-ok/undelivered for ${email} (reason=${r.reason || 'unknown'}); falling back to legacy sender`);
-  } catch (e: any) {
-    console.error(`[AUTH] unified send() threw for ${email}: ${e?.message || 'Unknown error'} — falling back`);
-  }
-  try {
-    const sent = await sendVerificationEmail(env, email, name, verificationUrl);
-    if (!sent) {
-      console.warn(`[AUTH] Email delivery failed for ${email}. Check GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN secrets.`);
+    const vars = { name, verify_url: verificationUrl, app_url: env.APP_URL };
+    let r = await sendBound(env, 'auth_verify_email', ref, vars, { userId, immediate: true, skipMirror: true });
+    if (r.state === 'refused' && (await transientRefusal(env, r.ref))) {
+      r = await sendBound(env, 'auth_verify_email', ref, vars, { userId, immediate: true, skipMirror: true });
     }
-    return { sent, verificationUrl, tokenStored };
+    if (r.state !== 'accepted') {
+      console.warn(`[AUTH] verification email not accepted (state=${r.state}, reason=${r.reason || 'unknown'})`);
+    }
+    return { sent: r.state === 'accepted', verificationUrl, tokenStored };
   } catch (e: any) {
-    console.error(`[AUTH] Email service error for ${email}: ${e?.message || 'Unknown error'}`);
+    console.error(`[AUTH] verification email threw: ${e?.name || 'Error'}`);
     return { sent: false, verificationUrl, tokenStored };
   }
 }
@@ -1289,10 +1299,12 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   const expires = new Date(Date.now() + MAGIC_LINK_TTL_MIN * 60 * 1000).toISOString();
   const ua = (c.req.header('user-agent') || '').slice(0, 500);
   const canary = insertCanaryRows(c.req.raw);
+  let tokenId = 0;
   try {
     const inserted = await c.env.DB.prepare(
       `INSERT INTO magic_link_tokens (email, token_hash, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
     ).bind(email, tokenHash, expires, ip || null, ua || null).run();
+    tokenId = Number(inserted?.meta?.last_row_id || 0);
     if (canary) canary.tokenId = inserted?.meta?.last_row_id ?? null;
   } catch (e) {
     console.error('[AUTH:magic-start] token insert failed', e);
@@ -1322,14 +1334,29 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   // that second press was the first time a message was actually queued.
   // #4578 (D4578): /register asks for `purpose: 'signup'` right after it created the account, and gets the same link
   // worded as "finish creating your account". The answer below is identical either way, so nothing is enumerated.
+  //
+  // D8536 (#8536): the send goes under the delivery contract. Its reference
+  // is this token row (one row, one issuance), and the address is the one the
+  // row names, so a queue retry reconciles instead of mailing the link twice.
   const signup = parsed.body?.purpose === 'signup';
-  const queued = signup
-    ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
-    : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  const ref = { flow: 'sign_in' as const, subject: { kind: 'magic_link_token' as const, id: tokenId }, attempt: 1 };
+  const queued = await sendBound(c.env, signup ? 'auth_signup_link' : 'auth_magic_link', ref, { name, magic_url: magicUrl });
   if (canary) canary.sendId = queued.log_id;
   if (!queued.ok) {
     console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
+  }
+  // The replacement makes every earlier unused link for this address invalid,
+  // once the new one is on its way (not before: a refused send leaves the
+  // person the link they already have). The verify claim then answers
+  // `expired` for the old one.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE magic_link_tokens SET expires_at = datetime('now')
+        WHERE email = ? AND id < ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')`,
+    ).bind(email, tokenId).run();
+  } catch (e) {
+    console.error('[AUTH:magic-start] earlier links not retired', (e as Error)?.name || 'Error');
   }
   return c.json({ ok: true, message: 'If that email is valid, a sign-in link is on its way. It expires in 15 minutes.' }, 202);
 }));

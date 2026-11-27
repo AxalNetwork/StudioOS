@@ -135,15 +135,25 @@ export function setHeight(paragraphs: string[], widthPt: number, scale = 1): num
 }
 
 /**
+ * D8771 (#8771): the share of their sizes `fitParagraphs` sets a box's
+ * paragraphs at: 1 when they fit, else the largest step down to FIT_FLOOR
+ * that fits (or FIT_FLOOR when nothing does). The writer's report counts it.
+ */
+export function fitScale(paragraphs: string[], r: Rect): number {
+  const w = r.w / 2, h = r.h / 2; // card pixels to points
+  let scale = 1;
+  while (scale > FIT_FLOOR && setHeight(paragraphs, w, scale) > h) scale = Math.round((scale - 0.05) * 100) / 100;
+  return scale;
+}
+
+/**
  * D1574: the paragraphs at the largest share of their sizes (down to
  * FIT_FLOOR) that sets them inside the box, so no area overflows in
  * PowerPoint. The sizes are written, not left to autofit, which PowerPoint
  * only applies once the text is edited.
  */
 export function fitParagraphs(paragraphs: string[], r: Rect): string[] {
-  const w = r.w / 2, h = r.h / 2; // card pixels to points
-  let scale = 1;
-  while (scale > FIT_FLOOR && setHeight(paragraphs, w, scale) > h) scale = Math.round((scale - 0.05) * 100) / 100;
+  const scale = fitScale(paragraphs, r);
   if (scale >= 1) return paragraphs;
   return paragraphs.map((p) => p.replace(/ sz="(\d+)"/g, (_, n) => ` sz="${Math.max(600, Math.floor(Number(n) * scale))}"`));
 }
@@ -409,11 +419,24 @@ export type EditableReport = {
    * silence.
    */
   decor: { shapes: number; svg: number; not_drawn: number };
+  /**
+   * D8771 (#8771): what the export dialog's completed panel says the file holds.
+   * `text.boxes` counts the blocks written as editable text boxes (a chart
+   * written as words included); `text.shrunk` those set smaller to fit, and
+   * `text.smallest` the smallest share any was set at (1 when none was, never
+   * below FIT_FLOOR). `diagrams` counts the typed diagrams written as native
+   * shapes. `slides.from_blocks` counts the slides drawn from their blocks;
+   * `slides.text_frames` the rest (a card made of fields, and the Sources
+   * appendix), written as the text writer's stacked text frames.
+   */
+  text: { boxes: number; shrunk: number; smallest: number };
+  diagrams: number;
+  slides: { total: number; from_blocks: number; text_frames: number };
 };
 
 type Media = { name: string; data: Uint8Array };
 type ChartPart = { xml: string; workbook: Uint8Array };
-type Counts = { native: number; pictured: number; as_text: number; placed: number; not_placed: number; shapes: number; svg: number; decor_not_drawn: number };
+type Counts = { native: number; pictured: number; as_text: number; placed: number; not_placed: number; shapes: number; svg: number; decor_not_drawn: number; text_boxes: number; shrunk: number; smallest: number; diagrams: number };
 
 /** A 1 × 1 transparent PNG: the fallback picture an SVG decor item carries for a reader that cannot draw SVG. */
 export const CLEAR_PNG = new Uint8Array([
@@ -614,13 +637,19 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       const layout = diagramLayout(b.diagram);
       if (layout) {
         put(b, r, diagramGroup(() => id++, `Diagram ${b.id}`, r, layout, b.pinned === true, input.dir === 'rtl'));
+        counts.diagrams += 1;
         continue;
       }
     }
     const paras = b.kind === 'chart' ? chartParagraphs(b, today) : blockParagraphs(b);
     if (!paras) continue;
     if (b.kind === 'chart') counts.as_text += 1;
-    put(b, r, textBox(id++, `${b.kind} ${b.id}`, r, input.dir === 'rtl' ? paras.map(rtlParagraph) : paras, b.kind === 'metric' ? 'ctr' : 't', b.pinned === true));
+    const said = input.dir === 'rtl' ? paras.map(rtlParagraph) : paras;
+    // D8771: counted as the dialog reports it — a box set smaller to fit, and the smallest share.
+    const scale = fitScale(said, r);
+    counts.text_boxes += 1;
+    if (scale < 1) { counts.shrunk += 1; counts.smallest = Math.min(counts.smallest, scale); }
+    put(b, r, textBox(id++, `${b.kind} ${b.id}`, r, said, b.kind === 'metric' ? 'ctr' : 't', b.pinned === true));
   }
   shapes.push(...withGroups(decor, () => id++), ...withGroups(placed, () => id++));
   if (input.brand.show_footer) {
@@ -656,7 +685,8 @@ export async function writeEditableDeck(input: EditableInput): Promise<EditableR
   const total = input.renderable.length;
   const media: Media[] = [];
   const charts: ChartPart[] = [];
-  const counts: Counts = { native: 0, pictured: 0, as_text: 0, placed: 0, not_placed: 0, shapes: 0, svg: 0, decor_not_drawn: 0 };
+  const counts: Counts = { native: 0, pictured: 0, as_text: 0, placed: 0, not_placed: 0, shapes: 0, svg: 0, decor_not_drawn: 0, text_boxes: 0, shrunk: 0, smallest: 1, diagrams: 0 };
+  let fromBlocks = 0;
   const shots = { left: CHART_SHOTS_MAX };
   const parts: ZipEntry[] = [];
   for (let i = 0; i < total; i += 1) {
@@ -664,7 +694,7 @@ export async function writeEditableDeck(input: EditableInput): Promise<EditableR
     const blocks = Array.isArray(stored?.blocks) && stored.blocks.length ? stored : null;
     let xml: string;
     let rels: string[] = [];
-    if (blocks) ({ xml, rels } = await blockSlideXml(blocks, i, total, input, media, charts, counts, shots));
+    if (blocks) { ({ xml, rels } = await blockSlideXml(blocks, i, total, input, media, charts, counts, shots)); fromBlocks += 1; }
     else xml = buildSlideXml(input.renderable[i], input.brand, i, total);
     parts.push({ name: `ppt/slides/slide${i + 1}.xml`, data: enc.encode(xml) });
     parts.push({
@@ -713,5 +743,8 @@ export async function writeEditableDeck(input: EditableInput): Promise<EditableR
     charts: { native: counts.native, pictured: counts.pictured, as_text: counts.as_text },
     images: { placed: counts.placed, not_placed: counts.not_placed },
     decor: { shapes: counts.shapes, svg: counts.svg, not_drawn: counts.decor_not_drawn },
+    text: { boxes: counts.text_boxes, shrunk: counts.shrunk, smallest: counts.smallest },
+    diagrams: counts.diagrams,
+    slides: { total, from_blocks: fromBlocks, text_frames: total - fromBlocks },
   };
 }

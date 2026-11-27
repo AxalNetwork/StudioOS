@@ -17,6 +17,7 @@ their import.
 | `incorporateModel.js` | Pure: the steps and their words, the recommendation, the jurisdiction card, your own projects, the prefill, the co-founder agreement's status, the timeline and the 83(b) line, the device draft. |
 | `itemisedQuoteModel.js` | D4357, pure: the review step's itemised quote, its Not recorded lines, each source and its day, and the total of the known lines. |
 | `incorporateAdapter.js` | The seam to what is not on main: `orderCompany` (#3855, the order's `company_uid`) and `askPanel` (#3706). |
+| `IncorporateStart.jsx` | D6688: INC8 subject selection before the existing incorporation flow. |
 
 ## The rules for adding here
 

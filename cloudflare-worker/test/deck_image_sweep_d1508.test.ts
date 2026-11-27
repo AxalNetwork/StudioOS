@@ -15,11 +15,11 @@ import { MAX_DELETES, imageReferenced, sweepDeckImages } from '../src/services/d
 import { Jobs } from '../src/models/jobs.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
 const names = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
   .sort((a, b) => migrationNumber(a) - migrationNumber(b) || a.localeCompare(b));
 const sqlOf = (n: string) => readFileSync(new URL('migrations/' + n, root), 'utf8');
@@ -30,8 +30,7 @@ const UID = (n: number) => `0b6a2c1e-3f4d-4a5b-8c9d-${String(n).padStart(12, '0'
 
 function fixture(upTo = Infinity) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline);
-  for (const n of names) if (migrationNumber(n) <= upTo) db.exec(sqlOf(n));
+  loadSchema(db, { below: upTo + 1 });
   db.exec("INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (2, 'founder', 100, 'Synthetic founder', 'synthetic-2@example.invalid', 1, 'studio')");
   db.exec("INSERT INTO projects(id, name, founder_id) VALUES (1, 'Synthetic venture', 100), (2, 'Other synthetic venture', 200)");
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (7, 1, 1, ?, ?, 1)').run('[]', 'Synthetic deck');

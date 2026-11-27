@@ -364,14 +364,8 @@ export async function loadAllLists(env: Env): Promise<SanctionEntity[]> {
 // Per-user screening — fetch lists, run matcher, persist verdict, notify
 // admin on hit. Idempotent: each run inserts a fresh row (history).
 // ---------------------------------------------------------------------------
-export async function screenUser(
-  env: Env,
-  userId: number,
-  subject: ScreeningSubject,
-  triggeredBy: { admin_user_id?: number | null; reason?: string } = {},
-): Promise<{ id: number; hit: boolean; severity: string; matches: MatchHit[] }> {
-  const entities = await loadAllLists(env);
-  await ensureSanctionsSchema(env);
+export async function screenNamedSubject(env: Env, subject: ScreeningSubject, loaded?: SanctionEntity[]) {
+  const entities = loaded ?? await loadAllLists(env);
   const matches = fuzzyMatchEntities(subject, entities);
   const hit = matches.length > 0;
   let severity: 'none' | 'review' | 'block' = 'none';
@@ -379,6 +373,17 @@ export async function screenUser(
     const top = matches[0];
     severity = (top.reasons.includes('name_exact') && top.reasons.includes('dob_exact')) ? 'block' : 'review';
   }
+  return {matches, hit, severity};
+}
+
+export async function screenUser(
+  env: Env,
+  userId: number,
+  subject: ScreeningSubject,
+  triggeredBy: { admin_user_id?: number | null; reason?: string } = {},
+): Promise<{ id: number; hit: boolean; severity: string; matches: MatchHit[] }> {
+  const {matches, hit, severity} = await screenNamedSubject(env, subject);
+  await ensureSanctionsSchema(env);
   let id = 0;
   try {
     const ins: any = await env.DB.prepare(

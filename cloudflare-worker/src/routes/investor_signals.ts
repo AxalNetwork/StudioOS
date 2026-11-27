@@ -28,7 +28,38 @@ const TICKET_BAND_RANGES: Record<string, [number, number]> = {
   '$250k-$1M':   [250_000,   1_000_000],
   '$1M+':        [1_000_000, 5_000_000],
 };
-const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+// #6131 (D6128 Q2): sectors and anti-thesis sectors are drawn from the NFX
+// taxonomy the investor onboarding offers (`frontend/src/lib/nfxSectors.js`,
+// verbatim and in its order; a test holds the two lists equal). Before this the
+// writer kept only the legacy labels below, so every onboarding pick was dropped
+// and `completed_at` (which needs a sector) was never set.
+export const NFX_SECTORS: readonly string[] = [
+  'Advertising', 'AgTech', 'AI', 'Analytics', 'AR/VR', 'AudioTech', 'AutoTech',
+  'BioTech', 'Chemicals', 'ClimateTech/CleanTech', 'Cloud Infrastructure',
+  'ConstructionTech', 'Consumer Health', 'Consumer Internet', 'Cosmetics',
+  'Creator/Passion Economy', 'Cybersecurity', 'Data Services', 'DeepTech',
+  'DefenseTech', 'Developer Tools', 'Diagnostics', 'Digital Health',
+  'Direct-to-Consumer (DTC)', 'Drug Delivery', 'E-commerce', 'Education', 'EnergyTech',
+  'Enterprise Applications', 'Enterprise Infrastructure', 'Enterprise',
+  'Entertainment & Sports', 'Fashion', 'FinTech', 'Food and Beverage',
+  'Future of Work', 'Games', 'Gaming/eSports', 'General Tech', 'Generative Tech/AI',
+  'Gig Economy', 'GovTech', 'Hardware', 'Health & Hospital Services', 'Health IT',
+  'Human Capital/HRTech', 'Impact', 'Insurance', 'IoT', 'LegalTech', 'Local Services',
+  'Lodging/Hospitality', 'Logistics', 'Manufacturing', 'MarketingTech', 'Marketplaces',
+  'Material Science', 'Media/Content', 'Medical Devices', 'Messaging',
+  'Parenting/Families', 'Payments', 'Pharmaceuticals', 'Real Estate/PropTech',
+  'Retail', 'Robotics', 'SaaS', 'Sales & CRM', 'Security', 'Semiconductors',
+  'Smart Cities/UrbanTech', 'SMB Software', 'Social Commerce', 'Social Networks',
+  'Space', 'Supply Chain Tech', 'Therapeutics', 'TransportationTech', 'Travel',
+  'Web3/Blockchain', 'Web3/Crypto', 'Wellness & Fitness',
+];
+// The earlier vocabulary. Rows saved before #6131 hold these labels, and the
+// Settings cards ("My thesis", the thesis editor, Firm settings) still offer
+// them and send the stored arrays back whole, so they stay accepted: dropping
+// them would erase a stored thesis on an unrelated Settings save.
+export const LEGACY_SECTOR_OPTIONS: readonly string[] = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
+// One vocabulary for the thesis and the anti-thesis (same list, opposite sign).
+export const SECTOR_OPTIONS: readonly string[] = [...new Set([...NFX_SECTORS, ...LEGACY_SECTOR_OPTIONS])];
 const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
 const GEO_OPTIONS    = ['North America','Europe','LATAM','APAC','MENA','Africa'];
 
@@ -110,8 +141,12 @@ async function ensureSchema(env: Env): Promise<void> {
   }
 }
 
-function asStrArr(v: unknown, allowed?: string[]): string[] {
+function asStrArr(v: unknown, allowed?: readonly string[]): string[] {
   if (!Array.isArray(v)) return [];
+  // A closed vocabulary bounds the array by itself (each value at most once),
+  // so the cap is the vocabulary's size; an open list keeps the cap of 25.
+  // The NFX list is longer than 25, and onboarding sets no pick limit.
+  const max = allowed ? allowed.length : 25;
   const out: string[] = [];
   const seen = new Set<string>();
   for (const x of v) {
@@ -121,7 +156,7 @@ function asStrArr(v: unknown, allowed?: string[]): string[] {
     if (seen.has(s)) continue;
     seen.add(s);
     out.push(s);
-    if (out.length >= 25) break;
+    if (out.length >= max) break;
   }
   return out;
 }

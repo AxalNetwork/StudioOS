@@ -33,6 +33,12 @@ export type CapacityPolicy = {
   approvedGroupId: number;
   /** Pilot narrows the existing eight-request authority bound without increasing it. */
   maxActiveRequests?: number;
+  /**
+   * #8626: how long after admission a merge candidate may keep up to maxExternalWorkerShards first-attempt
+   * Worker shards unstarted, for a Linux runner that is busy now. Unset: every shard dispatches as assigned
+   * at admission. It never limits hosted dispatch: a shard that is not held goes to hosted at once.
+   */
+  mergePickupHoldMs?: number;
   budgets: CapacityBudgets;
 };
 export type CiSubmission = {
@@ -175,7 +181,34 @@ export function validateCapacityPolicy(policy: CapacityPolicy): void {
         + b.hostedExecutionMs + b.controlMarginMs > b.queueMs
       // A fenced included attempt must still leave a full hosted fallback inside the request deadline.
       || b.includedStartMs + b.includedExecutionMs + b.cancellationMs + b.hostedStartMs
-        + b.hostedExecutionMs + b.controlMarginMs > b.queueMs) throw new Error('capacity_budget_refused');
+        + b.hostedExecutionMs + b.controlMarginMs > b.queueMs
+      // #8626: a shard picked up at the end of its hold still has its fenced attempt and a full hosted fallback.
+      || (policy.mergePickupHoldMs !== undefined && (!positive(policy.mergePickupHoldMs)
+        || policy.mergePickupHoldMs + b.externalStartMs + b.externalExecutionMs + b.cancellationMs + b.hostedStartMs
+          + b.hostedExecutionMs + b.controlMarginMs > b.queueMs))) throw new Error('capacity_budget_refused');
+}
+
+/** A missing, stale, incomplete or malformed inventory closes the self-hosted pools; hosted is unaffected. */
+function inventoryUsable(inventory: CapacityInventory | null, policy: CapacityPolicy, now: number): inventory is CapacityInventory {
+  return !!inventory?.complete
+    && Number.isSafeInteger(inventory.observedAt) && now >= inventory.observedAt
+    && now - inventory.observedAt <= policy.budgets.inventoryMaxAgeMs
+    && Array.isArray(inventory.runners) && inventory.runners.length <= 1000
+    && new Set(inventory.runners.map(r => r.id)).size === inventory.runners.length
+    && !inventory.runners.some(r => !positive(r.id) || r.groupId !== policy.approvedGroupId
+      || !['linux-x64', 'macos-arm64'].includes(r.profile)
+      || typeof r.online !== 'boolean' || typeof r.busy !== 'boolean' || typeof r.draining !== 'boolean');
+}
+
+/**
+ * #8626: the approved Linux runners a waiting merge Worker shard could run on. `idle` can take one now;
+ * `total` also counts busy ones, each of which can take one when it finishes. Offline and draining runners
+ * count in neither, and an unusable inventory gives zero for both.
+ */
+export function linuxPickupPool(inventory: CapacityInventory | null, policy: CapacityPolicy, now: number): { idle: number; total: number } {
+  if (!inventoryUsable(inventory, policy, now)) return { idle: 0, total: 0 };
+  const linux = inventory.runners.filter(r => r.profile === 'linux-x64' && r.online && !r.draining);
+  return { idle: linux.filter(r => !r.busy).length, total: linux.length };
 }
 
 export function submissionMatches(input: CiSubmission, proof: CiProvenance, repository: string): boolean {
@@ -209,14 +242,7 @@ export function selectPools(
   const assignments = input.shards.map(shard => ({ shard, profile: 'hosted' as CiProfile }));
   if (!trusted || !['push', 'merge_group'].includes(input.event)) return assignments;
   // A missing, stale or malformed inventory closes only the self-hosted pools.
-  const selfHosted = !!inventory?.complete
-    && Number.isSafeInteger(inventory.observedAt) && now >= inventory.observedAt
-    && now - inventory.observedAt <= policy.budgets.inventoryMaxAgeMs
-    && Array.isArray(inventory.runners) && inventory.runners.length <= 1000
-    && new Set(inventory.runners.map(r => r.id)).size === inventory.runners.length
-    && !inventory.runners.some(r => !positive(r.id) || r.groupId !== policy.approvedGroupId
-      || !['linux-x64', 'macos-arm64'].includes(r.profile)
-      || typeof r.online !== 'boolean' || typeof r.busy !== 'boolean' || typeof r.draining !== 'boolean');
+  const selfHosted = inventoryUsable(inventory, policy, now);
   const available = (profile: SelfHostedProfile) => !selfHosted ? 0 : Math.max(0, inventory!.runners.filter(r =>
     r.profile === profile && r.online && !r.busy && !r.draining).length - (reservations[profile] ?? 0));
   const free: Record<Exclude<CiProfile, 'hosted'>, number> = {

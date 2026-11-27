@@ -312,10 +312,13 @@ export function OpenDecisionButton({ onOpen, className = '' }) {
   );
 }
 
-/** The decision card: eligible, voted and recused, then one row per vote. */
-export function DecisionCard({ decision }) {
+/** The decision card: roster and tally figures, then one row per vote. */
+export function DecisionCard({ decision, user }) {
   const ballot = ballotOf(decision);
   const roster = rosterLine(decision);
+  const members = decision.roster?.members;
+  const awaitingYourVote = user?.id != null && Array.isArray(members)
+    && members.some((member) => Number(member.user_id) === Number(user.id) && member.vote === null);
   const votes = decision.votes ?? [];
   return (
     <section className="rounded-[10px] border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="commit-decision">
@@ -332,13 +335,17 @@ export function DecisionCard({ decision }) {
         </div>
         <dl className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="commit-ballot">
           <div className="flex items-center gap-1.5"><dt>Eligible voters</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{roster.unreadable ? <Unavailable /> : roster.eligible === null ? <NotRecorded /> : roster.eligible}</dd></div>
-          {roster.eligible !== null && !roster.unreadable ? (
-            <div className="flex items-center gap-1.5"><dt>To vote</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{roster.toVote === null ? <NotRecorded /> : roster.toVote}</dd></div>
-          ) : null}
           <div className="flex items-center gap-1.5"><dt>Voted</dt><dd className="font-bold text-axal-ink dark:text-gray-100">{ballot.voted}</dd></div>
           <div className="flex items-center gap-1.5"><dt>Recused</dt><dd className="font-bold text-axal-ink dark:text-gray-100"><span aria-hidden="true">⊘ </span>{ballot.recused} <span className="font-normal">· beside the tally</span></dd></div>
+          <div className="flex items-center gap-1.5">
+            <dt>To vote</dt>
+            <dd className="font-bold text-axal-ink dark:text-gray-100">
+              {roster.unreadable ? <Unavailable /> : roster.toVote === null ? <NotRecorded /> : <>{roster.toVote}{awaitingYourVote ? ' · you' : null}</>}
+            </dd>
+          </div>
         </dl>
       </div>
+      {roster.reason && <p className="mb-3 text-[11.5px] text-gray-600 dark:text-gray-400">{roster.reason}</p>}
       <RecordTable
         testid="commit-votes"
         head={['Partner', 'Vote', 'Rationale', 'Recorded']}
@@ -1024,7 +1031,7 @@ export default function InvestorCommitZone() {
                   onVoted={load}
                 />
                 <div className="hidden space-y-4 md:block" data-testid="commit-desktop">
-                  <DecisionCard decision={current} />
+                  <DecisionCard decision={current} user={user} />
                   <YourVote decision={current} user={user} onSaved={load} renderMark={(vote) => <VoteMark vote={vote} />} />
                   <div className="grid gap-4 lg:grid-cols-12">
                     <div className="min-w-0 lg:col-span-8">

@@ -32,6 +32,7 @@ import {
 } from '../../scripts/check-magic-link-insert.mjs';
 import { latestCanarySlot } from '../../scripts/check-magic-link-canary.mjs';
 import { withoutSafeComments } from '../../scripts/check-unused-imports.mjs';
+import { headerComment, indexMode } from '../../scripts/lib/folderFiles.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -668,7 +669,7 @@ test('the template key the probe looks for is the one the endpoint sends', () =>
   assert.equal(TEMPLATE_KEY, 'auth_magic_link', 'the probe changed which template it looks for');
   assert.ok(read('cloudflare-worker/src/templates/email/registry.ts').includes('auth_magic_link: t({'),
     'auth_magic_link is no longer a registered template');
-  assert.ok(read('cloudflare-worker/src/routes/auth.ts').includes("sendEmail(c.env, 'auth_magic_link'"),
+  assert.ok(read('cloudflare-worker/src/routes/auth.ts').includes(": 'auth_magic_link', ref, { name, magic_url: magicUrl }"),
     '/magic/start no longer sends auth_magic_link — the probe is watching the wrong row');
   // And the key is a code constant, not an env override that could point the
   // probe at a template nothing sends.
@@ -889,8 +890,12 @@ test('scheduled runs only observe D1, while manual runs default to checking the 
 // Wiring
 
 test('the new probe is documented where the other live probes are', () => {
+  // #6470: scripts/README.md names it under "The live probes"; its description is the
+  // script's header comment, which the README's generated list reads.
   const scripts = read('scripts/README.md');
-  assert.match(scripts, /`check-magic-link-insert\.mjs`/, 'add it to the live-probes table in scripts/README.md');
+  assert.equal(indexMode(scripts), 'generated');
+  assert.match(scripts.slice(scripts.indexOf('## The live probes'), scripts.indexOf('## The deck harness')), /`check-magic-link-insert\.mjs`/,
+    'name it with the other live probes in scripts/README.md');
   const wfReadme = read('.github/workflows/README.md');
   assert.match(wfReadme, /`magic-link-insert-probe\.yml`/, 'add the row to .github/workflows/README.md');
   // Select this workflow's configuration bullet, not the summary inventory row. See
@@ -902,11 +907,11 @@ test('the new probe is documented where the other live probes are', () => {
   assert.match(row, /arriv/i, 'the row does not say arrival is out of scope');
   // Both READMEs must stop saying the old thing: that this probe cannot see
   // delivery at all.
-  const scriptsRow = scripts.split('\n').find((l) => l.startsWith('| `check-magic-link-insert.mjs` |')) || '';
-  assert.ok(scriptsRow, 'the scripts/README.md row is no longer a table row of its own');
+  const scriptsRow = headerComment('check-magic-link-insert.mjs', read('scripts/check-magic-link-insert.mjs'));
+  assert.ok(scriptsRow, 'check-magic-link-insert.mjs has no header comment for scripts/README.md\'s generated list');
   assert.ok(!/It cannot see delivery/.test(scriptsRow),
-    'the scripts/README.md row still claims the probe cannot see delivery — it reads email_send_log now');
-  assert.match(scriptsRow, /email_send_log/, 'the row does not say what proves the send');
+    'the header still claims the probe cannot see delivery — it reads email_send_log now');
+  assert.match(scriptsRow, /email_send_log/, 'the header does not say what proves the send');
 });
 
 test('D79 records why this is a second probe and not a mode of the first', () => {

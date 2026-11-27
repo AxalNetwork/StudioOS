@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/** D7145 checks each workflow job against the production credential inventory and enforces its environment. */
 /** D7145: check every Actions workflow against the production credential inventory. */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -142,7 +143,7 @@ export function checkProductionCredentials(workflows, inventory) {
       // The disabled compute host already has its own protected preview environment (D4557).
       const computePreview = key === 'agent-compute-preview.yml/deploy_disabled_host' &&
         sameNames(triggers, ['workflow_dispatch']) && sameNames(names, ['CLOUDFLARE_API_TOKEN']);
-      const allowed = preview ? [null] : computePreview ? ['agent-compute-preview'] : ['production', 'production-ops'];
+      const allowed = preview ? [null] : computePreview ? ['agent-compute-preview'] : ['production', 'production-ops', 'production-backup', 'production-monitoring'];
       if (!allowed.includes(row.environment) || (actual ?? null) !== row.environment) {
         errors.push(`${key}: expected a literal ${allowed.includes(row.environment) ? row.environment : allowed.join(' or ')} environment`);
       }

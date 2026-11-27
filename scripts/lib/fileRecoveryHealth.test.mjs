@@ -1,3 +1,4 @@
+/** D6653: freshness/failure, metadata privacy and once-per-episode alert fixtures. */
 /** D6653: heartbeat freshness, failures, privacy and once-per-episode alert fixtures. */
 import test from 'node:test';
 import assert from 'node:assert/strict';

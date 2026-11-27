@@ -1,4 +1,9 @@
-/** D5535: disposable release-admission fixtures, without Cloudflare credentials. */
+/**
+ * D5535: production Wrangler config, account inventory and fail-closed release
+ * fixtures.
+ *
+ * D5535: disposable release-admission fixtures, without Cloudflare credentials.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';

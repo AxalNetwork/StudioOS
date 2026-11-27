@@ -161,6 +161,8 @@ The redirects, each the route's whole element:
 - `ReferEarnRedirect.jsx` — `/admin/refer-earn` →
   `/admin/programs/refer-and-earn/queue?moved=refer-earn`.
 
+`StudioProgramAccess.jsx` shows the Administrator’s licence and program request action or opens the program’s HQ grant grid (#6960).
+
 ## Rules
 
 - The pages read D953 §2's R1–R12; from D961, part 1's catalogue read

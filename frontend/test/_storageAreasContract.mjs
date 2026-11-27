@@ -39,6 +39,7 @@ export const STORAGE_AREA_CONTRACT = Object.freeze([
   ['brand_files', 'brand', '/account'],
   ['csv_imports', 'other', null],
   ['articles', 'other', '/articles/draft'],
+  ['work_graph_media', 'other', null],
 ].map((row) => Object.freeze(row)));
 
 /** The keys, sorted: compare as a set. */

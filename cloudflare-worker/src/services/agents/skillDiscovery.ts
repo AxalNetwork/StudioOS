@@ -58,7 +58,9 @@
 import { missingTools, type OutputKind, type Tag } from './skills';
 import { toolLabel, type AttachCode } from './skillLinks';
 
-export type DiscoveryCode = AttachCode | 'output_mismatch' | 'input_unavailable' | 'not_runnable';
+// D8768: `attachCheck` no longer refuses `role_mismatch` (fit only sorts); discovery's contract still gates on the
+// role for a task recommendation (SKILL_DISCOVERY_CONTRACT.md), so the code is discovery's own until that contract moves.
+export type DiscoveryCode = AttachCode | 'role_mismatch' | 'output_mismatch' | 'input_unavailable' | 'not_runnable';
 
 /** The agent the skill would run on, as the server reads it (`agentByUid`), never as a client claims it. */
 export type DiscoveryAgent = { role: string; company: number | string | null; tools: readonly string[] };

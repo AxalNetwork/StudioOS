@@ -120,6 +120,13 @@ async function proofWithConsents(env: Env, advisorId: number, items: ProofRow[])
   return out;
 }
 
+/** A count as the aggregate returned it, or null when it did not (D7807): never 0 for unread. */
+function countOrNull(v: unknown): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 advisors.get('/me/proof', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -131,9 +138,19 @@ advisors.get('/me/proof', async (c) => {
     const rows = await c.env.DB.prepare(
       'SELECT * FROM advisor_proof_items WHERE advisor_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?'
     ).bind(m.id, w.limit, w.offset).all<ProofRow>();
+    // One read of the whole list: three facts per claim, summed. D7807
+    // (#7807): `needs_reconfirmation` is a claim whose card reads Needs
+    // reconfirmation (`proofCardState` in proofModel.js): no live
+    // confirmation, no ask awaiting an answer, and a consent that was given,
+    // not withdrawn or cancelled, but is not about the claim as it now reads
+    // (`consentState`: confirmed before D4670, or the claim changed since).
     const whole = await c.env.DB.prepare(
       `SELECT COUNT(*) AS total,
-              COALESCE(SUM(CASE WHEN EXISTS (
+              COALESCE(SUM(attested), 0) AS attested,
+              COALESCE(SUM(awaiting), 0) AS awaiting,
+              COALESCE(SUM(CASE WHEN attested = 0 AND awaiting = 0 AND stale = 1 THEN 1 ELSE 0 END), 0) AS needs_reconfirmation
+         FROM (
+       SELECT EXISTS (
                 SELECT 1 FROM advisor_proof_consents x
                  WHERE x.proof_item_id = p.id AND x.consent_given = 1
                    AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
@@ -144,15 +161,28 @@ advisors.get('/me/proof', async (c) => {
                    AND json_extract(x.claim_json, '$.organization') IS p.organization
                    AND json_extract(x.claim_json, '$.period_note') IS p.period_note
                    AND json_extract(x.claim_json, '$.detail') IS p.detail
-              ) THEN 1 ELSE 0 END), 0) AS attested,
-              COALESCE(SUM(CASE WHEN EXISTS (
+              ) AS attested,
+              EXISTS (
                 SELECT 1 FROM advisor_proof_consents x
                  WHERE x.proof_item_id = p.id AND COALESCE(x.consent_given, 0) <> 1
                    AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
                    AND NOT EXISTS (SELECT 1 FROM advisor_proof_consent_cancellations a WHERE a.consent_id = x.id)
-              ) THEN 1 ELSE 0 END), 0) AS awaiting
-         FROM advisor_proof_items p WHERE p.advisor_id = ?`
-    ).bind(m.id).first<{ total: number; attested: number; awaiting: number }>();
+              ) AS awaiting,
+              EXISTS (
+                SELECT 1 FROM advisor_proof_consents x
+                 WHERE x.proof_item_id = p.id AND x.consent_given = 1
+                   AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+                   AND NOT EXISTS (SELECT 1 FROM advisor_proof_consent_cancellations a WHERE a.consent_id = x.id)
+                   AND NOT (x.claim_json IS NOT NULL
+                     AND json_extract(x.claim_json, '$.kind') IS p.kind
+                     AND json_extract(x.claim_json, '$.title') IS p.title
+                     AND json_extract(x.claim_json, '$.organization') IS p.organization
+                     AND json_extract(x.claim_json, '$.period_note') IS p.period_note
+                     AND json_extract(x.claim_json, '$.detail') IS p.detail)
+              ) AS stale
+         FROM advisor_proof_items p WHERE p.advisor_id = ?
+         )`
+    ).bind(m.id).first<{ total: number; attested: number; awaiting: number; needs_reconfirmation: number | null }>();
     const items = rows.results || [];
     const total = Number(whole?.total) || 0;
     const attested = Number(whole?.attested) || 0;
@@ -160,7 +190,12 @@ advisors.get('/me/proof', async (c) => {
       items: await proofWithConsents(c.env, m.id, items),
       page: pageFacts(w, total, items.length),
       // `awaiting`: a claim with an ask no one has answered or withdrawn.
-      counts: { total, attested, self_stated: total - attested, awaiting: Number(whole?.awaiting) || 0 },
+      // `needs_reconfirmation` (D7807): a whole-list figure, or null when the
+      // count did not come back; never a zero standing in for an unread count.
+      counts: {
+        total, attested, self_stated: total - attested, awaiting: Number(whole?.awaiting) || 0,
+        needs_reconfirmation: countOrNull(whole?.needs_reconfirmation),
+      },
     });
   } catch (e) { return mapError(c, e); }
 });

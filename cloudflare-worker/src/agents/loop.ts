@@ -249,7 +249,7 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
     l.task.detail ? `Detail: ${l.task.detail}` : '',
     goal ? `Goal: ${goal.title}${goal.why ? ` (why: ${goal.why})` : ''}` : '',
     l.task.source_kind === 'one_next_thing' && l.task.source_ref ? `One next thing: ${l.task.source_ref}` : '',
-    handTo.length ? `If part of this belongs to another role, end your answer with one line {"handoff":{"to_role":"<role>","title":"<the task for them>","why":"<why>","note":"<what they need to know>"}}. Roles you may hand off to: ${handTo.join(', ')}. A person decides it.` : '',
+    handTo.length ? `If part of this belongs to another role, end your answer with one line {"handoff":{"to_role":"<role>","title":"<the task for them>","why":"<why>","note":"<what they need to know>"}}. Roles you may hand off to: ${handTo.join(', ')}. A person decides it. To ask for a planner or a reviewer rather than a worker, add "role":"planner" or "role":"reviewer"; a reviewer also names the run it reviews, "reviews":"<run uid>", and is never that run's author (D8081).` : '',
   ].filter(Boolean).join('\n');
   const blocks = [
     `<agent_data source="memory" trust="data">${inert({ untrusted: true, data: notes })}</agent_data>`,

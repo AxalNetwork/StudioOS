@@ -97,7 +97,9 @@ test('the gallery filters by top core value, natural fit and risk, searches by n
   assert.deepEqual(gallery(PERSONAS, { risk: 'bold' }).map((p) => p.key), ['kade', 'ryssa']);
   assert.deepEqual(gallery(PERSONAS, { risk: 'balanced' }).map((p) => p.key), ['orrin']);
   assert.deepEqual(gallery(PERSONAS, { q: 'ORR' }).map((p) => p.key), ['orrin']);
-  assert.deepEqual(gallery(PERSONAS, { q: 'market' }).map((p) => p.key), ['orrin'], 'the tagline is searched too');
+  assert.deepEqual(gallery(PERSONAS, { q: 'road ends' }).map((p) => p.key), ['orrin'], 'the tagline is searched too');
+  // D8769: and the work each is good for, so "market" also finds Kade (Marketing and growth).
+  assert.deepEqual(gallery(PERSONAS, { q: 'market' }).map((p) => p.key), ['kade', 'orrin']);
   assert.deepEqual(gallery(PERSONAS, { value: 'integrity', fit: 'legal', risk: 'balanced' }).map((p) => p.key), ['orrin']);
   assert.equal(galleryCount(PERSONAS, PERSONAS), '4 agents');
   assert.equal(galleryCount(PERSONAS.slice(0, 1), PERSONAS), '1 of 4 agents');

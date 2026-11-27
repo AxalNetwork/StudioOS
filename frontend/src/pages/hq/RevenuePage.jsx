@@ -54,7 +54,7 @@ import { HIDDEN, withRefundsDue } from './revenue/advisoryRefundsModel';
 import RefundReviewFlow from '../../components/RefundReviewFlow.jsx';
 import { PromotionsSection } from './revenue/Promotions';
 import {
-  UNAVAILABLE, attentionItems, coverageSources, isReady, periodLabel, periodOptions,
+  UNAVAILABLE, attentionItems, coverageSources, isReady, periodLabel, periodOptions, revenueScopes,
 } from './revenue/revenueModel.js';
 
 // The parts' exports, from the page as they always were, so callers and tests read one module.
@@ -198,9 +198,7 @@ export default function RevenuePage() {
   const shownPeriod = period || (ready ? data.quarter.key : null);
   const nowMs = Date.now();
   const usageCoverage = ready ? data.usage_coverage : null;
-  const scopes = usageCoverage?.available
-    ? usageCoverage.by_licence.map((l) => ({ licence_uid: l.licence_uid, name: l.brand_name || l.licence_ref || l.licence_uid }))
-    : [];
+  const scopes = revenueScopes(data, shownPeriod);
   const sources = useMemo(
     () => coverageSources({ summary: data, statements, disputes, refunds, ceilings, period: shownPeriod }),
     [data, statements, disputes, refunds, ceilings, shownPeriod],
@@ -269,7 +267,7 @@ export default function RevenuePage() {
         {scoped && (
           <p className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[13px] text-axal-muted dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400" data-testid="hq-revenue-scope-note">
             Scope: <b className="text-axal-ink dark:text-gray-100">{scoped}</b>. Receivables, subsidiaries, promotions and Needs attention are narrowed to it.
-            The financial position, streams, AI economics and billing exceptions stay platform-wide, because no charge or AI run names its licence (U1).
+            AI per licence also follows Scope where recorded. The financial position, streams, platform AI totals and billing exceptions keep their labelled platform-wide scope.
           </p>
         )}
 
@@ -287,7 +285,7 @@ export default function RevenuePage() {
         <RevenueStreams stream={stream} summary={data} periodStatements={periodStatements} period={shownPeriod} onWhy={why} />
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <RevenueTrend period={shownPeriod} onWhy={why} />
-          <AiEconomicsSection summary={data} period={shownPeriod} onWhy={why} />
+          <AiEconomicsSection summary={data} licenceUid={scope} period={shownPeriod} onWhy={why} />
         </div>
         <ReceivablesSection statements={statements} licenceUid={scope} onOpen={setStatementUid} onRetry={loadStatements} onWhy={why} />
         <SubsidiariesSection

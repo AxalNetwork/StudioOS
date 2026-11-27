@@ -8,7 +8,7 @@ repair each describe a task. The runner returns a patch, or nothing. It pushes, 
 
 - **`edit`** is in the `repair` environment, which accepts deployments from `main` only.
   - It has the model credentials, `contents: read` and `id-token: write` (for Claude's federation), and no App token.
-  - It runs only this folder, checked out from `main`, and installs this folder's pinned SDKs with
+  - It runs only this folder, checked out at the attempt's controller commit (below), and installs this folder's pinned SDKs with
     `--ignore-scripts`.
   - The commit being fixed is checked out as data.
   - The model gets six tools: `read_file`, `list_dir`, `search`, `read_data`, `replace_in_file` and `write_file`.
@@ -22,6 +22,22 @@ repair each describe a task. The runner returns a patch, or nothing. It pushes, 
 `.github/workflows/landing-bot-model.yml` validates the task, runs up to three rounds and publishes the first
 patch that passed as the artifact `landing-bot-model-patch` (a patch file and a manifest, both JSON). Callers treat the
 manifest as untrusted and re-check it with `patch.mjs`'s `checkPatch` before they use it.
+
+## One controller revision per attempt (#8506)
+
+`prepare` resolves the controller, this folder and the rest of `scripts/landing-bot`, to **one commit** (the
+caller's own `github.sha`, since every caller runs on `main`; `main`'s head, read once, on a dispatch from
+elsewhere). Every round's `edit` and `verify` check out that commit, never a branch name, and the runner's
+`controller` output hands it to the caller's publish step, which checks out `github.sha` and refuses unless the
+two are one commit.
+
+The edit job writes a record file beside the patch (`record.mjs`): repository, task digest, pull request, target
+head, controller commit, run id and attempt, round, and the digest of the patch file's exact bytes. `verify` and the
+publish step each rebuild those fields from their own inputs and refuse any difference: another controller, another
+head, changed bytes, or a patch from an earlier attempt of the same run. The edit job calls no model when it
+cannot write a full record. The resolver then compares the PR's current head with the verified one: a moved head
+is a definitive hand-back, as an exhausted keeper is (D8077), not a quiet skip. Main repair compares the record
+with the runner's `head` output; main itself moves, and the manifest's before hashes keep a moved file safe.
 
 ## Providers
 

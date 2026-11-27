@@ -22,7 +22,7 @@
  */
 import type { Env } from '../types';
 import {
-  BLOB_BINDING, Spend, WORK_GRAPH_BLOB_DEPS, actorOk, blobPrefix, integrityEventStatement, outOfScope, parseBlobKey,
+  BLOB_BINDING, Spend, WORK_GRAPH_BLOB_DEPS, actorOk, blobKey, blobPrefix, integrityEventStatement, outOfScope, parseBlobKey,
   residencyAllowed, verifyBlob,
   type BlobCost, type BlobRefusal, type IntegrityEvent,
 } from './workGraphBlobs';
@@ -69,7 +69,7 @@ export type ReconcileResult = { ok: true; report: ReconcileReport; cost: BlobCos
 const posInt = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
 const nonNeg = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
 
-interface LiveRow { revision_uid: string; asset_uid: string; digest: string; byte_length: number; residency: string | null; flags: string | null }
+interface LiveRow { revision_uid: string; asset_uid: string; digest: string; byte_length: number; residency: string | null; source_id: string; project_id: number | null; flags: string | null }
 interface TombRow { revision_uid: string; asset_uid: string; digest: string; source_id: string }
 
 export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationContext, input: ReconcileInput): Promise<ReconcileResult> {
@@ -107,7 +107,7 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
 
   // 1. Live revisions of WorkGraph-held bytes: half-uploaded, lost or corrupt objects, and residency.
   const live = await s.all<LiveRow>(env.DB.prepare(
-    `SELECT r.revision_uid, r.asset_uid, r.digest, r.byte_length, r.residency,
+    `SELECT r.revision_uid, r.asset_uid, r.digest, r.byte_length, r.residency, r.source_id, r.project_id,
             (SELECT group_concat(f.flag) FROM work_graph_revision_flags f WHERE f.revision_uid = r.revision_uid AND f.cleared_at IS NULL) AS flags
        FROM work_graph_revisions r
       WHERE r.tenant_id = ? AND r.company_id = ? AND r.source_store = 'r2_object' AND r.source_locator = 'FILES'
@@ -123,10 +123,12 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
       if (!dry) writes.push(flag(r.revision_uid, r.asset_uid, 'residency_mismatch'));
       events.push({ ...base, assetUid: r.asset_uid, revisionUid: r.revision_uid, digest: r.digest, action: 'residency_flagged', outcome: 'flagged', detail: { residency: r.residency, jurisdiction: WORK_GRAPH_BLOB_DEPS.jurisdiction }, at });
     }
-    const cacheKey = `${r.digest}:${r.byte_length}`;
+    const cacheKey = `${r.source_id}:${r.digest}:${r.byte_length}`;
     let ok = verified.get(cacheKey);
     if (ok === undefined) {
-      const v = await verifyBlob(env, scope, r.digest, r.byte_length);
+      const v = r.source_id === blobKey({ ...scope, projectId: r.project_id }, r.digest, parseBlobKey(r.source_id)?.objectClass)
+        ? await verifyBlob(env, { ...scope, projectId: r.project_id }, r.digest, r.byte_length, undefined, parseBlobKey(r.source_id)?.objectClass)
+        : { ok: false, r2ClassB: 0 };
       s.cost.r2ClassB += v.r2ClassB;
       ok = v.ok;
       verified.set(cacheKey, ok);
@@ -154,7 +156,7 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
   const companyHold = holds.some((h) => h.asset_uid === null);
   const heldAssets = new Set(holds.map((h) => h.asset_uid).filter((a): a is string => a !== null));
   const deleteKeys: string[] = [];
-  const deletedDigests: string[] = [];
+  const deletedBlobs: { digest: string; object_class: string; project_id: number }[] = [];
 
   // 2. Orphans: objects under this company's prefix that no revision names.
   const listed = await bucket.list({ prefix: blobPrefix(scope), limit, cursor: input.cursors?.orphans ?? undefined, include: ['customMetadata'] } as R2ListOptions);
@@ -176,7 +178,7 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
       const action = dry ? 'listed' : companyHold ? 'held' : 'deleted';
       report.orphans.push({ key: o.key, digest, size: o.size, action });
       events.push({ ...base, digest, action: action === 'deleted' ? 'blob_deleted' : action === 'held' ? 'deletion_blocked' : 'orphan_listed', outcome: 'flagged', detail: { orphan: true, size: o.size }, at });
-      if (action === 'deleted') { deleteKeys.push(o.key); deletedDigests.push(digest); }
+      if (action === 'deleted') { deleteKeys.push(o.key); deletedBlobs.push({ digest, object_class: parseBlobKey(o.key)?.objectClass ?? 'generic', project_id: parseBlobKey(o.key)?.projectId ?? 0 }); }
     }
   }
   report.cursors.orphans = listed.truncated ? (listed as { cursor?: string }).cursor ?? null : null;
@@ -191,7 +193,11 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
       ORDER BY r.revision_uid LIMIT ?`,
   ).bind(scope.tenantId, scope.companyId, retentionCutoff, input.cursors?.tombstones ?? '', limit));
   const byKey = new Map<string, TombRow[]>();
-  for (const t of tombs) byKey.set(t.source_id, [...(byKey.get(t.source_id) ?? []), t]);
+  for (const t of tombs) {
+    const key = parseBlobKey(t.source_id);
+    if (!key || key.tenantId !== scope.tenantId || key.companyId !== scope.companyId || key.digest !== t.digest) continue;
+    byKey.set(t.source_id, [...(byKey.get(t.source_id) ?? []), t]);
+  }
   for (const [key, rows] of byKey) {
     const digest = rows[0].digest;
     const keep = await s.first<{ n: number; assets: string | null }>(env.DB.prepare(
@@ -213,7 +219,7 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
     events.push({ ...base, assetUid: rows[0].asset_uid, revisionUid: revisions[0], digest, action: action === 'deleted' ? 'blob_deleted' : action === 'held' ? 'deletion_blocked' : 'orphan_listed', outcome: 'flagged', detail: { tombstoned: revisions }, at });
     if (action === 'deleted') {
       deleteKeys.push(key);
-      deletedDigests.push(digest);
+      deletedBlobs.push({ digest, object_class: parseBlobKey(key)?.objectClass ?? 'generic', project_id: parseBlobKey(key)?.projectId ?? 0 });
       // The deletion tombstone: permanent, so the revision reads as deleted, never as merely missing.
       for (const r of rows) writes.push(flag(r.revision_uid, r.asset_uid, 'bytes_deleted'));
     }
@@ -252,8 +258,8 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
     s.cost.r2ClassA++;
     writes.push(env.DB.prepare(
       `UPDATE work_graph_blobs SET deleted_at = ?
-        WHERE tenant_id = ? AND company_id = ? AND deleted_at IS NULL AND digest IN (SELECT value FROM json_each(?))`,
-    ).bind(at, scope.tenantId, scope.companyId, JSON.stringify(deletedDigests)));
+        WHERE tenant_id = ? AND company_id = ? AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM json_each(?) d WHERE json_extract(d.value, '$.digest') = work_graph_blobs.digest AND json_extract(d.value, '$.object_class') = work_graph_blobs.object_class AND json_extract(d.value, '$.project_id') = work_graph_blobs.project_id)`,
+    ).bind(at, scope.tenantId, scope.companyId, JSON.stringify(deletedBlobs)));
   }
   // A dry run changes nothing: no flag, no deletion, no audit row. It only reports.
   const total = dry ? 0 : writes.length + events.length;

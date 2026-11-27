@@ -35,7 +35,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { METRIC_KEYS } from '../src/services/updateShare.ts';
 import { GROW_MODULES } from '../src/services/growCycle.ts';
 import {
-  KPI_RULES_REQUIRED, MODULE_ORDER, REPORT_FIGURES, applyChoices, assembleReport, figureFor, readerFigures, requiredFiguresOf,
+  MODULE_ORDER, REPORT_FIGURES, applyChoices, assembleReport, figureFor, readerFigures, requiredFiguresOf,
 } from '../src/services/reportFigures.ts';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -74,6 +74,8 @@ const PERIOD_A = 'a'.repeat(32), PERIOD_B = 'b'.repeat(32), PERIOD_B2 = 'c'.repe
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   DDL.forEach((s) => db.exec(s));
+  db.exec(read('cloudflare-worker/sql/migrations/168_portfolio_marks_distributions.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/202611220339_6214_portfolio_reporting_rule_history.sql'));
   db.exec(`
     INSERT INTO founders (id, name, email) VALUES (31, 'Fay Founder', 'fay@example.test'), (32, 'Otis Other', 'otis@example.test');
     INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES
@@ -161,9 +163,6 @@ test('REPORT_FIGURES: one key per figure, shared update metrics and KPI rules ma
     .matchAll(/\(NULL, '(\w+)',\s*'[^']*',\s*'[^']*',\s*'[^']*',\s*'(monthly|quarterly)',\s*([01]),/g)].map((m) => ({ key: m[1], cadence: m[2], required: m[3] === '1' }));
   assert.equal(seeds.length, 8);
   for (const s of seeds) assert.ok(figureFor(s.key), `KPI rule ${s.key} has no report figure`);
-  for (const cadence of ['monthly', 'quarterly'] as const) {
-    assert.deepEqual([...KPI_RULES_REQUIRED[cadence]].sort(), seeds.filter((s) => s.required && s.cadence === cadence).map((s) => s.key).sort(), cadence);
-  }
   const slugs = new Set(GROW_MODULES.map((m: any) => m.slug));
   assert.deepEqual([...MODULE_ORDER], GROW_MODULES.map((m: any) => m.slug));
   for (const f of REPORT_FIGURES) assert.ok(slugs.has(f.module), `${f.key} names no Grow module`);
@@ -171,8 +170,8 @@ test('REPORT_FIGURES: one key per figure, shared update metrics and KPI rules ma
 
 test('requiredFiguresOf: the signed paper’s figures win; a KPI duty takes the KPI rules; an update requires none', () => {
   assert.deepEqual(requiredFiguresOf({ kind: 'quarterly_kpi', required_figures: '["burn","mrr","nonsense"]' }), ['net_burn', 'mrr']);
-  assert.deepEqual(requiredFiguresOf({ kind: 'monthly_financials', required_figures: '[]' }), ['cash_balance', 'net_burn', 'runway', 'revenue']);
-  assert.deepEqual(requiredFiguresOf({ kind: 'quarterly_kpi', required_figures: '[]' }), ['cash_balance', 'net_burn', 'runway', 'revenue', 'arr', 'headcount']);
+  assert.deepEqual(requiredFiguresOf({ kind: 'monthly_financials', required_figures: '[]', kpi_rules_required: ['cash_balance','net_burn','runway_months','revenue'] }), ['cash_balance', 'net_burn', 'runway', 'revenue']);
+  assert.deepEqual(requiredFiguresOf({ kind: 'quarterly_kpi', required_figures: '[]', kpi_rules_required: ['cash_balance','net_burn','runway_months','revenue','arr','headcount'] }), ['cash_balance', 'net_burn', 'runway', 'revenue', 'arr', 'headcount']);
   assert.deepEqual(requiredFiguresOf({ kind: 'quarterly_update', required_figures: '[]' }), []);
   assert.deepEqual(requiredFiguresOf({ kind: 'annual_audited', required_figures: 'not json' }), []);
 });

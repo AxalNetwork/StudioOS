@@ -3,7 +3,7 @@
 // 1024px) and, where the layout differs, at desktop width. The page's own
 // reads are stubbed as D1030's suite does; the drawer's and the check-in's go
 // through the real clients to a stubbed fetch. Fixtures are worked out by hand.
-import test from 'node:test';
+import test, { afterEach, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { act } from 'react';
@@ -17,11 +17,16 @@ const pagePath = 'pages/events/MyEventsPage.jsx';
 const page = read('frontend/src/' + pagePath);
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
-// The page keeps its own clock (`Date.now()`), so the fixtures are relative to today.
+// The page keeps its own clock (`Date.now()`), so every test runs at one fixed instant and the fixtures are
+// relative to it. On the real clock, Northwind's 23:59 start had already passed in the last minute of each UTC
+// day, so the row lost its Check in and MEV18c failed (run 45722301056, 23:59:57Z).
+const FIXED_NOW = Date.parse('2026-11-18T12:00:00Z');
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: FIXED_NOW }));
+afterEach(() => mock.timers.reset());
 const DAY = 86_400_000;
 const iso = (ms) => new Date(ms).toISOString();
-const todayAt = (hhmm) => `${new Date().toISOString().slice(0, 10)}T${hhmm}:00Z`;
-const T0 = Date.now();
+const todayAt = (hhmm) => `${iso(FIXED_NOW).slice(0, 10)}T${hhmm}:00Z`;
+const T0 = FIXED_NOW;
 const ATTENDING = [
   { id: 1, title: 'Pricing Workshop', starts_at: iso(T0 + 3 * DAY), ends_at: null, timezone: 'UTC', location_kind: 'virtual', location_url: 'https://example.test/join', reg_status: 'confirmed', payment_status: 'none', comp: true, comp_source: 'audience_rule', checkin_code: 'K7Q2-9X4M' },
   { id: 2, title: 'Operators Social', starts_at: iso(T0 + 18 * DAY), ends_at: null, timezone: 'UTC', location_kind: 'in_person', location_text: 'Rua Exemplo 10', reg_status: 'waitlisted', reg_waitlist_position: 3, comp: false, checkin_code: null },

@@ -22,6 +22,8 @@
  * (`services/programRegistry.ts`) at write time, so a typo is refused before it is frozen, never after.
  */
 import type { Env } from '../types';
+import { programOf } from './programGrants';
+import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
 import { isRegistryKey } from './programRegistry';
 
 export const PACKAGE_STATUSES = ['draft', 'active', 'retired'] as const;
@@ -43,7 +45,23 @@ export class PackageError extends Error {
   }
 }
 
+export type HqService = { kind: 'hq_service'; description: string };
+
+/** Explicit delivery terms are independent of catalogue readiness and program metadata. */
+export function readDelivery(key: string, raw: unknown): HqService | null {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') throw new PackageError(400, 'invalid_delivery', 'Choose studio operation or an HQ service.');
+  const { kind, description } = raw as Record<string, unknown>;
+  if (kind === 'studio_operation') return null;
+  if (kind !== 'hq_service' || typeof description !== 'string' || !description.trim() || description.trim().length > 500) {
+    throw new PackageError(400, 'invalid_delivery', 'Describe the HQ service in 1 to 500 characters.');
+  }
+  if (programOf(key)?.readiness !== 'hq') throw new PackageError(400, 'invalid_delivery', 'Only a program delivered by HQ can have HQ service terms.');
+  return { kind, description: description.trim() };
+}
+
 export type PackageItem = {
+  delivery?: HqService;
   program_key: string;
   included_by_default: boolean;
   position: number;
@@ -96,12 +114,13 @@ function itemOf(r: Record<string, unknown>): PackageItem {
   return {
     program_key: String(r.program_key), included_by_default: Number(r.included_by_default) === 1,
     position: Number(r.position), metadata,
+    ...(r.hq_service_description ? { delivery: { kind: 'hq_service' as const, description: String(r.hq_service_description) } } : {}),
   };
 }
 
 async function itemsOf(env: Env, packageUid: string): Promise<PackageItem[]> {
   const r = await env.DB.prepare(
-    'SELECT program_key, included_by_default, position, metadata_json FROM program_package_items WHERE package_uid = ? ORDER BY position, program_key',
+    'SELECT program_key, included_by_default, position, metadata_json, hq_service_description FROM program_package_items WHERE package_uid = ? ORDER BY position, program_key',
   ).bind(packageUid).all<Record<string, unknown>>();
   return (r.results || []).map(itemOf);
 }
@@ -164,7 +183,7 @@ const PACKAGE_KEY_MAX = 60;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ITEMS_MAX = 50;
 
-export type ItemInput = { program_key: string; included_by_default: boolean; metadata: Record<string, unknown> | null };
+export type ItemInput = { delivery?: HqService | null; program_key: string; included_by_default: boolean; metadata: Record<string, unknown> | null };
 export type PackageInput = {
   name: string;
   description: string | null;
@@ -255,7 +274,8 @@ export function validatePackageInput(body: unknown): { ok: true; value: PackageI
       if (seen.has(key)) { dup = key; continue; }
       seen.add(key);
       const meta = r.metadata && typeof r.metadata === 'object' && !Array.isArray(r.metadata) ? r.metadata as Record<string, unknown> : null;
-      items.push({ program_key: key, included_by_default: r.included_by_default !== false, metadata: meta });
+      const delivery = r.delivery === undefined ? undefined : readDelivery(key, r.delivery);
+      items.push({ program_key: key, included_by_default: r.included_by_default !== false, metadata: meta, delivery });
     }
     if (bad.length) errors.items = `not a program key: ${bad.join(', ')}`;
     else if (dup) errors.items = `${dup} is listed more than once`;
@@ -274,10 +294,17 @@ export async function unknownProgramKeys(env: Env, items: ItemInput[]): Promise<
   return keys.filter((k) => !known.has(k));
 }
 
+// Older clients send program keys and metadata when copying or editing a version.
+function withPreviousDelivery(items: ItemInput[], previous: PackageItem[]): ItemInput[] {
+  const saved = new Map(previous.map((item) => [item.program_key, item.delivery]));
+  return items.map((item) => item.delivery === undefined && saved.get(item.program_key)
+    ? { ...item, delivery: saved.get(item.program_key) } : item);
+}
+
 function itemStatements(env: Env, packageUid: string, items: ItemInput[]) {
   return items.map((it, i) => env.DB.prepare(
-    `INSERT INTO program_package_items (package_uid, program_key, included_by_default, position, metadata_json) VALUES (?, ?, ?, ?, ?)`,
-  ).bind(packageUid, it.program_key, it.included_by_default ? 1 : 0, i + 1, it.metadata ? JSON.stringify(it.metadata) : null));
+    `INSERT INTO program_package_items (package_uid, program_key, included_by_default, position, metadata_json, hq_service_description) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(packageUid, it.program_key, it.included_by_default ? 1 : 0, i + 1, it.metadata ? JSON.stringify(it.metadata) : null, it.delivery?.description ?? null));
 }
 
 /** Creates a brand-new package key as its DRAFT v1. 409 `package_key_taken` if the key already exists (any version). */
@@ -303,6 +330,8 @@ export async function createPackage(env: Env, packageKey: string, input: Package
 export async function draftNextVersion(env: Env, packageKey: string, input: PackageInput, actor: string | null): Promise<ProgramPackageWithItems> {
   const latest = await env.DB.prepare('SELECT MAX(version) AS v FROM program_packages WHERE package_key = ?').bind(packageKey).first<{ v: number | null }>();
   if (!latest?.v) throw new PackageError(404, 'not_found', `No package has the key ${packageKey}.`);
+  const previous = await versionDetail(env, packageKey, latest.v);
+  const items = withPreviousDelivery(input.items, previous.items);
   const next = Number(latest.v) + 1;
   const uid = crypto.randomUUID();
   await env.DB.batch([
@@ -314,7 +343,7 @@ export async function draftNextVersion(env: Env, packageKey: string, input: Pack
     ).bind(uid, packageKey, next, input.name, input.description, input.currency, input.base_annual_fee_cents,
       input.guidance_min_cents, input.guidance_max_cents, input.floor_multiplier_ppm, input.ceiling_multiplier_ppm,
       input.effective_from, input.effective_to, new Date().toISOString(), actor),
-    ...itemStatements(env, uid, input.items),
+    ...itemStatements(env, uid, items),
   ]);
   return versionDetail(env, packageKey, next);
 }
@@ -327,18 +356,26 @@ export async function updateDraftVersion(env: Env, packageKey: string, version: 
   if (before.status !== 'draft') {
     throw new PackageError(409, 'package_version_immutable', `${packageKey} v${version} is ${before.status}; publish a new version instead of editing it.`);
   }
-  const res = await env.DB.prepare(
+  // A legacy editor omits delivery. Preserve stored terms for each retained key,
+  // and guard them in the same transaction so a concurrent service edit cannot be lost.
+  const original = await itemsOf(env, before.uid);
+  const originalTerms = new Map(original.map((item) => [item.program_key, item.delivery?.description ?? null]));
+  const preserve = input.items.filter((item) => item.delivery === undefined && originalTerms.has(item.program_key));
+  const items = withPreviousDelivery(input.items, original);
+  const result = await runDecision(env, [env.DB.prepare(
     `UPDATE program_packages SET name = ?, description = ?, currency = ?, base_annual_fee_cents = ?, guidance_min_cents = ?,
        guidance_max_cents = ?, floor_multiplier_ppm = ?, ceiling_multiplier_ppm = ?, effective_from = ?, effective_to = ?
      WHERE uid = ? AND status = 'draft'`,
   ).bind(input.name, input.description, input.currency, input.base_annual_fee_cents, input.guidance_min_cents,
     input.guidance_max_cents, input.floor_multiplier_ppm, input.ceiling_multiplier_ppm, input.effective_from, input.effective_to,
-    before.uid).run();
-  if (!res.meta?.changes) throw new PackageError(409, 'package_version_immutable', `${packageKey} v${version} was published while you edited it; publish a new version.`);
-  await env.DB.batch([
+    before.uid), decisionGuard(env),
+    ...preserve.map((item) => env.DB.prepare(`INSERT INTO decision_guard (decision_won)
+      VALUES (CASE WHEN EXISTS (SELECT 1 FROM program_package_items WHERE package_uid = ? AND program_key = ? AND hq_service_description IS ?) THEN 1 ELSE 0 END)`)
+      .bind(before.uid, item.program_key, originalTerms.get(item.program_key) ?? null)),
     env.DB.prepare('DELETE FROM program_package_items WHERE package_uid = ?').bind(before.uid),
-    ...itemStatements(env, before.uid, input.items),
+    ...itemStatements(env, before.uid, items), clearGuard(env),
   ]);
+  if (result.lost) throw new PackageError(409, 'changed_since_open', 'The draft changed or was published. Reload it before editing.');
   return versionDetail(env, packageKey, version);
 }
 

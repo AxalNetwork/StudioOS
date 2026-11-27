@@ -1,6 +1,13 @@
 import type { Env } from '../types';
 import { isSuppressed } from './newsletter';
 import { plainStripeAmount } from '../../../frontend/src/lib/money.js';
+import { sendRawEmailOutcome, type RawEmailOpts } from './email/gmail';
+import { deliverWithReference, issuanceOf, type DeliveryResult, type SendReference } from './email/deliveryContract';
+
+// D8536 (#8536) — the delivery contract for critical flows lives in
+// `email/deliveryContract.ts`; its types are re-exported here so a caller
+// that already imports this file reads one place.
+export type { DeliveryFlow, DeliveryResult, DeliveryState, SendReference } from './email/deliveryContract';
 
 // A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
 // send inline, so a Google endpoint that never answers holds a person's sign-in
@@ -280,23 +287,10 @@ export async function sendAgreementAssignedEmail(
   return (await sendAgreementAssignedEmailResult(env, to, recipientName, agreementLabel, signLink, adminName)).ok;
 }
 
-export async function sendAgreementAssignedEmailResult(
-  env: Env,
-  to: string,
-  recipientName: string,
-  agreementLabel: string,
-  signLink: string,
-  adminName: string,
-  linkExpiryDays = 7,
-): Promise<EmailSendResult> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.error('[EMAIL] Gmail credentials missing — agreement email not sent');
-    return { ok: false, reason: 'not_configured' };
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
+/** The agreement (signing) email's subject, HTML and text. Pure, so a test reads exactly what is sent. */
+export function agreementAssignedEmailContent(
+  recipientName: string, agreementLabel: string, signLink: string, adminName: string, linkExpiryDays = 7,
+): { subject: string; html: string; text: string } {
     const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
     const safeAgreement = escapeHtml(agreementLabel);
     const safeAdmin = escapeHtml(adminName);
@@ -345,6 +339,27 @@ export async function sendAgreementAssignedEmailResult(
 </table></td></tr></table></body></html>`;
     const text = `${greet}\n\n${adminName} has verified your partner profile and assigned your Closing Binder:\n\n  ${agreementLabel}\n\nReview and sign here: ${signLink}\n\nThis link expires in ${linkExpiryDays} days. Every access is logged.\n\n— Axal Deals`;
     const subject = `Your Closing Binder is ready: ${agreementLabel}`;
+    return { subject, html, text };
+}
+
+export async function sendAgreementAssignedEmailResult(
+  env: Env,
+  to: string,
+  recipientName: string,
+  agreementLabel: string,
+  signLink: string,
+  adminName: string,
+  linkExpiryDays = 7,
+): Promise<EmailSendResult> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — agreement email not sent');
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = agreementAssignedEmailContent(recipientName, agreementLabel, signLink, adminName, linkExpiryDays);
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Deals <deal@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -509,22 +524,10 @@ export async function sendPartnerInvitationEmail(
   return (await sendPartnerInvitationEmailResult(env, to, recipientName, adminName, link, personalMessage)).ok;
 }
 
-export async function sendPartnerInvitationEmailResult(
-  env: Env,
-  to: string,
-  recipientName: string,
-  adminName: string,
-  link: string,
-  personalMessage: string,
-): Promise<EmailSendResult> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
-    return { ok: false, reason: 'not_configured' };
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
+/** The partner invitation's subject, HTML and text. Pure, so a test reads exactly what is sent (D8536 part 3). */
+export function partnerInvitationEmailContent(
+  recipientName: string, adminName: string, link: string, personalMessage: string,
+): { subject: string; html: string; text: string } {
     const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
     const noteBlock = personalMessage
       ? `<tr><td style="padding:0 32px 8px;"><div style="background:#faf5ff;border-left:3px solid #7c3aed;border-radius:8px;padding:14px 16px;color:#4b5563;font-size:14px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(personalMessage)}</div></td></tr>`
@@ -576,6 +579,26 @@ ${noteBlock}
     const noteText = personalMessage ? `\n\n${personalMessage}\n\n` : '\n\n';
     const text = `${greet}\n\n${adminName} has invited you to join the Axal VC partner network.${noteText}Open the partner onboarding chatbot here: ${link}\n\nThis link expires in 14 days.\n\n— Axal VC`;
     const subject = `You're invited to partner with Axal VC`;
+    return { subject, html, text };
+}
+
+export async function sendPartnerInvitationEmailResult(
+  env: Env,
+  to: string,
+  recipientName: string,
+  adminName: string,
+  link: string,
+  personalMessage: string,
+): Promise<EmailSendResult> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = partnerInvitationEmailContent(recipientName, adminName, link, personalMessage);
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal VC <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -611,25 +634,18 @@ ${noteBlock}
  *
  * Every interpolated value is escaped. `companyName` and `inviterName` are
  * typed by a user, and this is HTML going to a third party's inbox.
+ *
+ * D8536: the subject, text and HTML are built here, pure, so a test reads
+ * exactly what is sent. The company settings page sends it under the delivery
+ * contract (`sendCompanyInvitationEmailBound` below), and so does the HQ move
+ * invitation (`rpc/branchOps.ts`, subject `branch_invitation`, part 3).
  */
-export async function sendCompanyInvitationEmail(
-  env: Env,
-  to: string,
-  companyName: string,
-  inviterName: string,
-  link: string,
-): Promise<boolean> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return false;
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
-    console.error('[EMAIL] Gmail credentials missing — company invitation not sent');
-    return false;
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
-    const co = escapeHtml(companyName);
-    const who = escapeHtml(inviterName);
-    const html = `<!DOCTYPE html>
+export function companyInvitationEmailContent(
+  companyName: string, inviterName: string, link: string,
+): { subject: string; html: string; text: string } {
+  const co = escapeHtml(companyName);
+  const who = escapeHtml(inviterName);
+  const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
@@ -669,10 +685,29 @@ export async function sendCompanyInvitationEmail(
   </p>
 </td></tr>
 </table></td></tr></table></body></html>`;
-    const text = `${inviterName} invited you to join ${companyName} on Axal VC StudioOS.\n\n`
-      + `Accept here: ${link}\n\nThis invitation expires in 14 days and works only for this email `
-      + `address. If you were not expecting it, you can ignore it — nothing happens until you accept.\n\n— Axal VC`;
-    const rawEmail = buildRawEmail(to, `${inviterName} invited you to ${companyName}`, html, text, 'Axal VC <noreply@axal.vc>');
+  const text = `${inviterName} invited you to join ${companyName} on Axal VC StudioOS.\n\n`
+    + `Accept here: ${link}\n\nThis invitation expires in 14 days and works only for this email `
+    + `address. If you were not expecting it, you can ignore it — nothing happens until you accept.\n\n— Axal VC`;
+  return { subject: `${inviterName} invited you to ${companyName}`, html, text };
+}
+
+export async function sendCompanyInvitationEmail(
+  env: Env,
+  to: string,
+  companyName: string,
+  inviterName: string,
+  link: string,
+): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
+    console.error('[EMAIL] Gmail credentials missing — company invitation not sent');
+    return false;
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = companyInvitationEmailContent(companyName, inviterName, link);
+    const rawEmail = buildRawEmail(to, subject, html, text, 'Axal VC <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
@@ -690,6 +725,174 @@ export async function sendCompanyInvitationEmail(
     console.error(`[EMAIL] Company invitation failed for ${to}: ${e?.message || 'Unknown error'}`);
     return false;
   }
+}
+
+/**
+ * D8536 (#8536) — the company invitation under the delivery contract. The
+ * address is the one the invitation row names (`ref.subject`), the answer is
+ * the contract state, and a retry of the same reference never mails twice.
+ * A refused send is tried once more in the same call, since nothing left.
+ */
+export async function sendCompanyInvitationEmailBound(
+  env: Env,
+  ref: SendReference,
+  content: { companyName: string; inviterName: string; link: string },
+): Promise<DeliveryResult> {
+  const { subject, html, text } = companyInvitationEmailContent(content.companyName, content.inviterName, content.link);
+  return deliverWithReference(env, ref, (to) => sendRawEmailOutcome(env, {
+    to, subject, html, text, from: 'Axal VC <noreply@axal.vc>', mailClass: 'transactional',
+  }), { tries: 2 });
+}
+
+// ---------------------------------------------------------------------------
+// D8536 part 2 (#8536) — signatures, billing and operational alerts under the
+// delivery contract. Each sender takes a send reference instead of an address:
+// the recipient is read from the reference's subject record, the answer is the
+// contract state, and a retry of the same reference never mails twice. The
+// content functions above are the ones the unreferenced senders use, so the
+// message a person receives is unchanged. A refused send is tried once more in
+// the same call, since nothing left, except a signing email (SIGNING_TRIES).
+// ---------------------------------------------------------------------------
+async function deliverBound(
+  env: Env, ref: SendReference, message: (to: string) => Omit<RawEmailOpts, 'to'>, tries = 2,
+): Promise<DeliveryResult> {
+  return deliverWithReference(env, ref, (to) => sendRawEmailOutcome(env, { ...message(to), to }), { tries });
+}
+
+// A signing email is tried once per call. Its link can be replaced by a
+// concurrent resend while the first send is out (D924), and a second try in
+// the same call would mail the superseded link. Every caller already answers a
+// refused send (restoring the earlier link, or a 502 the person retries), and
+// that retry carries the same reference.
+const SIGNING_TRIES = 1;
+
+/** A contract answer as the older `EmailSendResult` (`ok` only for `accepted`), for callers that read `.ok`. */
+export function asEmailSendResult(r: DeliveryResult): EmailSendResult {
+  if (r.state === 'accepted') return { ok: true, reason: null };
+  if (r.reason === 'suppressed') return { ok: false, reason: 'suppressed' };
+  if (r.reason === 'not_configured') return { ok: false, reason: 'not_configured' };
+  return { ok: false, reason: r.state === 'timed_out' ? 'failed' : 'refused' };
+}
+
+/**
+ * D8536 part 2 (#8536) — the send reference of one signing email. The subject
+ * is the `esign_recipients` row, which names the address while it waits to
+ * sign. The attempt is which issuance of its signing token this is (the first
+ * 16 hex of the token's SHA-256, so a replaced link is a new attempt) and the
+ * occasion: `send` for the first email of a token, `remind-YYYYMMDD` for the
+ * sender's reminder (at most one a day, D411), `resend-YYYYMMDDHH` for a
+ * re-send of the same link (a signer's own, at most one an hour, D6197; an
+ * admin's). A retry within one occasion carries the same reference, so a send
+ * that was accepted, or that left without an answer, is not mailed again.
+ */
+export type SigningOccasion = 'send' | 'renew' | 'remind' | 'resend';
+export async function signingRef(recipientId: number, token: string, occasion: SigningOccasion, now = new Date()): Promise<SendReference> {
+  const iso = now.toISOString();
+  const day = iso.slice(0, 10).replace(/-/g, '');
+  const when = occasion === 'remind' ? `-${day}` : occasion === 'resend' ? `-${day}${iso.slice(11, 13)}` : '';
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  const issuance = Array.from(new Uint8Array(digest)).slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return { flow: 'signature', subject: { kind: 'esign_recipient', id: recipientId }, attempt: `${issuance}.${occasion}${when}` };
+}
+
+/** The agreement signing email, to the e-sign recipient `ref` names (subject `esign_recipient`). */
+export async function sendAgreementAssignedEmailBound(
+  env: Env,
+  ref: SendReference,
+  c: { recipientName: string; agreementLabel: string; signLink: string; adminName: string; linkExpiryDays?: number },
+): Promise<DeliveryResult> {
+  const { subject, html, text } = agreementAssignedEmailContent(c.recipientName, c.agreementLabel, c.signLink, c.adminName, c.linkExpiryDays ?? 7);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal Deals <deal@axal.vc>', mailClass: 'transactional' }), SIGNING_TRIES);
+}
+
+/** The release sign-off email, to the e-sign recipient `ref` names (subject `esign_recipient`). */
+export async function sendReleaseSignEmailBound(env: Env, ref: SendReference, input: ReleaseSignEmailInput): Promise<DeliveryResult> {
+  const { subject, html, text } = releaseSignEmailContent(input);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'StudioOS releases <noreply@axal.vc>', mailClass: 'transactional' }), SIGNING_TRIES);
+}
+
+/** A signed PDF forwarded to the address its forward log row names (subject `esign_forward`). */
+export async function sendSignedPdfForwardedEmailBound(
+  env: Env,
+  ref: SendReference,
+  c: { documentTitle: string; senderName: string; pdfBytes: Uint8Array; message?: string; from?: string },
+): Promise<DeliveryResult> {
+  return deliverBound(env, ref, (to) => {
+    const { subject, html, text, filename } = signedPdfForwardedEmailContent(to, c.documentTitle, c.senderName, { message: c.message });
+    return {
+      subject, html, text, from: c.from || 'Axal VC Legal <legal@axal.vc>', mailClass: 'transactional',
+      attachments: [{ filename, contentType: 'application/pdf', content: '', bytes: c.pdfBytes }],
+    };
+  });
+}
+
+/** A branded receipt, to the address its subject record names (`invoice_receipt` or `order_receipt`). */
+export async function sendBrandedInvoiceEmailBound(
+  env: Env, ref: SendReference, opts: Omit<BrandedInvoiceOpts, 'to'>,
+): Promise<DeliveryResult> {
+  return deliverBound(env, ref, (to) => {
+    const { subject, html, text } = brandedInvoiceContent({ ...opts, to });
+    return {
+      subject, html, text, from: 'Axal VC <billing@axal.vc>', mailClass: 'transactional',
+      attachments: opts.pdfBytes && opts.pdfBytes.length
+        ? [{ filename: `${(opts.invoiceNumber || 'receipt').replace(/[^a-zA-Z0-9 _-]/g, '')}.pdf`, contentType: 'application/pdf', content: '', bytes: opts.pdfBytes }]
+        : undefined,
+    };
+  });
+}
+
+/** The flagged-score alert, to the admin its `notifications` row names (subject `admin_alert`). */
+export async function sendFlaggedScoreEmailBound(
+  env: Env, ref: SendReference, recipientName: string, payload: FlaggedScoreEmailPayload,
+): Promise<DeliveryResult> {
+  const { subject, html, text } = flaggedScoreEmailContent(recipientName, payload);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal Alerts <noreply@axal.vc>', mailClass: 'transactional' }));
+}
+
+// ---------------------------------------------------------------------------
+// D8536 part 3 (#8536) — the rest of sign-in and invitations under the
+// delivery contract. As in part 2, each sender takes a send reference instead
+// of an address, and the content is the function the unreferenced sender uses,
+// so the message a person receives is unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * The verification email (`verificationEmailContent`), to the address its
+ * subject record names: an account holding a verification token
+ * (`user_verification`), either side of an email change
+ * (`email_change_confirm`, `email_change_revoke`) or a co-founder invitation
+ * (`founder_invite`), which has always been sent with this body. It is
+ * account-security mail for the suppression list, as before.
+ */
+export async function sendVerificationEmailBound(
+  env: Env, ref: SendReference, name: string, verificationUrl: string,
+): Promise<DeliveryResult> {
+  const { subject, html, text } = verificationEmailContent(name, verificationUrl);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal VC <noreply@axal.vc>', mailClass: 'security' }));
+}
+
+/**
+ * D8536 part 3 — the send reference of one partner invitation email. The
+ * subject is the `partner_invitations` row. D923 re-sends the SAME link on
+ * purpose (the token never changes; a resend extends its expiry), so, as for a
+ * signing email, the attempt is the token's issuance plus the occasion: `send`
+ * for the email at creation, `resend-YYYYMMDDHH` for an admin's resend. A
+ * second click within the same hour after an accepted send is answered from
+ * the ledger; a resend the next hour is its own send.
+ */
+export async function partnerInvitationRef(invitationId: number, token: string, occasion: 'send' | 'resend', now = new Date()): Promise<SendReference> {
+  const iso = now.toISOString();
+  const when = occasion === 'resend' ? `-${iso.slice(0, 10).replace(/-/g, '')}${iso.slice(11, 13)}` : '';
+  return { flow: 'invitation', subject: { kind: 'partner_invitation', id: invitationId }, attempt: `${await issuanceOf(token)}.${occasion}${when}` };
+}
+
+/** The partner invitation (`partnerInvitationEmailContent`), to the address its row names. */
+export async function sendPartnerInvitationEmailBound(
+  env: Env, ref: SendReference,
+  c: { recipientName: string; adminName: string; link: string; personalMessage: string },
+): Promise<DeliveryResult> {
+  const { subject, html, text } = partnerInvitationEmailContent(c.recipientName, c.adminName, c.link, c.personalMessage);
+  return deliverBound(env, ref, () => ({ subject, html, text, from: 'Axal VC <noreply@axal.vc>', mailClass: 'transactional' }));
 }
 
 /**
@@ -895,7 +1098,7 @@ export async function sendContactInviteEmail(
 // unreviewed items older than 24h was retired by D671. Best-effort delivery —
 // notifications.ts always also writes an in-app row first.
 // ---------------------------------------------------------------------------
-interface FlaggedScoreEmailPayload {
+export interface FlaggedScoreEmailPayload {
   projectName: string;
   snapshotId: number;
   totalScore: number | null;
@@ -904,17 +1107,8 @@ interface FlaggedScoreEmailPayload {
   source: 'submit' | 'hash_audit';
 }
 
-export async function sendFlaggedScoreEmail(
-  env: Env,
-  to: string,
-  recipientName: string,
-  payload: FlaggedScoreEmailPayload,
-): Promise<boolean> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return false;
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return false;
-  try {
-    const accessToken = await getGmailAccessToken(env);
+/** The flagged-score alert's subject, HTML and text. Pure, so a test reads exactly what is sent. */
+export function flaggedScoreEmailContent(recipientName: string, payload: FlaggedScoreEmailPayload): { subject: string; html: string; text: string } {
     const greet = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
     const safeProject = escapeHtml(payload.projectName);
     const safeFlags = payload.flagSummary.length
@@ -954,6 +1148,21 @@ export async function sendFlaggedScoreEmail(
       `Flags: ${payload.flagSummary.join(', ') || 'integrity issue'}\n\n` +
       `Review here: ${payload.reviewUrl}\n`;
     const subject = `[Axal] Score flagged for review — ${payload.projectName}`;
+    return { subject, html, text };
+}
+
+export async function sendFlaggedScoreEmail(
+  env: Env,
+  to: string,
+  recipientName: string,
+  payload: FlaggedScoreEmailPayload,
+): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return false;
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = flaggedScoreEmailContent(recipientName, payload);
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Alerts <noreply@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -1016,6 +1225,11 @@ export async function sendNotificationEmail(
   }
 }
 
+/** The verification email's subject, HTML and text (D8536 part 3: pure, so a test reads exactly what is sent). */
+export function verificationEmailContent(name: string, verificationUrl: string): { subject: string; html: string; text: string } {
+  return { subject: 'Verify your email — Axal VC', html: buildEmailHTML(name, verificationUrl), text: `Verify your email: ${verificationUrl}` };
+}
+
 export async function sendVerificationEmail(env: Env, to: string, name: string, verificationUrl: string): Promise<boolean> {
   // D810 — the suppression list, by reason (security).
   if (await isSuppressed(env, to, 'security')) return false;
@@ -1025,9 +1239,8 @@ export async function sendVerificationEmail(env: Env, to: string, name: string, 
   }
   try {
     const accessToken = await getGmailAccessToken(env);
-    const html = buildEmailHTML(name, verificationUrl);
-    const text = `Verify your email: ${verificationUrl}`;
-    const rawEmail = buildRawEmail(to, 'Verify your email — Axal VC', html, text);
+    const { subject, html, text } = verificationEmailContent(name, verificationUrl);
+    const rawEmail = buildRawEmail(to, subject, html, text);
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       signal: AbortSignal.timeout(MAIL_FETCH_TIMEOUT_MS),
@@ -1052,21 +1265,10 @@ export async function sendVerificationEmail(env: Env, to: string, name: string, 
 // Sends a Gmail multipart email with the signed PDF as an attachment.
 // Returns { ok, error } so the caller can log per-recipient status.
 // ---------------------------------------------------------------------------
-export async function sendSignedPdfForwardedEmail(
-  env: Env,
-  to: string,
-  documentTitle: string,
-  senderName: string,
-  pdfBytes: Uint8Array,
-  opts?: { message?: string; from?: string },
-): Promise<{ ok: boolean; error?: string }> {
-  // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return { ok: false, error: 'suppressed' };
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
-    return { ok: false, error: 'Gmail not configured on this environment' };
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
+/** The signed-PDF forward's subject, HTML and text for one recipient. Pure, so a test reads exactly what is sent. */
+export function signedPdfForwardedEmailContent(
+  to: string, documentTitle: string, senderName: string, opts?: { message?: string },
+): { subject: string; html: string; text: string; filename: string } {
     const greet = to.split('@')[0];
     const safeTitle = escapeHtml(documentTitle || 'Signed Document');
     const safeSender = escapeHtml(senderName || 'Axal StudioOS');
@@ -1112,6 +1314,26 @@ ${noteBlock}
 </td></tr>
 </table></td></tr></table></body></html>`;
     const text = `Hi ${greet},\n\n${safeSender} has forwarded a signed document from Axal StudioOS.\n\nDocument: ${safeTitle}\n${opts?.message ? `\nNote: ${opts.message}\n` : ''}\nThe executed PDF is attached.`;
+    return { subject: `Signed document: ${documentTitle}`, html, text, filename: `${safeTitle.replace(/[^a-zA-Z0-9 _-]/g, '')}.pdf` };
+}
+
+export async function sendSignedPdfForwardedEmail(
+  env: Env,
+  to: string,
+  documentTitle: string,
+  senderName: string,
+  pdfBytes: Uint8Array,
+  opts?: { message?: string; from?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, error: 'suppressed' };
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
+    return { ok: false, error: 'Gmail not configured on this environment' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { html, text } = signedPdfForwardedEmailContent(to, documentTitle, senderName, opts);
+    const safeTitle = escapeHtml(documentTitle || 'Signed Document');
     const rawEmail = buildRawEmailWithAttachment(
       to,
       `Signed document: ${documentTitle}`,

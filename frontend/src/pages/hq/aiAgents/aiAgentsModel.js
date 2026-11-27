@@ -43,6 +43,7 @@ export const SUBTABS = {
  * stale link never lands on a blank page.
  *   /hq/ai-agents                         → overview
  *   /hq/ai-agents/roster[/:agent]         → roster (agent detail when a key is given)
+ *   /hq/ai-agents/roster/registry[/:name] → roster · registry (D8080: the entry when a name is given)
  *   /hq/ai-agents/skills[/companies]      → skills · axal | companies
  *   /hq/ai-agents/skills/:uid/edit        → skills · editor
  *   /hq/ai-agents/operations[/spend|/policies|/audit] → operations · …
@@ -50,6 +51,7 @@ export const SUBTABS = {
 export function viewFor(pathname = '') {
   const rest = String(pathname).replace(/\/+$/, '').slice(BASE.length).split('/').filter(Boolean);
   const [tab, a, b] = rest;
+  if (tab === 'roster' && a === 'registry') return { tab: 'roster', sub: b ? 'registry-agent' : 'registry', agent: b ? decodeURIComponent(b) : null };
   if (tab === 'roster') return { tab: 'roster', sub: a ? 'agent' : 'list', agent: a ? decodeURIComponent(a) : null };
   if (tab === 'skills') {
     if (a === 'companies') return { tab: 'skills', sub: 'companies' };

@@ -38,6 +38,7 @@ import {
 import { latestProjectMarks, carryingValue, MARK_UNAVAILABLE_REASONS } from '../services/portfolioValuation';
 import { HELD_SCOPE, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { managedFundIds } from '../services/fundGpAccess';
+import { readReportingRules } from '../services/portfolioReportingRules';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -109,6 +110,11 @@ export type PositionScope = {
   /** Every company the caller sees, or null for every company. */
   visibleCsv: string | null;
 };
+
+/** A company holding never grants another fund's reporting-rule history. */
+export function reportingRuleFundId(scope: Pick<PositionScope,'held'|'funds'>, raw: number|null): number|null {
+ return raw !== null && (scope.held === null || scope.funds.includes(Number(raw))) ? Number(raw) : null;
+}
 
 export async function positionScope(c: any, user: any): Promise<PositionScope | null> {
   const licensed = canViewLpData(user);
@@ -574,14 +580,9 @@ r.get('/kpi-compliance', async (c) => {
     }
 
     const [defs, held, updates] = await Promise.all([
+      readReportingRules(c.env, null, cadence, period!).then(set => ({ success: true, results: set.rules, rule_set: set })).catch(() => null),
       c.env.DB.prepare(
-        `SELECT kpi_key, name, definition, unit, cadence, required, applies_to, sort_order
-           FROM portfolio_kpi_definitions
-          WHERE fund_id IS NULL AND cadence = ?
-          ORDER BY sort_order`,
-      ).bind(cadence).all<any>().catch(() => null),
-      c.env.DB.prepare(
-        `SELECT DISTINCT p.project_id, pr.uid, pr.name
+        `SELECT DISTINCT p.project_id, p.fund_id, pr.uid, pr.name, pr.stage
            FROM portfolio_positions p
            LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
@@ -640,18 +641,40 @@ r.get('/kpi-compliance', async (c) => {
       if (at && (!prev || at > prev)) lastSeen.set(pid, at);
     }
 
-    const companies = (held.results || []).map((h: any) => {
+    // D6214: one read per distinct fund; each company carries its applicable rules and history.
+    if (!hasQueryResults(held)) throw new Error('Positions unreadable');
+    const byProject = new Map<number, any>();
+    for (const row of held.results || []) {
+      // Holding a company permits its round read, not another manager’s rule history.
+      const h = { ...row, fund_id: reportingRuleFundId(scope,row.fund_id) };
+      const current = byProject.get(Number(h.project_id));
+      if (current) { if (h.fund_id != null) current.fund_ids.add(Number(h.fund_id)); }
+      else byProject.set(Number(h.project_id), { ...h, fund_ids: new Set(h.fund_id == null ? [] : [Number(h.fund_id)]) });
+    }
+    const fundIds = [...new Set([...byProject.values()].flatMap(h => [...h.fund_ids]))] as number[];
+    const ruleSets = new Map<number, Awaited<ReturnType<typeof readReportingRules>>>();
+    try { await Promise.all(fundIds.map(async id => ruleSets.set(id, await readReportingRules(c.env, id, cadence, period!)))); }
+    catch { return c.json({ available: false, reason: 'Required KPIs could not be read.', detail: 'Required KPIs could not be read.' }, 503); }
+    const companies = [...byProject.values()].map((h: any) => {
       const pid = Number(h.project_id);
       const last = lastSeen.get(pid) || null;
       const reportedNow = thisPeriod.has(pid);
+      const sets = [...h.fund_ids].map((id: any) => ruleSets.get(id)!).filter(Boolean);
+      const applicable = (sets.length ? sets.flatMap(set => set.rules) : defs!.results).filter((r: any) => r.applies_to === 'all' || r.applies_to === h.stage);
+      const rules = [...new Map(applicable.map((rule: any) => [rule.kpi_key, { ...rule, required: applicable.some((r: any) => r.kpi_key === rule.kpi_key && r.required) ? 1 : 0 }])).values()];
+      const ownSets = sets.filter(set => !set.inherited);
+      const dueDays = ownSets.length ? Math.min(...sets.map(set => set.due_days)) : null;
       return {
         project_id: pid,
         project_uid: h.uid || null,
+        fund_ids: [...h.fund_ids], stage: h.stage || null, kpi_set: rules,
+        rule_revisions: sets.map(set => ({ fund_id: set.fund_id, revision: set.revision, effective_from: set.effective_from })),
         name: h.name || `Startup ${pid}`,
         reported: reportedNow,
         last_reported_at: last,
         days_since_report: daysSince(last, today),
-        ...reportDue(bounds?.until ?? null, dutiesRead ? (dutyDays.get(pid) ?? null) : undefined, reportedNow, today),
+        ...reportDue(bounds?.until ?? null, dutiesRead ? (dutyDays.get(pid) ?? dueDays) : undefined, reportedNow, today),
+        ...(dutiesRead && !dutyDays.has(pid) && dueDays !== null ? { due_basis: 'fund_rules' } : {}),
       };
     });
     const reported = companies.filter(x => x.reported).length;
@@ -671,6 +694,7 @@ r.get('/kpi-compliance', async (c) => {
       period_default: asked ? null : 'last_completed',
       period_now: currentPeriod(cadence, today),
       timezone: 'UTC',
+      rules_basis: scope.held === null ? 'all_funds' : scope.funds.length ? 'managed_funds' : 'firm_wide',
       kpi_set: defs.results || [],
       companies,
       reported_count: reported,
@@ -859,12 +883,17 @@ r.post('/', async (c) => {
     const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number }>();
     if (!proj) return c.json({ detail: 'Project not found' }, 404);
     // D1215: the closing line this position records, when one is named: a line of a closing on this venture.
+    // D6889 part 2 (#7938): only a received line, and only once. The Record position form names the line, and
+    // the line then reads In Portfolio; nothing matches a line to a position by venture or amount.
     const lineUid = body.closing_line_uid == null || body.closing_line_uid === '' ? null : String(body.closing_line_uid);
     if (lineUid !== null) {
       const line = await c.env.DB.prepare(
-        'SELECT 1 AS yes FROM closing_lines l JOIN closings cl ON cl.id = l.closing_id WHERE l.uid = ? AND cl.project_id = ?'
-      ).bind(lineUid, projectId).first();
+        'SELECT l.status FROM closing_lines l JOIN closings cl ON cl.id = l.closing_id WHERE l.uid = ? AND cl.project_id = ?'
+      ).bind(lineUid, projectId).first<{ status: string }>();
       if (!line) return c.json({ detail: 'No closing line of this venture has that id.', code: 'closing_line_not_found' }, 404);
+      if (line.status !== 'received') {
+        return c.json({ detail: 'Only a received closing line can be recorded as a position. Nothing was recorded.', code: 'closing_line_not_received' }, 409);
+      }
     }
     const uid = newUid();
     const values = [
@@ -878,10 +907,18 @@ r.post('/', async (c) => {
         `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(...values).run()
+      // One position per line, decided in the insert itself, so two saves at once cannot both land.
       : await c.env.DB.prepare(
         `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at, closing_line_uid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(...values, lineUid).run();
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM portfolio_positions WHERE closing_line_uid = ?)`
+      ).bind(...values, lineUid, lineUid).run();
+    if (lineUid !== null && !Number((ins as any).meta?.changes ?? 0)) {
+      const held = await c.env.DB.prepare('SELECT uid FROM portfolio_positions WHERE closing_line_uid = ? ORDER BY id LIMIT 1')
+        .bind(lineUid).first<{ uid: string }>();
+      return c.json({ detail: 'This closing line already has a position in Portfolio. Nothing was recorded.', code: 'closing_line_already_recorded',
+        position_uid: held?.uid ?? null }, 409);
+    }
     const x = await c.env.DB.prepare('SELECT * FROM portfolio_positions WHERE id = ?').bind((ins as any).meta?.last_row_id).first<PositionRow>();
     return c.json(x, 201);
   } catch (e) { return mapError(c, e); }

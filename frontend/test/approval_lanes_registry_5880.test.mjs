@@ -56,7 +56,9 @@ const LABEL_PAIRS = {
 
 /** Lanes with no page to open, each drawn as plain words by its door. */
 const NO_DOOR = {
-  // Empty since D5885 gave Best-Fit its board (/admin/approvals/best-fit).
+  // D5885 gave Best-Fit its board (/admin/approvals/best-fit).
+  // D6698: HQ has no formation case page yet; the lane is where cases are read and assigned.
+  formation_cases: 'Read and assign here',
 };
 
 /** The page's view of every lane: key, label, group and scope. */

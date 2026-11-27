@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuthSync';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, HonestBlock, MONO, MUTED } from './teamUi.jsx';
-import { Comparison, ExtendSkillSheet, History, Marker, ReasonQuote } from './SkillExtension.jsx';
+import { Comparison, ExtendSkillSheet, History, Marker, ReasonQuote, RebaseSheet } from './SkillExtension.jsx';
 import { actionsFor, bannerWords, compareView, skillHref } from './extensionCompareModel.js';
 
 /**
@@ -12,7 +12,8 @@ import { actionsFor, bannerWords, compareView, skillHref } from './extensionComp
  *
  * It reads the extension's card (`GET /api/teams/skills/:uid`), its lineage (`GET /api/teams/skills/:uid/base`) and the
  * company's name from the Team library read. Editors see "Edit my draft" and, when Axal has a newer version, "Extend Axal
- * vN again"; members and HQ admins read only (owner Q2 option A). Rebase waits on #5965 and is drawn disabled.
+ * vN again"; members and HQ admins read only (owner Q2 option A). #4538 (SK-20, D4538 part 5): editors also see
+ * "Rebase onto vN", which opens the rebase sheet and makes a new draft through `POST /api/teams/skills/:uid/rebase`.
  */
 
 const SECTION = 'rounded-axal-lg border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -43,6 +44,7 @@ export default function SkillComparePage() {
   const [lineage, setLineage] = useState(null);
   const [lib, setLib] = useState(null);
   const [sheet, setSheet] = useState(false);
+  const [rebase, setRebase] = useState(false);
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -55,7 +57,7 @@ export default function SkillComparePage() {
   }, [companyUid, skillUid, tick]);
   const back = skillHref(companyUid, skillUid);
   const teamHref = `/account/companies/${encodeURIComponent(companyUid)}/settings/team?tab=skills`;
-  const retry = () => setTick((t) => t + 1);
+  const retry = () => { setRebase(false); setTick((t) => t + 1); };
 
   const companyName = (lib?.available ? lib.value?.company_name : null) || null;
   const crumb = (name) => (
@@ -105,8 +107,11 @@ export default function SkillComparePage() {
                 {acts.extendAgain ? (
                   <>
                     <span className="flex flex-col items-start gap-0.5">
-                      <button type="button" className={`${BTN_SECONDARY} opacity-60`} aria-disabled="true" aria-describedby="rebase-why" data-testid="compare-rebase">Rebase onto v{acts.extendAgain.version}</button>
-                      <span id="rebase-why" className={MUTED}>Not built yet · #5965</span>
+                      <button type="button" className={`${BTN_SECONDARY} ${acts.rebase.disabled ? 'opacity-60' : ''}`} aria-disabled={acts.rebase.disabled || undefined}
+                        aria-describedby={acts.rebase.why ? 'rebase-why' : undefined} onClick={acts.rebase.disabled ? undefined : () => setRebase(true)} data-testid="compare-rebase">
+                        Rebase onto v{acts.extendAgain.version}{acts.rebase.disabled ? '' : '…'}
+                      </button>
+                      {acts.rebase.why ? <span id="rebase-why" className={MUTED} data-testid="compare-rebase-why">{acts.rebase.why}</span> : null}
                     </span>
                     <button type="button" className={BTN_PRIMARY} aria-disabled={acts.extendAgain.disabled || undefined} aria-describedby={acts.extendAgain.disabled ? 'extend-why' : undefined}
                       onClick={acts.extendAgain.disabled ? undefined : () => setSheet(true)} data-testid="compare-extend-again">
@@ -152,6 +157,10 @@ export default function SkillComparePage() {
             </>
           )}
           <History rows={view.history} />
+          {rebase && acts.rebase && !acts.rebase.disabled ? (
+            <RebaseSheet skillUid={skillUid} view={view} card={s} onClose={() => setRebase(false)} onReload={retry}
+              onRebased={(made) => { setRebase(false); navigate(skillHref(companyUid, made?.uid || skillUid)); }} />
+          ) : null}
           {sheet && acts.extendAgain && view.kind === 'compare' ? (
             <ExtendSkillSheet again existingName={s.name}
               base={{ uid: view.baseUid, name: view.baseName, current_version: view.currentVersion, version: acts.extendAgain.version }}

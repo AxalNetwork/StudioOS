@@ -1,0 +1,194 @@
+{
+  "DELETE /api/cycles/raise/evidence/claims/:id/link": {
+    "kind": "target"
+  },
+  "DELETE /api/cycles/raise/evidence/claims/:id/note": {
+    "kind": "target"
+  },
+  "DELETE /api/cycles/raise/mercury/facts/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/cycles/raise/use-of-funds/hires/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/cycles/raise/use-of-funds/milestones/:id": {
+    "kind": "target"
+  },
+  "DELETE /api/cycles/raise/use-of-funds/scenarios/:id": {
+    "kind": "target"
+  },
+  "GET /api/cycles/build/company-creation/data-room": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/capital-relationships/commitments": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/preview": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/search-console/preview": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/search-console/recheck": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/evidence/share-links": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/modules/:slug": {
+    "kind": "target"
+  },
+  "GET /api/cycles/raise/narrative/:version/check": {
+    "kind": "target"
+  },
+  "GET /api/cycles/raise/narrative/:version/claims": {
+    "kind": "target"
+  },
+  "GET /api/cycles/raise/share-drafts": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/cap-table-scenarios": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/compare": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/export.csv": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/export.pdf": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/hires": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/history": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/milestones": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/milestones/:id": {
+    "kind": "target"
+  },
+  "GET /api/cycles/raise/use-of-funds/plan": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/scenarios": {
+    "kind": "filter"
+  },
+  "GET /api/cycles/raise/use-of-funds/scenarios/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/cycles/raise/evidence/items/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/cycles/raise/use-of-funds/hires/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/cycles/raise/use-of-funds/milestones/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/cycles/raise/use-of-funds/scenarios/:id": {
+    "kind": "target"
+  },
+  "POST /api/cycles/build/company-creation/data-room": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/claims/:id/link": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/claims/:id/note": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/items": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/items/:id/accept": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/items/:id/dismiss": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/items/batch": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/pdf-copies": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/refresh": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/share-links": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/evidence/share-links/:uid/revoke": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/mercury/proposals/:id/accept": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/mercury/proposals/:id/dismiss": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/mercury/sync": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/narrative/:version/check": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/narrative/:version/claims/:uid/use-record": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/readiness/pdf-copies": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/readiness/share-links": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/share-drafts/:uid/accept": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/share-drafts/:uid/discard": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/share-drafts/quote": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/share-drafts/run": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/status/pdf-copies": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/status/share-links": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/use-of-funds/hires": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/use-of-funds/milestones": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/use-of-funds/scenarios": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/use-of-funds/scenarios/:id/make-base": {
+    "kind": "target"
+  },
+  "POST /api/cycles/raise/use-of-funds/snapshot": {
+    "kind": "target"
+  },
+  "PUT /api/cycles/raise/narrative/questions/:question/answer": {
+    "kind": "target"
+  },
+  "PUT /api/cycles/raise/use-of-funds": {
+    "kind": "target"
+  },
+  "PUT /api/cycles/raise/use-of-funds/scenarios/:id/cap-table": {
+    "kind": "target"
+  }
+}

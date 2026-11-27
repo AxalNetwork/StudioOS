@@ -35,6 +35,8 @@
 .pf-eyebrow{font:700 10px var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--pf-mu)}
 .pf-boundary{margin:0;color:var(--pf-mu);font-size:10.5px}
 .pf-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* D4818 part 3: a live region kept in the page before its message, so the message is announced; empty, it takes no gap in the body's column. */
+.pf-live:empty{margin-bottom:-14px}
 .pf-not-recorded{color:var(--pf-mu);font-style:italic;font-weight:500}
 .pf-unreadable{color:var(--pf-neg);font-weight:700}
 .pf-unavailable{color:var(--pf-amT);font-weight:700}
@@ -262,6 +264,8 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-obligations td.pf-row-actions .pf-btn{flex:1 1 auto;justify-content:center}
   .pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:0}
   .pf-obligations td[data-label="Due"]{max-width:none}
+  /* D4818 part 3 (WCAG 1.4.12): a phone card has the width, so its notes are not clamped to two lines that wider spacing overflows. */
+  .pf-obligations td small{display:block;max-width:none;-webkit-line-clamp:unset;overflow:visible}
 }
 /* D6909 part 2 (PRM20–PRM23): Request a mark's steps, facts, evidence and the request list */
 .pf-steps{display:flex;gap:6px;flex-wrap:wrap;list-style:none;margin:0 0 10px;padding:0;font-size:11.5px;font-weight:700}

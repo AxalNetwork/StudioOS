@@ -76,6 +76,21 @@ function refuse(m: Meter, code: AuthorityRefusalCode, ids: string[], current?: {
   return { ok: false, code, ids, cost: { ...m.cost }, ...(current ? { current } : {}) };
 }
 
+/**
+ * One company, one tenant: its release lines and its grants name the tenant it lives under. True when any of them names
+ * a tenant other than the scope's, so a request naming that company under this tenant is `wrong_tenant`. Part 10's
+ * reviewer routes ask the same question before they read anything else of the scope.
+ */
+export async function companyUnderOtherTenant(env: Pick<Env, 'DB'>, m: Meter, scope: AuthorityScope): Promise<boolean> {
+  const foreign = await m.first<{ tenant_id: number }>(env.DB.prepare(
+    `SELECT tenant_id FROM work_graph_release_authority_events WHERE company_id = ? AND tenant_id <> ?
+     UNION ALL
+     SELECT tenant_id FROM work_graph_release_lines WHERE company_id = ? AND tenant_id <> ?
+     LIMIT 1`,
+  ).bind(scope.companyId, scope.tenantId, scope.companyId, scope.tenantId));
+  return !!foreign;
+}
+
 async function change(env: Pick<Env, 'DB'>, op: 'grant' | 'revoke', input: AuthorityChangeInput): Promise<AuthorityChangeResult> {
   const m = new Meter(env);
   if (!input || !scopeOk(input.scope) || !posInt(input.userId) || !posInt(input.actorUserId) || !keyOk(input.idempotencyKey)
@@ -100,14 +115,7 @@ async function change(env: Pick<Env, 'DB'>, op: 'grant' | 'revoke', input: Autho
   const first = await replay();
   if (first) return first;
 
-  // One company, one tenant: its release lines and its grants name the tenant it lives under.
-  const foreign = await m.first<{ tenant_id: number }>(env.DB.prepare(
-    `SELECT tenant_id FROM work_graph_release_authority_events WHERE company_id = ? AND tenant_id <> ?
-     UNION ALL
-     SELECT tenant_id FROM work_graph_release_lines WHERE company_id = ? AND tenant_id <> ?
-     LIMIT 1`,
-  ).bind(companyId, tenantId, companyId, tenantId));
-  if (foreign) return refuse(m, 'wrong_tenant', [String(companyId)]);
+  if (await companyUnderOtherTenant(env, m, input.scope)) return refuse(m, 'wrong_tenant', [String(companyId)]);
 
   if (op === 'grant') {
     const linked = await m.first<{ one: number }>(env.DB.prepare(
@@ -202,6 +210,37 @@ export async function releaseAuthoritiesForScope(env: Pick<Env, 'DB'>, scope: Au
     out.set(h.userId, [...(out.get(h.userId) ?? []), h.authority].sort());
   }
   return out;
+}
+
+/**
+ * D5585 part 9 — the people of one scope whose account is revoked, for `ReleaseContext.revokedUserIds`. Revoked is the
+ * platform's own account revocation, `users.is_active = 0`: the flag a session is refused on (`auth.ts`), which an
+ * HQ licence revocation and an admin deactivation set. The platform never deletes a `users` row (`dsrRequests.ts`), so
+ * there is no other account state to read. A removed company link is not a revocation of the person: it already
+ * withdraws their grants here (both resolvers join the link), so their approvals stop counting through `authorities`.
+ *
+ * Who is checked: the company's linked people (every grant holder was linked when granted), and everyone the scope's
+ * release records name as acting — reviewers of decisions, attesters (an agent's sponsor too), manifest authors, and the
+ * approvers of component heads (whom publication re-checks; a revoked one refuses it `revoked_author`). The answer
+ * is not capped: a cap would drop a revocation, and dropping one would let that person's decisions count. Its size is
+ * bounded by those people, not by the platform's users. Reactivating the account (`is_active = 1`) restores them on the
+ * next request.
+ */
+export async function revokedReleaseUsers(env: Pick<Env, 'DB'>, scope: AuthorityScope): Promise<Set<number>> {
+  if (!scopeOk(scope)) return new Set();
+  const m = new Meter(env);
+  const t = scope.tenantId, co = scope.companyId;
+  const rows = await m.all<{ id: number }>(env.DB.prepare(
+    `SELECT u.id FROM users u
+      WHERE u.is_active = 0 AND u.id IN (
+        SELECT user_id FROM user_company_links WHERE company_id = ?
+        UNION SELECT reviewer_user_id FROM work_graph_release_decisions WHERE tenant_id = ? AND company_id = ?
+        UNION SELECT actor_user_id FROM work_graph_release_attestations WHERE tenant_id = ? AND company_id = ?
+        UNION SELECT actor_user_id FROM work_graph_release_manifests WHERE tenant_id = ? AND company_id = ?
+        UNION SELECT approver_user_id FROM work_graph_events
+         WHERE tenant_id = ? AND company_id = ? AND approver_user_id IS NOT NULL)`,
+  ).bind(co, t, co, t, co, t, co, t, co));
+  return new Set(rows.map((r) => Number(r.id)));
 }
 
 /** The grants of one scope: who holds what now, and (with `history`) every grant and revocation, newest first. */

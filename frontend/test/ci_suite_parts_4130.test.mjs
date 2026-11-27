@@ -70,19 +70,21 @@ test('both workflow matrices consume only generated names and the gate requires 
   const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
   const alerts = readFileSync('.github/workflows/github-alerts.yml', 'utf8');
   assert.doesNotMatch(alerts, /(?:frontend|worker)-\d+-of-\d+/);
-  // D7108 part 2: ci.yml carries exactly one literal part list, the queue's,
-  // inside the merge_group-guarded matrix expression, and it is partsOf's
-  // names in order. Off the queue the matrix is still `plan`'s output.
+  // D7108 part 2, D8435: ci.yml carries exactly one literal part list, the full
+  // tier's, and it is partsOf's names in order. It is the matrix on every event
+  // but a draft pull request, whose fast tier is `rest` alone. Nothing comes
+  // from `plan`, so the suite waits for no job.
   const literal = JSON.stringify(partsOf(pkg.scripts).map((p) => p.name));
-  const matrix = `        part: \${{ fromJSON(github.event_name == 'merge_group' && '${literal}' || needs.plan.outputs.parts) }}\n`;
-  assert.equal(ci.split(matrix).length, 2, 'the queue matrix lists partsOf(package.json) names, in order, once');
+  const matrix = `        part: \${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.draft && '["rest"]' || '${literal}') }}\n`;
+  assert.equal(ci.split(matrix).length, 2, 'the suite matrix lists partsOf(package.json) names, in order, once');
   const sharded = plan.parts.filter((p) => p.script).length;
   // D7881 names the one delegated part only to bound its hosted fallback.
   const macTimeout = "    timeout-minutes: ${{ matrix.part == 'worker-1-of-6' && vars.MACBOOK_WORKER_ENABLED == 'true' && github.event_name != 'pull_request' && 83 || 50 }}\n";
   assert.equal(ci.split(macTimeout).length, 2, 'exactly one bounded Mac-part timeout');
   assert.equal((ci.replace(macTimeout, '').match(/(?:frontend|worker)-\d+-of-\d+/g) || []).length, sharded, 'no additional part lists outside the queue matrix');
   assert.equal(new Set(JSON.parse(literal)).size, plan.parts.length, 'the literal list has no repeated part');
-  assert.match(ci, /needs: \[verified, plan, suite\]/);
+  // D8626: `capacity-route` joins the gate's needs for the routed-candidate refusal; the pass rule is unchanged.
+  assert.match(ci, /needs: \[verified, plan, capacity-route, suite\]/);
   assert.match(ci, /if \{ \{ \[ "\$PLAN" = "success" \] && \[ "\$EVENT" != "merge_group" \]; \} \|\| \{ \[ "\$PLAN" = "skipped" \] && \[ "\$EVENT" = "merge_group" \]; \}; \} && \[ "\$SUITE" = "success" \]; then/);
   assert.match(ci, /  plan:\n    name: suite plan\n    needs: verified\n    if: \$\{\{ !cancelled\(\) && needs\.verified\.outputs\.run == '' && github\.event_name != 'merge_group' \}\}\n/);
   assert.match(ci, /--plan-file suite-plan\.json/);
@@ -99,25 +101,25 @@ const suiteStep = (ci, name) => {
   return { step, run: step.match(/ {8}run: \|\n((?: {10}[^\n]*\n?)+)/)[1].replace(/^ {10}/gm, '') };
 };
 
-test('D7108 part 2: in the queue each suite part writes the plan itself, after setup-node and before any install, and off the queue downloads it', () => {
+test('D7108 part 2, D8435: on every event each suite part writes the plan itself, after setup-node and before any install, and downloads nothing', () => {
   const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
   const suite = ci.slice(ci.indexOf('\n  suite:\n'), ci.indexOf('\n  test-deps:\n'));
-  const { step } = suiteStep(suite, 'Exact-once plan from this commit (merge queue)');
-  assert.match(step, /\n {8}if: github\.event_name == 'merge_group'\n/);
-  assert.match(step, /\n {10}PART: \$\{\{ matrix\.part \}\}\n {10}TOTAL: \$\{\{ strategy\.job-total \}\}\n/);
+  const { step } = suiteStep(suite, 'Exact-once plan from this commit');
+  assert.doesNotMatch(step, /\n {8}if:/, 'the step runs on every event');
+  assert.match(step, /\n {10}PART: \$\{\{ matrix\.part \}\}\n {10}TOTAL: \$\{\{ strategy\.job-total \}\}\n {10}DRAFT_TIER: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.draft \}\}\n/);
   assert.match(step, /names=\$\(node scripts\/test-drift-parts\.mjs --plan --equal-weights\)/);
-  assert.match(suite, /uses: actions\/download-artifact@[^\n]+\n {8}if: github\.event_name != 'merge_group'\n {8}with:\n {10}name: suite-plan\n/);
-  const order = ['actions/setup-node', 'actions/download-artifact', 'Exact-once plan from this commit', 'Install frontend deps', '--plan-file suite-plan.json'].map((s) => suite.indexOf(s));
+  assert.doesNotMatch(suite, /name: suite-plan|needs\.plan/, 'no plan artifact and no plan output is read');
+  const order = ['actions/setup-node', '- name: Exact-once plan from this commit', 'Install frontend deps', '--plan-file suite-plan.json'].map((s) => suite.indexOf(s));
   assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), JSON.stringify(order));
 });
 
-test('D7108 part 2: the queue plan step fails a part, never drops one, when the matrix and the plan differ', () => {
+test('D7108 part 2, D8435: the plan step fails a part, never drops one, when the matrix and the plan differ', () => {
   const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
   const names = plan.parts.map((p) => p.name);
-  const { run } = suiteStep(ci, 'Exact-once plan from this commit (merge queue)');
+  const { run } = suiteStep(ci, 'Exact-once plan from this commit');
   const code = run.replace('node scripts/test-drift-parts.mjs --plan --equal-weights', `printf '%s' '${JSON.stringify(names)}'`);
   assert.notEqual(code, run);
-  const exec = (PART, TOTAL) => spawnSync('bash', ['-e', '-c', code], { encoding: 'utf8', env: { ...process.env, PART, TOTAL: String(TOTAL) } });
+  const exec = (PART, TOTAL, DRAFT_TIER = 'false') => spawnSync('bash', ['-e', '-c', code], { encoding: 'utf8', env: { ...process.env, PART, TOTAL: String(TOTAL), DRAFT_TIER } });
   for (const part of names) {
     const ok = exec(part, names.length);
     assert.equal(ok.status, 0, ok.stderr);
@@ -126,7 +128,17 @@ test('D7108 part 2: the queue plan step fails a part, never drops one, when the 
   for (const [part, total] of [[names[0], names.length - 1], [names[0], names.length + 1], ['worker-7-of-6', names.length], ['', names.length]]) {
     const bad = exec(part, total);
     assert.equal(bad.status, 1, `${part}/${total}`);
-    assert.match(bad.stderr, /::error::The queue matrix/);
+    assert.match(bad.stderr, /::error::The suite matrix/);
+  }
+  // D8435: the runner benchmark shares these steps and runs the plan once a lane, so whole multiples pass.
+  assert.equal(exec(names[0], names.length * 3).status, 0);
+  for (const total of [0, names.length * 2 - 1, names.length * 2 + 1]) assert.equal(exec(names[0], total).status, 1, String(total));
+  // D8435: the draft tier is one part, and it must be a part of the plan.
+  assert.equal(exec('rest', 1, 'true').status, 0);
+  for (const [part, total, draft] of [['rest', names.length, 'true'], ['rest', 2, 'true'], ['selected', 1, 'true'], ['rest', 1, 'false'], ['rest', 1, '']]) {
+    const bad = exec(part, total, draft);
+    assert.equal(bad.status, 1, `${part}/${total}/${draft}`);
+    assert.match(bad.stderr, /::error::The suite matrix/);
   }
 });
 
@@ -203,7 +215,7 @@ test('#6460 the real CI planner gives drafts only rest and preserves all nine pa
   assert.match(ci, /types: \[opened, synchronize, reopened, ready_for_review\]/);
   const planner = ci.match(/id: plan\n(?:[^\n]*\n)*? {8}run: \|\n((?: {10}[^\n]*\n)+)/)[1];
   const code = planner.replace(/^ {10}/gm, '').replace(
-    'node scripts/test-drift-parts.mjs --plan test-timings.json',
+    'node scripts/test-drift-parts.mjs --plan --equal-weights',
     `printf '%s' '${JSON.stringify(plan.parts.map(part => part.name))}'`,
   ).replace('>> "$GITHUB_OUTPUT"', '');
   for (const [EVENT, DRAFT, expected] of [
@@ -250,10 +262,11 @@ test('#6674 the timing selector has clean stdout on a fresh checkout', () => {
   }
 });
 
-test('#6674 all three planners use the same timing download step', () => {
-  for (const workflow of ['ci', 'github-alerts', 'runner-benchmark']) {
-    const yaml = readFileSync(`.github/workflows/${workflow}.yml`, 'utf8');
-    assert.match(yaml, /run: bash scripts\/ci\/download-test-timings\.sh/);
+test('#6674 the timing-weighted planner uses the timing download step; the equal-weight ones download nothing', () => {
+  assert.match(readFileSync('.github/workflows/github-alerts.yml', 'utf8'), /run: bash scripts\/ci\/download-test-timings\.sh/);
+  // D8693: ci.yml plans with equal weights on every event, and the runner benchmark mirrors its plan job.
+  for (const workflow of ['ci', 'runner-benchmark']) {
+    assert.doesNotMatch(readFileSync(`.github/workflows/${workflow}.yml`, 'utf8'), /download-test-timings|--plan test-timings/, workflow);
   }
 });
 

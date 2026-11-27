@@ -1270,6 +1270,7 @@ export function dueOf(row) {
   if (!date) return { state: 'none', text: NOT_RECORDED, reason: String(row?.due_reason || '').trim() || NO_DUE_DATE };
   const basis = row.due_basis === 'reporting_duty'
     ? `${row.due_days} days after the period ends, from the reporting duty`
+    : row.due_basis === 'fund_rules' ? `${row.due_days} days after the period ends, from the fund’s reporting rules`
     : row.due_basis === 'firm_default' ? `${row.due_days} days after the period ends, the firm default` : null;
   if (row.reported === true) return { state: 'reported', text: `Due ${date}`, date, basis };
   if (row.overdue === true && isNum(row.days_overdue) && Number(row.days_overdue) > 0) {
@@ -1312,7 +1313,8 @@ export function missingFor(reporting, update, compliance, updates) {
   if (!update || !periodCovers(c.cadence, reporting.period, update.period)) {
     return { state: 'not_measured', text: `Not measured: the latest update readable here is ${update?.period ? `for ${periodName(update.period)}` : 'for no stated period'}` };
   }
-  const required = requiredAgainst(c.kpi_set, update);
+  const company = c.companies?.find(row => Number(row.project_id) === Number(update.project_id));
+  const required = requiredAgainst(company?.kpi_set || c.kpi_set, update);
   if (!required.length) return { state: 'ok', text: 'No KPI is required at this cadence' };
   const gone = required.filter((r) => !r.carried);
   if (!gone.length) return { state: 'ok', text: 'No required KPI missing' };

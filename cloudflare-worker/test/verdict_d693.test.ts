@@ -482,6 +482,8 @@ test('the route refuses a malformed body in the documented order', async () => {
   const db = fixture();
   const h = hypothesis(db, P, 'H1');
   const cases: [unknown, number, string][] = [
+    [{ for: 'venture' }, 400, 'decision must be proceed, pivot or stop'],
+    [{ decision: null, for: 'venture' }, 400, 'decision must be proceed, pivot or stop'],
     [{ decision: 'maybe', for: 'venture' }, 400, 'decision must be proceed, pivot or stop'],
     [{ decision: 'proceed', for: 'H1' }, 400, "for must be 'venture' or 'h-<id>'"],
     [{ decision: 'proceed', for: 'venture', evidence: Array.from({ length: 51 }, (_, i) => `k-${i}`) }, 400, 'A decision rests on at most 50 pieces of evidence.'],
@@ -595,6 +597,10 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
     if (rel === 'services/records/types.ts' && lines.length <= 1) continue;
     if (rel === 'services/cycleActivity.ts' && lines.length <= 4) continue;
     if (rel === 'services/records/verdict.ts' && lines.every((l) => /\bstore: 'validation_decision(s|_commitments)'/.test(l))) continue;
+    // D8530 (#8530): the VentureSpace data inventory names each verdict table once, as an entry's table name
+    // in its foreign-key list, and reads or writes none of them.
+    if (rel === 'services/ventureSpaceDataInventory.ts' && lines.length <= 3
+      && lines.every((l) => /^\s*\['validation_decision(s|_commitments|_shares)', 'p', 'cascade'\],$/.test(l))) continue;
     offenders.push(rel);
   }
   assert.deepEqual(offenders, []);

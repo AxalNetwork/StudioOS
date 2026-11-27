@@ -23,7 +23,7 @@ export type CapacityEnv = Pick<Env,'REPOSITORY'|'GITHUB_APP_ID'|'GITHUB_INSTALLA
   CAPACITY_PUBLICATION?: string;
   CAPACITY_INVENTORY_TOKEN?: string;
 };
-type Settings = CapacityConfig & { maxExternalWorkerShards: number; maxIncludedWorkerShards: number; appId: number; publication: 'pilot'|'full-suite' };
+type Settings = CapacityConfig & { mergePickupHoldMs?: number; maxExternalWorkerShards: number; maxIncludedWorkerShards: number; appId: number; publication: 'pilot'|'full-suite' };
 /** D8011: one canonical window, committed atomically before accepting any reservation. */
 export class SqlCapacityBudgetStore implements CapacityBudgetStore {
   private storage: Pick<DurableObjectStorage, 'sql'|'transactionSync'>;
@@ -79,6 +79,7 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
   }
   private policy(config:Settings){return {version:1 as const,maxExternalWorkerShards:config.maxExternalWorkerShards,
     maxIncludedWorkerShards:config.maxIncludedWorkerShards,minimumHostedWorkerShards:1,approvedGroupId:config.approvedGroupId,
+    ...(config.mergePickupHoldMs===undefined?{}:{mergePickupHoldMs:config.mergePickupHoldMs}),
     maxActiveRequests:config.publication==='pilot'?1:8,budgets:{...CI_CAPACITY_BUDGETS}};}
   private async components(sharedApi?: CapacityApi) {
     const config=this.settings();
@@ -119,6 +120,11 @@ export class CapacityControl extends DurableObject<CapacityEnv> {
             ||!Number.isSafeInteger(input.checkId)||input.checkId<=0)return new Response('invalid reconciliation',{status:400});
           if(await this.ctx.storage.get<boolean>('capacity-kill')!==true)return new Response('drain required',{status:409});
           if(String(config.appId)!==this.env.GITHUB_APP_ID)return new Response('publication App mismatch',{status:409});
+          // #8417: refuse locally before any token request, GitHub read or alarm write. adopt() and its
+          // transaction repeat both checks, so an intent that changes during discovery is still refused.
+          let current:{adoptable:boolean;fingerprint:string}|null=null;
+          try{current=review.inspect(input.requestId);}catch{current=null;}
+          if(!current?.adoptable||current.fingerprint!==input.fingerprint)return Response.json({adopted:false},{status:409});
           const api=await capacityGithubClient(this.env,capacityPlatformFetch);
           await this.ctx.storage.setAlarm(Date.now()+1000);
           const adopted=await review.adopt(input.requestId,input.fingerprint,input.checkId,api);

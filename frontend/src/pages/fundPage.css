@@ -33,6 +33,42 @@
 .dark .fd-card small, .dark .fd-card dt { color: #adb0c2; }
 .dark .fd-card dl > div, .dark .fd-entry { border-color: #383b4d; }
 @media (max-width: 640px) { .fd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fd-two { grid-template-columns: minmax(0, 1fr); } .fd-number { font-size: 17px; } .fd-actions a { flex: 1 1 calc(50% - 10px); text-align: center; } }
+
+/* D6250: the approved report letter and frozen-figures side column. */
+.fd-report-reader { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 16px; align-items: start; }
+.fd-report-mast { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e4e5ec; padding-bottom: 16px; }
+.fd-report-letter { padding: 24px; }
+.fd-report-letter h2 { font-size: 22px; }
+.fd-report-letter h3 { font-size: 15px; margin: 24px 0 10px; }
+.fd-report-letter p { white-space: pre-wrap; line-height: 1.7; font-size: 14px; }
+.fd-report-event { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; margin: 12px 0; }
+.fd-report-event h4, .fd-report-event p { margin: 0; }
+.fd-report-event time, .fd-report-foot { font-size: 12px; }
+.dark .fd-report-mast { border-color: #383b4d; }
+@media (max-width: 760px) {
+  .fd-report-reader { grid-template-columns: minmax(0, 1fr); }
+  .fd-report-letter { padding: 16px; }
+  .fd-report-event { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+@media print {
+  /* Keep the reader and its ancestor chain in normal flow; remove all other app chrome. */
+  body:has(.fd-report-reader) *:not(:has(.fd-report-reader)):not(.fd-report-reader):not(.fd-report-reader *) { display: none !important; }
+  html:has(.fd-report-reader), body:has(.fd-report-reader), body:has(.fd-report-reader) :has(.fd-report-reader) {
+    position: static !important; display: block !important; width: auto !important; height: auto !important;
+    min-height: 0 !important; max-height: none !important; margin: 0 !important; padding: 0 !important;
+    overflow: visible !important; transform: none !important; contain: none !important; background: #fff !important;
+  }
+  /* D6250-p2: a dark theme's colour scheme would paint the page margins dark when backgrounds print. */
+  html:has(.fd-report-reader) { color-scheme: light !important; }
+  body .fd-report-reader { display: block; width: 100%; }
+  /* D6250-p2: the figures column is short; it prints whole on one page after the letter. */
+  body .fd-report-reader > aside { break-inside: avoid; }
+  body .fd-report-reader .fd-card { background: #fff; color: #000; border: 0; box-shadow: none; }
+  body .fd-report-reader .fd-card * { color: #000 !important; }
+  .fd-report-event { break-inside: avoid; }
+  .fd-report-reader h3 { break-after: avoid; }
+  .fd-report-reader p { orphans: 3; widows: 3; }
+}
 /* D6254: the fund-level band, independently read sections and phone-safe metadata. */
 .fd-performance-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .fd-card .fd-performance-grid > div { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# D7585: deterministically render the next worldwide manager import with its own source, original evidence dates and additive identity guards.
 """D7585: reproduce the additive, primary-source worldwide manager migration.
 
 Run without arguments to write the unmerged migration, or with --check to

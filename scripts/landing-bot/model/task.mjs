@@ -9,7 +9,8 @@
  *     "verify": [["npm", "ci", "--ignore-scripts"], ["node", "--test", "frontend/test/x.test.mjs"]],
  *     "data": { "ci-log.txt": "...", "pr-title.txt": "..." },  // untrusted text, shown to the model as data
  *     "max_turns": 20, "max_minutes": 15, "max_rounds": 3,
- *     "merge_sha": "<40 hex>", "head_sha": "<40 hex>" }               // optional: merge mode (#6475)
+ *     "merge_sha": "<40 hex>", "head_sha": "<40 hex>",                // optional: merge mode (#6475)
+ *     "pr": 123 }                                                      // optional: the PR it is for (#8506)
  *
  * MERGE MODE (#6475). With `merge_sha`, each round checks out the branch,
  * merges that commit into it with main's merge rules (`stage.mjs`), and edits
@@ -110,6 +111,8 @@ export function parseTask(input) {
     if (raw[k] !== undefined && raw[k] !== null && !SHA.test(String(raw[k]))) errors.push(`${k} is not a full commit SHA`);
   }
   if (raw.head_sha && !raw.merge_sha) errors.push('head_sha is read only in merge mode, with merge_sha');
+  // #8506: the pull request the patch is for, when there is one; it goes into the patch's record.
+  if (raw.pr !== undefined && raw.pr !== null && !(Number.isSafeInteger(raw.pr) && raw.pr >= 1)) errors.push('pr is not a pull request number');
 
   if (errors.length) return { task: null, errors };
   return {
@@ -124,6 +127,7 @@ export function parseTask(input) {
       max_rounds: intIn(raw.max_rounds, HARD.rounds, HARD.rounds),
       merge_sha: raw.merge_sha || null,
       head_sha: raw.head_sha || null,
+      pr: raw.pr ?? null,
     }),
     errors: [],
   };

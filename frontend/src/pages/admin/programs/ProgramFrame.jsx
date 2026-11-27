@@ -4,6 +4,7 @@ import { Lightbox, usePhoneWidth } from '../../../ui';
 import { programsApi } from '../../../lib/api/programs';
 import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, ProgramDimensions, StatusPill, SUB, Unread } from './parts';
 import useProgramsTitle from './useProgramsTitle';
+import StudioProgramAccess from './StudioProgramAccess';
 import { ViewPresentationLink } from '../../programs/AdminPresentationLinks';
 import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, programDimensions, withoutMoved } from './programsModel';
 import { CSV_DONE, CSV_LINES, CSV_PROGRAMS, refusalSentence } from './programPagesModel';
@@ -36,6 +37,8 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
   const page = meta || PAGES[program];
   const card = programByKey(program) || { status: null, grant: null, hqGrant: null };
   const moved = movedNotice(loc.pathname, loc.search);
+  const pathname = loc.pathname.replace(/\/$/, '');
+  const showLicence = pathname === `/admin/programs/${program}` || pathname === `/admin/programs/${program}/availability`;
   // D4810: the page's own detail read when it passes one, so the frame never reads it again.
   const grantBadge = useGrantBadge(program, detail);
   useProgramsTitle(`${page.title} · Programs`);
@@ -63,7 +66,7 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
         </div>
         <div className="flex items-start gap-2">
           {/* D6966 (PGS07C–D): a program with a presentation in the map links it first, on a phone too. */}
-          <ViewPresentationLink programKey={program} />
+          <ViewPresentationLink programKey={program} registryRow={detailRow(detail) || (meta ? {} : null)} />
           {/* D962: a page that draws its own way in on a phone has no header buttons there (PG20b). */}
           {phone && !actionsOnPhone ? null : actions}
           {CSV_PROGRAMS.includes(program) ? <MoreMenu program={program} title={page.title} /> : null}
@@ -78,6 +81,9 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
 
       <MovedNotice text={moved} onDismiss={() => navigate({ pathname: loc.pathname, search: withoutMoved(loc.search), hash: loc.hash }, { replace: true })} />
 
+      {showLicence ? (
+        <StudioProgramAccess programKey={program} superAdmin={superAdmin} />
+      ) : null}
       {tabs}
       {children}
     </div>

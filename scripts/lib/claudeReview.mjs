@@ -1,4 +1,12 @@
 /**
+ * The advisory Claude review's rules: its settings and their bounds, which pull
+ * requests may be reviewed (never a fork or Dependabot), the diff parse, which
+ * files are sent and in what order, the prompt with its nonce-fenced untrusted
+ * data, the output schema and the validation of every finding against the diff,
+ * the cost estimate and the per-review and monthly caps, the artifact-name
+ * ledger, and the escaped summary and annotations. Owned by
+ * `../claude-review/review.mjs`.
+ *
  * The pure half of the advisory pull-request review that calls the Anthropic
  * Messages API (`../claude-review/review.mjs`, `.github/workflows/claude-review.yml`).
  *

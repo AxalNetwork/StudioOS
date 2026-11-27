@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 /**
+ * #6326: the `red-ci-triage` skill's reader. `node scripts/red-ci-triage.mjs
+ * <pr> [--run <id>] [--logs DIR] [--no-main] [--json]` prints the CI failure
+ * digest's verdict (and whether it is stale), `ciClassify`'s verdict now, the
+ * open `[alert]` issues with what each forbids, and every failing test, tsc
+ * error, eslint error or guard in the failed jobs' logs with the command that
+ * reproduces it locally; for a part also red on main it reads main's log and
+ * marks each failure as shared or not. GET requests only: never comments,
+ * re-runs, merges, pushes or dispatches
+ *
  * #6326: the `red-ci-triage` skill's reader. Given a PR, it prints the CI
  * failure digest's verdict, the open `[alert]` issues, and every failing test,
  * type error, lint error or guard in the failed jobs' logs, each with the local

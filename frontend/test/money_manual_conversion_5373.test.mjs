@@ -93,7 +93,7 @@ const ALLOW = [
     "frontend/src/pages/investor/deals/ClosingZone.jsx": 3,
     "cloudflare-worker/src/routes/_capital_call_writes.ts": 1,
     "cloudflare-worker/src/routes/capital.ts": 1,
-    "cloudflare-worker/src/routes/funds.ts": 5,
+    "cloudflare-worker/src/routes/funds.ts": 4,
     "cloudflare-worker/src/routes/liquidity.ts": 2,
     "cloudflare-worker/src/routes/networkfx.ts": 1,
     "cloudflare-worker/src/services/capitalAttestationTerms.ts": 2,
@@ -119,6 +119,7 @@ const ALLOW = [
   } },
   { kind: 'usd', reason: "AI tokens, token packs, credits and AI spend are US dollars (micro-USD ledger; packs are sold in USD only).", files: {
     "frontend/src/components/checkout/packModel.js": 9,
+    "frontend/src/pages/team/agentChoiceModel.js": 1,
     "frontend/src/components/checkout/checkoutModel.js": 1,
     "frontend/src/lib/aiTokens.js": 2,
     "frontend/src/lib/labCredits.js": 1,

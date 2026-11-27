@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning Course Cards · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Learning · Course Cards · #8663 · learning series 2 of 9 (#8662 to #8670)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Learning — course cards that let a founder compare what they will produce, the effort and who each course is for</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Courses tab of /learning (and the course rows of All). Each card leads with the course’s task and what the learner will produce, then minutes, level and required lessons, then audience and prior learning, then one action that says what happens: Start, Resume, Review or Preview draft. The four observed founder courses are the catalogue; Evidence-based pitch narratives (decision memo and claim register, 85 min, 10 lessons, 7 required) is the fully worked example. Covers are the LE8 drawn cover or a typographic fallback. Draft and program-only cards say who sees them. Progress comes from /api/learning/me, and a failed read shows as Unavailable, never as Not started. The proposed ordering is labelled a recommendation. States follow the Platform States vocabulary. It keeps the Axal VC shell; Learning opens from the Account menu. Violet dashed ◇ tags mark data the catalog does not return yet (#8288); the amber ⚑ tag marks the one owner decision, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Thu 26 Nov 2026 · checked against main 7b0db10927 · course titles, Draft, Intro, 75–85 min and the pitch output observed on axal.vc 25 Nov; other outputs, lesson counts, progress, covers and the 31-course catalogue are synthetic; Maya Ruiz, Northwind Labs and Iris Chen are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Learning Course Cards Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['LCC-00', 'Route, anatomy and data sources', 'The numbered route from Courses to the pitch course overview and back, on desktop and phone. The card anatomy, row by row, with the source on main for each line and what still needs #8288.', [W('LCC00')]],
+      ['LCC-01', 'Before · observed on axal.vc', 'Four cards that read the same: Course, Draft, title, Intro, 1 h 15–1 h 25 min. Output, audience and prior learning exist but only the course page reads them. The catalog sends a cover that the card drops.', [C('LCC01', false, 1200, 360)]],
+      ['LCC-02', 'Super Admin · the production catalogue', 'The real state: four drafts that only Super Admins see. Each card says so. Preview draft opens the course page and Edit in Studio stays secondary. Nothing is published from here.', [F('LCC02', false, 1060)]],
+      ['LCC-03', 'Founder · first visit', 'Synthetic: after HQ publishes the four. Search, Level and Length filters, the suggested order labelled as a recommendation, and four cards whose rows line up for comparison.', [F('LCC03', false, 1060)]],
+      ['LCC-04', 'Founder · return visit', 'One course in progress (3 of 6 required, Resume names the next lesson), one completed, two not started, and a program course listed because the learner is enrolled.', [F('LCC04', false, 1580)]],
+      ['LCC-05', 'Card variants', 'Preview (draft), available, in progress, completed, program for an enrolled member, program-only for a Super Admin, and progress unavailable. Each card shows who sees it, what its action does and where its data comes from.', [C('LCC05', false, 1300, 1215)]],
+      ['LCC-06', 'Cover art and typographic fallback', 'Two drawn covers (sample images) and two fallbacks, as on every board. The same four with no cover still look different. A cover that fails to load falls back without a broken-image icon.', [C('LCC06', false, 1300, 625)]],
+      ['LCC-07', 'Missing metadata', 'No output (the summary takes its place), no length or level, no audience or prior learning, and a card with only a title. Each missing field is named once as Not recorded.', [C('LCC07', false, 1300, 590)]],
+      ['LCC-08', 'Long title and 200% zoom', 'A long title wraps in full and its neighbours’ rows move with it. At 200% zoom the grid drops to one column and the output and action stay readable.', [C('LCC08', 'Long title in the grid', 1200, 640), C('LCC08B', '200% zoom', 1240, 920)]],
+      ['LCC-09', 'Larger catalogue', 'Synthetic: 31 courses filtered to Intro (9). The suggestion collapses. The page uses the route’s own level, max_minutes, page size and order.', [F('LCC09', false, 1900)]],
+      ['LCC-10', 'Loading, empty, no match, unavailable, offline', 'Skeletons in card shape; the empty catalogue a member sees today; no match with Clear search; the list unavailable with Retry; progress unavailable with usable cards; offline with a stale age.', [C('LCC10', false, 1300, 975)]],
+      ['LCC-11', 'Focus order and accessible names', 'Search, Level, Length, then one tab stop per card and the pager. Each card link is named by its title and described by its output, effort, state and action.', [C('LCC11', false, 1300, 950)]],
+      ['LCC-12', 'Phone 390 × 844', 'The format chips, search and filters, a collapsed suggestion and compact cards (thumbnail and title, then output, effort and action). Also the Super Admin drafts, a return visit, unavailable → retry → no match, a long title at 200%, and the hand-off to the course overview with Back to Courses.', [P('LCC12A', 'First visit'), P('LCC12B', 'Super Admin · drafts'), P('LCC12C', 'Return visit'), P('LCC12D', 'Unavailable, retry, no match'), P('LCC12E', 'Long title and 200%'), P('LCC12F', 'Steps 4 and 5 · overview and back')]],
+      ['LCC-13', 'Dark mode', 'The return visit on the dark tokens, with dark cover and fallback tints.', [F('LCC13', false, 1060)]],
+      ['LCC-14', 'Engineering handoff', 'What main has (with files), the #8288 data the catalog must return, the suggested-order decision (⚑ Q1, option A drawn), frontend-only work, the acceptance list mapped to boards and how this canvas fits with #8662, #8664, #8665, #8667, #8668 and #8669.', [W('LCC14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

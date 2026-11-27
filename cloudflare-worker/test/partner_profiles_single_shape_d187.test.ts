@@ -31,13 +31,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { routeAnswer, hydrateAlreadyAnswered } from '../src/services/advisor/writeRouter.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -52,17 +51,13 @@ const WRITE_ROUTER = read(resolve(SRC, 'services/advisor/writeRouter.ts'));
 const ONBOARDING = read(resolve(SRC, 'routes/partner_onboarding.ts'));
 const PARTNERS = read(resolve(SRC, 'routes/partners.ts'));
 
-/** A freshly provisioned environment: the baseline, then every migration past it. */
+/**
+ * A freshly provisioned environment: the baseline, then every migration past it. #8589: built once per run
+ * (D4133's `_schema_once.mjs`, a fresh build of the same files) and copied into this test's own database.
+ */
 function freshDb(): InstanceType<typeof DatabaseSync> {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(read(resolve(SQL, 'schema_baseline.sql')));
-  for (const name of readdirSync(MIGRATIONS)
-    .filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
-    .sort((a, b) => migrationNumber(a) - migrationNumber(b) || a.localeCompare(b))) {
-    for (const stmt of splitStatements(read(resolve(MIGRATIONS, name)))) {
-      try { db.exec(stmt); } catch { /* fresh-build failures are migrations_fresh_build's to report */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 

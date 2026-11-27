@@ -339,6 +339,8 @@ test('D1169: the read touches only member stores; fund, legal, identity, 83(b) a
     'member_files', 'obligation_occurrences', 'outreach_sequences', 'outreach_steps', 'projects', 'research_documents', 'user_company_links', 'users',
     // D1411 (#3894): a member's own articles, to list their objects in R2.
     'articles',
+    // D5583 part 2: admitted creative media, not generic WorkGraph records.
+    'work_graph_blobs',
   ].sort());
   for (const never of ['legal_notice_files', 'legal_document_files', 'documents', 'kyc', 'fund', 'publications']) assert.ok(!tables.has(never), never);
   // Four D1169 queries (each data room area's groups and largest) and D1170's two per-owner statements.

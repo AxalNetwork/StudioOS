@@ -1,3 +1,5 @@
+// D6387: identify and update actionable workflow repair episodes.
+//
 // D6387: route verified GitHub Actions failures to repair issues, with one occurrence per run attempt.
 import { createHash } from 'node:crypto';
 import { ALERT_KINDS, mainState } from './githubAlerts.mjs';
@@ -90,7 +92,71 @@ export function normalizeWorkflowFailure({ run, jobs = [], superseded = false, q
   const compact = '[' + run.id + ', attempt ' + run.run_attempt + '](' + url + ') · `' + run.conclusion + '`' +
     (hexSha(run.head_sha) ? ' · [`' + run.head_sha.slice(0, 12) + '`](' + root + '/commit/' + run.head_sha + ')' : '') +
     (prs.length ? ' · ' + prs.slice(0, 10).map(n => '[PR #' + n + '](' + root + '/pull/' + n + ')').join(', ') : '');
-  return { contextKey, fingerprint, attemptKey, since, receiptDay, compact, title, evidence: evidence.join('\n\n'), recommendation, labels, workflow, isMain };
+  // Only a PR's own run can name an owner; a queue candidate, main or another branch stays with triage.
+  const ownerPr = context[0] === 'pr' && !isMain ? pr : null;
+  const headSha = hexSha(run.head_sha) ? run.head_sha : null;
+  return { contextKey, fingerprint, attemptKey, since, receiptDay, compact, title, evidence: evidence.join('\n\n'), recommendation, labels, workflow, isMain, ownerPr, headSha };
+}
+
+// D6387 part 2: the keywords that link a PR to its task. `Refs`, `Builds on` and bare numbers name context, not owners.
+const TASK_LINK = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part\s+of)\s*:?\s+#([1-9]\d{0,9})\b/gi;
+const SLOT_LABEL = /^slot:S\d{2,}$/i;
+const COORDINATOR_SLOT = 'slot:S01';
+const MAX_LINKED_TASKS = 10;
+const OWNER_REASONS = {
+  unattributed: 'the failure is not on a pull request\'s own run',
+  stale: 'the failed commit is no longer the open pull request\'s head',
+  unlinked: 'the pull request links no task with Closes, Fixes, Resolves or Part of',
+  unlabelled: 'a linked task has no single slot label',
+  notTask: 'a linked number is a pull request, not a task',
+  shared: 'the linked tasks belong to different slots',
+  unreadable: 'the pull request or its linked task could not be read',
+};
+
+/** Task numbers a PR body links with a closing or `Part of` keyword, in first-seen order. */
+export function linkedTaskNumbers(body) {
+  const numbers = [];
+  for (const match of String(body ?? '').slice(0, 65_536).matchAll(TASK_LINK)) {
+    const number = Number(match[1]);
+    if (numberId(number) && !numbers.includes(number)) numbers.push(number);
+  }
+  return numbers;
+}
+
+/**
+ * D6387 part 2: the slot that owns a newly classified failure. A PR body only nominates task numbers; the slot
+ * comes from a slot label on the repository's own issue. Anything short of one agreed slot stays with S01.
+ */
+export async function resolveOwnerSlot({ api, repository = REPOSITORY, record }) {
+  const coordinator = reason => ({ label: COORDINATOR_SLOT, reason, task: null });
+  if (!numberId(record?.ownerPr) || !record.headSha) return coordinator('unattributed');
+  try {
+    const pull = await api('/repos/' + repository + '/pulls/' + record.ownerPr);
+    if (pull?.number !== record.ownerPr || pull.state !== 'open' || pull.head?.sha !== record.headSha) return coordinator('stale');
+    const tasks = linkedTaskNumbers(pull.body);
+    if (!tasks.length) return coordinator('unlinked');
+    if (tasks.length > MAX_LINKED_TASKS) return coordinator('shared');
+    const owners = new Map();
+    for (const number of tasks) {
+      const issue = await api('/repos/' + repository + '/issues/' + number);
+      if (issue?.number !== number) return coordinator('unreadable');
+      if (issue.pull_request) return coordinator('notTask');
+      const slots = (issue.labels || []).map(label => label?.name ?? label).filter(name => typeof name === 'string' && SLOT_LABEL.test(name));
+      if (slots.length !== 1) return coordinator('unlabelled');
+      if (!owners.has(slots[0].toLowerCase())) owners.set(slots[0].toLowerCase(), { label: slots[0], task: number });
+    }
+    if (owners.size !== 1) return coordinator('shared');
+    const [owner] = owners.values();
+    return { ...owner, reason: null };
+  } catch {
+    // Routing is advisory. An unreadable PR or task must not hold back the repair issue itself.
+    return coordinator('unreadable');
+  }
+}
+
+function ownerLine(owner, record) {
+  if (owner.task) return '**Owner** `' + owner.label + '`, the slot of task #' + owner.task + ', which PR #' + record.ownerPr + ' links.';
+  return '**Owner** `' + COORDINATOR_SLOT + '` for coordinator triage: ' + OWNER_REASONS[owner.reason] + '.';
 }
 
 export function createWorkflowFailureReporter({ api, catalog, repository = REPOSITORY, ensureMainRedIssue }) {
@@ -228,8 +294,12 @@ export function createWorkflowFailureReporter({ api, catalog, repository = REPOS
       if (label?.name !== 'workflow-failure') throw new Error('workflow_failure_label_unavailable');
       routingLabelVerified = true;
     }
-    const body = [record.evidence, '**Repair** ' + record.recommendation, '<!-- studioos-workflow-context:v1 ' + record.contextKey + ' -->', group, occurrence].join('\n\n');
-    const issue = await api(root, { method: 'POST', body: JSON.stringify({ title: record.title, body, labels: record.labels }) });
+    // Only a genuinely new repair needs an owner: inherited, adopted and grouped failures keep their issue's routing.
+    const owner = await resolveOwnerSlot({ api, repository, record });
+    const labels = record.labels.map(label => label === COORDINATOR_SLOT ? owner.label : label);
+    const body = [record.evidence, '**Repair** ' + record.recommendation, ownerLine(owner, record),
+      '<!-- studioos-workflow-context:v1 ' + record.contextKey + ' -->', group, occurrence].join('\n\n');
+    const issue = await api(root, { method: 'POST', body: JSON.stringify({ title: record.title, body, labels }) });
     if (!numberId(issue?.number)) throw new Error('workflow_issue_creation_unconfirmed');
     index({ ...issue, body, state: 'open' });
     return { action: 'created', issueNumber: issue.number };

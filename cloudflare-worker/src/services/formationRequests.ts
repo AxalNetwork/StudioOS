@@ -61,7 +61,7 @@
 import type { Env } from '../types';
 import { newUid } from '../routes/_t13t14t15_helpers';
 import { isCalendarDate } from './section83b';
-import { readCase, stageWaitingOn, type Actor, type CaseRow } from './formationCase';
+import { caseWriteBatch, readCase, stageWaitingOn, type Actor, type CaseRow } from './formationCase';
 import { approvePack, readFiling } from './formationFilings';
 import { logAdminAction } from './adminAudit';
 import { notify, FORMATION_NOTIFY_TYPES } from './notify';
@@ -109,7 +109,7 @@ const OPEN_INSERT =
   + 'SELECT ?, c.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
   + 'COALESCE((SELECT p.prior_waiting_on FROM formation_case_requests p WHERE p.case_id = c.id AND p.state IN ' + ACTIVE_SQL + ' ORDER BY p.id LIMIT 1), c.waiting_on), '
   + 'COALESCE((SELECT p.prior_case_revision FROM formation_case_requests p WHERE p.case_id = c.id AND p.state IN ' + ACTIVE_SQL + ' ORDER BY p.id LIMIT 1), c.revision) '
-  + 'FROM formation_cases c WHERE c.id = ? AND c.closed_at IS NULL';
+  + 'FROM formation_cases c WHERE c.id = ? AND c.closed_at IS NULL RETURNING *';
 const REQUEST_AT = 'EXISTS (SELECT 1 FROM formation_case_requests WHERE uid = ? AND revision = ?)';
 const EVENT_INSERT =
   'INSERT INTO formation_case_events (case_id, actor_user_id, party, kind, visibility, detail_json) '
@@ -167,7 +167,7 @@ function onBehalfError(actor: Actor): string | null {
   return null;
 }
 async function logWrite(env: Env, actor: Actor, action: string, details: Record<string, unknown>) {
-  if (actor.party === 'founder' || !actor.userId) return;
+  if (actor.hqWrite || actor.party === 'founder' || !actor.userId) return;
   await logAdminAction(env, Number(actor.userId), actor.email ?? '', action, { party: actor.party, ...details });
 }
 async function quietNotify(env: Env, args: Parameters<typeof notify>[1]) {
@@ -183,6 +183,13 @@ function restoreValue(r: RequestRow, kase: CaseRow): string {
 export interface NewRequest {
   askedOf: unknown; askedOfUserId?: unknown; kind: unknown; title: unknown; body?: unknown; dueOn?: unknown;
   boundSha256?: unknown; filingId?: unknown;
+}
+
+// A proxy justification belongs to HQ. Public notes and requests keep their own text and the partner attribution.
+function eventAttribution(actor: Actor, visibility: Visibility) {
+  if (!actor.hqWrite || visibility === 'hq_only') return actor.hqWrite?.attribution;
+  const { reason: _privateReason, ...publicFields } = actor.hqWrite.attribution;
+  return publicFields;
 }
 
 /** HQ, a partner or counsel opens a request on a case. The case then waits on the party asked. */
@@ -219,15 +226,15 @@ export async function openRequest(env: Env, caseId: number, input: NewRequest, a
 
   const uid = newUid();
   const visibility = requestVisibility(input.askedOf);
-  const detail = JSON.stringify({ request_uid: uid, kind: input.kind, title, asked_of: input.askedOf });
-  const results = await env.DB.batch([
+  const detail = JSON.stringify({ request_uid: uid, kind: input.kind, title, asked_of: input.askedOf, ...eventAttribution(actor, visibility) });
+  const results = await caseWriteBatch(env, actor, [
     env.DB.prepare(OPEN_INSERT).bind(uid, actor.party, actor.userId, input.askedOf, askedOfUser, input.kind, title, body,
       input.dueOn ?? null, bound, filing, kase.id),
     env.DB.prepare(EVENT_INSERT).bind(kase.id, actor.userId, actor.party, 'request_opened', visibility, detail, uid, 0),
     env.DB.prepare(WAITING_UPDATE).bind(kase.waiting_on, kase.id, uid, 0),
-  ]);
+  ], 0);
   if (!(Number(results[0]?.meta?.changes ?? 0) > 0)) return fail(409, 'case_closed');
-  const request = (await readRequestByUid(env, uid))!;
+  const request = results[0].results[0] as unknown as RequestRow;
   await logWrite(env, actor, 'formation_request_opened', { case_uid: kase.uid, request_uid: uid, kind: input.kind, asked_of: input.askedOf });
   if (askedOfUser) {
     await quietNotify(env, {
@@ -428,7 +435,8 @@ export async function addNote(
   if (!text) return fail(400, 'text_required');
   const vis = input.visibility == null ? (actor.party === 'founder' ? 'all' : 'hq_only') : input.visibility;
   if (!isIn(noteVisibilities(actor.party), vis)) return fail(400, 'visibility_not_allowed');
-  const res = await env.DB.prepare(NOTE_INSERT).bind(kase.id, actor.userId, actor.party, vis, JSON.stringify({ text })).run();
+  const statement = env.DB.prepare(NOTE_INSERT).bind(kase.id, actor.userId, actor.party, vis, JSON.stringify({ text, ...eventAttribution(actor, vis) }));
+  const res = actor.hqWrite ? (await caseWriteBatch(env, actor, [statement], 0))[0] : await statement.run();
   await logWrite(env, actor, 'formation_case_note', { case_uid: kase.uid, visibility: vis });
   return { ok: true, eventId: Number(res.meta?.last_row_id ?? 0) };
 }

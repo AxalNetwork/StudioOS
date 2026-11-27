@@ -1,0 +1,110 @@
+{
+  "DELETE /api/funds/:id/lps/:lpId": {
+    "kind": "target"
+  },
+  "DELETE /api/funds/:id/report-periods/:periodId": {
+    "kind": "target"
+  },
+  "GET /api/funds": {
+    "kind": "filter"
+  },
+  "GET /api/funds/:id": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/analytics": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/capital-calls": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/capital-calls/:callId": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/comms": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/ledger": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/lp-report/:lpId": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/lps": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/notes/brief": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/page": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/report-periods": {
+    "kind": "target"
+  },
+  "GET /api/funds/:id/report-periods/:periodId": {
+    "kind": "target"
+  },
+  "GET /api/funds/analytics": {
+    "kind": "filter"
+  },
+  "GET /api/funds/distributions": {
+    "kind": "filter"
+  },
+  "PATCH /api/funds/:id": {
+    "kind": "target"
+  },
+  "PATCH /api/funds/:id/lps/:lpId": {
+    "kind": "target"
+  },
+  "POST /api/funds": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/capital-call": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/capital-calls/:callId/correct": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/capital-calls/:callId/withdraw": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/capital-calls/lines/:lineId/receipts": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/capital-calls/preview": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/comms": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/distributions/preview": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/drafts/brief": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/lps": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/notes/brief": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/regenerate-lpa": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/report-periods": {
+    "kind": "target"
+  },
+  "POST /api/funds/:id/report-periods/:periodId/drafts/letter": {
+    "kind": "target"
+  },
+  "POST /api/funds/distributions/:id/mark-paid": {
+    "kind": "target"
+  },
+  "POST /api/funds/distributions/execute": {
+    "kind": "target"
+  },
+  "PUT /api/funds/:id/lps/:lpId/type": {
+    "kind": "target"
+  }
+}

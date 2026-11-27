@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, GripVertical, RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -10,14 +10,14 @@ import { Lightbox, WorkerRail } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
 import PitchPage from './PitchPage';
 import BuildProgress, { BuildAnnouncer } from './BuildProgress';
-import OneClickBuild, { FreshnessLines, ProposalReview } from './OneClickBuild';
-import { CoverageMeter, SourcesStep, useDeckSources } from './SourcesBoards';
+import { FreshnessLines, ProposalReview } from './OneClickBuild';
+import { SourcesStep, useDeckSources } from './SourcesBoards';
 import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
 import {
   MESSAGE_HINT, MESSAGE_LABEL, MESSAGE_MAX, NOT_ON_STUDIOOS, NO_ROUND, PRICE_RETRY, PROPOSED_BY_EADWYN, RELOAD_LATEST, ROUND_LINK, addRow, aiTokens,
   buildSentence, canConfirm, chipsFor, editRow, estimateLine, fastBrief, moveRow, outlineSentence, priceNote, priceState, quoteUidOf, refusalOf, removeRow, roundLine, rowWarning, startOptions, withBase,
 } from './newDeckModel';
-import { ONE_CLICK_LINE, ONE_CLICK_TITLE, audienceLabel, buildingLine } from './oneClickModel';
+import { audienceLabel, buildingLine } from './oneClickModel';
 import TemplateChooser from './TemplateChooser';
 import { templateSentence } from './templatesModel';
 import { availability } from './deckV2Adapter';
@@ -27,38 +27,11 @@ import { deckRail } from './deckRailGroups';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 
 /**
- * D897 (#2677, part 3 of #2434), rebuilt by D1604 (#3716, pd2, plan §11 step
- * 14) — New deck at /raise/pitch/new, on one page:
- *
- *   Generate from my data   the one-click (`OneClickBuild.jsx`) at the top,
- *                           with the coverage the sources read gives, building
- *                           with this page's audience, length and sources.
- *   Audience and stage      the stage from the venture's records (#3877's
- *                           `inferred`, with its reason), its chips greyed
- *                           "Coming later" until the stage plan (#3774); the
- *                           seven audiences and the lengths, preset from that
- *                           brief (never a literal of the client's); the
- *                           active round; Start from blank, a past version or
- *                           a template.
- *   Sources                 every record with its checkbox, value, source,
- *                           grade and as-of date (`SourcesStep`, D896); an
- *                           unticked record is on no card. The connectors'
- *                           freshness with Sync now (#3877).
- *   Outline                 the length's standard outline, free, at once; each
- *                           row with its message (D897 §9, #3659: the one
- *                           takeaway its card leaves, editable, words only),
- *                           its records, drag and Move up / down; Regenerate
- *                           outline runs Eadwyn (cost first); Reorder for
- *                           stage waits on #3808. Build deck sends the
- *                           outline's `proposal_hash` back, so a tab that
- *                           read an older outline is refused, not obeyed.
- *
- * There is no prompt field: typed instructions live only in the editor, scoped
- * to the Grid selection (owner rule). Build deck shows its cost first, then
- * lands on the review shared with the one-click (`ProposalReview`), where
- * nothing is saved before Accept. A template start is the editor's own fill
- * (`apply-method`) and lands on the same review. `?proposal=<id>` reopens a
- * proposal: its cards on the review, or an outline still to build here.
+ * D6056 / PS-03 — one New deck stepper with the existing pinned price model.
+ * Audience, sources and outline stay mounted when moving between steps.
+ * The standard-outline shortcut enters the same price and generation flow.
+ * Template previews and their apply-method confirmation stay with Start from.
+ * Builds land on ProposalReview, where nothing is saved before Accept.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold disabled:cursor-not-allowed disabled:opacity-50 dark:disabled:opacity-50';
@@ -179,7 +152,19 @@ function Refusal({ refusal }) {
 }
 
 /** The dialog every run opens: what it does and holds, then Confirm or Cancel; a build shows its progress while it runs. */
-function Confirm({ title, sentence, action, hold = null, ready = true, onReprice = null, busy, progress = null, announce = null, onConfirm, onClose }) {
+function Confirm({ inline = false, title, sentence, action, hold = null, ready = true, onReprice = null, busy, progress = null, announce = null, onConfirm, onClose }) {
+  if (inline) return (
+    <section className={`${CARD} flex min-w-0 flex-col gap-4 p-4`} data-testid="pitch-new-dialog" aria-labelledby="pitch-new-price-title">
+      <h2 id="pitch-new-price-title" className={H2}>{busy ? 'Generating your deck' : title}</h2>
+      <BuildAnnouncer text={busy ? announce : ''} testId="pitch-new-announce" />
+      {busy ? progress : <>
+        <p className={`m-0 ${MUTED}`}>{sentence}</p>
+        {hold ? <span className="font-mono text-xs" data-testid="pitch-new-dialog-hold">{hold}</span> : null}
+        {onReprice ? <button type="button" className={GHOST} onClick={onReprice} data-testid="pitch-new-reprice">{PRICE_RETRY}</button> : null}
+        <button type="button" className={`${PRIMARY} whitespace-normal`} onClick={onConfirm} disabled={!ready} data-testid="pitch-new-confirm">{action}</button>
+      </>}
+    </section>
+  );
   return (
     <Lightbox label={title} title={title} width={540} onClose={() => !busy && onClose()} testId="pitch-new-dialog"
       footer={busy && progress ? null : (
@@ -243,6 +228,7 @@ function Flow({ projectId, q, navigate, params, setParams }) {
     const o = proposal.outline || {};
     return (
       <div className="flex flex-col gap-4" data-testid="pitch-new-review">
+        <DeckSteps step={5} />
         <ProposalReview key={proposal.id} projectId={projectId} q={q} proposal={proposal} items={items} versions={versionList} built={built}
           audience={o.audience ? audienceLabel(o.audience, ctx) : null} />
       </div>
@@ -255,12 +241,33 @@ function Flow({ projectId, q, navigate, params, setParams }) {
   );
 }
 
+const DECK_STEPS = ['Audience and round', 'Sources', 'Outline', 'Price', 'Generate', 'Review'];
+
+function DeckSteps({ step, onStep = null, busy = false, lastStep = 3 }) {
+  return <nav aria-label="New deck steps" data-testid="pitch-new-steps">
+    <ol className="m-0 grid list-none grid-cols-3 gap-2 p-0 sm:grid-cols-6">
+      {DECK_STEPS.map((name, i) => <li key={name}>
+        <button type="button" aria-current={step === i ? 'step' : undefined} disabled={busy || !onStep || i > lastStep}
+          onClick={() => onStep?.(i)} data-testid={`pitch-new-step-${i + 1}`}
+          className={`min-h-[44px] w-full rounded-lg border px-2 py-2 text-left text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-axal-violet ${step === i ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:bg-violet-950 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>
+          <span className="block font-mono">{i + 1}</span>{name}
+        </button>
+      </li>)}
+    </ol>
+  </nav>;
+}
+
 function OnePage({ ctx, projectId, q, sources, items, versions, methods, recommended, outlineProposal, onLanded, manual }) {
   // The brief the context read gives (#3877's inferred, else the fast path): the page starts from it.
   const initial = useMemo(() => fastBrief(ctx), [ctx]);
   const o = outlineProposal?.outline || null;
   const [audience, setAudience] = useState(o?.audience || initial?.audience || null);
   const [length, setLength] = useState(o?.length || initial?.length || ctx.lengths?.[0]?.id || null);
+  const [step, setStep] = useState(0);
+  const stepHeading = useRef(null);
+  const runLock = useRef(false);
+  const quoteReads = useRef({ outline: 0, build: 0 });
+  useEffect(() => { stepHeading.current?.focus(); }, [step]);
   const [start, setStart] = useState({ kind: 'blank', id: 'blank' });
   const [chosen, setChosen] = useState(null);
   const [rows, setRows] = useState(() => (Array.isArray(o?.rows) && o.rows.length ? o.rows : standardRows(ctx, o?.length || initial?.length || ctx.lengths?.[0]?.id)));
@@ -300,12 +307,14 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   // quote is dropped the moment any of them changes: a quote for other inputs is never offered for these.
   const roundRef = ctx?.round?.uid ?? null;
   const refreshQuote = useCallback(async (which, extra = {}) => {
+    const read = ++quoteReads.current[which];
     if (!audience || !length) return;
     setQuote((old) => ({ ...old, [which]: { status: 'loading' } }));
     try {
       const qt = await newDeckApi.quote({ project_id: projectId, step: which, audience, length, round_ref: roundRef, ...extra });
-      setQuote((old) => ({ ...old, [which]: { status: 'ok', quote: qt } }));
+      if (read === quoteReads.current[which]) setQuote((old) => ({ ...old, [which]: { status: 'ok', quote: qt } }));
     } catch (e) {
+      if (read !== quoteReads.current[which]) return;
       setQuote((old) => ({ ...old, [which]: { status: 'failed', message: refusalOf(e)?.message || null } }));
       if (e?.code === 'figure_in_prompt') setRefusal(refusalOf(e));
     }
@@ -320,16 +329,18 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   }, [refreshQuote, rows, exclude.join(',')]);
 
   const run = async (fn, option = null) => {
+    if (runLock.current) return;
+    runLock.current = true;
     setBusy(true); setRefusal(null); setRunning(option); setStartedAt(option === 'build' ? Date.now() : null);
     try { await fn(); setDialog(null); } catch (e) {
       const why = refusalOf(e);
-      setRefusal(why); setDialog(null); reportError('pitch-new:write', e);
+      setRefusal(why); setDialog(null); if (option === 'build') setStep(3); reportError('pitch-new:write', e);
       // A stale or missing quote: the price is read again and the dialog asks again; nothing is re-sent on its own.
       if (why?.code === 'quote_stale' || why?.code === 'quote_required') {
         setQuote((old) => ({ ...old, [option === 'outline' ? 'outline' : 'build']: { status: 'stale' } }));
-        if (option === 'outline') refreshQuote('outline'); else refreshQuote('build', { outline: rows, exclude });
+        // Keep the expired state until the founder asks for a new price.
       }
-    } finally { setBusy(false); setRunning(null); setStartedAt(null); }
+    } finally { runLock.current = false; setBusy(false); setRunning(null); setStartedAt(null); }
   };
 
   const proposeOutline = () => run(async () => {
@@ -339,7 +350,8 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   }, 'outline');
 
   const buildDeck = () => run(async () => {
-    if (!canConfirm(pBuild)) return;
+    if (!canConfirm(pBuild) || !rows.length || rowWarning(rows) || !audience || !length || ctx.grid_generate === false) return;
+    setStep(4);
     const r = await newDeckApi.build(withBase(body({ proposal_id: outlineId ?? undefined, outline: rows, exclude, ...(quoteUidOf(pBuild) ? { quote_uid: quoteUidOf(pBuild) } : {}) }), outlineId != null ? outlineHash : null), railPressHeaders(RAIL.build));
     onLanded(r);
   }, 'build');
@@ -361,18 +373,21 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
 
   return (
     <div className="flex flex-col gap-4" data-testid="pitch-new-page">
-      {!manual && <OneClickBuild projectId={projectId} q="" ctx={ctx} as="section" testId="pitch-new-fast" title={ONE_CLICK_TITLE} line={ONE_CLICK_LINE}
-        brief={audience && length ? { audience, length, label, cards: standard.length || null, why: null, round_ref: ctx?.round?.uid ?? null } : null} exclude={exclude} onBuilt={onLanded}>
-        {sources.status !== 'idle' ? (
-          <div className="max-w-[420px]" data-testid="pitch-new-fast-coverage">
-            <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="S" onRetry={sources.retry} />
-          </div>
-        ) : null}
-      </OneClickBuild>}
+      <DeckSteps step={step} lastStep={!audience || !length || templateStart ? 0 : !rows.length || warning ? 2 : 3} onStep={(next) => {
+        if (next > 0 && (!audience || !length)) return;
+        if (next === 3 && (!rows.length || warning || templateStart)) return;
+        setStep(next); setDialog(null);
+      }} busy={busy} />
+      <h2 ref={stepHeading} tabIndex={-1} className={H2} data-testid="pitch-new-current-step">{step + 1} · {DECK_STEPS[step]}</h2>
+      {!manual && step < 3 ? <div className={`${LAV} flex flex-wrap items-center justify-between gap-3 p-4`} data-testid="pitch-new-fast">
+        <span className={MUTED}>Use your current audience, round and sources with a standard outline. Review the price before generating.</span>
+        <button type="button" className={GHOST} disabled={!audience || !length || !standard.length} data-testid="pitch-new-fast-build"
+          onClick={() => { setRows(standard); setTouched(false); setOutlineId(null); setOutlineHash(null); setStart({ kind: 'blank', id: 'blank' }); setStep(3); setDialog(null); }}>Generate from my data</button>
+      </div> : null}
       <Refusal refusal={refusal} />
 
-      <section className={`${CARD} flex flex-col gap-3 p-4`} aria-labelledby="pitch-new-audience-title" data-testid="pitch-new-audience">
-        <h2 id="pitch-new-audience-title" className={H2}>Audience and stage</h2>
+      <section style={step === 0 ? undefined : { display: 'none' }} aria-hidden={step !== 0} className={`${CARD} flex flex-col gap-3 p-4`} aria-labelledby="pitch-new-audience-title" data-testid="pitch-new-audience">
+        <h2 id="pitch-new-audience-title" className={H2}>Audience and round</h2>
         {ctx.inferred?.why ? <span className={SMALL} data-testid="pitch-new-inferred">From your records: {ctx.inferred.why}</span> : null}
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stage" title={stagePlan?.reason} data-testid="pitch-new-stage">
           <span className="w-[70px] text-[12px] font-bold text-axal-muted dark:text-gray-400">Stage</span>
@@ -429,14 +444,14 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         </div>
       </section>
 
-      <section className="flex flex-col gap-2.5" aria-labelledby="pitch-new-sources-title" data-testid="pitch-new-sources">
+      <section style={step === 1 ? undefined : { display: 'none' }} aria-hidden={step !== 1} className="flex flex-col gap-2.5" aria-labelledby="pitch-new-sources-title" data-testid="pitch-new-sources">
         <h2 id="pitch-new-sources-title" className={H2}>Sources</h2>
         <FreshnessLines ctx={ctx} testId="pitch-new-fresh" />
         <SourcesStep items={items} coverage={sources.data?.coverage} status={sources.status} onRetry={sources.retry} onChange={onChosen} />
       </section>
 
       {templateStart ? null : (
-      <section className={`${LAV} flex flex-col gap-3 p-4`} aria-labelledby="pitch-new-outline-title" data-testid="pitch-new-outline">
+      <section style={step === 2 ? undefined : { display: 'none' }} aria-hidden={step !== 2} className={`${LAV} flex flex-col gap-3 p-4`} aria-labelledby="pitch-new-outline-title" data-testid="pitch-new-outline">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex items-center gap-2">
             <h2 id="pitch-new-outline-title" className={H2}>Outline</h2>
@@ -491,27 +506,45 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         <div className="flex flex-wrap items-center justify-end gap-3">
           {estimate ? <span className={MUTED} data-testid="pitch-new-estimate">{estimate}</span> : null}
           <button type="button" className={PRIMARY} disabled={!rows.length || Boolean(warning) || !audience || !length || templateStart} data-testid="pitch-new-build"
-            onClick={() => setDialog({ which: 'build' })}>
-            Build deck
+            onClick={() => { setStep(3); setDialog(null); }}>
+            Continue to price
           </button>
         </div>
       </section>
 
       )}
 
+      {step < 4 ? <div className="flex flex-wrap justify-between gap-3" data-testid="pitch-new-navigation">
+        <button type="button" className={GHOST} data-testid="pitch-new-back" disabled={step === 0} onClick={() => { setStep(step - 1); setDialog(null); }}>Back{step === 3 ? ' to outline' : ''}</button>
+        {step < 2 ? <button type="button" className={PRIMARY} disabled={!audience || !length || templateStart} onClick={() => setStep(step + 1)}>Continue to {DECK_STEPS[step + 1].toLowerCase()}</button> : null}
+      </div> : null}
+      {step >= 3 ? <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+        <div role="status" aria-live="polite" className={`${LAV} flex min-w-0 flex-col gap-3 p-4`} data-testid="pitch-new-price" data-price-state={pBuild.kind}>
+          <h2 className={H2}>{({ loading: 'Reading the price…', unavailable: 'Price unavailable', free: 'Confirmed · no charge', metered: 'Confirmed · metered', stale: 'Quote expired' })[pBuild.kind]}</h2>
+          <p className={`m-0 ${MUTED}`}>{buildSentence(pBuild, rows.length)}</p>
+          <dl className="m-0 grid grid-cols-[80px_minmax(0,1fr)] gap-2 text-xs">
+            <dt>Audience</dt><dd className="m-0">{label}</dd>
+            <dt>Round</dt><dd className="m-0 break-words">{ctx.round ? roundLine(ctx.round) : NO_ROUND}</dd>
+            <dt>Sources</dt><dd className="m-0">{sources.status === 'ok' ? `${recordedKeys.length - exclude.length} recorded sources selected` : sources.status === 'loading' ? 'Reading sources…' : 'Sources unavailable'}</dd>
+            <dt>Outline</dt><dd className="m-0">{rows.length} cards</dd>
+            <dt>Writes</dt><dd className="m-0">A proposal. Nothing is kept until you accept and save.</dd>
+          </dl>
+          {ctx.grid_generate === false ? <p role="alert" className={MUTED}>Generation is not switched on for this account.</p> : null}
+        </div>
+        <Confirm inline title="Confirm the price" action={pBuild.kind === 'metered' ? `Build deck · holds ${aiTokens(pBuild.hold)}` : 'Build deck'}
+          sentence={priceNote(pBuild) || 'Review your selections and confirm to generate.'} hold={pBuild.kind === 'metered' ? HOLD(aiTokens(pBuild.hold)) : null}
+          ready={canConfirm(pBuild) && rows.length > 0 && !warning && ctx.grid_generate !== false}
+          onReprice={priceNote(pBuild) && pBuild.kind !== 'loading' ? () => refreshQuote('build', { outline: rows, exclude }) : null}
+          busy={busy} onConfirm={buildDeck} progress={<BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} />} announce={buildingLine(rows.length)} />
+      </div> : null}
       {dialog ? (() => {
         // The dialog reads the price as it is NOW, so a price that moved under it is never confirmed by an old sentence.
-        const isBuild = dialog.which === 'build';
-        const price = isBuild ? pBuild : pOutline;
-        const view = dialog.go ? dialog : isBuild
-          ? { title: 'Build deck', action: 'Build deck', sentence: buildSentence(price, rows.length), go: buildDeck, build: true }
-          : { title: 'Regenerate outline', action: price.kind === 'metered' ? `Regenerate · ${aiTokens(price.hold)}` : 'Regenerate', sentence: outlineSentence(price, proposedBy === 'Eadwyn'), go: proposeOutline };
+        const price = pOutline;
+        const view = dialog.go ? dialog : { title: 'Regenerate outline', action: price.kind === 'metered' ? `Regenerate · ${aiTokens(price.hold)}` : 'Regenerate', sentence: outlineSentence(price, proposedBy === 'Eadwyn'), go: proposeOutline };
         return (
           <Confirm {...view} hold={!dialog.go && price.kind === 'metered' ? HOLD(aiTokens(price.hold)) : null} ready={Boolean(dialog.go) || canConfirm(price)}
-            onReprice={!dialog.go && priceNote(price) && price.kind !== 'loading' ? () => (isBuild ? refreshQuote('build', { outline: rows, exclude }) : refreshQuote('outline')) : null}
-            busy={busy} onConfirm={view.go} onClose={() => setDialog(null)}
-            progress={view.build ? <BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} /> : null}
-            announce={view.build ? buildingLine(rows.length) : null} />
+            onReprice={!dialog.go && priceNote(price) && price.kind !== 'loading' ? () => refreshQuote('outline') : null}
+            busy={busy} onConfirm={view.go} onClose={() => setDialog(null)} />
         );
       })() : null}
     </div>

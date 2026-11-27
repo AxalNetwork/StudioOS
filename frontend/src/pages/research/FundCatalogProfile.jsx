@@ -9,6 +9,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { NotRecorded, SourceCard, UnreadableBadge } from './FundDirectory';
 import { ProposedFields, SourceChip, SourceDatesCard, StateChip, VehicleHistory } from './FundProvenance.jsx';
 import ResearchActions from './ResearchActions.jsx';
+import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
 import { canAddToResearch } from './researchComparisons.js';
 import { ACTIONS, UNAVAILABLE, day, managedLine, reportedSize, rereadBeforeAction, shortlistMatch } from './fundProfileRead.js';
 
@@ -221,13 +222,32 @@ export default function FundCatalogProfile({ role = 'founder' }) {
   const [fund, setFund] = useState({ loading: true, error: null, status: null, data: null });
   const [list, setList] = useState({ loading: true, error: null, existing: null });
   const [notice, setNotice] = useState(null);
+  const routeKey = recordKey(id);
+  const route = useRef(routeKey);
+  route.current = routeKey;
+  const [loadedKey, setLoadedKey] = useState(null);
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
+  const current = sameRecord(loadedKey, routeKey);
+  const freshFor = (key, fresh) => fresh() && sameRecord(key, route.current);
+  useEffect(() => () => gate.current.invalidate(), []);
 
   const load = useCallback(async () => {
+    const key = recordKey(id);
+    const fresh = gate.current.begin();
+    setLoadedKey(null);
+    setAdding(false);
+    setNotice(null);
+    setList({ loading: true, error: null, existing: null });
     setFund({ loading: true, error: null, status: null, data: null });
     try {
       const data = await researchFundsApi.get(id);
+      if (!freshFor(key, fresh)) return;
+      setLoadedKey(key);
       setFund({ loading: false, error: null, status: 200, data });
     } catch (e) {
+      if (!freshFor(key, fresh)) return;
+      setLoadedKey(key);
       setFund(failedRead(e));
     }
   }, [id]);
@@ -236,26 +256,34 @@ export default function FundCatalogProfile({ role = 'founder' }) {
   // D7167: the shortlist row for THIS vehicle, matched on its directory uid.
   // D7168: asked of the Worker by `catalogue_uid`, so the row is found
   // whatever page of My funds holds it (the list pages at 50).
-  const uid = fund.data?.item?.uid || (fund.data ? id : null);
+  const uid = current ? fund.data?.item?.uid || (fund.data ? id : null) : null;
   useEffect(() => {
     if (!uid) return undefined;
     let alive = true;
+    const key = loadedKey;
+    const belongs = () => alive && sameRecord(key, route.current);
     setList({ loading: true, error: null, existing: null });
     researchMyFundsApi.list({ catalogue_uid: uid, limit: 1 })
-      .then((r) => { if (alive) setList({ loading: false, error: null, existing: shortlistMatch(r.items, uid) }); })
-      .catch((e) => { if (alive) setList({ loading: false, error: e?.message || UNAVAILABLE, existing: null }); });
+      .then((r) => { if (belongs()) setList({ loading: false, error: null, existing: shortlistMatch(r.items, uid) }); })
+      .catch((e) => { if (belongs()) setList({ loading: false, error: e?.message || UNAVAILABLE, existing: null }); });
     return () => { alive = false; };
-  }, [uid]);
+  }, [uid, loadedKey]);
 
   // D7167 (FND-P07 B): re-read before Save, Add and Compare; a 410 clears the page.
-  const reread = async () => {
-    const r = await rereadBeforeAction(researchFundsApi.get, id);
+  const checkFund = async (key, fresh) => {
+    const target = JSON.parse(key)[0];
+    const r = await rereadBeforeAction(researchFundsApi.get, target);
+    if (!freshFor(key, fresh)) return false;
     if (r.withdrawn) {
       setFund({ loading: false, error: 'Withdrawn', status: 410, data: null, removed: r.removed, reason: r.reason, during: true });
       return false;
     }
     if (!r.ok) { setNotice({ ok: false, text: r.message }); return false; }
     return true;
+  };
+  const reread = async () => {
+    if (!current) return false;
+    return checkFund(loadedKey, gate.current.begin());
   };
 
   // D4613: one save in flight at a time. A ref, not state: two clicks in the
@@ -266,34 +294,41 @@ export default function FundCatalogProfile({ role = 'founder' }) {
   const [adding, setAdding] = useState(false);
   const add = async () => {
     const item = fund.data?.item;
-    if (!item || list.existing || list.error || inFlight.current) return;
-    inFlight.current = true;
+    if (!current || !item || list.existing || list.error || inFlight.current?.key === loadedKey) return;
+    const operation = { key: loadedKey };
+    inFlight.current = operation;
+    const fresh = gate.current.begin();
+    const belongs = () => inFlight.current === operation && freshFor(operation.key, fresh);
     setAdding(true);
     setNotice(null);
     try {
-      if (!(await reread())) return;
+      if (!(await checkFund(operation.key, fresh))) return;
       const row = await api.research.fundCreate({ name: item.name, source_url: item.website || null, catalogue_uid: item.uid || id });
+      if (!belongs()) return;
       setList({ loading: false, error: null, existing: row });
       setNotice({ ok: true, text: row?.existing ? 'Already on your shortlist.' : `Saved to your shortlist. Your private dossier for ${item.name} is ready.` });
     } catch (e) {
+      if (!belongs()) return;
       if (e?.status === 410) {
         setFund({ loading: false, error: 'Withdrawn', status: 410, data: null, removed: e?.data?.removed || null, reason: e?.message || null, during: true });
       } else {
         setNotice({ ok: false, text: 'That fund did not save. Nothing changed.' });
       }
     } finally {
-      inFlight.current = false;
-      setAdding(false);
+      if (inFlight.current === operation) {
+        inFlight.current = false;
+        if (sameRecord(operation.key, route.current)) setAdding(false);
+      }
     }
   };
 
   return (
     <WorkspaceShell
       role={role}
-      title={fund.data?.item?.name || 'Fund profile'}
+      title={(current && fund.data?.item?.name) || 'Fund profile'}
       activeSlug="funds"
     >
-      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load} backTo={backTo}
+      <FundCatalogView fund={current ? fund : { loading: true }} list={list} onAdd={add} adding={adding && inFlight.current?.key === routeKey} notice={current ? notice : null} onRetry={load} backTo={backTo}
         research={canAddToResearch(role) ? (item) => (
           <ResearchActions kind="fund" item={{ uid: item.uid || id, name: item.name }} addLabel={ACTIONS.add} compareLabel={ACTIONS.compare} beforeOpen={reread} />
         ) : null} />

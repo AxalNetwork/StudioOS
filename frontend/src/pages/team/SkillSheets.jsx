@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, TriangleAlert, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Check, Search, TriangleAlert, X } from 'lucide-react';
 import { Sheet, Unrecorded } from '../../ui';
 import { api } from '../../lib/api';
 import { AgentTile } from './AgentMark.jsx';
-import { WORK_LABEL } from './personaModel.js';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
-import { AgentRadar, CostExplainer, RunCostLine, SkillRow, TaxChips } from './SkillParts.jsx';
+import { AgentRadar, CostExplainer, EligibilityChip, JobLines, RunCostLine, SkillRow, TaxChips } from './SkillParts.jsx';
 import {
-  LEVELS, OUTPUT_KINDS, RELEASE_NOTE_MAX, assignGroups, assignRows, blockedWords, costChangeWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, releaseNoteBody, scopeLine,
+  AREAS, LEVELS, OUTPUT_KINDS, RELEASE_NOTE_MAX, assignGroups, assignRows, costChangeWords, countsLine, eligibilityOf, eligibilityWhy, emptyEligible,
+  parseSkillMd, pickerRows, previewRadar, problemWords, radarVector, releaseNoteBody, scopeLine,
 } from './skillsModel.js';
 
 /**
@@ -81,8 +81,10 @@ export function AssignList({ rows, picked, onTick }) {
     <div key={g.company} className="flex flex-col">
       <span className={EYEBROW}>{g.company}</span>
       {g.agents.map((a) => {
-        const why = a.assigned ? 'Already has this skill.' : blockedWords(a.blocked);
-        const off = !!(a.assigned || a.blocked);
+        // D8768: the Worker's one rule. Only `eligible` is ticked; every other state says why, with its recovery.
+        const e = eligibilityOf(a);
+        const why = a.assigned ? 'Already has this skill.' : eligibilityWhy(e, { who: 'its sponsor' });
+        const off = e.state !== 'eligible';
         const on = a.assigned || picked.has(a.uid);
         const change = costChangeWords(a);
         return (
@@ -93,6 +95,7 @@ export function AssignList({ rows, picked, onTick }) {
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex flex-wrap items-center gap-1.5">
                 <b className="text-[13.5px] text-axal-ink dark:text-gray-100">{a.name}</b>
+                <EligibilityChip e={e} />
                 {a.fit ? <span className="inline-flex min-h-[20px] items-center rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 text-[11px] font-semibold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300" data-testid="assign-fit">Natural fit</span> : null}
               </span>
               <span className={MUTED}>{scopeLine(a.scope)}{Number.isFinite(a.skill_count) ? ` · ${a.skill_count} skills` : ''}</span>
@@ -112,7 +115,8 @@ export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
   const [refusal, setRefusal] = useState('');
   useEffect(() => { let alive = true; agents.assignable(skill.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [skill.uid]);
   const rows = block?.available ? assignRows(block.value?.agents, skill, personaOf) : [];
-  const free = rows.filter((a) => !a.blocked && !a.assigned);
+  const free = rows.filter((a) => eligibilityOf(a).state === 'eligible');
+  const counts = block?.available ? countsLine(block.value?.counts) : null;
   const tick = (uid) => setPicked((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const save = async () => {
     setRefusal('');
@@ -135,7 +139,8 @@ export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
               {picked.size} of {free.length} agents selected
               {free.length ? <button type="button" className={`ml-auto ${BTN_TEXT}`} onClick={() => setPicked(new Set(free.map((a) => a.uid)))} data-testid="assign-skill-all">Select all you can edit</button> : null}
             </div>
-            <span className={MUTED}>Agents whose persona fits this skill’s area come first. Any agent can take it.</span>
+            {counts ? <span className={`font-mono text-[11.5px] ${MUTED}`} data-testid="assign-counts">{counts}</span> : null}
+            <span className={MUTED}>Agents whose persona fits this skill’s area come first. Any agent can take it unless a policy blocks it.</span>
             <AssignList rows={rows} picked={picked} onTick={tick} />
           </>
         )}
@@ -146,17 +151,120 @@ export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
   );
 }
 
+// ---------------------------------------------------------------- D8768: the one picker
+
+/** TMS06: a skill's job, needs, output and cost inside a picker, with Back that keeps the picks and returns focus. */
+function PickerDetail({ s, onBack }) {
+  const back = useRef(null);
+  useEffect(() => { back.current?.focus?.(); }, []);
+  const e = eligibilityOf(s);
+  return (
+    <section className="flex flex-col gap-2 rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700" aria-label={`${s.name}: details`} data-testid="skill-picker-detail">
+      <button ref={back} type="button" className={`w-fit ${BTN_TEXT}`} onClick={onBack} data-testid="skill-picker-back">‹ Back to the list</button>
+      <span className="flex flex-wrap items-center gap-2"><b className="text-[14px] text-axal-ink dark:text-gray-100">{s.name}</b><EligibilityChip e={e} /></span>
+      <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-200">{s.description || <Unrecorded />}</p>
+      <JobLines s={s} />
+      {Array.isArray(s.steps) && s.steps.length ? (
+        <ol className="m-0 flex flex-col gap-1 pl-5 text-[12.5px] text-axal-ink dark:text-gray-200">{s.steps.map((st, i) => <li key={i}>{st}</li>)}</ol>
+      ) : null}
+      {eligibilityWhy(e) ? <span className="text-[12px] text-amber-800 dark:text-amber-200">{eligibilityWhy(e)}</span> : null}
+    </section>
+  );
+}
+
+/**
+ * D8768: the one skill picker, shared by an existing agent's Add skills drawer (TMS04–TMS06) and the Add-an-agent
+ * wizard (TMS07, TMS08). It draws what the Worker's one rule answered (`eligibility` on each row, `counts`, `areas`):
+ * natural fit first and labelled, every published skill listed, only `eligible` tickable, every other state with its
+ * reason and recovery. Search (`/` focuses it) and the area filter narrow what is shown and never drop a pick, and a
+ * skill's details open in place and come back with the picks and focus kept.
+ */
+export function SkillPicker({ value, exclude, picked, onTick, testPrefix, toolsLine = false }) {
+  const [q, setQ] = useState('');
+  const [area, setArea] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const search = useRef(null);
+  const all = (Array.isArray(value?.skills) ? value.skills : []).filter((s) => !exclude?.has(s.uid));
+  const inArea = area ? all.filter((s) => (s.taxonomy || []).some((t) => t.category_slug === area)) : all;
+  const rows = pickerRows(inArea, q);
+  const listedAreas = (value?.areas || []).filter((a) => a.listed > 0);
+  const onKey = (e) => {
+    if (e.key === '/' && e.target?.tagName !== 'INPUT' && e.target?.tagName !== 'TEXTAREA') { e.preventDefault(); search.current?.focus(); }
+  };
+  const open = detail ? all.find((s) => s.uid === detail) : null;
+  const back = () => {
+    const uid = detail;
+    setDetail(null);
+    setTimeout(() => { try { document.getElementById?.(`${testPrefix}-details-${uid}`)?.focus?.(); } catch { /* focus is a convenience */ } }, 0);
+  };
+  if (open) return <PickerDetail s={open} onBack={back} />;
+  const eligible = rows.filter((s) => eligibilityOf(s).state === 'eligible');
+  const empty = !eligible.length ? emptyEligible({ counts: value?.counts, areas: value?.areas, area, q }) : null;
+  const counts = countsLine(value?.counts);
+  return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
+    <div className="flex flex-col gap-2" onKeyDown={onKey} data-testid={`${testPrefix}-picker`}>
+      {counts ? <span className={`font-mono text-[11.5px] ${MUTED}`} data-testid={`${testPrefix}-counts`}>{counts}</span> : null}
+      <label className="relative flex items-center">
+        <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 text-axal-muted dark:text-gray-400" />
+        <span className="sr-only">Search by job, what it needs or what you get</span>
+        <input ref={search} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills ( / )" aria-keyshortcuts="/"
+          className={`${FIELD} h-9 w-full pl-8 text-[12.5px]`} data-testid={`${testPrefix}-search`} />
+      </label>
+      {listedAreas.length ? (
+        <div role="group" aria-label="Area" className="flex flex-wrap gap-1.5">
+          {[{ area: null, name: 'All' }, ...listedAreas.map((a) => ({ area: a.area, name: AREAS.find((x) => x.axis === a.area)?.name || a.area, a }))].map((x) => (
+            <button key={x.name} type="button" aria-pressed={area === x.area} onClick={() => setArea(x.area)}
+              className={`inline-flex min-h-[28px] items-center rounded-axal-pill border px-2.5 text-[12px] ${area === x.area ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
+              data-testid={`${testPrefix}-area-${x.area || 'all'}`}>{x.name}{x.a ? ` · ${x.a.eligible}/${x.a.listed}` : ''}</button>
+          ))}
+        </div>
+      ) : null}
+      {empty ? (
+        <div role="status" className="flex flex-col gap-1.5 rounded-axal-md border border-dashed border-axal-hairline px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:text-gray-200" data-testid={`${testPrefix}-empty`}>
+          <span>{empty.text}</span>
+          {empty.way ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => { setQ(''); setArea(empty.way.area); }} data-testid={`${testPrefix}-way`}>{empty.way.text} Show them</button> : null}
+          {picked.size ? <span className={MUTED}>{`Your ${picked.size} ${picked.size === 1 ? 'pick is' : 'picks are'} kept.`}</span> : null}
+        </div>
+      ) : null}
+      <div role="group" aria-label="Skills" className="flex flex-col">
+        {rows.map((s) => {
+          const e = eligibilityOf(s);
+          const why = eligibilityWhy(e);
+          const off = e.state !== 'eligible';
+          const on = picked.has(s.uid);
+          return (
+            <div key={s.uid} className={off ? 'opacity-80' : ''}>
+              <label className={off ? '' : 'cursor-pointer'}>
+                <input type="checkbox" className="sr-only" checked={on} disabled={off} onChange={() => onTick(s.uid)} data-testid={`${testPrefix}-${s.uid}`} />
+                <SkillRow s={s} version={s.version} why={why} state={e} check={<Box on={on} disabled={off} />}
+                  toolState={(t) => (e.state === 'blocked' && e.code === 'tool_not_approved' && e.tool?.key === t.key ? 'no' : 'ok')}>
+                  <button type="button" id={`${testPrefix}-details-${s.uid}`} className={BTN_TEXT} onClick={(ev) => { ev.preventDefault(); setDetail(s.uid); }} data-testid={`${testPrefix}-details-${s.uid}`}>Details</button>
+                </SkillRow>
+              </label>
+              {toolsLine && Array.isArray(s.tools_to_grant) && s.tools_to_grant.length && on ? (
+                <span className={`block pb-2 pl-7 ${MUTED}`} data-testid={`${testPrefix}-tools-${s.uid}`}>{`Step 3 will ask you to approve ${s.tools_to_grant.join(', ')}.`}</span>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- SK5
 
-/** SK5: only its role's skills, tools checked against its approved tools, the radar previewing the picks. */
+/** SK5 (D8768 TMS04–TMS06): every published skill the agent could take, natural fit first, the radar previewing the picks. */
 export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   const [block, setBlock] = useState(null);
   const [picked, setPicked] = useState(() => new Set());
   const [refusal, setRefusal] = useState('');
   useEffect(() => { let alive = true; agents.availableSkills(agent.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [agent.uid]);
-  const have = new Set((current || []).map((s) => s.uid));
-  const list = block?.available ? directory(block.value?.skills, { sort: 'popular' }).filter((s) => !have.has(s.uid)) : [];
-  const chosen = list.filter((s) => picked.has(s.uid));
+  const have = useMemo(() => new Set((current || []).map((s) => s.uid)), [current]);
+  // The picks are read from the whole answer, never the filtered rows: a search or an area never drops one.
+  const all = block?.available && Array.isArray(block.value?.skills) ? block.value.skills.filter((s) => !have.has(s.uid)) : [];
+  const chosen = all.filter((s) => picked.has(s.uid));
   const tick = (uid) => setPicked((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const save = async () => {
     setRefusal('');
@@ -170,7 +278,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   const pickKey = chosen.map((s) => s.uid).join(',');
   const cost = useCost(`${agent.uid}|${pickKey}`, () => agents.costEstimate(agent.uid, { add: chosen.map((s) => s.uid) }));
   return (
-    <Sheet title="Add skills to this agent" sub={WORK_LABEL[agent.role_key] ? `${WORK_LABEL[agent.role_key]} skills, most used first` : 'Skills, most used first'} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub="Every published skill it could take, natural fit first" width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
@@ -180,18 +288,8 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
       <div className="flex flex-col gap-3 px-5 py-5">
         <AgentRadar vector={chosen.length ? preview : radarVector(radar)} radar={radar} height={180} label={chosen.length ? 'With your picks.' : 'Now.'} />
         <RunCostLine est={cost} />
-        {!block?.available ? <ReadState block={block} what="Its role’s skills" /> : !list.length ? <HonestBlock>No other skill of this role yet.</HonestBlock>
-          : list.map((s) => {
-            const why = blockedWords(s.blocked);
-            const on = picked.has(s.uid);
-            return (
-              <label key={s.uid} className={why ? 'opacity-80' : 'cursor-pointer'}>
-                <input type="checkbox" className="sr-only" checked={on} disabled={!!why} onChange={() => tick(s.uid)} data-testid={`add-skill-${s.uid}`} />
-                <SkillRow s={s} version={s.version} why={why} check={<Box on={on} disabled={!!why} />}
-                  toolState={(t) => (s.blocked?.code === 'tool_not_approved' && (s.blocked.tool?.key === t.key) ? 'no' : 'ok')} />
-              </label>
-            );
-          })}
+        {!block?.available ? <ReadState block={block} what="The skills it could take" />
+          : <SkillPicker value={block.value} exclude={have} picked={picked} onTick={tick} testPrefix="add-skill" />}
         <Refusal text={refusal} />
       </div>
     </Sheet>
@@ -200,7 +298,12 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
 
 // ---------------------------------------------------------------- SK6
 
-/** The Add-an-agent Skills step: the published skills written for its role (the Worker still holds an agent to them), the three most used picked for you. */
+/**
+ * The Add-an-agent Skills step (D8768 TMS07, TMS08): the Worker's one rule for an agent not yet added, its role and
+ * persona from the steps before. Up to three eligible skills of its natural fit are picked for you; a skill a policy
+ * blocks says why; a picked skill names the tools step 3 will ask for. Nothing eligible says so, with counts and the
+ * way on, and the step can still go on with no skills.
+ */
 export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList }) {
   const [block, setBlock] = useState(null);
   // D4121 AG3: what the agent would cost per run with these skills, before it is added (its cap comes at Review).
@@ -211,36 +314,31 @@ export function SkillsStep({ scope, role, model, persona, picked, setPicked, onL
     () => (model ? agents.draftCostEstimate(kind, scopeId, { model, role, persona, skills: pickList }) : { available: false }));
   useEffect(() => {
     let alive = true;
-    agents.skillLibrary(scope.company?.uid || null).then((b) => {
+    setBlock(null);
+    agents.eligibleSkills(kind, scopeId, { role, persona }).then((b) => {
       if (!alive) return;
       setBlock(b);
       if (!b.available) return;
-      const list = directory(b.value?.skills, { fit: role, sort: 'popular' }).filter((s) => s.status === 'published');
+      const list = Array.isArray(b.value?.skills) ? b.value.skills : [];
       onList?.(list);
-      if (picked == null) setPicked(new Set(list.slice(0, 3).map((s) => s.uid)));
+      if (picked == null) setPicked(new Set(list.filter((s) => { const e = eligibilityOf(s); return e.state === 'eligible' && e.fit; }).slice(0, 3).map((s) => s.uid)));
     });
     return () => { alive = false; };
-  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role, persona]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!block?.available) {
     return (
       <div className="flex flex-col gap-2" data-testid="add-agent-skills">
-        {block ? <HonestBlock>{block.unreadable ? 'This role’s skills could not be read.' : 'Skills aren’t open yet.'} You can add skills from the agent’s profile later.</HonestBlock> : <p className={`m-0 ${MUTED}`}>Reading…</p>}
+        {block ? <HonestBlock>{block.unreadable ? 'The skills this agent could take could not be read.' : 'Skills aren’t open yet.'} You can add skills from the agent’s profile later.</HonestBlock> : <p className={`m-0 ${MUTED}`}>Reading…</p>}
       </div>
     );
   }
-  const list = directory(block.value?.skills, { fit: role, sort: 'popular' }).filter((s) => s.status === 'published');
   const set = picked || new Set();
   const tick = (uid) => { const n = new Set(set); if (n.has(uid)) n.delete(uid); else n.add(uid); setPicked(n); };
   return (
     <div className="flex flex-col gap-2" data-testid="add-agent-skills">
-      <p className={`m-0 ${MUTED}`}>This role’s skills, picked for you. Change any of them.</p>
-      {!list.length ? <HonestBlock>No skills for this role yet. You can add skills from the agent’s profile later.</HonestBlock>
-        : list.map((s) => (
-          <label key={s.uid} className="cursor-pointer">
-            <input type="checkbox" className="sr-only" checked={set.has(s.uid)} onChange={() => tick(s.uid)} data-testid={`add-agent-skill-${s.uid}`} />
-            <SkillRow s={s} version={s.version} check={<Box on={set.has(s.uid)} />} />
-          </label>
-        ))}
+      <p className={`m-0 ${MUTED}`}>Skills that fit this agent come first, and up to three are picked for you. Any published skill can be added unless a policy blocks it.</p>
+      {block.value?.tools_unreadable ? <HonestBlock>Your connected tools could not be read, so a skill that needs one is not offered yet.</HonestBlock> : null}
+      <SkillPicker value={block.value} picked={set} onTick={tick} testPrefix="add-agent-skill" toolsLine />
       <RunCostLine est={cost} />
     </div>
   );
