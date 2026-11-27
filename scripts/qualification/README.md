@@ -45,7 +45,9 @@ route or the 390 px check was not run.
 - **390 px**: not run in this mode, because it has no browser. A browser run
   writes `{ "<row id>": { "result": "pass" | "fail", "evidence": "…" } }` and
   `--phone` merges it. The row ids are `admin`, `founder`, `investor`,
-  `advisor`, `partner` and `pending`.
+  `advisor`, `partner` and `pending`. The browser run is
+  `frontend/tests/qualification/` (D8688 part 2): build `docs/`, run its
+  Playwright config, then pass its `test-results/role-phone-390.json` here.
 - **Preview only**: always `no` here. Every row runs as the role itself, never
   as an HQ preview. The role previews in #8689 cover navigation only and are
   not counted.

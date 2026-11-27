@@ -32,10 +32,16 @@
 // comparison. Both are real conveniences, but a bulk decline cannot satisfy
 // the per-application reason the API (rightly) requires, and shipping a
 // disabled-looking control is worse than leaving it out.
+//
+// D8688 part 2 (#8688): the queue's read and its review write live on
+// `spinoutLab`, not on `api`. The page called `api.adminLpApplications`, which
+// does not exist, so every load threw and the queue said "Could not load the queue" on HQ and on
+// every branch. The 390 px role qualification found it: the Admin row's next
+// action is decided here.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Loader2, RefreshCw } from 'lucide-react';
-import { api } from '../../lib/api';
+import { spinoutLab } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { titleCase } from '../../lib/absence';
 import { adminCapitalAttestationsApi } from '../../lib/api/adminCapitalAttestations';
@@ -107,7 +113,7 @@ function AdminLpApplicationsBody() {
     try {
       // Always fetch the full set and segment client-side: the counts must not
       // change as the reviewer switches tabs, and it keeps tab switching instant.
-      const r = await api.adminLpApplications(fund || undefined);
+      const r = await spinoutLab.adminLpApplications(fund || undefined);
       const list = Array.isArray(r?.applications) ? r.applications : [];
       setApps(list);
       setCounts(r?.counts || {});
@@ -149,7 +155,7 @@ function AdminLpApplicationsBody() {
     setBusy(true);
     setFlash(null);
     try {
-      const r = await api.adminLpApplicationReview(sel.id, {
+      const r = await spinoutLab.adminLpApplicationReview(sel.id, {
         status: nextStatus,
         ...(trimmed ? { review_note: trimmed } : {}),
       });
