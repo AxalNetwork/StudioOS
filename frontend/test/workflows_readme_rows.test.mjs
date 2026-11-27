@@ -68,7 +68,10 @@ test('#9054: every workflow has exactly one purpose row, and every row names a w
 // #9054: the generated column is the only statement of a GITHUB_TOKEN scope; the hand table names secrets.
 test('#9054: no purpose row restates a GITHUB_TOKEN scope in its secrets column', () => {
   const readme = readFileSync(README, 'utf8');
-  const rows = readme.slice(readme.indexOf('<!-- workflow-inventory:end -->')).split('\n').slice(3).filter(line => line.startsWith('| `'));
+  // The purpose table only: the rows from its header to the first line that is not a table row.
+  const after = readme.slice(readme.indexOf('<!-- workflow-inventory:end -->')).split('\n').slice(1);
+  const rows = after.slice(2, after.findIndex(line => !line.startsWith('|')));
+  assert.equal(rows.length, handTableFiles(readme).length);
   const scope = /`(?:actions|attestations|checks|contents|deployments|id-token|issues|packages|pages|pull-requests|security-events|statuses): (?:read|write)`/;
   const offenders = rows.filter(line => scope.test(line.split(' | ').at(-1)));
   assert.deepEqual(offenders.map(line => line.slice(0, 60)), []);
