@@ -98,16 +98,19 @@ export function percentToBps(text) {
   const s = String(text).trim().replace(/\s*%$/, '');
   const m = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(s);
   if (!m) return null;
-  return Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
+  // The digits are joined, not multiplied: "1" and "50" are 150 bps.
+  return Number(`${m[1]}${(m[2] || '').padEnd(2, '0')}`);
 }
 
 /**
  * Basis points as the percent a form field starts with: 200 → "2.00", 150 →
- * "1.50". Integer division only, so it reads back through `percentToBps` to
- * the same number. Null for anything that is not a whole number of bps from 0.
+ * "1.50". The point is placed in the digit string, so it reads back through
+ * `percentToBps` to the same number. Null for anything that is not a whole
+ * number of bps from 0.
  */
 export function bpsToPercentInput(bps) {
   const n = typeof bps === 'string' && bps.trim() !== '' ? Number(bps) : bps;
   if (typeof n !== 'number' || !Number.isSafeInteger(n) || n < 0) return null;
-  return `${Math.trunc(n / 100)}.${String(n % 100).padStart(2, '0')}`;
+  const digits = String(n).padStart(3, '0');
+  return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
 }
