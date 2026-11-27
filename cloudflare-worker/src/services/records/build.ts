@@ -22,6 +22,7 @@ import {
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
+import { NO_COMPANY_REASON } from '../connectorBinding';
 import { logCycleWriteStatement } from '../cycleActivity';
 import { mintDownloadToken } from '../signedDownload';
 import { customKpis, KPI_KEYS, KPI_LABEL, CUSTOM_PREFIX } from '../growKpis';
@@ -943,12 +944,29 @@ const prototypeMvp: ModuleSpec = {
 
 async function roadmapRow(ctx: RecordContext, id: string): Promise<Any> {
   const row = await ctx.env.DB.prepare(
-    `SELECT o.id, o.objective, o.kanban_status, o.kpi_key, o.feedback_theme, o.target_date, o.created_by, o.created_at, u.name AS owner
+    `SELECT o.id, o.objective, o.kanban_status, o.kpi_key, o.feedback_theme, o.target_date, o.quarter, o.key_results_json, o.created_by, o.created_at, u.name AS owner
        FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id WHERE o.id = ? AND o.project_id = ?`,
   ).bind(numericId(id), ctx.projectId).first<Any>();
   if (!row) throw new Error('Build roadmap item vanished after its ownership check');
   return row;
 }
+
+/**
+ * D8776 (#8776): the item's key results as one line, their text only, in stored order. Null when none is
+ * recorded or the stored JSON cannot be read, so the fact says "No key results recorded." rather than "0".
+ */
+export function keyResultsLine(json: unknown): string | null {
+  let list: unknown;
+  try { list = typeof json === 'string' && json ? JSON.parse(json) : null; } catch { return null; }
+  if (!Array.isArray(list)) return null;
+  const texts = list.map((kr) => (kr && typeof kr === 'object' && typeof (kr as Any).text === 'string' ? (kr as Any).text.trim() : ''))
+    .filter(Boolean);
+  return texts.length ? texts.join(' · ') : null;
+}
+
+/** D8776 (#8776): Quarters, dependencies and scenarios, opened on this item. The page reads `?project_id=`. */
+export const roadmapViewHref = (projectId: number, itemId: string | number) =>
+  `/build/roadmap?project_id=${projectId}&view=quarters&item=${encodeURIComponent(String(itemId))}`;
 
 const productRoadmap: ModuleSpec = {
   read: 'read', write: 'write', store: 'roadmap_okrs',
@@ -965,11 +983,24 @@ const productRoadmap: ModuleSpec = {
         fact('Moves', o.kpi_key, 'No KPI recorded.'),
         fact('Answers', o.feedback_theme, 'No feedback theme recorded.'),
         fact('Date', dateText(o.target_date), 'No date recorded.'),
+        // D8776 (#8776, BLR01B): the item shows its column and its quarter together (a record has at most five facts;
+        // the key results are the side section's first row).
+        fact('Quarter', o.quarter, 'No quarter recorded. Set one with Edit.'),
       ],
       createdBy: o.created_by ?? null, createdAt: o.created_at ?? null,
     };
   },
   sections: [
+    // D8776 (#8776, BLR01B, route 1B): the one door from an item to Quarters, dependencies and scenarios. A
+    // section row, not an action, so a reader who cannot write still has it.
+    { key: 'roadmap-view', title: 'Quarter, links and scenarios', side: true, async read(ctx, id) {
+      const krs = keyResultsLine((await roadmapRow(ctx, id)).key_results_json);
+      return { rows: [
+        krs ? { a: 'Key results', b: krs } : { a: 'Key results', b: 'No key results recorded.', c: 'Not recorded', tone: 'grey' },
+        { a: 'See its quarter, links and scenarios', b: 'Opens Quarters, dependencies and scenarios with this item highlighted. Back returns here.',
+          href: roadmapViewHref(ctx.projectId, numericId(id)) },
+      ] };
+    } },
     { key: 'dependencies', title: 'Dependencies', async read(ctx, id) {
       // Decision 4: "Waits on X" is an edge from X (okr_id) to this item (blocks_okr_id).
       const n = numericId(id);
@@ -1041,7 +1072,7 @@ const productRoadmap: ModuleSpec = {
   async actions(ctx, id): Promise<RecordAction[]> {
     const itemId = numericId(id), item = { id: String(itemId) };
     const o = await ctx.env.DB.prepare(
-      'SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
+      'SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id, quarter FROM roadmap_okrs WHERE id = ? AND project_id = ?',
     ).bind(itemId, ctx.projectId).first<Any>();
     if (!o) throw new Error('Build roadmap item vanished after its ownership check');
     const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT ?')
@@ -1084,9 +1115,11 @@ const productRoadmap: ModuleSpec = {
         ...itemFields({ title: o.objective, column: o.kanban_status, kpi_key: o.kpi_key, feedback_theme: o.feedback_theme,
           owner_user_id: o.owner_user_id, target_date: o.target_date, owners: await owners(ctx) }, withCurrent(optionsOf(COLUMN_LABEL), o.kanban_status)),
         { key: 'feature_id', label: 'Feature', kind: 'CH', value: idValue(o.feature_id), options: await featureChoices(ctx) },
+        // D8776 (#8776, owner question 2, option A): the quarter is edited on the item; the route refuses any other form.
+        { key: 'quarter', label: 'Quarter', kind: 'T', value: o.quarter ?? '', placeholder: 'Q1 2027' },
       ] },
       references: body => references(body, [['feature_id', 'mvp_features']]),
-      execute: (c, _id, body) => viaRoute(c, patchRoadmap, item, formBody(jsonOf(body), [...ITEM_KEYS, 'feature_id'], ITEM_CLEARABLE)) });
+      execute: (c, _id, body) => viaRoute(c, patchRoadmap, item, formBody(jsonOf(body), [...ITEM_KEYS, 'feature_id', 'quarter'], [...ITEM_CLEARABLE, 'quarter'])) });
     // #6041: undo an item added by mistake. Its dependency edges go with it; the activity row stays.
     actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
       confirm: { title: `Delete ${o.objective}?`, body: 'It leaves the roadmap with its dependencies. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
@@ -1611,7 +1644,7 @@ const operatingSystems: ModuleSpec = {
     } },
     { key: 'companies', title: 'Companies', side: true, async read(ctx, id) {
       const s = await systemOf(ctx, id);
-      if (s.companyId == null) return notRecorded('This project has no company scope for connectors.');
+      if (s.companyId == null) return notRecorded(NO_COMPANY_REASON);
       if (s.workspace || !s.connection) {
         const own = await ctx.env.DB.prepare('SELECT company_name FROM company_profiles WHERE id = ?').bind(s.companyId).first<Any>();
         return s.connection ? { rows: [{ a: own?.company_name ?? 'This venture’s company', b: 'on' }] } : notRecorded('Not connected yet.');

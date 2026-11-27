@@ -42,6 +42,9 @@ function fixture() {
   db.exec(sql('migrations/228_research_company_directory.sql').match(/CREATE TABLE IF NOT EXISTS research_company_directory \([\s\S]*?\n\);/)![0]);
   db.exec(sql('migrations/375_research_company_directory_columns.sql'));
   db.exec(sql('migrations/378_research_fund_directory_rebuild.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_directory \(.*?\);/)![0]);
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(`CREATE TABLE IF NOT EXISTS research_fund_directory_reports (fund_uid TEXT NOT NULL, period TEXT NOT NULL, report_date TEXT, fund_size_cents INTEGER, source_url TEXT NOT NULL, PRIMARY KEY (fund_uid, period));`);
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   db.exec(sql('migrations/406_research_fund_sources.sql').match(/CREATE TABLE IF NOT EXISTS research_fund_sources \([\s\S]*?\n\);/)![0]);
   db.exec(sql(MIGRATION));
   db.exec(sql('migrations/202611180051_7177_research_comparison_request_id.sql'));

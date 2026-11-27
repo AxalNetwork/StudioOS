@@ -44,6 +44,9 @@ function freshDb() {
   db.exec(migration('375'));
   db.exec(tableFrom('229', 'research_market_directory'));
   db.exec(tableFrom('365', 'research_fund_directory'));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(`CREATE TABLE IF NOT EXISTS research_fund_directory_reports (fund_uid TEXT NOT NULL, period TEXT NOT NULL, report_date TEXT, fund_size_cents INTEGER, source_url TEXT NOT NULL, PRIMARY KEY (fund_uid, period));`);
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   db.exec(migration('406')); // D597: fund rows are read only through the terms review
   db.exec(tableFrom('136', 'signals'));
   db.exec(migration('376'));
@@ -81,7 +84,8 @@ function freshDb() {
   s.run('s1', 'Payments rails', 'United Kingdom', '["payments","fintech"]', 'active', 2);
   s.run('s2', 'Archived fintech', 'United Kingdom', '["fintech"]', 'archived', 3);
   s.run('s3', 'Ops software', 'United States', '["vertical-saas"]', 'active', 1);
-  db.prepare('UPDATE research_fund_directory SET source_name = ? WHERE uid = ?').run(EUR_SOURCE, 'f1');
+  // D7744: a row moved onto the euro list by hand carries the currency that list stamps on insert.
+  db.prepare(`UPDATE research_fund_directory SET source_name = ?, fund_size_currency = 'EUR' WHERE uid = ?`).run(EUR_SOURCE, 'f1');
   db.prepare('UPDATE signals SET build_opportunity = ?, why_now = ?, confidence_score = ? WHERE id = ?').run('{"headline":"Payment reconciliation","wedge":"Reconcile","icp":"Treasurers","risks":"Integration"}', 'New rails', 82, 's1');
   return db;
 }

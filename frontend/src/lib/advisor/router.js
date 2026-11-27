@@ -112,6 +112,16 @@ export function pagesForBank(bankName) {
 }
 
 /** Friendly label for a page route — used by the right-rail rings. */
+/**
+ * D8730 (#8730): a page Eadwyn's chat itself lives on is not a place to go.
+ * The discovery bank's questions are answered in Eadwyn on /exploring, so a
+ * card there draws no "Open Exploring" link back to the page it is on.
+ */
+export const IN_CHAT_TARGETS = Object.freeze(['/exploring']);
+export function openableTarget(path) {
+  return path && !IN_CHAT_TARGETS.includes(path) ? path : null;
+}
+
 export function pageLabel(path) {
   if (!path) return '';
   const map = {

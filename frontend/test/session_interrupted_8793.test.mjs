@@ -107,7 +107,8 @@ test('the wiring: the 401 leaves the marker first, the timer says inactivity, a 
   assert.match(logout, /const idle = opts\?\.reason === 'inactivity';/);
   assert.match(logout, /if \(idle\) markSessionEnded\(SESSION_ENDED_IDLE\); else clearSessionEnded\(\);/);
   assert.match(logout, /await clearSession\(\);[\s\S]*window\.location\.replace\(to\);/);
-  assert.match(app, /<Navigate to=\{signedOutRedirectFor\(location\)\} state=\{\{ from: location \}\} replace \/>/);
+  // D8680 wraps it so an email link that left no session also says why.
+  assert.match(app, /<Navigate to=\{withLinkFailure\(signedOutRedirectFor\(location\), linkBootstrapFailure\)\} state=\{\{ from: location \}\} replace \/>/);
 
   const login = read('frontend/src/pages/LoginPage.jsx');
   assert.match(login, /return sessionEndedNotice\(safeNextPath\(\), window\.location\.search\);/);

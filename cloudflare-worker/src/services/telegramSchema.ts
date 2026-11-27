@@ -5,7 +5,7 @@
  * replit.md pending-migrations gotcha).
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap, tableColumns } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -19,18 +19,16 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_telegram_channels_audience ON telegram_channels(audience, enabled)",
     );
     // Lazy ALTER for per-channel author signature appended at send time.
-    // Same PRAGMA pattern as ensureAdvisorWeekColumn / ensureMarketIntelSchema.
-    try {
-      const cols = await env.DB.prepare("PRAGMA table_info('telegram_channels')").all<{ name: string }>();
-      const hasSig = (cols.results || []).some((c) => String(c.name) === 'signature');
-      if (!hasSig) {
-        await env.DB.exec("ALTER TABLE telegram_channels ADD COLUMN signature TEXT");
-        // Backfill default for the canonical seeded rows so existing posts
-        // immediately render the human signature.
-        await env.DB.exec("UPDATE telegram_channels SET signature = 'Guillaume Lauzier' WHERE signature IS NULL");
-      }
-    } catch (e) {
-      console.warn('[telegramSchema] signature column ensure failed:', (e as Error).message);
+    // #5343: through `runSchemaBootstrap`, which reads the columns once per
+    // binding and skips the ALTER when the column is there. A failure reaches
+    // the catch below and leaves the schema unready; before, it was logged and
+    // the schema marked ready.
+    const hadSig = (await tableColumns(env, 'telegram_channels')).has('signature');
+    await runSchemaBootstrap(env, ['ALTER TABLE telegram_channels ADD COLUMN signature TEXT']);
+    if (!hadSig) {
+      // Backfill default for the canonical seeded rows so existing posts
+      // immediately render the human signature.
+      await env.DB.exec("UPDATE telegram_channels SET signature = 'Guillaume Lauzier' WHERE signature IS NULL");
     }
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS telegram_posts (id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL REFERENCES telegram_channels(id), audience TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', title TEXT, body_md TEXT NOT NULL, media_r2_key TEXT, media_kind TEXT, scheduled_for TEXT, sent_at TEXT, telegram_message_id INTEGER, telegram_link TEXT, source TEXT NOT NULL DEFAULT 'manual', source_kind TEXT, body_hash TEXT, send_error TEXT, override_reason TEXT, override_findings TEXT, created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
@@ -70,17 +68,10 @@ export async function ensureTelegramSchema(env: Env): Promise<void> {
         "('axal-partners', 'Axal Operating Partners', 'partners', 1)," +
         "('axal-alumni', 'Axal Alumni', 'alumni', 1)",
     );
-    // D250 — who scheduled the post (migration 290). Same PRAGMA pattern as
-    // the signature column: a safety net for the declared column, not its
-    // only declaration (D235).
-    try {
-      const cols = await env.DB.prepare("PRAGMA table_info('telegram_posts')").all<{ name: string }>();
-      if (!(cols.results || []).some((c) => String(c.name) === 'scheduled_by')) {
-        await env.DB.exec("ALTER TABLE telegram_posts ADD COLUMN scheduled_by INTEGER REFERENCES users(id)");
-      }
-    } catch (e) {
-      console.warn('[telegramSchema] scheduled_by column ensure failed:', (e as Error).message);
-    }
+    // D250 — who scheduled the post (migration 290): a safety net for the
+    // declared column, not its only declaration (D235). #5343: asked first,
+    // as the signature column is.
+    await runSchemaBootstrap(env, ['ALTER TABLE telegram_posts ADD COLUMN scheduled_by INTEGER REFERENCES users(id)']);
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[telegramSchema] ensure failed:', (e as Error).message);

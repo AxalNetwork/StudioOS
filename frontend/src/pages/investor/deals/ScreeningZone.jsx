@@ -13,7 +13,7 @@ import { SearchInput } from '../../advisor/network/kit';
 import { PASS_TAXONOMY, NEXT_ROUND_LINE, dayWithYear, passReasonLabel, passReturnWord } from '../../../lib/dealFlow';
 import { DealStrip, StripKey, useScopeStrips } from '../../../components/scoring/scorecard/Scorecard';
 import { SCOPES, stripOf } from '../../../components/scoring/scorecard/scorecardModel';
-import { PassDialog } from '../dealflow/StageDialogs';
+import { MoveToDiligenceDialog, PassDialog } from '../dealflow/StageDialogs';
 import { fitCell } from '../dealflow/flowModel';
 import { confidenceCell, decisionOf, flowStateOf, screeningSummary } from './screeningModel';
 
@@ -36,8 +36,8 @@ import { confidenceCell, decisionOf, flowStateOf, screeningSummary } from './scr
  *     scope's band and confidence word. Confidence is the count of scored
  *     scopes per word, never one word for a scorecard that has no total;
  *   · Fit: `GET /api/deals/fit` (D1239), the investor's own thesis;
- *   · Your decision: `GET /api/deals/flow` (D1238). Move to diligence moves
- *     the deal in your deal flow; Pass opens the deal flow's reason dialog
+ *   · Your decision: `GET /api/deals/flow` (D1238). Move to diligence opens
+ *     its DE14 dialog (D5914), then moves the deal in your deal flow; Pass opens the deal flow's reason dialog
  *     (`PassDialog`), so Passed is reached only with a reason;
  *   · Pass reasons: `GET /api/deals/flow/passes` (D6148), the firm's own
  *     passes in its deal flow, each reason opening the deals passed for it;
@@ -128,8 +128,8 @@ export default function InvestorScreeningZone() {
   const [view, setView] = useState('scorecards');
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState(null);
-  const [busyId, setBusyId] = useState(null);
-  const [refusals, setRefusals] = useState({});
+  // D5914 (DE14): Move to diligence is said first, in its own dialog; a refusal stays there.
+  const [moving, setMoving] = useState(null);
   const [result, setResult] = useState('');
   const [reason, setReason] = useState(null);
 
@@ -220,23 +220,17 @@ export default function InvestorScreeningZone() {
     return { status: 'ready', data: { ...cur.data, items: [next, ...items] } };
   });
   const nameOf = (r) => r.company || `Deal #${r.deal_id}`;
-  const moveToDiligence = async (r) => {
+  const moveToDiligence = (r) => {
+    if (decisionOf(flow, r.deal_id).kind !== 'open') return;
+    setResult('');
+    setMoving(r);
+  };
+  /** The dialog's move: it throws, so the dialog keeps the Worker's refusal. */
+  const confirmDiligence = (r) => {
     const d = decisionOf(flow, r.deal_id);
-    if (d.kind !== 'open') return;
-    setBusyId(r.deal_id);
-    setRefusals((x) => ({ ...x, [r.deal_id]: '' }));
-    try {
-      const next = d.entry
-        ? await dealFlowApi.update(r.deal_id, { stage: 'diligence' })
-        : await dealFlowApi.add({ deal_id: r.deal_id, stage: 'diligence' });
-      keep(next);
-      setResult(`Moved ${nameOf(r)} to Diligence in your deal flow.`);
-    } catch (e) {
-      reportError('Screening:move', e);
-      setRefusals((x) => ({ ...x, [r.deal_id]: e?.message || `${nameOf(r)} could not be moved. Nothing changed.` }));
-    } finally {
-      setBusyId(null);
-    }
+    return d.entry
+      ? dealFlowApi.update(r.deal_id, { stage: 'diligence' })
+      : dealFlowApi.add({ deal_id: r.deal_id, stage: 'diligence' });
   };
 
   const anyRead = deskReady || passesReady;
@@ -357,8 +351,8 @@ export default function InvestorScreeningZone() {
                             <Decision
                               row={r}
                               decision={decision}
-                              busy={busyId === r.deal_id}
-                              error={refusals[r.deal_id]}
+                              busy={false}
+                              error={null}
                               onMove={moveToDiligence}
                               onPass={(row) => { setResult(''); setDialog(row); }}
                               onRetry={loadFlow}
@@ -397,8 +391,8 @@ export default function InvestorScreeningZone() {
                         card
                         row={r}
                         decision={decision}
-                        busy={busyId === r.deal_id}
-                        error={refusals[r.deal_id]}
+                        busy={false}
+                        error={null}
                         onMove={moveToDiligence}
                         onPass={(row) => { setResult(''); setDialog(row); }}
                         onRetry={loadFlow}
@@ -539,6 +533,18 @@ export default function InvestorScreeningZone() {
           </StatedLimit>
         </div>
       </ZoneBody>
+      {moving && (
+        <MoveToDiligenceDialog
+          row={{ id: moving.deal_id, name: nameOf(moving) }}
+          onClose={() => setMoving(null)}
+          onMove={() => confirmDiligence(moving)}
+          onMoved={(next) => {
+            keep(next);
+            setResult(`Moved ${nameOf(moving)} to Diligence in your deal flow.`);
+            setMoving(null);
+          }}
+        />
+      )}
       {dialog && (
         <PassDialog
           row={{ id: dialog.deal_id, name: nameOf(dialog) }}

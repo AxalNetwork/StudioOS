@@ -299,6 +299,11 @@ export const DEPLOY_WORKFLOWS = [
     trigger: 'after each preview build finishes, from main (D7146)',
     deploys: 'a preview Worker per pull request, serving the SPA its credential-free build produced, with no bindings',
   },
+  {
+    file: 'workspace-image.yml',
+    trigger: 'on each pull request affecting the workspace engine (D5566)',
+    deploys: 'nothing: validates offline workspace host packaging with --dry-run and builds/scans the image without publishing or Cloudflare credentials',
+  },
 ] as const;
 
 /**

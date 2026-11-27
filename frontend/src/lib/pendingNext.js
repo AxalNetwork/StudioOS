@@ -179,6 +179,29 @@ export function loginRedirectFor(location) {
   return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
 }
 
+/**
+ * D8680 (#8680): the email link was opened and its session probe failed. The sign-in address gains that reason as
+ * `magic_error=` (one of the two codes `linkBootstrapFailureFor` below returns; anything else is dropped), so
+ * LoginPage says why and opens its send-a-new-link step instead of a bare "Sign in".
+ */
+export const LINK_BOOTSTRAP_FAILURES = Object.freeze(['session', 'unreachable']);
+export function withLinkFailure(loginPath, code) {
+  if (!LINK_BOOTSTRAP_FAILURES.includes(code)) return loginPath;
+  return `${loginPath}${loginPath.includes('?') ? '&' : '?'}magic_error=${code}`;
+}
+
+/**
+ * D8680 (#8680): why the session probe after an email link found no session, as a `?magic_error=` code LoginPage
+ * words (MAGIC_ERROR_COPY). `session`: the server answered that this browser is not signed in (`/auth/me` 401s; api.request
+ * throws that with `status` 401, and its other 401s as "Session expired"), so the link was spent but the browser did
+ * not keep the cookie. `unreachable`: anything else (a 5xx, a timeout, no network), so the session may well exist and we could not
+ * read it. Neither carries the error's own text: only the code reaches the address bar.
+ */
+export function linkBootstrapFailureFor(error) {
+  if (error?.status === 401 || (!error?.status && error?.message === 'Session expired')) return 'session';
+  return 'unreachable';
+}
+
 // ---------------------------------------------------------------------------
 // D7166 part 2 (#7166, RFD-04B, RFD-06): "Signed in. This is the search you opened."
 // ---------------------------------------------------------------------------

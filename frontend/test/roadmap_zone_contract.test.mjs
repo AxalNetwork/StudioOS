@@ -85,10 +85,11 @@ test('every live chip on this zone has a view the page implements', () => {
   const at = FILTERS.indexOf("'build/roadmap'");
   const block = FILTERS.slice(at, FILTERS.indexOf('\n  ],', at));
   const keys = [...block.matchAll(/[{,]\s*key: '([a-z]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(keys.sort(), ['board', 'dependencies', 'scenarios', 'timeline'],
+  // D8776 (#8776, owner question 3, option A): By quarter, Dependencies, Scenarios; the Board view is Product roadmap's.
+  assert.deepEqual(keys.sort(), ['dependencies', 'quarters', 'scenarios'],
     'the roadmap chip set changed — check the page branches on each of them');
   for (const key of keys) {
-    if (key === 'timeline') continue; // the default branch, named by exclusion
+    if (key === 'quarters') continue; // the default branch, named by exclusion
     assert.ok(new RegExp(`view === '${key}'`).test(PAGE),
       `the \`${key}\` chip is live but the page never branches on it, so selecting it changes nothing`);
   }

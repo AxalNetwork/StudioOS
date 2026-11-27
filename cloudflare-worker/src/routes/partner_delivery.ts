@@ -244,6 +244,15 @@ function currentPeriod(now = new Date()): string {
  * is a real answer — nothing recorded — and the board draws it as absent rather
  * than green, which is the failure that helper's docblock exists against.
  */
+/** D8733: the earliest open milestone due on or after `today` (a `YYYY-MM-DD`), as the board row names it. */
+export function nextOpenMilestone(ms: any[], today: string): { next_milestone_title: string | null; next_milestone_due_at: string | null } {
+  const open = ms
+    .filter((m: any) => !m.completed_at && m.due_at && String(m.due_at).slice(0, 10) >= today)
+    .sort((a: any, b: any) => String(a.due_at).slice(0, 10).localeCompare(String(b.due_at).slice(0, 10)));
+  const m = open[0];
+  return { next_milestone_title: m ? (m.title ?? null) : null, next_milestone_due_at: m ? String(m.due_at).slice(0, 10) : null };
+}
+
 partnerDelivery.get('/board', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
@@ -282,7 +291,7 @@ partnerDelivery.get('/board', async (c) => {
           WHERE e.partner_id = ? ORDER BY s.granted_at DESC`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT m.engagement_id, m.due_at, m.completed_at
+        `SELECT m.engagement_id, m.title, m.due_at, m.completed_at
            FROM engagement_milestones m
            JOIN engagements e ON e.id = m.engagement_id
           WHERE e.partner_id = ?`,
@@ -424,6 +433,9 @@ partnerDelivery.get('/board', async (c) => {
         milestone_count: ms.length,
         milestones_done: ms.filter((m: any) => m.completed_at).length,
         milestones_due_7d: ms.filter(dueThisWeek).length,
+        // D8733 (#8733) — the next open milestone, dated today or later: its title and due date as the firm entered
+        // them, so the Studio feed's due alert can say which milestone and when. Null when none is open and dated.
+        ...nextOpenMilestone(ms, weekStart),
         // D4822 — the facts Board v2 derives its attention reasons and next action from. Each is counted from the
         // rows this read already has; none is a score. Overdue is an open milestone whose date is before today.
         milestones_overdue: ms.filter((m: any) => !m.completed_at && m.due_at && String(m.due_at).slice(0, 10) < weekStart).length,

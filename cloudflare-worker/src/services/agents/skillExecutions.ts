@@ -27,8 +27,12 @@
  * Detail is HQ skills only. A company skill's runs are counted by scope, never by skill (the D4161 boundary).
  * Every figure is defined in `documentation/architecture/SKILL_ANALYTICS_METRICS.md`. The proposal board of #3851 is
  * not read.
+ *
+ * D8912 (#8912): a company's editors read the same block over their own skills (`subject: 'company'`). The run, the
+ * charge and the outcome are defined once: `COMPANY_EXECUTIONS_SQL` and `COMPANY_OUTCOMES_SQL` share the HQ reads'
+ * text and only narrow them, in SQL, to that company's skills, so no other company's run, uid or count is read out.
  */
-import { matchesSkill, type SkillFilters, type Unavailable } from './skillCoverage.ts';
+import { matchesSkill, type SkillFilters, type Subject, type Unavailable } from './skillCoverage.ts';
 
 /** With no `from`/`to` filter, the window is the last 30 whole UTC days ending today (today included). */
 export const EXECUTIONS_DEFAULT_DAYS = 30;
@@ -42,12 +46,8 @@ export function executionsWindow(f: SkillFilters | null, now: Date): { since: st
   return { since: sqlDay(today - (EXECUTIONS_DEFAULT_DAYS - 1) * DAY_MS), until: sqlDay(today + DAY_MS), days: EXECUTIONS_DEFAULT_DAYS, source: 'default' };
 }
 
-/**
- * Completed runs, grouped by skill, executed version, model, agent role and path. Bound: since, until, model, model.
- * The per-run subqueries use `idx_ai_usage_logs_guard_for`, `idx_team_agent_events_agent` and
- * `idx_agent_task_runs_agent` (each keyed by the run's own agent), so no table is scanned once per run.
- */
-export const EXECUTIONS_SQL = `WITH runs AS (
+// The completed runs and what each one cost, written once for both reads (D8912). Bound: since, until, model, model.
+const RUNS_FROM = `WITH runs AS (
     SELECT u.id, u.skill_id, u.skill_version, u.model, u.agent_id,
       u.prompt_tokens + u.completion_tokens
         + COALESCE((SELECT SUM(g.prompt_tokens + g.completion_tokens) FROM ai_usage_logs g WHERE g.guard_for = u.id), 0) AS tokens,
@@ -61,13 +61,9 @@ export const EXECUTIONS_SQL = `WITH runs AS (
     FROM ai_usage_logs u
     WHERE u.skill_id IS NOT NULL AND u.guard_for IS NULL
       AND datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)
-      AND (? IS NULL OR u.model = ?)
-  )
-  SELECT s.id AS skill_id, s.scope, s.status, s.current_version,
-    CASE WHEN s.scope = 'hq' THEN s.uid END AS uid,
-    CASE WHEN s.scope = 'hq' THEN v.roles_json END AS published_roles_json,
-    CASE WHEN s.scope = 'hq' THEN v.taxonomy_json END AS published_tags_json,
-    r.skill_version AS version, r.model, a.role_key, r.scheduled,
+      AND (? IS NULL OR u.model = ?)`;
+// The groups and their sums, written once for both reads.
+const RUN_GROUPS = `r.skill_version AS version, r.model, a.role_key, r.scheduled,
     COUNT(*) AS completed, SUM(r.tokens) AS tokens,
     SUM(CASE WHEN r.charge IS NOT NULL AND NOT r.earlier_attempts THEN 1 ELSE 0 END) AS charge_recorded,
     SUM(CASE WHEN r.charge IS NULL THEN 1 ELSE 0 END) AS charge_unrecorded,
@@ -77,6 +73,30 @@ export const EXECUTIONS_SQL = `WITH runs AS (
   LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
   LEFT JOIN team_agents a ON a.id = r.agent_id
   GROUP BY s.id, r.skill_version, r.model, a.role_key, r.scheduled`;
+
+/**
+ * Completed runs, grouped by skill, executed version, model, agent role and path. Bound: since, until, model, model.
+ * The per-run subqueries use `idx_ai_usage_logs_guard_for`, `idx_team_agent_events_agent` and
+ * `idx_agent_task_runs_agent` (each keyed by the run's own agent), so no table is scanned once per run.
+ */
+export const EXECUTIONS_SQL = `${RUNS_FROM}
+  )
+  SELECT s.id AS skill_id, s.scope, s.status, s.current_version,
+    CASE WHEN s.scope = 'hq' THEN s.uid END AS uid,
+    CASE WHEN s.scope = 'hq' THEN v.roles_json END AS published_roles_json,
+    CASE WHEN s.scope = 'hq' THEN v.taxonomy_json END AS published_tags_json,
+    ${RUN_GROUPS}`;
+
+/**
+ * D8912: the same runs, one company's skills only, narrowed inside `runs` so no other company's usage row is read
+ * further. Its own skills are named (uid, current roles and tags). Bound: since, until, model, model, company id.
+ */
+export const COMPANY_EXECUTIONS_SQL = `${RUNS_FROM}
+      AND u.skill_id IN (SELECT id FROM agent_skills WHERE scope = 'company' AND company_id = ?)
+  )
+  SELECT s.id AS skill_id, s.scope, s.status, s.current_version, s.uid,
+    v.roles_json AS published_roles_json, v.taxonomy_json AS published_tags_json,
+    ${RUN_GROUPS}`;
 
 /**
  * Nearest-rank p50 and p95 of the model call's `latency_ms`, per (skill, version) and over every run read, for the
@@ -106,16 +126,21 @@ export const EXECUTION_LATENCY_SQL = `WITH r AS (
  * loop's, from the change on), for HQ skills. Bound: since, until. Events have no model, so a model filter makes the
  * outcomes unavailable. A company skill is never joined (`s.scope = 'hq'`), so its uid never leaves SQL.
  */
-export const OUTCOMES_SQL = `SELECT s.id AS skill_id, s.uid, s.status, s.current_version, 'hq' AS scope,
+const OUTCOMES_SELECT = `SELECT s.id AS skill_id, s.uid, s.status, s.current_version, s.scope,
     v.roles_json AS published_roles_json, v.taxonomy_json AS published_tags_json,
     e.kind, json_extract(e.detail_json, '$.code') AS code, json_extract(e.detail_json, '$.status') AS http_status,
     json_extract(e.detail_json, '$.skill.version') AS version, COUNT(*) AS n, MIN(e.created_at) AS first_at
   FROM team_agent_events e
-  JOIN agent_skills s ON s.uid = json_extract(e.detail_json, '$.skill.uid') AND s.scope = 'hq'
-  LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+  JOIN agent_skills s ON s.uid = json_extract(e.detail_json, '$.skill.uid')`;
+const OUTCOMES_WHERE = `LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
   WHERE e.kind IN ('run', 'refused') AND json_extract(e.detail_json, '$.outcome_v') = 1
     AND datetime(e.created_at) >= datetime(?) AND datetime(e.created_at) < datetime(?)
   GROUP BY s.id, e.kind, code, http_status, version`;
+export const OUTCOMES_SQL = `${OUTCOMES_SELECT} AND s.scope = 'hq'
+  ${OUTCOMES_WHERE}`;
+/** D8912: the same outcomes, one company's skills only. Bound: company id, since, until. */
+export const COMPANY_OUTCOMES_SQL = `${OUTCOMES_SELECT} AND s.scope = 'company' AND s.company_id = ?
+  ${OUTCOMES_WHERE}`;
 
 /** A run that reached the model and did not finish: the model, the gateway, the accounts, the guard, or saving it. */
 export const FAILED_CODES: ReadonlySet<string> = new Set([
@@ -127,7 +152,7 @@ export const FAILED_CODES: ReadonlySet<string> = new Set([
 export const isRetryable = (code: string, status: number | null) => code === 'step_in_flight' || (status != null && status >= 500 && !FAILED_CODES.has(code));
 
 export type OutcomeRow = {
-  skill_id: number; uid: string; status: string; current_version: number; scope: 'hq';
+  skill_id: number; uid: string; status: string; current_version: number; scope: Subject;
   published_roles_json: string | null; published_tags_json: string | null;
   kind: 'run' | 'refused'; code: string | null; http_status: number | null; version: number | null; n: number; first_at: string;
 };
@@ -139,7 +164,7 @@ export type ExecutionRow = {
   completed: number; tokens: number; charge_recorded: number; charge_unrecorded: number; charge_incomplete: number; charge_microusd: number;
 };
 export type LatencyRow = { kind: 'version' | 'overall'; skill_id: number | null; skill_version: number | null; latency_ms: number; rn: number; n: number };
-/** A published HQ skill as coverage read it, to name the ones with no completed run. */
+/** A published skill of the subject as coverage read it, to name the ones with no completed run. */
 export type PublishedSkill = { uid?: string | null; status: string; scope: 'hq' | 'company' };
 
 type Charge = { microusd: number; runs_recorded: number; runs_unrecorded: number; runs_incomplete: number };
@@ -183,8 +208,14 @@ function latencyOf(rows: readonly LatencyRow[]): Latency {
 export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly LatencyRow[] | 'unreadable', ctx: {
   filters: SkillFilters | null; category: ReadonlyMap<string, string>; window: ReturnType<typeof executionsWindow>;
   published: readonly PublishedSkill[]; outcomes?: readonly OutcomeRow[] | 'unreadable';
+  /**
+   * D8912: whose skills are detailed (default HQ). In a company's read every row is that company's (its SQL says so);
+   * a row of any other scope is dropped, never counted, and `by_scope` is the company's own count only.
+   */
+  subject?: Subject;
 }) {
   const f = ctx.filters;
+  const subject: Subject = ctx.subject ?? 'hq';
   // The window and the model narrow every run in SQL, a company skill's included. A skill term (scope, status, uid,
   // version, category, tag, role) cannot match a company skill, whose tags and roles are never read.
   const bySkillTerm = f != null && [f.scope, f.status, f.uid, f.version, f.category, f.tag, f.role].some((v) => v != null);
@@ -194,8 +225,8 @@ export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly
   const bySkill = new Map<string, { status: string; current_version: number; t: Tally; versions: Map<number, Tally>; skill_id: number;
     models: Record<string, number>; roles: Record<string, number> }>();
   for (const r of rows) {
-    if (r.scope !== 'hq') { add(company, r); continue; }
-    if (skillTerms && !matchesSkill(r, skillTerms, ctx.category)) continue;
+    if (r.scope !== subject) { if (subject === 'hq') add(company, r); continue; }
+    if (skillTerms && !matchesSkill(r, skillTerms, ctx.category, subject)) continue;
     if (f?.version != null && Number(r.version) !== f.version) continue;
     add(hq, r);
     const uid = r.uid as string;
@@ -214,7 +245,7 @@ export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly
     ? { available: false, reason: 'The latency read failed.' }
     : latencyOf(lat.filter((l) => l.kind === (skillId == null ? 'overall' : 'version') && (skillId == null || (Number(l.skill_id) === skillId && Number(l.skill_version) === version))));
   const ran = new Set(bySkill.keys());
-  const idle = ctx.published.filter((p) => p.scope === 'hq' && p.status === 'published' && p.uid && !ran.has(p.uid)).map((p) => p.uid as string).sort();
+  const idle = ctx.published.filter((p) => p.scope === subject && p.status === 'published' && p.uid && !ran.has(p.uid)).map((p) => p.uid as string).sort();
   const skills = [...bySkill.entries()]
     .sort(([a, x], [b, y]) => y.t.completed - x.t.completed || (a < b ? -1 : a > b ? 1 : 0))
     .map(([uid, s]) => ({
@@ -227,11 +258,12 @@ export function skillExecutions(rows: readonly ExecutionRow[], latency: readonly
     counts: 'completed_runs' as const,
     window: ctx.window,
     totals: { ...shape(hq), model_latency_ms: latencyFor(null, null) },
-    by_scope: {
+    // D8912: a company's read counts its own runs (in `hq`'s tally, the subject's) and nothing of HQ's.
+    by_scope: subject === 'company' ? { company: { completed: hq.completed } } as { hq?: undefined; company: { completed: number } } : {
       hq: { completed: hq.completed },
       company: bySkillTerm ? { available: false, reason: "A company skill's tags and roles are never read, so no filter can match it." } as Unavailable : { completed: company.completed },
     },
-    outcomes: outcomesOf(ctx.outcomes ?? [], f, skillTerms, ctx.category),
+    outcomes: outcomesOf(ctx.outcomes ?? [], f, skillTerms, ctx.category, subject),
     run_latency: { available: false, reason: 'No run records when the whole run started and ended; model_latency_ms is the model call only.' } as Unavailable,
     workflows: { available: false, reason: 'Waits on a workflow\'s stable identity (#4535).' } as Unavailable,
     published_without_completed_runs: { count: idle.length, skill_uids: idle },
@@ -252,10 +284,10 @@ const outcomeShape = (t: OutcomeTally) => {
  * Outcome rates over marked events only. A run is completed (a `run` event), failed (a code in FAILED_CODES), or
  * refused (any other code); a retryable refusal is counted apart and never enters `ended`, the rates' denominator.
  */
-function outcomesOf(rows: readonly OutcomeRow[] | 'unreadable', f: SkillFilters | null, skillTerms: SkillFilters | null, category: ReadonlyMap<string, string>) {
+function outcomesOf(rows: readonly OutcomeRow[] | 'unreadable', f: SkillFilters | null, skillTerms: SkillFilters | null, category: ReadonlyMap<string, string>, subject: Subject) {
   if (rows === 'unreadable') return { available: false, reason: 'The run and refusal events could not be read.' } as Unavailable;
   if (f?.model != null) return { available: false, reason: 'A run or refusal event records no model, so a model filter cannot narrow the outcomes.' } as Unavailable;
-  const kept = rows.filter((r) => (!skillTerms || matchesSkill(r, skillTerms, category)) && (f?.version == null || Number(r.version) === f.version));
+  const kept = rows.filter((r) => r.scope === subject && (!skillTerms || matchesSkill(r, skillTerms, category, subject)) && (f?.version == null || Number(r.version) === f.version));
   if (!kept.length) return { available: false, reason: 'No run or refusal in this window carries its skill: attribution started with D4536 part 4.' } as Unavailable;
   const blank = (): OutcomeTally => ({ completed: 0, refused: 0, failed: 0, retryable: 0, by_code: {} });
   const all = blank();

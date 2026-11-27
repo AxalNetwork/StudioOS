@@ -320,3 +320,17 @@ test('the route asks the second question only when a version is set, bound, and 
   assert.match(block, /termsReason = 'updated'; return true;/);
   assert.match(AUTH, /terms_acceptance_reason: termsReason,/);
 });
+
+test('D8831: pre-release receipts remain satisfied when the factual version changes without reacceptance', () => {
+  const { d } = dbWithAcceptances();
+  try {
+    seed(d, 8831, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+    accepted(d, 8831, '2026-07-08');
+    d.prepare("INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, document_version) VALUES (8831, 'privacy_v1', '2026-11-01T00:00:00Z', 'signup', '2026-10-29')").run();
+    assert.ok(LEGAL_DOCUMENT_VERSIONS.tos_v1 > '2026-07-08');
+    assert.ok(LEGAL_DOCUMENT_VERSIONS.privacy_v1 > '2026-10-29');
+    assert.equal(reason(d, 8831, TERMS_REACCEPT_FROM), null);
+    const rows = d.prepare('SELECT obligation_key, document_version FROM legal_acceptances WHERE user_id = 8831 ORDER BY obligation_key').all();
+    assert.deepEqual(rows.map((r: any) => [r.obligation_key, r.document_version]), [['privacy_v1', '2026-10-29'], ['tos_v1', '2026-07-08']]);
+  } finally { d.close(); }
+});

@@ -555,6 +555,10 @@ test('roles lists the models an agent may run on, and plan_locked agrees with th
       kind: 'Text Generation',
       beta: false,
       plan_locked: false,
+      // D8769 (#8769): the jobs it is listed for (USE_KINDS), its catalogue capabilities and its context window.
+      jobs: [{ key: 'write', label: 'Write' }, { key: 'synth', label: 'Synth' }, { key: 'plan', label: 'Plan' }, { key: 'agent', label: 'Agent' }, { key: 'chat', label: 'Chat' }],
+      capabilities: ['Batch', 'Function calling'],
+      context_window: 24000,
       input_usd_per_million: 0.366685,
       output_usd_per_million: 2.81606875,
     });

@@ -5,10 +5,10 @@ import { Card, Skeleton, Unrecorded } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
-  EMPTY_QUERY, GEOGRAPHY_REASON, PAGE_SIZES, SIZE_CURRENCIES, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
-  activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, matchLine, pageInfo, pageList,
-  queryFromSearch, recorded, removeFilter, restoredLine, searchFromQuery, showUnsized, showUnsizedLabel, sizeExclusion, sizeOf,
-  sortLabel, sortShort, toParams, vehicleLabel, zeroHint,
+  EMPTY_QUERY, GEOGRAPHY_REASON, PAGE_SIZES, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
+  activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, listSizeText, matchLine, pageInfo, pageList,
+  queryFromSearch, recorded, removeFilter, restoredLine, searchFromQuery, showUnsized, showUnsizedLabel, sizeCompareLine, sizeCurrencyOptions,
+  sizeExclusion, sizeOf, sortLabel, sortShort, toParams, unknownCurrencyLine, vehicleLabel, zeroHint,
 } from './fundDirectoryRead';
 import { FUNDS_FILTERS_DROPPED, consumeFundsReturn } from '../../lib/pendingNext.js';
 import { canAddToResearch } from './researchComparisons.js';
@@ -233,8 +233,10 @@ function facetOptions(list, value) {
  * sheet can both be in the page. `stacked` is the sheet's layout (RFD-03B): one filter a row, the size currency as
  * two radio buttons, EIF and EIFO as checkboxes with 44px targets.
  */
-function FilterFields({ idp, query, onQuery, facets, stacked = false }) {
+function FilterFields({ idp, query, onQuery, facets, data, stacked = false }) {
   const ccy = query.size_currency || 'EUR';
+  // D7744: the currencies the answer lists (`size_currencies`), not a fixed pair.
+  const currencies = sizeCurrencyOptions(data, ccy);
   const box = stacked ? 'min-w-0 basis-full' : 'min-w-0 flex-1 basis-[200px]';
   const tall = stacked ? ' min-h-[44px]' : '';
   const select = (id, label, value, key, any, list) => (
@@ -255,7 +257,7 @@ function FilterFields({ idp, query, onQuery, facets, stacked = false }) {
         <legend className={LABEL}>{stacked ? 'Size · one currency at a time' : `Size · ${ccy} only`}</legend>
         {stacked ? (
           <div className="mb-2 inline-flex rounded-lg border border-axal-hairline p-0.5 dark:border-gray-700" role="radiogroup" aria-label="Size currency">
-            {SIZE_CURRENCIES.map(([v, l]) => (
+            {currencies.map(([v, l]) => (
               <label key={v} title={l}
                 className={`inline-flex min-h-[40px] min-w-[64px] cursor-pointer items-center justify-center rounded-md px-3 text-[12.5px] font-semibold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-violet-600 dark:has-[:focus-visible]:ring-violet-400 ${ccy === v ? 'bg-violet-700 text-white dark:bg-violet-600 dark:text-white' : 'text-axal-ink dark:text-gray-100'}`}>
                 <input type="radio" className="sr-only" name={`${idp}-size-currency`} value={v} checked={ccy === v}
@@ -269,7 +271,7 @@ function FilterFields({ idp, query, onQuery, facets, stacked = false }) {
           {stacked ? null : (
             <select aria-label="Size currency" className={`${SELECT.replace('w-full ', '')} w-[88px] shrink-0`} value={ccy}
               onChange={(e) => onQuery({ size_currency: e.target.value })}>
-              {SIZE_CURRENCIES.map(([v, l]) => <option key={v} value={v} title={l}>{v}</option>)}
+              {currencies.map(([v, l]) => <option key={v} value={v} title={l}>{v}</option>)}
             </select>
           )}
           <input id={`${idp}-size-min`} type="text" inputMode="decimal" aria-label={`Size from, in millions of ${ccy}`} placeholder="From (M)"
@@ -292,7 +294,7 @@ function FilterFields({ idp, query, onQuery, facets, stacked = false }) {
       </fieldset>
       {facets && (
         <p className="basis-full text-[11px] text-axal-faint">
-          {`Sizes compare in ${ccy} only: ${formatCount(facets.size_not_comparable || 0)} matching ${Number(facets.size_not_comparable) === 1 ? 'fund has' : 'funds have'} no size in ${ccy === 'USD' ? 'US dollars' : 'euros'} and sit outside the size filter.`}
+          {sizeCompareLine(query, facets)}
           {facets.eif ? ` ${formatCount(facets.eif.unknown)} list no notable LPs, so their EIF backing is unknown.` : ''}
         </p>
       )}
@@ -304,7 +306,7 @@ function FilterFields({ idp, query, onQuery, facets, stacked = false }) {
  * Search, sort and the filters. On a phone only the search is here: Sort and Filters move to the thumb bar
  * (`PhoneBar`) and the filters to their sheet (`FilterSheet`), RFD-03.
  */
-function Filters({ search, onSearch, query, onQuery, facets }) {
+function Filters({ search, onSearch, query, onQuery, facets, data }) {
   return (
     <Card padding="md">
       <div className="flex flex-wrap items-end gap-3">
@@ -324,7 +326,7 @@ function Filters({ search, onSearch, query, onQuery, facets }) {
         </div>
       </div>
       <div id="fd-filters" className="mt-3 hidden flex-wrap items-end gap-3 sm:flex">
-        <FilterFields idp="fd" query={query} onQuery={onQuery} facets={facets} />
+        <FilterFields idp="fd" query={query} onQuery={onQuery} facets={facets} data={data} />
       </div>
     </Card>
   );
@@ -375,7 +377,7 @@ function FilterSheet({ query, onQuery, facets, result, active, onClear, onClose 
         className="inline-flex min-h-[48px] w-full items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[13px] font-semibold text-white hover:bg-violet-800 dark:bg-violet-600 dark:text-white dark:hover:bg-violet-500">{showLabel(result)}</button>}>
       <div className="flex flex-col gap-4 px-5 pb-5 pt-4">
         <p role="status" className="sr-only">{answered ? `${matchLine(result.data).match}, ${matchLine(result.data).of}.` : ''}</p>
-        <FilterFields idp="fds" query={query} onQuery={onQuery} facets={facets} stacked />
+        <FilterFields idp="fds" query={query} onQuery={onQuery} facets={facets} data={result?.data} stacked />
       </div>
     </Sheet>
   );
@@ -412,10 +414,10 @@ export function focusAfterChip(index) {
   }, 0);
 }
 
-function CoverageCard({ coverage, sources }) {
+function CoverageCard({ coverage }) {
   const rows = coverageRows(coverage);
   const total = coverage?.total || 0;
-  const unknown = coverage?.fields?.size_unknown_currency || 0;
+  const unknownLine = unknownCurrencyLine(coverage);
   return (
     <Card padding="md" data-testid="fund-directory-coverage">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -452,11 +454,7 @@ function CoverageCard({ coverage, sources }) {
           <p className="mt-1 text-[11px] text-axal-faint">No list records it, so it is not offered as a filter.</p>
         </div>
       </div>
-      {unknown > 0 && (
-        <p className="mt-3 text-[11.5px] text-axal-muted">
-          {formatCount(unknown)} more {unknown === 1 ? 'fund holds' : 'funds hold'} a size from {(sources || []).filter((s) => !s.size_currency).length === 1 ? 'a list' : 'lists'} whose currency is not recorded. Those sizes are not shown, banded or sorted until the currency is known.
-        </p>
-      )}
+      {unknownLine && <p className="mt-3 text-[11.5px] text-axal-muted">{unknownLine}</p>}
     </Card>
   );
 }
@@ -472,7 +470,7 @@ function SourcesList({ data }) {
             <li key={s.name}>
               {href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-axal-violet dark:text-violet-300">{s.title || s.name}</a> : (s.title || s.name)}
               {` · ${formatCount(s.rows)} funds · as of ${s.as_of || 'an unrecorded date'} · `}
-              {s.size_currency ? `sizes in ${s.size_currency}` : 'size currency not recorded, so no size is shown'}
+              {listSizeText(s)}
               {` · ${s.publisher ? `published by ${s.publisher}` : 'publisher not recorded'} · terms: ${VERDICT_LABELS[s.verdict] || 'Not recorded'}`}
               {s.reason ? <span className="block">{s.reason}</span> : null}
             </li>
@@ -664,7 +662,7 @@ export function FundDirectoryView({
         )}
       </div>
 
-      <Filters search={search} onSearch={onSearch} query={query} onQuery={onQuery} facets={facets} />
+      <Filters search={search} onSearch={onSearch} query={query} onQuery={onQuery} facets={facets} data={data} />
 
       {active.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="fund-directory-chips">
@@ -833,7 +831,7 @@ export function FundDirectoryView({
           {data ? <span className="text-[12px] text-axal-muted">{directoryLine(data.coverage, data.sources)} · what each field covers</span> : null}
         </summary>
         <div className="space-y-4 px-4 pb-4">
-          {data?.coverage && <CoverageCard coverage={data.coverage} sources={data.sources} />}
+          {data?.coverage && <CoverageCard coverage={data.coverage} />}
           {band}
           {data && <SourcesList data={data} />}
         </div>

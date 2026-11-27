@@ -201,9 +201,10 @@ export function MyCommitment({ portal, failed, onReload, proof = null }) {
   }
 
   return (
-    <section id="my-commitment" data-testid="section-my-commitment" className="scroll-mt-20">
+    <section id="my-commitment" aria-labelledby="my-commitment-heading" data-testid="section-my-commitment" className="scroll-mt-20">
       <div className="mb-2.5 flex items-end justify-between gap-3">
-        <div className={LBL}>My commitment</div>
+        {/* D8731 (#8731): the heading Studio's "Open My commitment" names; it takes focus on arrival at #my-commitment. */}
+        <h2 id="my-commitment-heading" tabIndex={-1} data-section-heading="" className={LBL}>My commitment</h2>
         <span className="text-[11.5px] text-gray-400 dark:text-gray-500">Your own rows on each fund's register</span>
       </div>
       {failed ? (
