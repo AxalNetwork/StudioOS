@@ -2744,7 +2744,6 @@ export const api = {
   onboardingGetProgress: () => request('/onboarding/progress'),
   onboardingSaveProgress: (payload) => request('/onboarding/progress', { method: 'PUT', body: JSON.stringify(payload) }),
   onboardingComplete: (flow, data) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow, data }) }),
-  draftInvestorThesis: () => request('/onboarding/investor/thesis-draft', { method: 'POST' }),
   // `accepted_terms` is required by the route, not decorative: this gate is where
   // acceptance of the Terms and Privacy Policy is collected and recorded, because
   // it is the one screen every fresh signup passes whatever the auth method.
