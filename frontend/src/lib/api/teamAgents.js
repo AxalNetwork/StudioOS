@@ -139,6 +139,9 @@ export const teamAgentsApi = {
   skillBase: (uid) => request(`/teams/skills/${enc(uid)}/base`),
   // D4538 part 5 (#5965), SK-20: explicit per-conflict choices create a draft; never publish or change pins.
   rebaseSkill: (uid, body) => request(`/teams/skills/${enc(uid)}/rebase`, { method: 'POST', body: JSON.stringify(body) }),
+  // D8827 (#8827): Eadwyn's version summary and per-conflict proposals on Compare with Axal. `{ estimate: true }` quotes;
+  // `{ quote }` runs on the approved hold. It writes nothing: an accepted proposal is a rebase choice.
+  skillProposals: (uid, body) => request(`/teams/skills/${enc(uid)}/proposals`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
   // D4538 part 6 (#5967): task-to-skill discovery for an agent the caller manages. Reads only; attaching stays setAgentSkills.
   discoverSkills: (body) => request('/teams/skills/discover', { method: 'POST', body: JSON.stringify(body) }),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
