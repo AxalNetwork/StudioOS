@@ -31,6 +31,7 @@
  */
 import type { Env } from '../types';
 import { loadOverrides, mapCompanyCountry, mapCompanySector, type Overrides } from './researchTaxonomy';
+import { likeNeedleLower } from '../util/likeSearch';
 
 /** A bad query value. `reason` is a sentence this file wrote, safe for a refusal body (D278). */
 export class CompanyQueryError extends Error {
@@ -120,11 +121,6 @@ export function parseCompanyQuery(get: (k: string) => string | undefined, sector
 /** `sector_label=none` asks for the companies with no sector label. */
 export const SECTOR_NONE = 'none';
 
-/** `%`, `_` and `\` match themselves inside a LIKE … ESCAPE '\' pattern. */
-export function likeLiteral(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
 const LIST_COLUMNS = `uid, name, website, country, founded_year, sector, source_name,
   source_url, source_license, as_of, funding_total, funding_currency, last_funding_amount,
   last_funding_currency, last_funding_date, last_funding_type, employee_count, employee_growth_pct,
@@ -188,7 +184,7 @@ export async function listCompanies(env: Env, q: CompanyQuery) {
   const where: string[] = [];
   const binds: unknown[] = [];
   if (q.q) {
-    const like = `%${likeLiteral(q.q.toLowerCase())}%`;
+    const like = likeNeedleLower(q.q, 0);
     where.push(`(LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(website) LIKE ? ESCAPE '\\')`);
     binds.push(like, like);
   }
@@ -202,7 +198,7 @@ export async function listCompanies(env: Env, q: CompanyQuery) {
   if (q.sector_none) where.push(`TRIM(COALESCE(sector, '')) = ''`);
   if (q.sectorTerms.length) {
     where.push(`(${q.sectorTerms.map(() => `LOWER(COALESCE(sector, '')) LIKE ? ESCAPE '\\'`).join(' OR ')})`);
-    binds.push(...q.sectorTerms.map((t) => `%${likeLiteral(t.toLowerCase())}%`));
+    binds.push(...q.sectorTerms.map((t) => likeNeedleLower(t, 0)));
   }
   if (q.founded_from != null) { where.push('founded_year >= ?'); binds.push(q.founded_from); }
   if (q.founded_to != null) { where.push('founded_year <= ?'); binds.push(q.founded_to); }

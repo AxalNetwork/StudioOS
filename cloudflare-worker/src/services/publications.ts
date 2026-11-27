@@ -18,6 +18,7 @@ import { AI_SURFACE } from './aiSurfaces';
 import { runGatewayTextModel, type GatewayDeps, type GatewayRunResult } from './aiProviders';
 import { gatewayTextOn } from './ai/catalogue';
 import { upstreamAdmission } from './upstreamLease';
+import { likeNeedle } from '../util/likeSearch';
 
 // k-anonymity floor — mirrors K_MIN in routes/market_intel.ts. Any aggregate
 // row with n<5 is suppressed both server-side (here) AND defensively
@@ -65,8 +66,8 @@ export async function loadSectionAggregates(
   const where: string[] = ['extractor = ?', 'n >= ?'];
   const params: Array<string | number> = [section, K_MIN];
   if (sector) {
-    where.push('dimension_key LIKE ?');
-    params.push(`%${sector}%`);
+    where.push("dimension_key LIKE ? ESCAPE '\\'");
+    params.push(likeNeedle(sector, 0)!);
   }
   if (periodFrom) { where.push('period_key >= ?'); params.push(periodFrom); }
   if (periodTo)   { where.push('period_key <= ?'); params.push(periodTo); }

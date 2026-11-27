@@ -30,6 +30,7 @@ import type { Env } from '../types';
 import { ACCESS_STATUSES, USER_LICENCE_TYPES, type UserLicenceStatus, type UserLicenceType } from './userLicences';
 import { PROGRAMS } from './programGrants';
 import { isRegistryKey } from './programRegistry';
+import { likeNeedle } from '../util/likeSearch';
 
 export const LICENCE_TYPE_LABEL: Record<UserLicenceType, string> = {
   founder: 'Founder', investor: 'Investor', operating_partner: 'Operating Partner', advisor: 'Advisor',
@@ -389,7 +390,7 @@ export function accessQuery(raw: Record<string, string | undefined>): AccessQuer
  * `limit`; `truncated` says when more matched.
  */
 export async function programAccessByHolder(env: Env, query: AccessQuery, day = todayUtc()) {
-  const like = query.q ? `%${query.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  const like = query.q ? likeNeedle(query.q, 0) : null;
   const ids = await env.DB.prepare(
     `SELECT DISTINCT u.id, u.name, u.email FROM licences l JOIN users u ON CAST(l.holder_id AS INTEGER) = u.id
       WHERE l.licence_family = 'user' AND l.holder_type = 'user'

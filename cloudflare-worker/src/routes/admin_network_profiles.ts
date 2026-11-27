@@ -43,6 +43,7 @@ import {
   SKILL_CATALOG,
   type NetworkKind,
 } from '../services/networkProfilesSchema';
+import { likeNeedle } from '../util/likeSearch';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -211,8 +212,9 @@ r.get('/', async (c) => {
   const limit = rawLimit == null || rawLimit === '' ? 200 : Number(rawLimit);
   if (!Number.isInteger(limit) || limit < 1 || limit > 500) return c.json({ error: 'invalid_limit', min: 1, max: 500 }, 400);
   const q = String(c.req.query('q') || '').trim().slice(0, 100);
-  // `q` is bound, with LIKE's own wildcards escaped, so "50%" finds "50%".
-  const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  // `q` is bound, with LIKE's own wildcards escaped, so "50%" finds "50%",
+  // and capped at D1's 50-byte LIKE limit (D9167).
+  const like = likeNeedle(q, 0)!;
   const want = (st: RosterState) => (states.includes(st) ? 1 : 0);
   // One written-out query: the three states are disjoint and cover every row,
   // and each is switched on by a bound flag rather than spliced in.

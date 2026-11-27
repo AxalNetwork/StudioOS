@@ -23,6 +23,7 @@ import {
   loadFxRates, convertFromUsd,
   type PlanPricing,
 } from './subscriptionPlans';
+import { likeNeedleLower } from '../util/likeSearch';
 
 // ---------- common row helpers (no `any`) ----------
 type SqlRow = Record<string, unknown>;
@@ -391,8 +392,8 @@ export async function loadUsers(env: Env, opts: {
   if (opts.role) { filters.push('u.role = ?'); params.push(opts.role); }
   if (opts.tier) { filters.push('mi.plan = ?'); params.push(opts.tier); }
   if (opts.search) {
-    filters.push('(LOWER(u.email) LIKE ? OR LOWER(u.name) LIKE ?)');
-    const s = `%${opts.search.toLowerCase()}%`;
+    filters.push("(LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(u.name) LIKE ? ESCAPE '\\')");
+    const s = likeNeedleLower(opts.search, 0)!;
     params.push(s, s);
   }
   const where = filters.join(' AND ');

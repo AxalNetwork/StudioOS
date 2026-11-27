@@ -21,7 +21,8 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import research from '../src/routes/research.ts';
-import { EUR_SOURCE, likeLiteral, parseDirectoryQuery, DirectoryQueryError } from '../src/services/researchFundDirectory.ts';
+import { EUR_SOURCE, parseDirectoryQuery, DirectoryQueryError } from '../src/services/researchFundDirectory.ts';
+import { likeNeedle } from '../src/util/likeSearch.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -127,7 +128,7 @@ test('q matches the name, and quotes, % and _ stay bound and literal', async () 
   assert.deepEqual(uids(quote.body), ['zeta']);
   const inj = await get(db, `/fund-directory?q=${encodeURIComponent("' OR 1=1 --")}`);
   assert.deepEqual([inj.status, inj.body.total], [200, 0]);
-  assert.equal(likeLiteral('a%b_c\\d'), 'a\\%b\\_c\\\\d');
+  assert.equal(likeNeedle('a%b_c\\d'), '%a\\%b\\_c\\\\d%');
 });
 
 test('hq_country goes through the crosswalk: every HQ string naming the country', async () => {

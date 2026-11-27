@@ -23,6 +23,7 @@ import type { Env } from '../types';
 import { PERSONAS, PERSONA_BY_ID, type PersonaId } from '../personas';
 import { retiredSentence, statusesOf } from './segmentProfiles';
 import { CONFIDENCE_BANDS, SEGMENT_SOURCES } from './personaSegments';
+import { likeNeedle } from '../util/likeSearch';
 
 const DAY_MS = 86_400_000;
 /** Rows a page of members or activity holds (SEG3, SEG5: pages of 25). */
@@ -378,9 +379,9 @@ export async function readActivity(env: Env, q: { kind: string | null; segment?:
   }
   sources.suggestion = { recorded: false, reason: SUGGESTIONS_REASON };
   if (!parts.length) throw new MembersError(503, 'activity_unreadable', 'The activity could not be read. Try again.');
-  const like = q.q.length >= 2 ? `%${q.q}%` : '';
+  const like = likeNeedle(q.q, 2) ?? '';
   // A segment's own rows name it as where a member came from or went to; an ask to finish names none, so it is left out.
-  const where = ` WHERE (? = '' OR x.kind = ?) AND (? = '' OR x.seg_from = ? OR x.seg_to = ?) AND (? = '' OR lower(COALESCE(um.name, '')) LIKE ? OR lower(COALESCE(um.email, '')) LIKE ? OR lower(COALESCE(ua.name, '')) LIKE ?)`;
+  const where = ` WHERE (? = '' OR x.kind = ?) AND (? = '' OR x.seg_from = ? OR x.seg_to = ?) AND (? = '' OR lower(COALESCE(um.name, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(um.email, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(ua.name, '')) LIKE ? ESCAPE '\\')`;
   const from = ' FROM (' + parts.join(' UNION ALL ') + ') x LEFT JOIN users ua ON ua.id = x.actor_id LEFT JOIN users um ON um.id = x.member_id';
   const seg = q.segment ?? '';
   const binds = [q.kind ?? '', q.kind ?? '', seg, seg, seg, like, like, like, like];

@@ -18,6 +18,7 @@
 import type { Env } from '../types';
 import { GOVERNANCE_ENTITIES, entityName, type GovernanceEntity } from './governance';
 import { templateSafety } from './templateSafety';
+import { likeNeedleLower } from '../util/likeSearch';
 
 export const SEARCH_TYPES = ['template', 'agreement', 'governance'] as const;
 export type SearchType = typeof SEARCH_TYPES[number];
@@ -45,8 +46,8 @@ export function searchQuery(raw: unknown): string | null {
   return q.length >= 2 && q.length <= 200 ? q : null;
 }
 
-/** A LIKE pattern for the query, with %, _ and \ escaped (used with ESCAPE '\'). */
-export const likeOf = (q: string) => `%${q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+/** A LIKE pattern for the query, with %, _ and \ escaped (used with ESCAPE '\'), capped at D1's 50 bytes (D9167). */
+export const likeOf = (q: string) => likeNeedleLower(q, 0)!;
 
 /**
  * How well a result's fields match: an exact title 4, a title that starts

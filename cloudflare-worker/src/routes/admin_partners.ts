@@ -244,11 +244,11 @@ function manyOf(c: any, name: string): string[] | null {
 
 /**
  * A `LIKE ? ESCAPE '\'` pattern for a free-text search, or null when blank.
- * `likeNeedleLower` escapes `%` and `_`; the backslash is escaped first, so a
- * search for a literal `\` matches a backslash and nothing else.
+ * `likeNeedleLower` escapes `\`, `%` and `_` and caps the pattern at D1's
+ * 50 bytes (D9167), so a search for a literal `\` matches a backslash.
  */
 function searchPattern(raw: unknown): string | null {
-  return likeNeedleLower(String(raw ?? '').replace(/\\/g, '\\\\'), 1);
+  return likeNeedleLower(raw, 1);
 }
 
 /** A positive whole number of at most `max`; `undefined` when absent, `null` when malformed. */
@@ -270,7 +270,7 @@ admin_partners.get('/invitations', async (c) => {
   await requireAdmin(c);
   const status = c.req.query('status') || null;
   const emailQ = c.req.query('email');
-  const emailLike = emailQ ? `%${emailQ.toLowerCase().replace(/[\\%_]/g, m => `\\${m}`)}%` : null;
+  const emailLike = emailQ ? likeNeedleLower(emailQ, 1) : null;
 
   const stages = manyOf(c, 'stage');
   if (stages && stages.some((s) => !(INVITATION_STAGES as readonly string[]).includes(s))) {

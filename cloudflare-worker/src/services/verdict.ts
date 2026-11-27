@@ -44,6 +44,7 @@ import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleVal
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { heldLicences } from './accountLicences';
 import { decisionEvidenceV2, sourceKey, type DecisionEvidence, type EvidenceRow, type Exclusion } from './validateMethodology';
+import { likeNeedle } from '../util/likeSearch';
 
 /**
  * Pieces of evidence a decision must rest on before a verdict is given.
@@ -544,7 +545,7 @@ export async function decisionsFor(
   const kind = filter && filter !== 'withheld' ? filter : null;
   const withheld = filter === 'withheld' ? 1 : 0;
   const term = String(q || '').trim().toLowerCase().slice(0, 120);
-  const like = term ? `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
+  const like = likeNeedle(term, 1) ?? '';
   const where = [projectId, scoped, hyp, kind, kind, withheld, like, like, like] as const;
 
   const total = await env.DB.prepare(

@@ -13,6 +13,7 @@
  */
 import { validEventTopics } from '../services/eventTopics';
 import { Hono } from 'hono';
+import { likeNeedle } from '../util/likeSearch';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
 import { ensureEventsSchema } from '../services/eventsSchema';
@@ -73,7 +74,9 @@ eventsPublic.get('/events', async (c) => {
       ? `datetime(COALESCE(ends_at, starts_at)) < datetime('now')`
       : `datetime(COALESCE(ends_at, starts_at)) >= datetime('now')`);
   }
-  if (q) { where.push('(title LIKE ? OR summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
+  // D9167: escaped and capped to D1's 50-byte LIKE limit, so a long term still answers.
+  const like = likeNeedle(q, 1);
+  if (like) { where.push("(title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')"); binds.push(like, like); }
   // D1032 (#2873): Discover's filters. A value outside the list is refused,
   // never ignored, so a typo cannot read as "every event".
   const format = c.req.query('format');

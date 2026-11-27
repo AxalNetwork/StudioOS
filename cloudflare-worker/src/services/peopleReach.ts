@@ -17,6 +17,7 @@
  * `%`, `_` and `\` escaped, so a member types a name, not a pattern.
  */
 import type { Env } from '../types';
+import { likeNeedle } from '../util/likeSearch';
 
 export type Shared = { kind: 'company' | 'connection'; name: string };
 export type Person = { uid: string; name: string; avatar_url: string | null; shared: Shared[] };
@@ -27,8 +28,8 @@ export const SEARCH_MAX_LEN = 80;
 export const SEARCH_LIMIT = 10;
 export const CONNECTION_LABEL = 'Co-founder match';
 
-/** The query, made safe for `LIKE ? ESCAPE '\'`. */
-export const likeContains = (q: string) => `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+/** The query, made safe for `LIKE ? ESCAPE '\'` and capped at D1's 50 bytes (D9167). */
+export const likeContains = (q: string) => likeNeedle(q, 0)!;
 
 /**
  * Everyone reachable from `callerId`, optionally only those whose name holds

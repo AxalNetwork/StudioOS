@@ -424,9 +424,9 @@ export async function setCallLanguage(env: Env, userId: number, interviewId: num
   if (!ref) return null;
   const value = normalCallLang(lang);
   await env.DB.prepare(
-    `UPDATE interview_channel_refs SET call_lang = ?, updated_at = datetime('now')
-      WHERE user_id = ? AND interview_id = ? AND provider = ? AND (id = ? OR external_ref LIKE ?)`,
-  ).bind(value, userId, interviewId, ref.provider, ref.id, `${ref.external_ref}:%`).run();
+    `UPDATE interview_channel_refs SET call_lang = ?1, updated_at = datetime('now')
+      WHERE user_id = ?2 AND interview_id = ?3 AND provider = ?4 AND (id = ?5 OR substr(external_ref, 1, length(?6)) = ?6)`,
+  ).bind(value, userId, interviewId, ref.provider, ref.id, `${ref.external_ref}:`).run();
   return loadRef(env, ref.uid);
 }
 

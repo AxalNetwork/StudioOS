@@ -30,6 +30,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
+import { likeNeedle } from '../util/likeSearch';
 import { ASSESSED_LESSON_KINDS, refreshCourses } from '../services/learningCompletion';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { mapError } from './_t13t14t15_helpers';
@@ -126,12 +127,6 @@ export function transcriptMatch(row: { title?: string | null; summary?: string |
   return { in: 'transcript' as const, snippet, at_seconds: seconds };
 }
 
-/** Escape a LIKE term; null when there is no search. */
-function likeTerm(q: string | null): string | null {
-  if (!q) return null;
-  return `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-}
-
 const UNREADABLE: Record<Kind, string> = {
   course: 'The course store could not be read, so this is not a claim that there are no courses.',
   video: 'The video store could not be read, so this is not a claim that there are no videos.',
@@ -144,7 +139,7 @@ const UNREADABLE: Record<Kind, string> = {
 async function readKind(env: Env, user: unknown, kind: Kind, f: {
   q: string | null; topic: string | null; level: string | null; limit: number; offset: number; now: string; maxMinutes?: number | null;
 }): Promise<{ rows: CatalogRow[]; state: SourceState }> {
-  const like = likeTerm(f.q);
+  const like = likeNeedle(f.q, 1);
   const sa = user && isSuperAdmin(user as any) ? 1 : 0;
   const me = Number((user as any)?.id ?? 0);
   // A source without the field a filter names is left out, not listed

@@ -22,6 +22,7 @@
  */
 import type { Env } from '../types';
 import { notify } from './notify';
+import { likeNeedleLower } from '../util/likeSearch';
 
 export const KYC_STATUSES = ['not_started', 'pending', 'needs_info', 'approved', 'rejected', 'expired'] as const;
 export type KycStatus = typeof KYC_STATUSES[number];
@@ -172,7 +173,7 @@ const BASE = `
 
 function baseBinds(q: QueueQuery): unknown[] {
   // The search is text: `%`, `_` and the escape itself are escaped, never patterns.
-  const like = q.q ? `%${q.q.toLowerCase().replace(/[\\%_]/g, (ch) => `\\${ch}`)}%` : null;
+  const like = q.q ? likeNeedleLower(q.q, 0) : null;
   return [like, like, like, q.idType, q.idType, q.country, q.country, q.flag, q.flag, q.flag, q.flag, q.assignee, q.assignee, q.assignee];
 }
 

@@ -28,6 +28,7 @@ import {
   PROGRAM_GROUPS, PROPOSAL_ACTIONS, ProgramError, checkNewKey, checkTemplates, insertProgramStatements, insertProgramStatementsOnApproval, isKeyTaken,
   keyFromName, type Actor, type NewProgram, type ProgramReader,
 } from './programRegistry';
+import { likeNeedle } from '../util/likeSearch';
 
 export const PROPOSAL_STATUSES = ['draft', 'sent', 'approved', 'sent_back', 'declined'] as const;
 export type ProposalStatus = typeof PROPOSAL_STATUSES[number];
@@ -402,8 +403,8 @@ export class ProposalsClosed extends Error {
 // Reads
 // ---------------------------------------------------------------------------
 
-/** `q` matched as a substring of the name, with `%`, `_` and `\` taken literally. */
-export const likeOf = (q: string) => `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+/** `q` matched as a substring of the name, with `%`, `_` and `\` taken literally, capped at D1's 50 bytes (D9167). */
+export const likeOf = (q: string) => likeNeedle(q, 0)!;
 
 export type ListQuery = { q: string; status: ProposalStatus | null; sort: 'newest' | 'oldest'; page: number; licence?: string | null };
 

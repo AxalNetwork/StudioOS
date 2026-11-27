@@ -150,7 +150,7 @@ const FEED_AUDIT_ALL_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.fi
     WHERE (? IS NULL OR datetime(a.exported_at) < datetime(?))
       AND (? IS NULL OR datetime(a.exported_at) >= datetime(?))
       AND (? IS NULL OR a.admin_user_id = ?)
-      AND (? IS NULL OR a.action LIKE ? ESCAPE '!' OR a.report_type LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR a.action LIKE ? ESCAPE '\\' OR a.report_type LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR t.name LIKE ? ESCAPE '\\' OR t.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(a.exported_at) DESC, a.id DESC LIMIT ?`;
 
 const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.filters_json, a.exported_at,
@@ -163,7 +163,7 @@ const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, 
       AND (? IS NULL OR datetime(a.exported_at) < datetime(?))
       AND (? IS NULL OR datetime(a.exported_at) >= datetime(?))
       AND (? IS NULL OR a.admin_user_id = ?)
-      AND (? IS NULL OR a.action LIKE ? ESCAPE '!' OR a.report_type LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR a.action LIKE ? ESCAPE '\\' OR a.report_type LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR t.name LIKE ? ESCAPE '\\' OR t.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(a.exported_at) DESC, a.id DESC LIMIT ?`;
 
 /** Twenty-five placeholders, one per entry in ACTOR_SIDE_ACTIONS (D625 added the three identity reads; D1232 the KYC value shown, renewals, audit, periods, D1230's Send to HQ and its decision, and D1229's case, figures, assignment, note, ask for information and re-check). */
@@ -175,7 +175,7 @@ const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.create
       AND (? IS NULL OR datetime(l.created_at) < datetime(?))
       AND (? IS NULL OR datetime(l.created_at) >= datetime(?))
       AND (? IS NULL OR l.user_id = ?)
-      AND (? IS NULL OR l.action LIKE ? ESCAPE '!' OR l.details LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR l.action LIKE ? ESCAPE '\\' OR l.details LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(l.created_at) DESC, l.id DESC LIMIT ?`;
 
 /** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */
@@ -187,7 +187,7 @@ const FEED_ACTIVITY_SUSPENSIONS_SQL = `SELECT l.id, l.action, l.details, l.creat
       AND (? IS NULL OR datetime(l.created_at) < datetime(?))
       AND (? IS NULL OR datetime(l.created_at) >= datetime(?))
       AND (? IS NULL OR l.user_id = ?)
-      AND (? IS NULL OR l.action LIKE ? ESCAPE '!' OR l.details LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR l.action LIKE ? ESCAPE '\\' OR l.details LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(l.created_at) DESC, l.id DESC LIMIT ?`;
 
 const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
@@ -199,7 +199,7 @@ const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.acto
     WHERE (? IS NULL OR datetime(e.created_at) < datetime(?))
       AND (? IS NULL OR datetime(e.created_at) >= datetime(?))
       AND (? IS NULL OR e.actor_user_id = ?)
-      AND (? IS NULL OR e.event LIKE ? ESCAPE '!' OR e.note LIKE ? ESCAPE '!' OR l.licence_ref LIKE ? ESCAPE '!' OR l.brand_name LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR e.event LIKE ? ESCAPE '\\' OR e.note LIKE ? ESCAPE '\\' OR l.licence_ref LIKE ? ESCAPE '\\' OR l.brand_name LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(e.created_at) DESC, e.id DESC LIMIT ?`;
 
 /** Two placeholders, one per entry in SUSPENSION_LICENCE_EVENTS. */
@@ -213,7 +213,7 @@ const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at
       AND (? IS NULL OR datetime(e.created_at) < datetime(?))
       AND (? IS NULL OR datetime(e.created_at) >= datetime(?))
       AND (? IS NULL OR e.actor_user_id = ?)
-      AND (? IS NULL OR e.event LIKE ? ESCAPE '!' OR e.note LIKE ? ESCAPE '!' OR l.licence_ref LIKE ? ESCAPE '!' OR l.brand_name LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR e.event LIKE ? ESCAPE '\\' OR e.note LIKE ? ESCAPE '\\' OR l.licence_ref LIKE ? ESCAPE '\\' OR l.brand_name LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(e.created_at) DESC, e.id DESC LIMIT ?`;
 
 /**
@@ -232,7 +232,7 @@ const FEED_SECURITY_EVENTS_SQL = `SELECT s.id, s.kind, s.factor, s.outcome, s.de
       AND (? IS NULL OR datetime(s.occurred_at) >= datetime(?))
       AND (? IS NULL OR s.user_id = ? OR s.support_user_id = ?)
       AND (? IS NULL OR s.outcome = ?)
-      AND (? IS NULL OR s.kind LIKE ? ESCAPE '!' OR s.factor LIKE ? ESCAPE '!' OR s.detail LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR sp.name LIKE ? ESCAPE '!' OR sp.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR s.kind LIKE ? ESCAPE '\\' OR s.factor LIKE ? ESCAPE '\\' OR s.detail LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR sp.name LIKE ? ESCAPE '\\' OR sp.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(s.occurred_at) DESC, s.id DESC LIMIT ?`;
 
 /**
@@ -252,7 +252,7 @@ const FEED_IMPERSONATIONS_SQL = `SELECT i.id, i.context, i.started_at, i.ended_a
       AND (? IS NULL OR datetime(i.started_at) >= datetime(?))
       AND (? IS NULL OR i.admin_user_id = ?)
       AND (? IS NULL OR (? = 1 AND i.ended_at IS NOT NULL) OR (? = 0 AND i.ended_at IS NULL))
-      AND (? IS NULL OR i.context LIKE ? ESCAPE '!' OR a.name LIKE ? ESCAPE '!' OR a.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+      AND (? IS NULL OR i.context LIKE ? ESCAPE '\\' OR a.name LIKE ? ESCAPE '\\' OR a.email LIKE ? ESCAPE '\\' OR t.name LIKE ? ESCAPE '\\' OR t.email LIKE ? ESCAPE '\\')
     ORDER BY datetime(i.started_at) DESC, i.id DESC LIMIT ?`;
 
 /** A row's whole second (epoch ms), or NaN for a row without a time. */

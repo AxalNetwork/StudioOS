@@ -1032,9 +1032,9 @@ export function instanceOf(ref: Pick<MeetingRef, 'provider' | 'external_ref'>): 
 async function ownInstance(env: Env, call: MeetingRef): Promise<MeetingRef | null> {
   return (await env.DB.prepare(
     `SELECT * FROM interview_channel_refs
-      WHERE provider = 'zoom' AND session_id = ? AND id <> ? AND external_ref LIKE ?
+      WHERE provider = 'zoom' AND session_id = ?1 AND id <> ?2 AND substr(external_ref, 1, length(?3)) = ?3
       ORDER BY id LIMIT 1`,
-  ).bind(call.session_id, call.id, `${call.external_ref}:%`).first<MeetingRef>()) ?? null;
+  ).bind(call.session_id, call.id, `${call.external_ref}:`).first<MeetingRef>()) ?? null;
 }
 
 /**

@@ -14,6 +14,7 @@ export const PAGE_MAX = 50;
 export const PAGE_DEFAULT = 25;
 export const NOTE_MAX = 2000;
 export const QUERY_MAX = 100;
+import { likeNeedle } from '../util/likeSearch';
 
 export class DirectoryRefusal extends Error {
   status: number;
@@ -96,7 +97,7 @@ export function likeTerm(raw: string | null | undefined): string | null {
   const q = String(raw ?? '').trim();
   if (!q) return null;
   if (q.length > QUERY_MAX) throw refuse(400, 'query_too_long', `A search is at most ${QUERY_MAX} characters.`);
-  return '%' + q.replace(/[\\%_]/g, ch => '\\' + ch) + '%';
+  return likeNeedle(q, 1);
 }
 
 /** The member directory: one page and the true total under the same WHERE. */

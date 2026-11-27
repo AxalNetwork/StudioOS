@@ -512,6 +512,13 @@
     ]
   },
   {
+    "id": "check-like-patterns",
+    "command": [
+      "node",
+      "scripts/check-like-patterns.mjs"
+    ]
+  },
+  {
     "id": "undefined-symbols",
     "command": [
       "node",

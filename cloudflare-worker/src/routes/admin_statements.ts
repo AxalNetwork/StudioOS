@@ -43,6 +43,7 @@ import { branchByCode } from '../services/branches';
 import { currencyCode } from '../services/currencies';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { logAdminAction } from '../services/adminAudit';
+import { likeNeedle } from '../util/likeSearch';
 import {
   ACTION_REASON_MAX, ACTION_REASON_MIN, AUDIT_ACTION, IDEMPOTENCY_KEY_RE, PAYMENT_REFERENCE_MAX, STEP_UP_ACTIONS,
   planStatementAction, requestHash, type StatementActionKind,
@@ -575,7 +576,7 @@ r.get('/licence-picker', async (c) => {
     if (rawCursor && !after) {
       return c.json({ error: 'bad_cursor', message: 'The cursor is not one this picker issued. Start from the first page.' }, 400);
     }
-    const like = q ? `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%` : '';
+    const like = likeNeedle(q, 1) ?? '';
     const rows = await c.env.DB.prepare(
       `SELECT * FROM (
          SELECT tl.id, tl.uid,

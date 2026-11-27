@@ -39,6 +39,7 @@ import type { RouteMount } from '../util/routeRegistry';
 import { logAdminAction } from '../services/adminAudit';
 import { DECK_FEATURES, GRID_GENERATE, elementKey, forgetFlags } from '../services/featureFlags';
 import { ELEMENTS } from '../services/decks/elementModels';
+import { likeNeedle } from '../util/likeSearch';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -128,7 +129,7 @@ r.get('/people', async (c) => {
   await requireHqAdmin(c);
   const q = String(c.req.query('q') ?? '').trim();
   if (q.length < 2) return refuse(c, 400, { code: 'query_too_short', message: 'Type at least 2 characters of a name.' });
-  const like = `%${q.slice(0, 80).replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const like = likeNeedle(q);
   const rows = (await c.env.DB.prepare(
     `SELECT u.uid, u.name, u.role,
             (SELECT cp.company_name FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id

@@ -26,6 +26,7 @@
  */
 import type { Env, User } from '../types';
 import { finishImportJob, startImportJob } from './linkedinConnections';
+import { likeNeedle } from '../util/likeSearch';
 
 /** The largest file taken, and the most rows read from it. */
 export const MAX_CSV_BYTES = 5 * 1024 * 1024;
@@ -402,7 +403,7 @@ export async function bookOf(env: Env, owner: number, q: string, page: number, f
   }
   const filterArgs = [filters.source ?? null, owner, filters.source ?? null, filters.follow_up ?? null, owner, filters.follow_up ?? null];
   const term = q.trim().toLowerCase().slice(0, 100);
-  const like = `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const like = likeNeedle(term, 0)!;
   const offset = Math.max(0, page - 1) * BOOK_PAGE;
   const rows = (await env.DB.prepare(
     `SELECT n.id, n.name, n.email, n.company, n.title, n.linkedin_url, n.connected_on, n.created_at,

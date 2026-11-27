@@ -44,6 +44,7 @@
  * It refuses a set larger than EXPORT_MAX rather than cut it short.
  */
 import type { Env } from '../types';
+import { likeNeedleLower } from '../util/likeSearch';
 
 /** A reference as migration 556 writes it. */
 export const PROFILE_REF = /^pp_[0-9a-f]{10}$/;
@@ -181,7 +182,7 @@ export function listFilters(query: ListQuery): { where: string[]; binds: unknown
   const binds: unknown[] = [];
   const q = one(query.q).slice(0, 120);
   if (q) {
-    const like = '%' + q.toLowerCase().replace(/[\\%_]/g, (m) => '\\' + m) + '%';
+    const like = likeNeedleLower(q, 0);
     where.push("(LOWER(COALESCE(full_name, '')) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(user_name, '')) LIKE ? ESCAPE '\\'"
       + " OR LOWER(email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(legal_entity_name, '')) LIKE ? ESCAPE '\\'"
       + " OR LOWER(COALESCE(organization, '')) LIKE ? ESCAPE '\\')");

@@ -35,6 +35,7 @@ import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile,
 import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { putRecord } from '../services/recordStore';
+import { likeNeedle, likePrefix } from '../util/likeSearch';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -305,8 +306,9 @@ function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): u
   const lead = Number.isInteger(leadN) && leadN > 0 ? leadN : null;
   const template = opt(q('template'));
   const decision = opt(q('decision'));
-  const search = String(q('q') ?? '').trim().slice(0, 100);
-  const like = search ? search.replace(/[\\%_]/g, (m) => `\\${m}`) : null;
+  const search = String(q('q') ?? '').trim();
+  // D9167: escaped and capped at D1's 50-byte LIKE limit.
+  const like = likeNeedle(search, 1);
   const everyone = user.role === 'admin' && q('owner_only') !== '1' ? 1 : 0;
   return [
     subjectType, subjectType,
@@ -318,7 +320,7 @@ function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): u
     template, template,
     decision, decision, decision,
     q('past_target') === '1' ? 1 : 0,
-    like, like == null ? null : `%${like}%`, like == null ? null : `${like}%`,
+    like, like, likePrefix(search, 1),
     everyone, user.id, user.id, user.id,
   ];
 }
@@ -2468,7 +2470,7 @@ dd.get('/my-reviews', async (c) => {
 });
 
 const SUBJECT_ROLE: Record<string, string> = { founder: 'founder', advisor: 'advisor', investor: 'investor', partner: 'partner' };
-const likeOf = (q: string) => `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+const likeOf = (q: string) => likeNeedle(q, 0)!;
 
 /**
  * D1250 (#3265, DDL2): each startup the search found, with its stage and the
