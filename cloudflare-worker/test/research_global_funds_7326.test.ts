@@ -79,6 +79,8 @@ function emptyDirectory() {
   db.exec(ddl(VEHICLES));
   db.exec(read('376_research_taxonomy.sql'));
   db.exec(ddl(read('229_research_market_directory.sql')));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   return db;
 }
 

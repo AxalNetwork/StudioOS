@@ -39,10 +39,11 @@ import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, readdirSync, mkdtempSync, cpSync, symlinkSync, rmSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, cpSync, symlinkSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { writeFileAtomic } from '../../cloudflare-worker/test/_atomic_write.mjs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -383,9 +384,9 @@ if (!process.env.D5079_SKIP_MUTATIONS) {
     assert.equal(original.split(check.before).length - 1, 1, `mutation target is not unique: ${check.name}`);
     let result;
     try {
-      writeFileSync(file, original.replace(check.before, check.after));
+      writeFileAtomic(file, original.replace(check.before, check.after));
       result = run(check.pattern);
-    } finally { writeFileSync(file, original); }
+    } finally { writeFileAtomic(file, original); }
     assert.notEqual(result.status, 0, `the mutation went unnoticed by "${check.pattern}": ${(result.stdout || '').slice(-1800)}`);
     assert.equal(readFileSync(file, 'utf8'), original, 'the copy was not restored');
     assert.equal(readFileSync(check.file, 'utf8'), checkout, 'the checkout was written to');

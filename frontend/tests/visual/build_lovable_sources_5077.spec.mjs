@@ -42,7 +42,7 @@ for (const width of [1440, 390]) {
           await expect(sources).toHaveAttribute('open', '');
         }
         const source = sources.getByTestId('cycle-part-lovable');
-        const launch = source.getByRole('button', { name: 'Build in Lovable', exact: true });
+        const launch = source.getByRole('button', { name: 'Prepare a Lovable prompt', exact: true });
         await expect(launch).toBeVisible();
         await expect(page.getByTestId('lovable-build')).toHaveCount(1);
         await expect(page.getByTestId(width === 390 ? 'phone-module-next' : 'cycle-records').getByTestId('lovable-build')).toHaveCount(0);

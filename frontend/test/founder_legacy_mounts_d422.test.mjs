@@ -108,15 +108,15 @@ test('the editors keep their deep links: ?mode=workspace and the Research landin
   assert.ok(!app.includes('founderDiscoveryEditor'), 'the retired Discovery editor switch is back');
   // Research: any query beyond project_id, or ?mode=workspace, skips the desk.
   assert.match(app, /const founderResearchLanding = effectiveRole === 'founder'\s*&& \(researchMode === 'landing' \|\| \(!researchHasNonProjectQuery && researchMode !== 'workspace'\)\);/);
-  // AND THE PATHS THAT STILL LINK TO THEM GO TO THE EDITOR, not the redirect:
-  // the Roadmap zone sends objective edits to the editor's roadmap section,
-  // `/execution?mode=workspace#execution-roadmap` (#2297 removed the
-  // `/execution/roadmap` mount; the page scrolls to the hash). (The
-  // Validate interviews zone that linked `?tab=interviews` is gone, D704: ICP
-  // fit is edited on the interview's record, `interview_record_d697`.)
+  // #2297 removed the `/execution/roadmap` mount; `/execution?mode=workspace` still opens the editor. (The
+  // Validate interviews zone that linked `?tab=interviews` is gone, D704: ICP fit is edited on the interview's
+  // record, `interview_record_d697`.) D8776 (#8776, owner question 2, option A): Build's Quarters, dependencies
+  // and scenarios no longer sends a founder to that editor; its one first action is Product roadmap's own Add.
   assert.equal(routeBlock('/execution/roadmap'), '', '#2297 removed the sub-route');
   assert.match(routeBlock('/execution'), /!founderExecutionEditor[\s\S]*<ExecutionPage \/>/);
-  assert.match(codeOnly(raw('frontend/src/pages/founder/FounderBuildRoadmap.jsx')), /to=\{`\/execution\?mode=workspace\$\{[^\n]*?\}#execution-roadmap`\}/);
+  const roadmapPage = codeOnly(raw('frontend/src/pages/founder/FounderBuildRoadmap.jsx'));
+  assert.doesNotMatch(roadmapPage, /\/execution\?mode=workspace/, 'Build offers the /execution roadmap editor again');
+  assert.match(roadmapPage, /to=\{addFirstHref\(projectId\)\}/);
 });
 
 test('no founder desk embeds a legacy editor', () => {

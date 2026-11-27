@@ -13,6 +13,7 @@ imports. The bucket roots and the zone routing live in
 | `kit.jsx` | The one import surface for partner zones; its header lists the three traps it exists to defuse. |
 | `PartnerStudioHome.jsx` | Partner Studio, what `/studio` renders for a partner: the masthead, Eadwyn (`StudioInterview`) and the profile band, around `PartnerHomeP2` (D564). |
 | `PartnerHomeP2.jsx` | Partner Studio's body, the canvas's P2 (D394), mounted by `PartnerStudioHome` since the owner signed it off on #981 (D564). |
+| `firmFeedModel.js`, `feedReturn.js`, `FromStudioBack.jsx` | The Studio firm feed (D8733): the model that builds every alert and the six-row summary, the return record that brings the partner back to the feed as they left it, and the "Back to Studio · Firm feed" bar and not-found notice the pages it opens draw. |
 | `PartnerFirmProfileCard.jsx` | The firm's partner profile, introductions switch and agreement summary (D390), mounted on Firm Settings (`/company-settings`) for partner sign-ins (D395). |
 | `PartnerWorkspaceShell.jsx`, `PartnerWorkspaceTabs.jsx` | The legacy tabbed shell a few older pages (`/needs`, `/services`, `/partner/insights` and others) still wrap themselves in. |
 | `OrganizationsZone.jsx` | Network · Organizations for this licence. |

@@ -64,8 +64,8 @@ test('a metric block the editor placed is a figure with its source; one with no 
 test('sourceOf: the grades only; no binding is null, so the card says Source: Not recorded', () => {
   assert.equal(sourceOf(null), null);
   assert.equal(sourceOf({}), null);
-  assert.equal(sourceOf({ source_key: 'raise.round_target', grade: 'Stated' }), 'Source: Raise · Stated');
-  assert.equal(sourceOf({ source_key: 'odd.key', grade: 'Reviewed', as_of: 'not a day' }), 'Source: StudioOS · Reviewed');
+  assert.equal(sourceOf({ source_key: 'raise.round_target', grade: 'Stated' }), 'Source: Raise · Stated · date not recorded', 'D8772 Q3 A: an undated source says so');
+  assert.equal(sourceOf({ source_key: 'odd.key', grade: 'Reviewed', as_of: 'not a day' }), 'Source: StudioOS · Reviewed · date not recorded');
   assert.equal(sourceOf({ source_key: 'grow.mrr', grade: 'Excellent' }), SOURCE_NOT_ON_STUDIOOS, 'a grade the Worker never writes');
   // The page draws the figure's own line, and the fallback only when it has none.
   const present = read('frontend/src/pages/raise/pitch/PitchPresent.jsx');

@@ -210,7 +210,11 @@ test('a supplied project ID the member cannot open is unavailable, never another
   })));
   // Mutation checked: removing `<ProjectUnavailable />` from FounderStudioBody fails this; restored, it passes.
   assert.match(html, /data-testid="status-founder-project-unavailable"/);
-  assert.doesNotMatch(html, /Accessible venture|Second venture/);
+  // D8729 (#8729, SFD10): the notice offers the member's own ventures by name, as links into Studio, and
+  // nothing else of theirs is drawn: outside that list neither name appears.
+  const offered = html.slice(html.indexOf('data-testid="founder-project-unavailable-ventures"'), html.indexOf('</ul>', html.indexOf('founder-project-unavailable-ventures')));
+  assert.match(offered, /href="\/studio\?project_id=3"[^>]*>.*Accessible venture/);
+  assert.doesNotMatch(html.replace(offered, ''), /Accessible venture|Second venture/);
 
   // And the cycle reads say so too, without a request.
   const t = await mountHook(w.reads.project);

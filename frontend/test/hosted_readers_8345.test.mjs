@@ -22,6 +22,12 @@ import { hostedReaders, isolationFor, hostedExecutorDependencies } from '../../s
 import { JobContainer } from '../../scripts/ci/runners/job-container.mjs';
 import { receiptIdentity } from '../../scripts/ci/runner-admission.mjs';
 import { main as bridge } from '../../scripts/ci/capacity-executor.mjs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { recoveryStore } from '../../scripts/ci/runners/recovery-store.mjs';
+import { runInContainer } from '../../scripts/ci/runner-execution.mjs';
 const NOW = 1_800_000_000_000, REPO = 'AxalNetwork/StudioOS', EXEC = 'e'.repeat(40), SOURCE = 'a'.repeat(40);
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const key = { ...publicKey.export({ format: 'jwk' }), kid: 'fixture-8345', alg: 'RS256', use: 'sig' };
@@ -118,7 +124,8 @@ test('signed target token + authenticated receipt transport + independent job + 
 test('main defaults still refuse; readers have no implicit positive dependency', async t => {
   const w = world(t); assert.deepEqual(hostedReaders(), {}); assert.equal(await isolationFor('hosted').admissionIsolation(w.args), false);
   await assert.rejects(createHostedReaders().readProvenance(w.args), /unconfigured/);
-  const noJob = createHostedReaders({ ...w.options, job: undefined }); await noJob.readProvenance(w.args); await assert.rejects(noJob.readBoundary(w.args), /job_unconfigured/);
+  const noJob = createHostedReaders({ ...w.options, job: undefined });
+  await assert.rejects(noJob.readProvenance(w.args), /job_unconfigured/); await assert.rejects(noJob.readBoundary(w.args), /job_unconfigured|provenance_required/);
 });
 test('forged signature, wrong audience, expired token and changed target-job claims refuse', async t => {
   for (const fault of ['signature', 'aud', 'exp', 'check_run_id', 'runner_environment', 'workflow_sha']) {
@@ -386,14 +393,24 @@ test('readiness requires the exact trusted JobContainer profile, not a lookalike
   for (const job of [{ profileId: 'hosted', policy: w.native.policy, inspectReadiness: w.native.inspectReadiness },
     Object.assign(new JobContainer(w.native.policy, { profileId: 'github-8', engine: w.native.engine }), { inspectReadiness: w.native.inspectReadiness })]) {
     const readers = createHostedReaders({ ...w.options, job });
-    await readers.readProvenance(w.args);
-    await assert.rejects(readers.readBoundaryReadiness(w.args), /job_unconfigured/);
+    await assert.rejects(readers.readProvenance(w.args), /job_unconfigured/);
+    await assert.rejects(readers.readBoundaryReadiness(w.args), /job_unconfigured|provenance_required/);
   }
+});
+test('D8345-p1: the inspection-time job check stays after the early refusal', async t => {
+  // A job whose profile changes after provenance cannot serve readiness or the live boundary.
+  for (const method of ['readBoundaryReadiness', 'readBoundary']) await t.test(method, async t => {
+    const v = world(t); await v.readers.readProvenance(v.args); v.native.profileId = 'github-8';
+    await assert.rejects(v.readers[method](v.args), /job_unconfigured/, method);
+    assert.equal(v.calls.some(c => c.engine), false);
+  });
 });
 
 test('bridge snapshot age is bounded before isolation even when reader documents are fresh', async t => {
   for (const age of [-1, 29_000, 30_000, 30_001, 31_000]) await t.test(String(age), async t => {
     const w = world(t); w.native.owned = null;
+    // D8345-p1: issue the token ten seconds earlier, so only the bridge's own non-future guard refuses the -1 ms case.
+    w.claims.iat = NOW / 1000 - 10; w.claims.nbf = w.claims.iat - 1;
     t.mock.method(globalThis, 'fetch', w.options.issuerFetch);
     const env = { GITHUB_REPOSITORY: REPO, EXECUTOR_SHA: EXEC, CHILD_WORKFLOW_SHA: EXEC, GITHUB_WORKFLOW_SHA: EXEC,
       GITHUB_RUN_ID: '202', GITHUB_RUN_ATTEMPT: '1', PROFILE: 'hosted', CI_CAPACITY_AUDIENCE: w.claims.aud,
@@ -414,5 +431,201 @@ test('bridge snapshot age is bounded before isolation even when reader documents
         return accepted ? 0 : 1;
       } });
     assert.equal(code, accepted ? 0 : 1);
+  });
+});
+
+// D8345-p1: S21's H2 direct reader checks, H4 early refusal and the reconciliation of reader output with S09's ports.
+const bridgeEnv = (w, profile = 'hosted') => ({ GITHUB_REPOSITORY: REPO, EXECUTOR_SHA: EXEC, CHILD_WORKFLOW_SHA: EXEC, GITHUB_WORKFLOW_SHA: EXEC,
+  GITHUB_RUN_ID: '202', GITHUB_RUN_ATTEMPT: '1', PROFILE: profile, CI_CAPACITY_AUDIENCE: w.claims.aud,
+  GH_TOKEN: 'fixture-only', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://fixture.actions.githubusercontent.com/token', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-only' });
+const receiptInput = w => ({ request: { requestId: w.receipt.requestId, shard: w.receipt.logicalShard,
+  generation: w.receipt.generation, profile: w.receipt.profile }, context: w.args.context, phase: 'execute' });
+const outbound = calls => calls.filter(c => c.url);
+
+test('D8345-p1 H2: an inactive authority envelope refuses directly, before any OIDC or Actions call', async t => {
+  for (const active of [false, 'true', 1, undefined]) await t.test(String(active), async t => {
+    const w = world(t);
+    const readers = createHostedReaders({ ...w.options, readReceipt: async () => ({ ...clone(w.envelope), active }) });
+    await assert.rejects(readers.readProvenance(w.args), /hosted_receipt_changed/);
+    assert.deepEqual(outbound(w.calls), []);
+  });
+});
+
+test('D8345-p1 H2: a self-hosted label on the target job refuses in the reader, whatever its case', async t => {
+  for (const label of ['self-hosted', 'Self-Hosted', 'SELF-HOSTED']) await t.test(label, async t => {
+    const w = world(t); w.selected.labels = ['ubuntu-latest', label];
+    await assert.rejects(w.readers.readProvenance(w.args), /hosted_target_job_refused/);
+  });
+});
+
+test('D8345-p1 H2: a failed provenance refresh clears earlier provenance for every later reader', async t => {
+  for (const method of ['readBoundaryReadiness', 'readBoundary']) await t.test(method, async t => {
+    const w = world(t); await w.readers.readProvenance(w.args);
+    w.state.jobs = []; w.state.total = 0; // The second refresh finds no target job.
+    await assert.rejects(w.readers.readProvenance(w.args), /hosted_target_job_refused/);
+    await assert.rejects(w.readers[method](w.args), /hosted_provenance_required/);
+    assert.equal(w.calls.some(c => c.engine), false, 'no engine call without current provenance');
+  });
+});
+
+test('D8345-p1 H2: one readers object never serves a second receipt binding', async t => {
+  for (const field of ['generation', 'planDigest', 'requestId']) await t.test(field, async t => {
+    const w = world(t);
+    const readers = createHostedReaders({ ...w.options, readReceipt: async () => clone(w.envelope) });
+    await readers.readProvenance(w.args);
+    const other = clone(w.receipt);
+    other[field] = field === 'generation' ? 4 : field === 'planDigest' ? `sha256:${'9'.repeat(64)}` : '83450000-0000-4000-8000-000000000002';
+    w.envelope.receipt = clone(other); // Authority agrees with the second receipt; only the reader's scope latch differs.
+    const before = outbound(w.calls).length;
+    await assert.rejects(readers.readProvenance({ ...w.args, receipt: other }), /hosted_reader_scope_changed/);
+    assert.equal(outbound(w.calls).length, before, 'no OIDC, JWKS or Actions call after the scope refusal');
+  });
+});
+
+test('D8345-p1 H2: two distinct Actions jobs naming the same check run refuse', async t => {
+  const w = world(t);
+  w.state.jobs = [w.selected, { ...clone(w.selected), id: 908 }]; w.state.total = 2;
+  await assert.rejects(w.readers.readProvenance(w.args), /hosted_target_job_refused/);
+  w.state.jobs = [{ ...clone(w.selected), id: 908 }, w.selected];
+  await assert.rejects(w.readers.readProvenance(w.args), /hosted_target_job_refused/, 'order does not pick a winner');
+});
+
+test('D8345-p1 H4: with no trusted boundary job, hosted admission refuses before any OIDC, JWKS or Actions call', async t => {
+  for (const [name, profile, other] of [['default hosted', 'hosted', null], ['default github-8', 'github-8', null],
+    ['job of the other profile', 'hosted', 'github-8']]) await t.test(name, async t => {
+    const w = world(t, profile); t.mock.method(globalThis, 'fetch', w.options.issuerFetch);
+    const ports = { results: { read: () => null }, store: {}, authority: { readReceipt: w.options.readReceipt },
+      async admit(_env, dependencies) {
+        await dependencies.readReceipt(receiptInput(w));
+        const before = w.calls.length;
+        assert.equal(await dependencies.verifyIsolation(w.args), false);
+        assert.deepEqual(w.calls.slice(before), [], 'the refusing admission makes no outbound or engine call');
+        return 1;
+      } };
+    // Default composition: the real isolationFor and hostedBoundaryJob (null). Otherwise a job serving another profile.
+    if (other) ports.isolationFactory = (profileId, options) => hostedExecutorDependencies({ ...options, profileId,
+      boundaryJob: () => new JobContainer(w.native.policy, { profileId: other, engine: w.native.engine }) });
+    assert.equal(await bridge('admit', bridgeEnv(w, profile), ports), 1);
+    const readers = hostedReaderFactory(bridgeEnv(w, profile), w.options.readReceipt, { fetcher: w.options.issuerFetch })({ job: null });
+    const before = w.calls.length;
+    await assert.rejects(readers.readProvenance(w.args), /hosted_native_job_unconfigured/);
+    assert.deepEqual(w.calls.slice(before), []);
+  });
+});
+
+test('D8345-p1 reconciliation: real readers through the bridge and S09 execution port, before install and before test', async t => {
+  for (const profile of ['hosted', 'github-8']) await t.test(profile, async t => {
+    const w = world(t, profile); t.mock.method(globalThis, 'fetch', w.options.issuerFetch);
+    const receiptReads = () => w.calls.filter(c => c.url === 'https://capacity.invalid/capacity/receipt').length;
+    const ports = { results: { read: () => null }, store: {}, authority: { readReceipt: w.options.readReceipt },
+      isolationFactory: (profileId, options) => hostedExecutorDependencies({ ...options, profileId, boundaryJob: () => w.native }),
+      async execute(mode, _env, deps) {
+        assert.equal(mode, 'verify-plan'); assert.equal(deps.job, w.native);
+        // The exact argument shape runner-execution's admit/recheck pass to executionIsolation.
+        const check = () => deps.executionIsolation({ receipt: clone(w.receipt), context: clone(w.args.context),
+          profile: clone(w.args.profile), phase: 'execute', signal: new AbortController().signal });
+        const identity = w.native.boundaryIdentity(), reads = receiptReads();
+        assert.equal(await check(), true, 'before install');
+        assert.equal(await check(), true, 'before test');
+        assert.equal(receiptReads() - reads, 2, 'one authenticated refresh per check, none per reader document');
+        assert.deepEqual(w.native.boundaryIdentity(), identity, 'reading never changes the live instance');
+        w.state.egressProof = false; // The actual S09 inspection today: host control is not denied.
+        assert.equal(await check(), false, 'unverified egress refuses at the execution port');
+        w.state.egressProof = true;
+        const owned = w.native.owned; w.native.owned = null;
+        assert.equal(await check(), false, 'no live instance is unbound'); w.native.owned = owned;
+        const live = w.native.inspectBoundary;
+        w.native.inspectBoundary = async args => ({ ...await live(args), instanceId: 'd'.repeat(64) });
+        assert.equal(await check(), false, 'a document naming another instance refuses'); w.native.inspectBoundary = live;
+        w.native.inspectReadiness = async () => { throw Error('readiness is never read by the execution port'); };
+        if (profile === 'github-8') {
+          const evidence = w.envelope.hostedEvidence; delete w.envelope.hostedEvidence;
+          assert.equal(await check(), false, 'github-8 execution still needs the authority lane'); w.envelope.hostedEvidence = evidence;
+        }
+        assert.equal(await check(), true, 'restored');
+        return 0;
+      } };
+    assert.equal(await bridge('verify-plan', bridgeEnv(w, profile), ports), 0);
+  });
+});
+
+test('D8345-p1 reconciliation: reader documents carry exactly the identities S09 verifies', async t => {
+  const w = world(t, 'github-8', 'c'.repeat(40)), owned = w.native.owned; w.native.owned = null;
+  const provenance = await w.readers.readProvenance(w.args);
+  const readiness = await w.readers.readBoundaryReadiness(w.args), lane = await w.readers.readIncludedEligibility(w.args);
+  assert.equal(Object.hasOwn(readiness, 'instanceId'), false);
+  w.native.owned = owned; const live = await w.readers.readBoundary(w.args);
+  for (const document of [provenance, readiness, live, lane]) {
+    assert.equal(document.binding.childWorkflowSha, 'c'.repeat(40), 'the exact child pin');
+    assert.equal(document.binding.executorSha, EXEC, 'the control revision stays separate');
+  }
+  assert.deepEqual([readiness.jobId, live.jobId, lane.jobId], [909, 909, 909], 'every native and lane document names the provenance job');
+  assert.deepEqual({ instanceId: live.instanceId, policyDigest: live.policyDigest },
+    { instanceId: w.native.boundaryIdentity().instanceId, policyDigest: w.native.boundaryIdentity().policyDigest });
+  assert.equal(readiness.policyDigest, live.policyDigest, 'admission readiness and live inspection name one policy');
+  assert.equal(readiness.observedAt, NOW, 'inspection time is preserved, not re-stamped');
+});
+
+/** A stateful synthetic engine for one hosted JobContainer: create/start/inspect/exec/rm, state built from the create args. */
+function hostedEngine(t) {
+  const root = mkdtempSync(join(tmpdir(), 'hosted-8345-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const source = join(root, 'source'), plan = join(root, 'plan.json'), id = 'b'.repeat(64);
+  mkdirSync(source); writeFileSync(plan, '{}');
+  let info = null, removed = false; const calls = [];
+  const engine = async args => {
+    calls.push(args[0]);
+    if (args[0] === 'create') {
+      const val = k => args[args.indexOf(k) + 1], all = k => args.flatMap((v, i) => v === k ? [args[i + 1]] : []);
+      info = { Id: id, Image: args.at(-3), State: { Running: true, Pid: 123 },
+        Config: { User: val('--user'), Labels: Object.fromEntries([val('--label').split('=')]), Entrypoint: [val('--entrypoint')], Cmd: args.slice(-2), Env: all('--env') },
+        HostConfig: { Privileged: false, Init: true, ReadonlyRootfs: true, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges'], PidMode: '', IpcMode: 'private',
+          CgroupnsMode: 'private', NetworkMode: 'bridge', PidsLimit: 256, Memory: 4294967296, NanoCpus: 2e9,
+          Tmpfs: Object.fromEntries(all('--tmpfs').map(v => [v.slice(0, v.indexOf(':')), v.slice(v.indexOf(':') + 1)])) },
+        Mounts: [{ Type: 'bind', Source: source, Destination: '/input', RW: false, Propagation: 'rprivate' },
+          { Type: 'bind', Source: plan, Destination: '/input-plan.json', RW: false, Propagation: 'rprivate' }] };
+      return `${id}\n`;
+    }
+    if (args[0] === 'inspect') { if (removed) throw Object.assign(Error('gone'), { stderr: `Error: No such object: ${id}` }); return JSON.stringify([info]); }
+    if (args[0] === 'rm') { removed = true; return ''; }
+    if (args[0] === 'exec' && args.includes('-e')) return 'readable';
+    if (args[0] === 'exec' && args.includes('/usr/local/bin/python3')) return '3.11.18\n';
+    if (args[0] === 'exec' && args.includes('/usr/local/bin/node')) return '22.23.3\n';
+    return '';
+  };
+  return { root, source, plan, engine, calls, removed: () => removed };
+}
+
+test('D8345-p1 chain: authenticated receipt, real readers and S09 execution port drive install, recheck, test, export and verified removal', async t => {
+  for (const [name, testScript, egressAtRecheck] of [['success', 'exit 0', true], ['sticky test failure', 'exit 3', true],
+    ['host control not denied at the pre-test recheck', 'exit 0', false]]) await t.test(name, async t => {
+    const w = world(t), f = hostedEngine(t), phases = [];
+    const job = new JobContainer(w.native.policy, { profileId: 'hosted', engine: f.engine, stage: async () => {}, namespace: () => true,
+      spawnEngine: args => { const phase = args.at(-1).includes('npm ci') ? 'install' : 'test'; phases.push(phase);
+        return spawn('/bin/sh', ['-c', phase === 'install' ? 'exit 0' : testScript], { stdio: 'ignore' }); } });
+    // Synthetic egress qualification only; the actual S09 inspectBoundary reports deniesHostControl: false.
+    const inspect = job.inspectBoundary.bind(job);
+    job.inspectBoundary = async args => { const value = await inspect(args); return value && { ...value, deniesHostControl: w.state.egressProof }; };
+    const deps = hostedExecutorDependencies({ profileId: 'hosted', boundaryJob: () => job, readers: ({ job: trusted }) => createHostedReaders({ ...w.options, job: trusted }) });
+    assert.equal(deps.job, job);
+    const call = signal => ({ receipt: clone(w.receipt), context: clone(w.args.context), profile: clone(w.args.profile), phase: 'execute', signal });
+    const admitted = { allowed: true, identity: clone(w.receipt), sourceSha: SOURCE, originalRunId: 101, originalAttempt: 1, originalEvent: 'push', sourceRef: 'refs/heads/main' };
+    const seen = [], logs = [];
+    const code = await runInContainer({ job, executionIsolation: deps.executionIsolation, current: { profile: w.args.profile, identity: clone(w.receipt) },
+      paths: { source: f.source }, planPath: f.plan, signal: new AbortController().signal, store: recoveryStore({ root: join(f.root, 'state'), create: true }),
+      exporter: async () => ({ state: 'complete', files: 1, bytes: 10 }), log: line => logs.push(line), output: () => {},
+      admit: async (verifyIsolation, { signal }) => { const ok = await verifyIsolation(call(signal)); seen.push(['admit', ok]); return ok ? admitted : { allowed: false }; },
+      recheck: async ({ signal }) => { w.state.egressProof = egressAtRecheck; const ok = await deps.executionIsolation(call(signal)); seen.push(['recheck', ok]); return ok; } });
+    const outcome = JSON.parse(logs.find(line => line.includes('container_outcome')));
+    assert.deepEqual(seen, [['admit', true], ['recheck', egressAtRecheck]]);
+    assert.equal(outcome.install.status, 'success');
+    assert.equal(outcome.cleanup.state, 'complete'); assert.equal(f.removed(), true, 'removal is verified on every path');
+    if (!egressAtRecheck) {
+      assert.deepEqual(phases, ['install'], 'no test runs after a refused recheck');
+      assert.deepEqual([outcome.category, outcome.infrastructure, outcome.test.status, code], ['infrastructure', 'boundary_recheck_failed', 'not_run', 1]);
+    } else if (testScript === 'exit 3') {
+      assert.deepEqual([outcome.category, outcome.test.status, outcome.test.exitCode, code], ['test_failure', 'failure', 3, 3], 'the verified test failure keeps its raw exit');
+    } else {
+      assert.deepEqual([outcome.category, outcome.test.status, outcome.export.state, code], ['success', 'success', 'complete', 0]);
+    }
   });
 });

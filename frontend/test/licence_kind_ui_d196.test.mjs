@@ -33,6 +33,8 @@ const NAV_MODEL = readFileSync(new URL('../src/pages/admin/licenceNavModel.js', 
 import { codeOnly } from './_codeOnly.mjs';
 import { licencePageSource } from './_licencePage.mjs';
 import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
+import { KIND_CARDS, planCreate } from '../src/pages/admin/licences/newLicenceModel.js';
+import { KIND_HOSTS } from '../src/pages/admin/licences/issueLicenceFlowModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -66,10 +68,12 @@ test('the SPA offers exactly the kinds the ledger admits', () => {
   // The whole point of D196: one vocabulary, read from both files rather than
   // restated here. A third kind on either side — a button the CHECK refuses,
   // or a column value with no control — fails this.
-  const picker = block('licence-kind', '</p>');
-  const spa = [...picker.matchAll(/\['([a-z_]+)',\s*'[^']*'\]/g)].map((m) => m[1]);
+  // D5929 (#5929): the inline form became New licence's step 1, whose Kind
+  // control is `KIND_CARDS` (#5931); the host explainer is `KIND_HOSTS`.
+  const spa = KIND_CARDS.map((c) => c.k);
   assert.deepEqual(spa, ['subsidiary', 'white_label'],
     'the Kind control no longer offers exactly the two kinds');
+  assert.deepEqual(KIND_HOSTS.map(([k]) => k), spa, 'the host explainer and the Kind control disagree about which kinds exist');
 
   const decl = ROUTE.match(/LICENCE_KINDS\s*=\s*\[([^\]]*)\]/);
   assert.ok(decl, 'the worker no longer names its licence kinds in one place');
@@ -83,14 +87,12 @@ test('the create path SENDS the kind and no longer refuses white-label', () => {
   // ledger has no kind column" — stopped being true rather than being
   // rephrased. D111's narrow-don't-delete applies to a refusal that is partly
   // still true; this one is not.
-  // BOUNDED TO THE LICENCE FORM. `kind: form.kind` also appears in the NOTICE
-  // form eight hundred lines up, whose `kind` is a notice kind — so an
-  // unbounded match is satisfied by a different form entirely. Measured:
-  // deleting the licence payload's line escaped the first version of this.
-  const at = SRC.indexOf('async function create(e)');
-  assert.ok(at > 0, 'the licence create handler is gone');
-  const creator = SRC.slice(at, SRC.indexOf('api.licenceCreate', at));
-  assert.match(creator, /kind:\s*form\.kind/, 'the create payload no longer carries the chosen kind');
+  // D5929: the create is step 1's (`planCreate`, then `api.licenceCreate(plan.body)`),
+  // so the payload is checked by building it, for each kind.
+  const base = { licence_ref: 'wl-zz-001', legal_entity_name: 'Example Entity' };
+  assert.equal(planCreate({ ...base, kind: 'white_label' }).body.kind, 'white_label', 'the create payload no longer carries white-label');
+  assert.equal(planCreate({ ...base, kind: 'subsidiary' }).body.kind, 'subsidiary', 'the create payload no longer carries the chosen kind');
+  assert.match(SRC, /api\.licenceCreate\(plan\.body\)/, 'step 1 no longer sends the planned body');
   assert.doesNotMatch(SRC, /ledger has no kind column/,
     'the page still tells an operator the ledger cannot store a kind');
   assert.doesNotMatch(SRC, /disabled=\{form\.kind/,
@@ -117,19 +119,24 @@ test('the pill reads the stored kind, and its two branches say different things'
 });
 
 test('the white-label explainer describes the host, not a missing column', () => {
-  const picker = block('licence-kind', '</p>');
+  // D5929: read per kind from `KIND_HOSTS`, which New licence draws under step 1 (`nl-kind-hosts`).
+  const hosts = Object.fromEntries(KIND_HOSTS);
+  const picker = hosts.white_label;
   assert.match(picker, /no HQ brand desk/,
     'the white-label explainer stopped saying HQ does not approve their brand');
   // A SENTENCE ONLY THE WHITE-LABEL BRANCH CARRIES. Both branches mention
-  // Settings → Domain, so matching that phrase inside this slice is satisfied
-  // by the subsidiary copy — which is what let the first version of this pass
-  // with the white-label host sentence deleted.
+  // Settings → Domain, so matching that phrase is satisfied by the subsidiary
+  // copy — which is why each kind's line is read on its own.
   assert.match(picker, /Members land on a platform host at activation/,
     'the explainer stopped saying a white-label starts on a platform host');
+  assert.doesNotMatch(hosts.subsidiary, /Members land on a platform host/, 'the subsidiary line took the white-label sentence');
   assert.match(picker, /Settings → Domain/,
-    'neither branch says where a custom host is bound');
+    'the white-label line no longer says where a custom host is bound');
+  assert.match(hosts.subsidiary, /Settings → Domain/,
+    'the subsidiary line no longer says where its host is bound');
   assert.match(picker, /Super Admin stays on axal\.vc/,
     'the explainer stopped saying Super Admin keeps its own host');
+  assert.match(SRC, /KIND_HOSTS\.map\(/, 'New licence no longer draws the host explainer');
 });
 
 test('the domain strip reads the store, and HQ\'s only control is Detach (D197)', () => {

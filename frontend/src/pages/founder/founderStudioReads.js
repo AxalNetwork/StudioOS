@@ -24,16 +24,23 @@
  * projects is never swapped for another venture. The venture read settles as
  * `unavailableProject(id)` (a failed read that says so, so every dependent zone
  * stays Unreadable rather than showing another venture's figures), and the
- * lifecycle and scores are not requested. The first project is chosen only
- * when no ID was supplied.
+ * lifecycle and scores are not requested.
+ *
+ * D8729 (#8729): with no ID supplied the venture is resolved in order: the
+ * switcher's pick on this device (`preferredProjectId`, `activeProject.js`)
+ * when it is one of the member's ventures, then the only venture, then, with
+ * two or more, a choice (owner Q1 A): the venture read settles as
+ * `chooseProject(n)` and nothing venture-scoped is requested. The member's
+ * ventures are handed over as `ventures` (`[{ id, name }]`, or the failure),
+ * for Switch venture, the chooser and the unavailable notice.
  */
 import { api, spinoutLab } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { failedRead, unavailableProject } from './founderStudioModel';
+import { chooseProject, failedRead, unavailableProject } from './founderStudioModel';
 
 const array = (value, key) => (Array.isArray(value) ? value : Array.isArray(value?.[key]) ? value[key] : []);
 
-export function startFounderStudioReads({ requestedProjectId, onRead, client = api, lab = spinoutLab } = {}) {
+export function startFounderStudioReads({ requestedProjectId, preferredProjectId = null, onRead, client = api, lab = spinoutLab } = {}) {
   const settle = async (key, promise) => {
     let value;
     try { value = await promise; } catch (e) {
@@ -55,13 +62,24 @@ export function startFounderStudioReads({ requestedProjectId, onRead, client = a
       projects = failedRead(e?.message);
     }
     if (projects && projects.failed) {
+      onRead('ventures', projects);
       onRead('project', projects); onRead('lifecycle', projects); onRead('scores', projects);
       return;
     }
-    const list = array(projects, 'projects');
-    const requested = requestedProjectId === null || requestedProjectId === undefined ? '' : String(requestedProjectId).trim();
-    const named = (p) => p?.id !== null && p?.id !== undefined && Number.isFinite(Number(requested)) && Number(p.id) === Number(requested);
-    const project = requested ? (list.find(named) || null) : (list.find((p) => p?.id) || null);
+    const list = array(projects, 'projects').filter((p) => p?.id !== null && p?.id !== undefined && String(p.id).trim() !== '');
+    onRead('ventures', list.map((p) => ({ id: p.id, name: String(p.name || '').trim() || null })));
+    const asId = (v) => (v === null || v === undefined ? '' : String(v).trim());
+    const requested = asId(requestedProjectId);
+    const preferred = asId(preferredProjectId);
+    const is = (id) => (p) => Number.isFinite(Number(id)) && Number(p.id) === Number(id);
+    let project;
+    if (requested) project = list.find(is(requested)) || null;
+    else if (preferred && list.find(is(preferred))) project = list.find(is(preferred));
+    else if (list.length > 1) {
+      const choose = chooseProject(list.length);
+      onRead('project', choose); onRead('lifecycle', choose); onRead('scores', choose);
+      return;
+    } else project = list[0] || null;
     if (requested && !project) {
       const unavailable = unavailableProject(requested);
       onRead('project', unavailable); onRead('lifecycle', unavailable); onRead('scores', unavailable);

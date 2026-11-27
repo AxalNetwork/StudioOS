@@ -36,7 +36,7 @@
  */
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -49,6 +49,7 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 import { isolatedMutationSource } from './_isolated_mutation_source.mjs';
+import { writeFileAtomic } from './_atomic_write.mjs';
 import { failedTests } from '../../scripts/lib/mutationCheck.mjs';
 import {
   SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, disconnectedReason, systemActionIntent, systemStateOf,
@@ -399,9 +400,9 @@ if (!process.env.D5065_SKIP_MUTATIONS) {
     assert.equal(original.split(check.before).length - 1, 1, `mutation target is not unique: ${check.name}`);
     let result;
     try {
-      writeFileSync(file, original.replace(check.before, check.after));
+      writeFileAtomic(file, original.replace(check.before, check.after));
       result = run(check.pattern);
-    } finally { writeFileSync(file, original); }
+    } finally { writeFileAtomic(file, original); }
     assert.notEqual(result.status, 0, `the mutation went unnoticed by "${check.pattern}": ${(result.stdout ?? '').slice(-1500)}`);
     assert.ok(failedTests(result.stdout).some(name => name.includes(check.pattern)), `wrong mutation failure for ${check.name}: ${(result.stdout ?? '').slice(-1500)}`);
     assert.equal(readFileSync(file, 'utf8'), original, 'the private source was not restored');

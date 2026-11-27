@@ -161,7 +161,8 @@ test('#4568 R2-04: the ratchet refuses growth, a new blind file and a stale entr
     const { [someFile]: _drop, ...without } = baseline;
     assert.deepEqual(ratchet(inv, without).grown.map((g: any) => g.file), [someFile], 'a blind file not on record is refused');
     assert.deepEqual(ratchet(inv, { ...baseline, 'cloudflare-worker/src/gone.ts': 3 }).shrunk.map((s: any) => s.file), ['cloudflare-worker/src/gone.ts'], 'a stale entry must be lowered');
-    assert.ok(inv.totals.blind_declared >= 300, 'most blind ALTERs are for columns a migration already declares');
+    // #5343 shrinks the blind count batch by batch, so this pins the share, not a floor that each batch would break.
+    assert.equal(inv.totals.blind_declared, inv.totals.blind_alters, 'every blind ALTER left is for a column a migration already declares');
   } finally { db.close(); }
 });
 

@@ -350,6 +350,23 @@ export function filterChips(filters = {}, { superAdmin = false, reviewers = [] }
   return chips;
 }
 
+/**
+ * D8728 (SAD03, SAD03P): what a filtered read leaves out, so a landing opened
+ * with `?age=past` says that the other waiting items exist. The Worker sends
+ * `unfiltered_total` only for a filtered read; with either figure missing
+ * (a lane cut at the cap, a total withheld) the line is not drawn, rather
+ * than guessed.
+ */
+export function hiddenByFilter(reply, filters = {}) {
+  if (!reply || reply.unfiltered_total == null || reply.total == null) return null;
+  const n = Number(reply.unfiltered_total) - Number(reply.total);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const chips = filterChips(filters).length;
+  if (!chips) return null;
+  const many = chips > 1;
+  return `${nf(n)} more waiting ${n === 1 ? 'is' : 'are'} hidden by ${many ? 'these filters' : 'this filter'}.`;
+}
+
 /* ------------------------------------------------------------------ *
  * Waiting on HQ (APR1)
  * ------------------------------------------------------------------ */
