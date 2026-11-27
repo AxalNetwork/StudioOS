@@ -68,11 +68,11 @@ export function claimEvidence(number, { ref, message, status, handbackComment },
   if (status !== 404) return { state: 'unknown', status: status ?? null };
   const latestStatus = [...comments].reverse().find(comment => /(?:^|\n)STATUS\s*\n/.test(comment.body || ''));
   if (issue.labels.includes('state:in-progress')) return { state: 'unknown', reason: 'issue still marked in progress' };
-  if (/claimed by label/i.test(latestStatus?.body || '')) {
+  if (issue.assignees?.length || /claimed by label/i.test(latestStatus?.body || '')) {
     const handback = comments.find(comment => comment.id === handbackComment);
     if (!handback || !['OWNER', 'MEMBER', 'COLLABORATOR'].includes(handback.author_association)
       || !/\bhand(?:s|ed)?[ -]back\b|\brelease(?:d|s)?\s+(?:the\s+)?claim\b/i.test(handback.body || '')
-      || handback.created_at <= latestStatus.created_at) return { state: 'unknown', reason: 'label-based ownership needs a verified handback' };
+      || (latestStatus && handback.created_at <= latestStatus.created_at)) return { state: 'unknown', reason: 'assignee or label-based ownership needs a verified handback' };
     return { state: 'absent', handback: { id: handback.id, url: handback.html_url } };
   }
   return { state: 'absent' };

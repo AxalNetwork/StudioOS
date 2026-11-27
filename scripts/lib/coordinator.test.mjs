@@ -167,6 +167,7 @@ test('expired claims stay held and a 403 or a label receipt cannot supply absenc
   assert.equal(claimEvidence(8661, { status: 403 }, issue, []).state, 'unknown');
   assert.equal(claimEvidence(8661, {}, issue, []).state, 'unknown');
   assert.equal(claimEvidence(8661, { status: 404 }, issue, [{ body: 'STATUS\nClaimed by label' }]).state, 'unknown');
+  assert.equal(claimEvidence(8661, { status: 404 }, { ...issue, assignees: ['current-holder'] }, []).state, 'unknown');
   assert.equal(claimEvidence(8661, { status: 404 }, issue, []).state, 'absent');
   const comments = [
     { id: 17, body: 'STATUS\nClaimed by label', created_at: '2026-01-01' },
