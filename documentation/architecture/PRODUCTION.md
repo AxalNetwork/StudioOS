@@ -84,8 +84,11 @@ There is no separate frontend deploy. `axal.vc` and `app.axal.vc` are both
 whole-host Workers Custom Domains of the `studioos` Worker (`wrangler.toml`
 `[[routes]]` and `[[env.production.routes]]`, each `custom_domain = true`),
 and the Worker serves the SPA on both from its own `[assets]` binding
-(`directory = "./docs"`, `not_found_handling = "single-page-application"`,
-`run_worker_first` for `/api/*`, `/landing/*`, `/p/*` and `/assets/*`). One
+(`directory = "./docs"`, `not_found_handling = "single-page-application"`).
+The paths the Worker script must answer before the assets binding (`/api/*`,
+`/mcp`, `/assets/*` and the other prefixes the comment above that table
+explains) are the `run_worker_first` list in `wrangler.toml` `[assets]`,
+mirrored under `[env.production.assets]`; read the list there, not in prose. One
 build sits behind both hosts and they ship together on every
 `wrangler deploy` — `npm run deploy` by hand, or
 `.github/workflows/cloudflare-worker-deploy.yml` on every push to `main`. A
@@ -316,7 +319,7 @@ D2403: a founder's own X connection uses a second HQ-owned "founders" X app, nev
 
 The worker enforces per-bucket limits via KV (`RATE_LIMITS`). FastAPI mirrors
 the same layout for local-dev parity. See
-`cloudflare-worker/src/services/rateLimit.ts` and
+`cloudflare-worker/src/middleware/rateLimit.ts` and
 `backend/app/services/rate_limit.py`.
 
 | Bucket    | Limit          | Scope    | Applies to                                              |

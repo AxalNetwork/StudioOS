@@ -11,12 +11,14 @@
 # beside it made it inert. That script, and the Cloudflare Pages mirror it ran
 # on, are retired; this file is the only thing setting headers on the shell.
 #
-# NOT applied to responses the Worker script generates — the
-# `run_worker_first` paths `/api/*`, `/landing/*`, `/p/*` and `/assets/*`.
-# The first three get cloudflare-worker/src/middleware/securityHeaders.ts;
-# `/assets/*` is answered by cloudflare-worker/src/index.ts straight from the
-# assets binding, which is why there is no `/assets/*` Cache-Control rule
-# here — it would be inert.
+# NOT applied to any path in the `run_worker_first` list of wrangler.toml
+# `[assets]`, whatever that list holds: those requests run the Worker script,
+# not the assets binding, and the Worker sets their headers itself (the
+# comment above `[assets]` says which handler answers which prefix; the Hono
+# app uses cloudflare-worker/src/middleware/securityHeaders.ts). `/assets/*` is
+# answered by cloudflare-worker/src/index.ts straight from the assets binding,
+# which is why there is no `/assets/*` Cache-Control rule here — it would be
+# inert.
 #
 # Values are the Worker middleware's own (securityHeaders.ts).
 # frontend/test/apex_truth_doc.test.mjs fails if the two drift apart, and
