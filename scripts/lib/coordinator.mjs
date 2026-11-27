@@ -377,11 +377,12 @@ export function planFromFindings(findings, { evidence, canClose } = {}) {
       merged.unfinished = v.unfinished || 'Verified full-scope evidence on main is still needed.';
     }
     const quiet = f.verdict === 'keep_as_is' && !merged.remaining_work && !merged.owner_question && !f.label_change;
+    const note = protectedIssue || v.note_supported !== true || quiet ? null : merged;
     return {
       number: f.number,
       kind: f.kind || null,
-      note: protectedIssue || (evidence ? v.note_supported !== true : v.note_supported === false) || quiet ? null : merged,
-      labelChange: protectedIssue || closing || v.label_change_ok !== true ? null : f.label_change || null,
+      note,
+      labelChange: !note || closing || v.label_change_ok !== true ? null : f.label_change || null,
       close: closing ? (f.verdict === 'close_superseded' ? 'not_planned' : 'completed') : null,
       ...(facts ? { evidence: facts } : {}),
     };

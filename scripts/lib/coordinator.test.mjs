@@ -114,13 +114,14 @@ test('the status note starts with S1: and ends with the marker', () => {
 });
 
 test('planFromFindings closes only what the verifier allowed and drops unsupported notes', () => {
-  const evidence = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].map(number => [number,
+  const evidence = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map(number => [number,
     { issue: { number }, facts: { claim: { state: 'absent' } } }]));
   const steps = planFromFindings([
     { number: 1, verdict: 'close_done', verification: { safe_to_close: true, note_supported: true } },
     { number: 2, verdict: 'close_done', verification: { safe_to_close: false, unfinished: 'U', label_change_ok: true, note_supported: true }, label_change: { state: 'state:ready' } },
     { number: 7, verdict: 'close_done', verification: { safe_to_close: true, note_supported: false } },
     { number: 8, verdict: 'needs_status_fix', label_change: { state: 'state:ready' }, verification: {} },
+    { number: 9, verdict: 'needs_status_fix', label_change: { state: 'state:ready' }, verification: { note_supported: false, label_change_ok: true } },
     { number: 3, verdict: 'needs_status_fix', label_change: { state: 'state:blocked' }, verification: { note_supported: false, label_change_ok: false } },
     { number: 4, verdict: 'keep_as_is', verification: {} },
     { number: 5, verdict: 'split_or_rescope', remaining_work: 'old', verification: { note_supported: true, corrected: { remaining_work: 'new' } } },
@@ -135,6 +136,7 @@ test('planFromFindings closes only what the verifier allowed and drops unsupport
   assert.equal(st(6).close, 'not_planned');
   assert.equal(st(7).close, null, 'no close without its note');
   assert.equal(st(8).labelChange, null, 'a label change nobody verified is dropped');
+  assert.equal(st(9).labelChange, null, 'a label change needs a supported note for apply and recovery');
   assert.throws(() => planFromFindings([{ number: 1, verdict: 'keep_as_is' }, { number: 1, verdict: 'keep_as_is' }]), /two findings/);
 });
 

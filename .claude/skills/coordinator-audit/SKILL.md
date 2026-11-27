@@ -37,7 +37,7 @@ scratchpad folder, `DIR`. Every command below is run from the repository root.
    `sections` is optional: a list of `{ key, who, pages: [routes] }` for a page audit (the founder and investor groups are in `RULES.md`). It reads only. If the container restarts, re-run it with `resumeFromRunId`; finished agents replay from cache.
 5. **Save and plan.** Write the workflow's result to `DIR/result.json`, then
    `node scripts/coordinator.mjs plan --in DIR/result.json --out DIR`.
-   A finding the verifier did not support gets no note; a label change it did not accept is dropped; a close happens only where it said `safe_to_close` and its note is supported. If the plan prints `PRIVATE`, the run found a security flaw: send `DIR/private-notes.json` to the owner privately (a draft security advisory) and never post it on an issue.
+   A state change requires the verifier's approval and a supported note. A close also requires `safe_to_close` and verified source or replacement evidence. If the plan prints `PRIVATE`, the run found a security flaw: send `DIR/private-notes.json` to the owner privately (a draft security advisory) and never post it on an issue.
 6. **Dry run, then apply.**
    `node scripts/coordinator.mjs apply --dir DIR --run <runId>` prints every change (the run id must be the one the workflow was given). Read it. Then add `--go`.
    Before changing each issue it rechecks main, issue fields, comments, relevant PRs, dependencies and claim evidence. Any mismatch skips the item and its pending note. Triage `DIR/stale-<runId>.json` again with a new run id. A second check after the note prevents overwriting an edit made between the note and the state change. GitHub issue comments and state changes are separate requests.
