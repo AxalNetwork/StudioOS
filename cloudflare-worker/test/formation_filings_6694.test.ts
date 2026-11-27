@@ -109,13 +109,15 @@ const ACCEPT = { decidedOn: '2026-11-10', registrationNumber: 'DE-7781234', cert
 test('submitting without the founder approving that pack hash is refused; a new pack clears the approval', async () => {
   const { db, env } = fixture();
   const id = await prepared(env, false);
-  assert.equal((await quiet(() => markReadyToFile(env, id, HQ))).ok, true);
   assert.deepEqual(await submitFiling(env, id, { submittedOn: '2026-11-02' }, HQ, TODAY), { ok: false, status: 409, error: 'founder_approval_required' });
+  // D6706: the case reaches ready_to_file only once the founder approved the pack.
+  assert.deepEqual(await markReadyToFile(env, id, HQ), { ok: false, status: 409, error: 'founder_approval_required' });
 
   assert.deepEqual(await approvePack(env, id, { packSha256: SHA_B }, FOUNDER_ACTOR), { ok: false, status: 409, error: 'pack_changed' }, 'an approval of another hash');
   assert.deepEqual(await approvePack(env, id, { packSha256: SHA_A }, HQ), { ok: false, status: 403, error: 'founder_only' });
   assert.deepEqual(await approvePack(env, id, { packSha256: SHA_A }, { party: 'founder', userId: OTHER }), { ok: false, status: 403, error: 'founder_only' }, 'another founder');
   assert.equal((await approvePack(env, id, { packSha256: SHA_A }, FOUNDER_ACTOR)).ok, true);
+  assert.equal((await quiet(() => markReadyToFile(env, id, HQ))).ok, true);
 
   // A new pack clears it: the founder approved pack A, not pack B.
   assert.equal((await setPack(env, id, { packDocumentId: 51, packSha256: SHA_B }, HQ)).ok, true);
