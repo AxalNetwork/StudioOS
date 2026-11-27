@@ -8,7 +8,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
-  ReportingArchive, statusOf, periodsFor, periodCounts, periodPath, newPeriodPath, NO_FUND_REASON,
+  ReportingArchive, statusOf, periodsFor, periodCounts, periodPath, newPeriodPath, NO_FUND_REASON, deliveryNote,
 } from '../src/pages/investor/InvestorFundReporting.jsx';
 import { investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
 import { investorZoneActions } from '../src/workspaces/investorZoneActions.js';
@@ -41,7 +41,7 @@ test('the Issued and Draft chips select rows with that status, and their counts 
   assert.deepEqual(periodsFor('draft', ROWS).map((r) => r.id), [3]);
   assert.equal(periodsFor('all', ROWS).length, 3);
   const counts = periodCounts(ROWS);
-  assert.deepEqual(counts, { all: 3, issued: 2, draft: 1 });
+  assert.deepEqual(counts, { all: 3, issued: 2, draft: 1, undelivered: 0 });
 
   let picked = null;
   const chips = investorZoneFilters('funds/reporting', { value: 'all', onChange: (k) => { picked = k; }, counts });
@@ -54,10 +54,45 @@ test('the Issued and Draft chips select rows with that status, and their counts 
     byLabel[label].onSelect();
     assert.equal(periodsFor(picked, ROWS).length, n, `${label} selected ${periodsFor(picked, ROWS).length}`);
   }
-  // Delivery narrowed on fields no period carries; it is a stated gap, not a chip.
-  const delivery = chips.find((c) => c.label === 'Delivery');
-  assert.equal(delivery.disabled, true);
-  assert.equal(delivery.onSelect, undefined);
+  // D6240: Delivery selects issued periods whose recorded delivery missed an LP.
+  const delivery = chips.find((c) => String(c.label).startsWith('Not all delivered'));
+  assert.ok(delivery && !delivery.disabled, `no live "Not all delivered" chip in ${chips.map((c) => c.label)}`);
+  delivery.onSelect();
+  assert.equal(picked, 'undelivered');
+});
+
+// D6240 rows: recorded 2 of 3, recorded 3 of 3, issued before delivery was recorded, and a draft.
+const DELIVERY_ROWS = [
+  { ...ROWS[0] },
+  { ...ROWS[1], lp_delivery: { state: 'recorded', delivered: 2, total: 3, opened: 1, failed: 0, no_account: 1 } },
+  { ...ROWS[2], lp_delivery: { state: 'recorded', delivered: 3, total: 3, opened: 0, failed: 0, no_account: 0 } },
+  { id: 0, fund_id: 10, period: 'Q4 2025', period_start: '2025-10-01', period_end: '2025-12-31', status: 'issued', issued_at: '2026-01-15T10:00:00Z', narrative: {},
+    lp_delivery: { state: 'not_recorded', delivered: null, total: null, opened: null, failed: null, no_account: null } },
+];
+
+test('D6240: the archive shows n of m, and a period issued before delivery was recorded reads Not recorded, never 0 of m', () => {
+  const html = render({ rows: DELIVERY_ROWS });
+  const cells = [...html.matchAll(/data-testid="cell-period-delivered">(.*?)<\/td>/g)].map((m) => m[1].replace(/<[^>]+>/g, '|'));
+  assert.deepEqual(cells, [
+    'Not sent',
+    '2 of 3|1 opened · 1 no account|',
+    '3 of 3',
+    'Not recorded · issued before delivery was recorded',
+  ]);
+  assert.doesNotMatch(html, /0 of/);
+});
+
+test('D6240: Not all delivered selects only a recorded shortfall', () => {
+  assert.deepEqual(periodsFor('undelivered', DELIVERY_ROWS).map((r) => r.id), [2]);
+  assert.equal(periodCounts(DELIVERY_ROWS).undelivered, 1);
+});
+
+test('D6240: the Delivered tile names the latest issued period, and says Not recorded for one issued before delivery was recorded', () => {
+  assert.equal(deliveryNote(true, DELIVERY_ROWS[1], 'recorded'), 'LPs reached · Q2 2026');
+  assert.equal(deliveryNote(true, DELIVERY_ROWS[3], 'not_recorded'), 'Q4 2025 was issued before delivery was recorded');
+  assert.equal(deliveryNote(true, null, undefined), 'No issued period yet');
+  assert.equal(deliveryNote(false, null, undefined), 'Not read');
+  assert.equal(deliveryNote(true, DELIVERY_ROWS[1], 'unreadable'), 'Per-LP delivery could not be read');
 });
 
 test('the page reads the selected fund only: no unscoped LP report list replaces its periods', () => {
