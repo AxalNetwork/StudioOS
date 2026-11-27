@@ -14,7 +14,7 @@ import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts'
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 
 test.after(removeMigratedDatabases);
-const SECRET = 'synthetic-7674-merge-secret-'.repeat(3);
+const SECRET = `${crypto.randomUUID()}${crypto.randomUUID()}`;
 const MARKER = 'PLANTED-7674-MERGE-PRIVATE-MARKER';
 const migration = readFileSync(new URL('../sql/migrations/202611271715_7674_network_directory_merge_alias.sql', import.meta.url), 'utf8');
 const T0 = '2026-11-19T12:00:00.000Z';
