@@ -79,6 +79,8 @@ partnerPipeline.get('/activity', async (c) => {
     if (raw != null && (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(needId))) {
       return c.json({ detail: 'Name an opportunity by its need ID.' }, 400);
     }
+    // #9170: D1 refuses a compound SELECT of more than five terms ("too many terms in compound SELECT"), so the six
+    // kinds are two unions of three, joined in `events` (scripts/check-compound-select.mjs holds every route to five).
     const { results } = await c.env.DB.prepare(
       `WITH scoped_quotes AS (
          SELECT id, need_id, status, decided_at FROM quotes
@@ -88,7 +90,7 @@ partnerPipeline.get('/activity', async (c) => {
          SELECT id, need_id FROM engagements
          WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
            AND (? IS NULL OR need_id = ?)
-       ), events AS (
+       ), proposal_events AS (
          SELECT need_id, 'passed' AS kind, passed_at AS occurred_at, id AS source_id
            FROM partner_lead_passes WHERE partner_id = ? AND (? IS NULL OR need_id = ?)
          UNION ALL
@@ -97,8 +99,8 @@ partnerPipeline.get('/activity', async (c) => {
          UNION ALL
          SELECT need_id, CASE status WHEN 'accepted' THEN 'proposal_won' ELSE 'proposal_lost' END, decided_at, id
            FROM scoped_quotes WHERE status IN ('accepted', 'rejected') AND decided_at IS NOT NULL
-         UNION ALL
-         SELECT q.need_id, 'negotiation_moved', g.last_moved_at, g.id
+       ), engagement_events AS (
+         SELECT q.need_id AS need_id, 'negotiation_moved' AS kind, g.last_moved_at AS occurred_at, g.id AS source_id
            FROM quote_negotiations g JOIN scoped_quotes q ON q.id = g.quote_id
          UNION ALL
          SELECT e.need_id, 'retainer_created', r.created_at, r.id
@@ -106,6 +108,10 @@ partnerPipeline.get('/activity', async (c) => {
          UNION ALL
          SELECT e.need_id, 'retainer_ended', r.ended_at, r.id
            FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id WHERE r.ended_at IS NOT NULL
+       ), events AS (
+         SELECT need_id, kind, occurred_at, source_id FROM proposal_events
+         UNION ALL
+         SELECT need_id, kind, occurred_at, source_id FROM engagement_events
        )
        SELECT e.kind, e.occurred_at, e.source_id, n.id AS need_id, n.uid AS need_uid, n.title
        FROM events e JOIN founder_needs n ON n.id = e.need_id

@@ -3,8 +3,9 @@ import type { Env } from '../types';
 import type { MemberFileKind } from './memberFiles';
 type Candidate = { source:string; id:number; r2_key:string; owner_user_id:number|null; scope_valid:number };
 // Completed rows are durable checkpoints; UNION ALL + LIMIT stops at one bounded
-// batch without sorting every remaining file in every source.
-const PENDING = `SELECT 'demand' AS source,id,evidence_file_key AS r2_key,NULL AS owner_user_id,scope_valid FROM
+// batch without sorting every remaining file in every source. #9170: D1 refuses a
+// compound SELECT of more than five terms, so the last two sources are one nested union.
+export const PENDING = `SELECT 'demand' AS source,id,evidence_file_key AS r2_key,NULL AS owner_user_id,scope_valid FROM
  (SELECT id,evidence_file_key,evidence_file_key GLOB ('validate-evidence/'||project_id||'/*') AS scope_valid FROM demand_signals WHERE evidence_file_key IS NOT NULL AND evidence_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND size_unmeasurable_at IS NULL AND id>? ORDER BY id LIMIT ?)
  UNION ALL SELECT 'formation',id,proof_file_key,NULL,scope_valid FROM
  (SELECT id,proof_file_key,proof_file_key GLOB ('build-proof/'||project_id||'/*') AS scope_valid FROM formation_steps WHERE proof_file_key IS NOT NULL AND proof_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND size_unmeasurable_at IS NULL AND id>? ORDER BY id LIMIT ?)
@@ -12,12 +13,12 @@ const PENDING = `SELECT 'demand' AS source,id,evidence_file_key AS r2_key,NULL A
  (SELECT id,proof_file_key,EXISTS (SELECT 1 FROM projects p WHERE p.id=CAST(substr(proof_file_key,13) AS INTEGER) AND p.entity_id=entity_obligations.entity_id AND proof_file_key GLOB ('build-proof/'||p.id||'/*')) AS scope_valid FROM entity_obligations WHERE proof_file_key IS NOT NULL AND proof_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND size_unmeasurable_at IS NULL AND id>? ORDER BY id LIMIT ?)
  UNION ALL SELECT 'minutes',id,minutes_file_key,NULL,scope_valid FROM
  (SELECT id,minutes_file_key,EXISTS (SELECT 1 FROM compliance_events e WHERE e.id=event_id AND minutes_file_key GLOB ('grow-minutes/'||e.project_id||'/*')) AS scope_valid FROM obligation_occurrences WHERE minutes_file_key IS NOT NULL AND minutes_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND size_unmeasurable_at IS NULL AND id>? ORDER BY id LIMIT ?)
- UNION ALL SELECT 'import',id,raw_file_r2_key,NULL,scope_valid FROM
+ UNION ALL SELECT source,id,r2_key,owner_user_id,scope_valid FROM (SELECT 'import' AS source,id,raw_file_r2_key AS r2_key,NULL AS owner_user_id,scope_valid FROM
  (SELECT id,raw_file_r2_key,raw_file_r2_key GLOB ('imports/'||user_id||'/*') AS scope_valid FROM data_imports WHERE raw_file_r2_key IS NOT NULL AND raw_file_r2_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND size_unmeasurable_at IS NULL AND id>? ORDER BY id LIMIT ?)
  UNION ALL SELECT 'member',id,r2_key,owner_user_id,scope_valid FROM
  (SELECT f.id,f.r2_key,f.owner_user_id,f.r2_key GLOB ((CASE f.kind WHEN 'headshot' THEN 'headshots/' ELSE 'brand-logos/' END)||COALESCE(CAST(f.owner_user_id AS TEXT)||'/', '')||'*') AS scope_valid FROM member_files f WHERE f.size_missing_at IS NULL AND f.size_unmeasurable_at IS NULL
    AND (f.size_bytes IS NULL OR (f.kind='headshot' AND (f.size_recheck_required=1 OR f.owner_user_id IS NULL)))
-   AND f.id>? AND (f.size_bytes IS NULL OR (f.id>? AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id=f.owner_user_id AND u.headshot_r2_key=f.r2_key))) ORDER BY f.id LIMIT ?)
+   AND f.id>? AND (f.size_bytes IS NULL OR (f.id>? AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id=f.owner_user_id AND u.headshot_r2_key=f.r2_key))) ORDER BY f.id LIMIT ?))
  LIMIT ?`;
 const prefixes:Record<string,string>={demand:'validate-evidence/',formation:'build-proof/',obligation:'build-proof/',minutes:'grow-minutes/',import:'imports/'};
 function namespaceOwner(key:string):number|null {
