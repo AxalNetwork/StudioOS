@@ -23,8 +23,14 @@ function section(md, heading) {
   assert.ok(start >= 0, `missing heading: ${heading}`);
   const level = /^#+/.exec(heading)[0].length;
   const rest = md.slice(start + heading.length);
-  const next = rest.search(new RegExp(`\\n#{1,${level}} `));
-  return heading + (next < 0 ? rest : rest.slice(0, next));
+  // The next line that is a heading of this level or higher ends the section (no regex built from data).
+  const lines = rest.split('\n');
+  const end = lines.findIndex((line, i) => {
+    if (i === 0) return false;
+    const hashes = line.length - line.replace(/^#+/, '').length;
+    return hashes >= 1 && hashes <= level && line[hashes] === ' ';
+  });
+  return heading + (end < 0 ? rest : lines.slice(0, end).join('\n'));
 }
 
 const AGENTS = read('AGENTS.md');
@@ -61,7 +67,7 @@ test('every variable the landing text names is read by a workflow, and the READM
   }
   const landingVars = new Set(landingWorkflows.flatMap((f) => [...read(`${WF}/${f}`).matchAll(/vars\.((?:LANDING|QUEUE)_[A-Z_]+)/g)].map((m) => m[1])));
   const table = WF_README.slice(WF_README.indexOf('| Actions variable |'));
-  for (const v of landingVars) assert.match(table, new RegExp(`\`${v}\``), `the workflows README's variable table omits \`${v}\``);
+  for (const v of landingVars) assert.ok(table.includes(`\`${v}\``), `the workflows README's variable table omits \`${v}\``);
 });
 
 test('every workflow the landing text names exists, and the README table lists each landing workflow with its triggers', () => {
@@ -93,9 +99,10 @@ test('the three values of LANDING_BOT_ENABLED are the ones mode() reads', () => 
 
 test('the numbers the rules state are the bot\'s constants, and the breakers are its alerts', () => {
   const words = { 2: 'two', 3: 'three', 4: 'four' };
-  assert.match(BOT_SECTION, new RegExp(`${words[MAX_ATTEMPTS]}\\s+attempts of each kind, ${words[MAX_BOT_COMMITS_PER_DAY]} bot commits and ${words[MAX_MODEL_RUNS_PER_DAY]} model runs in any 24 hours,\\s+${words[KEEPER_MAX_ATTEMPTS]} keeper attempts for good`));
-  assert.match(RED_MAIN, new RegExp(`${words[KEEPER_MAX_ATTEMPTS]} keeper attempts per PR`));
+  // Whitespace is folded so a line break in the prose does not matter; each phrase is compared literally.
   const flat = (s) => s.replace(/\s+/g, ' ');
+  assert.ok(flat(BOT_SECTION).includes(`${words[MAX_ATTEMPTS]} attempts of each kind, ${words[MAX_BOT_COMMITS_PER_DAY]} bot commits and ${words[MAX_MODEL_RUNS_PER_DAY]} model runs in any 24 hours, ${words[KEEPER_MAX_ATTEMPTS]} keeper attempts for good`), 'the landing section states the per-PR caps as the bot defines them');
+  assert.ok(flat(RED_MAIN).includes(`${words[KEEPER_MAX_ATTEMPTS]} keeper attempts per PR`), 'Red main states the keeper cap as the bot defines it');
   for (const alert of BREAKER_ALERTS) {
     assert.ok(flat(BOT_SECTION).includes(`\`${alert}\``), `AGENTS.md omits the breaker ${alert}`);
     assert.ok(flat(WF_README).includes(`\`${alert}\``), `the workflows README omits the breaker ${alert}`);
