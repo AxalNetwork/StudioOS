@@ -25,6 +25,7 @@
 -- columns (scripts/import-research-funds.py writes INSERT OR REPLACE) cannot
 -- blank them. A row of an unlisted list is never stamped. Additive: nothing is
 -- dropped, no size changes.
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611270508_7744_research_fund_size_currency_and_kind.fix.sql
 
 ALTER TABLE research_fund_directory ADD COLUMN fund_size_currency TEXT;
 ALTER TABLE research_fund_directory ADD COLUMN record_kind TEXT;
