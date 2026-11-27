@@ -36,7 +36,7 @@ export const FEED_OUTCOMES = Object.freeze(['ok', 'refused', 'live', 'ended', 'n
 export const SESSION_REVOKE_OUTCOMES = Object.freeze(['revoked', 'already_revoked', 'not_found']);
 export const DEPLOYMENT_OUTCOMES = Object.freeze(['done', 'failed', 'unreachable', 'not_reached', 'unknown']);
 export const ACT_OUTCOMES = Object.freeze(['done', 'partial', 'failed']);
-export const DSR_CLOSE_STATUSES = Object.freeze(['closed', 'stale', 'not_open', 'key_conflict', 'unconfirmed']);
+export const DSR_CLOSE_STATUSES = Object.freeze(['closed', 'stale', 'not_open', 'key_conflict', 'unconfirmed', 'erasure_failed']);
 
 export const MUTATION_RESULTS = Object.freeze([
   'done', 'partial', 'already_revoked', 'not_found', 'expired', 'refused', 'failed', 'unknown',

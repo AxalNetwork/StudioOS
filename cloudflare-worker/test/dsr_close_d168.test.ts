@@ -302,13 +302,14 @@ test('the route is behind the write bar, and its audit row names the subject', (
     'the audit row no longer names the subject — the governance feed would show a blank Target');
 });
 
-test('"fulfilled" never claims the platform deleted anything', () => {
-  // The one thing this PR must not imply. There is no erasure path anywhere in
-  // the codebase, so an outcome or a message that read as a deletion would be
-  // a false statement in a compliance record.
+test('"fulfilled" never claims the platform deleted more than it did', () => {
+  // The one thing this PR must not imply. The only erasure the platform has is
+  // the account's agent data (D1530, run by the close since D9046), so a
+  // message that read as a wider deletion would be a false statement in a
+  // compliance record.
   const handler = closeRouteSource();
-  assert.match(handler, /does not itself erase anything|records that the manual act/i,
-    'the fulfilled response no longer says the platform erases nothing');
+  assert.match(handler, /it erases nothing else — the rest is the manual act you are recording/i,
+    'the fulfilled response no longer says the platform erases nothing beyond the agent data');
   assert.match(SERVICE, /decision record/i,
     'the service no longer states that an outcome is a decision record rather than a deletion');
 });

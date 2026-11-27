@@ -18,11 +18,17 @@
  * a real database here.
  *
  * WHAT `fulfilled` MEANS, once, where every caller can see it: the manual
- * erasure was carried out. This platform performs none — there is no
- * DELETE FROM users, no `deleted_at` and no anonymisation anywhere in the
- * codebase, and inventing one needs a retention and legal-hold policy nobody
- * has written. The outcome is a decision record. An audit row implying a
- * deletion that did not happen would be worse than the gap it closes.
+ * erasure was carried out, and the one erasure the platform has ran first.
+ * That one is `eraseAccountAgents` (D1530): the runtime of the agents the
+ * account sponsors, their memory notes, run summaries and queued tasks. The
+ * close runs it as a step (`DsrCloseInput.erase`, D9046) after confirming the
+ * reviewed request is the open one and before anything is recorded; if it
+ * throws, nothing is recorded and the request stays open. Beyond that the
+ * platform erases nothing — there is no DELETE FROM users, no `deleted_at` and
+ * no anonymisation anywhere in the codebase, and inventing one needs a
+ * retention and legal-hold policy nobody has written. The outcome is a
+ * decision record. An audit row implying a deletion that did not happen would
+ * be worse than the gap it closes.
  */
 import type { Env } from '../types';
 import { adminAuditStatement } from './adminAudit';
@@ -260,6 +266,12 @@ export type DsrCloseInput = {
   /** The ledger row the list showed, or null for a request the ledger does not hold yet. */
   requestId: number | null;
   closeKey: string;
+  /**
+   * D9046: the platform's own erasure for this account (`eraseAccountAgents`),
+   * run only for `fulfilled`, only once the reviewed request is confirmed open,
+   * and before the ledger is written. A throw records nothing.
+   */
+  erase?: () => Promise<void>;
 };
 
 export type DsrClosedLedgerRow = {
@@ -277,13 +289,34 @@ export type DsrCloseResult =
   /** The key belongs to a different close. Nothing was written. */
   | { status: 'key_conflict' }
   /** The batch ran, and what it did could not be read back. Retrying with the same key is safe. */
-  | { status: 'unconfirmed'; reason: string };
+  | { status: 'unconfirmed'; reason: string }
+  /** D9046: the erasure step threw. Nothing was recorded and the request is still open; retrying is safe. */
+  | { status: 'erasure_failed' };
 
 async function closedByKey(env: Env, closeKey: string): Promise<DsrClosedLedgerRow | null> {
   return (await env.DB.prepare(
     `SELECT id, user_id, requested_at, outcome, closed_at, closed_by_user_id
        FROM dsr_requests WHERE close_key = ?`,
   ).bind(closeKey).first<DsrClosedLedgerRow>()) ?? null;
+}
+
+/**
+ * D9046 — the claim's own conditions, read before the erasure: the subject's
+ * flag holds the reviewed stamp, the named ledger row (if any) is open with that
+ * stamp, and no other open row would make the derive a no-op and the claim miss.
+ */
+async function reviewedRequestIsOpen(env: Env, input: DsrCloseInput): Promise<boolean> {
+  const { userId, requestedAt, requestId } = input;
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok FROM users u
+      WHERE u.id = ? AND u.deletion_requested_at = ?
+        AND NOT EXISTS (SELECT 1 FROM dsr_requests d
+                         WHERE d.user_id = u.id AND d.outcome IS NULL
+                           AND (d.requested_at <> ? OR (? IS NOT NULL AND d.id <> ?)))
+        AND (? IS NULL OR EXISTS (SELECT 1 FROM dsr_requests d
+                                   WHERE d.id = ? AND d.user_id = u.id AND d.outcome IS NULL AND d.requested_at = ?))`,
+  ).bind(userId, requestedAt, requestedAt, requestId, requestId, requestId, requestId, requestedAt).first<{ ok: number }>();
+  return !!row;
 }
 
 /** A row found by key is this close only if it is the same subject, operator and outcome. */
@@ -322,6 +355,22 @@ export async function closeDsrRequest(env: Env, input: DsrCloseInput): Promise<D
 
   const prior = await closedByKey(env, closeKey);
   if (prior) return sameClose(prior, input) ? { status: 'closed', replayed: true, row: prior } : { status: 'key_conflict' };
+
+  // D9046 — ERASE, THEN RECORD, AND ONLY THE REQUEST REVIEWED. The erasure
+  // runs only when the claim below would hold: the flag still carries the
+  // reviewed stamp, and the ledger's open row (if any) is that request. A stale
+  // or closed request is left to the batch, which records nothing and says so,
+  // so an erasure is never run on a review the close then refuses. A throw
+  // returns before the batch: the ledger and the flag are untouched, and a
+  // retry is safe because the erasure is a set of DELETEs.
+  if (outcome === 'fulfilled' && input.erase && await reviewedRequestIsOpen(env, input)) {
+    try {
+      await input.erase();
+    } catch {
+      console.warn('[dsr] erasure_step_failed');
+      return { status: 'erasure_failed' };
+    }
+  }
 
   const auditDetails = { reason, target_user_id: userId, outcome, requested_at: requestedAt, close_key: closeKey };
   const actorHash = await hashEmail(input.actorEmail || '');
