@@ -209,7 +209,7 @@ function FieldHead({ fill, name, label, value, busy, children }) {
 /** What stays live behind an open form: the AIRail and the Ask panel (`data-sheet-keep`, D1317's own mark). */
 export const FORM_KEEP = Object.freeze(['[data-sheet-keep]']);
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null, focusField = null }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, venture = null, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null, focusField = null }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
@@ -342,7 +342,8 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   if (!base) return null;
   const cycleKey = String(cycle ?? '').toLowerCase();
   const name = moduleName || MODULES[cycleKey]?.find((module) => module.slug === slug)?.name;
-  const eyebrow = [CYCLES[cycleKey]?.name || cycle, name].filter(Boolean).join(' · ');
+  // D8729 (#8729, SFD05): opened from Studio, the first line names the venture too: "Atlas Orchard · Build · Solution design".
+  const eyebrow = [typeof venture === 'string' && venture.trim() ? venture.trim() : null, CYCLES[cycleKey]?.name || cycle, name].filter(Boolean).join(' · ');
   const Assistant = formAssistant(cycleKey, slug, base.key);
   const save = async (event) => {
     event.preventDefault();

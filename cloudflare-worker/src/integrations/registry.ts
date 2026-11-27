@@ -181,6 +181,8 @@ export interface SyncResult {
   counts?: Record<string, number | boolean>;
   /** D782: the repositories (or other sources) this sync read, kept on its log row. */
   repositories?: string[];
+  /** D8774: the venture this sync read, for a provider that feeds one (GitHub); kept on its log row. */
+  project_id?: number;
   external_id?: string | null;
 }
 

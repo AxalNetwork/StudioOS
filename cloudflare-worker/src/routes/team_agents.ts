@@ -128,6 +128,18 @@ async function lastActivity(env: Env, agentId: number): Promise<string | null> {
   } catch { return null; }
 }
 
+/**
+ * D8769 (#8769): how many skills the agent holds, for the roster's "Can it run
+ * now" (an agent with none cannot run a skill). Null when it could not be
+ * read, never 0: the page draws an unread count as Not recorded.
+ */
+export async function skillCountOf(env: Env, agentId: number): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE agent_id = ?').bind(agentId).first<{ n: number }>();
+    return row && Number.isFinite(Number(row.n)) ? Number(row.n) : null;
+  } catch { return null; }
+}
+
 async function personOf(env: Env, userId: number | null): Promise<{ uid: string; name: string } | null> {
   if (!userId) return null;
   const u = await env.DB.prepare('SELECT uid, name FROM users WHERE id = ?').bind(userId).first<{ uid: string; name: string }>();
@@ -179,6 +191,8 @@ async function agentDto(env: Env, a: AgentRow) {
     scope_kind: a.scope_kind,
     project: project ? { id: project.id, name: project.name } : null,
     reads_line: await readsLineOf(env, a),
+    // D8769: an outside assistant holds no Axal skills, so it has no count.
+    skill_count: a.source === 'mcp_client' ? null : await skillCountOf(env, a.id),
   };
 }
 
@@ -200,7 +214,6 @@ const SKILL_WORDS = {
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again.',
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
-  role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
   capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 } as const;

@@ -71,6 +71,8 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)!));
   db.exec(MIGRATION);
+  // D8771 (#8771): the ledger records what each file carried.
+  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611270209_8771_deck_exports_disclosure.sql'), 'utf8'));
   db.prepare(`INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES (1, 'owner.3655@example.test', 'Founder', 'founder', 100, 1)`).run();
   db.prepare(`INSERT INTO projects (id, name, founder_id) VALUES (1, 'Testventure Labs', 100)`).run();
   db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 2, ?, 'Seed deck', 1, 1)`).run(JSON.stringify(SLIDES));

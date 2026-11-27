@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { Skeleton } from '../../ui';
 import { BTN_TEXT, HonestBlock, MUTED, TeamCard } from './teamUi.jsx';
 import * as agents from './agentsAdapter.js';
-import { coverageRows, coverageSummary } from './skillsModel.js';
+import { coverageRows } from './skillsModel.js';
+import { coverageSentence } from './agentChoiceModel.js';
 
 /**
  * D1612 (#3952, SK8) — Team coverage on the People and agents tab: people and
@@ -15,10 +17,11 @@ import { coverageRows, coverageSummary } from './skillsModel.js';
 
 export function CoverageTable({ axes }) {
   const rows = coverageRows(axes);
-  const summary = coverageSummary(rows);
+  const said = coverageSentence(rows);
   return (
     <div className="flex flex-col gap-2" data-testid="team-coverage">
-      <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-200">{summary ? <b>{summary}</b> : 'Every category with an agent on it also has a person on it.'}</p>
+      <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-200" data-testid="team-coverage-sentence" data-kind={said.kind}>{said.kind === 'gaps' || said.kind === 'zero' ? <b>{said.text}</b> : said.text}</p>
+      {said.sub ? <p className={`m-0 ${MUTED}`} data-testid="team-coverage-sub">{said.sub}</p> : null}
       <div role="table" aria-label="Team coverage" className="flex flex-col">
         <div role="row" className="hidden grid-cols-[150px_120px_130px_minmax(0,1fr)] gap-2.5 border-b border-axal-hairline pb-1.5 dark:border-gray-800 md:grid">
           {['Category', 'People', 'Agent', ''].map((c, i) => <span key={i} role="columnheader" className="font-mono text-[11px] uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">{c}</span>)}
@@ -36,11 +39,28 @@ export function CoverageTable({ axes }) {
   );
 }
 
+/** TMM09 A: the card while its read is under way. */
+export function CoverageReading() {
+  return (
+    <div aria-busy="true" className="flex flex-col gap-2" data-testid="team-coverage-reading">
+      <p role="status" className={`m-0 ${MUTED}`}>Reading team coverage…</p>
+      {[0, 1, 2, 3].map((i) => <Skeleton key={i} h={28} />)}
+    </div>
+  );
+}
+
 export default function TeamCoverageCard({ kind, id }) {
   const [block, setBlock] = useState(null);
   const load = () => { setBlock(null); agents.coverage(kind, id).then(setBlock); };
   useEffect(() => { let alive = true; agents.coverage(kind, id).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [kind, id]);
-  if (!block || (!block.available && !block.unreadable)) return null;
+  if (!block) {
+    return (
+      <TeamCard title="Team coverage" aside={<span className={MUTED}>People and agents on the same eight categories</span>} testId="team-coverage-card">
+        <CoverageReading />
+      </TeamCard>
+    );
+  }
+  if (!block.available && !block.unreadable) return null;
   return (
     <TeamCard title="Team coverage" aside={<span className={MUTED}>People and agents on the same eight categories</span>} testId="team-coverage-card">
       {block.available ? <CoverageTable axes={block.value?.axes} />

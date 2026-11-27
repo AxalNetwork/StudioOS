@@ -18,3 +18,4 @@ than once. A fix never deletes rows.
 | `202611260844_7927_census_cbp_source.fix.sql` | D7927: keeps the `census-cbp` source disabled, so a rolled-back Worker that has no importer for it imports nothing. |
 | `202611261004_5585_release_line_names.fix.sql` | D5585-p16: re-creates the line names table's index and its four triggers. |
 | `202611271037_7746_research_source_record_links.fix.sql` | D7746: re-creates the mapping history's two append-only triggers; the old Worker names neither new table, so a rollback needs nothing else. |
+| `202611270444_7928_bls_ce_source.fix.sql` | D7928: keeps the `bls-ce` source disabled, so a rolled-back Worker that has no importer for it imports nothing. |
