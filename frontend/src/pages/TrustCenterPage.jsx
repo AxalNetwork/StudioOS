@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import MemberOverview, { MemberUnreadable } from './trust/MemberOverview';
 import RequirementDialog from './trust/RequirementDialog';
 import MemberData from './trust/MemberData';
+import AccreditationEvidence from './trust/AccreditationEvidence';
 import { memberRequirements, requirementCounts, signingRequirement, REQUIREMENTS } from './trust/memberTrustModel';
 import {
   ShieldCheck, Lock, FileText, CheckCircle2, Loader2,
@@ -75,6 +76,10 @@ const STATUS_TONE = {
   pending:       'prog',
   in_review:     'prog',
   expired:       'bad',
+  // accreditation_evidence.status — D6139, a letter's review (routes/trust_accreditation.ts)
+  submitted:     'prog',
+  accepted:      'ok',
+  sent_back:     'bad',
   // pairwise_ndas.status — the Agreements tab
   signed:        'ok',
   active:        'ok',
@@ -281,8 +286,8 @@ function Section({ icon: Icon, title, subtitle, children }) {
 // remains responsible for review status. kyb_v1 has no working satisfier either
 // (cloudflare-worker/test/obligation_satisfiable.test.ts).
 //
-// Accreditation evidence has no upload route on either side, so the tab says
-// that rather than drawing a file input that cannot POST.
+// D6139: accreditation evidence has its routes now (routes/trust_accreditation.ts),
+// so the Verifications tab draws the upload in `trust/AccreditationEvidence.jsx`.
 
 /**
  * The one signing path for a role NDA, drawn on its Role agreements row.
@@ -1064,13 +1069,13 @@ export default function TrustCenterPage({ chromeless = false }) {
   );
 
   const accreditation = role === 'investor' && (
-    <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">
+    <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation requirement, and the verification letter behind it.">
       {/* Wording is the canvas's: v2 says "Manage in Account Settings" here
-          and "Edit in Account Settings" on Entity. They are different verbs
-          on purpose — accreditation is an ongoing status you maintain, an
-          entity record is a document you amend. */}
+          and "Edit in Account Settings" on Entity. The self-declared answer
+          (D6136, Account › My thesis) is kept there; the letter below is what
+          the fund team verifies. */}
       <ManagedElsewhere cta="Manage in Account Settings →" href="/account">
-        This page reports the requirement state. Evidence upload is not available here.
+        Your self-declared accreditation answer is kept in Account Settings. The letter below is what the fund team verifies.
       </ManagedElsewhere>
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'accreditation')}
@@ -1078,19 +1083,13 @@ export default function TrustCenterPage({ chromeless = false }) {
 
       />
       {/*
-        THE ONE THING THIS TAB CANNOT DO. The card here used to offer a basis
-        picker and a file input over POST /trust/accreditation/upload, which
-        does not exist — nor do /status, /badge/:id or /:id/review. It was
-        unreachable, so nobody hit the 404; saying so is better than leaving
-        the absence to be read as an oversight, and better than a file input
-        that cannot POST.
+        D6139 part 1: the letter itself. Owner answer A on #6139: only a
+        verification letter from a CPA, attorney, broker-dealer or registered
+        adviser. Its own read (GET /trust/accreditation/evidence/mine), so a
+        failure there leaves the requirement above standing. The old card's
+        dead routes (POST /trust/accreditation/upload and friends) stay retired.
       */}
-      <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-        Evidence upload is not available here. The platform records whether your accreditation obligation is
-        satisfied, but has no route to accept the document behind it — so there is no upload to offer yet.
-        Ask through the <a href="/help" className="underline hover:text-gray-700 dark:hover:text-gray-300">Help Center</a> and
-        the fund team will tell you how they need it.
-      </p>
+      {obligations.some(o => o.obligation_key === 'accreditation_v1') && <AccreditationEvidence onChanged={load} />}
     </Section>
   );
 
@@ -1123,7 +1122,7 @@ export default function TrustCenterPage({ chromeless = false }) {
     if (entry?.open && entry.evidence_envelope_uuid) return <OpenToSignButton item={entry} onChanged={load} />;
     if (entry && !entry.open) return <p className="text-sm text-slate-600 dark:text-slate-400">Signing is not currently required for this agreement.</p>;
     const href = REQUIREMENTS[selectedRow.obligation_key]?.[3];
-    if (href) return <a className="inline-flex min-h-11 items-center font-semibold text-violet-700 underline dark:text-violet-300" href={href}>{selectedRow.obligation_key === 'kyc_v1' ? 'Open identity check' : selectedRow.obligation_key === 'kyb_v1' ? 'Open Account' : selectedRow.obligation_key === 'accreditation_v1' ? 'Open Help Center' : 'Read document'}</a>;
+    if (href) return <a className="inline-flex min-h-11 items-center font-semibold text-violet-700 underline dark:text-violet-300" href={href}>{selectedRow.obligation_key === 'kyc_v1' ? 'Open identity check' : selectedRow.obligation_key === 'kyb_v1' ? 'Open Account' : selectedRow.obligation_key === 'accreditation_v1' ? 'Open Verifications' : 'Read document'}</a>;
     return <p className="text-sm text-slate-600 dark:text-slate-400">{selectedRow.status === 'satisfied' || selectedRow.status === 'waived' ? 'No action is required.' : 'No signing envelope is recorded yet. Ask through the Help Center.'}</p>;
   })();
   const panels = (

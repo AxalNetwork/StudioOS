@@ -124,7 +124,7 @@ test('requirement variants keep the recorded state and do not invent dates or ac
       assert.match(textOf(v.by('trust-requirement-dialog')),/completion date is not returned/);
       if(status==='in_review')assert.doesNotMatch(textOf(v.by('trust-needs-you')),/Investor NDA/);
       if(status==='in_review'||status==='satisfied')assert.doesNotMatch(textOf(v.by('trust-requirement-dialog')),/Open to sign/);
-      if(status==='expired')assert.match(textOf(v.by('trust-requirement-dialog')),/Evidence upload is not available/);
+      if(status==='expired'){assert.match(textOf(v.by('trust-requirement-dialog')),/Upload a verification letter from a CPA, attorney, broker-dealer or registered adviser on the Verifications tab/);assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/trust/me?tab=verifications'&&textOf(n)==='Open Verifications'));}
       if(!required)assert.match(textOf(v.by('trust-requirement-dialog')),/Not required for your account/);
     }finally{await v.unmount();}
   }

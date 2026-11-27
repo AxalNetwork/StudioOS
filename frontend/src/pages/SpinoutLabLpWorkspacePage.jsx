@@ -4,6 +4,8 @@ import { showsProof } from './investor/proofOfFundsModel';
 import { useProofTargets } from './investor/ProofOfFunds';
 import { useLocation } from 'react-router-dom';
 import { api, spinoutLab } from '../lib/api';
+import { trustAccreditationApi } from '../lib/api/trustAccreditation';
+import { accreditationState } from './trust/memberTrustModel';
 import { lpAccessState, lpHasReports, SPINOUT_FUND_SLUG, fundTerms, LP_STATES } from '../lib/spinoutFundModel';
 import { GATE, PROFILE_CHIP, EXTERNAL_DOCS, LBL, MONO, Chip } from './investor/fund/FundWorkspaceSupport';
 import { programFigures, fundFigures } from '../lib/spinoutFundFigures';
@@ -83,6 +85,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   // The caller's KYC record from Trust (D372). `loaded: false` is "could not
   // read", which the onboarding table says rather than guessing a status.
   const [kyc, setKyc] = useState({ loaded: false, status: null });
+  // D6139: the caller's accreditation letter, as /trust/me reads it.
+  const [accreditation, setAccreditation] = useState({ loaded: false, state: null });
   const [reportErr, setReportErr] = useState('');
 
   const load = async () => {
@@ -92,15 +96,20 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     // raise aggregates) fail independently: a metrics outage must not blank
     // the viewer's standing, and vice versa. A metrics failure draws its fund
     // figures "Unreadable", never a stand-in.
-    const [portalRes, metricsRes, appRes, kycRes] = await Promise.allSettled([
+    const [portalRes, metricsRes, appRes, kycRes, accRes] = await Promise.allSettled([
       api.fundsLpPortal(),
       spinoutLab.fundMetrics(),
       spinoutLab.lpApplication(),
       api.kycStatus(),
+      trustAccreditationApi.mine(),
     ]);
     setKyc(kycRes.status === 'fulfilled'
       ? { loaded: true, status: kycRes.value?.kyc_status ?? null }
       : { loaded: false, status: null });
+    // D6139: the same accreditation state /trust/me draws; a failed read is not "no letter".
+    setAccreditation(accRes.status === 'fulfilled' && Array.isArray(accRes.value?.items)
+      ? { loaded: true, state: accreditationState(accRes.value) }
+      : { loaded: false, state: null });
     if (portalRes.status === 'fulfilled') {
       setPortal(portalRes.value);
     } else {
@@ -389,6 +398,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       />
       <FundOnboardingSection
         kyc={kyc}
+        accreditation={accreditation}
         application={application}
         applicationLoaded={applicationLoaded}
         portal={portal}
