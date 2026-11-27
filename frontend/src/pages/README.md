@@ -46,6 +46,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `raise/` | Round-manager panels. |
 | `closing/` | D1213 (#2424): the closing room (founder, investor, staff) and Contracts › Closings, from terms agreed to money in the account. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
+| `network/` | D9025 (#9025): Network's shared directory, read from `/api/network/directory` (D7674): People (`NetworkPeoplePage.jsx`) and, in `directory/`, the search, pager, Person Sheet and private overlay it shares with Organizations. |
 | `relationships/` | D1357 (#3572): relationship intelligence: the sharing setting, "Who knows them" on a record, the ask, and Network › Introductions (inbox, follow-ups, log). |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |

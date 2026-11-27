@@ -76,6 +76,8 @@ test('founder Grow zones match Pages · Founder Grow (FG1–FG7)', () => {
 test('founder Network zones match Pages · Founder Network (FN1–FN3)', () => {
   const network = founder.rows.find((r) => r.label === 'Network');
   assert.deepEqual(network.zones.map((z) => [z.slug, archetypeLabel(z)]), [
+    // D9025 (#9025): People, the shared directory, first after the Overview (D7676 Q1, answer A).
+    ['people', 'COLLECTION'],
     ['relationships', 'MATCH ENGINE'],
     ['introductions', 'FEED'],
     ['organizations', 'COLLECTION'],
