@@ -96,8 +96,10 @@ function isInvestorSide(user: User): boolean {
  *    no grant, so an update with no audience recorded (one made before the
  *    share sheet) stays with its founder and admins until it is shared again.
  * Each fragment takes one bound parameter: the reader's user id.
+ * D8993: the daily portfolio check (`services/portfolioAttentionCheck.ts`) writes the investor grant out in its
+ * own query; its test pins that copy to this text.
  */
-const INVESTOR_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
+export const INVESTOR_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
   OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.investors') END) = 'true')`;
 const TEAM_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'team')
   OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.team') END) = 'true')`;
