@@ -42,7 +42,6 @@ export const BRIEF_SECTION_MAX = 5000;
 export const PRO_RATA_VALUES = ['none', 'pro_rata', 'super_pro_rata'] as const;
 export const INFORMATION_RIGHTS_VALUES = ['none', 'standard', 'major_investor'] as const;
 export const BOARD_SEAT_VALUES = ['none', 'observer', 'seat'] as const;
-export const BOARD_SEAT_COUNT_MAX = 20;
 const ENUMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   pro_rata: PRO_RATA_VALUES, information_rights: INFORMATION_RIGHTS_VALUES, board_seat: BOARD_SEAT_VALUES,
 });
@@ -173,9 +172,9 @@ export function validateChanges(input: unknown): { values: Content; errors: Fiel
       if (typeof raw !== 'string' || !ENUMS[k].includes(raw)) errors[k] = 'unsupported_value'; else values[k] = raw;
     } else if (k === 'board_seat_count') {
       const n = typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+      // Any positive whole number (owner, 2026-11-27: no upper cap); a safe integer, so it round-trips exactly.
       if (typeof n !== 'number' || !Number.isSafeInteger(n)) errors[k] = 'not_a_whole_number';
       else if (n < 1) errors[k] = 'must_be_positive';
-      else if (n > BOARD_SEAT_COUNT_MAX) errors[k] = 'too_large';
       else values[k] = n;
     } else if (k in TEXT_LIMITS) {
       if (typeof raw !== 'string') { errors[k] = 'not_text'; continue; }

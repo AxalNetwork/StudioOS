@@ -40,7 +40,7 @@
  *   N1  drop a brief key from REVISION_CONTENT_KEYS    N2  drop board_seat_count from it        → §9 key tests
  *   N3  accept a 5001-character section    N4  discount not a percentage    N5  an empty pro_rata enum
  *   N5b accept any enum value    N6  a seat count beside `observer`    N7  a seat count of 0
- *   N8  no seat-count upper bound    N9  a fractional seat count    N10 no note bound    N11 sections untrimmed
+ *   N8  a seat-count upper bound of 20 (the owner removed it)    N9  a fractional seat count    N10 no note bound    N11 sections untrimmed
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deal_drafts_5456.test.ts
@@ -189,7 +189,8 @@ test('§9 · #6196 terms: discount 0–100 with two decimals, the three enumerat
     [{ board_seat: true }, 'board_seat', 'unsupported_value'],
     [{ information_rights_note: 'n'.repeat(281) }, 'information_rights_note', 'too_long'],
     [{ board_seat_count: 0 }, 'board_seat_count', 'must_be_positive'], [{ board_seat_count: 1.5 }, 'board_seat_count', 'not_a_whole_number'],
-    [{ board_seat_count: '2a' }, 'board_seat_count', 'not_a_whole_number'], [{ board_seat_count: 21 }, 'board_seat_count', 'too_large'],
+    [{ board_seat_count: '2a' }, 'board_seat_count', 'not_a_whole_number'], [{ board_seat_count: -3 }, 'board_seat_count', 'must_be_positive'],
+    [{ board_seat_count: 2 ** 53 }, 'board_seat_count', 'not_a_whole_number'], [{ board_seat_count: '99999999999999999999' }, 'board_seat_count', 'not_a_whole_number'],
   ];
   for (const [input, k, code] of bad) assert.equal(validateChanges(input).errors[k], code, JSON.stringify(input));
   const good = validateChanges({
@@ -201,7 +202,9 @@ test('§9 · #6196 terms: discount 0–100 with two decimals, the three enumerat
     discount_pct: 20, pro_rata: 'super_pro_rata', information_rights: 'major_investor', information_rights_note: 'Quarterly accounts.',
     board_seat: 'seat', board_seat_count: 2,
   });
-  assert.deepEqual(validateChanges({ discount_pct: 100, board_seat_count: 20, information_rights_note: 'n'.repeat(280) }).errors, {});
+  assert.deepEqual(validateChanges({ discount_pct: 100, board_seat_count: 1, information_rights_note: 'n'.repeat(280) }).errors, {});
+  // No upper cap on seats (owner, 2026-11-27): any positive whole number, kept exactly.
+  for (const n of [21, 250, '1000']) assert.deepEqual(validateChanges({ board_seat_count: n }), { values: { board_seat_count: Number(n) }, errors: {} }, String(n));
   // Blank is not recorded, never `none` and never 0.
   assert.deepEqual(validateChanges({ pro_rata: '', information_rights: null, board_seat: ' ', discount_pct: '', board_seat_count: '' }).values,
     { pro_rata: null, information_rights: null, board_seat: null, discount_pct: null, board_seat_count: null });
