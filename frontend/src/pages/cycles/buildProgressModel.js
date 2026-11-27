@@ -50,7 +50,12 @@ export const FOOTNOTE = {
 /** Said in the sheet before the press: preparing is what records the send (D1068 §1). */
 export const PREPARE_NOTE = 'Preparing records that you sent these items to this tool, so it shows on Progress. Nothing opens until you press it.';
 export const NOT_CONNECTED = 'Not connected';
-export const PRIVACY_PASSED = 'Privacy check passed: no names, emails or quotes.';
+/**
+ * D8773 (#8773, owner Q3 option A): the send's check is `lintForSend` alone
+ * (`services/buildHandoffs.ts`), so the sheet names its four checks and what
+ * they do not cover, and never certifies that no names are present.
+ */
+export { SEND_CHECKS, SEND_CHECK_OK, SEND_NOT_COVERED } from './lovable/lovableModel';
 
 /** The items a founder may send: accepted and landed (a door is opened, never sent). */
 export function sendable(plan) {

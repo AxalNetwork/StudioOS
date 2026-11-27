@@ -433,7 +433,9 @@ test('mounted VB6–VB8: Send to… chooses nothing for the founder, says what e
     assert.match(post.url, /\/api\/cycles\/build\/plan\/handoffs\?project=3&scope=venture$/);
     assert.deepEqual(post.body, { provider: 'lovable', items: [MUST] });
     assert.equal(r.textOf('plan-send-counter'), '521 / 4,000');
-    assert.match(r.textOf('plan-send-privacy'), /Privacy check passed: no names, emails or quotes\./);
+    // D8773 (Q3, A): the four checks the send ran, named, and what they do not cover; never "passed" or "no names".
+    assert.match(r.textOf('plan-send-privacy'), /^No matches for the four checks below\.Email addresses.*Phone numbers.*Tax, bank and card numbers.*Recorded full legal names.*Not covered: interviewees’ names/);
+    assert.doesNotMatch(r.textOf('plan-send-privacy'), /passed|no names|This venture’s interviewees/);
     assert.equal(r.props('plan-send-open').href, 'https://lovable.dev/?autosubmit=true#prompt=Build');
     assert.equal(r.props('plan-send-open').target, '_blank', 'it opens in the founder\'s own tool');
   } finally { await r.close(); }
