@@ -4,7 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
-import { useRouteTitle } from './lib/pageTitles';
+import { useRouteTitle } from './lib/seo'; // D8681: re-exported by seo.js, as App.jsx's import list is frozen (D5615)
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
   clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
