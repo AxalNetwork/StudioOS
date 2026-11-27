@@ -60,6 +60,7 @@ and StudioHome at `/raise/pitch`).
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 | `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
+| `pricing_back_interval_8717.spec.mjs` | D8717 (#8717): Pricing's billing interval in the address. Per audience (Founder, Investor, Advisor, Operating Partner) at 1440 and 390: Yearly, the card's signup, browser Back restoring the audience and Yearly with the catalogue's figure, total and destination, Forward, a deliberate Monthly, no history entry per press; deep links and reload. Synthetic prices, no payment, no baselines. |
 
 | `account_journey_8529.spec.mjs` | D8529 (#8529): the whole account journey at 1440 and 390 — company and projects, an emailed invitation read from the outbox, sign-in returning to it, one seat, the right settings after a reload, an old address resolving after a move, and a revoked seat |
 | `_account_journey_seed.ts` | What `server.ts` seeds for that spec: two onboarded accounts per width that own nothing yet; made-up names |

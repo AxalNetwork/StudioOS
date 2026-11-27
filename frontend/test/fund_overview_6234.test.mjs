@@ -146,6 +146,10 @@ test('#6234 gap rule 4: delivery recorded — issued is not delivered', () => {
   assert.equal(open.href, '/funds/reporting?fund=7');
   assert.equal(gap(packGaps({ fundId: 7, periods: [{ ...issued, delivery_count: 3 }], today: TODAY }), 'delivery').done, true);
   assert.equal(gap(packGaps({ fundId: 7, periods: [Q3D], today: TODAY }), 'delivery').done, false, 'a draft is never delivered');
+  // D6240: per-LP counts decide when the reply carries them; a D6255 receipt alone does not make a legacy period recorded.
+  const legacy = { ...issued, delivery_status: 'sent', delivered_count: 2, lp_delivery: { state: 'not_recorded' } };
+  assert.equal(gap(packGaps({ fundId: 7, periods: [legacy], today: TODAY }), 'delivery').done, false);
+  assert.equal(gap(packGaps({ fundId: 7, periods: [{ ...legacy, lp_delivery: { state: 'recorded', delivered: 2, total: 3 } }], today: TODAY }), 'delivery').done, true);
   assert.equal(packGaps({ fundId: 7, periods: null, today: TODAY }).rows, null, 'an unreadable archive claims no row either way');
 });
 

@@ -1490,7 +1490,7 @@ export async function routeAnswer(
         ).bind(picks[0] || null, picks[1] || null, picks[2] || null, user.id).run();
         return {
           status: 'saved',
-          saved_to: { table: 'explorer_needs', column: 'challenge_1', id: user.id, page_url: '/explorer/profile' },
+          saved_to: { table: 'explorer_needs', column: 'challenge_1', id: user.id, page_url: '/exploring' },
         };
       } catch (e) {
         return { status: 'failed', error: (e as Error).message };
@@ -1506,7 +1506,7 @@ export async function routeAnswer(
         ).bind(dbValue, user.id).run();
         return {
           status: 'saved',
-          saved_to: { table: 'explorer_needs', column: sharedLeaf.col, id: user.id, page_url: '/explorer/profile' },
+          saved_to: { table: 'explorer_needs', column: sharedLeaf.col, id: user.id, page_url: '/exploring' },
         };
       } catch (e) {
         return { status: 'failed', error: (e as Error).message };
@@ -1529,7 +1529,7 @@ export async function routeAnswer(
     }
     return {
       status: 'saved',
-      saved_to: { table: 'explorer_needs', column: 'track_extra_json', id: user.id, page_url: '/explorer/profile' },
+      saved_to: { table: 'explorer_needs', column: 'track_extra_json', id: user.id, page_url: '/exploring' },
     };
   }
 

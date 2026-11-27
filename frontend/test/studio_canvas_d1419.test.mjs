@@ -273,8 +273,12 @@ test('the strip keeps main’s labels: Company progress in a cohort, Venture pro
 
 test('below 1024px the founder body draws the strip, the profile card and the modules, with Customise in a bottom bar', () => {
   const out = html(h(FounderStudioBody, { user: member, reads: {}, onRetry() {}, studio: founder(), phone: true }));
-  assert.doesNotMatch(out, /data-testid="text-founder-studio-title"|data-testid="section-founder-advisor"/, 'the phone draws its own bar and chat above');
+  // D8729 (#8729, SFD12A): the phone body opens with the venture heading, then Eadwyn's collapsed row and its
+  // (hidden) chat, then the strip, the profile card and the modules; the bar above is no longer a heading.
   const at = (id) => out.indexOf(`data-testid="${id}"`);
+  assert.ok(at('text-founder-studio-title') > -1 && at('text-founder-studio-title') < at('studio-eadwyn-row'));
+  assert.ok(at('studio-eadwyn-row') < at('section-founder-advisor') && at('section-founder-advisor') < at('founder-studio-strip'));
+  assert.match(out, /<section id="studio-chat" hidden=""/, 'Eadwyn starts collapsed on the phone (owner Q3 A)');
   assert.ok(at('founder-studio-strip') < at('zone-founder-profile') && at('zone-founder-profile') < at('studio-modules') && at('studio-modules') < at('studio-phone-customise'));
 });
 

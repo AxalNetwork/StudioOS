@@ -9,7 +9,7 @@ import { HQ_LANES, HQ_ONLY_LINE, HQ_ONLY_TITLE, LANES, LANE_FAILED, isHqLane } f
 import {
   AGE_FILTERS, ATTENTION_LINE, BAND_PARTS, OVERDUE_UNOWNED, SEARCH_MIN, SORTS, WORK_VIEWS, collectOverdue,
   overdueAssignLine, overdueAssignTitle, ownershipCallout, bandedRows, filterChips, hasNextPage,
-  inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, laneAgeChart, pageLine, refusalToast, summaryStrip,
+  hiddenByFilter, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, laneAgeChart, pageLine, refusalToast, summaryStrip,
   viewPatch, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, filterCount,
 } from './inboxModel';
 import { FOOT } from './boardParts';
@@ -122,7 +122,8 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
     for (const [k, v] of Object.entries(patch)) { if (v) p.set(k, v); else p.delete(k); }
     if (!('page' in patch)) p.delete('page');
     const s = p.toString();
-    navigate({ pathname: '/admin/approvals', search: s ? `?${s}` : '' }, { replace: true });
+    // D8728: the router state rides along, so refining a view Studio opened keeps its crumb.
+    navigate({ pathname: '/admin/approvals', search: s ? `?${s}` : '' }, { replace: true, state: loc.state ?? null });
   };
   const applySearch = useRef(null);
   applySearch.current = (value) => {
@@ -167,6 +168,7 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
   const nFilters = filterCount(q.filters);
   const reviewers = Array.isArray(reply?.reviewers) ? reply.reviewers : [];
   const chips = filterChips(q.filters, { superAdmin, reviewers });
+  const hidden = hiddenByFilter(reply, q.filters);
   const picked = rows.filter((r) => selected.has(r.key));
   const allPicked = rows.length > 0 && picked.length === rows.length;
   const toggle = (key) => setSelected((s) => { const next = new Set(s); if (next.has(key)) next.delete(key); else next.add(key); return next; });
@@ -235,7 +237,7 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
       </div>
 
       {inbox.status === 'error' ? (
-        <FailedCard title="We could not load Approvals." line="The rest of the admin still works. Try again in a moment." error={inbox.error} onRetry={inbox.reload} testId="approvals-failed" />
+        <FailedCard title="We could not load Approvals." line={`The rest of the admin still works. Try again in a moment.${chips.length ? ` Your ${chips.length > 1 ? 'filters' : 'filter'} ${chips.map((c) => c.text).join(', ')} ${chips.length > 1 ? 'are' : 'is'} kept.` : ''}`} error={inbox.error} onRetry={inbox.reload} testId="approvals-failed" />
       ) : (
         <>
           <section className={`${CARD} min-w-0`} aria-labelledby="approvals-queue-h" data-testid="approvals-inbox">
@@ -343,6 +345,7 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
                   {nFilters ? (
                     <>
                       <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing matches these filters.</span>
+                      {hidden ? <span className={SUB} data-testid="approvals-hidden">{hidden}</span> : null}
                       <button type="button" className={LINK} onClick={clearFilters}>Clear filters</button>
                     </>
                   ) : view === 'mine' ? (
@@ -363,6 +366,7 @@ export function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, o
             {rows.length ? (
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
                 <span className={`${SUB} ${MONO}`} data-testid="approvals-count">{pageLine(reply)}</span>
+                {hidden ? <span className={SUB} data-testid="approvals-hidden">{hidden}</span> : null}
                 <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
                   <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
                   <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>

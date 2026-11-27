@@ -52,3 +52,36 @@ export function EngagementFocusBar({ focusKey, label, shown, total, noun = 'reco
     </div>
   );
 }
+
+// D8733 (#8733, SOP06 B, SOP08 B) — one person kept selected on Capacity, the Studio feed's over-cap alert's target.
+// `?person=<user_id>` narrows the roster to that person, with the same bar; a value no row carries narrows to
+// nothing and says so, never to someone else.
+
+/** The zone's `?person=` value and a function that clears it, keeping the rest of the query. */
+export function usePersonFocus() {
+  const [params, setParams] = useSearchParams();
+  const key = params.get('person') || '';
+  const clear = useCallback(() => setParams((p) => { const n = new URLSearchParams(p); n.delete('person'); return n; }), [setParams]);
+  return { key, clear };
+}
+
+/** The roster narrowed to the focused person (all of it when nobody is focused). */
+export function focusPeople(people, key) {
+  if (!key) return people;
+  return (people || []).filter((p) => String(p?.user_id ?? '') === key);
+}
+
+/** The bar over a roster narrowed to one person: who, how many of the firm's people, and Show all. */
+export function PersonFocusBar({ focusKey, people, onClear }) {
+  if (!focusKey) return null;
+  const mine = focusPeople(people, focusKey);
+  return (
+    <div role="status" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-[#ececf1] bg-[#f4f0fe] px-3 py-2 text-[14px] text-[#18181b] dark:border-gray-700 dark:bg-violet-950/30 dark:text-gray-100" data-testid="person-focus">
+      <span>
+        Showing <b>{mine[0]?.name || 'a person this roster has no record for'}</b>
+        {' '}· {mine.length} of {(people || []).length} people
+      </span>
+      <button type="button" onClick={onClear} className="font-semibold text-[#7c3aed] hover:underline dark:text-[#a78bfa]">Show all</button>
+    </div>
+  );
+}

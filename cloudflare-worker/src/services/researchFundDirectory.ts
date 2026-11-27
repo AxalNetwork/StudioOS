@@ -14,19 +14,19 @@
  *                 (`mapFundHq`): every distinct HQ string that maps to the
  *                 code is matched, bound as one JSON array.
  *   focus         a market-directory slug, through `mapFundFocus` the same way.
- *   size_min/max  whole euros. Sizes are compared only where the currency is
- *                 known to be euros: the EuroTech rows (S1, 12:17Z on #1081 —
- *                 the lists are never banded, sorted or summed together
- *                 unconverted). A size filter therefore leaves out every row
- *                 whose currency is not recorded.
+ *   size_min/max  whole units of the asked `size_currency` (euros by default).
+ *                 Sizes are compared only on rows that record their size in
+ *                 that currency (S1, 12:17Z on #1081 — the lists are never
+ *                 banded, sorted or summed together unconverted). A size filter
+ *                 therefore leaves out every row whose currency is not recorded.
  *   vintage_from/to  `fund_year`, inclusive.
  *   eif / eifo    `1` backed; `0` not backed, which is only known when the row
  *                 records its LPs (`notable_lps`): a 0 flag with no LP text
  *                 means unknown (S1, 12:17Z).
  *   stage         refused with 400: the directory records no stage yet, and an
  *                 unfiltered answer must never pass for a filtered one.
- *   size_band     one of SIZE_BANDS (half-open euro bands), on the EuroTech list
- *                 only, like size_min/max; it cannot be combined with them.
+ *   size_band     one of SIZE_BANDS (half-open bands of the asked currency), on
+ *                 the rows sized in it only, like size_min/max; it cannot be combined with them.
  *                 `none` (D7166 part 2, RFD-02's "Show them") is the other
  *                 side of a size filter: every match with no size in the
  *                 asked `size_currency`, the rows `size_not_comparable` counts.
@@ -57,10 +57,10 @@
  *   removed_sources  the lists taken down, with why and how many funds are withheld.
  *
  * D7166 (#7166) — sizes in each list's own currency, and one row per vehicle:
- *   LIST_CURRENCY  the currency each list records sizes in: EuroTech in euros,
- *                 the Shai Goldman list in US dollars (migration 429, its 1A
- *                 note). A list not named there records no size in a known
- *                 currency. Sizes are never compared, banded or sorted across
+ *   currency      each list's own currency: EuroTech in euros, the Shai
+ *                 Goldman list in US dollars (migration 429, its 1A note).
+ *                 D7744 moved it from a LIST_CURRENCY map keyed by list name
+ *                 onto each row. Sizes are never compared, banded or sorted across
  *                 currencies: `size_currency` (EUR by default, or USD) picks
  *                 the one currency size_min/max, size_band, the size sort and
  *                 the size facet work in, and every other match is left out
@@ -69,27 +69,52 @@
  *                 plus fund number; each old manager uid that no longer names a
  *                 row is recorded in `research_fund_directory_uid_moves`, and
  *                 `getFund` follows it, so an old link opens the same vehicle.
+ *
+ * D7744 (#7744) — a row carries its own size currency and record kind
+ * (migration 202611270508_7744): `fund_size_currency` (three capitals or
+ * NULL) on each row and each report row, `record_kind` (vehicle, manager,
+ * accelerator, resource, or NULL) on each row, stamped from
+ * `research_fund_list_defaults` for the lists that table names. Every read
+ * here takes the currency from the row, never from the list's name, so a
+ * third list's GBP size is shown, filtered, banded and sorted in GBP, and a
+ * size with no currency is counted (`size_unknown_currency`) and never shown.
+ * `size_currency` takes any three-letter code (EUR by default); a code no
+ * served row holds matches no size and is not an error. `kind` filters on
+ * `record_kind` (`none`: not recorded), with a facet. Sizes are never converted.
  */
 import type { Env } from '../types';
 import { loadOverrides, mapFundFocus, mapFundHq } from './researchTaxonomy';
 import { fundProfile } from './researchFundProfile';
 
-/** The source whose sizes are euros (`fund_size_cents` = euro cents). */
+/**
+ * The EuroTech list's name. D7744: no read decides a currency from it any
+ * more (the row carries `fund_size_currency`); it stays for the fixtures and
+ * the importers that name the list.
+ */
 export const EUR_SOURCE = 'EuroTech VC Funds (public spreadsheet)';
-/** D7166: the source whose sizes are US dollars (`fund_size_cents` = US cents, migration 429). */
+/** The Shai Goldman list's name (migration 429). Like EUR_SOURCE, never used to pick a currency. */
 export const USD_SOURCE = 'Shai Goldman — new VC funds at/below $200M';
 
-/** D7166: the currencies a size can be compared in, one list each. */
-export const SIZE_CURRENCIES = ['EUR', 'USD'] as const;
-export type SizeCurrency = typeof SIZE_CURRENCIES[number];
+/** D7744: a size currency is any three capital letters (the migration's trigger holds the same rule). */
+export type SizeCurrency = string;
+export const isSizeCurrency = (v: unknown): v is SizeCurrency => typeof v === 'string' && /^[A-Z]{3}$/.test(v);
 
-/** D7166: each list's size currency. A list not named here records none in a known currency. */
-export const LIST_CURRENCY: Readonly<Record<string, SizeCurrency>> = { [EUR_SOURCE]: 'EUR', [USD_SOURCE]: 'USD' };
+/** D7744: the record kinds migration 202611270508_7744's trigger allows; NULL is "kind not recorded". */
+export const RECORD_KINDS = ['vehicle', 'manager', 'accelerator', 'resource'] as const;
+export type RecordKind = typeof RECORD_KINDS[number];
+export const KIND_NOT_RECORDED = 'Kind not recorded';
+const isKind = (v: unknown): v is RecordKind => (RECORD_KINDS as readonly unknown[]).includes(v);
 
-/** The one list whose sizes are in `currency`. */
-export function currencySource(currency: SizeCurrency): string {
-  return currency === 'USD' ? USD_SOURCE : EUR_SOURCE;
+/**
+ * D7744: the one helper Markets and Overview use to choose a euro size — by the
+ * row's own currency, never its list's name. Null when the row has no size or
+ * its size is in another currency (or in none recorded).
+ */
+export function euroSizeCents(f: { fund_size_cents: number | null; fund_size_currency?: string | null }): number | null {
+  return f.fund_size_currency === 'EUR' && f.fund_size_cents != null ? Number(f.fund_size_cents) : null;
 }
+/** The same rule in SQL over a served fund row: its euro size, else NULL. A literal of this file. */
+export const EURO_SIZE_SQL = `CASE WHEN fund_size_currency = 'EUR' THEN fund_size_cents END`;
 
 /** The three terms verdicts migration 406's CHECK allows, and no other. */
 export const FUND_SOURCE_VERDICTS = ['republish allowed', 'cite only', 'not allowed'] as const;
@@ -146,14 +171,14 @@ export const SORTS: Readonly<Record<string, string>> = {
   '-name': 'name COLLATE NOCASE DESC, uid ASC',
   'vintage': 'fund_year IS NULL, fund_year ASC, name COLLATE NOCASE, uid',
   '-vintage': 'fund_year IS NULL, fund_year DESC, name COLLATE NOCASE, uid',
-  // D7166: `?` is the list of the asked `size_currency` (`currencySource`), bound by `orderBy`.
-  'size': `(source_name = ? AND fund_size_cents IS NOT NULL) DESC, fund_size_cents ASC, name COLLATE NOCASE, uid`,
-  '-size': `(source_name = ? AND fund_size_cents IS NOT NULL) DESC, fund_size_cents DESC, name COLLATE NOCASE, uid`,
+  // D7744: `?` is the asked `size_currency`, matched against each row's own currency, bound by `orderBy`.
+  'size': `(fund_size_currency = ? AND fund_size_cents IS NOT NULL) DESC, fund_size_cents ASC, name COLLATE NOCASE, uid`,
+  '-size': `(fund_size_currency = ? AND fund_size_cents IS NOT NULL) DESC, fund_size_cents DESC, name COLLATE NOCASE, uid`,
 };
 
 /** The binds `SORTS[q.sort]` takes: a size sort puts the asked currency's sized rows first. */
 export function orderBy(q: Pick<DirectoryQuery, 'sort' | 'size_currency'>): { binds: unknown[] } {
-  return { binds: SORTS[q.sort].includes('?') ? [currencySource(q.size_currency ?? 'EUR')] : [] };
+  return { binds: SORTS[q.sort].includes('?') ? [q.size_currency ?? 'EUR'] : [] };
 }
 
 /**
@@ -170,11 +195,14 @@ export const SIZE_BANDS: ReadonlyArray<{ value: string; label: string; min: numb
   { value: '500+', label: '€500M and over', min: 500_000_000_00, max: null },
 ];
 
-const CURRENCY_MARK: Readonly<Record<SizeCurrency, string>> = { EUR: '€', USD: 'US$' };
+const CURRENCY_MARK: Readonly<Record<string, string>> = { EUR: '€', USD: 'US$', GBP: '£' };
+/** D7744: the words a sentence names a currency by; any other code is named by itself. */
+const CURRENCY_WORD: Readonly<Record<string, string>> = { EUR: 'euros', USD: 'US dollars', GBP: 'pounds sterling' };
+export const currencyWord = (c: SizeCurrency) => CURRENCY_WORD[c] ?? c;
 
-/** D7166: SIZE_BANDS labelled in `currency`. */
+/** D7166: SIZE_BANDS labelled in `currency`; a code with no mark is written before the figure (D7744). */
 export function sizeBands(currency: SizeCurrency) {
-  return SIZE_BANDS.map((b) => ({ ...b, label: b.label.replaceAll('€', CURRENCY_MARK[currency]) }));
+  return SIZE_BANDS.map((b) => ({ ...b, label: b.label.replaceAll('€', CURRENCY_MARK[currency] ?? `${currency} `) }));
 }
 
 /** A bad query value. `reason` is a sentence this file wrote, safe for a refusal body (D278). */
@@ -199,6 +227,8 @@ export interface DirectoryQuery {
   sort: string;
   /** D7166: the one currency sizes are filtered, banded and sorted in. */
   size_currency: SizeCurrency;
+  /** D7744: one record kind, or `none` for a row whose kind is not recorded. */
+  kind?: RecordKind | 'none' | null;
   limit: number;
   offset: number;
   /**
@@ -243,9 +273,14 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
   if (band && band !== 'none' && !SIZE_BANDS.some((b) => b.value === band)) {
     throw new DirectoryQueryError('size_band', `size_band must be one of ${SIZE_BANDS.map((b) => b.value).join(', ')}, none`);
   }
+  // D7744: any three-letter code; one no served row holds matches no size, which is not an error.
   const ccy = (get('size_currency') ?? '').trim().toUpperCase() || 'EUR';
-  if (!(SIZE_CURRENCIES as readonly string[]).includes(ccy)) {
-    throw new DirectoryQueryError('size_currency', `size_currency must be one of ${SIZE_CURRENCIES.join(', ')}`);
+  if (!isSizeCurrency(ccy)) {
+    throw new DirectoryQueryError('size_currency', 'size_currency must be a three-letter currency code, such as EUR');
+  }
+  const kind = (get('kind') ?? '').trim().toLowerCase();
+  if (kind && kind !== 'none' && !isKind(kind)) {
+    throw new DirectoryQueryError('kind', `kind must be one of ${RECORD_KINDS.join(', ')}, none`);
   }
   const vRaw = (get('vintage') ?? '').trim().toLowerCase();
   const vintage = vRaw === 'none' ? 'none' as const : int('vintage', vRaw, 1900, 2100);
@@ -262,7 +297,8 @@ export function parseDirectoryQuery(get: (k: string) => string | undefined): Dir
     eif: flag('eif', get('eif')),
     eifo: flag('eifo', get('eifo')),
     sort,
-    size_currency: ccy as SizeCurrency,
+    size_currency: ccy,
+    kind: (kind || null) as RecordKind | 'none' | null,
     limit: int('limit', get('limit'), 1, 100) ?? 25,
     offset: int('offset', get('offset'), 0, 1_000_000) ?? 0,
   };
@@ -317,39 +353,59 @@ async function rawValuesMappingTo(env: Env, column: 'hq' | 'sector_focus', targe
   return (rows.results || []).map((r) => r.v).filter((v) => map(v, overrides).targets.includes(target));
 }
 
-const COLUMNS = `uid, name, website, linkedin, hq, fund_number, fund_size_cents,
-  fund_date, quarter, fund_year, sector_focus, notable_lps,
-  eif_flag, eifo_flag, source_name, source_url, as_of`;
+/** D7744: a directory row's columns, in order; every read that builds a `DirectoryRow` by hand selects these. */
+export const DIRECTORY_COLUMNS = [
+  'uid', 'name', 'website', 'linkedin', 'hq', 'fund_number', 'fund_size_cents', 'fund_size_currency',
+  'fund_date', 'quarter', 'fund_year', 'sector_focus', 'notable_lps',
+  'eif_flag', 'eifo_flag', 'source_name', 'source_url', 'as_of', 'record_kind',
+] as const;
+
+/** The column list for a SELECT, each prefixed with `alias.` when one is given (a literal of the caller). */
+export function directoryColumns(alias = ''): string {
+  return DIRECTORY_COLUMNS.map((c) => (alias ? `${alias}.${c}` : c)).join(', ');
+}
+
+const COLUMNS = directoryColumns();
 
 export interface DirectoryRow {
   uid: string; name: string; website: string | null; linkedin: string | null; hq: string | null;
   fund_number: string | null; fund_size_cents: number | null; fund_date: string | null; quarter: string | null;
   fund_year: number | null; sector_focus: string | null; notable_lps: string | null;
   eif_flag: number; eifo_flag: number; source_name: string; source_url: string; as_of: string;
+  /** D7744: the size's currency as the row records it; NULL when none is recorded. */
+  fund_size_currency?: string | null;
+  /** D7744: what the row's list says the row is; NULL when not recorded. */
+  record_kind?: string | null;
 }
 
+/** The reason a size with no recorded currency is not shown (D7744: counted, never printed). */
+export const NO_SIZE_CURRENCY = 'Not recorded: this list records no size in a known currency';
+
 /**
- * A row as the API shows it: the currency its size is in, or why there is
- * none; EIF and EIFO as true, false, or null when unknown.
+ * A row as the API shows it: the currency its size is in (the row's own,
+ * D7744), or why there is none; EIF and EIFO as true, false, or null when
+ * unknown; its record kind, or why there is none.
  */
 export function presentFund(r: DirectoryRow) {
-  // D7166: each list's own currency (LIST_CURRENCY), not euros only.
-  const currency = LIST_CURRENCY[r.source_name] ?? null;
+  const { fund_size_currency: raw, ...rest } = r;
+  const currency = isSizeCurrency(raw) ? raw : null;
+  const sized = currency != null && r.fund_size_cents != null;
   const lpsKnown = typeof r.notable_lps === 'string' && r.notable_lps.trim() !== '';
   const backing = (f: number) => (f ? true : lpsKnown ? false : null);
+  const kind = isKind(r.record_kind) ? r.record_kind : null;
   return {
-    ...r,
-    fund_size_cents: currency ? r.fund_size_cents : null,
-    size_currency: currency && r.fund_size_cents != null ? currency : null,
-    ...(currency && r.fund_size_cents != null ? {} : {
-      size_reason: currency ? 'Not recorded' : 'Not recorded: this list records no size in a known currency',
-    }),
+    ...rest,
+    fund_size_cents: sized ? r.fund_size_cents : null,
+    size_currency: sized ? currency : null,
+    ...(sized ? {} : { size_reason: r.fund_size_cents == null ? 'Not recorded' : NO_SIZE_CURRENCY }),
+    record_kind: kind,
+    ...(kind ? {} : { record_kind_reason: KIND_NOT_RECORDED }),
     eif: backing(r.eif_flag),
     eifo: backing(r.eifo_flag),
   };
 }
 
-type FacetKey = 'hq_country' | 'focus' | 'size' | 'vintage' | 'eif' | 'eifo';
+type FacetKey = 'hq_country' | 'focus' | 'size' | 'vintage' | 'eif' | 'eifo' | 'kind';
 
 /** The crosswalk's answer for an `hq_country` / `focus` filter (a JSON array), resolved once per request. */
 interface Resolved { hq: string | null; focus: string | null }
@@ -372,18 +428,18 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
     else { where.push(`sector_focus IN (SELECT value FROM json_each(?))`); binds.push(r.focus); }
   }
   if (q.size_band === 'none' && omit !== 'size') {
-    // D7166 part 2: the matches a size filter leaves out — no size in the asked currency's list
+    // D7166 part 2: the matches a size filter leaves out — no size in the asked currency
     // (no amount, another currency, or a currency not recorded), as `sizeFacet` counts them.
-    where.push(`(COALESCE(source_name, '') <> ? OR fund_size_cents IS NULL)`);
-    binds.push(currencySource(q.size_currency ?? 'EUR'));
+    where.push(`(COALESCE(fund_size_currency, '') <> ? OR fund_size_cents IS NULL)`);
+    binds.push(q.size_currency ?? 'EUR');
   }
   const band = q.size_band ? SIZE_BANDS.find((b) => b.value === q.size_band) ?? null : null;
   const lo = band ? band.min : (q.size_min != null ? q.size_min * 100 : null);
   const hi = band ? band.max : (q.size_max != null ? q.size_max * 100 : null);
   if ((band || q.size_min != null || q.size_max != null) && omit !== 'size') {
-    // D7166: whole units and bands of the asked currency, on that currency's list only.
-    where.push(`source_name = ? AND fund_size_cents IS NOT NULL`);
-    binds.push(currencySource(q.size_currency ?? 'EUR'));
+    // D7744: whole units and bands of the asked currency, on the rows that record their size in it.
+    where.push(`fund_size_currency = ? AND fund_size_cents IS NOT NULL`);
+    binds.push(q.size_currency ?? 'EUR');
     if (lo != null) { where.push(`fund_size_cents >= ?`); binds.push(lo); }
     // A band is half-open; size_max (whole euros) stays inclusive, as in steps 2–3.
     if (hi != null) { where.push(band ? `fund_size_cents < ?` : `fund_size_cents <= ?`); binds.push(hi); }
@@ -399,6 +455,10 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
     const v = q[field];
     if (v === 1) where.push(`${col} = 1`);
     if (v === 0) where.push(`${col} = 0 AND TRIM(COALESCE(notable_lps, '')) <> ''`);
+  }
+  if (q.kind && omit !== 'kind') {
+    if (q.kind === 'none') where.push(`record_kind IS NULL`);
+    else { where.push(`record_kind = ?`); binds.push(q.kind); }
   }
   if (q.focus_in) {
     where.push(q.focus_in_blank
@@ -451,7 +511,7 @@ async function vintageFacet(env: Env, q: DirectoryQuery, r: Resolved) {
 }
 
 /**
- * Size bands count the asked currency's rows only (`currencySource`, D7166).
+ * Size bands count the rows whose own currency is the asked one (D7744).
  * Every other match — no size, a size in the other currency, or one in a
  * currency that is not recorded — is `not_comparable`, never put into a band.
  */
@@ -460,9 +520,9 @@ async function sizeFacet(env: Env, q: DirectoryQuery, r: Resolved) {
   const clause = whereClause(where);
   // `clause` is built from literals of `conditions`; every value is in `binds`.
   const rows = await env.DB.prepare(
-    `SELECT CASE WHEN source_name = ? THEN fund_size_cents END AS c, COUNT(*) AS n
+    `SELECT CASE WHEN fund_size_currency = ? THEN fund_size_cents END AS c, COUNT(*) AS n
        FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY c`,
-  ).bind(currencySource(q.size_currency ?? 'EUR'), ...binds).all<{ c: number | null; n: number }>();
+  ).bind(q.size_currency ?? 'EUR', ...binds).all<{ c: number | null; n: number }>();
   const bands = sizeBands(q.size_currency ?? 'EUR').map((b) => ({ value: b.value, label: b.label, count: 0 }));
   let notComparable = 0;
   for (const row of rows.results || []) {
@@ -473,6 +533,27 @@ async function sizeFacet(env: Env, q: DirectoryQuery, r: Resolved) {
     if (k < 0) notComparable += n; else bands[k].count += n;
   }
   return { bands, not_comparable: notComparable };
+}
+
+/** D7744: matches per record kind, every other filter applied; `none` is the rows whose kind is not recorded. */
+async function kindFacet(env: Env, q: DirectoryQuery, r: Resolved) {
+  const { where, binds } = conditions(q, r, 'kind');
+  const clause = whereClause(where);
+  // `clause` is built from literals of `conditions`; every value is in `binds`.
+  const rows = await env.DB.prepare(
+    `SELECT record_kind AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY record_kind`,
+  ).bind(...binds).all<{ v: string | null; n: number }>();
+  return kindCounts(rows.results || []);
+}
+
+/** The four kinds and `none`, each with its count, from `record_kind` groups; the counts sum to the rows grouped. */
+function kindCounts(rows: Array<{ v: string | null; n: number }>) {
+  const by = new Map(rows.map((x) => [x.v, Number(x.n)]));
+  const none = rows.filter((x) => !isKind(x.v)).reduce((t, x) => t + Number(x.n), 0);
+  return [
+    ...RECORD_KINDS.map((k) => ({ value: k as string, label: k[0].toUpperCase() + k.slice(1), count: by.get(k) ?? 0 })),
+    { value: 'none', label: KIND_NOT_RECORDED, count: none },
+  ];
 }
 
 /** Backed (flag 1), not backed (flag 0 with LP text), unknown (flag 0, no LP text). */
@@ -497,12 +578,10 @@ async function backingFacet(env: Env, q: DirectoryQuery, r: Resolved, field: 'ei
  * funds each withholds — a count, never a row.
  */
 async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>) {
-  const [cov, src, gone] = await Promise.all([
+  const [cov, src, gone, sized, kinds] = await Promise.all([
     env.DB.prepare(
       `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN source_name = ? AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_eur,
-              SUM(CASE WHEN source_name = ? AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_usd,
-              SUM(CASE WHEN source_name NOT IN (?, ?) AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_unknown_currency,
+              SUM(CASE WHEN fund_size_currency IS NULL AND fund_size_cents IS NOT NULL THEN 1 ELSE 0 END) AS size_unknown_currency,
               SUM(CASE WHEN TRIM(COALESCE(hq, '')) <> '' THEN 1 ELSE 0 END) AS hq,
               SUM(CASE WHEN TRIM(COALESCE(website, '')) <> '' THEN 1 ELSE 0 END) AS website,
               SUM(CASE WHEN TRIM(COALESCE(linkedin, '')) <> '' THEN 1 ELSE 0 END) AS linkedin,
@@ -512,7 +591,7 @@ async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>)
               SUM(CASE WHEN TRIM(COALESCE(fund_number, '')) <> '' THEN 1 ELSE 0 END) AS fund_number,
               MAX(as_of) AS as_of
          FROM ${SERVED_FUNDS} AS f`,
-    ).bind(EUR_SOURCE, USD_SOURCE, EUR_SOURCE, USD_SOURCE).first<Record<string, number | string | null>>(),
+    ).first<Record<string, number | string | null>>(),
     env.DB.prepare(
       `SELECT source_name AS name, MAX(source_url) AS url, COUNT(*) AS n, MAX(as_of) AS as_of
          FROM ${SERVED_FUNDS} AS f GROUP BY source_name ORDER BY COUNT(*) DESC, source_name`,
@@ -522,26 +601,50 @@ async function coverageAndSources(env: Env, reviews: Map<string, FundSourceRow>)
         WHERE source_name IN (SELECT source_name FROM research_fund_sources WHERE verdict = 'not allowed')
         GROUP BY source_name`,
     ).all<{ name: string; n: number }>(),
+    // D7744: the sized rows per list and per the row's own currency (NULL: none recorded).
+    env.DB.prepare(
+      `SELECT source_name AS name, fund_size_currency AS c, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f
+        WHERE fund_size_cents IS NOT NULL GROUP BY source_name, fund_size_currency`,
+    ).all<{ name: string; c: string | null; n: number }>(),
+    env.DB.prepare(`SELECT record_kind AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f GROUP BY record_kind`)
+      .all<{ v: string | null; n: number }>(),
   ]);
   const withheld = new Map((gone.results || []).map((g) => [g.name, Number(g.n)]));
   const n = (k: string) => Number(cov?.[k] ?? 0);
+  const byCurrency: Record<string, number> = {};
+  const listCurrencies = new Map<string, Set<string>>();
+  for (const x of sized.results || []) {
+    if (!isSizeCurrency(x.c)) continue;
+    byCurrency[x.c] = (byCurrency[x.c] ?? 0) + Number(x.n);
+    if (!listCurrencies.has(x.name)) listCurrencies.set(x.name, new Set());
+    listCurrencies.get(x.name)!.add(x.c);
+  }
+  const currenciesOf = (name: string) => [...(listCurrencies.get(name) ?? [])].sort();
   return {
     coverage: {
       total: n('total'),
       as_of: (cov?.as_of as string | null) ?? null,
       fields: {
-        size_eur: n('size_eur'),
-        size_usd: n('size_usd'),
+        size_eur: byCurrency.EUR ?? 0,
+        size_usd: byCurrency.USD ?? 0,
         size_unknown_currency: n('size_unknown_currency'),
+        // D7744: rows with a size, per the currency each row records it in.
+        size_by_currency: Object.fromEntries(Object.keys(byCurrency).sort().map((c) => [c, byCurrency[c]])),
         hq: n('hq'), website: n('website'), linkedin: n('linkedin'), sector_focus: n('sector_focus'),
         fund_year: n('fund_year'), notable_lps: n('notable_lps'), fund_number: n('fund_number'),
       },
+      // D7744: rows per record kind; `none` is the rows whose kind is not recorded. They sum to `total`.
+      kinds: kindCounts(kinds.results || []),
     },
+    /** D7744: the currencies the served sized rows hold: the options the size currency control offers. */
+    size_currencies: Object.keys(byCurrency).sort(),
     sources: (src.results || []).map((s) => {
       const cite = citeSource(s.name, s.url, reviews.get(s.name));
       return {
         name: s.name, url: s.url, rows: Number(s.n), as_of: s.as_of,
-        size_currency: LIST_CURRENCY[s.name] ?? null,
+        // D7744: the currencies this list's sized rows record; `size_currency` is that one when there is exactly one.
+        size_currencies: currenciesOf(s.name),
+        size_currency: currenciesOf(s.name).length === 1 ? currenciesOf(s.name)[0] : null,
         title: cite.title, publisher: cite.publisher, published_url: cite.url, verdict: cite.verdict,
         terms_status: cite.terms_status, terms_quote: cite.terms_quote, evidence_url: cite.evidence_url,
         reviewed_on: cite.reviewed_on, reason: cite.reason,
@@ -572,11 +675,11 @@ async function facetLabels(env: Env) {
   return { countries: toMap(countries), markets: toMap(markets) };
 }
 
-/** D7166: what a size comparison covers, per asked currency. */
-export const SIZE_BASIS: Readonly<Record<SizeCurrency, string>> = {
-  EUR: 'Sizes are compared and sorted in euros, on the EuroTech list only; the US dollar list is compared on its own, and other lists record no size in a known currency.',
-  USD: 'Sizes are compared and sorted in US dollars, on the Shai Goldman list only; the euro list is compared on its own, and other lists record no size in a known currency.',
-};
+/** D7744: what a size comparison covers, derived from the asked currency; it names no list. */
+export function sizeBasis(currency: SizeCurrency): string {
+  const word = currencyWord(currency);
+  return `Sizes are compared and sorted in ${word}, on the funds whose list records their size in ${word}; sizes in another currency are compared on their own and never converted, and a size with no recorded currency is not shown.`;
+}
 
 export async function listDirectory(env: Env, q: DirectoryQuery) {
   const [overrides, reviews] = await Promise.all([loadOverrides(env), loadFundSources(env)]);
@@ -596,13 +699,14 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     coverageAndSources(env, reviews),
     facetLabels(env),
   ]);
-  const [hq, focus, vintage, size, eif, eifo] = await Promise.all([
+  const [hq, focus, vintage, size, eif, eifo, kind] = await Promise.all([
     placeFacet(env, 'hq', q, r, overrides, labels.countries, 'HQ not recorded'),
     placeFacet(env, 'sector_focus', q, r, overrides, labels.markets, 'Focus not recorded'),
     vintageFacet(env, q, r),
     sizeFacet(env, q, r),
     backingFacet(env, q, r, 'eif'),
     backingFacet(env, q, r, 'eifo'),
+    kindFacet(env, q, r),
   ]);
   return {
     items: (page.results || []).map((row) => presentCited(row, reviews)),
@@ -611,7 +715,9 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
     offset: q.offset,
     sort: q.sort,
     size_currency: q.size_currency,
-    size_basis: SIZE_BASIS[q.size_currency],
+    size_currencies: whole.size_currencies,
+    kind: q.kind ?? null,
+    size_basis: sizeBasis(q.size_currency),
     coverage: whole.coverage,
     sources: whole.sources,
     removed_sources: whole.removed_sources,
@@ -623,9 +729,10 @@ export async function listDirectory(env: Env, q: DirectoryQuery) {
       size_not_comparable: size.not_comparable,
       eif,
       eifo,
+      kind,
     },
     facets_unmapped: { hq_country: hq.unmapped, focus: focus.unmapped },
-    facets_basis: 'Each filter\'s counts apply every other active filter, not its own. A fund whose HQ or focus names two values counts under both; one the crosswalk places nowhere counts under neither. Size bands count euro sizes only.',
+    facets_basis: 'Each filter\'s counts apply every other active filter, not its own. A fund whose HQ or focus names two values counts under both; one the crosswalk places nowhere counts under neither. Size bands count sizes in the asked currency only.',
   };
 }
 
@@ -674,16 +781,14 @@ export async function getFund(env: Env, uid: string, movedFrom: string | null = 
   }
   try {
     const r = await env.DB.prepare(
-      `SELECT period, report_date, fund_size_cents, source_url
+      `SELECT period, report_date, fund_size_cents, fund_size_currency, source_url
          FROM research_fund_directory_reports WHERE fund_uid = ? ORDER BY period ASC`,
     ).bind(uid).all();
-    // A report's size is shown only in a known currency, like the fund's own.
-    const currency = LIST_CURRENCY[row.source_name] ?? null;
-    const reports = (r.results || []).map((x: Record<string, unknown>) => ({
-      ...x,
-      fund_size_cents: currency ? x.fund_size_cents : null,
-      size_currency: currency && x.fund_size_cents != null ? currency : null,
-    }));
+    // D7744: a report's size is shown only in the currency the report row records, like the fund's own.
+    const reports = (r.results || []).map(({ fund_size_currency: c, ...x }: Record<string, unknown>) => {
+      const sized = isSizeCurrency(c) && x.fund_size_cents != null;
+      return { ...x, fund_size_cents: sized ? x.fund_size_cents : null, size_currency: sized ? c : null };
+    });
     const profile = await fundProfile(env, row, reviews);
     return { item: { ...presentCited(row, reviews), provenance: profile.provenance, proposed: profile.proposed }, history: profile.history, reports, reports_status: 'ok' as const, moved_from: movedFrom };
   } catch {

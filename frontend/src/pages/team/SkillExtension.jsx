@@ -283,17 +283,29 @@ function HandEditor({ field, row, value, onChange, version, describedBy }) {
   );
 }
 
+/** D8827: an accepted proposal's choice per conflicting part, with the hand editor's start value for the others' Edit. */
+function seedChoices(plan, initial, start) {
+  const out = {};
+  for (const c of plan?.conflicts || []) {
+    const pick = initial?.[c.field];
+    if (!pick || !['mine', 'axal', 'edit'].includes(pick.choice) || (pick.choice === 'edit' && !c.editable)) continue;
+    out[c.field] = { choice: pick.choice, value: pick.choice === 'edit' ? pick.value : start(c.field) };
+  }
+  return out;
+}
+
 /**
  * SK-20: Rebase onto Axal vN. One choice per conflicting part (Keep mine / Take Axal vN / Edit by hand), the other
  * parts' result lines, and Create draft. It sends the exact Axal version shown and the draft version read; it makes a
  * new draft (replacing unpublished draft edits) and never publishes it or touches a pinned agent. A refusal keeps
  * every choice; one the page must re-read offers Reload.
  */
-export function RebaseSheet({ skillUid, view, card, onClose, onReload, onRebased }) {
+export function RebaseSheet({ skillUid, view, card, onClose, onReload, onRebased, initial = null }) {
   const plan = rebasePlan(view);
   const v = plan?.version;
   const rowOf = (f) => view.rows.find((r) => r.field === f);
-  const [choices, setChoices] = useState({});
+  // D8827: the choices the editor accepted from Eadwyn's proposals start chosen; every other conflict starts unchosen.
+  const [choices, setChoices] = useState(() => seedChoices(plan, initial, (f) => handStart(f, rowOf(f))));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(null);
   const [missing, setMissing] = useState([]);

@@ -60,6 +60,11 @@ regexes = [
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.
   '''\bsynthetic-d1135-secret\b''',
+  # D8688 (#8688): the role qualification's local fixture signing keys, one per
+  # synthetic deployment (HQ and the two test-only branches), each repeated
+  # twice for length. They sign only JWTs minted inside the isolated local run;
+  # no deployment holds them. Pinned literally, as D1135 does.
+  '''d8688-(hq|branch-[ab])-fixture-signing-key-''',
   # D6495 (#6495): this exact literal only signs JWTs inside the D5074
   # in-memory capability fixture, whose fetch stub forbids external calls.
   # Anchors preserve detection for prefixed/suffixed values and other seeds.

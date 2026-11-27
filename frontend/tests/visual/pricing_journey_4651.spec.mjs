@@ -208,6 +208,9 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
+      // #8717: the interval lives in the address now, and the address changes a render before the plan links do.
+      // Wait for the drawn toggle, which renders with the links, before reading or following one.
+      await expect(page.getByRole('button', { name: 'Yearly' })).toHaveAttribute('aria-pressed', 'true');
       await page.locator('a[href*="plan=founder%3Agrowth"], a[href*="plan=founder:growth"]').first().waitFor();
       await page.locator('a[href*="plan=founder%3Astudio"], a[href*="plan=founder:studio"]').first().click();
       await expect(page).toHaveURL(/\/register\?/);
@@ -248,6 +251,9 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
+      // #8717: the interval lives in the address now, and the address changes a render before the plan links do.
+      // Wait for the drawn toggle, which renders with the links, before reading or following one.
+      await expect(page.getByRole('button', { name: 'Yearly' })).toHaveAttribute('aria-pressed', 'true');
       await page.locator('a[href*="plan=founder%3Agrowth"], a[href*="plan=founder:growth"]').first().click();
       await expect(page).toHaveURL(/\/register\?/);
       const back = returnOf(page.url());
@@ -272,6 +278,9 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
 
       await page.goto('/pricing?for=founder');
       await page.getByRole('button', { name: 'Yearly' }).click();
+      // #8717: the interval lives in the address now, and the address changes a render before the plan links do.
+      // Wait for the drawn toggle, which renders with the links, before reading or following one.
+      await expect(page.getByRole('button', { name: 'Yearly' })).toHaveAttribute('aria-pressed', 'true');
       const href = await page.locator('a[href*="plan=founder%3Astudio"], a[href*="plan=founder:studio"]').first().getAttribute('href');
       state.catalogueDown = 1;
       await page.goto(href);

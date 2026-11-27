@@ -14,6 +14,8 @@
  *
  * D5990: `policyTarget`, `decide` and `checkRunBody` turn a delivery and its
  * result into the `merge-control/policy` check run `repoControl.ts` posts.
+ * D8834: `decide` passes a T2 merge-group head only on the sign-off evidence
+ * `signoff.ts` gathers for its enqueued pull request head.
  */
 import { classify, POLICY_VERSION } from './policy.ts';
 import type { ChangedFile, Tier } from './policy.ts';
@@ -35,6 +37,8 @@ export interface PolicyResult {
   readonly policy_version: string;
   readonly base: string;
   readonly head: string;
+  /** D8834: true only when the classification finished; an evaluation error is never signed past. */
+  readonly complete: boolean;
 }
 export interface EvaluateOptions { api: GithubApi; timeoutMs?: number }
 
@@ -52,6 +56,7 @@ function result(input: { base?: unknown; head?: unknown }, tier: Tier, reasons: 
     policy_version: POLICY_VERSION,
     base: typeof input.base === 'string' ? input.base : '',
     head: typeof input.head === 'string' ? input.head : '',
+    complete: classified,
   });
 }
 
@@ -167,12 +172,16 @@ export async function evaluate(input: { base: string; head: string }, options: E
 export const CHECK_NAME = 'merge-control/policy';
 /** D5990: the pull-request actions that give a head a new policy decision. A label, comment or review is none of them. */
 export const POLICY_PR_ACTIONS: readonly string[] = Object.freeze(['opened', 'synchronize', 'reopened']);
-/** D5990: the reason every T2 merge-group head carries until the owner sign-off of #5620 items 4 and 5 is built. */
-export const SIGNOFF_PENDING = 'T2: owner sign-off is not built yet (#5620 items 4 and 5), so a T2 merge-group head stays action_required';
+/** D5990, D8834: the reason a T2 merge-group head carries when no sign-off for its enqueued pull request head passes it. */
+export const SIGNOFF_PENDING = 'T2: a T2 merge-group head passes only with an owner sign-off for its enqueued pull request head (#5620 items 4 and 5)';
+/** D8834: the queue branch GitHub names a merge group's head by; the number is the pull request. */
+const QUEUE_REF = /^refs\/heads\/gh-readonly-queue\/main\/pr-([1-9]\d{0,9})-[a-f0-9]{40}$/;
 const TEXT_LIMIT = 60_000;
 
 export type PolicyEvent = 'pull_request' | 'merge_group';
 export interface PolicyTarget { readonly kind: PolicyEvent; readonly head: string; readonly base: string; readonly pr: number | null }
+/** D8834: what `signoff.ts` found for a T2 merge-group head: `ok` only for a current sign-off bound to the candidate. */
+export interface SignoffEvidence { readonly ok: boolean; readonly reasons: readonly string[] }
 export interface Decision {
   readonly kind: PolicyEvent; readonly head: string; readonly base: string;
   readonly conclusion: Conclusion; readonly tier: Tier; readonly reasons: readonly string[]; readonly policy_version: string;
@@ -182,11 +191,15 @@ export interface Decision {
  * D5990: the head a delivery asks the policy about, against its base: a merge
  * group's `checks_requested`, or a pull request opened, synchronized or
  * reopened. Every other event, action, label, comment or review is null.
+ * D8834: a merge group's pull request is read from its queue branch.
  */
 export function policyTarget(event: Delivery): PolicyTarget | null {
   const head = event?.headSha, base = event?.baseSha;
   if (typeof head !== 'string' || typeof base !== 'string' || !SHA.test(head) || !SHA.test(base)) return null;
-  if (event.event === 'merge_group' && event.action === 'checks_requested') return Object.freeze({ kind: 'merge_group', head, base, pr: null });
+  if (event.event === 'merge_group' && event.action === 'checks_requested') {
+    const queued = QUEUE_REF.exec(typeof event.headRef === 'string' ? event.headRef : '');
+    return Object.freeze({ kind: 'merge_group', head, base, pr: queued ? Number(queued[1]) : null });
+  }
   if (event.event === 'pull_request' && POLICY_PR_ACTIONS.includes(event.action)) {
     const pr = Number.isSafeInteger(event.pr) && Number(event.pr) > 0 ? Number(event.pr) : null;
     return pr === null ? null : Object.freeze({ kind: 'pull_request', head, base, pr });
@@ -196,13 +209,17 @@ export function policyTarget(event: Delivery): PolicyTarget | null {
 
 /**
  * D5990: the check's conclusion. Success only for a completed T0 or T1
- * classification; everything else is action_required. A T2 merge-group head
- * is action_required by its own rule, because nothing can sign it off yet.
+ * classification; everything else is action_required. D8834: a T2
+ * merge-group head passes only on `ok` sign-off evidence for a finished
+ * classification; without it, it is action_required by its own rule.
  */
-export function decide(result: PolicyResult, target: PolicyTarget): Decision {
+export function decide(result: PolicyResult, target: PolicyTarget, signoff: SignoffEvidence | null = null): Decision {
   const base = { kind: target.kind, head: target.head, base: target.base, policy_version: result.policy_version };
   if (target.kind === 'merge_group' && result.tier === 'T2') {
-    return Object.freeze({ ...base, conclusion: 'action_required', tier: 'T2', reasons: Object.freeze([...result.reasons, SIGNOFF_PENDING]) });
+    if (signoff?.ok === true && result.complete === true) {
+      return Object.freeze({ ...base, conclusion: 'success', tier: 'T2', reasons: Object.freeze([...result.reasons, ...signoff.reasons]) });
+    }
+    return Object.freeze({ ...base, conclusion: 'action_required', tier: 'T2', reasons: Object.freeze([...result.reasons, SIGNOFF_PENDING, ...(signoff?.reasons ?? [])]) });
   }
   const passing = result.conclusion === 'success' && (result.tier === 'T0' || result.tier === 'T1');
   return Object.freeze({ ...base, conclusion: passing ? 'success' : 'action_required', tier: passing ? result.tier : 'T2', reasons: result.reasons });
@@ -221,7 +238,8 @@ export function checkRunBody(decision: Decision, repository: string): Record<str
     external_id: `${decision.policy_version}:${decision.kind}`,
     details_url: `https://github.com/${repository}/blob/${decision.policy_version}/documentation/architecture/decisions/D5990.md`,
     output: {
-      title: decision.conclusion === 'success' ? `${decision.tier}: passes the landing policy` : `${decision.tier}: action required`,
+      title: decision.conclusion !== 'success' ? `${decision.tier}: action required`
+        : decision.tier === 'T2' ? 'T2: signed off by the owner' : `${decision.tier}: passes the landing policy`,
       summary: `Tier ${decision.tier}, ${decision.conclusion}. policy_version ${decision.policy_version}.`,
       text,
     },

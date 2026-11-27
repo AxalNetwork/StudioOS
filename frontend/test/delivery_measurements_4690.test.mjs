@@ -16,7 +16,8 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), p), 'utf8'));
 const capacity = read('frontend/src/pages/partner/delivery/CapacityZone.jsx');
-const home = read('frontend/src/pages/partner/PartnerHomeP2.jsx');
+// D8733: the home feed's lines are built in its model, `firmFeedModel.js`, since the feed links each alert to its item.
+const home = read('frontend/src/pages/partner/firmFeedModel.js');
 const deliverables = read('frontend/src/pages/partner/delivery/DeliverablesZone.jsx');
 const health = read('frontend/src/pages/partner/delivery/HealthZone.jsx');
 const board = read('frontend/src/pages/partner/delivery/BoardZone.jsx');

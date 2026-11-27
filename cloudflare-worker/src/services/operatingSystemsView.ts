@@ -17,6 +17,7 @@ import type { Env } from '../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS } from '../integrations/moduleLabels';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
+import { NO_COMPANY_REASON } from './connectorBinding';
 import { disconnectedReason, systemActionIntent, systemStateOf, type SystemActionIntent, type SystemState } from './systemsState';
 
 /** The Build modules, by their feed keys: a tool that feeds one of these feeds Build. */
@@ -194,8 +195,8 @@ export function systemsPart(kinds: SystemKindRow[], viewerId: number, viewerMemb
   };
 }
 
-/** BD20 A: no company yet, so there are no system rows, only the one step first. */
-export const NO_COMPANY_REASON = 'This project has no company scope for connectors.';
+/** BD20 A: no company yet, so there are no system rows, only the one step first. D8774: the words are `connectorBinding.ts`'s. */
+export { NO_COMPANY_REASON };
 export const systemsWithoutCompany = () => ({ state: 'not_recorded' as const, reason: NO_COMPANY_REASON, rows: [], summary: null, next: null });
 
 /** How many sync lines Tools shows, newest first, and the label that says the list stops there. */

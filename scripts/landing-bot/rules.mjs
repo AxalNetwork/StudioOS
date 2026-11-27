@@ -77,19 +77,27 @@ export function count(v) {
 }
 
 /**
- * `LANDING_BOT_ENABLED`: `true` acts on all triggers, `dispatch` acts only in a workflow_dispatch run on one named
- * PR, and anything else (unset included) is `off`.
+ * #6481 (D6481-p2): the kinds with their own activation switch. The feeder (first queue entry) reads
+ * `LANDING_BOT_FEEDER_ENABLED` and nothing else, so turning on queue intake never turns on the keeper, refresh,
+ * repair or recovery, and turning those on never turns on queue intake. Every other kind reads `LANDING_BOT_ENABLED`.
  */
-export function mode(env = {}) {
-  const v = env?.LANDING_BOT_ENABLED;
+export const SWITCHES = Object.freeze({ feeder: 'LANDING_BOT_FEEDER_ENABLED' });
+export const switchFor = (kind) => (Object.hasOwn(SWITCHES, kind ?? '') ? SWITCHES[kind] : 'LANDING_BOT_ENABLED');
+
+/**
+ * The kind's switch (`switchFor`): `true` acts on all triggers, `dispatch` acts only in a workflow_dispatch run on
+ * one named PR, and anything else (unset included) is `off`.
+ */
+export function mode(env = {}, kind) {
+  const v = env?.[switchFor(kind)];
   if (v === 'true') return 'all';
   if (v === 'dispatch') return 'dispatch';
   return 'off';
 }
 
-/** Whether this trigger may act at all under the mode. A dispatch run names exactly one PR. */
-export function triggerAllowed(env, { event, dispatchPr, prNumber } = {}) {
-  const m = mode(env);
+/** Whether this trigger may act at all under the kind's mode. A dispatch run names exactly one PR. */
+export function triggerAllowed(env, { event, dispatchPr, prNumber, kind } = {}) {
+  const m = mode(env, kind);
   if (m === 'all') return true;
   if (m === 'dispatch') return event === 'workflow_dispatch' && isInt(dispatchPr) && dispatchPr > 0 && dispatchPr === prNumber;
   return false;
@@ -153,7 +161,7 @@ export function breakers(kind, ctx = {}) {
 export function eligible(pr, ctx = {}) {
   const reasons = [];
   const { env = {}, repo, files = null, kind, now } = ctx;
-  if (!triggerAllowed(env, { event: ctx.event, dispatchPr: ctx.dispatchPr, prNumber: pr?.number })) reasons.push(`mode ${mode(env)} does not allow this trigger`);
+  if (!triggerAllowed(env, { event: ctx.event, dispatchPr: ctx.dispatchPr, prNumber: pr?.number, kind })) reasons.push(`${switchFor(kind)} mode ${mode(env, kind)} does not allow this trigger`);
   if (!pr || !isInt(pr.number)) return { ok: false, reasons: [...reasons, 'no pull request'] };
   if (pr.state !== 'open') reasons.push('pull request is not open');
   const headRepo = pr.head?.repo?.full_name;
