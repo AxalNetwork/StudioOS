@@ -379,7 +379,8 @@ test('moved: the notice shows on an arrival from Integrations, and not otherwise
 test('add and request: the Add menu’s three entries, custom shown as Pro and Coming soon, and an honest form', () => {
   const add = text(html(h(AddMenu, { onBrowse() {}, onRequest() {}, initialOpen: true })));
   assert.match(add, /Browse connectors Request a connector Add a custom connector PRO Coming soon/);
-  assert.match(html(h(AddMenu, { onBrowse() {}, onRequest() {}, initialOpen: true })), /<button type="button" role="menuitem" class="[^"]*" disabled="" title="The Worker has no MCP client yet\.">Add a custom connector/);
+  // #9113: until `GET /api/connectors/custom` answers, and while CUSTOM_MCP_ENABLED is off, the entry stays disabled.
+  assert.match(html(h(AddMenu, { onBrowse() {}, onRequest() {}, initialOpen: true, custom: { state: 'off', servers: [] } })), /<button type="button" role="menuitem" class="[^"]*" disabled="" title="Custom connectors are not available yet\." data-testid="button-connectors-add-custom">Add a custom connector/);
   const req = html(h(RequestSheet, { onClose() {}, tool: 'Notion' }));
   assert.match(text(req), /Request a connector Tell us which tool you need\. .*Tool name .*What you would use it for/);
   assert.match(req, /value="Notion"/);

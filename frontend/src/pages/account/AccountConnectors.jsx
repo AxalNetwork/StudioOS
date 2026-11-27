@@ -21,6 +21,8 @@ import { ActiveFilters, ConnectorFilterMenu } from './ConnectorFilterMenu';
 import { isMercurySearch, notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
+import { CustomConnectorLightbox, CustomServersGroup, CustomUpsellLightbox, useCustomServers } from './CustomConnectors';
+import { customEntry, customReturn } from './customConnectorsModel';
 
 /**
  * D651 (#1463) — the Account center's Connectors section, `/account/connectors`,
@@ -186,8 +188,15 @@ export function RequestSheet({ onClose, tool: initial = '' }) {
   );
 }
 
-export function AddMenu({ onBrowse, onRequest, initialOpen = false }) {
+/**
+ * The Add menu. #9113: "Add a custom connector" follows `custom`, the page's
+ * one `GET /api/connectors/custom` read (`customEntry`): disabled with PRO and
+ * Coming soon until it settles and while the Worker's flag is off (404), the
+ * plan's upsell on 402, and C26's form on 200.
+ */
+export function AddMenu({ onBrowse, onRequest, onCustom = () => {}, custom = null, initialOpen = false }) {
   const [open, setOpen] = useState(initialOpen);
+  const entry = customEntry(custom);
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -203,9 +212,9 @@ export function AddMenu({ onBrowse, onRequest, initialOpen = false }) {
         <div role="menu" className="absolute right-0 top-10 z-20 flex w-60 flex-col rounded-xl border border-axal-hairline bg-white p-1.5 shadow-xl dark:border-gray-700 dark:bg-gray-900" data-testid="connectors-add-menu">
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onBrowse(); }}>Browse connectors</button>
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onRequest(); }}>Request a connector</button>
-          <button type="button" role="menuitem" className={item} disabled title="The Worker has no MCP client yet.">
+          <button type="button" role="menuitem" className={item} disabled={!entry.enabled} title={entry.title} onClick={entry.enabled ? () => { setOpen(false); onCustom(entry.opens); } : undefined} data-testid="button-connectors-add-custom" data-opens={entry.opens || undefined}>
             Add a custom connector
-            <span className="flex gap-1"><span className="rounded-full bg-axal-violet px-1.5 py-0.5 text-[9.5px] font-bold text-white">PRO</span><span className="rounded-full border border-dashed border-axal-hairline px-1.5 py-0.5 text-[9.5px] font-semibold text-axal-muted">Coming soon</span></span>
+            <span className="flex gap-1"><span className="rounded-full bg-axal-violet px-1.5 py-0.5 text-[9.5px] font-bold text-white">PRO</span>{entry.comingSoon && <span className="rounded-full border border-dashed border-axal-hairline px-1.5 py-0.5 text-[9.5px] font-semibold text-axal-muted">Coming soon</span>}</span>
           </button>
         </div>
       )}
@@ -317,7 +326,7 @@ export function ConnectorsPhoneView(props) {
 }
 
 /** The section, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_FILTER, initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false, superAdmin = false }) {
+export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_FILTER, initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false, superAdmin = false, customRead = null }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
@@ -333,6 +342,18 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
   const [requesting, setRequesting] = useState(null);
   const [waitBusy, setWaitBusy] = useState(false);
   const [waitError, setWaitError] = useState('');
+  // #9113: the member's own MCP servers (D852), one read; a test hands it in as `customRead`.
+  const ownCustom = useCustomServers({ skip: !!customRead });
+  const { custom, reload: reloadCustom } = customRead || ownCustom;
+  const [customOpen, setCustomOpen] = useState(null);
+  // The Worker's return from a server's sign-in: one line, then the query is
+  // cleared. The address is kept as it arrived, so the line can name the host once the list is read.
+  const [arrivedWith] = useState(() => location.search);
+  const customBack = customReturn(arrivedWith, custom);
+  useEffect(() => {
+    if (!customBack) return;
+    navigate({ pathname: location.pathname, search: stripReturn(location.search, customBack.strip), hash: location.hash }, { replace: true, state: location.state });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A return from a provider's sign-in (a bookmarked `/account/connectors?oauth=…`):
   // D753 sends it on to its connector's page, which says what happened.
@@ -472,6 +493,10 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
     content = discover;
   }
 
+  const customLine = customBack && (
+    <p role={customBack.tone === 'danger' ? 'alert' : 'status'} className={`rounded-[10px] border px-3.5 py-2.5 text-[13px] ${customBack.tone === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'}`} data-testid="custom-return">{customBack.text}</p>
+  );
+  const customGroup = <CustomServersGroup custom={custom} onChanged={reloadCustom} />;
   const movedNote = moved && <div className="rounded-[10px] border border-axal-violet/25 bg-axal-lavender px-3.5 py-2.5 text-[13px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="connectors-moved">Integrations are now Connectors.</div>;
   // On a phone Discover is not a tab: it is kept below A3m's sections, and
   // "Browse connectors" scrolls to it in place.
@@ -505,7 +530,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
           </>
         )}
         {onDiscover && <ConnectorFilterMenu facets={facets} value={sel} onChange={setSel} phone={phone} shown={shown} />}
-        <AddMenu onBrowse={browse} onRequest={() => setRequesting('')} />
+        <AddMenu onBrowse={browse} onRequest={() => setRequesting('')} custom={custom} onCustom={setCustomOpen} />
       </div>
       {onDiscover && <ActiveFilters chips={chips} onClear={clearChip} />}
     </div>
@@ -521,6 +546,8 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
       <BuilderHandoff />
 
       {requesting !== null && <RequestSheet tool={requesting} onClose={() => setRequesting(null)} />}
+      {customOpen === 'form' && <CustomConnectorLightbox onClose={() => setCustomOpen(null)} />}
+      {customOpen === 'upsell' && <CustomUpsellLightbox message={custom.message} onClose={() => setCustomOpen(null)} />}
     </>
   );
 
@@ -538,6 +565,8 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
           </div>
         </div>
         {movedNote}
+        {customLine}
+        {customGroup}
         <section id="connectors-discover" className="flex scroll-mt-24 flex-col gap-2.5" data-testid="connectors-phone-discover">
           <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Discover</h2>
           {toolbar}
@@ -562,10 +591,12 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
       </div>
 
       {movedNote}
+      {customLine}
 
       {toolbar}
 
       {content}
+      {tab === 'yours' && customGroup}
 
       {extras}
     </div>
