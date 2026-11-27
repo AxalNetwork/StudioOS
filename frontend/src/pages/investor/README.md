@@ -4,6 +4,10 @@ Dedicated canvas landing pages for the Investor / LP role, mirroring the
 pattern in `../founder/`: a role-specific component owns the page instead of
 the generic route wrapper once a canvas has graduated.
 
+- `StudioBackLink.jsx` (D8731, #8731) is "‹ Studio" on a phone, drawn first
+  on a page a Studio card opened (the card link carries `FROM_STUDIO` from
+  `investorHomeModel.js` as router state): Axal VC Fund and Pricing. At
+  desktop, or reached any other way, it draws nothing.
 - `FromMercury.jsx` (D840 part 4, #2349) is the "From Mercury" part of
   Deals · Commit and Closing, Fund · Calls, Accounting and Reporting, and
   Portfolio's member-facing bank-data boundary. Facts are shown;

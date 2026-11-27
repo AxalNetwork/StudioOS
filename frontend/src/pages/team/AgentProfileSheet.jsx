@@ -12,6 +12,7 @@ import SponsorSheet from './SponsorSheet.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import { agentName, agentSkillsScope, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
+import { agentReadiness, whatItDoes } from './agentChoiceModel.js';
 
 /**
  * D1497 (#3727, TM5a, TM5b) — an agent's profile, a Sheet at 640, from
@@ -43,6 +44,13 @@ import { agentName, agentSkillsScope, budgetLine, dayTime, eventWords, pauseWord
  * D4387 (#4387): a manager's "Change sponsor" opens `SponsorSheet`, as TM9b's
  * "Choose a new sponsor" does (`editSponsor`), and TM9b's "Raise the cap"
  * opens Edit cap (`editCap`).
+ *
+ * D8769 (#8769, TMM02): the profile leads with the work. Its order is
+ * whether it can run now (`agentReadiness`), "What {name} does" (its area of
+ * work, model and where it works), its Skills (`AgentSkillsCard`, passed in
+ * as `skills`), "Sponsor and cap", Permissions, Proposals and Activity; the
+ * persona (D4119's card, Story and goal, Values with the risk scale) is kept
+ * whole under "About {name}: story and values", one press away.
  */
 
 const PROPOSAL_KEYS = [['proposed', 'Proposed'], ['accepted', 'Accepted'], ['edited', 'Edited'], ['discarded', 'Discarded'], ['withdrawn', 'Withdrawn']];
@@ -63,7 +71,7 @@ export function Confirm({ title, body, button, danger, onCancel, onConfirm, refu
 }
 
 /** The profile body, from one `GET /api/teams/agents/:uid` answer. */
-export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
+export function AgentProfile({ data, canManage, onAsk, legend = [], skills = null }) {
   const a = data.agent || {};
   const persona = a.persona || null;
   const outside = a.source === 'mcp_client';
@@ -72,29 +80,40 @@ export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
   const pct = used != null && cap ? Math.min(100, (used / cap) * 100) : null;
   const counts = data.proposals && typeof data.proposals === 'object' ? data.proposals : null;
   const resets = day(data.resets_at, { year: false });
+  const name = agentName(a);
+  const ready = agentReadiness(a);
   return (
     <div className="flex flex-col gap-5 px-5 py-5" data-testid="agent-profile">
-      {persona ? (
-        <>
-          <AgentCard persona={persona} legend={legend} testId="agent-profile-card"
-            footer={(
-              <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="agent-profile-status">
-                {a.status === 'paused' ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : <Pill tone="ok">Active</Pill>}
-                <span>Sponsor: {a.sponsor?.name || <Unrecorded />}</span>
-              </span>
-            )} />
-          <section className="flex flex-col gap-1.5" data-testid="agent-story">
-            <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Story</h3>
-            <p className="m-0 text-[13px] leading-[1.55] text-axal-ink dark:text-gray-200">{persona.story || <Unrecorded />}</p>
-            <p className={`m-0 ${MUTED}`}>Goal · {persona.goal || <Unrecorded />}</p>
-          </section>
-          <section className="flex flex-col gap-2" data-testid="agent-values">
-            <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Values</h3>
-            <AxalValuesBars testId="agent-value" highlight bars={agentValueBars(persona, legend)} caption={fixedCaption(persona.name)} />
-            <div className="border-t border-axal-hairline pt-2 dark:border-gray-800"><RiskScale risk={persona.risk} /></div>
-          </section>
-        </>
-      ) : outside ? <AgentIdentity name={agentName(a)} role="Connected app" /> : <Unrecorded>Who this agent is was not recorded</Unrecorded>}
+      <section className="flex flex-col gap-1.5" data-testid="agent-readiness" data-state={ready.key}>
+        <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="agent-profile-status">
+          {ready.key === 'paused' ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span>
+            : ready.key === 'active' ? <Pill tone="ok">Active</Pill>
+              : <span className={`rounded-axal-pill px-2 py-0.5 text-[11px] font-semibold ${ready.tone === 'amber' ? 'bg-axal-amber text-axal-amber-deep' : 'border border-dotted border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-400'}`}>{ready.pill}</span>}
+          <span>{ready.line}</span>
+        </span>
+      </section>
+      <section className="flex flex-col gap-1" data-testid="agent-does">
+        <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{`What ${name} does`}</h3>
+        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-200">{outside ? 'Connected app · runs on your own assistant' : <>Area of work · {whatItDoes(a)}</>}</p>
+        {a.reads_line ? <p className={`m-0 ${MUTED}`}>{a.reads_line}</p> : null}
+        {!outside ? <p className={`m-0 ${MUTED}`}>Platform model · {a.model_label || a.model_id || <Unrecorded />}</p> : null}
+      </section>
+      {skills || null}
+      <section data-testid="agent-sponsor-cap">
+        <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Sponsor and cap</h3>
+        <p className="m-0 mb-1 text-[13px] text-axal-ink dark:text-gray-200">Sponsor: {a.sponsor?.name || <Unrecorded />}</p>
+        {outside ? <p className={`m-0 ${MUTED}`}>Runs on your own assistant</p> : used == null ? <Unrecorded /> : (
+          <>
+            <p className="m-0 font-mono text-[13px] text-axal-ink dark:text-gray-100">{budgetLine(used, cap)}{cap == null ? <> · cap <Unrecorded /></> : null}</p>
+            {pct != null ? (
+              <div role="img" aria-label={budgetLine(used, cap, ' used')} className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
+                <div className="h-full bg-axal-violet" style={{ width: `${pct}%` }} />
+              </div>
+            ) : null}
+          </>
+        )}
+        {!outside && resets ? <p className={`m-0 mt-1 ${MONO}`}>Resets {resets}</p> : null}
+      </section>
       <section>
         <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Permissions</h3>
         <div role="table" aria-label="Permissions" className="rounded-axal-md border border-axal-hairline dark:border-gray-700">
@@ -111,20 +130,6 @@ export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
           ))}
         </div>
         <p className={`m-0 mt-1 ${MUTED}`}>Auto is off for every module in v1.</p>
-      </section>
-      <section>
-        <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Budget</h3>
-        {outside ? <p className={`m-0 ${MUTED}`}>Runs on your own assistant</p> : used == null ? <Unrecorded /> : (
-          <>
-            <p className="m-0 font-mono text-[13px] text-axal-ink dark:text-gray-100">{budgetLine(used, cap)}{cap == null ? <> · cap <Unrecorded /></> : null}</p>
-            {pct != null ? (
-              <div role="img" aria-label={budgetLine(used, cap, ' used')} className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
-                <div className="h-full bg-axal-violet" style={{ width: `${pct}%` }} />
-              </div>
-            ) : null}
-          </>
-        )}
-        {!outside && resets ? <p className={`m-0 mt-1 ${MONO}`}>Resets {resets}</p> : null}
       </section>
       <section>
         <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Proposals</h3>
@@ -149,6 +154,24 @@ export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
           </ul>
         ) : <Unrecorded>Nothing recorded yet</Unrecorded>}
       </section>
+      {persona ? (
+        <details className="group rounded-axal-md border border-axal-hairline dark:border-gray-700" data-testid="agent-about">
+          <summary className="flex min-h-[44px] cursor-pointer items-center gap-2 px-3 text-[13px] font-bold text-axal-ink dark:text-gray-100">{`About ${name}: story and values`}</summary>
+          <div className="flex flex-col gap-5 border-t border-axal-hairline px-3 py-3 dark:border-gray-800">
+            <AgentCard persona={persona} legend={legend} testId="agent-profile-card" />
+            <section className="flex flex-col gap-1.5" data-testid="agent-story">
+              <h4 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Story</h4>
+              <p className="m-0 text-[13px] leading-[1.55] text-axal-ink dark:text-gray-200">{persona.story || <Unrecorded />}</p>
+              <p className={`m-0 ${MUTED}`}>Goal · {persona.goal || <Unrecorded />}</p>
+            </section>
+            <section className="flex flex-col gap-2" data-testid="agent-values">
+              <h4 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Values</h4>
+              <AxalValuesBars testId="agent-value" highlight bars={agentValueBars(persona, legend)} caption={fixedCaption(persona.name)} />
+              <div className="border-t border-axal-hairline pt-2 dark:border-gray-800"><RiskScale risk={persona.risk} /></div>
+            </section>
+          </div>
+        </details>
+      ) : outside ? <AgentIdentity name={name} role="Connected app" /> : <Unrecorded>Who this agent is was not recorded</Unrecorded>}
       {onAsk || null}
     </div>
   );
@@ -195,11 +218,12 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
   };
   const manage = !!(a && (canManage || block?.value?.can_manage));
   const pause = a ? pauseWords(a) : null;
-  const tagline = a?.persona?.tagline || null;
+  // D8769: the accessible name adds what it does (", AI agent, Finance"), never the persona's motto.
+  const does = a ? whatItDoes(a) : null;
   return (
     <>
       <Sheet width={640} onClose={onClose} testId="agent-profile-sheet"
-        title={a ? <>{name}<span className="sr-only">{tagline ? `, AI agent: ${tagline}` : ', AI agent'}</span></> : 'AI agent'}
+        title={a ? <>{name}<span className="sr-only">{does ? `, AI agent, ${does}` : ', AI agent'}</span></> : 'AI agent'}
         sub={a ? a.source === 'mcp_client' ? <>AI agent · Connected app</> : <>AI agent · Platform model · {a.model_label || a.model_id || <Unrecorded />}</> : undefined}
         headerActions={a ? <span className="flex items-center gap-1.5"><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : null}</span> : null}
         footer={manage ? (
@@ -216,8 +240,9 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
           : !block.available ? <div className="px-5 py-5"><HonestBlock>{block.unreadable ? 'This agent could not be read.' : block.reason}{block.refused ? '' : ' That is not the same as having none.'}</HonestBlock></div>
             : (
               <>
-                <AgentProfile data={block.value} canManage={manage} legend={legend} />
-                {a.source !== 'mcp_client' ? <><div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} /></div>
+                <AgentProfile data={block.value} canManage={manage} legend={legend}
+                  skills={a.source !== 'mcp_client' ? <AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} /> : null} />
+                {a.source !== 'mcp_client' ? <>
                 <div className="flex flex-col gap-5 border-t border-axal-hairline px-5 py-5 dark:border-gray-800">
                   <AgentMemory uid={a?.uid || uid} canManage={manage} />
                   <AgentDuties uid={a?.uid || uid} />

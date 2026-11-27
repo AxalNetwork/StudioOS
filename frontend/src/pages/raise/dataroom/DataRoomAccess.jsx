@@ -10,7 +10,7 @@ import { day, roomCan } from './dataRoomModel';
 import {
   COFOUNDER_LINE, FILTERS, NDA_LINE, NDA_WORD, REVOKE_LINE, STATE_WORD,
   accessRefusal, accessRows, candidateRows, canOpen, eventLine, eventsOf, filterRows, foldersWord, grantBody, grantBodyError,
-  matrix, ndaOf, ndaUnlocks, shareEffect,
+  grantFiles, matrix, ndaOf, ndaUnlocks, shareEffect,
 } from './accessModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -19,6 +19,13 @@ import Sheet from '../../../ui/Sheet.jsx';
  * Revoke (DR7r), the NDA (DR8) and the co-founder's view (DR16b). Every
  * change opens an in-page dialog that says what it changes before it is
  * sent; who can open what is `grantOn`'s, never decided here.
+ *
+ * D5075 part 2 (#5075, DR33 RAD33B): below the phone width the investors are
+ * cards, not the 880px table: who, since and until, folders, the NDA, what
+ * they can open and what stays shut, the last event, Revoke and a sheet that
+ * lists every file with the rule that opens or shuts it. The file × investor
+ * matrix stays behind View table, scrolling inside its own box. Desktop is
+ * unchanged.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -32,6 +39,8 @@ const BTN = 'inline-flex min-h-[34px] items-center justify-center rounded-[9px] 
 const BTN_P = 'inline-flex min-h-[34px] items-center justify-center rounded-[9px] border border-axal-violet bg-axal-violet px-3.5 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500';
 const SELECT = 'min-h-[32px] rounded-full border border-axal-hairline bg-white px-3 text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const FIELD = 'block w-full rounded-[7px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+/** D5075 part 2: on a phone a control is at least 44px tall (DR33). */
+const tall = (cls, phone) => (phone ? cls.replace(/min-h-\[\d+px\]/, 'min-h-[44px]') : cls);
 const NOTE = 'rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2.5 text-[12.5px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-900/30 dark:text-gray-100';
 const NDA_TONE = {
   signed: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
@@ -160,7 +169,7 @@ function NdaDialog({ room, projectUid, grant, onClose, onDone }) {
 }
 
 /** DR7i: one investor's grant, what they open now, the NDA and their events. */
-function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct }) {
+function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct, phone = false }) {
   const nda = ndaOf(grant);
   const unlocks = ndaUnlocks(room, grant);
   const events = eventsOf(room, grant);
@@ -169,8 +178,8 @@ function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct }) {
     <Sheet label={grant.investor_name || 'Investor'} eyebrow="Investor · grant" title={grant.investor_name || grant.investor_email} onClose={onClose} width={600} testId="investor-lightbox"
       footer={canShare ? (
         <div className="flex flex-wrap justify-between gap-2">
-          <button type="button" className={`${BTN} border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`} onClick={() => onAct('revoke', grant)} data-testid="investor-revoke">Revoke access</button>
-          <button type="button" className={BTN} onClick={() => onAct('change', grant)} data-testid="investor-change">Change</button>
+          <button type="button" className={`${tall(BTN, phone)} border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`} onClick={() => onAct('revoke', grant)} data-testid="investor-revoke">Revoke access</button>
+          <button type="button" className={tall(BTN, phone)} onClick={() => onAct('change', grant)} data-testid="investor-change">Change</button>
         </div>
       ) : null}>
       <div className="flex flex-col gap-4 px-5 py-4">
@@ -183,7 +192,7 @@ function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct }) {
         <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="investor-nda">
           <span className={EYEBROW}>NDA</span>
           <div className="flex flex-wrap items-center gap-2"><NdaPill state={nda} />
-            {canNda && nda === 'none' ? <button type="button" className={BTN} onClick={() => onAct('nda', grant)} data-testid="investor-send-nda">Send the NDA</button> : null}
+            {canNda && nda === 'none' ? <button type="button" className={tall(BTN, phone)} onClick={() => onAct('nda', grant)} data-testid="investor-send-nda">Send the NDA</button> : null}
           </div>
         </section>
         <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="investor-opens">
@@ -191,6 +200,7 @@ function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct }) {
           <span className={`text-[13px] font-bold ${MONO} ${INK}`}>{canOpen(room, grant)} of {total} files</span>
           {unlocks.length ? <span className={`text-[12px] ${MUTED}`}>{unlocks.length} more open once the NDA is signed.</span> : null}
         </section>
+        {phone ? <GrantFileList room={room} grant={grant} /> : null}
         <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="investor-events">
           <span className={EYEBROW}>Their events · of the room’s last fifty</span>
           {events.length ? events.map((a, i) => (
@@ -202,6 +212,66 @@ function InvestorLightbox({ room, grant, canShare, canNda, onClose, onAct }) {
   );
 }
 
+/**
+ * D5075 part 2 (DR33): the phone's drill-down in place of the matrix's column.
+ * Each file of the room, with what opens it or the first rule that shuts it.
+ */
+function GrantFileList({ room, grant }) {
+  const rows = grantFiles(room, grant);
+  return (
+    <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="investor-files">
+      <span className={EYEBROW}>File by file</span>
+      {rows.length ? (
+        <ul className="m-0 flex list-none flex-col p-0" aria-label={`Files, for ${grant.investor_name || grant.investor_email || 'this investor'}`}>
+          {rows.map((r) => (
+            <li key={r.uid} className="flex flex-col gap-0.5 border-b border-axal-hairline py-2 last:border-0 dark:border-gray-800" data-testid={`investor-file-${r.uid}`}>
+              <span className={`text-[13px] font-bold [overflow-wrap:anywhere] ${INK}`}>{r.name}</span>
+              <span className={`text-[11.5px] ${MUTED}`}>{r.folder}</span>
+              <span className={`self-start rounded-full border px-2 py-0.5 text-[11px] font-bold ${r.open ? NDA_TONE.signed : NDA_TONE.none}`}>{r.open ? '✓ ' : ''}{r.why}</span>
+            </li>
+          ))}
+        </ul>
+      ) : <span className={`text-[12px] ${MUTED}`}>The room has no files yet.</span>}
+    </section>
+  );
+}
+
+/** D5075 part 2 (DR33 RAD33B): one grant as a phone card, every column of the table as a labelled line. */
+function GrantCard({ r, canShare, onOpen, onAct }) {
+  const name = r.who;
+  return (
+    <li className={`${CARD} flex flex-col gap-2 px-3.5 py-3`} data-testid={`grant-card-${r.uid}`}>
+      <button type="button" className={`flex min-h-[44px] items-center text-left text-[14px] font-bold [overflow-wrap:anywhere] ${INK}`} onClick={() => onOpen(r.uid)}
+        aria-label={`${name}: open their access, file by file`} data-testid={`grant-card-open-${r.uid}`}>{name}</button>
+      {r.email && r.email !== r.who ? <span className={`-mt-2 text-[11.5px] [overflow-wrap:anywhere] ${MUTED}`}>{r.email}</span> : null}
+      <span className={`text-[12px] ${MUTED}`}>
+        <span className={MONO}>Since {r.granted}</span> · {r.ends === 'No end date' ? 'No end date' : <span className={MONO}>until {r.ends}</span>} · {r.folders}
+      </span>
+      {r.state !== 'active' ? <span className={`text-[12px] font-bold ${MUTED}`}>{STATE_WORD[r.state]}</span> : null}
+      {r.endingSoon ? <span className="text-[12px] font-bold text-amber-700 dark:text-amber-300">Ends {r.endingSoon}</span> : null}
+      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12.5px]">
+        <dt className={`font-bold ${MUTED}`}>Can open</dt>
+        <dd className={`m-0 ${MONO} ${INK}`} data-testid={`grant-card-open-count-${r.uid}`}>{r.open} of {r.total} files</dd>
+        <dt className={`font-bold ${MUTED}`}>Not open to them</dt>
+        <dd className={`m-0 ${MONO} ${INK}`} data-testid={`grant-card-shut-${r.uid}`}>{r.shut} {r.shut === 1 ? 'file' : 'files'}</dd>
+        <dt className={`font-bold ${MUTED}`}>NDA</dt>
+        <dd className="m-0"><NdaPill state={r.nda} /></dd>
+        <dt className={`font-bold ${MUTED}`}>Committed</dt>
+        <dd className={`m-0 ${INK}`}>{r.committed}</dd>
+        <dt className={`font-bold ${MUTED}`}>Last event</dt>
+        <dd className={`m-0 ${INK}`}>{r.last}</dd>
+      </dl>
+      <span className="flex flex-wrap gap-2">
+        <button type="button" className={`${tall(BTN, true)} flex-1`} onClick={() => onOpen(r.uid)} data-testid={`grant-card-files-${r.uid}`}>File by file</button>
+        {canShare && r.state !== 'revoked' ? (
+          <button type="button" className={`${tall(BTN, true)} flex-1 border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`} onClick={() => onAct('revoke', r.grant)}
+            aria-label={`Revoke ${name}’s access`} data-testid={`grant-card-revoke-${r.uid}`}>Revoke</button>
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
 function Matrix({ room, phone }) {
   const [q, setQ] = useState('');
   const [folder, setFolder] = useState('all');
@@ -209,8 +279,8 @@ function Matrix({ room, phone }) {
   return (
     <div className="flex flex-col gap-2" data-testid="access-matrix">
       <div className="flex flex-wrap gap-2">
-        <input className={`${FIELD} max-w-[260px]`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search files" data-testid="matrix-search" />
-        <select className={SELECT} value={folder} onChange={(e) => setFolder(e.target.value)} aria-label="Folder" data-testid="matrix-folder">
+        <input className={`${FIELD} ${phone ? 'min-h-[44px]' : 'max-w-[260px]'}`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search files" aria-label="Search files" data-testid="matrix-search" />
+        <select className={tall(SELECT, phone)} value={folder} onChange={(e) => setFolder(e.target.value)} aria-label="Folder" data-testid="matrix-folder">
           <option value="all">Folder: any</option><option value="top">Top level</option>
           {(room?.folders || []).map((f) => <option key={f.uid} value={f.uid}>{f.name}</option>)}
         </select>
@@ -241,7 +311,7 @@ function Matrix({ room, phone }) {
 }
 
 /** DR8's strip: the NDA by investor, and what it unlocks, named for the founder only. */
-function NdaStrip({ room, canNda, onAct }) {
+function NdaStrip({ room, canNda, onAct, phone = false }) {
   const grants = (room?.grants || []).filter((g) => g.status === 'active');
   if (!grants.length) return null;
   const ndaFiles = (room?.files || []).filter((f) => f.visibility === 'nda');
@@ -252,7 +322,7 @@ function NdaStrip({ room, canNda, onAct }) {
         <div key={g.uid} className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid={`nda-row-${g.uid}`}>
           <span className={`text-[13px] font-bold ${INK}`}>{g.investor_name || g.investor_email}</span>
           <span className="flex items-center gap-2"><NdaPill state={ndaOf(g)} />
-            {canNda && ndaOf(g) === 'none' ? <button type="button" className={BTN} onClick={() => onAct('nda', g)} data-testid={`nda-send-${g.uid}`}>Send the NDA</button> : null}
+            {canNda && ndaOf(g) === 'none' ? <button type="button" className={tall(BTN, phone)} onClick={() => onAct('nda', g)} data-testid={`nda-send-${g.uid}`}>Send the NDA</button> : null}
           </span>
         </div>
       ))}
@@ -275,6 +345,9 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
   const [open, setOpen] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [said, setSaid] = useState(null);
+  // D5075 part 2: on a phone the matrix is the detailed table, opened on request.
+  const [table, setTable] = useState(false);
+  const shown = phone ? 'list' : view;
   const rows = useMemo(() => filterRows(accessRows(room), f), [room, f]);
   const all = accessRows(room);
   const grantOf = (uid) => (room?.grants || []).find((g) => g.uid === uid) || null;
@@ -292,30 +365,34 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
       ) : null}
       <section className={CARD}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
-          <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{view === 'list' ? 'By investor' : 'Matrix'}</h2>
+          <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{shown === 'list' ? 'By investor' : 'Matrix'}</h2>
           <span className="flex flex-wrap gap-2">
-            <span className="inline-flex rounded-[9px] border border-axal-hairline p-0.5 dark:border-gray-700" role="tablist" aria-label="View">
+            {phone ? null : <span className="inline-flex rounded-[9px] border border-axal-hairline p-0.5 dark:border-gray-700" role="tablist" aria-label="View">
               {['list', 'matrix'].map((v) => (
                 <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} data-testid={`access-view-${v}`}
                   className={`min-h-[28px] rounded-[7px] px-3 text-[12px] ${view === v ? `bg-axal-ground font-bold ${INK} dark:bg-gray-800` : `font-semibold ${MUTED}`}`}>{v === 'list' ? 'List' : 'Matrix'}</button>
               ))}
-            </span>
-            {canShare ? <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'share' })} data-testid="access-share">Share</button> : null}
+            </span>}
+            {canShare ? <button type="button" className={tall(BTN_P, phone)} onClick={() => setDialog({ kind: 'share' })} data-testid="access-share">Share</button> : null}
           </span>
         </div>
         <div className="px-4 py-3">
-          {view === 'matrix' ? <Matrix room={room} phone={phone} /> : (
+          {shown === 'matrix' ? <Matrix room={room} phone={phone} /> : (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap gap-2">
-                <input className={`${FIELD} max-w-[240px]`} value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="Search investors" data-testid="access-search" />
+                <input className={`${FIELD} ${phone ? 'min-h-[44px]' : 'max-w-[240px]'}`} value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="Search investors" aria-label="Search investors" data-testid="access-search" />
                 {Object.entries(FILTERS).map(([k, opts]) => (
-                  <select key={k} className={SELECT} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} aria-label={k} data-testid={`access-filter-${k}`}>
+                  <select key={k} className={tall(SELECT, phone)} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} aria-label={k} data-testid={`access-filter-${k}`}>
                     {opts.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                   </select>
                 ))}
               </div>
               {!all.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-access-none">The room is not shared with anyone yet.{canShare ? ' Share it with an investor from Capital relationships.' : ''}</p>
-                : !rows.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="access-filtered-none">No grant matches these filters.</p> : (
+                : !rows.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="access-filtered-none">No grant matches these filters.</p> : phone ? (
+                  <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Investors with access" data-testid="dataroom-access-cards">
+                    {rows.map((r) => <GrantCard key={r.uid} r={r} canShare={canShare} onOpen={setOpen} onAct={act} />)}
+                  </ul>
+                ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[880px] border-collapse" data-testid="dataroom-access-table">
                       <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{['Investor', 'Granted', 'Ends', 'Folders', 'NDA', 'Committed', 'Can open', 'Last event'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
@@ -340,11 +417,19 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
                   </div>
                 )}
               <p className={`m-0 text-[11.5px] ${MUTED}`}>Can open counts what each grant, gate and NDA allows today. Committed comes from Capital relationships.</p>
+              {/* D5075 part 2: the file × investor matrix is a phone's detailed table, opened on request. */}
+              {phone ? (
+                <>
+                  <button type="button" className={`${tall(BTN, true)} self-start`} aria-expanded={table} aria-controls="dataroom-access-phone-matrix"
+                    onClick={() => setTable((v) => !v)} data-testid="access-view-table">{table ? 'Hide table' : 'View table'}</button>
+                  {table ? <div id="dataroom-access-phone-matrix"><Matrix room={room} phone /></div> : null}
+                </>
+              ) : null}
             </div>
           )}
         </div>
       </section>
-      <NdaStrip room={room} canNda={canNda} onAct={act} />
+      <NdaStrip room={room} canNda={canNda} onAct={act} phone={phone} />
       {/* D6913 part 2 (RS-17): the founder's per-room switch for investors' own Library and Ask (D6869). */}
       {projectUid ? <LibrarySwitch projectUid={projectUid} /> : null}
       <section className={`${CARD} flex flex-col gap-1.5 px-4 py-3`} data-testid="access-report-shares">
@@ -357,7 +442,7 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
       {/* D1109 (#2989): the second grant type, moved from the retired files tool. An advisor's
           brief and document shares are made and revoked here; the advisor sees counts, never the files. */}
       {canShare && projectUid ? <section className={`${CARD} px-4 py-3`} data-testid="access-advisor-grants"><AdvisorGrantSection projectUid={projectUid} /></section> : null}
-      {open && grantOf(open) ? <InvestorLightbox room={room} grant={grantOf(open)} canShare={canShare} canNda={canNda} onClose={() => setOpen(null)} onAct={act} /> : null}
+      {open && grantOf(open) ? <InvestorLightbox room={room} grant={grantOf(open)} canShare={canShare} canNda={canNda} onClose={() => setOpen(null)} onAct={act} phone={phone} /> : null}
       {dialog?.kind === 'share' ? <ShareDialog room={room} projectUid={projectUid} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'nda' ? <NdaDialog room={room} projectUid={projectUid} grant={dialog.grant} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'revoke' ? (

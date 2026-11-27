@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import partnerDelivery from '../src/routes/partner_delivery.ts';
+import partnerDelivery, { nextOpenMilestone } from '../src/routes/partner_delivery.ts';
 import research from '../src/routes/research.ts';
 
 import { withGuard } from './_guard_stub.mjs';
@@ -166,6 +166,40 @@ test('D394: due this week counts open milestones due today through six days out,
   const row = r.body.items.find((i: any) => i.engagement_id === OUR_ENG);
   assert.equal(row.milestones_due_7d, 2);
   assert.ok(!r.body.items.some((i: any) => i.engagement_id === THEIR_ENG), 'another firm\'s engagement never comes back');
+});
+
+// D8733 (#8733): the row names its next open milestone, so the Studio feed's due alert can say which and when.
+test('D8733: a board row names its next open milestone, dated today or later, never a done, overdue or undated one', async () => {
+  const db = freshDb();
+  const add = (title: string, dueAt: string | null, done = false) => db.prepare(
+    `INSERT INTO engagement_milestones (uid, engagement_id, title, due_at, completed_at) VALUES (?,?,?,?,?)`,
+  ).run(`m-${title}`, OUR_ENG, title, dueAt, done ? '2026-01-01T00:00:00Z' : null);
+  add('Overdue', day(-1));
+  add('Done today', day(0), true);
+  add('Later', day(9));
+  add('Pricing workshop', day(1));
+  add('Undated', null);
+  db.prepare(`INSERT INTO engagement_milestones (uid, engagement_id, title, due_at) VALUES (?,?,?,?)`).run('m-theirs', THEIR_ENG, 'Theirs', day(0));
+  const r = await board(db, OURS);
+  const row = r.body.items.find((i: any) => i.engagement_id === OUR_ENG);
+  assert.equal(row.next_milestone_title, 'Pricing workshop');
+  assert.equal(row.next_milestone_due_at, day(1));
+  assert.equal(row.milestones_due_7d, 1, 'the count is unchanged');
+});
+
+test('D8733: nextOpenMilestone picks the earliest open dated milestone from today, by calendar date', () => {
+  const ms = [
+    { title: 'Kickoff', due_at: '2026-11-20', completed_at: null },
+    { title: 'Review', due_at: '2026-11-30T09:00:00Z', completed_at: null },
+    { title: 'Workshop', due_at: '2026-11-27', completed_at: null },
+    { title: 'Signed', due_at: '2026-11-26', completed_at: '2026-11-25T10:00:00Z' },
+    { title: 'Undated', due_at: null, completed_at: null },
+  ];
+  assert.deepEqual(nextOpenMilestone(ms, '2026-11-26'), { next_milestone_title: 'Workshop', next_milestone_due_at: '2026-11-27' });
+  assert.deepEqual(nextOpenMilestone(ms, '2026-11-27'), { next_milestone_title: 'Workshop', next_milestone_due_at: '2026-11-27' }, 'due today counts');
+  assert.deepEqual(nextOpenMilestone(ms, '2026-11-28'), { next_milestone_title: 'Review', next_milestone_due_at: '2026-11-30' });
+  assert.deepEqual(nextOpenMilestone(ms, '2026-12-01'), { next_milestone_title: null, next_milestone_due_at: null });
+  assert.deepEqual(nextOpenMilestone([{ title: null, due_at: '2026-11-27', completed_at: null }], '2026-11-26'), { next_milestone_title: null, next_milestone_due_at: '2026-11-27' });
 });
 
 test('D394: an empty board counts zero due, because it read the milestones and found none', async () => {

@@ -1,7 +1,8 @@
 /**
  * HQ package term lifecycle (D5025, #5025): each accepted package term's
  * state, the read-only review of a renewal, upgrade, downgrade or change
- * (part 1), and scheduling that change for the next term, listing and
+ * (part 1) with the open items of each program it ends (part 3, D5025-p3),
+ * and scheduling that change for the next term, listing and
  * cancelling schedules (part 2, D5025-p2). Super Admin only; writes are
  * audited and use the Super Admin write bar.
  */
@@ -13,7 +14,7 @@ import adminLicences from './admin_licences';
 import type { RouteMount } from '../util/routeRegistry';
 import { byUid } from '../services/licenceLedgerCore';
 import { getPackageOffer, PackageOfferError } from '../services/packageOffers';
-import { licenceOffers, reviewChange, standaloneGranted, termState, today } from '../services/packageLifecycle';
+import { endingDependents, licenceOffers, reviewChange, standaloneGranted, termState, today } from '../services/packageLifecycle';
 import { cancelPackageChange, listPackageChanges, schedulePackageChange } from '../services/packageChanges';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -53,12 +54,17 @@ r.get('/:uid/package-offers/:offer/change-review', async (c) => {
     if (effective != null && !DAY.test(effective)) {
       throw new PackageOfferError(400, 'invalid_effective_on', 'effective_on must be a day written YYYY-MM-DD.');
     }
+    const day = today();
     const review = reviewChange({
       proposal, all: await licenceOffers(c.env, uid), standaloneGranted: await standaloneGranted(c.env, uid),
-      day: today(), effectiveOn: effective,
+      day, effectiveOn: effective,
     });
     if (effective != null && review.current_term && !(review as any).proration_quote) {
       throw new PackageOfferError(400, 'effective_outside_term', 'effective_on must fall inside the current term, in the same currency.');
+    }
+    // D5025-p3: the open items of each ending program, for the licence's holders. Read only.
+    if ('ending_dependents' in review && review.ending_dependents) {
+      review.ending_dependents = await endingDependents(c.env, uid, review.programs.ending, day, new Date().toISOString());
     }
     c.header('Cache-Control', 'no-store');
     return c.json(review);

@@ -6,7 +6,9 @@ import { api } from '../lib/api';
 import { trackOnce } from '../lib/funnel';
 import { reportError } from '../lib/log';
 // #4622: the homes load lazily, so a view fetches only the home it draws.
-import { FounderStudioHome, InvestorStudioHome, AdvisorStudioHome, PartnerStudioHome, AdminStudioHome } from './StudioHomesLazy';
+import { FounderStudioHome, InvestorStudioHome, AdvisorStudioHome, PartnerStudioHome, AdminStudioHome, FounderStudioPreview } from './StudioHomesLazy';
+import { useViewMode } from '../contexts/ViewModeContext';
+import { rolePreviewOf } from '../lib/previewShells';
 // Task #6 (IF) — first-login product tour (the onboarding checklist panel
 // was removed 2026-05-22: signup flow already runs the persona chatbot and
 // the page already surfaces the Personal Advisor, so the checklist
@@ -66,11 +68,15 @@ export default function Dashboard({ activeRole, authUser }) {
   // broad dashboard payload, so the founder home does not wait for it (and it is not asked for). Anyone else,
   // an admin previewing or impersonating included, reads it as before.
   const ownFounder = activeRole === 'founder' && authUser?.role === 'founder';
+  // D8730 (#8730): an admin previewing the Founder role sees the role, not their own account, so the preview
+  // draws without the dashboard read too.
+  const shellMode = useViewMode();
+  const founderPreview = activeRole === 'founder' && rolePreviewOf(shellMode) === 'founder';
   useEffect(() => {
-    if (ownFounder) { setLoading(false); return; }
+    if (ownFounder || founderPreview) { setLoading(false); return; }
     setLoading(true);
     load();
-  }, [ownFounder]);
+  }, [ownFounder, founderPreview]);
 
   // Task #2 — funnel: activation endpoint. trackOnce de-dupes per browser
   // (localStorage) so only the FIRST dashboard render after signup counts.
@@ -135,6 +141,8 @@ export default function Dashboard({ activeRole, authUser }) {
 
   // #4622: the founder's own Studio mounts now, before (and without) the dashboard read.
   if (ownFounder) return founderHome(authUser);
+  // D8730 (#8730): the Founder preview, with no tasks or tester lists, which are a founder's own.
+  if (founderPreview) return <FounderStudioPreview user={authUser} />;
 
   // The admin profile does not wait on the founder dashboard, and it does not
   // fall through to skills, values and archetype. Eadwyn and the Admin page
