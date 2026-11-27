@@ -22,13 +22,13 @@ const DIR = '.github/workflows';
 const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.
-// D7899: Dependency Review also runs in the queue, comparing the queue's own
-// base and head; it reads only and is advisory until its required-check
-// activation, so its job is exempt from the skip-in-queue rule below.
+// D7899, D8641: Dependency Review also runs in the queue, comparing the queue's
+// own base and head, and reads only. Main has required it since 2026-11-23
+// (#7899), so it is in REQUIRED and held to the required-check rules above.
 // D8068: Agent provenance reads the queued PR's own commits and is advisory
 // (continue-on-error) until the owner makes `provenance` a required check.
 const IN_QUEUE = Object.freeze(['agent-provenance.yml', 'ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml']);
-const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'agent-provenance.yml': 'D8068', 'dependency-review.yml': 'D7899' });
+const ADVISORY_QUEUE_WORKFLOWS = Object.freeze({ 'agent-provenance.yml': 'D8068' });
 
 const code = (file) => readFileSync(`${DIR}/${file}`, 'utf8').split('\n').filter((l) => !/^\s*#/.test(l));
 const unquote = (v) => v.trim().replace(/^(['"])(.*)\1$/, '$2');

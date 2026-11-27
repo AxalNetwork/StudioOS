@@ -51,7 +51,7 @@ keeps that list in one place).
 | `ruleset[main].include` | to be recorded | the default branch | #8060 |
 | `ruleset[main].bypass_actors` | to be recorded | `none` (after the owner's go on #8060) | #8060 |
 | `ruleset[main].rules` | to be recorded | pull request, merge queue, required status checks, non fast-forward, deletion | #8060 |
-| `ruleset[main].required_status_checks` | to be recorded | the six checks the deploy admission job waits for | #8060 |
+| `ruleset[main].required_status_checks` | `test:drift (full suite), worker (typecheck), frontend (build), api ↔ worker drift, applied migrations unchanged, scan, Dependency Review` | every context from GitHub Actions, required on pull requests and in the merge queue since 2026-11-23 16:59:40 Europe/Zurich (#7899's console receipt, linked in D8641). Production's push-event admission waits only for the first six; `Dependency Review` never runs on a push | #7899 |
 | `ruleset[main].strict_required_status_checks` | to be recorded | as D5605 | #8060 |
 | `ruleset[main].merge_queue.merge_method` | to be recorded | `SQUASH` | #8060 |
 | `ruleset[main].merge_queue.max_entries_to_merge` | to be recorded | `5` (D5605 row 4) | #8060 |

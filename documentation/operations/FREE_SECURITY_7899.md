@@ -72,6 +72,30 @@ upload. Its SARIF upload requires security-events-write on trusted public main.
    Do not make path-scoped CodeQL/Semgrep jobs universally required without a
    separate design ensuring that every candidate emits those contexts.
 
+### Rollout record (D8641)
+
+| Step | State | Receipt |
+| --- | --- | --- |
+| 1–3. Land the workflow; real PR and queue runs | Done | D7899 landed through the queue. |
+| 4. Add the context to the main ruleset | Done 2026-11-23 16:59:40 Europe/Zurich | [Console receipt on #7899](https://github.com/AxalNetwork/StudioOS/issues/7899#issuecomment-7106112322): main requires the six original contexts plus **Dependency Review** from GitHub Actions. |
+| 5. First enforced PR and queue result | Done 2026-11-25 | [Post-activation receipt on #7899](https://github.com/AxalNetwork/StudioOS/issues/7899#issuecomment-7149112037), on #8464 (merged 2026-11-24 19:42 UTC). |
+| 4 (source half). Mirror the context in `requiredChecks.mjs`, the queue contract test and the inventory | This change (#8641, D8641) | Awaits independent source review and normal CI; the parent's acceptance stays on #7899. |
+
+The post-activation receipts, each `success`:
+
+| Candidate | Dependency Review | Full CI |
+| --- | --- | --- |
+| PR source `166c2b393ec261da904aec3d51bac45f0e8e18f3` (`pull_request`) | [run 45441237119](https://github.com/AxalNetwork/StudioOS/actions/runs/45441237119), job 138612623499 | [run 45441237530](https://github.com/AxalNetwork/StudioOS/actions/runs/45441237530) |
+| Queue/merged `b9b932bd151a96c405011b722a746e08c1bc4816` (`merge_group`) | [run 45458219588](https://github.com/AxalNetwork/StudioOS/actions/runs/45458219588), job 138673336378 | [run 45458219579](https://github.com/AxalNetwork/StudioOS/actions/runs/45458219579) |
+
+These are later validation receipts, not #7901's. #7901's final-head
+[full CI run 44797143692](https://github.com/AxalNetwork/StudioOS/actions/runs/44797143692)
+was **cancelled**; never cite it as passing.
+
+The context runs on `pull_request` and `merge_group` only. Production's
+push-event admission (`scripts/verify-production-candidate.mjs`) still waits
+for the six push-event checks and must not wait for Dependency Review.
+
 If the new check has a service/configuration failure, remove only the newly
 added required context while fixing the workflow. Preserve the existing queue,
 Gitleaks, migration and CI requirements. Never use an admin bypass or push main.
