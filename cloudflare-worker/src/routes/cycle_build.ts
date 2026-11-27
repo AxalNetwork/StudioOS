@@ -23,6 +23,7 @@ import { addHolder, updateHolder, removeFounderHolder, HolderError } from '../se
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { posthogKpiTexts } from '../services/posthog/build';
 import { createdId, featureCreateStatements, feedbackLink, mustHaveCreateStatements, roadmapCreateStatements } from '../services/buildCreates';
+import { isProjectAgent, mayOwn } from '../services/buildOwners';
 import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, deleteRoadmapItem, moveRoadmapItem, roadmapCreateChecks } from './progress';
@@ -1656,12 +1657,41 @@ async function linkedIds(c: any, p: Project, body: Record<string, unknown>, exis
   if (hypothesisId != null && Object.hasOwn(body, 'hypothesis_id') && !await ownedRow(c.env, 'hypotheses', hypothesisId, p.id)) return c.json({ detail: 'Hypothesis belongs to another project or does not exist' }, 404) as Response;
   return { painId, hypothesisId };
 }
-async function ownerChecked(c: any, p: Project, raw: unknown): Promise<number | null | Response> {
+/**
+ * D8775 (#8775, Q1 option A): an owner or reviewer is on the project's team (#3994's roster) or in its
+ * company. Before, only the company's members counted, so a project team with no company link had no one.
+ */
+const NOT_ON_TEAM = 'is not on this project’s team or in its company';
+async function ownerChecked(c: any, p: Project, raw: unknown, role = 'Owner'): Promise<number | null | Response> {
   if (raw == null) return null;
   const ownerId = positiveId(raw);
-  if (!ownerId) return c.json({ detail: 'Invalid owner' }, 400);
-  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, ownerId).first();
-  return member ? ownerId : c.json({ detail: 'Owner is not a member of this company' }, 400);
+  if (!ownerId) return c.json({ detail: `Invalid ${role.toLowerCase()}` }, 400);
+  return await mayOwn(c.env, p.id, ownerId) ? ownerId : c.json({ detail: `${role} ${NOT_ON_TEAM}` }, 400);
+}
+/**
+ * D8775 (Q2 option A): who builds a must-have. An agent is one of the project's own active agents, and
+ * only with a named person reviewing; the agent drafts, the person reviews. `undefined` keys keep what is stored.
+ */
+async function builderChecked(c: any, p: Project, body: Record<string, unknown>, existing: { reviewer_user_id?: unknown; builder_agent_id?: unknown } = {}):
+  Promise<{ reviewer: number | null; agent: number | null } | Response> {
+  const has = (k: string) => Object.hasOwn(body, k);
+  let reviewer = (existing.reviewer_user_id ?? null) as number | null, agent = (existing.builder_agent_id ?? null) as number | null;
+  if (has('reviewer_user_id')) {
+    const r = await ownerChecked(c, p, body.reviewer_user_id === '' ? null : body.reviewer_user_id, 'Reviewer'); if (r instanceof Response) return r;
+    reviewer = r;
+  }
+  if (has('builder_agent_id')) {
+    const raw = body.builder_agent_id === '' ? null : body.builder_agent_id;
+    if (raw == null) agent = null;
+    else {
+      const id = positiveId(raw);
+      if (!id) return c.json({ detail: 'Invalid builder' }, 400);
+      if (!await isProjectAgent(c.env, p.id, id)) return c.json({ detail: 'The builder is not an active agent on this project’s team' }, 400);
+      agent = id;
+    }
+  }
+  if (agent != null && reviewer == null) return c.json({ detail: 'An agent builds only with a named person reviewing. Choose a reviewer.' }, 400);
+  return { reviewer, agent };
 }
 /**
  * A Linked URL (decision 7): https on figma.com, www.figma.com or github.com
@@ -1809,21 +1839,81 @@ app.post('/company-creation/vercel-proposals/:id/dismiss', async c => {
 app.post('/must-haves', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  // D8775 (#8775): a feature chosen from Solution design becomes the must-have on its own row.
+  if (body.feature_id != null && body.feature_id !== '') return promoteFeature(c, ctx, body);
   const title = text(body.title), due = dateValue(body.due_date);
   const state = mvpValue(body, 'state', STATE_IN, MVP_STATUSES);
   if (!title || due === false || state === false) return c.json({ detail: 'A must-have needs a title; State is Not started, In progress, Done or Blocked' }, 400);
+  const links = mustLinks(c, body); if (links instanceof Response) return links;
+  const ids = await linkedIds(c, ctx.project, { hypothesis_id: body.hypothesis_id ?? null }); if (ids instanceof Response) return ids;
+  const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
+  const builder = await builderChecked(c, ctx.project, body); if (builder instanceof Response) return builder;
+  const status = state ?? 'Backlog';
+  const results = await c.env.DB.batch(mustHaveCreateStatements(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, title, hypothesisId: ids.hypothesisId, status, owner, due, links,
+    reviewer: builder.reviewer, agent: builder.agent,
+  }));
+  return c.json({ id: createdId(results) }, 201);
+});
+function mustLinks(c: any, body: Record<string, unknown>): Array<NonNullable<ReturnType<typeof featureLink>>> | Response {
   const rawLinks = body.links == null ? [] : body.links;
   if (!Array.isArray(rawLinks) || rawLinks.length > 2) return c.json({ detail: 'Up to two links' }, 400);
   const links = rawLinks.map(featureLink);
   if (links.some(l => l == null)) return c.json({ detail: 'A link is an https Figma or GitHub URL' }, 400);
-  const ids = await linkedIds(c, ctx.project, { hypothesis_id: body.hypothesis_id ?? null }); if (ids instanceof Response) return ids;
-  const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
-  const status = state ?? 'Backlog';
-  const results = await c.env.DB.batch(mustHaveCreateStatements(c.env, {
-    projectId: ctx.project.id, userId: ctx.user.id, title, hypothesisId: ids.hypothesisId, status, owner, due, links: links as Array<NonNullable<typeof links[number]>>,
-  }));
-  return c.json({ id: createdId(results) }, 201);
-});
+  return links as Array<NonNullable<typeof links[number]>>;
+}
+/**
+ * D8775 (#8775, BLV02/BLV02B): Make it a must-have. The feature's own row becomes the must-have, so its
+ * pain theme, hypothesis (and so its success bar), description, risks and sessions are carried, not
+ * retyped. A title or hypothesis the body names replaces the carried one; an owner, due date, state,
+ * reviewer and builder are set as Add must-have sets them. `roadmap` (now, next or later) also adds the
+ * linked roadmap item, in the same batch, under the roadmap's own free-tier cap. A feature that is
+ * already a must-have is a 409, so nothing is made twice.
+ */
+/** The feature record's Make it a must-have (`records/build.ts`): the same promotion, for the record's own id. */
+async function promoteRecordFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const body = await jsonBody(c) ?? {};
+  return promoteFeature(c, ctx, { ...body, feature_id: c.req.param('id') });
+}
+async function promoteFeature(c: WriteCall, ctx: WriteCtx, body: Record<string, unknown>): Promise<Response> {
+  const id = positiveId(body.feature_id); if (!id) return c.json({ detail: 'Invalid feature' }, 400);
+  const f = await c.env.DB.prepare(
+    'SELECT id, title, is_must_have, hypothesis_id, pain_group_id, owner_user_id, due_date, delivery_status, reviewer_user_id, builder_agent_id FROM mvp_features WHERE id = ? AND project_id = ?',
+  ).bind(id, ctx.project.id).first<any>();
+  if (!f) return c.json({ detail: 'Feature belongs to another project or does not exist' }, 404);
+  if (Number(f.is_must_have) === 1) return c.json({ detail: 'That feature is already a must-have.' }, 409);
+  const title = body.title == null || body.title === '' ? f.title : text(body.title);
+  const due = Object.hasOwn(body, 'due_date') ? dateValue(body.due_date) : f.due_date;
+  const state = mvpValue(body, 'state', STATE_IN, MVP_STATUSES);
+  const column = body.roadmap == null || body.roadmap === '' ? null : body.roadmap;
+  if (!title || due === false || state === false) return c.json({ detail: 'A must-have needs a title; State is Not started, In progress, Done or Blocked' }, 400);
+  if (column !== null && (typeof column !== 'string' || !['now', 'next', 'later'].includes(column))) return c.json({ detail: 'Roadmap is Now, Next or Later' }, 400);
+  const links = mustLinks(c, body); if (links instanceof Response) return links;
+  const ids = await linkedIds(c, ctx.project, body.hypothesis_id == null || body.hypothesis_id === '' ? {} : { hypothesis_id: body.hypothesis_id }, f); if (ids instanceof Response) return ids;
+  const owner = body.owner_user_id == null || body.owner_user_id === '' ? f.owner_user_id ?? null : await ownerChecked(c, ctx.project, body.owner_user_id);
+  if (owner instanceof Response) return owner;
+  const builder = await builderChecked(c, ctx.project, body, f); if (builder instanceof Response) return builder;
+  if (column) {
+    try { await roadmapCreateChecks(c.env, ctx.user, ctx.project.id, { objective: title, kanban_status: column }); }
+    catch (e) { if (e instanceof Response) return e; throw e; }
+  }
+  const seen = new Set(((await c.env.DB.prepare('SELECT url FROM mvp_feature_links WHERE feature_id = ?').bind(id).all<{ url: string }>()).results ?? []).map(l => l.url));
+  // `done_at` is migration 441's triggers': a promotion straight to Done is dated like any other.
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE mvp_features SET is_must_have = 1, title = ?, hypothesis_id = ?, delivery_status = ?, owner_user_id = ?, due_date = ?,
+        reviewer_user_id = ?, builder_agent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND is_must_have IS NOT 1`)
+      .bind(title, ids.hypothesisId, state ?? f.delivery_status ?? 'Backlog', owner, due ?? null, builder.reviewer, builder.agent, id, ctx.project.id),
+    ...[...new Map(links.filter(l => !seen.has(l.url)).map(l => [l.url, l])).values()].map(l => c.env.DB.prepare(
+      'INSERT INTO mvp_feature_links (feature_id, kind, url, external_ref, created_by) VALUES (?, ?, ?, ?, ?)').bind(id, l.kind, l.url, l.external_ref, ctx.user.id)),
+    logged(c.env, ctx.project.id, ctx.user.id, 'prototype-mvp', id, 'build_must_have_promoted', 'Feature made a must-have, with its pain theme and hypothesis'),
+    ...(column ? roadmapCreateStatements(c.env, {
+      projectId: ctx.project.id, userId: ctx.user.id, title, column: column as 'now' | 'next' | 'later', sortOrder: await columnEnd(c.env, ctx.project.id, column),
+      owner, due: due ?? null, kpi: null, theme: null, featureId: id, waitsOn: null,
+    }) : []),
+  ]);
+  const item = column ? await c.env.DB.prepare('SELECT MAX(id) AS id FROM roadmap_okrs WHERE project_id = ? AND feature_id = ?').bind(ctx.project.id, id).first<{ id: number }>() : null;
+  return c.json({ id, promoted: true, roadmap_item_id: item?.id ?? null }, 200);
+}
 
 app.patch('/features/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
@@ -1833,7 +1923,7 @@ async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   if (!id) return c.json({ detail: 'Invalid feature id' }, 400);
   const existing = await c.env.DB.prepare(
-    'SELECT title, description, added_value, effort, scope, delivery_status, pain_group_id, hypothesis_id, is_must_have, owner_user_id, due_date FROM mvp_features WHERE id = ? AND project_id = ?',
+    'SELECT title, description, added_value, effort, scope, delivery_status, pain_group_id, hypothesis_id, is_must_have, owner_user_id, due_date, reviewer_user_id, builder_agent_id FROM mvp_features WHERE id = ? AND project_id = ?',
   ).bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Feature not found' }, 404);
   const body = await jsonBody(c);
@@ -1849,16 +1939,17 @@ async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
     || ownerId === false || due === false || ![true, false, 0, 1, null].includes(must as never)) return c.json({ detail: 'Invalid feature field' }, 400);
   if (Object.hasOwn(body, 'owner_user_id') && body.owner_user_id != null && ownerId == null) return c.json({ detail: 'Invalid owner' }, 400);
   const links = await linkedIds(c, ctx.project, body, existing); if (links instanceof Response) return links;
-  if (ownerId != null) {
-    const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
-    if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
+  // D8775: a changed owner is someone on the project's team or in its company; one already stored stays.
+  if (Object.hasOwn(body, 'owner_user_id') && ownerId != null && Number(ownerId) !== Number(existing.owner_user_id)) {
+    const owner = await ownerChecked(c, ctx.project, ownerId); if (owner instanceof Response) return owner;
   }
+  const builder = await builderChecked(c, ctx.project, body, existing); if (builder instanceof Response) return builder;
   // `done_at` is migration 441's triggers': dated on the move to Done, cleared on a reopen.
   await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE mvp_features SET title = ?, description = ?, added_value = ?, effort = ?, scope = ?, delivery_status = ?,
-        pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`)
+        pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, reviewer_user_id = ?, builder_agent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`)
       .bind(title, description, impact ?? existing.added_value, effort ?? existing.effort, scope === undefined ? existing.scope : scope, state ?? existing.delivery_status,
-        links.painId, links.hypothesisId, must == null ? null : Number(must), ownerId, due, id, ctx.project.id),
+        links.painId, links.hypothesisId, must == null ? null : Number(must), ownerId, due, builder.reviewer, builder.agent, id, ctx.project.id),
     logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', id, 'build_feature_details_changed', 'Feature details changed'),
   ]);
   return c.json({ ok: true, id });
@@ -2059,9 +2150,9 @@ async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
     || (column !== undefined && !(ROADMAP_COLUMNS as readonly unknown[]).includes(column))) return c.json({ detail: 'Invalid roadmap field' }, 400);
   const kpi = await kpiChecked(c, ctx.project, body); if (kpi instanceof Response) return kpi;
   const featureId = await ownedId(c, ctx.project, body, 'feature_id', 'mvp_features', 'feature'); if (featureId instanceof Response) return featureId;
-  if (ownerId) {
-    const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
-    if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
+  // D8775: the item's owner is on the project's team or in its company, as Add item's is.
+  if (has('owner_user_id') && ownerId && Number(ownerId) !== Number(existing.owner_user_id)) {
+    const owner = await ownerChecked(c, ctx.project, ownerId); if (owner instanceof Response) return owner;
   }
   // A body that only moves the item is the move, which logs itself.
   if (column === undefined || ['title', 'owner_user_id', 'target_date', 'kpi_key', 'feedback_theme', 'feature_id'].some(has)) {
@@ -2547,7 +2638,7 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
-export { patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, postFormationStep, patchFormationStep, deleteFormationStep, putSystem };
+export { patchFeature, promoteRecordFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, postFormationStep, patchFormationStep, deleteFormationStep, putSystem };
 
 // D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
 // "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.

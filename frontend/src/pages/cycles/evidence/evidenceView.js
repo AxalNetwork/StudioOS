@@ -51,7 +51,7 @@ export const ITEM_KIND = Object.freeze({
   'pain-theme': 'Pain theme', 'consented-quote': 'Quote, with consent', 'icp-fit': 'Interview fit',
   'demand-signal': 'Demand signal', 'experiment-result': 'Experiment result', 'validation-verdict': 'Validation decision',
   'kpi-snapshot': 'KPI snapshot', 'bank-revenue': 'Revenue from the bank', 'roadmap-release': 'Release',
-  'must-have-done': 'Must-have delivered', 'mapped-bank-spend': 'Mapped bank spend', 'hiring-plan': 'Planned hire',
+  'must-have-done': 'Must-have delivered', 'prototype-test-result': 'Prototype test result', 'mapped-bank-spend': 'Mapped bank spend', 'hiring-plan': 'Planned hire',
   'roadmap-milestone': 'Milestone', 'formation-proof': 'Formation step', 'filed-obligation': 'Filed obligation',
   'signed-document': 'Signed document', 'github-ip-step': 'GitHub IP step', 'bank-statement': 'Bank statement',
   'loi-file': 'Letter of intent', 'revenue-proof': 'Revenue proof', 'accepted-safe': 'Accepted SAFE', 'filed-83b': '83(b) election',

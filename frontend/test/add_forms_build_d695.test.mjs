@@ -218,7 +218,8 @@ async function assertEmpty(m) {
     assert.deepEqual(values('hypothesis_id'), ['']);
   } finally { await feature.unmount(); }
   const must = await mount(m.BUILD_FORMS['prototype-mvp'][0], { slug: 'prototype-mvp' });
-  try { assert.ok(must.text().includes('No member to choose yet.'), 'no owner is invented'); } finally { await must.unmount(); }
+  // D8775 (#8775): the empty owner list says why, in place of "No member to choose yet."
+  try { assert.ok(must.text().includes('No one can own it yet: an owner is on this project’s team or in its company.'), 'no owner is invented'); } finally { await must.unmount(); }
   const sys = await mount(m.BUILD_FORMS['operating-systems'][0], { slug: 'operating-systems' });
   try {
     assert.equal(sys.radios('provider_accounting').length, 0, 'no provider is offered that the read did not name');
@@ -231,7 +232,7 @@ async function assertEmpty(m) {
 test('8: no Build string carries a bracket, and an empty read leaves None yet or the empty sentence', async () => {
   await mutationCheck(source, path, assertEmpty, [
     ["k: 'Answers pain theme', opts: [NONE_YET]", "k: 'Answers pain theme', opts: []"],
-    ["empty: 'No member to choose yet.'", "empty: 'No [member] yet.'"],
+    ["optionsFrom: 'owners', empty: NO_OWNER }", "optionsFrom: 'owners', empty: 'No [member] yet.' }"],
     ["optionsFrom: 'providers', required: true,", "optionsFrom: 'providers',"],
     ["note: (v) => (v[providerField(kind)] ? null : { text: `No ${systemLabel(kind)} provider can be connected yet.`, href: '/build/connect', link: 'Connect a tool' }),", ''],
   ]);

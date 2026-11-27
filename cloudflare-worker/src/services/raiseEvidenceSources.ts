@@ -35,6 +35,8 @@ export const EVIDENCE_RULES: readonly EvidenceRule[] = [
   { kind:'bank-revenue', dataset:'bank', source_table:'mercury_raise_facts', areas:[NARRATIVE], backs:['revenue','revenue_growth'], source:'connector', days:90, summary:'A bank-derived revenue fact is recorded.', private_reason:'bank' },
   { kind:'roadmap-release', dataset:'releases', source_table:'roadmap_releases', areas:[NARRATIVE], backs:['releases'], source:'connector', days:90, summary:'A published release is recorded.' },
   { kind:'must-have-done', dataset:'features', source_table:'mvp_features', areas:[NARRATIVE], backs:['product_delivery'], source:'record', days:90, summary:'A must-have is recorded as done.' },
+  // D8775 (#8775, Q3 option A): a must-have's dated, done test session that kept a finding and links what it tested. A linked address alone never qualifies.
+  { kind:'prototype-test-result', dataset:'prototypeTests', source_table:'mvp_test_sessions', areas:[NARRATIVE], backs:['product_delivery'], source:'recorded', days:90, summary:'A must-have was tested on a dated session that kept a finding, against a linked deliverable.' },
   { kind:'mapped-bank-spend', dataset:'bankSpend', source_table:'mercury_raise_facts', areas:[FUNDS], backs:['use_of_funds_actuals'], source:'connector', days:90, summary:'Bank spend has a founder-accepted section mapping.', private_reason:'bank' },
   { kind:'hiring-plan', dataset:'hires', source_table:'use_of_funds_hires', areas:[FUNDS], backs:['hiring_plan'], source:'typed', days:90, summary:'A planned hire is recorded; it is not an actual cost.' },
   { kind:'roadmap-milestone', dataset:'milestones', source_table:'roadmap_okrs', areas:[FUNDS], backs:['milestones'], source:'record', days:90, summary:'A roadmap milestone target is recorded.' },
@@ -93,6 +95,9 @@ const QUERIES = {
     (SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.provider_key='github' AND i.status='active' WHERE l.project_id=r.project_id AND l.local_table='roadmap_releases' AND l.local_id=r.id AND l.kind='release')`,
   features: `SELECT f.id,f.done_at,f.updated_at,EXISTS(SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active' AND i.provider_key='github'
     WHERE l.project_id=f.project_id AND l.local_table='mvp_features' AND l.local_id=f.id) AS from_github FROM mvp_features f WHERE f.project_id=? AND f.is_must_have=1 AND f.delivery_status='done'`,
+  prototypeTests: `SELECT s.id,s.id AS session_id,s.held_on FROM mvp_test_sessions s JOIN mvp_features f ON f.id=s.feature_id AND f.project_id=s.project_id
+    WHERE s.project_id=? AND f.is_must_have=1 AND s.status='done' AND s.held_on IS NOT NULL AND s.deliverable_url LIKE 'https://%'
+      AND EXISTS(SELECT 1 FROM mvp_test_findings t WHERE t.session_id=s.id AND t.kept=1)`,
   bankSpend: `SELECT f.id,f.fact_key,f.amount_cents,f.months,f.as_of,m.target FROM mercury_raise_facts f JOIN integrations i ON i.id=f.integration_id AND i.provider_key='mercury' AND i.status='active'
     JOIN users u ON u.id=i.user_id AND u.is_active=1 JOIN projects p ON p.id=f.project_id AND p.founder_id=u.founder_id
     JOIN mercury_raise_proposals m ON m.integration_id=f.integration_id AND m.project_id=f.project_id AND m.kind='fund_mapping' AND m.status='accepted' AND m.source_key=f.label
@@ -128,7 +133,7 @@ const SOURCE_IDS:Record<Dataset,string>={
  contributors:' AND g.id IN (SELECT value FROM json_each(?))',skills:" HAVING (s.axis || ':' || s.source) IN (SELECT value FROM json_each(?))",
  themes:' AND id IN (SELECT value FROM json_each(?))',interviews:' AND id IN (SELECT value FROM json_each(?))',
  signals:' AND id IN (SELECT value FROM json_each(?))',experiments:' AND id IN (SELECT value FROM json_each(?))',verdicts:' AND id IN (SELECT value FROM json_each(?))',
- metrics:' AND m.id IN (SELECT value FROM json_each(?))',releases:' AND r.id IN (SELECT value FROM json_each(?))',features:' AND f.id IN (SELECT value FROM json_each(?))',
+ metrics:' AND m.id IN (SELECT value FROM json_each(?))',releases:' AND r.id IN (SELECT value FROM json_each(?))',features:' AND f.id IN (SELECT value FROM json_each(?))',prototypeTests:' AND s.id IN (SELECT value FROM json_each(?))',
  bankSpend:' AND f.id IN (SELECT value FROM json_each(?))',hires:' AND id IN (SELECT value FROM json_each(?))',milestones:' AND r.id IN (SELECT value FROM json_each(?))',
  formation:' AND id IN (SELECT value FROM json_each(?))',obligations:' AND o.id IN (SELECT value FROM json_each(?))',documents:' AND id IN (SELECT value FROM json_each(?))',
  ipSteps:' AND f.id IN (SELECT value FROM json_each(?))',bankDocuments:' AND d.id IN (SELECT value FROM json_each(?))',safes:' AND m.id IN (SELECT value FROM json_each(?))',
@@ -213,6 +218,7 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
       case 'bank-revenue': if(row.kind==='revenue')add(row.as_of,row.fact_key==='revenue:growth'?row.value:row.amount_cents,row.fact_key==='revenue:growth'?'percent':'cents');break;
       case 'roadmap-release': add(row.published_at,null,undefined,id,{provider:'github'});break;
       case 'must-have-done': add(row.done_at);break;
+      case 'prototype-test-result': add(row.held_on);break;
       case 'mapped-bank-spend': add(row.as_of,row.amount_cents,'cents');break;
       case 'hiring-plan': add(row.created_at,row.annual_cents,'cents');break;
       case 'roadmap-milestone': add(row.from_github===1?null:row.created_at,null);break;
