@@ -292,7 +292,7 @@ test('merged Versions keeps reads visible to admins and creation controls for fo
     const page = await mounted(h(NarrativeTabPage, { tab: 'versions', projectId: 1, search: '?project_id=1', admin, cards: [] }), handle);
     try {
       assert.ok(page.testIds().includes('narrative-read-by'));
-      assert.match(page.text(), /from Blank/);
+      assert.match(page.text(), /Blank/); // D9104: the Based on column
       assert.match(page.text(), /Before/);
       assert.equal(page.testIds().includes('narrative-duplicate'), !admin);
       assert.equal(page.testIds().includes('narrative-start-from'), !admin);

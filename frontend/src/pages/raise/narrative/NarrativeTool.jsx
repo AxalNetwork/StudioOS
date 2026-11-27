@@ -15,6 +15,8 @@ import PositioningTab from './PositioningTab';
 import { ObjectionsCard } from './ObjectionsPanel';
 import ClaimsTab from './ClaimsTab';
 import CheckTab from './CheckTab';
+import BuildDeckDialog from './BuildDeckDialog';
+import { deckEntry, newestOf, noVersionLine } from './buildDeckModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 
@@ -96,9 +98,12 @@ function Skeleton({ testId }) {
 }
 
 function NoVersion({ search, readOnly }) {
+  // D9104 (RAN24a, RAN26a): Build a deck takes a saved version; the editor is told so beside New version.
+  const build = noVersionLine(readOnly);
   return (
     <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-no-version">
       <span className={`text-[13.5px] font-bold ${INK}`}>{NO_VERSION}</span>
+      {build ? <span className={`text-[12.5px] ${MUTED}`} data-testid="narrative-no-version-build">{build}</span> : null}
       {readOnly ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
     </div>
   );
@@ -159,15 +164,48 @@ function DuplicateDialog({ projectId, version, next, onClose, onDone }) {
   );
 }
 
+/** A cell's value, or the dotted Not recorded chip; a bar while the module read is in flight. */
+function Cell({ value, loading, mono = false }) {
+  if (loading) return <span className="block h-3 w-16 animate-pulse rounded bg-axal-ground dark:bg-gray-800" aria-hidden="true" />;
+  return value ? <span className={`${mono ? 'font-mono' : ''} ${INK}`}>{value}</span> : <span className={`${NOT_SET} inline-block`}>{NOT_RECORDED}</span>;
+}
+
+/** NAR12's Read by in a row: the deck and its cards, or the dotted sentence that no deck reads it. */
+function ReadByCell({ row, loading }) {
+  if (loading) return <Cell loading />;
+  if (!row) return <Cell />;
+  return row.read_by?.cards?.length ? <span className={INK}>{readByLine(row)}</span> : <span className={`${NOT_SET} inline-block italic`}>{readByLine(row)}</span>;
+}
+
+/** D9104 (RAN24a): a row's Deck cell. The newest builds; an older row says it builds from the newest (◇) and opens it. */
+function DeckCell({ entry, onBuild, testId = 'narrative-version-deck' }) {
+  if (!entry) return null;
+  if (entry.kind === 'build') {
+    return <button type="button" className={`${BTN_SECONDARY} !w-fit min-h-[44px] lg:min-h-[32px] lg:py-1.5`} onClick={(e) => onBuild(e.currentTarget)} data-testid={`${testId}-build`}>{entry.label}</button>;
+  }
+  return (
+    <span className="flex flex-col items-start gap-1" data-testid={`${testId}-older`}>
+      <span className="max-w-[240px] rounded-[6px] border-[1.5px] border-dashed border-axal-violet px-2 py-0.5 font-mono text-[10.5px] font-bold leading-snug text-axal-violet dark:border-violet-400 dark:text-violet-300" title="Needs backend work">◇ {entry.tag}</span>
+      <Link className={`${LINK} inline-flex min-h-[44px] items-center text-[12.5px] lg:min-h-0`} to={entry.href}>{entry.open}</Link>
+    </span>
+  );
+}
+
+const TH = 'px-3 py-2 text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
+const TD = 'px-3 py-2.5 align-middle text-[12.5px]';
+
 /**
- * Versions (NAR12): every saved version with where it started, two of them
- * side by side through D908's compare, who reads each, and Duplicate or "Make
- * vN the start of a new version". No Delete is drawn.
+ * Versions (NAR12; D9104 rebuilds its list as RAN24a's table): every saved
+ * version with its audience, saved date, author, revision, where it started,
+ * who reads it and, for an editor, its Deck cell; two of them side by side
+ * through D908's compare; and Duplicate or "Make vN the start of a new
+ * version". No Delete is drawn. On a phone the table is one card per version.
  */
-function VersionsTab({ projectId, versions, search, reload, onChanged, readOnly = false }) {
+function VersionsTab({ projectId, versions, search, reload, onChanged, readOnly = false, phone = false }) {
   const [a, setA] = useState(() => versions[1]?.value ?? null);
   const [b, setB] = useState(() => versions[0]?.value ?? null);
   const [dup, setDup] = useState(null);
+  const [building, setBuilding] = useState(null);
   const read = useHomeRead(projectId, reload);
   const part = homePart(read.data);
   const listed = part?.versions ?? [];
@@ -175,27 +213,70 @@ function VersionsTab({ projectId, versions, search, reload, onChanged, readOnly 
   const label = (v) => versions.find((x) => x.value === String(v))?.label || `v${v}`;
   const row = (v) => listed.find((x) => String(x.version) === String(v)) || null;
   const picked = [b, a].filter((v) => v != null).map(row).filter(Boolean);
+  const newest = newestOf(versions);
+  const loading = read.status === 'loading';
+  const deckCol = !readOnly;
+  const openBuild = (node) => setBuilding({ ref: { current: node } });
   return (
-    <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[240px_minmax(0,1fr)_280px]" data-testid="narrative-versions">
-      <section className={CARD}>
-        <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[15px] font-extrabold tracking-[-.015em] dark:border-gray-800 ${INK}`}>Versions</h2>
+    <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_280px]" data-testid="narrative-versions">
+      <section className={`${CARD} min-w-0 lg:col-span-2`} data-testid="narrative-versions-table">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+          <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Versions</h2>
+          <span className={`font-mono text-[12px] ${MUTED}`}>{versions.length} saved{newest != null ? ` · newest v${newest}` : ''}</span>
+        </div>
         {read.status === 'error' || homeUnreadable(read.data)
           ? <div className="px-4 py-3"><Unreadable what="Where each version started" claim="This is not a claim that none are saved." /></div>
-          : (
+          : phone ? (
             <ul className="m-0 list-none p-0">
-              {versions.map((v) => {
+              {versions.map((v, i) => {
                 const r = row(v.value);
+                const entry = deckCol ? deckEntry(v.value, newest, { search }) : null;
                 return (
-                  <li key={v.value} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800">
-                    <Link to={versionHref(v.value, search)} className={`flex min-h-[44px] flex-col justify-center px-4 py-2 hover:bg-axal-ground dark:hover:bg-gray-800`} data-testid="narrative-version-row">
-                      <span className={`text-[13px] font-semibold ${INK}`}>{v.label}</span>
-                      {r && <span className={`text-[11.5px] ${MUTED}`} data-testid="narrative-version-sub">{versionSub(r)}</span>}
+                  <li key={v.value} className="flex flex-col gap-1 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="narrative-version-row">
+                    <Link to={versionHref(v.value, search)} className={`inline-flex min-h-[44px] items-center gap-2 text-[13.5px] font-bold ${INK}`}>
+                      v{v.value}{i === 0 ? <span className={`text-[11px] font-semibold ${MUTED}`}>newest</span> : null}<span className={`text-[12px] font-semibold ${MUTED}`}>· {r?.audience || NOT_RECORDED}</span>
                     </Link>
+                    {r ? <span className={`text-[12px] ${MUTED}`} data-testid="narrative-version-sub">{versionSub(r)} · revision {NOT_RECORDED}</span> : loading ? <Cell loading /> : null}
+                    <span className={`text-[12px] ${MUTED}`}>Read by: <ReadByCell row={r} loading={loading} /></span>
+                    {entry ? <div className="pt-1"><span className={`${EYEBROW} mb-1 block`}>Deck</span><DeckCell entry={entry} onBuild={openBuild} /></div> : null}
                   </li>
                 );
               })}
             </ul>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-axal-hairline dark:border-gray-800">
+                    {['Version', 'Audience', 'Saved', 'By', 'Revision', 'Based on', 'Read by', ...(deckCol ? ['Deck'] : [])].map((c) => <th key={c} scope="col" className={`${TH} ${c === 'Revision' ? 'text-right' : ''}`}>{c}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {versions.map((v, i) => {
+                    const r = row(v.value);
+                    return (
+                      <tr key={v.value} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="narrative-version-row">
+                        <td className={TD}>
+                          <Link to={versionHref(v.value, search)} className={`flex flex-col font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`}>
+                            <span>v{v.value}</span>
+                            {i === 0 ? <small className={`text-[11px] font-semibold ${MUTED}`} data-testid="narrative-version-newest">newest</small> : null}
+                          </Link>
+                        </td>
+                        <td className={TD}><Cell value={r?.audience} loading={loading} /></td>
+                        <td className={TD}><Cell value={r?.saved} loading={loading} mono /></td>
+                        <td className={TD}><Cell value={r?.by} loading={loading} /></td>
+                        <td className={`${TD} text-right`}><Cell loading={loading} /></td>
+                        <td className={TD}><Cell value={r?.based_on} loading={loading} /></td>
+                        <td className={TD}><ReadByCell row={r} loading={loading} /></td>
+                        {deckCol ? <td className={TD}><DeckCell entry={deckEntry(v.value, newest, { search })} onBuild={openBuild} /></td> : null}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
+        <p className={`m-0 border-t border-axal-hairline px-4 py-2.5 text-[11.5px] dark:border-gray-800 ${MUTED}`}>Read by counts only the current deck’s cards. Revision is not on this read, so it says Not recorded.</p>
       </section>
       <section className={CARD} data-testid="narrative-compare">
         <div className="flex flex-wrap items-center gap-2.5 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
@@ -257,6 +338,7 @@ function VersionsTab({ projectId, versions, search, reload, onChanged, readOnly 
         )}
       </div>
       {!readOnly && dup && <DuplicateDialog projectId={projectId} version={dup} next={nextVersion(versions)} onClose={() => setDup(null)} onDone={onChanged} />}
+      {!readOnly && building && newest != null ? <BuildDeckDialog projectId={projectId} version={newest} row={row(newest)} returnFocusTo={building.ref} onClose={() => setBuilding(null)} /> : null}
     </div>
   );
 }
@@ -355,10 +437,10 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} readOnly={readOnly} />;
   else if (!list.versions.length) body = <NoVersion search={search} readOnly={readOnly} />;
 
-  else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} readOnly={readOnly} />;
+  else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} readOnly={readOnly} phone={phone} />;
   else if (tab === 'story') body = (
     <>
-      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={readOnly} aiOn={fixOn}
+      <StoryTab key={version} projectId={projectId} version={version} newest={list.versions[0]?.value ?? null} search={search} phone={phone} readOnly={readOnly} aiOn={fixOn}
         exportAs={admin ? 'admin' : readOnly ? null : 'founder'} />
       <NarrativeNotes projectId={projectId} version={version} admin={admin} />
       {admin ? null : <NarrativeReads projectId={projectId} />}

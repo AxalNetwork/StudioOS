@@ -20,6 +20,10 @@ import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel
 import { ObjectionsPanel } from './ObjectionsPanel';
 import NarrativeCoach from './NarrativeCoach';
 import ExportDialog from './ExportDialog';
+import BuildDeckDialog from './BuildDeckDialog';
+import { shareItems } from './buildDeckModel';
+import useMenuFocus from '../pitch/useMenuFocus';
+import { PhoneSheet, SheetRow } from '../../../ui/phone/PhoneSheet';
 import { FIX_PROPOSAL_NOTE, appendFix, fixParts } from './claimsModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -119,6 +123,44 @@ function Proposal({ run, onAccept, onDiscard }) {
 }
 
 /** NAR17b and NAR17c, and any other refused run, in the Worker's words. */
+/**
+ * D9104 (RAN24a, RAN28a): the founder's Share ▾ on Story, a `role="menu"` with D1604's keyboard (`useMenuFocus`); on a
+ * phone one full-width Share button opens a bottom sheet with the same items at 52px. Only built items are offered
+ * (`shareItems`): Copy or export… and Build a deck from v[newest]….
+ */
+function ShareMenu({ items, phone, open, menu, version, onToggle, onClose, onPick }) {
+  if (phone) {
+    return (
+      <>
+        <button type="button" ref={menu.opener} className={`${GHOST} min-h-[44px] w-full justify-center`} aria-haspopup="dialog" aria-expanded={open} onClick={onToggle} data-testid="story-share-open">Share</button>
+        {open ? (
+          <PhoneSheet title={`Share v${version}`} onClose={onClose} opener={menu.opener}>
+            <div data-testid="story-share-sheet">
+              {items.map((it) => <SheetRow key={it.id} title={it.label} onClick={() => onPick(it.id)} />)}
+            </div>
+          </PhoneSheet>
+        ) : null}
+      </>
+    );
+  }
+  return (
+    <div className="flex justify-end">
+      <div className="relative" ref={menu.box} onKeyDown={menu.onKeyDown} onBlur={menu.onBlur}>
+        <button type="button" ref={menu.opener} className={`${GHOST} gap-1`} aria-haspopup="menu" aria-expanded={open} onClick={onToggle} data-testid="story-share-open">Share<span aria-hidden="true">▾</span></button>
+        {open ? (
+          <div role="menu" aria-label="Share" className="absolute right-0 top-[40px] z-30 flex w-[260px] flex-col rounded-[10px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="story-share-menu">
+            {items.map((it, i) => (
+              <button key={it.id} ref={menu.item(i)} type="button" role="menuitem"
+                className={`flex min-h-[36px] items-center rounded-[7px] px-2.5 text-left text-[13px] font-semibold hover:bg-axal-ground dark:hover:bg-gray-800 ${it.id === 'build' ? 'text-axal-violet dark:text-violet-300' : 'text-axal-ink dark:text-gray-100'}`}
+                onClick={() => onPick(it.id)} data-testid={`story-share-${it.id}`}>{it.label}</button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function RunRefused({ refusal }) {
   const tone = refusal.kind === 'tokens' ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800';
   return (
@@ -258,9 +300,13 @@ function SaveDialog({ writes, version, answers = [], onSave, onClose, saving, er
 }
 
 /** The Story tab for one version, read and written through D908's stores. */
-export default function StoryTab({ projectId, version, search = '', phone = false, readOnly: roleReadOnly = false, aiOn = true, exportAs = null }) {
+export default function StoryTab({ projectId, version, newest = null, search = '', phone = false, readOnly: roleReadOnly = false, aiOn = true, exportAs = null }) {
   // D6070: 'founder' exports and copies; 'admin' copies only, recorded with the read reason; null offers neither.
   const [exporting, setExporting] = useState(false);
+  // D9104 (RAN24a, RAN28a): the founder's Share ▾ (a sheet on a phone) and its Build a deck confirm, on `newest`.
+  const [sharing, setSharing] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const shareMenu = useMenuFocus(sharing && !phone, () => setSharing(false));
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const read = useNarrative(projectId, version, reload);
@@ -396,10 +442,18 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-story">
       {isLiveDeck(read.data) ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-live-deck">{LIVE_DECK}</p> : roleReadOnly ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-read-only">Read only. Notes are visible to the founder.</p> : null}
-      {exportAs && !isLiveDeck(read.data) ? (
+      {exportAs && !isLiveDeck(read.data) ? (exportAs === 'admin' ? (
         <div className="flex justify-end">
-          <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="story-export-open">{exportAs === 'admin' ? 'Copy text' : 'Export and copy'}</button>
+          <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="story-export-open">Copy text</button>
         </div>
+      ) : (
+        <ShareMenu items={shareItems({ exportAs, newest, phone })} phone={phone} open={sharing} menu={shareMenu} version={version}
+          onToggle={() => setSharing((s) => !s)} onClose={() => setSharing(false)}
+          onPick={(id) => { setSharing(false); shareMenu.opener.current?.focus?.(); if (id === 'export') setExporting(true); if (id === 'build') setBuilding(true); }} />
+      )) : null}
+      {building ? (
+        <BuildDeckDialog projectId={projectId} version={Number(newest)} revision={String(newest) === String(version) ? read.data?.meta?.revision ?? null : null}
+          returnFocusTo={shareMenu.opener} onClose={() => setBuilding(false)} />
       ) : null}
       {exporting ? (
         <ExportDialog projectId={projectId} read={read.data} sources={srcState} admin={exportAs === 'admin'} unsaved={writes.length > 0} onClose={() => setExporting(false)} />
