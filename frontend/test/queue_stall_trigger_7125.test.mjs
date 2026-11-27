@@ -67,7 +67,11 @@ test('the saved count: garbage or a missing file starts fresh; the run list keep
   for (const text of ['', 'not json', '{"schema":2,"failures":3}', '{"schema":1,"failures":-1}', '{"schema":1,"failures":"2"}', null]) {
     assert.deepEqual(readCheckerState(text), { schema: 1, failures: 0, since: null, runs: [] }, String(text));
   }
-  assert.deepEqual(readCheckerState('{"schema":1,"failures":4,"since":"x","runs":["a",3,"b"]}'), { schema: 1, failures: 4, since: 'x', runs: ['a', 'b'] });
+  assert.deepEqual(readCheckerState(`{"schema":1,"failures":4,"since":"${AT}","runs":["${RUN(1)}",3,"${RUN(2)}"]}`), { schema: 1, failures: 4, since: AT, runs: [RUN(1), RUN(2)] });
+  // The cache is file data: only a run link of the exact shape and an ISO time survive (CodeQL js/file-access-to-http).
+  // Mutation checked: the RUN_URL filter, the ISO_TIME check and the MAX_FAILURES cap each removed.
+  assert.deepEqual(readCheckerState('{"schema":1,"failures":4,"since":"x","runs":["a","https://evil.example/actions/runs/1","https://github.com/a/b/actions/runs/1?x=<y>"]}'), { schema: 1, failures: 4, since: null, runs: [] });
+  assert.deepEqual(readCheckerState('{"schema":1,"failures":10001}'), { schema: 1, failures: 0, since: null, runs: [] });
   let s = fresh;
   for (let i = 1; i <= 7; i++) s = checkerTransition(s, { outcome: 'failure', runUrl: RUN(i) }).state;
   assert.deepEqual(s.runs, [3, 4, 5, 6, 7].map(RUN));
@@ -81,7 +85,9 @@ test('the checker alert is its own title: it closes no landing gate', () => {
   const body = checkerIssueBody({ schema: 1, failures: 2, since: AT, runs: [RUN(1), RUN(2)] });
   assert.match(body, /has failed 2 times in a row, the first at 2026-11-23T23:50:00\.000Z/);
   assert.match(body, /- https:\/\/github\.com\/AxalNetwork\/StudioOS\/actions\/runs\/2/);
-  assert.match(checkerSlackText('open', { failures: 2, runUrl: RUN(2), issueUrl: 'https://github.com/AxalNetwork/StudioOS/issues/9' }), /failed 2 times in a row\.\* <https:\/\/github\.com\/AxalNetwork\/StudioOS\/actions\/runs\/2\|run> <https:\/\/github\.com\/AxalNetwork\/StudioOS\/issues\/9\|issue>/);
+  assert.match(checkerSlackText('open', { runUrl: RUN(2), issueUrl: 'https://github.com/AxalNetwork/StudioOS/issues/9' }), /failed 2 or more times in a row\.\* <https:\/\/github\.com\/AxalNetwork\/StudioOS\/actions\/runs\/2\|run> <https:\/\/github\.com\/AxalNetwork\/StudioOS\/issues\/9\|issue>/);
+  // No cached value reaches Slack: the line takes no count.
+  assert.equal(checkerSlackText('open', { failures: 9999 }), checkerSlackText('open', {}));
   assert.match(checkerSlackText('close'), /recovered/);
 });
 
@@ -131,7 +137,7 @@ test('CLI: the second failure opens the issue with the exact title and tells Sla
   const post = second.calls.find((c) => c.startsWith('CALL POST api.github.com/repos/AxalNetwork/StudioOS/issues '));
   assert.ok(post, second.out);
   assert.equal(JSON.parse(post.slice(post.indexOf('{'))).title, '[alert] merge queue stall check failing');
-  assert.ok(second.calls.some((c) => c.startsWith('CALL POST hooks.example/x') && /failed 2 times in a row/.test(c)));
+  assert.ok(second.calls.some((c) => c.startsWith('CALL POST hooks.example/x') && /failed 2 or more times in a row/.test(c)));
 });
 
 test('CLI: a successful check closes the open checker alert; an unrelated open alert is left alone', () => {

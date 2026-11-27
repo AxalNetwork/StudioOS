@@ -21,12 +21,24 @@ export const FAILURES_TO_OPEN = 2;
 /** The check step's outcomes (`steps.<id>.outcome`). Skipped means an earlier step failed: no reading either. */
 const FAILED = new Set(['failure', 'cancelled', 'skipped']);
 
+/** The most consecutive failures a saved count may carry; a larger number is not a count this job wrote. */
+const MAX_FAILURES = 10_000;
+/** Only a run link of this shape and an ISO time survive a read: the cache is file data, so nothing else from it
+ *  reaches the issue body. The Slack line carries no cached value at all (CodeQL js/file-access-to-http). */
+const RUN_URL = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/\d{1,20}$/;
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+
 /** The saved count, or a fresh one when the file is missing or unreadable (a lost count only delays the alert). */
 export function readCheckerState(text) {
   try {
     const v = JSON.parse(String(text ?? ''));
-    if (v?.schema === 1 && Number.isSafeInteger(v.failures) && v.failures >= 0) {
-      return { schema: 1, failures: v.failures, since: typeof v.since === 'string' ? v.since : null, runs: Array.isArray(v.runs) ? v.runs.filter(r => typeof r === 'string').slice(-5) : [] };
+    if (v?.schema === 1 && Number.isSafeInteger(v.failures) && v.failures >= 0 && v.failures <= MAX_FAILURES) {
+      return {
+        schema: 1,
+        failures: v.failures,
+        since: typeof v.since === 'string' && ISO_TIME.test(v.since) ? v.since : null,
+        runs: Array.isArray(v.runs) ? v.runs.filter(r => typeof r === 'string' && RUN_URL.test(r)).slice(-5) : [],
+      };
     }
   } catch { /* fresh state */ }
   return { schema: 1, failures: 0, since: null, runs: [] };
@@ -63,10 +75,10 @@ export function checkerIssueBody(state) {
   ].join('\n');
 }
 
-/** The one Slack line for an open or a close. */
-export function checkerSlackText(action, { issueUrl = null, runUrl = null, failures = 0 } = {}) {
+/** The one Slack line for an open or a close: this run's link and the issue GitHub returned, never a cached value. */
+export function checkerSlackText(action, { issueUrl = null, runUrl = null } = {}) {
   const issue = issueUrl ? ` <${issueUrl}|issue>` : '';
   const run = runUrl ? ` <${runUrl}|run>` : '';
   if (action === 'close') return `:white_check_mark: *Merge queue stall check recovered.*${run}${issue} Closing the alert.`;
-  return `:warning: *The merge queue stall check failed ${failures} times in a row.*${run}${issue}\nUntil it passes, a stalled queue opens no alert. Read the newest run's log (D7125-p2).`;
+  return `:warning: *The merge queue stall check has failed ${FAILURES_TO_OPEN} or more times in a row.*${run}${issue}\nUntil it passes, a stalled queue opens no alert. The issue lists the runs (D7125-p2).`;
 }

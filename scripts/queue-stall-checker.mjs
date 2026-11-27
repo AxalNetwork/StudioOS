@@ -72,7 +72,7 @@ async function main() {
   console.log(JSON.stringify({ kind: 'queue-stall-checker', outcome: env.CHECK_OUTCOME, failures: state.failures, action, issue: issue?.number ?? null }));
   if (action === 'open') {
     const created = await gh('/issues', { method: 'POST', body: JSON.stringify({ title: CHECKER_ALERT_TITLE, body: checkerIssueBody(state) }) });
-    await slack(checkerSlackText('open', { issueUrl: created?.html_url, runUrl, failures: state.failures }));
+    await slack(checkerSlackText('open', { issueUrl: created?.html_url, runUrl }));
   }
   if (action === 'close') {
     await gh(`/issues/${issue.number}/comments`, { method: 'POST', body: JSON.stringify({ body: `The stall check passed${runUrl ? ` in ${runUrl}` : ''}. Closing.` }) });
