@@ -261,7 +261,7 @@ export function cancelledShare(runs) {
 // perEvent runs each of pull_request, push and other. `requestPlan` gives the
 // worst case; `ci-scorecard.mjs` reads these and states no other number.
 export const BUDGET = Object.freeze({ cap: 385, runPages: 10, queuePages: 5, rules: 1,
-  wholeShas: 32, queueCiRuns: 74, perEvent: 12, jobsUntil: 210,
+  wholeShas: 23, queueCiRuns: 74, perEvent: 12, jobsUntil: 210,
   prPages: 2, timelinePages: 3, timelinesUntil: 370, commentPages: 10, writes: 1 });
 
 // The workflows whose merge_group jobs report a required check.

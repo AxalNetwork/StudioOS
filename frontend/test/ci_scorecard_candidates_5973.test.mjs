@@ -121,7 +121,7 @@ test('deadline-expired only on evidence: a pending check at a removal at the dea
 });
 
 test('required checks come from the shared list, which the workflows check holds to the ruleset', () => {
-  assert.deepEqual(m.QUEUE_WORKFLOWS, ['.github/workflows/ci.yml', '.github/workflows/gitleaks.yml', '.github/workflows/migration-immutability.yml']);
+  assert.deepEqual(m.QUEUE_WORKFLOWS, ['.github/workflows/ci.yml', '.github/workflows/dependency-review.yml', '.github/workflows/gitleaks.yml', '.github/workflows/migration-immutability.yml']);
   const lib = readFileSync(new URL('../../scripts/lib/ciScorecard.mjs', import.meta.url), 'utf8');
   const wf = readFileSync(new URL('merge_queue_ci_4107.test.mjs', import.meta.url), 'utf8');
   for (const src of [lib, wf]) assert.match(src, /import \{ REQUIRED \} from '(?:\.\/|(?:\.\.\/)+scripts\/lib\/)requiredChecks\.mjs';/);
@@ -157,12 +157,12 @@ test('the Markdown counts rows per class and the request plan fits under the sta
   const b = m.BUDGET;
   const plan = m.requestPlan();
   assert.equal(b.cap, 385);
-  // Listings before the sample: 10 run pages + 3 queue workflows x 5 pages + 1 rules read = 26.
-  assert.equal(plan.listings, 26);
-  // The sample: 32 SHAs x 3 queue workflows + (74 - 32) more ci.yml queue runs + 3 events x 12 = 174 job reads,
-  // inside 210 - 26 = 184, so 10 are left for prior-attempt reads.
-  assert.equal(plan.sample, 174);
-  assert.equal(plan.jobRoom, 184);
+  // Listings before the sample: 10 run pages + 4 queue workflows x 5 pages + 1 rules read = 31 (D8641: Dependency Review is the fourth).
+  assert.equal(plan.listings, 31);
+  // The sample: 23 SHAs x 4 queue workflows + (74 - 23) more ci.yml queue runs + 3 events x 12 = 179 job reads,
+  // exactly 210 - 31 = 179 (D8641), so prior-attempt reads get only what the sample leaves unread.
+  assert.equal(plan.sample, 179);
+  assert.equal(plan.jobRoom, 179);
   assert.ok(plan.sample <= plan.jobRoom, 'the whole job sample fits before jobsUntil');
   // Timelines and head listings keep D6678's room: 370 - 210 - 2 PR-list pages = 158.
   assert.equal(plan.timelineRoom, 158);
@@ -203,9 +203,9 @@ test('the rows read every listing: a candidate split across the queue listing an
 });
 
 test('the job sample takes whole SHAs first, listed ones first, then more ci.yml queue runs, then the other events', () => {
-  // D5973 part 2: queue runs of four head SHAs, three workflows each; only SHA 1's ci.yml run is in the capped listing.
+  // D5973 part 2: queue runs of four head SHAs, four workflows each; only SHA 1's ci.yml run is in the capped listing.
   const q = (c, path, id) => ({ id, event: 'merge_group', path: `.github/workflows/${path}`, head_sha: sha(c) });
-  const queueRuns = ['4', '3', '2', '1'].flatMap((c, i) => ['migration-immutability.yml', 'ci.yml', 'gitleaks.yml'].map((p, j) => q(c, p, 10 * i + j)));
+  const queueRuns = ['4', '3', '2', '1'].flatMap((c, i) => ['migration-immutability.yml', 'ci.yml', 'dependency-review.yml', 'gitleaks.yml'].map((p, j) => q(c, p, 10 * i + j)));
   const listedCi = queueRuns.find(r => r.head_sha === sha('1') && r.path.endsWith('/ci.yml'));
   const other = (event, id) => ({ id, event, path: '.github/workflows/x.yml', head_sha: sha('0') });
   const runs = [listedCi, other('pull_request', 100), other('pull_request', 101), other('push', 102), other('schedule', 103),
@@ -214,19 +214,19 @@ test('the job sample takes whole SHAs first, listed ones first, then more ci.yml
   const pick = m.jobSample({ runs, queueRuns, budget }).map(r => `${r.head_sha[0]}:${r.path.split('/').pop()}:${r.event}`);
   assert.deepEqual(pick, [
     // The listed SHA first, whole; then the rest, evenly spaced (one slot: the first, SHA 4), whole.
-    '1:ci.yml:merge_group', '1:gitleaks.yml:merge_group', '1:migration-immutability.yml:merge_group',
-    '4:ci.yml:merge_group', '4:gitleaks.yml:merge_group', '4:migration-immutability.yml:merge_group',
+    '1:ci.yml:merge_group', '1:dependency-review.yml:merge_group', '1:gitleaks.yml:merge_group', '1:migration-immutability.yml:merge_group',
+    '4:ci.yml:merge_group', '4:dependency-review.yml:merge_group', '4:gitleaks.yml:merge_group', '4:migration-immutability.yml:merge_group',
     // One more ci.yml queue run brings ci.yml to queueCiRuns = 3.
     '3:ci.yml:merge_group',
     // One each of pull_request, push and other; SHA 2's listed gitleaks queue run is not "other".
     '0:x.yml:pull_request', '0:x.yml:push', '0:x.yml:schedule',
   ]);
-  // At the stated sizes a busy day fills the plan exactly: 32 x 3 + (74 - 32) + 3 x 12 = 174.
+  // At the stated sizes a busy day fills the plan exactly: 23 x 4 + (74 - 23) + 3 x 12 = 179.
   const busy = Array.from({ length: 100 }, (_, i) => String(i).padStart(2, '0')).flatMap((c, i) =>
-    ['ci.yml', 'gitleaks.yml', 'migration-immutability.yml'].map((p, j) => ({ ...q('a', p, 1000 + 3 * i + j), head_sha: c.repeat(20) })));
+    ['ci.yml', 'dependency-review.yml', 'gitleaks.yml', 'migration-immutability.yml'].map((p, j) => ({ ...q('a', p, 1000 + 4 * i + j), head_sha: c.repeat(20) })));
   const events = ['pull_request', 'push', 'schedule'].flatMap((e, i) => Array.from({ length: 20 }, (_, k) => other(e, 5000 + 100 * i + k)));
   const full = m.jobSample({ runs: events, queueRuns: busy });
   assert.equal(full.length, m.requestPlan().sample);
   assert.equal(full.filter(r => r.event === 'merge_group' && r.path.endsWith('/ci.yml')).length, 74);
-  assert.equal(new Set(full.filter(r => r.event === 'merge_group' && !r.path.endsWith('/ci.yml')).map(r => r.head_sha)).size, 32);
+  assert.equal(new Set(full.filter(r => r.event === 'merge_group' && !r.path.endsWith('/ci.yml')).map(r => r.head_sha)).size, 23);
 });
