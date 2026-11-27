@@ -2,6 +2,8 @@
 
 `network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
 
+`mutation_atomic_writes.test.mjs` pins `_atomic_write.mjs`, the one way an in-suite mutation check rewrites a source file: a temporary file beside it renamed over it, so a test file running in parallel never imports a truncated copy. The guard fails if any suite under `cloudflare-worker/test`, `frontend/test` or `scripts` writes a mutated or restored source with `writeFileSync(<file>, original…)`. Mutations run on a private copy (`_isolated_mutation_source.mjs`, D6811), not on the checkout.
+
 `research_global_funds_7326.test.ts` replays the worldwide manager import over
 the real fund migrations and through directory reads: preserves historical
 rows, reports, saved references, UID redirects and source reviews; suppresses
