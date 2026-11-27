@@ -303,9 +303,13 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
  * persona from the steps before. Up to three eligible skills of its natural fit are picked for you; a skill a policy
  * blocks says why; a picked skill names the tools step 3 will ask for. Nothing eligible says so, with counts and the
  * way on, and the step can still go on with no skills.
+ *
+ * D8769 part 3 (TMM04B, the owner's Q2 = A): the sheet's Next stays off until a skill is chosen (`skillsGate`), so
+ * the step hands its read up (`onBlock`); a read that failed says so with Try again, which reads it again.
  */
-export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList }) {
+export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList, onBlock }) {
   const [block, setBlock] = useState(null);
+  const [tries, setTries] = useState(0);
   // D4121 AG3: what the agent would cost per run with these skills, before it is added (its cap comes at Review).
   const kind = scope.kind === 'company' ? 'company' : 'project';
   const scopeId = kind === 'company' ? scope.company?.uid : scope.project?.id;
@@ -315,20 +319,28 @@ export function SkillsStep({ scope, role, model, persona, picked, setPicked, onL
   useEffect(() => {
     let alive = true;
     setBlock(null);
+    onBlock?.(null);
     agents.eligibleSkills(kind, scopeId, { role, persona }).then((b) => {
       if (!alive) return;
       setBlock(b);
+      onBlock?.(b);
       if (!b.available) return;
       const list = Array.isArray(b.value?.skills) ? b.value.skills : [];
       onList?.(list);
       if (picked == null) setPicked(new Set(list.filter((s) => { const e = eligibilityOf(s); return e.state === 'eligible' && e.fit; }).slice(0, 3).map((s) => s.uid)));
     });
     return () => { alive = false; };
-  }, [role, persona]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role, persona, tries]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!block?.available) {
     return (
       <div className="flex flex-col gap-2" data-testid="add-agent-skills">
-        {block ? <HonestBlock>{block.unreadable ? 'The skills this agent could take could not be read.' : 'Skills aren’t open yet.'} You can add skills from the agent’s profile later.</HonestBlock> : <p className={`m-0 ${MUTED}`}>Reading…</p>}
+        {!block ? <p className={`m-0 ${MUTED}`}>Reading…</p>
+          : block.unreadable ? (
+            <HonestBlock role="alert" testId="add-agent-skills-unreadable"
+              action={<button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => setTries((n) => n + 1)} data-testid="add-agent-skills-retry">Try again</button>}>
+              The skills this agent could take could not be read. That is not the same as having none.
+            </HonestBlock>
+          ) : <HonestBlock>Skills aren’t open yet. You can add skills from the agent’s profile later.</HonestBlock>}
       </div>
     );
   }

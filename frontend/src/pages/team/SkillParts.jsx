@@ -152,8 +152,8 @@ export function SkillCard({ s, onOpen, onAssign, canAssign }) {
   );
 }
 
-/** SK4, SK5: a skill in a list, with its pinned version and whatever the screen puts on the right. */
-export function SkillRow({ s, version, retired, why, toolState, check, state, children }) {
+/** SK4, SK5: a skill in a list, with its pinned version and whatever the screen puts on the right; D8769 part 3: `makes`, what it makes ("Makes a brief"). */
+export function SkillRow({ s, version, retired, why, toolState, check, state, makes = null, children }) {
   return (
     <div className="flex items-start gap-2.5 border-t border-axal-hairline py-2.5 dark:border-gray-800" data-testid={`skill-row-${s.uid}`}>
       {check || null}
@@ -165,6 +165,7 @@ export function SkillRow({ s, version, retired, why, toolState, check, state, ch
           {state?.fit ? <span className={`${CHIP} border-axal-lavender-edge text-axal-violet-deep dark:border-violet-800 dark:text-violet-300`} data-testid="skill-fit">Natural fit</span> : null}
           {retired ? <span className={`${CHIP} border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200`}>Retired · still pinned</span> : null}
         </span>
+        {makes ? <span className="text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="skill-makes">{makes}</span> : null}
         <ToolChips tools={s.tools} stateOf={toolState} />
         {skillTokensLine(s.context_tokens) ? <span className={`${MONO} text-[11.5px] text-axal-muted dark:text-gray-400`} data-testid="skill-tokens">{skillTokensLine(s.context_tokens)}</span> : null}
         {why ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="skill-why">{why}</span> : null}

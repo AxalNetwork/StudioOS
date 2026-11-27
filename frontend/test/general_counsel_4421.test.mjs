@@ -53,7 +53,9 @@ test('answered payment and plan questions have no pending pill; Add agent reache
  const m=await mount(h(AddAgentSheet,{scope:{kind:'project',project:{id:7,name:'Synthetic project'}},roles:[{key:'ceo',default_rules:{}}],models:[],onClose(){}}),u=>{
   if(u.pathname.endsWith('/personas'))return json({personas:[{key:'synthetic',name:'Synthetic',tagline:'Synthetic test',natural_fit:[]}],values:[],areas:[]});
   if(u.pathname.endsWith('/tools'))return json({servers:[]});
-  return json({skills:[],areas:[]});
+  // D8769 part 3 (Q2 = A): Next stays off until a skill is chosen, so the wizard reads one eligible, natural-fit skill, picked for it.
+ if(u.pathname.endsWith('/skills/eligible'))return json({skills:[{uid:'skill-4421',name:'Synthetic skill',version:1,status:'published',eligibility:{state:'eligible',fit:true}}],areas:[]});
+ return json({skills:[],areas:[]});
  });
  try{await m.press('agent-pick-synthetic');await m.press('add-agent-next');await m.press('add-agent-next');assert.match(m.text(),/Model and cap for Synthetic/);assert.match(m.text(),/paid from your AI tokens/);assert.doesNotMatch(m.text(),/pending owner/);}finally{await m.close();}
 });
