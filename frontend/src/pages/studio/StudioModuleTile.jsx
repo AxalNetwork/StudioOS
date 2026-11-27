@@ -78,6 +78,14 @@ function MoreMenu({ title, onUp, onDown, first, last }) {
   );
 }
 
+/** `href` with the tile's `?project_id=` search, unless the href already carries a query of its own. */
+export function withVenture(href, search) {
+  if (!href) return null;
+  if (typeof search !== 'string' || !/^\?[^#]+$/.test(search) || href.includes('?')) return href;
+  const [path, hash] = href.split('#');
+  return `${path}${search}${hash !== undefined ? `#${hash}` : ''}`;
+}
+
 /**
  * `edit` is null outside Customise. Inside it: `{ size, first, last, lifted,
  * onSize, onRemove, onUp, onDown, handle }`, where `handle` holds the drag
@@ -85,7 +93,8 @@ function MoreMenu({ title, onUp, onDown, first, last }) {
  */
 export default function StudioModuleTile({ mod, size, spec, edit = null, fixed = false, tileProps = {} }) {
   const title = mod.title;
-  const href = mod.href || spec?.href || null;
+  // D8729 (#8729): a tile that names its venture (`spec.search`, `?project_id=`) opens in that venture, not the first one.
+  const href = withVenture(mod.href || spec?.href || null, spec?.search);
   const state = spec?.state || TILE.LOADING;
   const linked = href && state !== TILE.LOADING && state !== TILE.WITHHELD;
   return (

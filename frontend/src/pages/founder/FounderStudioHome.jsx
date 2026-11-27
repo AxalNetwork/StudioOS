@@ -30,8 +30,17 @@
  * chat-only page: Eadwyn first, then the strip, the profile card and the
  * modules (`FounderStudioBody` with `phone`), and the chat's composer is no
  * longer pinned, so the modules never scroll under it.
+ *
+ * D8729 (#8729) — THE ACTIVE VENTURE FIRST. Below 1024px the body (venture
+ * header, Next card, Eadwyn's collapsed row with the chat under it, then the
+ * strip, the profile and the modules) follows the phone bar, which is no
+ * longer a heading. With no `?project_id=` the venture is resolved in order:
+ * the switcher's pick on this device, the only venture, else a choice; the
+ * result is then written to the address with replace, and that write does not
+ * read the page again. A pick in the shell switcher while on /studio writes
+ * its venture to the address (SFD04).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
@@ -42,6 +51,7 @@ import StudioPhone, { StudioConversations } from './StudioPhone';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { STUDIO_PATH, STUDIO_TICKET_PATH, searchWithTab, studioTabOf, ticketTypeOf, withProjectId } from './studioPhoneModel';
 import { useStudioLayout } from '../studio/useStudioLayout';
+import { getActiveProject, useActiveProject } from '../../lib/activeProject';
 import { cyclesPlaced } from '../studio/studioLayoutModel';
 import './founderStudioHome.css';
 
@@ -50,7 +60,8 @@ import './founderStudioHome.css';
 export default function FounderStudioHome({ user, embedded = false }) {
   const [searchParams] = useSearchParams();
   const requestedProjectId = searchParams.get('project_id');
-  const { pathname, search } = useLocation();
+  const location = useLocation();
+  const { pathname, search } = location;
   const navigate = useNavigate();
   const tab = studioTabOf(search);
   const ticket = pathname === STUDIO_TICKET_PATH ? { type: ticketTypeOf(search) } : null;
@@ -63,16 +74,43 @@ export default function FounderStudioHome({ user, embedded = false }) {
   // D4619 (#4619): each cycle read is kept and committed under the full venture + cycle key (`useFounderCycleReads`).
   const cycles = useFounderCycleReads(reads.project, cyclesPlaced(studio.shown));
 
+  // #4622: each read is committed as it settles; one a newer run has superseded is dropped (`run`).
+  // D8729: the address this page wrote for the venture it resolved itself (`adopted`) is not read again.
+  const run = useRef(0);
+  const adopted = useRef(null);
+  useEffect(() => () => { run.current += 1; }, []);
   useEffect(() => {
-    // #4622: each read is committed as it settles; one a newer run has superseded is dropped.
-    let alive = true;
+    if (requestedProjectId && adopted.current === requestedProjectId) { adopted.current = null; return; }
+    adopted.current = null;
+    const mine = ++run.current;
     setReads({});
     startFounderStudioReads({
       requestedProjectId,
-      onRead: (key, value) => { if (alive) setReads((r) => ({ ...r, [key]: value })); },
+      preferredProjectId: getActiveProject()?.id ?? null,
+      onRead: (key, value) => { if (run.current === mine) setReads((r) => ({ ...r, [key]: value })); },
     });
-    return () => { alive = false; };
   }, [requestedProjectId, retry]);
+  // The venture resolved without an address is written to it, every other parameter kept.
+  const resolvedId = reads.project && !reads.project.failed && reads.project.id != null ? String(reads.project.id) : null;
+  useEffect(() => {
+    if (!resolvedId || requestedProjectId) return;
+    adopted.current = resolvedId;
+    const params = new URLSearchParams(search);
+    params.set('project_id', resolvedId);
+    navigate({ pathname, search: `?${params.toString()}` }, { replace: true, state: location.state });
+  }, [resolvedId]); // eslint-disable-line react-hooks/exhaustive-deps -- only a newly resolved venture writes
+  // SFD04: the shell switcher stays the one writer of the pick; a new pick on /studio opens that venture here.
+  const picked = useActiveProject();
+  const pickedId = picked?.id != null ? String(picked.id) : null;
+  const lastPick = useRef(pickedId);
+  useEffect(() => {
+    if (lastPick.current === pickedId) return;
+    lastPick.current = pickedId;
+    if (!pickedId || pickedId === requestedProjectId) return;
+    const params = new URLSearchParams(search);
+    params.set('project_id', pickedId);
+    navigate({ pathname, search: `?${params.toString()}` }, { replace: true });
+  }, [pickedId]); // eslint-disable-line react-hooks/exhaustive-deps -- only a new pick writes
 
   const again = () => setRetry((n) => n + 1);
   // A tab change stays on the path it is on, so an open ticket form stays open.
@@ -93,16 +131,18 @@ export default function FounderStudioHome({ user, embedded = false }) {
       belowThread={phone ? <StudioConversations /> : null}
     />
   );
+  // D8729: Eadwyn's row opens itself when the address names one of its tabs or the ticket form.
   const body = (inPhone) => (
-    <FounderStudioBody user={user} reads={reads} onRetry={again} studio={studio} cycles={cycles.reads} onRetryCycle={cycles.retry} search={venture && reads.project?.id ? `?project_id=${reads.project.id}` : ''} advisorAvailable={advisorAvailable} profileCard={<ProfileFitSection compact />} phone={inPhone}>
-      {inPhone ? null : chat}
+    <FounderStudioBody user={user} reads={reads} onRetry={again} studio={studio} cycles={cycles.reads} onRetryCycle={cycles.retry} search={venture && reads.project?.id ? `?project_id=${reads.project.id}` : ''} advisorAvailable={advisorAvailable} profileCard={<ProfileFitSection compact />} phone={inPhone}
+      level={embedded ? 'h2' : 'h1'} eadwynOpen={tab !== 'conversation' || Boolean(ticket)}>
+      {chat}
     </FounderStudioBody>
   );
   if (phone && embedded) {
-    return <div className="space-y-4" data-testid="founder-studio-embedded-phone">{chat}{body(true)}</div>;
+    return <div className="space-y-4" data-testid="founder-studio-embedded-phone">{body(true)}</div>;
   }
   if (phone) {
-    return <StudioPhone tab={tab} ticketOpen={Boolean(ticket)} advisorAvailable={advisorAvailable} after={body(true)}>{chat}</StudioPhone>;
+    return <StudioPhone tab={tab} ticketOpen={Boolean(ticket)}>{body(true)}</StudioPhone>;
   }
   return body(false);
 }

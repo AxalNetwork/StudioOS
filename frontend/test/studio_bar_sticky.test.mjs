@@ -29,7 +29,9 @@ test('the bar is sticky at the top of the scroll, opaque in both themes, above t
   const { cls, html } = bar();
   for (const c of ['sticky', 'top-0', 'z-20', 'bg-white', 'dark:bg-gray-950']) assert.ok(cls.includes(c), c);
   assert.ok(html.indexOf('studio-phone-bar') < html.indexOf('STUB CHAT'), 'the bar is above the chat');
-  assert.match(html, /Eadwyn AI<\/h1>/);
+  // D8729 (#8729): the bar is not a heading; the venture is the page's first heading.
+  assert.match(html, /data-testid="studio-phone-bar-title">Eadwyn AI<\/p>/);
+  assert.doesNotMatch(html, /<h1/);
   assert.match(html, />Tasks</);
 });
 

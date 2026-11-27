@@ -143,8 +143,12 @@ test('both homes draw the canvas context line: Studio, and the investor\'s role 
   // The founder Studio's header is D564's canvas: Studio and the Lab phase.
   const founder = codeOnly(read('../src/pages/founder/FounderStudioBody.jsx'));
   const investor = codeOnly(read('../src/pages/investor/InvestorStudioHome.jsx'));
-  assert.match(founder, /data-testid="text-founder-studio-title">Studio</);
-  assert.match(founder, /data-testid="badge-founder-studio-phase">\{header\.phase\}/);
+  // D8729 (#8729): the founder's heading names the active venture, or Studio on the paths with none (`ventureHeadOf`).
+  const venture = codeOnly(read('../src/pages/founder/StudioVenture.jsx'));
+  assert.match(venture, /data-testid="text-founder-studio-title">/);
+  assert.match(codeOnly(read('../src/pages/founder/founderNextModel.js')), /title: 'Studio'/);
+  assert.match(venture, /data-testid="badge-founder-studio-phase">\{header\.phase\}/);
+  assert.match(founder, /<VentureHeader /);
   assert.match(investor, /data-testid="text-investor-studio-title">Studio</);
   assert.match(investor, /data-testid="badge-investor-studio-role">Investor</);
   assert.match(investor, /data-testid="text-investor-studio-date">\{new Intl\.DateTimeFormat/);
