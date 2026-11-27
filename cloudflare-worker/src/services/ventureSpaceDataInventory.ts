@@ -465,6 +465,9 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['work_graph_revision_flags', 'c', 'company'],
   ['work_graph_revisions', 'pc', 'left'],
   ['workflows', 'p', 'left'],
+  ['x_grow_audience_facts', 'p', 'cascade'],
+  ['x_grow_links', 'p', 'cascade'],
+  ['x_grow_post_facts', 'p', 'cascade'],
 ];
 
 const HARD_DELETE: Record<HardDelete, Answer> = {
