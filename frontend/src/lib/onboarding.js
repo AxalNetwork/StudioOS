@@ -84,19 +84,6 @@ export function investorFundHref(role, intent) {
     ? '/spinout-lab/investor-workspace' : null;
 }
 
-/** D6135: copy recorded answers; the removed, unused slider weights are omitted. */
-export function investorProfilePayload(values) {
-  return {
-    investor_type: values.investor_type || null,
-    sectors: values.sectors || [], stages: values.stages || [], geos: values.geos || [],
-    ticket_band: values.check_size || null, thesis_text: values.thesis_text || null,
-    contribute_to_signals: values.contribute_to_signals !== false,
-    anti_thesis_sectors: values.anti_thesis_sectors || [], anti_thesis_stages: values.anti_thesis_stages || [],
-    firm_name: values.firm_name || null, accreditation_status: values.accreditation_status || null,
-    country: values.country || null, lp_intent: values.lp_intent || null,
-    lp_target_usd: values.lp_target_usd || null, notes: values.notes || null,
-  };
-}
 // D6131: v2 has seven questions plus Review. Old progress used eight
 // questions (and an earlier ninth slider step); preserve its actual question.
 export function investorResumeStep(progress) {

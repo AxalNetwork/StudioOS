@@ -57,6 +57,21 @@ export const MAX_TICKET = 2_000_000;
 const MAX_NOTE = 2_000;
 const MAX_PREFERENCES = PREFERENCE_AREAS.length;
 
+export function investorApplicationPrefill(profile: { investor_type: string | null; lp_target_usd: number | null; notes: string | null }) {
+  const types: Record<string, InvestorType> = {
+    angel: 'individual', family_office: 'family_office', institutional: 'institution', fund_gp: 'other',
+  };
+  const target = profile.lp_target_usd;
+  const type = profile.investor_type ?? '';
+  const validTarget = typeof target === 'number' && Number.isFinite(target) && target >= MIN_TICKET && target <= MAX_TICKET;
+  return {
+    investor_type: Object.hasOwn(types, type) ? types[type] : null,
+    target_commitment: validTarget ? target : null,
+    target_out_of_range: target !== null && !validTarget,
+    note: profile.notes?.slice(0, MAX_NOTE) ?? '',
+  };
+}
+
 export type LpApplicationInput = {
   investor_type: InvestorType;
   target_commitment: number;

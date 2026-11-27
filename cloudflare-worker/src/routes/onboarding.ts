@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureExploringSchema, getSuggestedRole, upsertSuggestedRole } from '../services/exploringSchema';
+import { draftInvestorThesis, saveInvestorProfile } from './investor_signals';
 
 const onboarding = new Hono<{ Bindings: Env }>();
 
@@ -91,6 +92,21 @@ onboarding.get('/progress', async (c) => {
   return c.json(rowToDto(row));
 });
 
+onboarding.post('/investor/thesis-draft', async (c) => {
+  const user = await requireAuth(c);
+  const guard = await enforceFlowMatch(c.env, user, 'investor');
+  if (!guard.ok) return c.json({ error: guard.error }, 403);
+  c.header('Cache-Control', 'private, no-store');
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare(
+    'SELECT data FROM onboarding_progress WHERE user_id = ? AND flow = ?',
+  ).bind(user.id, 'investor').first<{ data: string | null }>();
+  const answer = rowToDto(row).data;
+  const draft = answer && typeof answer === 'object' ? draftInvestorThesis(answer) : null;
+  if (!draft) return c.json({ error: 'Save your stages and sectors before drafting a thesis.' }, 409);
+  return c.json({ draft });
+});
+
 onboarding.put('/progress', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
@@ -120,24 +136,54 @@ onboarding.put('/progress', async (c) => {
 onboarding.post('/complete', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
-  if (!VALID_FLOWS.has(body.flow)) return c.json({ error: 'invalid flow' }, 400);
+  if (!VALID_FLOWS.has(body?.flow)) return c.json({ error: 'invalid flow' }, 400);
   const guardC = await enforceFlowMatch(c.env, user, body.flow);
   if (!guardC.ok) return c.json({ error: guardC.error }, guardC.status as any);
   await ensureSchema(c.env);
-  // Either UPDATE the existing row or INSERT a stub if the user finished
-  // without ever PUT'ing (defensive — frontend always PUTs).
-  const existing = await c.env.DB.prepare(
-    `SELECT user_id FROM onboarding_progress WHERE user_id = ?`
-  ).bind((user as any).id).first<any>();
-  if (existing) {
-    await c.env.DB.prepare(
-      `UPDATE onboarding_progress SET completed_at=datetime('now'), updated_at=datetime('now') WHERE user_id=?`
-    ).bind((user as any).id).run();
+  let profile;
+  if (body.flow === 'investor') {
+    const data = body.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return c.json({ error: 'Reload onboarding and review your answers before finishing.' }, 409);
+    }
+    const rawTarget = data.lp_target_usd;
+    const target = rawTarget == null || rawTarget === '' ? null
+      : typeof rawTarget === 'number' || typeof rawTarget === 'string' ? Number(rawTarget) : NaN;
+    if (target !== null && (!Number.isSafeInteger(target) || target < 0)) {
+      return c.json({ error: 'Enter the optional fund target as whole US dollars.' }, 422);
+    }
+    const progress = JSON.stringify({ ...data, _investor_onboarding_version: 2 });
+    if (progress.length > 64_000) return c.json({ error: 'data too large' }, 400);
+    const completion = c.env.DB.prepare(
+      `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, data, completed_at, updated_at)
+       VALUES (?, 'investor', 7, 8, ?, datetime('now'), datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET
+         flow=excluded.flow, step=excluded.step, total_steps=excluded.total_steps, data=excluded.data,
+         completed_at=CASE WHEN onboarding_progress.flow='investor'
+           THEN COALESCE(onboarding_progress.completed_at, excluded.completed_at) ELSE excluded.completed_at END,
+         updated_at=excluded.updated_at`,
+    ).bind(user.id, progress);
+    try {
+      // Undefined answers stay omitted in the canonical writer. Explicitly
+      // skipped optional answers use null or [] so Review and the store agree.
+      profile = await saveInvestorProfile(c.env, user, {
+        investor_type: data.investor_type, accreditation_status: data.accreditation_status, country: data.country,
+        ticket_band: data.check_size, stages: data.stages, sectors: data.sectors, geos: data.geos,
+        anti_thesis_sectors: data.anti_thesis_sectors ?? [], anti_thesis_stages: data.anti_thesis_stages ?? [],
+        firm_name: data.firm_name ?? null, thesis_text: data.thesis_text ?? null,
+        ...(typeof data.contribute_to_signals === 'boolean' ? { contribute_to_signals: data.contribute_to_signals } : {}),
+        lp_intent: data.lp_intent ?? null, lp_target_usd: target, notes: data.notes ?? null,
+      }, completion);
+    } catch {
+      return c.json({ error: 'Could not finish your investor profile. Your saved answers are still available.' }, 503);
+    }
+    if (!profile) return c.json({ error: 'Complete the required answers before finishing your investor profile.' }, 422);
   } else {
     await c.env.DB.prepare(
       `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
-       VALUES (?, ?, 0, 0, datetime('now'))`
-    ).bind((user as any).id, body.flow).run();
+       VALUES (?, ?, 0, 0, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET completed_at=datetime('now'), updated_at=datetime('now')`
+    ).bind(user.id, body.flow).run();
   }
   // Task #5 — flip users.assistant_enabled so the Dashboard surfaces the
   // pinned personal-assistant chat for first-time post-onboarding users.
@@ -177,7 +223,7 @@ onboarding.post('/complete', async (c) => {
       console.warn('[onboarding] project projection unavailable:', e?.message);
     }
   }
-  return c.json({ ok: true, completed_at: true, ...(projection ? { projection } : {}) });
+  return c.json({ ok: true, completed_at: true, ...(projection ? { projection } : {}), ...(profile ? { profile } : {}) });
 });
 
 // Auth & Onboarding v2 — licence picker (A2). Records the user's chosen

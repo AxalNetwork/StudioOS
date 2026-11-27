@@ -40,7 +40,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const workspaceContent = useRef(null);
   useEffect(() => {
     if (loading || !FUND_SECTION_HASHES.includes(hash)) return undefined;
-    const target = document.getElementById(hash.slice(1));
+    const form = hash === '#apply' ? document.getElementById('lp-application-entry') : null;
+    const target = form || document.getElementById(hash.slice(1));
     if (!target) return undefined;
     const scroll = () => target.scrollIntoView?.({ block: 'start' });
     scroll();
@@ -66,6 +67,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   // separates "no application" from "could not tell", so a failed read never
   // renders a fresh form to someone who has already applied.
   const [application, setApplication] = useState(null);
+  const [applicationPrefill, setApplicationPrefill] = useState(null);
   const [applicationLoaded, setApplicationLoaded] = useState(false);
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefErr, setBriefErr] = useState('');
@@ -105,6 +107,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     // unknown, and the form stays hidden behind the same `applicationLoaded`
     // flag the submit path uses.
     setApplication(appRes.status === 'fulfilled' ? (appRes.value?.application ?? null) : null);
+    setApplicationPrefill(appRes.status === 'fulfilled' ? (appRes.value?.prefill ?? null) : null);
     setApplicationLoaded(appRes.status === 'fulfilled');
     setLoading(false);
   };
@@ -341,6 +344,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         showApply={showApply}
         applicationLoaded={applicationLoaded}
         application={application}
+        prefill={applicationPrefill}
         setApplication={setApplication}
         showPending={showPending}
         derived={derived}
