@@ -181,7 +181,12 @@ export const WORKSPACES = ADMIN_PLACEMENT
  *   'also'  — the row's `match` lists it, and the row's overview draws it in
  *             its "Also in" list (`workspaces/AlsoIn.jsx`);
  *   'lab'   — a Spin-Out Lab page: the row's `match` lists it and the Lab's
- *             own arsenal (`lib/spinoutLabArsenal.js`) links it.
+ *             own arsenal (`lib/spinoutLabArsenal.js`) links it;
+ *   'related' — the row's `match` lists it, and the row's overview links it
+ *             among the links it picks for the founder's current task, not in
+ *             a static "Also in" list (D4866: Grow's "For this job",
+ *             `pages/cycles/growRelatedModel.js`, which ends every task's list
+ *             with it).
  *
  * An optional fourth element, `{ label, description }`, is what that profile
  * calls the page in its "Also in" list. The palette entry's label is the
@@ -208,7 +213,8 @@ export const PAGE_HOMES = {
   '/comarketing': [['partner', 'Offers', 'also']],
   '/incorporate/cofounder-agreement': [['founder', 'Raise', 'also']],
   '/spinout-lab/83b': [['founder', 'Spin-Out Lab', 'lab']],
-  '/perks': [['founder', 'Grow', 'also']],
+  // D4866 (#4866, GR-02): Grow's static "Also in Grow" (Perks alone) became "For this job"; Perks closes every task's list.
+  '/perks': [['founder', 'Grow', 'related']],
 };
 
 /** The pages a profile row's overview lists under "Also in", in map order. */

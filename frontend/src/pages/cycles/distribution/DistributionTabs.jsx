@@ -11,6 +11,7 @@ import { distributionStates } from './distributionStates.js';
 import useDistributionAccess from './useDistributionAccess.js';
 import { useDistributionLayout } from './useDistributionLayout.js';
 import { LoadingSkeleton } from './DistributionParts.jsx';
+import { GrowReportingLink } from '../GrowRelated.jsx';
 import './distribution.css';
 function ConnectedDistributionAsk({ aiOff = false, canWrite = true, ...props }) {
   const reading = useAiBudget();
@@ -39,7 +40,7 @@ export default function DistributionTabs({ tab = 'overview', search = '', action
   };
   return <section className="distribution-shell" data-testid="distribution-shell" data-layout={phone?'phone':tablet?'tablet':'desktop'}>
     <header className="ds-header"><div><p className="ds-eyebrow">Grow · Distribution</p><h1>Distribution</h1><p className="ds-subtitle">Reach the customers your validation found, and see what turns into revenue.</p></div>
-      <div className="ds-header-actions">{action && (model.manual.disabled?<button type="button" className="ds-primary" disabled title={model.manual.reason}>{action.label}</button>:<Link className="ds-primary" to={action.href}>{action.label}</Link>)}<DistributionAsk projectId={ventureId} model={model} /></div>
+      <div className="ds-header-actions flex-wrap">{action && (model.manual.disabled?<button type="button" className="ds-primary" disabled title={model.manual.reason}>{action.label}</button>:<Link className="ds-primary" to={action.href}>{action.label}</Link>)}{/* D4866 (GR-10): Reporting, Grow's utility, from Distribution too. */}<GrowReportingLink search={search} /><DistributionAsk projectId={ventureId} model={model} /></div>
     </header>
     <nav className="ds-tabs" aria-label="Distribution tabs" role="tablist">{DISTRIBUTION_TABS.map((t,index)=><Link key={t.key} ref={(el)=>{refs.current[index]=el;}} role="tab" id={`distribution-tab-${t.key}`} aria-controls="distribution-panel"
       aria-selected={t.key===active.key} aria-current={t.key===active.key?'page':undefined} tabIndex={t.key===active.key?0:-1} onKeyDown={(e)=>move(e,index)}
