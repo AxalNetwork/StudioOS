@@ -11,15 +11,20 @@
  *
  * D6129 (#6129): Needs you and Funds are drawn to canvas D6126, and Returns,
  * Thesis fit on live deals and Arrivals join them (`investorHomeModules.jsx`).
+ *
+ * D8731 (#8731): each Funds and Usage & quota state has one action whose label
+ * names the heading it opens: Axal VC Fund › Fund and terms, › My commitment,
+ * or Pricing › Investor. Run my fund (`/funds`) is never one of them.
  */
 import { Link } from 'react-router-dom';
 import InvestorQuotaBars from '../../../components/InvestorQuotaBars';
 import { Unreadable, Unrecorded } from '../../../ui';
 import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
-import { COMMITMENT, LP_WORKSPACE, arrivalsOf, fitOf, fundsOf, needsYouRows, returnsOf, shortDay } from '../../investor/investorHomeModel';
+import { COMMITMENT, FROM_STUDIO, FUND_TERMS, arrivalsOf, fitOf, fundsOf, needsYouRows, returnsOf, shortDay } from '../../investor/investorHomeModel';
 import { ArrivalsBody, FitBody, FundsBody, NeedsYouBody, ReturnsBody } from './investorHomeModules';
 import { formatRate } from '../../../lib/rate';
+import { hasInvestorTier } from '../../../sidebarConfig';
 
 const readable = (value) => String(value || '').replace(/[_-]/g, ' ').trim() || 'Not recorded';
 const formatDate = (value) => {
@@ -45,7 +50,36 @@ export function PortfolioRows({ data }) {
  * loading, a failed one Unreadable with Try again, an answer with nothing in
  * it the module's own empty words. The rules are `investorHomeModel.js`.
  */
-function homeV2Tiles({ records, failures, retry, today, dashboard, dashboardUnavailable }) {
+/** D8731: the Funds card counts LP commitments only (`lp_holdings`); a fund the member runs is under Fund. */
+const GP_LINE = 'Only your commitments as an LP are counted here. A fund you run is under Fund.';
+
+/**
+ * D8731 (#8731, canvas SIV-2): the Funds card. No commitment opens the fund
+ * brief, a commitment under the email opens My commitment (whose plain
+ * lp-portal read links it), a linked one opens My commitment. Unavailable,
+ * loading and the preview draw no link. `runsFunds` is the same Institutional
+ * gate that opens Fund (`App.jsx`'s `fundUnlocked`).
+ */
+export function fundCommitmentTile({ fund, funds, fundUnreadable, asAt, retry, runsFunds = false }) {
+  if (fundUnreadable) return { state: TILE.UNREADABLE, onRetry: () => retry('fund'), claim: 'Not a claim that you hold no commitment.' };
+  if (fund === undefined) return { state: TILE.LOADING };
+  if (funds.unlinked && !funds.rows.length) {
+    return { state: TILE.READY, href: COMMITMENT, linkState: FROM_STUDIO, openLabel: 'Link my commitment', body: <p className="ihs-sub" data-testid="status-funds-needs-linking">A commitment under your email is not linked to this account yet. Opening My commitment in Axal VC Fund links it.</p> };
+  }
+  if (!funds.rows.length) {
+    return {
+      state: TILE.EMPTY,
+      empty: <>You hold no fund commitment on Axal. Commitments you make to an Axal fund appear here with what was called, received and is due.<span className="mt-2 block" data-testid="status-funds-gp-line">{GP_LINE}</span></>,
+      href: FUND_TERMS, linkState: FROM_STUDIO, openLabel: 'See Axal VC Fund terms',
+    };
+  }
+  return {
+    state: TILE.READY, note: `${funds.rows.length} ${funds.rows.length === 1 ? 'fund' : 'funds'}`, href: COMMITMENT, linkState: FROM_STUDIO, openLabel: 'Open My commitment',
+    body: <><FundsBody funds={funds} asAt={asAt} onRetry={() => retry('fund')} />{runsFunds && <p className="ihs-sub" data-testid="status-funds-gp-line">{GP_LINE}</p>}</>,
+  };
+}
+
+function homeV2Tiles({ records, failures, retry, today, dashboard, dashboardUnavailable, runsFunds }) {
   const { fund, deals, updates } = records;
   const needs = needsYouRows(records, failures, today);
   const fundUnreadable = !!failures.fund || (fund != null && !Array.isArray(fund?.lp_holdings));
@@ -65,11 +99,7 @@ function homeV2Tiles({ records, failures, retry, today, dashboard, dashboardUnav
     needs_you: !needs.incomplete && !count ? { state: TILE.EMPTY, empty: 'Nothing needs you today. Capital calls, fund notices, signatures and Trust requirements appear here when they need you.' }
       : Object.values(needs.sources).every((s) => s.loading) ? { state: TILE.LOADING }
         : { state: TILE.READY, note: count ? `${count} ${count === 1 ? 'item' : 'items'} · by due date, then date added` : undefined, body: <NeedsYouBody model={needs} onRetry={retry} /> },
-    fund_commitment: fundUnreadable ? { state: TILE.UNREADABLE, onRetry: () => retry('fund') }
-      : fund === undefined ? { state: TILE.LOADING }
-        : funds.unlinked && !funds.rows.length ? { state: TILE.READY, href: LP_WORKSPACE, openLabel: 'Open the LP workspace', body: <p className="ihs-sub">Open the LP workspace to link your commitment.</p> }
-          : !funds.rows.length ? { state: TILE.EMPTY, empty: 'You hold no fund commitment on Axal. Commitments you make to an Axal fund appear here with what was called, received and is due.', href: '/funds', openLabel: 'See Axal Fund I' }
-            : { state: TILE.READY, note: `${funds.rows.length} ${funds.rows.length === 1 ? 'fund' : 'funds'}`, href: COMMITMENT, openLabel: 'Open my commitments', body: <FundsBody funds={funds} asAt={asAt} onRetry={() => retry('fund')} /> },
+    fund_commitment: fundCommitmentTile({ fund, funds, fundUnreadable, asAt, retry, runsFunds }),
     returns: failures.portfolio || (portfolio !== undefined && !returns) ? { state: TILE.UNREADABLE, onRetry: () => retry('portfolio') }
       : portfolio === undefined ? { state: TILE.LOADING }
         : returns.empty ? { state: TILE.EMPTY, empty: 'No position is recorded in your book, so there are no returns to show.', href: '/portfolio/performance', openLabel: 'Open Portfolio' }
@@ -101,8 +131,11 @@ export function investorTiles({
     return Object.fromEntries(INVESTOR_KEYS.map((k) => [k, withheld]));
   }
   return {
-    ...homeV2Tiles({ records, failures, retry: retrySource, today, dashboard, dashboardUnavailable }),
-    usage_quota: { state: TILE.READY, href: '/pricing?for=investor', openLabel: 'Open account', body: <InvestorQuotaBars user={user} compact /> },
+    ...homeV2Tiles({ records, failures, retry: retrySource, today, dashboard, dashboardUnavailable, runsFunds: user?.role === 'investor' && hasInvestorTier(user, 'institutional') }),
+    // D8731 (canvas SIV-7, owner Q2 option A): the card shows plan quotas, so it opens plans. Not the investor account: no link.
+    usage_quota: user?.role === 'investor'
+      ? { state: TILE.READY, href: '/pricing?for=investor', linkState: FROM_STUDIO, openLabel: 'Compare investor plans', body: <InvestorQuotaBars user={user} compact /> }
+      : { state: TILE.READY, body: <InvestorQuotaBars user={user} compact /> },
     deal_lifecycle: lifecycle === undefined ? { state: TILE.LOADING }
       : lifecycle === null ? { state: TILE.UNREADABLE, onRetry: retryLifecycle }
         : !stages.length ? { state: TILE.EMPTY, empty: 'No lifecycle records yet.', href: '/deals', openLabel: 'Open Deals' }

@@ -182,7 +182,8 @@ test('the list: Try again syncs and says how it went, a tool with no sync falls 
     syncAnswer = null;
     assert.equal(m.by('tool-action-calendly'), undefined, 'the daily limit offers no retry');
     await m.click('tool-action-stripe');
-    assert.ok(m.text(m.by('tool-confirm-stripe')).startsWith('Disconnect Stripe? Data already in StudioOS stays.'), 'the confirm says what stays');
+    // D8774: the account-wide disconnect says it is account-wide, then what stays.
+    assert.ok(m.text(m.by('tool-confirm-stripe')).startsWith('Disconnect Stripe from your account? This removes Stripe from your account. Data already in StudioOS stays.'), 'the confirm says what stays');
     assert.equal(calls.some((c) => c[0] === 'disconnect'), false, 'nothing is disconnected by the first click');
     await m.click('tool-confirm-disconnect-stripe');
     assert.deepEqual(calls.at(-1), ['disconnect', 'u-str']);
@@ -315,7 +316,7 @@ test('the project\'s company decides whom Build connects for', () => {
   assert.equal(projectCompany(null, companies).state, 'unreadable');
   assert.equal(projectCompany({ company_id: 5 }, null).state, 'unreadable', 'memberships unread: not guessed');
   assert.equal(projectCompany(undefined, companies).state, 'loading');
-  assert.equal(companyBanner({ state: 'none' }), 'This project has no company, so connected tools cannot feed it.');
+  assert.equal(companyBanner({ state: 'none' }), 'This venture is not in a company yet, so no connected tool feeds it. Tools you connected stay on your account.');
   assert.match(companyBanner({ state: 'outside' }), /^You are not a member of this project’s company/);
   assert.equal(companyBanner({ state: 'ok' }), null);
   assert.equal(servesCompany({ company_ids: [9] }, 5), false);
@@ -363,7 +364,7 @@ test('Build\'s list for the project\'s company: Use for it keeps the others, out
   } finally { await out.unmount(); }
   const none = await mount(view({ id: 7, company_id: null }));
   try {
-    assert.equal(none.text(none.by('connect-tool-company-none')), 'This project has no company, so connected tools cannot feed it.');
+    assert.equal(none.text(none.by('connect-tool-company-none')), 'This venture is not in a company yet, so no connected tool feeds it. Tools you connected stay on your account.');
     assert.equal(none.text(none.by('tool-action-calendly')), 'Connect', 'still connectable, for the member');
   } finally { Object.assign(connectorsApi, saved); await none.unmount(); }
 });

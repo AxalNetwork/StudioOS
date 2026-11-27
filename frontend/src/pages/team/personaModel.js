@@ -164,9 +164,22 @@ export function filterOptions(personas, legend) {
 }
 
 /**
+ * D8769 (#8769, TMM03): the work a persona is good for, as the Who card leads
+ * with it: its own area of work (`PERSONA_ROLE`), then its natural fit's
+ * areas, without repeats. Empty when neither is recorded.
+ */
+export function personaWork(persona) {
+  const own = WORK_LABEL[PERSONA_ROLE[persona?.key]] || null;
+  const fit = Array.isArray(persona?.natural_fit) ? persona.natural_fit.map((a) => AREA_LABEL[a]).filter(Boolean) : [];
+  return [...new Set([own, ...fit].filter(Boolean))];
+}
+
+/**
  * The gallery: the personas that match the search and every filter, in the
  * read's order, each with `on_team`. Search reads the name, tagline, goal and
- * personality. A persona on the team is kept, marked, never hidden.
+ * personality, and (D8769) the work it is good for (`personaWork`), so
+ * "finance" or "research" finds the agents for that work. A persona on the
+ * team is kept, marked, never hidden.
  */
 export function gallery(personas, { q = '', value = '', fit = '', risk = '' } = {}, onTeam = new Set()) {
   const needle = String(q || '').trim().toLowerCase();
@@ -175,7 +188,7 @@ export function gallery(personas, { q = '', value = '', fit = '', risk = '' } = 
     if (fit && !(p.natural_fit || []).includes(fit)) return false;
     if (risk && !(RISK_BAND[risk] || []).includes(Number(p.risk))) return false;
     if (!needle) return true;
-    return [p.name, p.tagline, p.goal, p.personality].some((s) => String(s || '').toLowerCase().includes(needle));
+    return [p.name, p.tagline, p.goal, p.personality, ...personaWork(p)].some((s) => String(s || '').toLowerCase().includes(needle));
   }).map((p) => ({ ...p, on_team: onTeam.has(p.key) }));
 }
 

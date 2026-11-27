@@ -66,6 +66,9 @@ export const EVIDENCE_TOKENS = [
   // owner, an accepted cofounder or HQ through getProjectMembershipRole. It lived in routes/decks.ts, where its body
   // was readable here; in the service it is named instead.
   'projectOwned',
+  // D6710 (#6710): the partner-side check on a formation case (services/formationAssignments.ts): a live member of
+  // the verified firm whose assignment on the open case is accepted ('full') or offered and unexpired ('redacted').
+  'canAccessFormationCase',
 ];
 const EVIDENCE_RE = new RegExp(`\\b(${EVIDENCE_TOKENS.join('|')})\\s*\\(`, 'g');
 // A domain helper named for an access check: requireCaseWriter, canReadFund, assertDealParticipant, ensureVentureMember…

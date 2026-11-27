@@ -100,9 +100,9 @@ function faceLine(binding) {
  * accent colour (the Worker kept it only when it reads on the card) and an
  * https link, which opens in a new tab.
  */
-function RichText({ paras, className }) {
+function RichText({ paras, className, style = undefined }) {
   return (
-    <span className={`flex flex-col gap-1 ${className}`} data-testid="deck-block-rich">
+    <span className={`flex flex-col gap-1 ${className}`} style={style} data-testid="deck-block-rich">
       {paras.map((runs, i) => (
         <span key={i}>
           {runs.map((r, j) => {
@@ -122,12 +122,14 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
   const heading = big ? 'text-[64px]' : 'text-[20px]';
   const para = big ? 'text-[30px]' : 'text-[12.5px]';
   const small = big ? 'text-[22px]' : 'text-[10.5px]';
+  // D8770 (#8770): a face that names a display font (the template preview's, `templatePreviewModel.previewFace`) draws headings and figures in it.
+  const display = colours?.display ? { fontFamily: colours.display } : undefined;
   if (b.kind === 'text') {
     if (!String(b.text || '').trim()) return live ? null : <span className="text-[11px] italic" style={{ color: colours.muted }}>Text · empty</span>;
     // D1500: rich text is drawn as its runs, read-only (editing them is A4c's).
     const paras = runsOf(b);
-    const body = paras ? <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} />
-      : b.style === 'heading' ? <span className={`${heading} font-extrabold leading-tight`}>{b.text}</span>
+    const body = paras ? <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} style={b.style === 'heading' ? display : undefined} />
+      : b.style === 'heading' ? <span className={`${heading} font-extrabold leading-tight`} style={display}>{b.text}</span>
         : b.style === 'list' ? <ul className={`m-0 list-disc pl-4 ${para}`}>{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>
           : <span className={`${para} leading-snug`}>{b.text}</span>;
     // D1523 (#3775): in the editor a number in free text carries "! Uncited"; Present and print (`live`) never do.
@@ -144,7 +146,7 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     return (
       <span className="flex h-full flex-col justify-center" data-testid={live ? `deck-block-metric-${b.id}` : undefined}>
         <span className={`${small} font-bold uppercase`} style={{ color: colours.muted }}>{b.label || 'Metric'}</span>
-        <span className={v === NOT_RECORDED ? `${big ? 'text-[26px]' : 'text-[11.5px]'} italic` : `${big ? 'text-[60px]' : 'text-[20px]'} font-extrabold`}>{v}</span>
+        <span className={v === NOT_RECORDED ? `${big ? 'text-[26px]' : 'text-[11.5px]'} italic` : `${big ? 'text-[60px]' : 'text-[20px]'} font-extrabold`} style={v === NOT_RECORDED ? undefined : display}>{v}</span>
         {live ? (sources ? <span className={small} style={{ color: colours.muted }}>{sourceOf(b.binding) || SOURCE_NOT_RECORDED}</span> : null)
           : b.binding ? (renderFace ? renderFace(b) : <span className="text-[10px]" style={{ color: colours.muted }} data-testid={`deck-block-face-${b.id}`}>{faceLine(b.binding)}</span>)
             : v !== NOT_RECORDED ? <span className="text-[10px]" style={{ color: colours.muted }} title={TYPED_LINE()} data-testid={`deck-block-face-${b.id}`}>{STATED_CHIP}</span> : null}

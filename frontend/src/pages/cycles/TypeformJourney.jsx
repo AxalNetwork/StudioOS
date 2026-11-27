@@ -4,12 +4,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { connectorPilotReturn } from '../account/connectorPilotReturn';
 import Lightbox from '../../ui/Lightbox';
 import { typeformApi } from '../../lib/api/typeform';
-import { mappingInput, mappingShape, typeformCount, typeformFailure } from './typeformJourneyModel';
+import { mappingInput, mappingShape, reconcileNotice, typeformCount, typeformFailure } from './typeformJourneyModel';
 
 const BOX = 'min-w-0 space-y-3 rounded-xl border border-axal-hairline bg-white p-4 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const BTN = 'min-h-[44px] cursor-pointer rounded-lg border border-axal-hairline px-3 py-2 hover:border-axal-violet focus-visible:outline focus-visible:outline-2 disabled:cursor-default dark:border-gray-700';
 const INPUT = 'min-h-[44px] rounded-lg border border-axal-hairline bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900';
 const KINDS = ['loi', 'pre_sale', 'waitlist', 'need_to_have', 'would_pay'];
+const importNotice = result => result?.outcome && result.outcome !== 'ok' ? `Import outcome: ${result.outcome}. Read the status before continuing.` : '';
 export default function TypeformJourney(props) { return <VentureTypeform key={props.projectId} {...props} />; }
 function VentureTypeform({ projectId, api = typeformApi }) {
   const [returnParams] = useSearchParams();
@@ -48,10 +49,10 @@ function VentureTypeform({ projectId, api = typeformApi }) {
     Promise.resolve().then(() => api.targets(projectId)).then(value => { if (live) setTargets(value); }).catch(() => { if (live) setTargetsError(true); });
     return () => { live = false; };
   }, [api, projectId, dialog]);
-  async function run(fn, close = true, refresh = true) {
+  async function run(fn, close = true, refresh = true, describe = importNotice) {
     if (action.current) return;
     action.current = true; setBusy(true); setError(''); setNotice('');
-    try { const result = await fn(); if (!alive.current) return; if (close) setDialog(null); if (refresh) setRound(n => n + 1); if (result?.outcome && result.outcome !== 'ok') setNotice(`Import outcome: ${result.outcome}. Read the status before continuing.`); }
+    try { const result = await fn(); if (!alive.current) return; if (close) setDialog(null); if (refresh) setRound(n => n + 1); const said = describe(result); if (said) setNotice(said); }
     catch (e) { if (alive.current) setError(typeformFailure(e)); }
     finally { action.current = false; if (alive.current) setBusy(false); }
   }
@@ -78,7 +79,7 @@ function VentureTypeform({ projectId, api = typeformApi }) {
     <div className="flex flex-wrap gap-2"><Link className={BTN} to={`/account/connectors/typeform?project_id=${encodeURIComponent(projectId)}`}>Connect or reconnect Typeform</Link><button type="button" className={BTN} disabled={busy || loading} onClick={() => setRound(n => n + 1)}>Read survey again</button>
       {read?.capability?.can_bind && <button type="button" className={BTN} disabled={busy} onClick={() => { setForm(read.binding?.form_id || ''); setDialog('form'); }}>Choose form</button>}
       {own && <><button type="button" className={BTN} disabled={busy} onClick={() => run(() => api.check(projectId))}>Check form access</button><button type="button" className={BTN} disabled={busy} onClick={() => setDialog('unbind')}>Unbind form</button></>}
-      {own && read.binding.access_state === 'ok' && <><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.sync(projectId))}>Import responses</button><button type="button" className={BTN} disabled={busy || (!pendingTarget && !mappingRevision)} onClick={() => { if (!pendingTarget) setField(fields[0]?.id || ''); setDialog('mapping'); }}>{pendingTarget ? 'Finish hypothesis link' : 'Map question'}</button><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.prepare(projectId))}>Prepare review queue</button></>}
+      {own && read.binding.access_state === 'ok' && <><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.sync(projectId))}>Import responses</button><button type="button" className={BTN} disabled={busy || (!pendingTarget && !mappingRevision)} onClick={() => { if (!pendingTarget) setField(fields[0]?.id || ''); setDialog('mapping'); }}>{pendingTarget ? 'Finish hypothesis link' : 'Map question'}</button><button type="button" className={BTN} disabled={busy || !!pendingTarget} onClick={() => run(() => api.prepare(projectId))}>Prepare review queue</button><button type="button" className={BTN} disabled={busy} onClick={() => run(() => api.reconcile(projectId), true, true, reconcileNotice)}>{status?.reconcile_in_progress ? 'Continue deleted-response check' : 'Check for deleted responses'}</button></>}
     </div>
     {own && read.binding.access_state === 'ok' && !loading && !mappingRevision && <p role="alert">Question mappings are unreadable. Read the survey again before mapping; existing rules will not be replaced.</p>}
     {notice && <p role="status">{notice}</p>}{pendingTarget && <p role="alert">The question rule was saved, but its hypothesis link is unfinished. Finish the link before importing or preparing more reviews.</p>}{loading && <p role="status">Reading survey…</p>}{busy && <p role="status">Working…</p>}{error && <p role="alert">{error}</p>}
@@ -90,6 +91,7 @@ function VentureTypeform({ projectId, api = typeformApi }) {
       {status.state === 'ok' && status.completed === 0 && <p>This survey has no completed submissions.</p>}
       {status.completed > 0 && status.qualifying === 0 && <p>Completed submissions exist, but no stored answers match the current rules.</p>}
       {status.state !== 'ok' && <p>Import is {status.state}; a delayed or failed sync does not mean the survey is empty.</p>}
+      <p>Last deleted-response check: {status.last_reconciled_at || 'Not recorded'}{status.reconcile_in_progress ? ' · A check is part way; continue it to check the rest' : ''}. A response deleted in Typeform is withdrawn here, with its evidence, only after two checks an hour apart both miss it.</p>
       {!!status.needs_remap?.length && <p>Map these questions again: {status.needs_remap.map(f => f.field_id).join(', ')}</p>}
     </>}
     {reviews && <div><h3 className="font-bold">Private review queue</h3>{!reviews.rows?.length && <p>No imported answers await review. Import and prepare the queue when eligible answers exist.</p>}

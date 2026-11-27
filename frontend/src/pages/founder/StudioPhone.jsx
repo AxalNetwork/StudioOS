@@ -15,6 +15,10 @@
  * `StudioInterview`, `FounderStudioHome` or `AdvisorProgressWidget`, which a
  * Node test cannot import.
  *
+ * D8729 (#8729): the bar is no longer a heading. The page's first heading is
+ * the venture's, in the body below it (`FounderStudioBody`), and Eadwyn's
+ * chat sits under the venture's Next card, so `children` is that body.
+ *
  * THE BAR STAYS. It is sticky at the top of the shell's scroll (`<main>`) at
  * z-20, so it stays put while the thread, Tasks, My tickets and the modules
  * scroll under it. The composer is not pinned (D1419): the modules below the
@@ -178,7 +182,7 @@ export default function StudioPhone({ tab = 'conversation', ticketOpen = false, 
         <div className="flex items-center gap-2.5">
           <img src="/eadwyn-ai.png" alt="Eadwyn" width="34" height="34" className="block h-[34px] w-[34px] shrink-0 object-contain [image-rendering:pixelated]" />
           <div>
-            <h1 className="text-[19px] font-extrabold leading-tight tracking-[-.024em] text-gray-900 dark:text-gray-100">Eadwyn AI</h1>
+            <p className="text-[19px] font-extrabold leading-tight tracking-[-.024em] text-gray-900 dark:text-gray-100" data-testid="studio-phone-bar-title">Eadwyn AI</p>
             <div className="text-[12px] text-[#615c6e] dark:text-gray-400" data-testid="studio-phone-tab">{TAB_LABEL[tab] || TAB_LABEL.conversation}</div>
           </div>
         </div>
