@@ -60,6 +60,10 @@ regexes = [
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.
   '''\bsynthetic-d1135-secret\b''',
+  # D5583-p4 (#5583): this exact synthetic seed only signs media delivery tokens
+  # inside work_graph_media_delivery_5583.test.ts, whose R2 and D1 are in-test fakes.
+  # Pinned as the literal, as D1135 is, rather than rewriting the PR branch's history.
+  '''\bsynthetic-test-secret-5583-p4\b''',
   # D6495 (#6495): this exact literal only signs JWTs inside the D5074
   # in-memory capability fixture, whose fetch stub forbids external calls.
   # Anchors preserve detection for prefixed/suffixed values and other seeds.
