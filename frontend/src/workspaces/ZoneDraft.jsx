@@ -66,9 +66,12 @@ const ACCENTS = {
     band: 'rounded-[10px] border border-amber-200 bg-amber-50/60 p-3.5 dark:border-amber-900 dark:bg-amber-950/25',
     ink: 'text-axal-amber-deep dark:text-amber-300',
     edit: 'mt-2 w-full rounded-[8px] border border-amber-200 bg-white p-2.5 text-[12px] leading-relaxed text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:border-amber-900 dark:bg-gray-900 dark:text-gray-100',
+    // D4818 part 4: amber-700, not amber-600. White 11px text on amber-600 is
+    // 3.2:1, under 1.4.3's 4.5:1 (the Portfolio's computed contrast check
+    // measured it); on amber-700 it is 5.0:1. The accent is still amber.
     button: 'inline-flex items-center gap-1.5 whitespace-nowrap rounded-[7px] border '
-      + 'border-amber-600 bg-amber-600 px-[11px] py-1.5 text-[11px] font-bold text-white '
-      + 'transition-colors hover:bg-amber-700 focus-visible:outline focus-visible:outline-2 '
+      + 'border-amber-700 bg-amber-700 px-[11px] py-1.5 text-[11px] font-bold text-white '
+      + 'transition-colors hover:bg-amber-800 focus-visible:outline focus-visible:outline-2 '
       + 'focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
   },
   // The investor canvases (b6a5f992, the diligence room) draw the band in the

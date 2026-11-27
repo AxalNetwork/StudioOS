@@ -12,7 +12,10 @@
  * any method); `log` lists each Portfolio read in order, with its method when it
  * is not a GET. `as` signs in as 'investor' (the default), 'admin' (an
  * administrator in their own shell) or 'preview' (an administrator previewing
- * the Investor shell, D4817 part 8). Every name is made up.
+ * the Investor shell, D4817 part 8). Part 4 (D4818-p4) adds a second company,
+ * Lumen, to the investor's workspace and the admin's book, so a check can
+ * change company while the first company's answer is still on its way; a
+ * delay is an `over` that awaits before it answers. Every name is made up.
  */
 import { prepare } from './_editor.mjs';
 
@@ -108,7 +111,18 @@ export const DETAIL = {
   marks: [{ uid: 'm1', as_of_date: '2026-03-31', fmv: 2400000, basis: 'round_price', event: 'Priced round' }],
   distributions: [],
 };
-export const ADMIN_POSITIONS = { items: [{ project_id: 2, project: DETAIL.project, total_invested: 1500000, rounds: 1, latest_ownership_pct: 6.2, latest_round: 'Seed' }] };
+/** Part 4: a second company's book, so a sheet can change company while the first company's read is late. */
+export const LUMEN_DETAIL = {
+  project: { id: 1, uid: 'lumen', name: 'Lumen Robotics' },
+  rounds: [{ uid: 'r2', round_name: 'Series A', invested_amount: 2000000, ownership_pct: 8.5 }],
+  cap_table_snapshot: [],
+  marks: [{ uid: 'm9', as_of_date: '2026-09-30', fmv: 5200000, basis: 'round_price', event: 'Series A' }],
+  distributions: [],
+};
+export const ADMIN_POSITIONS = { items: [
+  { project_id: 2, project: DETAIL.project, total_invested: 1500000, rounds: 1, latest_ownership_pct: 6.2, latest_round: 'Seed' },
+  { project_id: 1, project: LUMEN_DETAIL.project, total_invested: 2000000, rounds: 1, latest_ownership_pct: 8.5, latest_round: 'Series A' },
+] };
 export const STORED_MARK = {
   id: 41, uid: 'mk-7f3a', fund_id: null, project_id: 2, as_of_date: '2026-09-30', fmv: 2100000, post_money: null,
   event: 'Down round', basis: 'gp_estimate', source: 'Q3 board pack', note: null, created_by: 1, created_at: '2026-11-14T14:44:09.120Z',
@@ -121,6 +135,21 @@ export const NORTHWIND = {
   ],
   rounds: [], distributions: [],
 };
+export const LUMEN = {
+  project: { uid: 'lumen', name: 'Lumen Robotics' },
+  marks: [{ uid: 'mk-9', as_of_date: '2026-09-30', fmv: 5200000, post_money: 61000000, event: 'Series A', basis: 'round_price', source: 'term sheet' }],
+  rounds: [], distributions: [],
+};
+/** What Lumen owes this investor: one duty, its only period received. */
+export const LUMEN_OWED = {
+  ok: true, today: '2026-11-05', can_act: true, act_refusal: null,
+  company: {
+    uid: 'lumen', name: 'Lumen Robotics',
+    duties: [{ ...OWED.company.duties[0], uid: 'd-lu' }],
+    periods: [period('pl9', 'd-lu', '2026-09', '2026-10-30', 'sent', { start: '2026-09-01', end: '2026-09-30', sent_at: '2026-10-02 10:00:00', report_uid: 'r9' })],
+  },
+};
+
 /** A quarter-end's book: the latest quarters have one, the oldest has none recorded. */
 const quarter = (asOf) => (asOf < '2025-12-31' ? { ...ANALYTICS, nav: 0, paid_in: 0, position_count: 0, as_of: asOf, returns: {} } : { ...ANALYTICS, as_of: asOf, nav: asOf < '2026-06-30' ? 6100000 : ANALYTICS.nav });
 
@@ -163,16 +192,18 @@ export async function install(page, request, { over = {}, log = [], theme = 'lig
     if (path === '/api/positions/marks') return json({ items: [] });
     if (path === '/api/mark-requests') return json({ items: [] });
     if (path === '/api/positions/northwind') return json(as === 'admin' ? DETAIL : NORTHWIND);
-    if (path === '/api/positions/northwind/activity') return json({ items: [], sources: [], next_cursor: null });
+    if (path === '/api/positions/lumen') return json(as === 'admin' ? LUMEN_DETAIL : LUMEN);
+    if (/^\/api\/positions\/(northwind|lumen)\/activity$/.test(path)) return json({ items: [], sources: [], next_cursor: null });
     if (path === '/api/portfolio/chases') return json(CHASES);
     if (/^\/api\/portfolio-support\/[^/]+\/history$/.test(path)) return json(SUPPORT_HISTORY);
     if (path === '/api/reporting/companies/northwind') return json(OWED);
-    if (path === '/api/reporting/companies/northwind/figures') return json({ ok: true, reports: [] });
-    if (path === '/api/portfolio/health/northwind') return json({ latest: null, history: [] });
+    if (path === '/api/reporting/companies/lumen') return json(LUMEN_OWED);
+    if (/^\/api\/reporting\/companies\/(northwind|lumen)\/figures$/.test(path)) return json({ ok: true, reports: [] });
+    if (/^\/api\/portfolio\/health\/(northwind|lumen)$/.test(path)) return json({ latest: null, history: [] });
     if (path === '/api/portfolio-updates') return json({ items: [] });
-    if (path === '/api/portfolio-notes/companies/northwind') return json({ items: [], can_write: true, write_refusal: null });
-    if (path === '/api/portfolio-rights/northwind') return json({ rights: [], requests: [] });
-    if (path === '/api/portfolio-pro-rata/northwind') return json({ live_round: null, offer: null });
+    if (/^\/api\/portfolio-notes\/companies\/(northwind|lumen)$/.test(path)) return json({ items: [], can_write: true, write_refusal: null });
+    if (/^\/api\/portfolio-rights\/(northwind|lumen)$/.test(path)) return json({ rights: [], requests: [] });
+    if (/^\/api\/portfolio-pro-rata\/(northwind|lumen)$/.test(path)) return json({ live_round: null, offer: null });
     return json({});
   });
   return user;
