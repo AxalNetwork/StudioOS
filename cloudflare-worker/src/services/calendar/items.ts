@@ -175,10 +175,10 @@ export function hrefOf(ev: CalendarEvent): string | null {
     // #4735: the item itself, through WorkPage's `?item=` deep link, when the event names it.
     case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work${ev.source_uid ? `?item=${encodeURIComponent(ev.source_uid)}` : ''}` : null;
     // #5131 (D1486 §e): the campaign itself, and the Ads, Newsletter and Prospects tabs.
-    case 'grow_campaign': return typeof ev.url === 'string' && ev.url.startsWith('/grow/distribution/campaigns/') ? ev.url : '/grow/distribution/campaigns';
-    case 'ad_flight': return '/grow/distribution/ads';
-    case 'newsletter_send': return '/grow/distribution/newsletter';
-    case 'sequence_step': return '/grow/distribution/prospects';
+    // #9024 (Q18=b): only the link the reader was given (growDates.ts sets `url` for a reader the Distribution
+    // routes admit); an item with none, such as an advisor's, has no page link.
+    case 'grow_campaign': case 'ad_flight': case 'newsletter_send': case 'sequence_step':
+      return typeof ev.url === 'string' && ev.url.startsWith('/grow/distribution/') ? ev.url : null;
     case 'agent_session': return typeof ev.url === 'string' && ev.url.startsWith('/calendar') ? ev.url : '/calendar';
     default: return null;
   }
