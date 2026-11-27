@@ -317,7 +317,7 @@ const BASE_JOB_DIGESTS={
   "gate":'a0da00b955654e3e', // D8626: refuses a routed candidate while main does not require ci-capacity/full-suite.
   "selection-shadow":'41ac4055f5a3c941',
   "classify":'d594dedf4e520c73',
-  "visual":'7a2e05a6227ad715', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step.
+  "visual":'5b5e4e49f1e0e4e3', // #6250 (D6250-p2): the fund report print step; #8537 (D8537): the public journey step; #7808 (D7808): the switcher and rail step; #8524 (D8524-p2): the eSign signer journey step.
   "drift":'d870bd539b8eced2',
   "og-tags":'e7c2cfaf81226e04',
   "dev-backend":'82b39cdcaa1e275a',
