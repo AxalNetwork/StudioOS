@@ -9,6 +9,7 @@
  * a block whose read failed reads "Could not be read", never a zero (BD29).
  */
 import { buildFacts } from './BuildFacts.jsx';
+import { isFounderPreview } from './previewUploadModel.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -176,12 +177,53 @@ export function sourcesIn(records) {
   return { lab: keys.has('lab'), obligation: keys.has('obligation') };
 }
 
-/** BD25's "After formation" IP step, from the Lab's copied IP record (facts.ip, D6040). */
-export function ipStep(facts) {
+/**
+ * BD25's "After formation" IP step, from the Lab's copied IP record (facts.ip, D6040).
+ *
+ * D9101 (#9101): with no record, the step may offer BD25's Record IP assignment, which copies the IP answers of the
+ * viewer's accepted Spin-Out application (`POST /cycles/build/project/ip-copy`). `lab` is the viewer's Lab state as
+ * the page read it, `{ status: 'loading' | 'unreadable' | 'ready', application }`, or null when it was not read.
+ * `mode` is `useViewMode()`'s value, passed in so this stays pure. `action` is 'copy' or null; `check` is the Lab
+ * read's own state on this step only ('loading' | 'unreadable' | null); `note` is a line under the reason.
+ */
+export function ipStep(facts, lab = null, mode = null) {
   const ip = buildFacts('company-creation', facts).find((f) => f.label === 'IP');
-  return ip?.value
-    ? { value: ip.value, source: ip.source, recorded: true }
-    : { value: null, source: 'From the Lab’s IP record', recorded: false, reason: 'No Lab IP record: this venture did not come through the Lab, or its IP is not recorded.' };
+  if (ip?.value) return { value: ip.value, source: ip.source, recorded: true, action: null, check: null, note: null };
+  const base = {
+    value: null, source: 'From the Lab’s IP record', recorded: false, action: null, check: null, note: null,
+    reason: 'No Lab IP record: this venture did not come through the Lab, or its IP is not recorded.',
+  };
+  // The copy reads the caller's own application, so a Super Admin previewing a founder would get a 404 (D9101).
+  if (isFounderPreview(mode)) return { ...base, note: 'Only the founder can copy their own Spin-Out application.' };
+  if (lab?.status === 'loading') return { ...base, check: 'loading' };
+  if (lab?.status === 'unreadable') return { ...base, check: 'unreadable', note: 'Could not check your Spin-Out application.' };
+  const app = lab?.status === 'ready' ? lab.application : null;
+  if (app?.status === 'accepted' && /^[1-9]\d*$/.test(String(app.id ?? ''))) {
+    return { ...base, action: 'copy', applicationId: Number(app.id), note: 'Your Spin-Out application was accepted. Its IP answers can be copied onto this venture.' };
+  }
+  return base;
+}
+
+/** D9101: what a failed copy says on the IP step, by the Worker's answer (`cycle_build.ts`), never a bare code. */
+export function ipCopyErrorWords(err) {
+  const s = err?.status;
+  if (s === 404) return 'No accepted Spin-Out application of yours was found, so nothing was copied.';
+  if (s === 503) return 'Your application’s answers could not be read, so nothing was copied.';
+  if (typeof s === 'number' && s >= 400) return `${text(err?.message) || 'The IP details could not be copied.'} Nothing was copied.`;
+  return 'The IP details could not be copied: the request did not reach Axal. Nothing was copied.';
+}
+
+/**
+ * D9101: press Record IP assignment. Copies through `copyIp(projectId, applicationId)` and, once it lands, calls
+ * `reload()` so the step reads the record from `facts.ip`; the copy's own answer is not drawn. Resolves to the
+ * error words on the step, or '' when it was copied; nothing is sent outside the copy state.
+ */
+export async function runIpCopy(ip, projectId, copyIp, reload) {
+  if (ip?.action !== 'copy') return '';
+  try { await copyIp(projectId, ip.applicationId); }
+  catch (e) { return ipCopyErrorWords(e); }
+  reload?.();
+  return '';
 }
 
 /** Whole days from `today` (YYYY-MM-DD, UTC) to an ISO day, or null. */
