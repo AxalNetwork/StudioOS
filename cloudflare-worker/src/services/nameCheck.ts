@@ -36,6 +36,7 @@
 
 import type { Env } from '../types';
 import { sha256Hex } from './pdf';
+import { cataloguePlace } from './formationCatalogueReaders';
 
 export type NameCheckStatus = 'available' | 'taken' | 'unavailable';
 
@@ -72,6 +73,32 @@ export const JURISDICTION_REGISTRY: Record<string, RegistryKey> = {
   sg_pte: 'sg',
   ee_oy: 'ee',
 };
+
+/**
+ * D6691 (#6691): the register adapter for each place a catalogue form is
+ * registered in (`formation_jurisdictions`, ISO country and subdivision).
+ * The adapter is chosen by the form's place in the formation catalogue, not
+ * by its id; `JURISDICTION_REGISTRY` above is the frozen fallback for one
+ * release (#6716 deletes it).
+ */
+export const PLACE_REGISTRY: Readonly<Record<string, RegistryKey>> = Object.freeze({
+  'US-DE': 'de',
+  'US-WY': 'wy',
+  GB: 'uk',
+  SG: 'sg',
+  EE: 'ee',
+});
+
+/**
+ * The adapter for a wizard jurisdiction id: its catalogue place's adapter;
+ * the frozen map's after a logged fallback (see formationCatalogueReaders);
+ * undefined when the catalogue's place has no adapter or the id is unknown.
+ */
+export async function registryFor(env: Env, jurisdictionId: string): Promise<RegistryKey | undefined> {
+  const place = await cataloguePlace(env, jurisdictionId);
+  if (place == null) return JURISDICTION_REGISTRY[jurisdictionId];
+  return Object.prototype.hasOwnProperty.call(PLACE_REGISTRY, place) ? PLACE_REGISTRY[place] : undefined;
+}
 
 const CACHE_TTL_SECONDS = 3600;
 
@@ -371,7 +398,7 @@ export async function checkCompanyName(
   const fetchImpl = deps.fetchImpl || fetch;
   const timeoutMs = deps.timeoutMs ?? 10000;
   const normalized = normalizeName(rawName);
-  const registry = JURISDICTION_REGISTRY[jurisdictionId];
+  const registry = await registryFor(env, jurisdictionId);
 
   const unavailable = (reason: string, source: NameCheckResult['source'] = 'none'): NameCheckResult => ({
     status: 'unavailable',

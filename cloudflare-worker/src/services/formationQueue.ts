@@ -106,6 +106,11 @@ export interface QueueCase {
   stage_entered_at: string; waiting_on: string; hold_reason: string | null; form_key: string | null;
   partner_id: number | null; hq_owner_user_id: number | null; closed_at: string | null;
   close_reason: string | null; created_at: string; updated_at: string; country: string | null;
+  /**
+   * D6710: 1 when, for some service, the case's latest partner offer came back
+   * to HQ (expired or declined) and nothing has been offered since.
+   */
+  partner_offer_returned?: number | null;
 }
 
 /** Whether a case is in a saved view. */
@@ -113,7 +118,7 @@ export function inView(view: View, c: QueueCase, clocks: Clocks): boolean {
   const open = c.closed_at == null;
   switch (view) {
     case 'all': return true;
-    case 'unassigned': return open && c.hq_owner_user_id == null;
+    case 'unassigned': return open && (c.hq_owner_user_id == null || Number(c.partner_offer_returned) === 1);
     case 'waiting_on_hq': return open && c.waiting_on === 'hq';
     case 'screening_review': return open && c.stage === 'structure_review';
     case 'partner_late': return open && c.waiting_on === 'partner' && clocks.bands.partner === 'late';
@@ -142,6 +147,7 @@ export function queueRow(c: QueueCase, clocks: Clocks, viewerId: number, now: nu
     form_key: c.form_key,
     country: c.country,
     partner_id: c.partner_id,
+    partner_offer_returned: Number(c.partner_offer_returned) === 1,
     assigned: c.hq_owner_user_id != null,
     mine: c.hq_owner_user_id != null && Number(c.hq_owner_user_id) === Number(viewerId),
     closed: c.closed_at != null,
@@ -163,7 +169,9 @@ const CASE_COLUMNS =
   'c.id, c.uid, c.track, c.intent, c.path, c.stage, c.stage_entered_at, c.waiting_on, c.hold_reason, c.form_key, '
   + 'c.partner_id, c.hq_owner_user_id, c.closed_at, c.close_reason, c.created_at, c.updated_at, '
   + '(SELECT j.country FROM formation_entity_forms f JOIN formation_jurisdictions j ON j.id = f.jurisdiction_id '
-  + '  WHERE f.version_id = c.catalogue_version_id AND f.form_key = c.form_key LIMIT 1) AS country';
+  + '  WHERE f.version_id = c.catalogue_version_id AND f.form_key = c.form_key LIMIT 1) AS country, '
+  + "EXISTS (SELECT 1 FROM formation_case_assignments a WHERE a.case_id = c.id AND a.state IN ('expired', 'declined') "
+  + '  AND a.id = (SELECT max(b.id) FROM formation_case_assignments b WHERE b.case_id = c.id AND b.service = a.service)) AS partner_offer_returned';
 const QUEUE_SQL = 'SELECT ' + CASE_COLUMNS + ' FROM formation_cases c ORDER BY c.created_at, c.id LIMIT ?';
 const CASE_BY_UID_SQL = 'SELECT ' + CASE_COLUMNS + ', c.user_id, c.project_id, c.company_id, c.structure_gate, c.catalogue_version_id, c.revision '
   + 'FROM formation_cases c WHERE c.uid = ?';

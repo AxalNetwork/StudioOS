@@ -307,7 +307,7 @@ test('D1612: a published version is immutable; a pinned agent stays on it until 
   assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.error, 'retired');
 });
 
-test('D1612: an agent gets a skill only of its role, with its approved tools, from its company, by an editor', async () => {
+test('D1612: an agent gets a skill of any role (D8768), with its approved tools, from its company, by an editor', async () => {
   const w = world();
   const forIr = await published(w, update({ name: 'Investor CRM digest', roles: ['investor_relations'], tools: ['hubspot.read_contacts'] }));
   const needsMore = await published(w, update({ name: 'Pipeline read', roles: ['investor_relations', 'cfo'], tools: ['hubspot.read_deals'] }));
@@ -315,9 +315,10 @@ test('D1612: an agent gets a skill only of its role, with its approved tools, fr
   const draft = (await call(w, SUPER, 'POST', '/skills', update({ name: 'Never published' }))).body.skill.uid;
   const links = () => Number((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links').get() as any).n);
 
-  // A2 (#3956)'s codes: role_mismatch and tool_not_approved are 422, the tool named.
+  // A2 (#3956)'s code: tool_not_approved is 422, the tool named. D8768: no role gate (D4116), so the CFO is refused
+  // the Investor Relations skill for its tool alone, never for its role.
   const role = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [forIr] });
-  assert.deepEqual([role.status, role.body.error], [422, 'role_mismatch']);
+  assert.deepEqual([role.status, role.body.error], [422, 'tool_not_approved']);
   const tools = await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [needsMore] });
   assert.deepEqual([tools.status, tools.body.error, tools.body.tool], [422, 'tool_not_approved', { key: 'hubspot.read_deals', label: 'hubspot.read_deals' }]);
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [forIr] })).status, 200, 'its granted tool');
@@ -348,13 +349,14 @@ test('D1612: assigning one skill to several agents writes each it can and names 
   const uid = await published(w, update({ roles: ['cfo'] }));
   const first = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO, IR] });
   assert.equal(first.status, 200, 'one agent never refuses the call');
-  assert.deepEqual([first.body.added, first.body.refused], [1, [{ agent_uid: IR, code: 'role_mismatch' }]]);
+  // D8768: a skill written for the CFO goes to the Investor Relations agent too; fit only sorts.
+  assert.deepEqual([first.body.added, first.body.refused], [2, []]);
   // Another company's agent reads as no agent; a member who is not an editor is told so.
   assert.deepEqual((await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [GLOBEX_CFO] })).body.refused, [{ agent_uid: GLOBEX_CFO, code: 'not_found' }]);
   assert.deepEqual((await call(w, MEMBER, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO] })).body.refused, [{ agent_uid: CFO, code: 'not_manager' }]);
   const ok = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agents: [CFO, PROJECT_CFO] });
-  assert.deepEqual([ok.status, ok.body.added, ok.body.refused, ok.body.used_by], [200, 1, [], 2], 'one already had it');
-  assert.equal((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1')).body.hq[0].used_by, 2);
+  assert.deepEqual([ok.status, ok.body.added, ok.body.refused, ok.body.used_by], [200, 1, [], 3], 'one already had it');
+  assert.equal((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1')).body.hq[0].used_by, 3);
 });
 
 test('D1612: the agent\'s radar is the 8 axes on the person\'s scale, "Not recorded" where nothing tags an axis', async () => {

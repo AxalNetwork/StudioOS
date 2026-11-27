@@ -33,6 +33,15 @@ export const failedRead = (reason) => ({ failed: String(reason || 'Source unavai
  */
 export const unavailableProject = (id) => ({ failed: 'This venture is not available to your account.', unavailable: String(id) });
 export const isUnavailableProject = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string' && typeof r.unavailable === 'string';
+/**
+ * D8729 (#8729, owner Q1 A): two or more ventures, none named by the address
+ * and none picked in the switcher. Studio asks which; until then no venture's
+ * records are read, so every venture zone says so rather than showing the
+ * first venture's figures.
+ */
+export const CHOOSE_REASON = 'Choose a venture to see its records.';
+export const chooseProject = (count) => ({ failed: CHOOSE_REASON, choose: Number(count) });
+export const isChooseProject = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string' && Number.isFinite(r.choose) && r.choose > 0;
 const isFailed = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string';
 
 /** The state of one read: loading, unreadable, or ready. */

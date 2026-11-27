@@ -2,6 +2,8 @@
 
 `network_directory_7672.test.mjs` verifies the additive shared directory schema and offline planner with synthetic sources: identity kinds, private provenance, affiliations, replay/recovery, source conflicts, reviewed links and the no-membership/no-tie boundary.
 
+`mutation_atomic_writes.test.mjs` pins `_atomic_write.mjs`, the one way an in-suite mutation check rewrites a source file: a temporary file beside it renamed over it, so a test file running in parallel never imports a truncated copy. The guard fails if any suite under `cloudflare-worker/test`, `frontend/test` or `scripts` writes a mutated or restored source with `writeFileSync(<file>, original…)`. Mutations run on a private copy (`_isolated_mutation_source.mjs`, D6811), not on the checkout.
+
 `research_global_funds_7326.test.ts` replays the worldwide manager import over
 the real fund migrations and through directory reads: preserves historical
 rows, reports, saved references, UID redirects and source reviews; suppresses
@@ -348,7 +350,10 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `workspace_containment_5567.test.ts` | D5567 part 4: the fail-closed containment gate (evidence source/freshness from an injected clock, egress per network mode, metadata/localhost, guest bindings, privilege escalation, sandbox strength), the job-environment credential scan, and the real compute VM start options and image user; synthetic only. |
 | `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
 | `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
+| `workspace_checkpoint_r2_5568_p2.test.ts` | D5568 part 2: the R2 checkpoint adapter on a faultable in-memory bucket: key, namespace and prefix scope, checksum on put, read-back loss, null and corruption, corruption at rest, paging, the fenced delete, and the service's typed refusals through it; mutations R1 to R7 in its header. |
+| `workspace_checkpoint_store_5568_p2.test.mjs` | D5568 part 2: the pointer and runner stores on a real SQLite Durable Object with the adapter on a real Miniflare R2 bucket (test-only object): racing commits, restart, a runner cancel fencing the old writer, rollback, the store's refusals, the fenced head, retention GC; mutations S1 to S7 in its header. |
 | `workspace_placement_5570.test.ts` | D5570: placement order and reasons, Cloudflare-first fallback, unavailable cost and dry run, fair fenced admission leases over a restarted instance, reconcile-before-free, bill once; injected clock, synthetic only. |
+| `workspace_cloudflare_5566.test.ts` | D5566: the disabled coding host's controller and Cloudflare adapter with fake provider I/O: default-off, image/policy refusals, grant audiences, cancel/timeout/unknown cleanup, artifact scope and hashes, preview config, and guard mutations; Docker image evidence lives in `workspace-engine/test/`. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
 | File | Guarantee |
@@ -446,3 +451,4 @@ catalogue version only in the fixture.
 | `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
 - `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
 `capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.
+- `role_qualification_8688.test.ts` — D8688: the five role scenarios and a pending-review control, run through the real Worker on local synthetic data with a second tenant each. Their scenarios and fail-closed fixture are in `_role_qualification_8688.ts`, which `scripts/qualification/role-matrix.mjs` also runs.

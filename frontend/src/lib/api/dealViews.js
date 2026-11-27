@@ -22,4 +22,6 @@ export const dealViewsApi = {
   update: (uid, version, body, { context } = {}) => request(viewPath(`/${encodeURIComponent(uid)}`, contextQuery(context)), { method: 'PATCH', body: JSON.stringify({ ...body, version: requireVersion(version) }) }),
   remove: (uid, version, { context } = {}) => request(viewPath(`/${encodeURIComponent(uid)}`, { version: requireVersion(version), ...contextQuery(context) }), { method: 'DELETE' }),
   fit: (ids) => request(`/deals/fit?${new URLSearchParams({ ids: ids.join(',') })}`),
+  // D6287 part 2: the same read for Firm Settings, which draws its own plan refusal, so the paywall modal stays shut.
+  fitInline: (ids) => request(`/deals/fit?${new URLSearchParams({ ids: ids.join(',') })}`, { inlinePaywall: true }),
 };

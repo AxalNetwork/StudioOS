@@ -522,9 +522,10 @@ funds.get('/:id/page',async c=>{
  catch(error){return fundReportError(c,error);}
 });
 funds.get('/:id/report-periods/:periodId',async c=>{
- try{const {fund,canManage}=await fundPageAccess(c);const id=reportId(c.req.param('periodId'));
+ try{const {user,fund,canManage}=await fundPageAccess(c);const id=reportId(c.req.param('periodId'));
   if(!id)throw new FundReportRefusal('not_found',404);
-  return c.json({period:await readFundPeriod(c.env,fund.id,id,canManage),can_manage:canManage});}
+  // D6240: per-LP delivery is read only when `requireFundGp` admitted the caller (canManage); an LP's read records its opening.
+  return c.json({period:await readFundPeriod(c.env,fund.id,id,canManage,canManage?undefined:user.id),can_manage:canManage});}
  catch(error){return fundReportError(c,error);}
 });
 

@@ -753,6 +753,9 @@ export interface Env {
   AXAL_SECTION_SLACK_CHANNELS?: string;
   // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
   AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
+  // D5981: ISO UTC cutoff. When set, server failures of authenticated API
+  // operations after it become section incident episodes. Unset: nothing.
+  AXAL_SECTION_REQUEST_INCIDENT_START_UTC?: string;
   // D5984: exactly 'enabled' lets section incidents file GitHub bugs through
   // the ticket mirror's token and repository. Unset: no GitHub call is made.
   AXAL_SECTION_INCIDENT_GITHUB?: string;

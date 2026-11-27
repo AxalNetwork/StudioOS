@@ -10,7 +10,8 @@
  *   skill_retired          409: a retired skill is not added again (one already pinned stays)
  *   skill_suspended        409: HQ suspended the skill (D4161); one already pinned stays pinned,
  *                          and the run gate (`skillModeration.ts`) keeps it from running
- *   role_mismatch          the skill does not list the agent's role
+ *   (no role gate)         D8768: the roles a version was written for only recommend it (natural fit sorts,
+ *                          D4116); any skill can go to any agent. `skillEligibility.ts` reads this gate for every picker.
  *   tool_not_approved      a tool the skill uses is not in the agent's grants
  *                          (`tool_grants_json`, #3844), named as `{ key, label }`
  *
@@ -48,13 +49,13 @@ export type VersionRow = {
   /** D4533: an HQ version's release-evidence manifest; null on a company version and on one published before it. */
   evidence_json?: string | null;
 };
-export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'skill_suspended' | 'role_mismatch' | 'tool_not_approved' | 'capability_missing';
+export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'skill_suspended' | 'tool_not_approved' | 'capability_missing';
 export type Blocked = { code: AttachCode; tool?: { key: string; label: string }; capability?: { code: string; name: string } };
 export type Axis = { slug: string; label: string; level: number | null };
 
 /** The status each code answers with when a write is refused. */
 export const ATTACH_STATUS: Record<AttachCode, number> = {
-  not_found: 404, version_not_published: 422, skill_retired: 409, skill_suspended: 409, role_mismatch: 422, tool_not_approved: 422, capability_missing: 403,
+  not_found: 404, version_not_published: 422, skill_retired: 409, skill_suspended: 409, tool_not_approved: 422, capability_missing: 403,
 };
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
@@ -97,7 +98,6 @@ export async function attachCheck(env: Env, a: AgentPart, s: SkillRow, version: 
   // D4534: the run gate's own rule, so nothing is pinned that would be refused at run: an open suspension,
   // or an older version a suspension covered when the company republished to lift it.
   if (await skillRunRefusal(env, s.id, version)) return { code: 'skill_suspended' };
-  if (!versionRoles(v).includes(a.role_key)) return { code: 'role_mismatch' };
   const missing = missingTools(versionTools(v), grantsOf(a.tool_grants_json));
   if (missing.length) return { code: 'tool_not_approved', tool: { key: missing[0], label: toolLabel(missing[0]) } };
   // D8070: each tool's declared capability, held by the agent (an agent not yet added holds none).

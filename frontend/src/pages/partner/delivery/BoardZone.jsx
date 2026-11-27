@@ -12,6 +12,7 @@ import { HistoryPager, useMorePages } from './historyPages';
 import EngagementSheet from './EngagementSheet';
 import HealthPill from './HealthPill';
 import MyTasks from '../../work/MyTasks.jsx';
+import { NotFoundNotice, feedItemName } from '../FromStudioBack';
 import {
   boardCounts, defaultView, matchesView, modeValue, needsAttention, nextAction, primaryAction, progressText,
 } from './boardAttention';
@@ -127,6 +128,15 @@ export default function PartnerDeliveryBoardZone() {
   const selected = selectedKey ? items.find((r) => String(r.engagement_uid || r.engagement_id) === selectedKey) : null;
   const open = (row) => setParams((p) => { const n = new URLSearchParams(p); n.set('engagement', String(row.engagement_uid || row.engagement_id)); return n; });
   const close = useCallback(() => setParams((p) => { const n = new URLSearchParams(p); n.delete('engagement'); return n; }), [setParams]);
+  // D8733 (#8733, SOP08): a key outside the loaded rows used to open nothing and say nothing, including one past the
+  // first 200 (#4709). The board now reads on through the book until the key turns up or every page is read, and only
+  // then says the engagement is not on this firm's board.
+  const settled = !state.loading && !state.error && Boolean(d);
+  const seeking = Boolean(selectedKey && !selected && settled && more.page?.next_cursor && !more.loadingMore && !more.moreError);
+  const { loadMore } = more;
+  useEffect(() => { if (seeking) loadMore(); }, [seeking, more.page?.next_cursor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const notFound = Boolean(selectedKey && !selected && settled && !more.page?.next_cursor && !more.loadingMore && !more.moreError);
+  const fromStudio = params.get('from') === 'studio';
 
   const rowActions = partnerZoneActions('delivery/board', { view: { header: ['Client', 'Next action', 'Health', 'Progress', 'Owner', 'Mode', 'Value'], rows: visible, cells: (r) => [r.client, nextAction(r)?.text, r.health || 'not rated', progressText(r), r.owner_name, r.mode, r.price] } });
 
@@ -186,6 +196,10 @@ export default function PartnerDeliveryBoardZone() {
             {' '}<button type="button" onClick={load} disabled={state.refreshing} className="font-semibold text-[#7c3aed] underline-offset-2 hover:underline disabled:opacity-60 dark:text-[#a78bfa]">Refresh</button>
           </span>
         </div>
+      )}
+
+      {notFound && (
+        <NotFoundNotice name={feedItemName('engagement', selectedKey)} where="board" checked={Boolean(d?.page)} onShowAll={close} showAllLabel="Show all engagements" />
       )}
 
       {/* A refresh that fails keeps the last read on screen and says so (D4698): the board is not blanked. */}
@@ -294,7 +308,7 @@ export default function PartnerDeliveryBoardZone() {
         </div>
       </ZoneBody>
 
-      {selected && <EngagementSheet row={selected} onClose={close} />}
+      {selected && <EngagementSheet row={selected} onClose={close} backToStudio={fromStudio} />}
     </>
   );
 }

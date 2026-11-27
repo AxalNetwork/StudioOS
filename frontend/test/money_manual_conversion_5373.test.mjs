@@ -119,6 +119,7 @@ const ALLOW = [
   } },
   { kind: 'usd', reason: "AI tokens, token packs, credits and AI spend are US dollars (micro-USD ledger; packs are sold in USD only).", files: {
     "frontend/src/components/checkout/packModel.js": 9,
+    "frontend/src/pages/team/agentChoiceModel.js": 1,
     "frontend/src/components/checkout/checkoutModel.js": 1,
     "frontend/src/lib/aiTokens.js": 2,
     "frontend/src/lib/labCredits.js": 1,

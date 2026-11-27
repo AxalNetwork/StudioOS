@@ -8,6 +8,10 @@
  * A TRACKED ROW IS NOT A COMPARISON WITH ZEROES. With no peer figure the peer
  * half reads Not recorded with its reason, the sample has nothing to size, and
  * nothing is coloured or ranked.
+ *
+ * EARLIER VERSIONS ARE TEXT TOO (D6277). The History card lists what each
+ * restatement replaced, newest first, and draws no chart: two points are not
+ * a series.
  */
 
 /** The four tiles. `nr` marks Not recorded; `warn` marks a thin base. */
@@ -76,4 +80,61 @@ export function editorPatch(form) {
     peer_sample_size: n === '' ? null : Number(n),
     peer_as_of: t(form.peer_as_of),
   };
+}
+
+/**
+ * D6277: the History card's labels, in the editor's order. The Worker keeps
+ * these six fields and the reading as they were before each change.
+ */
+export const HISTORY_FIELDS = [
+  ['metric', 'Metric'],
+  ['our_value', 'Ours'],
+  ['peer_value', 'Peer value'],
+  ['peer_source', 'Peer source'],
+  ['peer_sample_size', 'Sample size (n)'],
+  ['peer_as_of', 'Peer as of'],
+  ['reading', 'Reading'],
+];
+
+export const HISTORY_EMPTY = 'No earlier version is recorded.';
+
+const histText = (v) => (v === null || v === undefined || String(v) === '' ? null : String(v));
+
+/** "12 Nov 2026" for a stored ISO moment, read in UTC; the raw text if it does not parse. */
+export function replacedOn(at) {
+  const t = Date.parse(at);
+  if (!Number.isFinite(t)) return at ? String(at) : null;
+  return new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * The History card's rows, newest first (the canvas's "Restatement history":
+ * Field, Earlier value, Replaced). `history` is the Worker's list of earlier
+ * versions, newest first; each version is compared with the one that replaced
+ * it (the current row for the newest), and each field that differs is a row.
+ *
+ * Null when the history could not be read — that is Unavailable, not empty.
+ * An earlier value that was blank is null (Not recorded), never "" or 0.
+ * Values stay text: a sample of 6 reads "6", and "1.4x" keeps its unit.
+ */
+export function historyRows(item, history) {
+  if (!Array.isArray(history)) return null;
+  const rows = [];
+  let after = item || {};
+  history.forEach((version, i) => {
+    for (const [key, field] of HISTORY_FIELDS) {
+      const earlier = histText(version?.[key]);
+      if (earlier === histText(after?.[key])) continue;
+      rows.push({
+        id: `${i}:${key}`,
+        key,
+        field,
+        earlier,
+        replaced: replacedOn(version?.changed_at),
+        changed_at: version?.changed_at ?? null,
+      });
+    }
+    after = version || {};
+  });
+  return rows;
 }

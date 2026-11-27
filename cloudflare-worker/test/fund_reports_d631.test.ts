@@ -13,7 +13,7 @@ const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join
  +['312_fund_call_ledger.sql','417_fund_position_valuations.sql','418_fund_ledger.sql','472_entity_bank_accounts.sql','473_fund_management_fees.sql','474_mercury_entity_connections.sql','476_fund_report_drafts.sql','483_mercury_not_ours.sql'].map(m=>readFileSync(new URL('../sql/migrations/'+m,import.meta.url),'utf8')).join('\n'); // D6249: an issued period's read looks up its pack
 const secret='d631-local-fixture-signing-secret';
 async function fixture(){
- const migration=readFileSync(new URL('../sql/migrations/202611151259_6255_fund_report_notice_delivery.sql',import.meta.url),'utf8');
+ const migration=['202611151259_6255_fund_report_notice_delivery.sql','202611270442_6240_fund_report_lp_delivery.sql'].map(m=>readFileSync(new URL('../sql/migrations/'+m,import.meta.url),'utf8')).join('\n');
  const {DB,db}=makeD1(schema+migration);
  const insert=db.prepare("INSERT INTO users(id,name,email,role,investor_tier,investor_subscription_status) VALUES(?,?,?,?,?,'active')");
  for(const [id,name,role,tier]of [[1,'Admin','admin','free'],[2,'GP','investor','institutional'],[3,'LP','investor','free'],[4,'Other','investor','institutional'],[5,'Founder','founder','free'],[6,'Legacy','investor','free']])insert.run(id,name,`${name}@example.test`,role,tier);
@@ -210,4 +210,98 @@ test('D6255: a failed inbox write rolls back fan-out and records the failure aft
  f.db.exec('DROP TABLE fund_report_notice_delivery');
  const unreadable=await f.request(`/10/report-periods/${id}`);
  assert.deepEqual([unreadable.status,unreadable.body.period.delivery_status],[200,'unreadable']);
+});
+
+const lpRows=(db:any,period:number)=>db.prepare('SELECT lp_id,user_id,state,made_available_at IS NOT NULL AS available,opened_at IS NOT NULL AS opened FROM fund_report_lp_delivery WHERE period_id=? ORDER BY lp_id').all(period).map((r:any)=>({...r}));
+
+test('D6240: issuing records one row per LP; counts and the per-LP list are for the GP only, and an LP opening is recorded once', async () => {
+ const f=await fixture();
+ // LP rows: 1 → user 3, 3 → no account (fixture); 4 → user 6, 5 → user 3 again, 6 → withdrawn, 7 → an inactive account.
+ f.db.exec("INSERT INTO limited_partners(id,fund_id,user_id,name) VALUES (4,10,6,'Sample LP Six'),(5,10,3,NULL)");
+ f.db.exec("INSERT INTO limited_partners(id,fund_id,user_id,status) VALUES (6,10,4,'withdrawn')");
+ f.db.exec("INSERT INTO users(id,name,email,role,is_active) VALUES (7,'Inactive','inactive@example.test','investor',0);INSERT INTO limited_partners(id,fund_id,user_id) VALUES (7,10,7)");
+ const posted=await f.request('/10/report-periods',2,'POST',{...draft,issue:true});
+ assert.equal(posted.status,201);
+ const id=posted.body.period.id;
+ assert.deepEqual(lpRows(f.db,id),[
+  {lp_id:1,user_id:3,state:'made_available',available:1,opened:0},
+  {lp_id:3,user_id:null,state:'not_sent',available:0,opened:0},
+  {lp_id:4,user_id:6,state:'made_available',available:1,opened:0},
+  {lp_id:5,user_id:3,state:'made_available',available:1,opened:0},
+  {lp_id:7,user_id:null,state:'not_sent',available:0,opened:0},
+ ]);
+ const counts=()=>f.request('/10/report-periods').then(r=>r.body.items[0].lp_delivery);
+ assert.deepEqual(await counts(),{state:'recorded',delivered:3,total:5,opened:0,failed:0,no_account:2});
+ // A retry with a complete receipt writes nothing.
+ await sendFundReportNotices(f.env,10,id);
+ assert.equal(lpRows(f.db,id).length,5);
+ // The LP's read is served, then recorded on both of their rows; a second read keeps the first time.
+ const read=await f.request(`/10/report-periods/${id}`,3);
+ assert.equal(read.status,200);
+ assert.equal(read.body.period.lp_deliveries,undefined,'an LP never receives the per-LP list');
+ assert.equal(read.body.period.lp_delivery,undefined,'an LP never receives the counts');
+ const first=f.db.prepare('SELECT opened_at FROM fund_report_lp_delivery WHERE period_id=? AND lp_id=1').get(id).opened_at;
+ assert.ok(first);
+ f.db.prepare("UPDATE fund_report_lp_delivery SET opened_at='2026-01-01T00:00:00.000Z' WHERE period_id=? AND lp_id IN (1,5)").run(id);
+ await f.request(`/10/report-periods/${id}`,3);
+ assert.deepEqual(lpRows(f.db,id).map((r:any)=>r.state),['opened','not_sent','made_available','opened','not_sent']);
+ assert.equal(f.db.prepare('SELECT opened_at FROM fund_report_lp_delivery WHERE period_id=? AND lp_id=1').get(id).opened_at,'2026-01-01T00:00:00.000Z');
+ // The GP's own read records no opening.
+ const gp=(await f.request(`/10/report-periods/${id}`)).body.period;
+ assert.deepEqual(await counts(),{state:'recorded',delivered:3,total:5,opened:2,failed:0,no_account:2});
+ assert.deepEqual(gp.lp_delivery,await counts());
+ assert.equal(gp.lp_deliveries_reason,null);
+ assert.deepEqual(gp.lp_deliveries.map((r:any)=>[r.lp_id,r.name,r.state]),[
+  [3,'LEGACY@example.test','not_sent'],[7,'Inactive','not_sent'],[4,'Sample LP Six','made_available'],[1,'LP','opened'],[5,'LP','opened']]);
+ // Another fund's GP is refused by requireFundGp and reads no row.
+ assert.equal((await f.request('/10/report-periods',4)).status,404);
+});
+
+test('D6240: a period issued before per-LP rows reads Not recorded, never 0 of m; an empty fund reads 0 of 0', async () => {
+ const f=await fixture();
+ const posted=await f.request('/10/report-periods',2,'POST',{...draft,issue:true});
+ const id=posted.body.period.id;
+ // Legacy: issued with a D6255 receipt and no per-LP rows (the receipt counted 1 LP and 1 without an account).
+ f.db.prepare('DELETE FROM fund_report_lp_delivery WHERE period_id=?').run(id);
+ const items=(await f.request('/10/report-periods')).body.items;
+ assert.deepEqual(items[0].lp_delivery,{state:'not_recorded',delivered:null,total:null,opened:null,failed:null,no_account:null});
+ const detail=(await f.request(`/10/report-periods/${id}`)).body.period;
+ assert.equal(detail.lp_deliveries,null);
+ assert.match(detail.lp_deliveries_reason,/^Not recorded: this period was issued before/);
+ // Legacy before D6255 too: no receipt either.
+ f.db.prepare('DELETE FROM fund_report_notice_delivery WHERE period_id=?').run(id);
+ assert.equal((await f.request('/10/report-periods')).body.items[0].lp_delivery.state,'not_recorded');
+ // A draft carries no counts.
+ await f.request('/10/report-periods',2,'POST',{...draft,period:'Q3 2026',period_start:'2026-07-01',period_end:'2026-09-30'});
+ assert.equal((await f.request('/10/report-periods')).body.items[0].lp_delivery,undefined);
+ // A fund with no LP at issue: a complete receipt that counted nobody is 0 of 0.
+ const g=await fixture();
+ g.db.exec('DELETE FROM limited_partners WHERE fund_id=10');
+ const empty=(await g.request('/10/report-periods',2,'POST',{...draft,issue:true})).body.period.id;
+ assert.equal(lpRows(g.db,empty).length,0);
+ assert.deepEqual((await g.request('/10/report-periods')).body.items[0].lp_delivery,{state:'recorded',delivered:0,total:0,opened:0,failed:0,no_account:0});
+ // An unreadable per-LP table reads Unreadable, and the report stays readable.
+ g.db.exec('DROP TABLE fund_report_lp_delivery');
+ const unreadable=await g.request(`/10/report-periods/${empty}`);
+ assert.equal(unreadable.status,200);
+ assert.deepEqual([unreadable.body.period.lp_delivery.state,unreadable.body.period.lp_deliveries],['unreadable',null]);
+ assert.match(unreadable.body.period.lp_deliveries_reason,/^Unreadable/);
+ g.db.exec('INSERT INTO limited_partners(fund_id,user_id) VALUES (10,3)');
+ assert.equal((await g.request(`/10/report-periods/${empty}`,3)).status,200,'an LP read survives a failed opening write');
+});
+
+test('D6240: a failed notice transaction records failed per LP, and a successful retry replaces those rows', async () => {
+ const f=await fixture();
+ f.db.exec("INSERT INTO limited_partners(id,fund_id,user_id) VALUES (4,10,6)");
+ f.db.exec("CREATE TRIGGER fail_notice BEFORE INSERT ON notifications_inbox WHEN NEW.user_id=6 BEGIN SELECT RAISE(ABORT,'test refusal'); END");
+ const id=(await f.request('/10/report-periods',2,'POST',{...draft,issue:true})).body.period.id;
+ assert.deepEqual(lpRows(f.db,id).map((r:any)=>[r.lp_id,r.state]),[[1,'failed'],[3,'not_sent'],[4,'failed']]);
+ assert.deepEqual((await f.request('/10/report-periods')).body.items[0].lp_delivery,{state:'recorded',delivered:0,total:3,opened:0,failed:2,no_account:1});
+ // An LP reading the report does not turn a failed notice into an opening.
+ await f.request(`/10/report-periods/${id}`,3);
+ assert.equal(lpRows(f.db,id)[0].state,'failed');
+ f.db.exec('DROP TRIGGER fail_notice');
+ await sendFundReportNotices(f.env,10,id);
+ assert.deepEqual(lpRows(f.db,id).map((r:any)=>[r.lp_id,r.state]),[[1,'made_available'],[3,'not_sent'],[4,'made_available']]);
+ assert.deepEqual((await f.request('/10/report-periods')).body.items[0].lp_delivery,{state:'recorded',delivered:2,total:3,opened:0,failed:0,no_account:1});
 });

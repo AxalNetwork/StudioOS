@@ -9,6 +9,8 @@ bounded batch; this folder owns the only writes to observations and import recei
 | `write.ts` | Bounded, bound-SQL appends; prior editions and revision links; run/source receipts with diagnostic classes only. |
 | `importers.ts` | Registered adapters and their parameter caps. |
 | `eurostatSbs.ts` | D7717: Eurostat structural business statistics (`sbs_sc_ovw`, reference years 2021 on) — enterprises, persons employed and net turnover by NACE Rev. 2 activity, size class and country, into source `eurostat-sbs`. |
+| `censusCbp.ts` | D7927: U.S. Census County Business Patterns, national establishments, employees and payroll by NAICS 2017 industry, into source `census-cbp` (disabled). |
+| `blsConsumerExpenditure.ts` | D7928: BLS Consumer Expenditure Surveys, mean annual spending per consumer unit for nine categories with the published standard error and CV, into source `bls-ce` (disabled until its terms and table layout are confirmed). |
 
 A source must be enabled. Missing cells store nothing; actual zero is preserved.
 Unchanged cells (same value, status and limitations, D7717) and an already-held edition insert nothing. An edition that changes

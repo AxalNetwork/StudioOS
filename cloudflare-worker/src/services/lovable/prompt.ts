@@ -9,7 +9,9 @@
  * interview holds: the templates read no interview, transcript, quote,
  * contact, email or phone store (`NEVER_INCLUDE`, held by a source scan in
  * `test/lovable_launch.test.ts`). The interviewees' names are read for one
- * purpose only: to refuse a prompt the founder typed one into.
+ * purpose only: to refuse a prompt the founder typed one into. The venture's
+ * members' account and display names (D8773, #8773) are read for one purpose
+ * only: to ask the founder whether a name that matches one should go.
  *
  * THE LINK. `https://lovable.dev/#prompt=` and the prompt, encoded, nothing
  * else: the prompt rides in the fragment, which the browser never sends to a
@@ -108,36 +110,118 @@ export const FINDING_WORDS: Record<string, string> = {
   tax_id: 'a tax number',
   bank_iban: 'a bank account number',
   card_like: 'a card number',
+  member_name: 'a member’s name',
 };
 
-export type Finding = { kind: string; words: string };
+/**
+ * A finding: its kind, its words, and (D8773, #8773) the 1-based lines of the
+ * checked text it was found on. Never the words that matched.
+ */
+export type Finding = { kind: string; words: string; lines: number[] };
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The 1-based line of a character offset in `text`. */
+export function lineOf(text: string, offset: number): number {
+  return text.slice(0, Math.max(0, offset)).split('\n').length;
+}
+
+/** Every line on which `name` stands as whole words, in any case. */
+function wholeWordLines(text: string, name: string): number[] {
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(name)}(?=$|[^\\p{L}\\p{N}])`, 'giu');
+  return [...text.matchAll(re)].map((m) => lineOf(text, (m.index ?? 0) + m[1].length));
+}
+
+const ascending = (xs: Iterable<number>) => [...new Set(xs)].sort((a, b) => a - b);
 
 /**
  * The privacy check, the same in the dialog's check and at launch: the shared
  * check for text that leaves StudioOS (`lintForSend`, `public`), and this
  * venture's interviewees' names, matched as whole words. Each finding is its
- * kind once; never the words that matched.
+ * kind once, with the lines it is on; never the words that matched.
  */
 export async function privacyFindings(env: Env, projectId: number, text: string): Promise<Finding[]> {
-  const kinds = new Set<string>();
+  const kinds = new Map<string, Set<number>>();
+  const add = (kind: string, lines: number[]) => {
+    const s = kinds.get(kind) ?? new Set<number>();
+    for (const n of lines) s.add(n);
+    kinds.set(kind, s);
+  };
   const res = await lintForSend(env, text, 'public');
-  if (!res.ok) for (const f of res.findings) kinds.add(f.kind);
+  if (!res.ok) for (const f of res.findings) add(f.kind, typeof f.offset === 'number' ? [lineOf(text, f.offset)] : []);
   const names = (await env.DB.prepare('SELECT DISTINCT interviewee_name AS name FROM discovery_interviews WHERE project_id = ? AND interviewee_name IS NOT NULL')
     .bind(projectId).all<{ name: string }>()).results || [];
   for (const { name } of names) {
     const n = line(name);
     if (n.length < 3) continue;
-    if (new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(n)}($|[^\\p{L}\\p{N}])`, 'iu').test(text)) { kinds.add('interviewee_name'); break; }
+    const at = wholeWordLines(text, n);
+    if (at.length) add('interviewee_name', at);
   }
-  return [...kinds].map((kind) => ({ kind, words: FINDING_WORDS[kind] || 'a private detail' }));
+  return [...kinds].map(([kind, lines]) => ({ kind, words: FINDING_WORDS[kind] || 'a private detail', lines: ascending(lines) }));
 }
 
-/** LV3's PII row, in the canvas's words. */
+/**
+ * D8773 (#8773): what the checks above cannot see. A venture named after its
+ * founder passes them, because a display name is not a recorded legal name.
+ * So the account name and the display name of each member of this venture
+ * (the accounts of its founder, and its accepted members not removed) are
+ * matched against the text as whole words, 3+ characters, any case. A match
+ * is advisory: it asks the founder to keep the name or use an alias, and
+ * never refuses a launch. Like a finding, it names lines, never the words.
+ */
+export async function memberNameAdvisories(env: Env, projectId: number, text: string): Promise<Finding[]> {
+  const rows = (await env.DB.prepare(`SELECT u.name AS name, u.display_name AS display_name FROM users u
+    WHERE u.id IN (SELECT m.user_id FROM project_members m WHERE m.project_id = ? AND m.status = 'accepted' AND m.removed_at IS NULL)
+       OR (u.founder_id IS NOT NULL AND u.founder_id = (SELECT p.founder_id FROM projects p WHERE p.id = ?))
+    LIMIT 100`).bind(projectId, projectId).all<{ name: string | null; display_name: string | null }>()).results || [];
+  const lines = new Set<number>();
+  for (const r of rows) {
+    for (const raw of [r.name, r.display_name]) {
+      const n = line(raw);
+      if (n.length < 3) continue;
+      for (const at of wholeWordLines(text, n)) lines.add(at);
+    }
+  }
+  return lines.size ? [{ kind: 'member_name', words: FINDING_WORDS.member_name, lines: ascending(lines) }] : [];
+}
+
+/** "in line 3", "in lines 3 and 5", "in lines 1, 2 and 7"; empty when no line is known. */
+export function linesWords(lines: number[] | undefined): string {
+  const xs = ascending(lines || []);
+  if (!xs.length) return '';
+  if (xs.length === 1) return `in line ${xs[0]}`;
+  return `in lines ${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+}
+
+/** LV3's PII row, in the canvas's words, with the lines each kind is on (D8773). */
 export function checkLine(findings: Finding[]): string {
   if (!findings.length) return 'No personal data found';
-  const what = findings.map((f) => f.words);
-  const list = what.length === 1 ? what[0] : `${what.slice(0, -1).join(', ')} and ${what[what.length - 1]}`;
-  return `This prompt contains ${list}. Remove it to continue.`;
+  if (findings.length === 1) {
+    const where = linesWords(findings[0].lines);
+    return `This prompt contains ${findings[0].words}${where ? `, ${where}` : ''}. Remove it to continue.`;
+  }
+  const what = findings.map((f) => {
+    const where = linesWords(f.lines).replace(/^in /, '');
+    return where ? `${f.words} (${where})` : f.words;
+  });
+  return `This prompt contains ${what.slice(0, -1).join(', ')} and ${what[what.length - 1]}. Remove it to continue.`;
+}
+
+/**
+ * D8773 (#8773): a neutral alias for this prompt only, typed by the founder
+ * (owner question Q2, option A: never saved). One line, 2 to 60 characters,
+ * letters, digits, spaces and . , ' & - only. Null when none was sent,
+ * false when what was sent is not one.
+ */
+export function aliasOf(raw: unknown): string | null | false {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const v = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
+  if (v.length < 2 || v.length > 60 || !/^[\p{L}\p{N} .,'’&-]+$/u.test(v)) return false;
+  return v;
+}
+
+/** The lines of a drafted prompt that carry the venture's label, as whole words. */
+export function labelLines(prompt: string, label: string): number[] {
+  const n = line(label);
+  return n ? ascending(wholeWordLines(prompt, n)) : [];
 }
