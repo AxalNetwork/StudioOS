@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account Menu Narrow Screens · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Shell · #8682 · Account menu on narrow screens · role audit 25 Nov</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · the signed-in header and account menu at 320, 360 and 390 px, for six roles, closed, open and in a role preview</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Below 1024 px a founder gets the phone band; every other role gets the desktop header squeezed into one row, and at 390 its account button ran 27 px past the viewport. These boards give the row four jobs in one place each: workspace (☰), shell shortcuts (⋯ Shortcuts), notifications and account (initials), every control a 44 px target. The name, email, role and release tag move into the account menu, which opens and closes by pointer and keyboard and returns focus to its trigger. Mode and preview indicators stay in the admin bar above; page actions stay on the page. Viewing a role (Preview shell) and acting as a person (support session) look different. The founder band is kept, with its pill fixed at 320. Platform States words (D5129), Eadwyn as the one rail (#5130). Violet dashed ◇ tags mark proposals; amber ⚑ tags mark owner picks drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main ee23155ff6 · [Iris Chen-Abernathy Valdés], [Tom Becker], [Maya Ruiz], [Atlas Orchard], [Lena Sato], [Dr. Jonas Weber], [Sara Holm], the unread counts (3, 0, 2, 1, 0, 5), the Contracts counts and release [v0.9.3-alpha] are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="18">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Account Menu Narrow Screens Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['0', 'Overview', 'What main does, the rule for the row, and the numbered route.', [W('AMN00')]],
+      ['T', 'On main today', 'The authenticated header below 1024 px at 390 (measured in the issue), 360 and 320, with the cause in App.jsx.', [C('AMN01', false, 1400, 440)]],
+      ['1', 'Step 1 · 320, closed', 'HQ Contracts, a long account name, the admin bar, target boundaries, keyboard order and the row budget.', [C('AMN10', '320 · closed', 320, 844)]],
+      ['2', 'Step 2 · Workspace menu', 'The drawer as a dialog: selected workspace HQ, Contracts current, Close focused, Escape returns focus to ☰.', [C('AMN11', '320 · workspace open', 320, 844)]],
+      ['3', 'Step 3 · Account menu', 'The account sheet: the long name wraps in its header, main’s rows, Log Out, the release tag in the footer.', [C('AMN12', '320 · account open', 320, 844)]],
+      ['4', 'Step 4 · Shortcuts', 'The named overflow for the header’s secondary doors: Email, Wellness, Refer & Earn.', [C('AMN13', '320 · Shortcuts open', 320, 844)]],
+      ['5', 'Step 5 · Dismissed', 'Focus back on the trigger; what a screen reader hears.', [C('AMN14', '320 · focus returned', 320, 844)]],
+      ['360', '360', 'The wordmark returns; the row keeps 52 px free.', [C('AMN15', '360 · closed', 360, 844)]],
+      ['390', '390', 'Closed with the row budget, the account menu open, the workspace menu open.', [P('AMN20', '390 · closed'), P('AMN21', '390 · account open'), P('AMN22', '390 · workspace open')]],
+      ['D', 'Desktop', '1440: main’s row with initials and a full accessible name; the account dropdown open with a header and keyboard focus.', [F('AMN30', false, 900), C('AMN31', false, 1440, 700)]],
+      ['6', 'Step 6 · Viewing a role', 'Preview shell as Investor at 320, the account menu at 390 saying whose settings they are, and desktop as main draws it.', [C('AMN40', '320 · preview', 320, 844), P('AMN41', '390 · preview, account open'), C('AMN42', false, 1440, 440)]],
+      ['7', 'Step 7 · Acting as a person', 'Preview shell and a support session side by side at 390: whose menu, who writes, the way back.', [C('AMN43', false, 1240, 900)]],
+      ['R', 'Six roles', 'Super Admin, Admin, Founder, Investor, Advisor and Operating partner: the closed header at 320 and 390; then where each thing lives and each role’s account rows.', [C('AMN50', false, 1400, 640), C('AMN51', false, 1400, 720)]],
+      ['F', 'Founder band', 'The shipped band at 390 and 320 with the computed pill overlap, and the fix.', [C('AMN52', false, 1000, 520)]],
+      ['S', 'States', 'Account loading, no display name, 99+, unread count unavailable, beta, branch suspended, focus, open.', [C('AMN60', false, 1400, 470)]],
+      ['DK', 'Dark', '390 with the account menu open (Investor) and 320 closed (Super Admin).', [P('AMN70', '390 · dark, account open'), C('AMN71', '320 · dark', 320, 844)]],
+      ['A11y', 'Accessibility', 'Target boundaries, keyboard order, open and dismiss, names and announcements, headings.', [W('AMN80')]],
+      ['H', 'Handoff', 'Checked on main with files, engineering, owner picks, preserved, acceptance mapped to boards, and the tests.', [W('AMNH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

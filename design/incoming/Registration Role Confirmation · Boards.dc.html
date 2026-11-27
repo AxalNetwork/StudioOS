@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registration Role Confirmation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Auth · /register · #8676 · new canvas (RGR-00 onward) · continues Sign In v2 and the public site kit</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Registration — ask the role once, show it on every form, and let it change before anything is sent</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The signed-out /register flow. Today a plain /register silently reuses a role stored on this device in the last 24 hours and offers no way to change it, so a visitor can start the wrong review and agreement path; an LP who arrives from LP sign in after an advisor visit sees “Create your Advisor account”. Here a plain /register asks one question with five answers (Investor and LP apart), a remembered role is pre-selected and must be confirmed, an explicit link still opens its own form, and every form carries “Signing up as …” with Change role. The LP workspace becomes a named destination, so LP sign in → Create an account opens the LP form and offers the investor form instead. Email verification, review, agreement and optional payment are explained once, below the actions. Desktop 1440, phone 390 and 320, light only, on the Sign In v2 card and sheet over the production artwork; the public pages use the shipped site kit. Violet dashed ◇ tags mark Worker work; amber ⚑ tags mark owner decisions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main ee23155ff6 · [Maya Ruiz], [Lena Sato], their addresses and [Advisor Pro] are fictional; the artwork is the production asset</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Registration Role Confirmation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RGR-00', 'Journeys and rules', 'Routes A (fresh), B (repeat), C (deep link), D (LP after an advisor visit, the owner’s 26 Nov sequence) and E (Change role and Back), each step numbered with its URL; the rules, the annotation key, sizes and the sample.', [W('RGR00')]],
+      ['RGR-01', 'Route A · fresh generic arrival · desktop', 'A1 the homepage’s Join Axal VC opens plain /register. A2 one question, five answers, nothing selected. A3 the founder form at ?lane=founder: “Signing up as a founder” with Change role above the heading, then name, email, the email link and Google. A4 check your email, role still shown.', [C('RGR01A', 'A1 · Homepage · Join Axal VC', 1440, 605), F('RGR01B', 'A2 · What brings you to Axal VC?', 900), F('RGR01C', 'A3 · Founder form', 900), F('RGR01D', 'A4 · Check your email', 900)]],
+      ['RGR-02', 'What happens after you sign up · once', 'The only place the steps are explained: confirm your email, membership review, the agreement, the workspace, then optional payment. Collapsed by default under the actions; founder and advisor-with-plan wording when open. No dates are promised.', [C('RGR02', 'Collapsed · founder · advisor with a plan', 1340, 648)]],
+      ['RGR-03', 'Route B · repeat generic arrival', 'A remembered role under 24 hours is pre-selected and labelled “Chosen on this device 3 hours ago”; Continue confirms it. Older than 24 hours it is not used. Picking another role changes the button; the confirmed role’s form keeps Change role.', [F('RGR03A', 'B2 · Remembered Advisor', 900), C('RGR03B', 'Expired · changed · confirmed', 1340, 668)]],
+      ['RGR-04', 'Route C · role-specific deep links', 'An explicit ?lane= opens its form with no question and replaces a remembered role. A conflicting link wins and the chip says which role; an unknown lane opens the question; the Spin-Out Lab link keeps its own heading.', [F('RGR04A', 'C2 · /register?lane=founder', 900), C('RGR04B', 'Conflicting · unknown · Spin-Out Lab', 1340, 660)]],
+      ['RGR-05', 'Route E · Change role and Back', 'Change role returns to the question with the current role selected and focused; Continue opens the new role’s form with the name and email kept and announces “Role changed to investor.” Back to the form changes nothing.', [C('RGR05', 'E1 → E2 → E3', 1340, 712)]],
+      ['RGR-06', 'Route D · LP after an advisor visit (owner, 26 Nov)', 'D1 Get Advisor Pro stored Advisor and she left. D2 /for-investors → LP sign in. D3 sign-in now names the LP workspace and its Create an LP account keeps the destination. D4 the LP form, no advisor plan, with “Create an investor account instead”. D5 not an LP, a clean browser, and sent with the kept destination.', [C('RGR06A', 'D1 · Earlier: advisor form with Advisor Pro', 460, 597), C('RGR06B', 'D2 · /for-investors · LP sign in', 1440, 454), F('RGR06C', 'D3 · Sign in to continue to the LP workspace', 900), F('RGR06D', 'D4 · Open your LP account', 960), C('RGR06E', 'Not an LP · clean browser · D5 sent', 1340, 567)]],
+      ['RGR-07', 'Phone 390', 'The same steps in the sheet: homepage Join, the question fresh and remembered, the founder form with its first field on the first screen, the details opened, the LP form with its alternative, and check your email.', [P('RGR07A', 'A1 · Homepage'), P('RGR07B', 'A2 · Question'), P('RGR07C', 'B2 · Remembered'), P('RGR07D', 'A3 · Founder form'), P('RGR07E', 'A3 · Details open'), P('RGR07F', 'D4 · LP form'), P('RGR07G', 'A4 · Check your email')]],
+      ['RGR-08', 'Phone 320 × 740', 'The size in the audit. The chip, heading and one line fit above Full name, so the first task is on the first screen; the question shows all five answers and Continue.', [C('RGR08A', 'Founder form', 320, 740), C('RGR08B', 'Question', 320, 740), C('RGR08C', 'LP form', 320, 740)]],
+      ['RGR-09', 'States and errors', 'Continue with nothing chosen, field errors, sending; verification that could not load (the link still sends), an address that already has an account (role unchanged), offline and Google unavailable.', [C('RGR09A', 'No role · field errors · sending', 1340, 693), C('RGR09B', 'Verification · existing account · offline', 1340, 733)]],
+      ['RGR-10', 'Accessibility', 'Focus order on the question; then headings, focus on arrival and after switching, Back, live announcements, labels, targets and contrast.', [F('RGR10A', 'Focus order · the question', 900), W('RGR10B')]],
+      ['RGR-11', 'Copy', 'The words for every state: question, remembered, chip, headings per role, LP alternative, details, role changed, sent, existing account and errors.', [W('RGR11')]],
+      ['RGR-12', 'Handoff', 'What was checked on main and what causes the audit’s findings, the Worker work (◇), the owner decisions (⚑), frontend-only work, acceptance mapped to boards and the tests it asks for.', [W('RGR12')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

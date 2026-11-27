@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ Team Inline Instructions · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ › Team · role audit 25 Nov · #8678</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ Team: find the person first, and read each action’s prerequisites and consequences where you open it</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">HQ › Team (/admin/hq-team) is the Super Admin’s people desk. On main a single paragraph after the list explains Move, Retry invitation, Support and Unbind, and it prints even when no branch is provisioned and none of them can appear. These boards keep the shipped HQ shell, the rose bar, the roster, the branch search, the governed-action states and every gate (authenticator, fresh step-up, Super Admin, reason), and move the instructions into the actions: a small scope summary and search lead, the people list follows, and each action opens a detail surface with Before you confirm (prerequisites, each with a word and a glyph) and What it does (consequences). Move and Unbind add a Review step before the existing step-up; Support says it changes nothing, Unbind says it removes access, and they never share a style. Three scenarios are drawn at 1440 and 390: HQ only, a branch search with a member and an administrator, and an interrupted invitation. Focus returns to the initiating row when a surface closes. Grey dashed boxes are annotations, the violet dashed ◇ tag marks the one proposed Worker change, amber ⚑ tags mark owner picks with option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026, 09:14 UTC · checked against main ee23155ff6 · every person ([Iris Chen], [Tom Becker], [Ana Lopes], [Dr. Jonas Weber], [Paul Weber], [Maya Ruiz]), branch, code and figure (3 administrators, 6 branches, 64 accounts) is bracketed and fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ Team Inline Instructions Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['HTM00', 'Today on main · for reference', 'HqTeamTable.jsx with no branch provisioned: the “whole team” sentence is followed by the instructions for four actions that cannot appear.', [C('HTM00', false, 1100, 460)]],
+      ['HTM01', 'Scenario A · HQ only · desktop 1440', 'No branch is provisioned. Scope summary, search and the HQ-held list lead; one sentence covers the branch actions, with a closed disclosure. The holder console, the action reference and All accounts follow (⚑ Q1). Sign out, the one HQ-held row action, explains itself when opened.', [F('HTM01', 'The whole page', 900), F('HTM01B', 'How branch actions work · disclosure open', 900), F('HTM01C', 'Sign out [Tom Becker] · prerequisites and what it does', 900)]],
+      ['HTM02', 'Scenario B · eligible branch accounts · desktop 1440', 'A search for “weber”: fr answers with a member (① Support, Move), de with an administrator (② Support, Unbind in the destructive style), three branches with nothing, one that did not answer. Only the actions that apply are drawn, each with a full accessible name.', [F('HTM02', '① ② Search answered · row actions', 1000)]],
+      ['HTM03', 'Move · Scope → Review → step-up → Result', 'The detail surface opens under the row: Before you confirm, What the move does, the destination (a branch that did not answer is not offered, ⚑ Q2) and the reason. Review restates the consequences; the shipped “Confirm it’s you” asks for the code; the outcome replaces the row and takes focus.', [F('HTM03', 'Scope · reason still empty', 1100), F('HTM03B', 'Review', 900), F('HTM03C', 'Confirm it’s you (as shipped)', 900), F('HTM03D', 'Result · invitation created, email sent', 900)]],
+      ['HTM04', 'Support · explained, then one press', 'Support says first that it changes nothing on the account, opens on the branch’s own site for 30 minutes, and that the branch sends a security notice; after Begin it reports Told, Not told or Not recorded.', [F('HTM04', 'Support · before Begin', 1000), F('HTM04B', 'Authorised · Told', 900)]],
+      ['HTM05', 'Unbind · Scope → Review → Result', 'Rose throughout: the role becomes Exploring, the account is deactivated, sessions stop at the next request, no notice is sent, no undo here. “Open Support instead” sits inside it. The Review is an alert dialog with focus on Back.', [F('HTM05', 'Unbind · consequences and reason', 1040), F('HTM05B', 'Review · alert dialog', 900), F('HTM05C', 'Result · the row is replaced', 900)]],
+      ['HTM06', 'Refused, unknown and closing', 'Refused in plain words (the bare “TOTP required” translated); an outcome that never arrived is neither done nor refused; Cancel, Escape or × return focus to the button in the initiating row.', [C('HTM06', 'Refused · Move', 1100, 700), C('HTM06B', 'Outcome unknown · Unbind', 1100, 720), C('HTM06C', 'Closed · focus back on the row', 1100, 360)]],
+      ['HTM07', 'Scenario C · interrupted invitation · desktop 1440', 'A move whose invitation did not land leads the page under Moves to finish. Retry invitation explains what it sends and that it cannot create a second invitation; the answer keeps created, email and next step apart; no answer is unknown.', [F('HTM07', 'Moves to finish', 900), F('HTM07B', 'Retry invitation · before you confirm', 1000), F('HTM07C', 'Created · email not sent · link once', 900), F('HTM07D', 'No answer · unknown', 900)]],
+      ['HTM10', 'Phone 390', 'The same three scenarios with 44 px targets. Each action opens a full-screen sheet with a labelled close; Review is a dialog; closing returns focus to the row’s button.', [P('HTM10', 'A · HQ only'), P('HTM10K', 'A · disclosure open'), P('HTM10B', 'B · search answered'), P('HTM10C', 'Move sheet · step 1'), P('HTM10D', 'Move review'), P('HTM10E', 'Support sheet'), P('HTM10F', 'Unbind sheet'), P('HTM10G', 'Unbind review'), P('HTM10H', 'C · Retry invitation sheet'), P('HTM10J', 'Closed · focus on Move')]],
+      ['HTM12', 'Dark · desktop 1440', 'HTM05 on the dark tokens: Unbind keeps its rose border, its glyphs and its words.', [F('HTM12', false, 1040)]],
+      ['HTM20', 'Headings, row action names, focus and announcements', 'The heading outline, every row action’s accessible name, where focus goes on open, close, review, step-up and result, and the literal announcements.', [W('HTM20')]],
+      ['HTM-H', 'Handoff', 'What main does today and why the paragraph prints, what is preserved, the one ◇ proposed change, the two ⚑ owner picks, the frontend-only work, acceptance mapped to boards, and the tests.', [W('HTMH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

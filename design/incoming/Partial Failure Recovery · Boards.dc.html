@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partial Failure Recovery · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Practice, Expertise and Cohorts · #8677</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · one recovery path when a section of Practice, Expertise or Cohorts cannot be read</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The advisor workspace reads each section from its own source. When one cannot be read, the section that owns the source says so once, in Platform States words (D5129, "Unavailable" on screen), with a retry named for what it reads ("Retry sessions", "Retry proof", "Retry week record"). Everything else stays on screen and keeps its selection. Sections that depend on the same source are marked Partial and link to the owner instead of offering a second button. Confirmed empty, loading, stale and unavailable look and read differently, and a failed read never produces a zero or a creation prompt. When the page cannot be read at all, one block carries one primary action. Failures are reproduced with deterministic fixtures; these routes are not permanently down. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark owner decisions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026, 14:06 UTC · checked against main ee23155ff6 · [Dr. Jonas Weber], [Maya Ruiz], [Atlas Orchard], [Winter 2026 Cohort] and every bracketed person, company and figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Partial Failure Recovery Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PFR-00', 'Journey, states and naming rule', 'The three routes step by step with their boards, the six states a section can be in with their copy and controls, and the retry naming rule. Then what main draws today, reproduced from the code.', [W('PFR00'), C('PFR00B', 'On main today', 1300, 440)]],
+      ['PFR-01', 'Practice · one source unavailable · desktop 1440', 'Requests and sessions cannot be read. Today owns the source and its one “Retry sessions”; Needs attention, Practice health and Recent clients stay current and mark what they lack. Retrying keeps the rest on screen; on success focus moves to the Today heading and one polite announcement is made.', [F('PFR01', '1 · One source unavailable', 1080), F('PFR01B', '2 · Retrying sessions', 1060), F('PFR01C', '3 · Recovered', 1110)]],
+      ['PFR-02', 'Practice · multiple failures and full-page failure', 'Two sources fail: one banner with “Retry 2 sources”, plus “Retry sessions” in Today and “Retry earnings” in Practice health. All five fail: one block, one primary “Retry Practice”, no zeros and no setup checklist; New engagement is demoted.', [F('PFR02', 'Two sources unavailable', 1100), F('PFR02B', 'All five unavailable · one primary action', 900)]],
+      ['PFR-03', 'Practice · genuine empty, stale, and the five states of one section', 'Every read answered and nothing is recorded: measured zeros and the area’s own next step. A refresh that failed after a good read keeps the rows, marked Stale with their age. Then Today in loading, confirmed empty, stale, unavailable and retrying.', [F('PFR03', 'Genuine empty', 960), F('PFR03C', 'Stale after a failed refresh', 1130), C('PFR03B', 'One section, five states', 1300, 420)]],
+      ['PFR-04', 'Expertise · proof unavailable', 'The profile is complete and current; Proof cannot be read. The Proof section owns “Retry proof”, the Verification cell is Unavailable and links to it, and the Next step card says a step may be missing. Then the three answers to “does a profile exist?”, and the recovery.', [F('PFR04', 'Proof unavailable', 1090), C('PFR04B', 'No profile, profile unreadable, loading', 1300, 560), C('PFR04C', 'Retry proof, then loaded', 1300, 420)]],
+      ['PFR-05', 'Cohorts · list cannot load, partial, stale, empty', 'The cohort list is the gate: when it fails the page is one block with “Retry cohorts”, announced once. The week record failing makes Cohort progress own “Retry week record” while roster, guidance and calendar stay. A failed refresh keeps the grid as Stale. Genuine empty states have no creation prompt.', [F('PFR05', 'Cohort list cannot be read', 900), F('PFR05B', 'Week record unavailable', 1040), C('PFR05C', 'Stale, then recovered', 1300, 620), C('PFR05D', 'Genuine empty', 1300, 300)]],
+      ['PFR-06', 'Phone 390 × 844', 'Blocks stack with a full-width 44 px retry. Practice single failure, two failures, recovered, genuine empty and full-page failure with Details open; Expertise with proof unavailable; Cohorts list unavailable and no cohort assigned.', [P('PFR06A', 'Practice · one source'), P('PFR06B', 'Practice · two sources'), P('PFR06C', 'Practice · recovered'), P('PFR06D', 'Practice · genuine empty'), P('PFR06H', 'Practice · full-page failure'), P('PFR06E', 'Expertise · proof'), P('PFR06F', 'Cohorts · cannot load'), P('PFR06G', 'Cohorts · none assigned')]],
+      ['PFR-07', 'Focus, announcements and headings', 'Numbered focus order and accessible names, where focus goes after success and failure, the single polite live region and its exact messages, what survives a retry, heading structure, and the phone stacking.', [W('PFR07')]],
+      ['PFR-08', 'Dark mode', 'Practice with two sources unavailable on the dark tokens, as the Practice v2 canvas has.', [F('PFR08', false, 1100)]],
+      ['PFR-09', 'Handoff', 'What was checked on main and what each file showed, frontend-only work, ◇ and ⚑ with option A, acceptance mapped to boards, and the fixture tests.', [W('PFR09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
