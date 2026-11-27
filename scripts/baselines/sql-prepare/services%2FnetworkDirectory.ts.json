@@ -1,8 +1,6 @@
 {
   "ENTRY_COLUMNS @ services/networkDirectory.ts": 3,
-  "VISIBLE @ services/networkDirectory.ts": 3,
-  "otherSide @ services/networkDirectory.ts": 1,
-  "ownSide @ services/networkDirectory.ts": 1,
+  "VISIBLE @ services/networkDirectory.ts": 2,
   "pageWhere.join(' AND ') @ services/networkDirectory.ts": 1,
   "where.join(' AND ') @ services/networkDirectory.ts": 5
 }

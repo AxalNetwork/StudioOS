@@ -148,7 +148,7 @@ test('detail lists sourced associations to visible entries only, with unknown cu
 test('an overlay is the caller’s alone, on a published person, and creates no relationship', async () => {
   const f = fixture();
   const before = sideEffects(f);
-  assert.deepEqual((await f.call('/entries/person-ada/overlay')).body, { overlay: null });
+  assert.deepEqual((await f.call('/entries/person-ada/overlay')).body, { overlay: null, merged_overlays: [] });
   const put = await f.call('/entries/person-ada/overlay', 'PUT', 1, { saved: true, private_note: '  Met at a synthetic event.  ' });
   assert.equal(put.status, 200, JSON.stringify(put.body));
   assert.equal(put.body.overlay.saved, true);
@@ -156,7 +156,7 @@ test('an overlay is the caller’s alone, on a published person, and creates no 
   const partial = await f.call('/entries/person-ada/overlay', 'PUT', 1, { saved: false });
   assert.equal(partial.body.overlay.private_note, 'Met at a synthetic event.', 'a partial change keeps the other field');
   assert.equal(partial.body.overlay.saved, false);
-  assert.deepEqual((await f.call('/entries/person-ada/overlay', 'GET', 2)).body, { overlay: null }, 'member two never reads member one’s note');
+  assert.deepEqual((await f.call('/entries/person-ada/overlay', 'GET', 2)).body, { overlay: null, merged_overlays: [] }, 'member two never reads member one’s note');
   assert.doesNotMatch(JSON.stringify((await f.call('/entries/person-ada', 'GET', 2)).body), /synthetic event/);
   assert.equal((await f.call('/entries/person-ada/overlay', 'GET', 1, undefined, { impersonated_by: 9 })).status, 403);
   assert.equal((await f.call('/entries/person-ada/overlay', 'PUT', 1, { saved: true }, { impersonated_by: 9 })).status, 403);

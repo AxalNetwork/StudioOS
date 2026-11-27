@@ -3,8 +3,10 @@
  *
  * Member reads (signed in):
  *   GET    /entries?q=&kind=person|organization&cursor=&limit=   published entries, true total, cursor pages
- *   GET    /entries/:uid                                         one published entry and its sourced associations
- * The member's own private overlay on a published person (signed in, not a support session):
+ *   GET    /entries/:uid                                         one published entry and its sourced associations;
+ *                                                                a merged-away uid answers its canonical entry
+ * The member's own private overlay on a published person (signed in, not a support session; a merged-away uid
+ * follows its redirect, and overlays written on entries merged into this one are listed, never moved):
  *   GET    /entries/:uid/overlay        → { overlay: { saved, private_note, updated_at } | null }
  *   PUT    /entries/:uid/overlay        { saved?, private_note? }  only the caller's own row is written
  *   DELETE /entries/:uid/overlay
@@ -16,6 +18,13 @@
  * Organisation-only controlled apply (D7674 part 2; Super Admin behind the write bar, not a support session):
  *   POST   /admin/organisation-apply     a reviewed organisation upload; re-planned on the server, applied in
  *                                         resumable batches, read back (`services/networkDirectoryApply.ts`)
+ * Reviewed merge, redirects, aliases and review decisions (D7674 part 3; Super Admin read, writes behind the write
+ * bar and not a support session; `services/networkDirectoryMerge.ts`):
+ *   GET    /admin/entries/:uid                  one entry's state, readiness, merges, observations, reviews, aliases
+ *   POST   /admin/entries/:uid/merge            { into_uid, idempotency_key, reason, review_uid? }  same kind only
+ *   POST   /admin/reviews/:reviewUid/decision   { decision: kept_separate|dismissed, idempotency_key, reason }
+ *   POST   /admin/entries/:uid/aliases          { alias, idempotency_key, reason }  organisations only
+ *   POST   /admin/aliases/:aliasUid/withdraw    { idempotency_key, reason }
  *
  * No route here reads `network_directory_private_sources`, creates an account, a membership, a relationship,
  * a notification or an outreach, or accepts SQL. The rules are `services/networkDirectory.ts`.
@@ -32,6 +41,9 @@ import {
   readEntry, readOverlay, searchDirectory, suppressEntry, writeOverlay,
 } from '../services/networkDirectory';
 import { APPLY_LIMITS, applyEnvelope, applyOrganisationManifest } from '../services/networkDirectoryApply';
+import {
+  addAlias, aliasInput, decideReview, decisionInput, mergeEntries, mergeInput, operatorEntry, withdrawAlias,
+} from '../services/networkDirectoryMerge';
 
 const directory = new Hono<{ Bindings: Env }>();
 type Ctx = Context<{ Bindings: Env }>;
@@ -120,6 +132,86 @@ async function change(c: Ctx, action: 'publish' | 'suppress') {
 
 directory.post('/admin/entries/:uid/publish', (c) => change(c, 'publish'));
 directory.post('/admin/entries/:uid/suppress', (c) => change(c, 'suppress'));
+
+/* Reviewed merge, redirects, aliases and review decisions (D7674 part 3; `services/networkDirectoryMerge.ts`). */
+
+directory.get('/admin/entries/:uid', async (c) => {
+  await requireSuperAdmin(c);
+  try { return c.json(await operatorEntry(c.env, uidParam(c))); } catch (e) { return answer(c, e); }
+});
+
+/** The write bar, then no support session: these change shared identity, so they are the operator's own act. */
+async function identityOperator(c: Ctx): Promise<User | Response> {
+  const admin = (await requireSuperAdminWriteBar(c)) as User;
+  if ((await selectJwt(c))?.payload.impersonated_by) {
+    return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot change directory identities or review decisions.' });
+  }
+  return admin;
+}
+
+function aliasParam(c: Ctx): string {
+  const uid = c.req.param('aliasUid') ?? '';
+  if (!UID.test(uid)) throw new DirectoryRefusal(400, 'invalid_uid', 'That is not an alias reference.');
+  return uid;
+}
+
+function reviewParam(c: Ctx): string {
+  const uid = c.req.param('reviewUid') ?? '';
+  if (!UID.test(uid)) throw new DirectoryRefusal(400, 'invalid_uid', 'That is not a review reference.');
+  return uid;
+}
+
+directory.post('/admin/entries/:uid/merge', async (c) => {
+  const admin = await identityOperator(c);
+  if (admin instanceof Response) return admin;
+  try {
+    const uid = uidParam(c);
+    const out = await mergeEntries(c.env, admin.id, uid, mergeInput(await body(c)));
+    if (!out.replayed) {
+      await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_merge',
+        { merge_uid: out.merge.uid, from_uid: out.merge.from_uid, to_uid: out.merge.to_uid, review_uid: out.merge.review_uid ?? null });
+    }
+    return c.json(out, out.replayed ? 200 : 201);
+  } catch (e) { return answer(c, e); }
+});
+
+directory.post('/admin/reviews/:reviewUid/decision', async (c) => {
+  const admin = await identityOperator(c);
+  if (admin instanceof Response) return admin;
+  try {
+    const out = await decideReview(c.env, admin.id, reviewParam(c), decisionInput(await body(c)));
+    if (!out.replayed) {
+      await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_review_decision',
+        { review_uid: out.decision.review_uid, decision: out.decision.decision, decision_uid: out.decision.uid });
+    }
+    return c.json(out, out.replayed ? 200 : 201);
+  } catch (e) { return answer(c, e); }
+});
+
+directory.post('/admin/entries/:uid/aliases', async (c) => {
+  const admin = await identityOperator(c);
+  if (admin instanceof Response) return admin;
+  try {
+    const uid = uidParam(c);
+    const out = await addAlias(c.env, admin.id, uid, aliasInput(await body(c)));
+    if (!out.replayed) {
+      await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_alias_add', { entry_uid: uid, alias_uid: out.alias.uid });
+    }
+    return c.json(out, out.replayed ? 200 : 201);
+  } catch (e) { return answer(c, e); }
+});
+
+directory.post('/admin/aliases/:aliasUid/withdraw', async (c) => {
+  const admin = await identityOperator(c);
+  if (admin instanceof Response) return admin;
+  try {
+    const out = await withdrawAlias(c.env, admin.id, aliasParam(c), changeInput(await body(c)));
+    if (!out.replayed) {
+      await logAdminAction(c.env, admin.id, (admin as any).email ?? '', 'network_directory_alias_withdraw', { entry_uid: out.alias.entry_uid, alias_uid: out.alias.uid });
+    }
+    return c.json(out, out.replayed ? 200 : 201);
+  } catch (e) { return answer(c, e); }
+});
 
 const tooLarge = () => new DirectoryRefusal(413, 'body_too_large', 'The upload is larger than this route accepts. Nothing was read or written.', { max_bytes: APPLY_LIMITS.MAX_BODY_BYTES });
 

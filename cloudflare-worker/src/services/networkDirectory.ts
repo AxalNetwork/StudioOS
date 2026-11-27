@@ -108,7 +108,13 @@ export async function searchDirectory(env: Env, opts: { q?: string | null; kind?
   const where = [VISIBLE];
   const binds: unknown[] = [];
   if (kind) { where.push('e.kind = ?'); binds.push(kind); }
-  if (term) { where.push("e.display_name LIKE ? ESCAPE '\\'"); binds.push(term); }
+  // A search also matches an organisation's active, operator-reviewed alias (D7674 part 3).
+  if (term) {
+    where.push(`(e.display_name LIKE ? ESCAPE '\\' OR (e.kind = 'organization' AND EXISTS (
+      SELECT 1 FROM network_directory_aliases al WHERE al.status = 'active' AND al.alias LIKE ? ESCAPE '\\'
+         AND (al.entry_uid = e.uid OR al.entry_uid IN (SELECT rd.from_uid FROM network_directory_redirects rd WHERE rd.to_uid = e.uid)))))`);
+    binds.push(term, term);
+  }
   const total = await env.DB.prepare(`SELECT COUNT(*) AS n FROM network_directory_entries e WHERE ${where.join(' AND ')}`)
     .bind(...binds).first<{ n: number }>();
   const pageWhere = [...where];
@@ -127,40 +133,92 @@ export async function searchDirectory(env: Env, opts: { q?: string | null; kind?
   };
 }
 
-/** One published entry with its sourced associations; an association to a hidden entry is left out. */
-export async function readEntry(env: Env, uid: string) {
+/**
+ * The canonical uid for a reference: a merged-away entry's stable redirect target, else the uid itself
+ * (D7674 part 3). Redirects are kept one hop, so one read answers.
+ */
+export async function canonicalUid(env: Env, uid: string): Promise<string> {
+  const r = await env.DB.prepare('SELECT to_uid FROM network_directory_redirects WHERE from_uid = ?').bind(uid).first<{ to_uid: string }>();
+  return r?.to_uid ?? uid;
+}
+
+/**
+ * Associations of an entry and of every entry merged into it, each to the other side's canonical entry, which
+ * must itself be visible. One static statement per side, so no column name is interpolated.
+ */
+const LINKS_SQL = {
+  person: `SELECT a.title, a.relation_kind, a.is_current, a.start_date, a.end_date, a.verification_status, a.observed_at,
+            e.uid AS other_uid, e.display_name AS other_name
+       FROM network_directory_affiliations a
+       JOIN network_directory_entries e ON e.uid = COALESCE(
+         (SELECT rd.to_uid FROM network_directory_redirects rd WHERE rd.from_uid = a.organization_uid), a.organization_uid)
+      WHERE (a.person_uid = ? OR a.person_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?))
+        AND a.verification_status <> 'withdrawn'
+        AND e.publication_status = 'published' AND e.verification_status <> 'withdrawn'
+      ORDER BY e.display_name, e.uid, a.observed_at DESC, a.uid`,
+  organization: `SELECT a.title, a.relation_kind, a.is_current, a.start_date, a.end_date, a.verification_status, a.observed_at,
+            e.uid AS other_uid, e.display_name AS other_name
+       FROM network_directory_affiliations a
+       JOIN network_directory_entries e ON e.uid = COALESCE(
+         (SELECT rd.to_uid FROM network_directory_redirects rd WHERE rd.from_uid = a.person_uid), a.person_uid)
+      WHERE (a.organization_uid = ? OR a.organization_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?))
+        AND a.verification_status <> 'withdrawn'
+        AND e.publication_status = 'published' AND e.verification_status <> 'withdrawn'
+      ORDER BY e.display_name, e.uid, a.observed_at DESC, a.uid`,
+} as const;
+
+/**
+ * One published entry with its sourced associations; an association to a hidden entry is left out. A merged-away
+ * uid answers its canonical entry with `redirected_from`, and only while that entry is visible (D7674 part 3).
+ */
+export async function readEntry(env: Env, requested: string) {
+  const uid = await canonicalUid(env, requested);
   const row = await env.DB.prepare(
     `SELECT ${ENTRY_COLUMNS} FROM network_directory_entries e JOIN network_directory_sources s ON s.uid = e.source_uid
      WHERE e.uid = ? AND ${VISIBLE}`,
   ).bind(uid).first<any>();
   if (!row) throw refuse(404, 'entry_not_found', 'There is no published directory entry with that reference.');
   const entry = projectEntry(row);
-  const otherSide = row.kind === 'person' ? 'organization_uid' : 'person_uid';
-  const ownSide = row.kind === 'person' ? 'person_uid' : 'organization_uid';
-  const links = (await env.DB.prepare(
-    `SELECT a.title, a.relation_kind, a.is_current, a.start_date, a.end_date, a.verification_status, a.observed_at,
-            e.uid AS other_uid, e.display_name AS other_name, e.kind AS other_kind
-       FROM network_directory_affiliations a JOIN network_directory_entries e ON e.uid = a.${otherSide}
-      WHERE a.${ownSide} = ? AND a.verification_status <> 'withdrawn' AND ${VISIBLE}
-      ORDER BY e.display_name, e.uid`,
-  ).bind(uid).all<any>()).results ?? [];
-  const affiliations = links.map(a => ({
-    [row.kind === 'person' ? 'organization' : 'person']: { uid: a.other_uid, name: a.other_name },
-    title: a.title ?? null,
-    relation: a.relation_kind,
+  const kind: Kind = row.kind === 'person' ? 'person' : 'organization';
+  const links = (await env.DB.prepare(LINKS_SQL[kind]).bind(uid, uid).all<any>()).results ?? [];
+  const seen = new Set<string>();
+  const affiliations = [];
+  for (const a of links) {
     // An affiliation the source did not date is unknown, never assumed current.
-    current: a.is_current === null || a.is_current === undefined ? 'unknown' : Number(a.is_current) === 1 ? 'current' : 'former',
-    start_date: a.start_date ?? null,
-    end_date: a.end_date ?? null,
-    verification: a.verification_status,
-    observed_at: a.observed_at,
-  }));
-  return { entry, affiliations };
+    const current = a.is_current === null || a.is_current === undefined ? 'unknown' : Number(a.is_current) === 1 ? 'current' : 'former';
+    // The same claim held by an entry and by one merged into it is listed once, from its latest observation.
+    const k = JSON.stringify([a.other_uid, a.relation_kind, a.title ?? null, current, a.start_date ?? null, a.end_date ?? null]);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    affiliations.push({
+      [kind === 'person' ? 'organization' : 'person']: { uid: a.other_uid, name: a.other_name },
+      title: a.title ?? null,
+      relation: a.relation_kind,
+      current,
+      start_date: a.start_date ?? null,
+      end_date: a.end_date ?? null,
+      verification: a.verification_status,
+      observed_at: a.observed_at,
+    });
+  }
+  // Active aliases of the entry and of every organisation merged into it, one per name.
+  const aliasRows = kind === 'organization'
+    ? (await env.DB.prepare(
+      `SELECT alias, alias_key FROM network_directory_aliases
+        WHERE status = 'active' AND (entry_uid = ? OR entry_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?))
+        ORDER BY alias_key, uid`,
+    ).bind(uid, uid).all<{ alias: string; alias_key: string }>()).results ?? []
+    : [];
+  const aliasKeys = new Set<string>();
+  const aliases = aliasRows.filter(a => !aliasKeys.has(a.alias_key) && !!aliasKeys.add(a.alias_key)).map(a => a.alias);
+  return { entry, affiliations, aliases, redirected_from: uid === requested ? null : requested };
 }
 
 /* ---------------------------------------------------------------- the member's private overlay */
 
-async function overlayTarget(env: Env, uid: string) {
+/** The visible person an overlay is kept on, after following a merge redirect. */
+async function overlayTarget(env: Env, requested: string) {
+  const uid = await canonicalUid(env, requested);
   const row = await env.DB.prepare(
     `SELECT e.uid, e.kind FROM network_directory_entries e WHERE e.uid = ? AND ${VISIBLE}`,
   ).bind(uid).first<{ uid: string; kind: Kind }>();
@@ -172,12 +230,18 @@ async function overlayTarget(env: Env, uid: string) {
 const overlayShape = (r: any) => r ? { saved: Number(r.saved) === 1, private_note: r.private_note ?? null, updated_at: r.updated_at } : null;
 
 /** The caller's own overlay. Nobody else's is ever selected: the owner is the caller's id in every statement. */
-export async function readOverlay(env: Env, userId: number, uid: string) {
-  await overlayTarget(env, uid);
+export async function readOverlay(env: Env, userId: number, requested: string) {
+  const { uid } = await overlayTarget(env, requested);
   const r = await env.DB.prepare(
     'SELECT saved, private_note, updated_at FROM network_directory_overlays WHERE owner_user_id = ? AND entry_uid = ?',
   ).bind(userId, uid).first<any>();
-  return { overlay: overlayShape(r) };
+  // The caller's own overlays on entries merged into this one stay where they were written and are shown here.
+  const merged = (await env.DB.prepare(
+    `SELECT o.entry_uid, o.saved, o.private_note, o.updated_at FROM network_directory_overlays o
+      WHERE o.owner_user_id = ? AND o.entry_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?)
+      ORDER BY o.updated_at DESC, o.entry_uid`,
+  ).bind(userId, uid).all<any>()).results ?? [];
+  return { overlay: overlayShape(r), merged_overlays: merged.map(m => ({ merged_from: m.entry_uid, ...overlayShape(m) })) };
 }
 
 export function overlayInput(body: Record<string, unknown>) {
@@ -197,8 +261,8 @@ export function overlayInput(body: Record<string, unknown>) {
   return out;
 }
 
-export async function writeOverlay(env: Env, userId: number, uid: string, input: { saved?: number; private_note?: string | null }) {
-  await overlayTarget(env, uid);
+export async function writeOverlay(env: Env, userId: number, requested: string, input: { saved?: number; private_note?: string | null }) {
+  const { uid } = await overlayTarget(env, requested);
   await env.DB.prepare(
     `INSERT INTO network_directory_overlays (owner_user_id, entry_uid, entry_kind, saved, private_note, updated_at)
      VALUES (?, ?, 'person', ?, ?, datetime('now'))
@@ -210,9 +274,14 @@ export async function writeOverlay(env: Env, userId: number, uid: string, input:
   return readOverlay(env, userId, uid);
 }
 
-export async function deleteOverlay(env: Env, userId: number, uid: string) {
-  await env.DB.prepare('DELETE FROM network_directory_overlays WHERE owner_user_id = ? AND entry_uid = ?').bind(userId, uid).run();
-  return { overlay: null };
+/** Clears the caller's own overlay on the entry and on every entry merged into it; nobody else's row is touched. */
+export async function deleteOverlay(env: Env, userId: number, requested: string) {
+  const uid = await canonicalUid(env, requested);
+  await env.DB.prepare(
+    `DELETE FROM network_directory_overlays WHERE owner_user_id = ?
+       AND (entry_uid = ? OR entry_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?))`,
+  ).bind(userId, uid, uid).run();
+  return { overlay: null, merged_overlays: [] };
 }
 
 /* ---------------------------------------------------------------- operator review and publication */
@@ -225,12 +294,19 @@ export type Readiness = { ready: boolean; blockers: string[]; checked_source_rec
  * the same source row, two different observations at the same time, or an open review on any of them blocks it.
  */
 export async function readiness(env: Env, uid: string): Promise<Readiness> {
+  // The entity is this entry and every entry merged into it (D7674 part 3): all their source rows count.
+  const merged = ((await env.DB.prepare('SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?')
+    .bind(uid).all<{ from_uid: string }>()).results ?? []).map(r => r.from_uid);
+  const group = new Set([uid, ...merged]);
   const identities = (await env.DB.prepare(
-    'SELECT DISTINCT source_uid, external_record_id FROM network_directory_source_records WHERE entry_uid = ?',
-  ).bind(uid).all<{ source_uid: string; external_record_id: string }>()).results ?? [];
+    `SELECT DISTINCT source_uid, external_record_id FROM network_directory_source_records
+      WHERE entry_uid = ? OR entry_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?)
+      ORDER BY source_uid, external_record_id`,
+  ).bind(uid, uid).all<{ source_uid: string; external_record_id: string }>()).results ?? [];
   if (!identities.length) return { ready: false, blockers: ['no_source_record'], checked_source_record_uid: null };
   const blockers = new Set<string>();
   let checked: string | null = null;
+  let checkedOwn = false;
   for (const id of identities) {
     const obs = (await env.DB.prepare(
       `SELECT uid, entry_uid, disposition, content_hash, decision_hash, observed_at FROM network_directory_source_records
@@ -240,8 +316,9 @@ export async function readiness(env: Env, uid: string): Promise<Readiness> {
     const latest = obs.filter(o => o.observed_at === latestAt);
     if (new Set(latest.map(o => o.content_hash + ':' + o.decision_hash)).size > 1) blockers.add('same_time_conflict');
     const head = latest[0];
-    if (!head || head.disposition !== 'accept' || head.entry_uid !== uid) blockers.add('latest_observation_not_accepted');
-    else checked = checked ?? head.uid;
+    if (!head || head.disposition !== 'accept' || !group.has(head.entry_uid)) blockers.add('latest_observation_not_accepted');
+    // The checked observation is the entry's own where it has one, else one merged into it.
+    else if (!checked || (!checkedOwn && head.entry_uid === uid)) { checked = head.uid; checkedOwn = head.entry_uid === uid; }
   }
   // One bound value however many observations a source row has (D1 allows 100 per statement).
   const open = await env.DB.prepare(
@@ -249,8 +326,9 @@ export async function readiness(env: Env, uid: string): Promise<Readiness> {
        SELECT 1 FROM network_directory_source_records o
         WHERE (o.uid = r.source_record_uid OR o.uid = r.candidate_record_uid)
           AND (o.source_uid, o.external_record_id) IN (
-            SELECT source_uid, external_record_id FROM network_directory_source_records WHERE entry_uid = ?))`,
-  ).bind(uid).first<{ n: number }>();
+            SELECT source_uid, external_record_id FROM network_directory_source_records
+             WHERE entry_uid = ? OR entry_uid IN (SELECT from_uid FROM network_directory_redirects WHERE to_uid = ?)))`,
+  ).bind(uid, uid).first<{ n: number }>();
   if (Number(open?.n ?? 0) > 0) blockers.add('open_review');
   const list = [...blockers].sort();
   return { ready: list.length === 0, blockers: list, checked_source_record_uid: list.length ? null : checked };

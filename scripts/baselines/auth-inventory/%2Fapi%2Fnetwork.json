@@ -11,7 +11,7 @@
     "kind": "unclassified",
     "state": "verified",
     "test": "cloudflare-worker/test/network_directory_apis_7674.test.ts",
-    "note": "Any signed-in member reads a directory entry only while it is published and not withdrawn; staged, suppressed, archived and withdrawn entries answer 404, and the projection carries no account link, private source cell or review item."
+    "note": "Any signed-in member reads a directory entry only while it is published and not withdrawn; staged, suppressed, archived and withdrawn entries answer 404, a merged-away uid answers its canonical entry only while that entry is itself visible (D7674 part 3), and the projection carries no account link, private source cell or review item."
   },
   "GET /api/network/directory/entries/:uid/overlay": {
     "review": "record_without_ownership_check",
