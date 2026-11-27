@@ -127,6 +127,16 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\nYour Axal account recovery request (ticket #{{ticket_id}}) has been resolved. Sign in to confirm everything looks correct, and rotate any recovery codes you no longer trust.`,
     html: `<p>Hi {{name}},</p><p>Your account recovery request (ticket #{{ticket_id}}) has been resolved. Sign in to confirm everything looks correct, and rotate any recovery codes you no longer trust.</p>`,
   }),
+  // vars: name, ticket_id, claim_url, expires_minutes
+  // D8536 part 4: the end of a trusted-contact or admin-cosign recovery. The
+  // person is locked out, so the link is in the email itself, not in the bell.
+  auth_recovery_claim: t({
+    key: 'auth_recovery_claim', category: 'security', severity: 'warning',
+    replyTo: 'security@axal.vc', alwaysSend: true,
+    subject: 'Finish recovering your Axal account',
+    text: `Hi {{name}},\n\nYour account recovery request (ticket #{{ticket_id}}) was approved. Open this link to sign in and finish:\n{{claim_url}}\n\nThe link expires in {{expires_minutes}} minutes and can only be used once. If you didn't ask to recover your account, reply to security@axal.vc immediately and don't open the link.`,
+    html: `<p>Hi {{name}},</p><p>Your account recovery request (ticket #{{ticket_id}}) was approved. Open this link to sign in and finish.</p><p><a href="{{{claim_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Finish recovery</a></p><p style="color:#6b7280;font-size:13px;">Expires in {{expires_minutes}} minutes. Single use.</p><p style="color:#dc2626;">If you didn't ask to recover your account, reply to <a href="mailto:security@axal.vc">security@axal.vc</a> immediately and don't open the link.</p>`,
+  }),
   // vars: name, device_name, ip, location, when
   auth_signin_new_device: t({
     key: 'auth_signin_new_device', category: 'security', severity: 'warning',
