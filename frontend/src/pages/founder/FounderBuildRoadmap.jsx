@@ -10,7 +10,7 @@ import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { DependenciesDialog, ScenarioDialog, RiskUnavailable } from './RoadmapDialogs';
 import {
-  DOOR, LANDING_SUB, addFirstHref, dueText, horizonOf, itemParam, itemSheetHref, landingBack, landingView, pickProject, quarterGroups,
+  DOOR, LANDING_SUB, addFirstHref, dueText, horizonOf, itemParam, itemSheetHref, landingBack, landingView, linkOrigin, pickProject, quarterGroups,
 } from '../cycles/roadmapShortcut.js';
 
 /**
@@ -32,6 +32,10 @@ import {
  * from, which is highlighted and focused; Back returns to that item, or to the board as it was left. A project
  * in the link that is not the reader's is said, not silently swapped. At zero items there is one action, Add
  * the first item, on Product roadmap (owner question 2, option A: the `/execution` editor is no longer offered).
+ *
+ * The Home checklist rows that still open this page (BLR05B) say so in the link, `?from=home&step=<key>`:
+ * Back is then "Back to Home" and the context row names the row. A link with no venture shows the reader's
+ * first and says so, rather than claiming it was kept from the link.
  */
 
 const TONE = { blocked: 'blocked', in_flight: 'active', done: 'done', provisional: 'neutral' };
@@ -51,6 +55,10 @@ export default function FounderBuildRoadmap() {
   const requestedId = params.get('project_id');
   const view = landingView(params.get('view'));
   const itemId = itemParam(params.get('item'));
+  // BLR05B: a Home checklist row that still opens this page says so in its link (`?from=home&step=`).
+  const origin = linkOrigin(params.get('from'), params.get('step'));
+  // Whether the link named a venture, read once: the page writes the one it shows into the address.
+  const [ventureInLink] = useState(() => requestedId != null && requestedId !== '');
   // Where the board handed over (its view and column), read once: a view change replaces the address.
   const [from] = useState(() => (typeof location.state?.roadmapFrom === 'string' ? location.state.roadmapFrom : null));
   const [projects, setProjects] = useState([]);
@@ -119,7 +127,10 @@ export default function FounderBuildRoadmap() {
     projectId: selectedId,
     item: itemId != null && !missingItem ? { id: itemId, objective: linked?.objective } : null,
     from,
+    origin,
   });
+  // Where the page was opened from, as the context row names it: the item, a Home checklist row, or the board.
+  const openedFrom = linked ? `Product roadmap · ${linked.objective}` : back.href === '/studio' ? origin.context : 'Product roadmap';
   const q = selectedId ? `?project_id=${selectedId}` : '';
 
   // The dependency view is the items that are IN the graph — either end of a link.
@@ -201,13 +212,10 @@ export default function FounderBuildRoadmap() {
           {status === 'error' && <div className="fb-roadmap-alert" role="alert" data-testid="status-roadmap-error"><AlertCircle size={16} /><span>Unavailable · {error} Nothing is shown as 0.</span><button type="button" onClick={load} data-testid="button-retry-roadmap"><RefreshCw size={13} /> Retry</button></div>}
           {status === 'loading' && <RoadmapSkeleton />}
           {status === 'empty' && <EmptyRoadmap />}
-          {status === 'ready' && selectedProject && zero && <ZeroItems projectId={selectedId} canWrite={canWrite} />}
+          {status === 'ready' && selectedProject && zero && <><Context name={selectedProject.name} openedFrom={openedFrom} kept={ventureInLink} /><ZeroItems projectId={selectedId} canWrite={canWrite} /></>}
           {status === 'ready' && selectedProject && !zero && (
             <>
-              <div className="fb-roadmap-context">
-                <div><span className="fb-roadmap-label">Venture</span><strong data-testid="text-roadmap-project">{text(selectedProject.name)}</strong><span>Kept from the link you followed</span></div>
-                <div className="fb-roadmap-context-right"><span className="fb-roadmap-label">Opened from</span><strong data-testid="text-roadmap-from">{linked ? `Product roadmap · ${linked.objective}` : 'Product roadmap'}</strong><span>Back returns there · week of {weekRange()}</span></div>
-              </div>
+              <Context name={selectedProject.name} openedFrom={openedFrom} kept={ventureInLink} />
               {missingItem && (
                 <p className="fb-roadmap-notice" role="status" data-testid="status-roadmap-item-missing">Item {itemId} is not on this venture’s roadmap, so nothing is highlighted.</p>
               )}
@@ -484,6 +492,16 @@ function PageRail({ project, stats }) {
 }
 
 /** BLR05B: no item yet. One action, on Product roadmap, never a third editor. */
+/** The venture kept from the link, and where the page was opened from (BLR02; at zero too, BLR05B). */
+function Context({ name, openedFrom, kept }) {
+  return (
+    <div className="fb-roadmap-context">
+      <div><span className="fb-roadmap-label">Venture</span><strong data-testid="text-roadmap-project">{text(name)}</strong><span>{kept ? 'Kept from the link you followed' : 'Your first venture; the link named none'}</span></div>
+      <div className="fb-roadmap-context-right"><span className="fb-roadmap-label">Opened from</span><strong data-testid="text-roadmap-from">{openedFrom}</strong><span>Back returns there · week of {weekRange()}</span></div>
+    </div>
+  );
+}
+
 function ZeroItems({ projectId, canWrite }) {
   return (
     <div className="fb-roadmap-empty" data-testid="empty-roadmap-items">
