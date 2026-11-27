@@ -10,7 +10,8 @@
  *     plan marked "Current plan".
  *
  * Five tabs (Founder, Investor, Advisors, Operating Partners, Models), the
- * selected one kept in `?for=`. Every figure is read: the plans, their monthly
+ * selected one kept in `?for=` and the billing interval beside it in
+ * `?interval=` (#8717, Monthly unless the address says Yearly). Every figure is read: the plans, their monthly
  * and yearly prices and the AI each includes from `GET /api/public/plans-and-packs`,
  * the models and their billed prices from `GET /api/public/ai/models`
  * (`pricingModel.js`). The copy is the canvas's (`sitePricing.js`).
@@ -32,8 +33,8 @@ import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
-  PRICING_TABS, closingRegisterPath, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
-  storageGroup, modelUsage, priceOf, usd,
+  PRICING_TABS, billingFromSearch, closingRegisterPath, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
+  searchWithBilling, storageGroup, modelUsage, priceOf, usd,
 } from '../lib/pricingModel';
 import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
@@ -583,7 +584,12 @@ export function PricingBody({ user = null }) {
   const navigate = useNavigate();
   const role = useViewMode()?.shellRole ?? null;
   const tab = initialTab(location.search, user ? role : null);
-  const [billing, setBilling] = useState('monthly');
+  // #8717: the interval lives in the address (`?interval=`), not in state, so Back from registration and Forward again
+  // restore the cadence that produced the quote. Choosing one replaces the entry: no history entry per press.
+  const billing = billingFromSearch(location.search);
+  const setBilling = (k) => {
+    navigate({ pathname: location.pathname, search: searchWithBilling(location.search, k), hash: location.hash }, { replace: true });
+  };
   useEffect(() => {
     if (tab !== 'models') track('pricing_view', { audience: tab, plan: null, interval: billing });
   }, [tab, billing]);
@@ -638,14 +644,17 @@ export function PricingBody({ user = null }) {
     const q = new URLSearchParams(location.search);
     const iv = q.get('interval');
     const seen = Number(q.get('seen'));
-    q.delete('checkout'); q.delete('interval'); q.delete('seen');
-    navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: location.hash }, { replace: true });
     const card = built.cards.find((c) => c.button?.checkout && planKeyOf(c.plan) === wanted);
-    if (!card) { setReturned({ kind: 'gone' }); return; }
     const interval = iv === 'yearly' ? 'yearly' : 'monthly';
-    const now = priceOf(card.plan, interval === 'yearly' ? 'year' : 'month');
-    if (interval === 'yearly' && !now) { setReturned({ kind: 'interval', name: card.name }); return; }
-    if (iv === 'yearly' || iv === 'monthly') setBilling(iv);
+    const now = card ? priceOf(card.plan, interval === 'yearly' ? 'year' : 'month') : null;
+    const opens = !!card && !(interval === 'yearly' && !now);
+    // #8717: `interval` is also the page's billing now. It stays when the sheet opens on that interval, and leaves
+    // with an ask that opens nothing (or names no interval), so the page falls back to the default as it did before.
+    q.delete('checkout'); q.delete('seen');
+    if (!opens || !(iv === 'yearly' || iv === 'monthly')) q.delete('interval');
+    navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: location.hash }, { replace: true });
+    if (!card) { setReturned({ kind: 'gone' }); return; }
+    if (!opens) { setReturned({ kind: 'interval', name: card.name }); return; }
     if (Number.isSafeInteger(seen) && seen > 0 && now && now.unit_amount !== seen) {
       setReturned({ kind: 'price', name: card.name, was: usd(seen), now: usd(now.unit_amount), interval });
     }

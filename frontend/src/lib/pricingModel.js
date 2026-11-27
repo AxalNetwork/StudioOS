@@ -40,6 +40,22 @@ export function landingTab(shellRole) {
   return 'founder';
 }
 
+/**
+ * #8717: the billing interval Pricing shows, kept in `?interval=` beside `?for=` so browser Back and Forward return
+ * to the cadence that produced a quote. `yearly` only when the address says so; anything else, and no `interval` at
+ * all (a fresh visit, a bare deep link), is the documented default, `monthly`. Never guessed from a malformed value.
+ */
+export function billingFromSearch(search) {
+  return new URLSearchParams(String(search || '')).get('interval') === 'yearly' ? 'yearly' : 'monthly';
+}
+
+/** #8717: `search` with the billing interval set, every other parameter (`for`, a checkout ask) kept as it was. */
+export function searchWithBilling(search, billing) {
+  const q = new URLSearchParams(String(search || ''));
+  q.set('interval', billing === 'yearly' ? 'yearly' : 'monthly');
+  return `?${q}`;
+}
+
 /** `?for=` first, else the role's landing tab. */
 export const initialTab = (search, shellRole) => tabFromSearch(search) ?? landingTab(shellRole);
 
