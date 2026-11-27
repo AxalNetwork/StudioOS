@@ -24,11 +24,13 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/portfolio_reporting_period_d4647.test.ts
  */
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { isolatedMutationSource } from './_isolated_mutation_source.mjs';
+import { writeFileAtomic } from './_atomic_write.mjs';
 
 import { lastClosedQuarter, quarterPeriod as workerQuarter, isClosed } from '../src/services/fundReportBuild.ts';
 import { completedPeriod } from '../src/services/portfolioMetrics.ts';
@@ -119,8 +121,17 @@ test('a completed period is one whose last day is past, by the same test the Wor
  * filtered to the tests that must then fail; the source is restored in a
  * `finally`. The page's module is imported by the test and by the SPA, so a
  * real import of the mutated file is what exercises it.
+ *
+ * The mutations are made in a private copy of the source (D6811), never in the
+ * checkout: `node --test` runs a shard's files in parallel, and a mutant written
+ * to the shared `reportingPeriod.js` would be read by any file importing it in
+ * that window. Each write is atomic (`_atomic_write.mjs`), so even the child
+ * never reads a half-written module, and every check confirms the checkout's
+ * copy is unchanged.
  */
-const SELF = new URL(import.meta.url).pathname;
+let mutationSource: ReturnType<typeof isolatedMutationSource> | null = null;
+const mutationRoot = () => (mutationSource ??= isolatedMutationSource(ROOT)).root;
+after(() => mutationSource?.close());
 function childEnv() {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.startsWith('NODE_TEST')) delete env[key];
@@ -128,8 +139,8 @@ function childEnv() {
 }
 const run = (pattern: string) => spawnSync(process.execPath,
   ['--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs',
-    '--test', '--test-name-pattern', pattern, SELF],
-  { cwd: resolve(ROOT), encoding: 'utf8', timeout: 240000, maxBuffer: 8 * 1024 * 1024, env: { ...childEnv(), D4647_SKIP_MUTATIONS: '1' } });
+    '--test', '--test-name-pattern', pattern, resolve(mutationRoot(), 'cloudflare-worker/test/portfolio_reporting_period_d4647.test.ts')],
+  { cwd: mutationRoot(), encoding: 'utf8', timeout: 240000, maxBuffer: 8 * 1024 * 1024, env: { ...childEnv(), D4647_SKIP_MUTATIONS: '1' } });
 
 const PAGE = 'frontend/src/lib/reportingPeriod.js';
 const CHECKS = [
@@ -170,16 +181,20 @@ if (!process.env.D4647_SKIP_MUTATIONS) {
   });
 
   for (const check of CHECKS) test(`Mutation and restoration: ${check.name}`, () => {
-    const file = resolve(ROOT, check.file);
+    const file = resolve(mutationRoot(), check.file);
+    const shared = resolve(ROOT, check.file);
+    const sharedBefore = readFileSync(shared, 'utf8');
     const original = readFileSync(file, 'utf8');
+    assert.equal(original, sharedBefore, `the private copy of ${check.file} is not the checkout's`);
     assert.ok(original.includes(check.before), `mutation_target_missing: ${check.name}`);
     assert.equal(original.split(check.before).length - 1, 1, `mutation target is not unique: ${check.name}`);
     let result;
     try {
-      writeFileSync(file, original.replace(check.before, check.after));
+      writeFileAtomic(file, original.replace(check.before, check.after));
       result = run(check.pattern);
-    } finally { writeFileSync(file, original); }
+    } finally { writeFileAtomic(file, original); }
     assert.notEqual(result.status, 0, `the mutation went unnoticed by "${check.pattern}": ${(result.stdout ?? '').slice(-1500)}`);
-    assert.equal(readFileSync(file, 'utf8'), original, 'the source was not restored');
+    assert.equal(readFileSync(file, 'utf8'), original, 'the private source was not restored');
+    assert.equal(readFileSync(shared, 'utf8'), sharedBefore, 'the shared checkout changed during a mutation');
   });
 }

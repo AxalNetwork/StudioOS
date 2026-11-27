@@ -106,12 +106,14 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
   // D4819 part 20 (L20): below md the six sections are a 3 × 2 grid, so the row never scrolls the page sideways.
   assert.match(PAGE, /data-testid="licence-tabs"\s+className="mt-6 grid grid-cols-3 /, 'a phone draws the sections as a grid');
   assert.match(PAGE, /aria-pressed=\{kindFilter === id\}/);
-  assert.match(PAGE, /aria-pressed=\{form\.kind === id\}/);
+  // D5929: the draft form is New licence's step 1, whose Kind is a radio group that says what is checked.
+  assert.match(PAGE, /type="radio" name=\{name\} value=\{c\.k\} checked=\{value === c\.k\}/);
   // D4819: the ledger and the open licence are two views now, so the licence
   // that is current is the breadcrumb's current page, not a highlighted row.
   assert.match(PAGE, /<span aria-current="page"[^>]*>\{open \? \(open\.brand_name \|\| open\.licence_ref\) : 'Licence'\}<\/span>/);
   for (const label of ['Licence reference', 'Legal entity name', 'Brand name in product']) {
-    assert.ok(PAGE.includes(`aria-label="${label}"`), label);
+    // D5929: step 1's fields carry a visible <label htmlFor> (TextField) rather than an aria-label.
+    assert.ok(PAGE.includes(`label="${label}"`), label);
   }
   assert.equal(tabKeyMove('ArrowRight', 2, 5), 3);
   assert.equal(tabKeyMove('ArrowRight', 4, 5), 0);

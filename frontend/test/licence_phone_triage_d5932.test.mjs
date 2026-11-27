@@ -297,7 +297,7 @@ test('L20 page: search leads the licence view on a phone and returns to the ledg
     // Every button, select and text field on the page is 44px below md.
     const page = read('frontend/src/pages/admin/AdminLicences.jsx');
     assert.match(page, /const PHONE_TARGETS = 'max-md:\[&_button\]:min-h-\[44px\] max-md:\[&_select\]:min-h-\[44px\] max-md:\[&_input:not\(\[type=checkbox\]\):not\(\[type=radio\]\)\]:min-h-\[44px\]';/);
-    assert.equal((page.match(/max-w-6xl px-4 py-6 \$\{PHONE_TARGETS\}/g) || []).length, 3, 'on the licence, the zero state and the ledger');
+    assert.equal((page.match(/max-w-6xl px-4 py-6 \$\{PHONE_TARGETS\}/g) || []).length, 4, 'on New licence (D5929), the licence, the zero state and the ledger');
     // A ledger row on a phone is one target: the licence link covers the row.
     assert.ok(v.nodes().some((n) => v.props(n)['data-testid'] === 'licence-list-row' && /min-h-\[56px\]/.test(v.props(n).className)));
     assert.ok(v.nodes().some((n) => v.props(n)['data-testid'] === 'licence-row-link' && /after:inset-0/.test(v.props(n).className)));
