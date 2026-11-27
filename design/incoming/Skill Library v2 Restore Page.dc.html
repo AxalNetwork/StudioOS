@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Library v2 Restore · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.skx-sh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.skx-hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.skx-hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.skx-hd p{font-size:13px;color:var(--mu);margin-top:3px;max-width:720px}
+.skx-hd .skx-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.skx-crumb{font:600 12px var(--sg);color:var(--mu)}
+.skx-crumb b{color:var(--ink)}
+.skx-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.skx-tabs a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.skx-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.skx-tabs a .skx-n{font:700 10.5px var(--mo);margin-left:5px;color:var(--mu)}
+.skx-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.skx-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);background:var(--raised);white-space:nowrap}
+.skx-tbl td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.skx-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.skx-tbl td.skx-m{font:600 12px var(--mo);white-space:nowrap}
+.skx-tbl tr.skx-sel td{background:var(--lav)}
+.skx-next{font-size:12px;font-weight:700;color:var(--ink)}
+.skx-next small{display:block;font-weight:500;color:var(--mu)}
+.skx-mx{border-collapse:separate;border-spacing:0;font-size:12px;width:100%}
+.skx-mx th{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding:8px 10px;text-align:left;border-bottom:1px solid var(--hair);background:var(--raised)}
+.skx-mx td{padding:6px 8px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.skx-mx td.skx-c{text-align:center}
+.skx-cell{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:82px;padding:3px 8px;border-radius:7px;font:700 11px var(--sg);border:1px solid var(--hair)}
+.skx-cell.p{background:var(--posBg);color:var(--pos);border-color:var(--posE)}
+.skx-cell.f{background:var(--neg);color:#fff;border-color:var(--neg)}
+.skx-cell.n{background:transparent;color:var(--mu);border-style:dotted;border-color:var(--hair2)}
+.skx-cell.s{background:transparent;color:var(--amT);border-style:dashed;border-color:var(--amE)}
+.skx-cell.m{background:var(--raised);color:var(--mu);border-style:dashed}
+.skx-bar{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--ink);border-radius:12px;background:var(--card)}
+.skx-bar b.mo{font-size:18px}
+.skx-steps{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.03em;text-transform:uppercase}
+.skx-steps span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu);white-space:nowrap}
+.skx-steps span+span{border-left:0}
+.skx-steps span:first-child{border-radius:8px 0 0 8px}.skx-steps span:last-child{border-radius:0 8px 8px 0}
+.skx-steps span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.skx-steps span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.skx-steps span.bl{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.skx-fld{display:flex;flex-direction:column;gap:5px}
+.skx-fld label{font-size:12.5px;font-weight:700}
+.skx-fld label span{font-weight:500;color:var(--mu)}
+.skx-in{min-height:36px;display:flex;align-items:center;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px}
+.skx-in.lock{background:var(--raised);color:var(--mu);font-family:var(--mo)}
+.skx-in.err{border-color:var(--neg);box-shadow:0 0 0 1px var(--neg)}
+.skx-in.dirty{border-color:#7c3aed;box-shadow:0 0 0 1px #7c3aed}
+.skx-er{font-size:12px;font-weight:600;color:var(--neg)}
+.skx-ol{display:flex;flex-direction:column;gap:6px;counter-reset:s}
+.skx-ol li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--hair);border-radius:9px;background:var(--card);font-size:12.5px;counter-increment:s}
+.skx-ol li:before{content:counter(s);display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);font:700 11px var(--mo);color:var(--mu)}
+.skx-tag{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:600 11px var(--mo);border:1px solid var(--hair);background:var(--raised);color:var(--ink);white-space:nowrap}
+.skx-tag i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.skx-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.skx-blk{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.skx-blk h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.skx-blk p{font-size:13px;line-height:1.5}
+.skx-out{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px dashed var(--hair2);border-radius:8px;padding:10px 12px;white-space:pre-wrap}
+.skx-chk{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.skx-chk li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.skx-chk li:last-child{border-bottom:0}
+.skx-chk li small{display:block;color:var(--mu);font-size:11.5px}
+.skx-ic{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;font:800 11px var(--sg)}
+.skx-ic.ok{background:var(--pos);color:#fff}.skx-ic.no{background:var(--neg);color:#fff}.skx-ic.wt{background:transparent;border:1.5px dashed var(--amD);color:var(--amT)}
+.skx-dlg{background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.skx-dlg .skx-dh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px}
+.skx-dlg .skx-dh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.skx-dlg .skx-db{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.skx-dlg .skx-df{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.skx-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.skx-card{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.skx-card h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+.skx-card .skx-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.skx-card>.stt{align-self:flex-start}
+.skx-why{font-size:12px;color:var(--amT);background:var(--amBg);border:1px solid var(--amE);border-radius:8px;padding:6px 9px}
+.skx-st13{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.skx-st13>div{border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.skx-st13 small{font-size:11.5px;color:var(--mu);line-height:1.4}
+.skx-st13 code{font:500 10.5px var(--mo);color:var(--mu)}
+.skx-ph .skx-tabs a{padding:12px 10px;min-height:44px}
+.skx-flow{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.skx-flow>div{flex:1;min-width:120px;border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:10px;font-size:12px;display:flex;flex-direction:column;gap:4px}
+.skx-flow>div b{font-size:12.5px}
+.skx-flow>i{align-self:center;font-style:normal;color:var(--mu)}
+/* SKX · Skill Library v2 addendum · Extension compare (#5963). Builds on sk_extra.css; new classes only. */
+.skx-shr{position:relative}
+.skx-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;font-style:normal}
+.skx-based{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--mu);margin-top:6px}
+.skx-based b{color:var(--ink);font-weight:700}
+.skx-mk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair2);background:var(--card);color:var(--mu)}
+.skx-mk svg{flex:none}
+.skx-mk.c{color:var(--amT);background:var(--amBg);border-color:var(--amD);border-width:1.5px}
+.skx-mk.y{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.skx-mk.a{color:var(--ink);background:var(--card);border-color:var(--ink);border-style:dashed}
+.skx-mk.s{color:var(--mu);background:transparent;border-style:dotted}
+.skx-ach{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:6px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--ink);color:var(--ink);background:var(--card)}
+.skx-leg{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.skx-q{margin:0;border-left:3px solid var(--hair2);padding:4px 0 4px 12px;display:flex;flex-direction:column;gap:3px}
+.skx-q p{font-size:13px;line-height:1.5;color:var(--ink);max-width:760px}
+.skx-ban{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--vi);background:var(--lav);font-size:12.5px;line-height:1.5;color:var(--ink)}
+.skx-ban>div{flex:1;min-width:0}
+.skx-ban b{font-size:13.5px}
+.skx-ban .ic{display:grid;place-items:center;width:24px;height:24px;border-radius:999px;background:var(--vi);color:#fff;font-weight:800;flex:none}
+.skx-ban.ro{border-color:var(--hair2);background:var(--raised)}
+.skx-ban.ro .ic{background:var(--ink);color:var(--card)}
+.skx-ban.un{border-style:dashed;border-color:var(--ink);background:var(--card)}
+.skx-ban.un .ic{background:transparent;color:var(--ink);border:1.5px dashed var(--ink)}
+.skx-cnt{font:700 13px var(--mo);color:var(--amT)}
+.skx-quiet{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mu);flex-wrap:wrap}
+.skx-why2{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--ink);justify-content:flex-end;margin-top:-8px}
+.skx-rbx{display:inline-flex;align-items:center;gap:6px}
+.skx-cmp{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+.skx-cmp thead th{text-align:left;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);padding:9px 12px;border-bottom:1px solid var(--hair);border-top:1px solid var(--hair);background:var(--raised);vertical-align:top}
+.skx-cmp thead th small{display:block;font:500 11px var(--sg);letter-spacing:0;text-transform:none;color:var(--mu);margin-top:2px}
+.skx-cmp tbody th{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--hair);font-weight:500;display:table-cell}
+.skx-cmp tbody th b{display:block;font-size:13px;font-weight:800;margin-bottom:5px}
+.skx-cmp tbody th small{display:block;font-size:11px;color:var(--mu);margin-top:6px;line-height:1.4}
+.skx-cmp td{vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--hair);border-left:1px solid var(--hair);min-width:0}
+.skx-cmp tr.skx-cf th{box-shadow:inset 4px 0 0 var(--amD)}
+.skx-cmp tr.skx-cf td,.skx-cmp tr.skx-cf th{background:var(--amBg)}
+.skx-cmp.big td{padding:12px 14px}
+.skx-cmp.big .skx-lnx li{font-size:12.5px;padding:4px 6px}
+.skx-tx{font-size:12.5px;line-height:1.5}
+.skx-tx.chg{font-weight:600}
+.skx-same{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);font-style:italic}
+.skx-lnx{display:flex;flex-direction:column;gap:2px;list-style:none;margin:0;padding:0;counter-reset:ln}
+.skx-lnx li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:6px;font-size:12px;line-height:1.45;padding:2px 4px;border-radius:5px}
+.skx-lnx li .g{font:800 12px var(--mo);text-align:center}
+.skx-lnx.num li{counter-increment:ln}
+.skx-lnx.num li .g:before{content:counter(ln);font:600 11px var(--mo);color:var(--mu)}
+.skx-lnx li.ad{background:var(--posBg);color:var(--pos)}
+.skx-lnx li.rm{background:var(--negBg);color:var(--neg);text-decoration:line-through;text-decoration-thickness:1px}
+.skx-lnx li.rm .g{text-decoration:none}
+.skx-lnx li.eq{color:var(--mu);font-style:italic}
+.skx-tls{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+.skx-tl{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;padding:2px 8px;border-radius:6px;border:1px solid var(--hair);background:var(--raised);font-size:11.5px;max-width:100%}
+.skx-tl code{font:600 11.5px var(--mo)}
+.skx-tl b{font:800 12px var(--mo)}
+.skx-tl small{flex-basis:100%;font-size:11px;font-weight:600;line-height:1.35}
+.skx-tl.rm{background:var(--negBg);border-color:var(--negE);color:var(--neg)}
+.skx-tl.rm code{text-decoration:line-through}
+.skx-tl.ad{background:var(--card);border:1px dashed var(--amD);color:var(--amT)}
+.skx-hist{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden;list-style:none;margin:0;padding:0}
+.skx-hist li,.skx-hist p{display:grid;grid-template-columns:180px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.skx-hist p{display:flex;color:var(--mu)}
+.skx-hist li:last-child{border-bottom:0}
+.skx-hist .skx-who{font-size:11.5px;color:var(--mu);display:inline-flex;gap:6px;align-items:center}
+.skx-hist.ph2 li{grid-template-columns:80px minmax(0,1fr);min-height:44px}
+.skx-spec{border:1px dashed var(--hair2);border-radius:10px;padding:10px 14px;background:transparent;display:flex;flex-direction:column;gap:6px}
+.skx-spec ul{display:flex;flex-direction:column;gap:3px;list-style:none;margin:0;padding:0}
+.skx-spec li{font:500 11px/1.5 var(--mo);color:var(--mu)}
+.skx-spec li:before{content:"› ";color:var(--vi)}
+.skx-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.skx-rail .hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.skx-rail .hd>div{flex:1}
+.skx-rail .hd small{display:block;font-size:11.5px;color:var(--mu)}
+.skx-rail .hd .e{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px}
+.skx-rail .bdy{padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1}
+.skx-rail .ft{padding:12px 16px;border-top:1px solid var(--hair);display:flex}
+.skx-prop{border:1px dashed var(--lavE);background:var(--lav);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px;font-size:12.5px;line-height:1.5}
+.skx-prop .eye{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.skx-prop ul{display:flex;flex-direction:column;gap:4px;list-style:none;margin:0;padding:0}
+.skx-prop code,.skx-rbrow code,.skx-ban code{font:600 11.5px var(--mo)}
+.skx-prop .acts{display:flex;gap:6px;flex-wrap:wrap}
+.skx-prop.in{margin-top:4px}
+.skx-dim{position:absolute;inset:0;background:var(--dim);display:grid;place-items:center;z-index:5}
+.skx-ta{min-height:64px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.skx-row2{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.skx-cnt2{white-space:nowrap}
+.skx-spin{width:12px;height:12px;border-radius:999px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;display:inline-block}
+.skx-refx{border:1px solid var(--hair);border-radius:10px;background:var(--card);padding:8px 12px;display:grid;grid-template-columns:170px minmax(0,1fr);gap:2px 12px;align-items:baseline}
+.skx-refx code{font:700 11.5px var(--mo);color:var(--ink)}
+.skx-refx p{grid-column:1/-1;font-size:12.5px;line-height:1.45}
+.skx-nocmp{border-style:dashed}
+.skx-nocmp p{font-size:13px;color:var(--mu)}
+.skx-rb{border-color:#a78bfa;border-style:dashed}
+.skx-rbrow{display:grid;grid-template-columns:220px minmax(0,1fr);gap:6px 14px;align-items:center;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.skx-rbrow>b{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.skx-rbrow small{grid-column:2;font-size:11.5px;color:var(--mu)}
+.skx-opt{display:inline-flex;border:1px solid var(--hair2);border-radius:9px;overflow:hidden;justify-self:start}
+.skx-opt button{min-height:32px;padding:0 12px;font:600 12px var(--sg);background:var(--card);border:0;border-right:1px solid var(--hair2);color:var(--ink)}
+.skx-opt button:last-child{border-right:0}
+.skx-opt button[aria-checked=true]{background:var(--ink);color:var(--card)}
+.skx-opt button[aria-checked=true]:before{content:"● "}
+.skx-tk{font-size:12.5px;font-weight:600;color:var(--mu)}
+.skx-sk7{display:flex;flex-direction:column;gap:7px}
+.skx-sk7>div{display:grid;grid-template-columns:72px repeat(3,minmax(0,1fr));gap:8px;align-items:center;font-size:11.5px}
+.skx-sk7 b{font-weight:700;color:var(--mu)}
+.skx-pcd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:8px}
+.skx-pcd.skx-cf{border:1.5px solid var(--amD);box-shadow:inset 4px 0 0 var(--amD)}
+.skx-pcd .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.skx-pcd .r1 b{font-size:14.5px;font-weight:800}
+.skx-pcd.sm{padding:10px 12px;gap:4px}
+.skx-pst{display:flex;flex-direction:column;gap:4px;padding-top:7px;border-top:1px solid var(--hair)}
+.skx-bb{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;padding:12px 16px 24px;background:var(--card);border-top:1px solid var(--hair)}
+.skx-bb .btn{min-height:48px}
+.skx-sheet{position:relative;background:var(--card)}
+.skx-sheet .pbd{background:var(--card)}
+.skx-cmp td,.skx-cmp tbody th,.skx-tx{color:var(--ink)}
+.skx-tl{color:var(--ink)}
+.skx-tl code{color:inherit}
+.skx-shr .selb{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.skx-lnx li.ad{color:var(--pos)}.skx-lnx li.rm{color:var(--neg)}
+
+/* SKR · Skill Library v2 addendum · Restore a published version (#8825). Builds on sk_extra.css and skx_extra.css; new classes only. */
+.skr-pol{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;vertical-align:middle}
+.skr-dimr{right:340px}
+.skr-lead{display:flex;flex-direction:column;gap:6px;padding:0 16px 10px}
+.skr-warn{display:flex;align-items:flex-start;gap:8px;padding:8px 11px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);border-radius:9px;font-size:12.5px;line-height:1.5}
+.skr-warn b{color:var(--amT)}
+.skr-warn svg{margin-top:4px;flex:none}
+.skr-warn.sm{padding:8px 10px}
+.skr-rule{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mu)}
+.skr-ver{display:flex;align-items:center;gap:7px}
+.skr-ver b.mo{font-size:13px}
+.skr-rec{display:inline-flex;align-items:center;gap:4px;margin-top:4px;font:600 10.5px var(--sg);color:var(--mu);white-space:nowrap}
+.skr-rec.ok{color:var(--pos)}
+.skr-rec.nrx{color:var(--mu);font-style:italic}
+.skr-rec.un{color:var(--ink);border-bottom:1.5px dashed var(--hair2);white-space:normal}
+.skr-note{max-width:180px;font-size:12px;line-height:1.4}
+.skr-rb{color:var(--vt)!important;border-color:var(--lavE)!important;background:var(--card)}
+.skr-rb[aria-pressed=true]{background:var(--lav)}
+.skr-holds{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);color:var(--mu);white-space:nowrap}
+.skr-un{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font:500 12px var(--sg);color:var(--ink)}
+.skr-pick{width:100%;justify-content:space-between;font-family:var(--mo)}
+.skr-det{border:1px solid var(--hair);border-radius:10px;padding:0 12px}
+.skr-det summary{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;cursor:pointer;font-size:12.5px}
+.skr-det[open]{padding-bottom:12px}
+.skr-det[open]>.diff+.diff{margin-top:8px}
+.skr-dunv{display:flex;flex-direction:column;gap:6px;border:1.5px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12.5px}
+.skr-ro{padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--raised);font-size:12.5px;line-height:1.5;color:var(--ink)}
+.skr-code{font:700 11px var(--mo);padding:1px 6px;border-radius:5px;background:var(--raised);border:1px solid var(--hair);color:var(--ink);white-space:nowrap}
+.skr-ready .skx-chk li small b{color:var(--ink)}
+.skr-disc{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink)}
+.skr-mut{font-size:12px;color:var(--mu);line-height:1.5;border-left:3px solid var(--hair2);padding-left:10px}
+.skr-other{display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--hair2);padding-top:10px}
+.skr-orow{display:flex;gap:8px;flex-wrap:wrap}
+.skr-refwrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.skr-refwrap>div{display:flex;flex-direction:column;gap:10px}
+.skr-refwrap .skx-rail{border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+.skr-refg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.skr-ref{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+.skr-rh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.skr-lt{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--ink);color:var(--card);font:800 11px var(--mo)}
+.skr-rs{font-size:14px;font-weight:800;line-height:1.35;letter-spacing:-.01em}
+.skr-rd{font-size:12px;color:var(--mu);line-height:1.5}
+.skr-rd a{color:var(--vt)!important;font-weight:700}
+.skr-rd code{font:600 11px var(--mo)}
+.skr-ra{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--hair);padding-top:9px;margin-top:auto}
+.skr-quiet{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;background:var(--raised)}
+.skr-skrow{display:flex;gap:10px;align-items:center}
+.skr-ead{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--mu);border-top:1px dashed var(--hair);padding-top:7px;margin-top:2px}
+.skr-e{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#7c3aed;color:#fff;font:800 11px var(--sg);flex:none}
+.skr-stb{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px dashed var(--hair2);border-radius:10px;background:var(--card);font-size:12.5px;line-height:1.5}
+.skr-stb svg{margin-top:4px;flex:none;color:var(--neg)}
+.skr-stb>div{display:flex;flex-direction:column;gap:3px}
+.skr-stb span{color:var(--mu)}
+.skr-stb.rf{border-style:solid;border-color:var(--ink);background:var(--raised)}
+.skr-stb.rf svg{color:var(--ink)}
+.skr-stb.big{padding:16px 18px;font-size:13.5px}
+.skr-stb.big b{font-size:16px}
+.skr-rfpage{gap:14px;max-width:880px}
+.skr-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:7px}
+.skr-pc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.skr-pc>.stt{align-self:flex-start}
+.skr-pdl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:3px 10px;font-size:12.5px;margin:0}
+.skr-pdl dt{color:var(--mu)}
+.skr-pdl dd{margin:0;font-weight:600}
+.skr-44{min-height:44px!important;width:100%}
+.skr-pe{border:1px dashed var(--lavE);background:var(--lav);border-radius:10px}
+.skr-pe summary{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 10px;font-size:12.5px;cursor:pointer;list-style:none}
+.skr-pe summary span:last-child{color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.skr-scrim{position:absolute;inset:0;background:var(--dim);z-index:4}
+.skr-sh{position:absolute;left:0;right:0;bottom:0;z-index:5;background:var(--card);border-radius:18px 18px 0 0;display:flex;flex-direction:column;max-height:760px;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+.skr-grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 2px}
+.skr-shh{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 16px 8px}
+.skr-shh b{font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.skr-shb{padding:0 16px 12px;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.skr-shf{display:flex;gap:8px;padding:12px 16px 24px;border-top:1px solid var(--hair);background:var(--card)}
+.skr-shf.col{flex-direction:column}
+.skr-ptoast{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;background:#18181b;color:#fff;font:600 12.5px var(--sg);line-height:1.45}
+.skr-ptoast svg{margin-top:3px;color:#34d399;flex:none}
+.skr-tbl th{white-space:normal;vertical-align:bottom;padding:8px 8px;line-height:1.35}
+.skr-tbl td{padding:9px 8px}
+.skr-tbl th:first-child,.skr-tbl td:first-child{padding-left:16px}
+.skr-tbl th:last-child,.skr-tbl td:last-child{padding-right:16px}
+.skr-tbl td.skx-m{font-size:11.5px}
+.skr-nw{white-space:nowrap}
+.skr-tbl .skr-note{max-width:160px}
+.skr-tbl .skr-note{min-width:150px}
+.skr-tbl td:first-child{width:150px}
+.skr-tbl td:first-child .skr-rec{white-space:normal;align-items:flex-start;max-width:150px}
+.skr-tbl td:first-child .skr-rec svg{margin-top:2px}
+.skr-tbl td:first-child .skr-rec.ok{white-space:nowrap}
+.skr-tbl .skr-rb{padding:0 10px}
+.skr-tbl .skr-holds{white-space:normal;max-width:130px;align-items:flex-start;text-align:left}
+.skr-tbl .skr-holds svg{margin-top:2px;flex:none}
+/* copied from the parent component (fa_extra.css) so Not recorded reads as in SK-05 */
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "SK26", "options": ["SK26", "SK27", "SK28", "SK29", "SK30", "SK31A", "SK31B", "SK33", "SK32A", "SK32B", "SK32C", "SK32D", "SKRH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SK26';
+    const dark = /^SK33$/.test(B);
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      ret: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="2"/>'),
+      eye: SV('<path d="M1 6s2-3.5 5-3.5S11 6 11 6 9 9.5 6 9.5 1 6 1 6z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/>'),
+      rf: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 9l6-6" stroke="currentColor" stroke-width="1.6"/>'),
+      cp: SV('<rect x="1.5" y="3.5" width="6" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 3.5V1.5h6v7h-3" fill="none" stroke="currentColor" stroke-width="1.4"/>')
+    };
+    const S = {
+      Draft: ['pd', 'pd'], 'In review': ['pd', 'eye'], Published: ['ok', 'ok'], Retired: ['na', 'ret'], Pass: ['ok', 'ok'], Unavailable: ['un', 'ua'], Refused: ['mz', 'rf'],
+      Saving: ['pd', 'pd'], Pinned: ['', 'lk'], 'Not recorded': ['ni', 'nd'], Recorded: ['ok', 'ok'], Requested: ['pd', 'pd'], Withdrawn: ['na', 'ret'], Blocked: ['xar', 'ar'], Current: ['mz', 'ok']
+    };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NR = '<span class="nrec">Not recorded</span>';
+    const BR = (t) => '<span class="ptag" title="Needs backend work">◇ ' + (t || 'Backend required') + '</span>';
+    const POL = (t) => '<span class="skr-pol" title="Owner decision, drawn as its pick">⚑ ' + t + '</span>';
+    const UNV = (what, retry) => '<span class="skr-un">' + st('Unavailable') + '<span>' + what + '</span>' + (retry === false ? '' : '<button type="button" class="btn t bsm">Try again</button>') + '</span>';
+
+    /* ---------- sample data (fictional, bracketed) ---------- */
+    const SKN = '[Launch checklist]', SLUG = 'launch-checklist';
+    const ME = '[Iris Chen]', ED = '[M. Osei]', RV = '[R. Haddad]', OK = '[M. Okafor]';
+    const VERS = [
+      { v: 3, cur: true, on: '16 Nov 2026', by: ED, note: '[Adds launch tickets and press-kit steps]', appr: RV, runs: '9 of 10', pins: '4', rec: 'y' },
+      { v: 2, on: '28 Oct 2026', by: ME, note: null, appr: OK, runs: '10 of 10', pins: '0', rec: 'y' },
+      { v: 1, on: '12 Oct 2026', by: OK, note: null, appr: RV, runs: '10 of 10', pins: '2', rec: 'n' }
+    ];
+    const REASON = 'Press-kit steps fail when no ticket is tagged launch. Going back to v1’s due-date checks until tickets are reliable.';
+    const SUGG = '[Restores v1’s steps 3 to 5 and drops the tickets.read tool added in v3.]';
+
+    /* ---------- shell (Skill Library v2, SK-05) ---------- */
+    const HQNAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'AI agents', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const sideHQ = () => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(HQNAV.map(t => '<a href="#"' + (t === 'AI agents' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const top = (av) => '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account: ' + (av ? av[1] : ME) + '">' + (av ? av[0] : 'IC') + '</span></div></div>';
+    const spine = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about skills" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px"><div class="skx-sh skx-shr" style="min-height:' + (o.h || 900) + 'px' + (o.rail ? ';grid-template-columns:200px minmax(0,1fr) 340px' : '') + '">' + sideHQ() + '<div class="mn">' + top(o.av) + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail || spine) + (o.overlay ? '<div class="skx-dim' + (o.rail && o.keepRail ? ' skr-dimr' : '') + '">' + o.overlay + '</div>' : '') + (o.toast || '') + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const spec = (lines) => '<aside class="skx-spec" aria-label="Spec notes"><span class="eye">Spec · where each value comes from (annotation, not product copy)</span><ul>' + J(lines.map(l => '<li>' + l + '</li>')) + '</ul></aside>';
+
+    const DTABS = ['Overview', 'Inputs & tools', 'Instructions', 'Test cases & evaluations', 'Review & versions', 'Usage & assignments'];
+    const dhead = (o) => { o = o || {}; return '<div class="skx-crumb">AI agents / Skills library / <b>' + SKN + '</b></div><header class="skx-hd"><div><h1>' + SKN + '</h1><p class="raw" style="font-size:12px">' + (o.meta || SLUG + ' · From Axal · v3 current (published 16 Nov) · draft with unpublished edits') + '</p><div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">' + st(o.state || 'In review') + '<span style="font-size:12.5px;color:var(--mu)">' + (o.line || RV + ' was asked to review the draft on 20 Nov') + '</span></div></div><div class="skx-acts"><button type="button" class="btn">Edit draft</button><button type="button" class="btn" aria-disabled="true" title="A second Super Admin approves first">Publish v4…</button><button type="button" class="btn" aria-haspopup="menu">More ▾</button></div></header><nav class="skx-tabs" aria-label="Skill">' + J(DTABS.map(t => '<a href="#"' + (t === 'Review & versions' ? ' aria-current="page"' : '') + '>' + t + (t === 'Test cases & evaluations' ? '<span class="skx-n">5 cases</span>' : '') + '</a>')) + '</nav>'; };
+
+    /* ---------- the Published versions card ---------- */
+    const recMark = (r) => r === 'y' ? '<span class="skr-rec ok">' + SH.ok + 'Publish recorded</span>' : r === 'n' ? '<span class="skr-rec nrx">' + SH.nd + 'Not recorded in the audit log</span>' : '<span class="skr-rec un">' + SH.ua + 'Unavailable · the audit log couldn’t be read</span>';
+    const vrow = (v, o) => {
+      o = o || {};
+      const holds = o.holds === v.v;
+      const act = o.noAct ? '' : holds ? '<span class="skr-holds">' + SH.cp + 'The draft holds this version</span>' : '<button type="button" class="btn bsm skr-rb"' + (o.sel === v.v ? ' aria-pressed="true"' : '') + '>Restore as draft…</button>';
+      const pins = o.pinsUn ? UNV('couldn’t be read') : '<b class="mo">' + v.pins + '</b>';
+      return '<tr' + (o.sel === v.v ? ' class="skx-sel"' : '') + '><td><div class="skr-ver"><b class="mo">v' + v.v + '</b>' + (v.cur ? st('Current', 'Current') : '') + '</div>' + recMark(o.recUn && v.v === 3 ? 'u' : v.rec) + '</td><td class="skx-m">' + v.on + '</td><td class="skr-nw">' + (v.by || NR) + '</td><td class="skr-note">' + (v.note || NR) + '</td><td class="skr-nw">' + (v.appr || NR) + '</td><td class="skx-m">' + (v.runs ? v.runs : NR) + '</td><td class="skx-m">' + pins + '</td><td style="text-align:right">' + act + '</td></tr>';
+    };
+    const versionsCard = (o) => {
+      o = o || {};
+      return '<section class="cd" style="grid-column:span 12;padding:0;gap:0;overflow:hidden" aria-labelledby="pvh"><div class="ch" style="padding:12px 16px"><h2 id="pvh">Published versions</h2><span class="raw">Immutable · ' + (o.count || '3 versions') + '</span></div>'
+        + '<div class="skr-lead">' + (o.warn ? '<p class="skr-warn">' + SH.ar + '<span><b>The draft has edits that were never published.</b> ' + ED + ' last edited it. ' + BR('#8825 · edit time stored, not served') + '</span></p>' : '') + (o.done ? o.done : '') + '<p class="skr-rule">' + SH.lk + ' Restoring copies a version into the draft. It publishes nothing and moves no agent.</p></div>'
+        + '<table class="skx-tbl skr-tbl"><thead><tr><th scope="col">Version</th><th scope="col">Published</th><th scope="col">By</th><th scope="col">Release note</th><th scope="col">Approved by</th><th scope="col">Runs at publish (of 10)</th><th scope="col">Agents pinned now</th><th scope="col"><span class="skx-sr">Action</span></th></tr></thead><tbody>'
+        + J(VERS.map(v => vrow(v, o))) + '</tbody></table>'
+        + '<p class="foot" style="padding:10px 16px">Agents move to a new version only when their team re-pins them (SK-10). The current row’s Restore throws the draft away and goes back to the live definition ' + POL('Owner Q1 · pick A') + '</p></section>';
+    };
+    const reviewCard = (o) => '<section class="cd" style="grid-column:span 5"><div class="ch"><h2>Review</h2>' + (o && o.withdrawn ? st('Withdrawn', 'Withdrawn by the restore') : st('Requested', 'Requested 20 Nov')) + '</div><dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Reviewer</dt><dd>' + RV + '</dd><dt>Asked by</dt><dd>' + ED + ' (last edited the draft)</dd><dt>Evidence</dt><dd>9 of 10 runs on this draft</dd></dl><p class="foot">A restore withdraws an open review: it was asked about another definition.</p></section>';
+    const diffCard = () => '<section class="cd" style="grid-column:span 7"><div class="ch"><h2>What changed · v3 → draft</h2><span class="raw">Unpublished edits</span></div><div class="diff"><div class="hd2"><span>Steps</span><span class="pl">1 changed</span></div><div class="ln"><span>5</span><span>Add press-kit tasks: release, photos, quotes.</span></div><div class="ln del"><span>−</span><span>6. Write the checklist as a one-page brief, grouped by week.</span></div><div class="ln add"><span>+</span><span>6. Write the checklist as a one-page brief, grouped by owner.</span></div></div><p class="foot">Name, purpose, tools, output, tags and roles: unchanged.</p></section>';
+
+    /* ---------- Eadwyn rail (#5130), SK-05's rail ---------- */
+    const rail = (inner, o) => { o = o || {}; return '<aside class="skx-rail" aria-label="Eadwyn"><div class="hd"><span class="e" aria-hidden="true">E</span><div><b>Eadwyn</b><small>Ask about skills</small></div><button type="button" class="ib" aria-label="Close Eadwyn">✕</button></div><div class="bdy"><p class="raw">' + (o.lead || 'Drafted from what this page shows. Nothing is sent until you choose.') + '</p>' + inner + '</div><div class="ft"><div class="inp" style="min-width:0;flex:1">Ask about this skill…</div></div></aside>'; };
+    const prop = (eye, body, acts) => '<section class="skx-prop"><span class="eye">' + eye + '</span>' + body + '<div class="acts">' + J(acts.map((a, i) => '<button type="button" class="btn bsm">' + a + '</button>')) + '</div></section>';
+    const PROP26 = prop('Proposal · which version to restore', '<p><b>[v1]</b> is the last version before <code>tickets.read</code> and the press-kit steps. [v2] differs from v1 only in step 5’s grouping.</p><p class="raw">From the draft → v1, v2 and v3 comparisons and v3’s release note.</p>', ['Accept · opens the restore on v1', 'Pick another', 'Dismiss']);
+    const rail26 = () => rail(PROP26 + '<p class="raw">Accept opens the restore dialog on v1. It sends nothing: the reason and the button stay yours.</p>');
+
+    /* ---------- SK-27 restore dialog ---------- */
+    const diffBody = () => '<div class="diff"><div class="hd2"><span>Frontmatter</span><span class="pl">1 field · 5 unchanged</span></div><div class="ln del"><span>−</span><span>tools: plan.read, people.read, tickets.read</span></div><div class="ln add"><span>+</span><span>tools: plan.read, people.read</span></div></div>'
+      + '<div class="diff"><div class="hd2"><span>Steps</span><span class="pl">3 restored · 4 removed</span></div><div class="ln"><span>1</span><span>Read the launch plan and list every task.</span></div><div class="ln"><span>2</span><span>Give each task an owner from the team.</span></div>'
+      + J(['3. Pull open tickets tagged launch.', '4. Match each ticket to a task.', '5. Add press-kit tasks: release, photos, quotes.', '6. Write the checklist as a one-page brief, grouped by owner.'].map(t => '<div class="ln del"><span>−</span><span>' + t + '</span></div>'))
+      + J(['3. Check each task has a due date before launch day.', '4. Flag a task with no owner or no date.', '5. Write the checklist as a one-page brief.'].map(t => '<div class="ln add"><span>+</span><span>' + t + '</span></div>')) + '</div>';
+    const happens = (o) => { o = o || {}; return '<div class="scopebox"><b>What happens</b><ul><li><span>•</span><span>The draft takes v1’s definition: name, purpose, steps, tools, output, tags and roles.</span></li><li><span>•</span><span>It ships only as <b>[v4]</b>, after a second Super Admin’s review and the evals. Nothing is published now.</span></li><li><span>•</span><span>You become its author, so you can’t approve it.</span></li>' + (o.noReview ? '' : '<li><span>•</span><span>The open review by ' + RV + ' is withdrawn.</span></li>') + '<li><span>•</span><span>The <b class="mo">[4]</b> agents on v3 and <b class="mo">[2]</b> on v1 keep their pins. Teams move them later.</span></li></ul></div>'; };
+    const restoreDlg = (o) => {
+      o = o || {};
+      const rs = o.reason || '';
+      const n = rs ? rs.length : 0;
+      return '<div class="skx-dlg' + (o.cls ? ' ' + o.cls : '') + '" role="dialog" aria-modal="true" aria-labelledby="rd" style="width:' + (o.w || 640) + 'px"><div class="skx-dh"><div><h2 id="rd">Restore ' + SKN + ' [v1] as the draft</h2><p class="raw" style="margin-top:4px">Copies a published version into the draft. Publishes nothing.</p></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="skx-db">'
+        + '<div class="skx-fld"><label for="rv">Version <span>· published versions only</span></label><button type="button" class="dd skr-pick" id="rv" aria-haspopup="listbox">v1 · published 12 Oct 2026 · ' + OK + '<span aria-hidden="true">▾</span></button></div>'
+        + happens()
+        + (o.diffUn ? '<div class="skr-dunv"><b>What changes in the draft</b>' + UNV('The comparison couldn’t be read') + '<span class="raw">The reason and Restore still work.</span></div>'
+          : '<details class="skr-det"' + (o.closed ? '' : ' open') + '><summary><b>What changes in the draft</b><span class="raw">draft → v1 · GET /:uid/diff?from=draft&amp;to=v1</span></summary>' + (o.closed ? '' : diffBody()) + '</details>')
+        + '<div class="skx-fld"><label for="rr">Reason <span>· required, 10 to 500 characters · kept in the audit log</span></label><div class="skx-in skx-ta' + (o.err ? ' err' : '') + '" id="rr"' + (o.err ? ' aria-invalid="true" aria-describedby="rre"' : '') + '>' + (rs || '<span class="raw">Why go back to v1?</span>') + '</div><div class="skx-row2">' + (o.err ? '<span class="skx-er" id="rre" role="alert">✕ Say why, in 10 to 500 characters.</span>' : '<span class="raw">' + (n && n < 10 ? (10 - n) + ' more to go' : n ? 'Enough' : 'At least 10 characters') + '</span>') + '<span class="raw skx-cnt2" aria-live="polite">' + n + ' / 500</span></div>'
+        + (o.sugg ? '<div class="skx-prop in"><span class="eye">Eadwyn’s suggestion · from the draft → v1 diff</span><p>“' + SUGG + '”</p><p class="raw">Accept or Edit puts it in the field as your text; change it before Restore enables. The reason is yours, in the audit log. ' + POL('Owner Q2 · pick A') + '</p><div class="acts"><button type="button" class="btn bsm">Accept</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Discard</button></div></div>' : '')
+        + '</div>' + (o.saveErr ? '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>The restore didn’t go through. Nothing changed.</b><div>Your reason is kept.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>' : '')
+        + '</div><div class="skx-df"><button type="button" class="btn">Cancel</button>' + (o.busy ? '<button type="button" class="btn p" aria-disabled="true" aria-busy="true">' + SH.pd + ' Restoring…</button>' : '<button type="button" class="btn p"' + (n >= 10 && !o.err ? '' : ' aria-disabled="true" title="Write a reason of at least 10 characters"') + '>Restore v1 as draft</button>') + '</div></div>';
+    };
+
+    /* ---------- SK-28 discard confirmation ---------- */
+    const discardDlg = (o) => { o = o || {}; return '<div class="skx-dlg" role="alertdialog" aria-modal="true" aria-labelledby="dd" aria-describedby="ddb" style="width:' + (o.w || 560) + 'px"><div class="skx-dh"><div><h2 id="dd">The draft has edits that were never published</h2><p class="raw" style="margin-top:4px">The server answered <code class="skr-code">draft_has_changes</code></p></div><button type="button" class="ib" aria-label="Keep my draft and close">✕</button></div><div class="skx-db">'
+      + '<p id="ddb" style="font-size:13px;line-height:1.5">Restoring v1 replaces them. They are kept in the audit log, not in the draft.</p>'
+      + '<dl class="kv2" style="grid-template-columns:140px minmax(0,1fr)"><dt>Last edited by</dt><dd>' + (o.noEditor ? NR : ED) + '</dd><dt>Last edited at</dt><dd>' + BR('#8825 · stored, not served') + '</dd><dt>What the edits change</dt><dd>Step 6 (from the draft → v3 diff)</dd></dl>'
+      + '<div class="skx-fld"><label>Your reason <span>· from the restore, read only</span></label><div class="skr-ro">' + REASON + '</div></div>'
+      + '<div class="skx-prop in"><span class="eye">Eadwyn · proposal</span><p><b>Keep my draft.</b> The unpublished edit changes step 6, which v1 removes. Ask ' + ED + ' before discarding it.</p><div class="acts"><button type="button" class="btn bsm">Accept · keep my draft</button><button type="button" class="btn bsm">Dismiss and choose</button></div></div>'
+      + '</div><div class="skx-df"><button type="button" class="btn">Keep my draft</button><button type="button" class="btn dg">Discard edits and restore v1</button></div></div>'; };
+
+    /* ---------- SK-29 restored ---------- */
+    const readyCard = () => '<section class="cd skr-ready" style="grid-column:span 7" aria-labelledby="rdh"><div class="ch"><h2 id="rdh">Draft · release readiness</h2>' + st('Blocked', 'Not ready to publish') + '</div>'
+      + '<ul class="skx-chk"><li><span class="skx-ic no" aria-hidden="true">✕</span><span><b>Needs approval</b><small>A new review is needed. The approval on this evidence already released v1, and you, as the draft’s author, can’t approve it.</small></span></li>'
+      + '<li><span class="skx-ic ok" aria-hidden="true">✓</span><span><b>Evaluation: 10 of 10 pass · bar 9 of 10</b><small>Results reused from [v1]: <b class="mo">10</b> of <b class="mo">10</b> required runs. The runs were not made again.</small></span></li></ul>'
+      + '<p class="skr-disc">' + SH.cp + ' Your unpublished edits were discarded and kept in the audit log.</p>'
+      + '<p class="skr-mut">Restored from v1 by ' + ME + ' on [27 Nov 2026]: “' + REASON + '” ' + BR('#8825 · after a reload') + '</p>'
+      + '<div class="skr-other"><span class="eye">Other answers this line gives, from freshness.blocking</span><div class="skr-orow">' + st('Blocked', 'Evaluation incomplete: [3] not evaluated') + st('Blocked', 'Golden cases failing: [8] of [10] pass') + '</div></div></section>';
+    const askCard = () => '<section class="cd" style="grid-column:span 5"><div class="ch"><h2>Review</h2>' + st('Withdrawn', 'Withdrawn by the restore') + '</div><dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Was asked</dt><dd>' + RV + ' · withdrawn 27 Nov</dd><dt>Author now</dt><dd>' + ME + ' (you)</dd><dt>Reviewer</dt><dd><button type="button" class="dd" style="width:100%;justify-content:space-between">Choose a Super Admin <span aria-hidden="true">▾</span></button><small class="raw">Lists the other active Super Admins; you are not in it.</small></dd></dl><button type="button" class="btn p" style="align-self:flex-start">Ask for review…</button></section>';
+    const rail29 = () => rail(prop('Proposal · who to ask', '<p>Ask <b>' + OK + '</b>. A second Super Admin, not you and not the last editor; approved v2.</p>', ['Accept · opens the reviewer panel', 'Edit · pick another', 'Dismiss']) + '<p class="raw">Then the evals (SK-03) and the Publish gate (SK-06). The new version is v4. Teams re-pin on their own page (SK-10).</p>');
+    const toast = '<div class="toast" role="status" style="bottom:28px"><span class="ok" aria-hidden="true">✓</span>Restored v1 as the draft. It ships as v4 after review and evals.<a href="#">Audit entry</a></div>';
+
+    /* ---------- SK-30 refusals ---------- */
+    const REF = [
+      ['A', 'already_restored', '409', 'The draft already holds v1’s definition.', 'Nothing changed.', ['Close']],
+      ['B', 'retired', '409', 'A retired skill is not restored. Its replacement carries on.', 'Replacement, read by reloading the skill (GET /:uid retired.replacement): <a href="#">[Launch plan] · Review &amp; versions</a>. The 409 body carries none. On a retired skill the Restore buttons are gone; this card shows only if it was retired while the dialog was open.', ['Close', 'Open [Launch plan]']],
+      ['C', 'tag_unknown', '400', 'v1 cannot be the draft as it was: One of the tags is not a skill in the /studio taxonomy.', 'The draft is untouched. Next step: edit the draft by hand (SK-04). The same card carries <code>tool_not_read_only</code> { tool: <code>[crm.write]</code> }: “v1 cannot be the draft as it was: [crm.write] can change records, and skills may only request read-only tools.”', ['Close', 'Edit the draft (SK-04)']],
+      ['D', 'reason_required', '400', 'Say why, in 10 to 500 characters.', 'Shown on the reason field, which is marked. Nothing else changes.', []],
+      ['E', 'version_unknown', '400', 'Restore a version this skill published.', 'The list was out of date. Reload to read the versions again.', ['Reload']],
+      ['F', 'not_found', '403 · 404', 'Only a Super Admin can do this. · There is no such Axal skill.', '403 “Super admin required” (on a branch: “HQ only”). 404 <code>not_found</code> when the skill is gone or is not an Axal skill.', ['Close']]
+    ];
+    const refCard = (r) => '<article class="skr-ref" aria-labelledby="rf' + r[0] + '"><div class="skr-rh"><span class="skr-lt">' + r[0] + '</span>' + st('Refused', 'Refused') + '<code class="skr-code">' + r[2] + ' ' + r[1] + '</code></div><p id="rf' + r[0] + '" class="skr-rs">' + r[3] + '</p><p class="skr-rd">' + r[4] + '</p>'
+      + (r[0] === 'D' ? '<div class="skx-in skx-ta err" aria-invalid="true" style="min-height:44px">Go back</div><div class="skx-row2"><span class="skx-er" role="alert">✕ Say why, in 10 to 500 characters.</span><span class="raw">7 / 500</span></div>' : '')
+      + (r[5].length ? '<div class="skr-ra">' + J(r[5].map((a, i) => '<button type="button" class="btn bsm">' + a + '</button>')) + '</div>' : '') + '</article>';
+    const rail30 = () => rail(prop('On C · tag_unknown · a hand edit', '<p><b>[Replace the tag launch-ops with Product launch · level 2]</b>, then save the draft. v1’s steps can be copied in by hand.</p>', ['Accept · opens SK-04 at Tags', 'Dismiss'])
+      + '<section class="skr-quiet"><span class="eye">On A, B, D, E and F</span><p>No proposal. The refusal is the server’s answer; there is nothing to choose.</p></section>', { lead: 'Proposes only where a choice exists.' });
+
+    /* ---------- SK-31 states ---------- */
+    const box = (t, inner, tag) => '<section class="cd" style="gap:8px"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2>' + (tag || '') + '</div>' + inner + '</section>';
+    const skRow = () => '<div class="skr-skrow"><span class="sk" style="height:12px;width:34px"></span><span class="sk" style="height:12px;width:80px"></span><span class="sk" style="height:12px;width:60px"></span><span class="sk" style="height:12px;flex:1"></span></div>';
+    const eadNote = (t) => '<p class="skr-ead"><span class="skr-e" aria-hidden="true">E</span>' + t + '</p>';
+    const STATES = [
+      ['Loading', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:9px">' + skRow() + skRow() + skRow() + '<span class="raw">Reading the versions…</span></div>' + eadNote('Rail: Loading, no proposal. Nothing was read to propose from.')],
+      ['Empty · no version yet', '<p style="font-size:13px"><b>Nothing to restore until v1 is published.</b></p><button type="button" class="btn p" style="align-self:flex-start">Publish… (SK-06)</button>' + eadNote('Proposes Publish (SK-06): Accept or Dismiss.')],
+      ['Not recorded', '<dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>By</dt><dd>' + NR + '</dd><dt>Release note</dt><dd>' + NR + '</dd><dt>Approved by</dt><dd>' + NR + '</dd><dt>Runs at publish</dt><dd>' + NR + '</dd><dt>Publish record</dt><dd>' + recMark('n') + '</dd><dt>Last edited by</dt><dd>' + NR + '</dd></dl><span class="raw">A version from before release evidence. Its Restore stays: with no recorded definition the server answers.</span>'],
+      ['Unavailable · pins read', '<p style="font-size:12.5px"><b>Agents pinned now</b></p>' + UNV('couldn’t be read') + '<span class="raw">Never 0. Restore still works.</span>' + eadNote('Rail: Unavailable, no proposal.')],
+      ['Unavailable · diff read', '<p style="font-size:12.5px"><b>In the restore dialog</b></p>' + UNV('The comparison couldn’t be read') + '<span class="raw">The reason and Restore still work.</span>'],
+      ['Unavailable · skill read', '<div class="skr-stb">' + SH.ua + '<div><b>The skill couldn’t be read.</b><span>This is not a claim that it has no versions.</span></div></div><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>'],
+      ['Unavailable · publish record', recMark('u') + '<span class="raw">publish_audited is null: the log couldn’t be read. Not the same as “not recorded in the audit log”.</span>'],
+      ['Refused', '<div class="skr-stb rf">' + SH.rf + '<div><b>Only a Super Admin can see a skill’s versions.</b><span><code class="skr-code">403 Super admin required</code> · branch: <code class="skr-code">HQ only</code></span></div></div><span class="raw">The whole page, SK-31 B.</span>' + eadNote('Rail: Refused, no proposal.')],
+      ['Saving', '<button type="button" class="btn p" aria-disabled="true" aria-busy="true" style="align-self:flex-start">' + SH.pd + ' Restoring…</button><span class="raw">Disabled while the server answers; announced politely.</span>'],
+      ['Save failed', '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>The restore didn’t go through. Nothing changed.</b><div>The reason is kept.</div></div></div><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>'],
+      ['Draft matches a version', '<div class="skr-ver"><b class="mo">v3</b>' + st('Current', 'Current') + '</div><span class="skr-holds">' + SH.cp + 'The draft holds this version</span><span class="raw">draft_hash equals v3’s evidence.definition_hash. No unpublished-edits line.</span>'],
+      ['Current version without a definition', '<p style="font-size:12.5px">The card says nothing about unpublished edits.</p><span class="raw">v-current published before release evidence: only the server can tell, by answering draft_has_changes (SK-28).</span>']
+    ];
+    const states = () => crop('<span class="eye">States · Platform States (D5129) · each says what happened and what to do next</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">' + J(STATES.map(s => box(s[0], s[1]))) + '</div>', 1440);
+    const refusedPage = () => '<div class="skx-crumb">AI agents / Skills library / <b>Skill</b></div><header class="skx-hd"><div><h1>Skill</h1><p>Nothing about this skill was read.</p></div></header>'
+      + '<section class="cd skr-rfpage" aria-labelledby="rfh"><div class="skr-stb rf big">' + SH.rf + '<div><b id="rfh">Only a Super Admin can see a skill’s versions.</b><span>Nothing of this skill is shown, because the read was refused. That is not a claim that it has none.</span><span>A Super Admin grants access from HQ › Team.</span></div></div><dl class="kv2" style="grid-template-columns:200px minmax(0,1fr)"><dt>Every read here</dt><dd><code class="skr-code">403</code> “Super admin required” (GET /:uid, /diff, /pins)</dd><dt>On a branch deployment</dt><dd><code class="skr-code">403</code> “HQ only”: there is no elevation to grant there</dd></dl></section>'
+      + spec(['An HQ admin who is not a Super Admin: requireSuperAdmin refuses before any read, so there is no tab to draw', 'Branch: requireSuperAdmin checks branchOf(env) first and answers “HQ only”']);
+
+    /* ---------- phone 390 ---------- */
+    const phone = (title, body, bar, sheet) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph skx-ph' + (sheet ? ' skr-under' : '') + '" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd" style="overflow:hidden;padding-bottom:' + (bar ? 110 : 28) + 'px">' + body + '</div>' + (bar ? '<div class="skx-bb">' + bar + '</div>' : '') + (sheet ? '<div class="skr-scrim" aria-hidden="true"></div><div class="skr-sh" role="dialog" aria-modal="true" aria-labelledby="sht">' + sheet + '</div>' : '') + '</div></div>';
+    const pcard = (v, o) => { o = o || {}; return '<article class="skr-pc"><div class="r1"><div class="skr-ver"><b class="mo">v' + v.v + '</b>' + (v.cur ? st('Current', 'Current') : '') + '</div><span class="raw">' + v.on + '</span></div><dl class="skr-pdl"><dt>By</dt><dd>' + (v.by || NR) + '</dd><dt>Note</dt><dd>' + (v.note || NR) + '</dd><dt>Agents pinned now</dt><dd class="mo">' + v.pins + '</dd></dl>' + recMark(v.rec) + (o.holds === v.v ? '<span class="skr-holds">' + SH.cp + 'The draft holds this version</span>' : '<button type="button" class="btn skr-rb skr-44">Restore as draft…</button>') + '</article>'; };
+    const pEad = (t, open) => '<details class="skr-pe"' + (open ? ' open' : '') + '><summary><span class="skr-e" aria-hidden="true">E</span><b>Eadwyn</b><span>' + t + '</span></summary></details>';
+    const MOB = {
+      SK32A: () => phone('Review & versions', '<div class="skx-crumb">Skills library / ' + SKN + '</div><div style="display:flex;gap:8px;align-items:center">' + st('In review') + '<span class="raw">v3 current</span></div><h2 style="font-size:16px;font-weight:800">Published versions</h2><p class="skr-warn sm">' + SH.ar + '<span><b>The draft has edits that were never published.</b></span></p><p class="skr-rule">' + SH.lk + ' Restoring copies a version into the draft. It publishes nothing and moves no agent.</p>' + pEad('[v1] is the last version before tickets.read…', false) + J(VERS.map(v => pcard(v)))),
+      SK32B: () => phone('Review & versions', '<h2 style="font-size:16px;font-weight:800">Published versions</h2>' + pcard(VERS[0]), null, '<div class="skr-grab" aria-hidden="true"></div><div class="skr-shh"><b id="sht">Restore [v1] as the draft</b><button type="button" class="pi" aria-label="Close">✕</button></div><div class="skr-shb">'
+        + '<div class="scopebox"><b>What happens</b><ul><li><span>•</span><span>The draft takes v1’s definition.</span></li><li><span>•</span><span>Ships only as [v4] after review and evals.</span></li><li><span>•</span><span>You can’t approve it. ' + RV + '’s review is withdrawn.</span></li><li><span>•</span><span>[4] agents on v3, [2] on v1 keep their pins.</span></li></ul></div>'
+        + '<button type="button" class="disc skr-44" aria-expanded="false"><b>What changes in the draft</b><span>1 field · 3 steps restored · 4 removed</span><i aria-hidden="true">›</i></button>'
+        + pEad('Suggests a reason from the diff', false)
+        + '<div class="skx-fld"><label for="pr">Reason <span>· required, 10 to 500</span></label><div class="skx-in skx-ta" id="pr" style="min-height:88px">' + REASON + '</div><span class="raw skx-cnt2" style="align-self:flex-end">' + REASON.length + ' / 500</span></div></div><div class="skr-shf"><button type="button" class="btn skr-44" style="flex:1">Cancel</button><button type="button" class="btn p skr-44" style="flex:1.4">Restore v1 as draft</button></div>'),
+      SK32C: () => phone('Review & versions', '<h2 style="font-size:16px;font-weight:800">Published versions</h2>' + pcard(VERS[0]), null, '<div class="skr-grab" aria-hidden="true"></div><div class="skr-shh"><b id="sht">The draft has edits that were never published</b></div><div class="skr-shb"><p style="font-size:13px;line-height:1.5">Restoring v1 replaces them. They are kept in the audit log, not in the draft.</p><dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Last edited by</dt><dd>' + ED + '</dd><dt>Last edited at</dt><dd>' + BR('#8825') + '</dd></dl>'
+        + pEad('Keep my draft: the edit changes step 6', false) + '<code class="skr-code" style="align-self:flex-start">draft_has_changes</code></div><div class="skr-shf col"><button type="button" class="btn skr-44">Keep my draft</button><button type="button" class="btn dg skr-44">Discard edits and restore v1</button></div>'),
+      SK32D: () => phone('Review & versions', '<div class="skr-ptoast" role="status">' + SH.ok + '<span>Restored v1 as the draft. It ships as v4 after review and evals.</span></div><div style="display:flex;gap:8px;align-items:center">' + st('Published') + '<span class="raw">v3 current</span></div>'
+        + '<section class="skr-pc"><b>Draft · release readiness</b>' + st('Blocked', 'Needs approval') + '<p class="raw">A new review is needed.</p><p style="font-size:12.5px">Evaluation: 10 of 10 pass · results reused from [v1]: <b class="mo">10</b> of <b class="mo">10</b> required runs</p><p class="skr-disc">' + SH.cp + ' Your unpublished edits were discarded and kept in the audit log.</p></section>'
+        + pEad('Ask ' + OK + ' to review', false) + J(VERS.slice(0, 1).map(v => pcard(v))), '<button type="button" class="btn p" style="flex:1">Ask for review…</button>')
+    };
+
+    /* ---------- handoff ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      SKRH: () => dk('<h1>Handoff · SK-26 to SK-33 · Restore a published version (#8825, for #4537)</h1><p>Continues Skill Library v2 (SK-01 to SK-16, D4956; SK-17 to SK-25 are the Extension Compare addendum, D5963). The control lives in SK-05 “Review &amp; versions”, card Published versions, whose ◇ for earlier versions (#4533) is now on main. Same shell, tabs, skx-tbl table, skx-dlg dialog, diff, readiness words and the Eadwyn rail. Checked against <code>main</code> d26a93a252 on Fri 27 Nov 2026. Code-informed, not screenshot-verified. Decision file on landing: <code>D4956-p1.md</code> (no <code>D4956-p*</code> exists yet).</p>'
+        + '<h2>Checked on main</h2>' + tbl(['File', 'What it showed'], [
+          ['<code>cloudflare-worker/src/routes/admin_hq_skills.ts</code> 876–887', '<code>POST /:uid/restore</code> { from_version, reason, discard_draft? }: Super Admin, 404 <code>not_found</code>, then 400 <code>reason_required</code> (10 to 500, <code>REASON_MIN</code>/<code>MAX</code>) before anything else; <code>GET /:uid/pins</code> at 889'],
+          ['<code>services/agents/skillRecovery.ts</code> <code>restoreDraft</code>', 'Order: 409 <code>retired</code> → 400 <code>version_unknown</code> → 400 checkDraft code (+ <code>tool</code>) → 409 <code>already_restored</code> → 409 <code>draft_has_changes</code> { draft_hash }. Writes the draft, <code>updated_by</code> = restorer, withdraws a requested review, audits <code>agent_skill_restore_proposed</code> with the reason and the discarded draft. Answers { from_version, current_version, next_version, definition_hash, discarded, freshness }'],
+          ['<code>GET /:uid</code> (same route file, 480–527)', '<code>versions[]</code>: version, published_at, by, evidence, publish_audited (null when the log was unreadable), release_note; <code>skill.updated_by</code>, <code>skill.draft_hash</code>; <code>review.open</code>; <code>freshness</code>; <code>retired.replacement</code>; <code>reviewers</code> excludes the caller and the last editor. No <code>updated_at</code> served'],
+          ['<code>skillLifecycle.ts</code> <code>lifecycleStatus</code>, <code>ReleaseDecision</code>', 'A published skill with an open review on its evidence reads <b>In review</b> (SK-26); the restore withdraws it, so it reads <b>Published</b> again (SK-29). <code>review.released_version</code> and <code>evaluation.reused</code> drive “A new review is needed” and “Results reused from v1”'],
+          ['<code>auth.ts</code> <code>requireSuperAdmin</code>; <code>util/branch.ts</code>', '403 “Super admin required”; on a branch 403 “HQ only” first'],
+          ['<code>services/agents/skills.ts</code> <code>checkDraft</code>', 'Messages drawn verbatim on SK-30 C: <code>tag_unknown</code>, <code>tool_not_read_only</code>'],
+          ['<code>frontend/src/lib/api/adminHqSkills.js</code>', '<code>get</code> and <code>diff</code> exist; no <code>restore</code> or <code>pins</code> method (the build adds <code>restore</code>; #8824 adds pins)'],
+          ['<code>frontend/src/pages/hq/aiAgents/ReleaseEvidence.jsx</code>, <code>releaseModel.js</code>', 'Today’s Published versions list (no action) and the readiness words SK-29 reuses']])
+        + '<h2>Acceptance → boards</h2>' + tbl(['Acceptance item', 'Board'], [['Choosing an immutable version', 'SK-26 (row action), SK-27 (picker of published versions only)'], ['A required reason', 'SK-27 (10 to 500, live count), SK-30 D'], ['A separate discard confirmation after draft_has_changes', 'SK-28, SK-32 C'], ['Success', 'SK-29, SK-32 D'], ['Each refusal by its code', 'SK-30 A–F, SK-31'], ['Creates a draft through review and evals, publishes nothing', 'SK-26 line, SK-27 “What happens”, SK-29 readiness'], ['Desktop, 390 phone, dark', 'SK-26 to SK-31, SK-32 A–D, SK-33']])
+        + '<h2>Backend required (◇ #8825)</h2>' + tbl(['Need', 'Today'], [['The draft’s last edit time', '<code>agent_skills.updated_at</code> is stored; no read returns it'], ['“Restored from vK by, on: reason” on the draft after a reload', 'Only the <code>agent_skill_restore_proposed</code> audit row records it'], ['Restore rows in the version timeline (source version, reason, actor, time; read as draft restores)', '#4533 part E, fields as posted on #4533 on 15 Nov; not on main']])
+        + '<h2>Owner questions (⚑, drawn as A)</h2><p>Q1 “Restore as draft…” also on the current row, to throw a draft away (same route, same discard confirmation): <b>A, yes</b> (SK-26). Q2 Eadwyn may draft the reason as a suggestion the person must edit before Restore enables: <b>A</b> (SK-27).</p>'
+        + '<h2>Frontend only (#4537)</h2><p>The action column and Publish-recorded mark; the unpublished-edits line (draft_hash vs the current version’s evidence.definition_hash, only when recorded); “The draft holds this version”; the dialog, picker, diff (existing <code>diff</code>), reason counter; the separate confirmation re-sending with <code>discard_draft: true</code> and the reason kept; the readiness line from the restore answer’s <code>freshness</code>; refusal cards; phone sheets; dark. Eadwyn proposals never send a restore.</p>'
+        + '<h2>Handoffs</h2><p>After a restore: Ask for review (SK-05) → evals (SK-03) → Publish gate (SK-06) → v(N+1). Teams re-pin on SK-10. Pins read: #8824. Version timeline: #4533. Card B’s replacement [Launch plan] is SK-07’s; this canvas is the skill before that retirement.</p>'
+        + '<h2>Departures from the brief</h2><p>Eadwyn’s SK-26 proposal names [v1], not [v2], so Accept opens the same restore SK-27 to SK-29 draw. The suggested reason drops <code>tickets.read</code> (a read tool these sample versions carry) instead of <code>crm.write</code>: a published version cannot hold a write tool, so <code>crm.write</code> appears only in SK-30 C. Unavailable is the ST word for a failed read; “couldn’t be read” is its sentence. SK-31 B is a page of its own because a refused viewer gets no tab.</p>'
+        + '<h2>Accessibility</h2><p>The versions table has real headers; every state is a word plus a glyph; the discard confirmation is an alertdialog that replaces the first dialog and returns focus to the row; the reason count is a polite live region; refusals are live regions with the code in text; 44px targets and no wide table at 390; dark keeps every word and shape.</p>'
+        + '<p>[Launch checklist], [Iris Chen], [M. Osei], [R. Haddad], [M. Okafor], versions, steps, tools, counts and dates are fictional sample content. Design only.</p>')
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    const g = (x) => '<div class="g">' + x + '</div>';
+    if (B === 'SK26') html = page(dhead() + g(diffCard() + reviewCard() + versionsCard({ warn: true })) + spec(['Unpublished-edits line: skill.draft_hash ≠ versions[current].evidence.definition_hash (shown only when the current version has a recorded definition)', 'Status In review: lifecycleStatus of a published skill with an open review (review.open by ' + RV + ')', 'Agents pinned now: GET /:uid/pins versions[].agents (0 is a real zero) · Publish recorded: versions[].publish_audited']), { h: 1240, rail: rail26() });
+    else if (B === 'SK27') html = page(dhead() + g(diffCard() + reviewCard() + versionsCard({ warn: true, sel: 1 })), { h: 1360, rail: rail26(), overlay: restoreDlg({ sugg: true }) });
+    else if (B === 'SK28') html = crop(discardDlg() + spec(['Opens only after POST /:uid/restore answers 409 draft_has_changes { draft_hash }; it replaces the SK-27 dialog', '“Discard edits and restore v1” re-sends { from_version: 1, reason, discard_draft: true }; Keep my draft sends nothing', 'Last edited by: skill.updated_by { uid, name }, Not recorded when null']), 600);
+    else if (B === 'SK29') html = page(dhead({ state: 'Published', line: 'The draft holds v1’s definition · ships as v4 after review and evals', meta: SLUG + ' · From Axal · v3 current (published 16 Nov) · draft restored from v1' }) + g(readyCard() + askCard() + versionsCard({ holds: 1 })) + spec(['Readiness from the restore answer’s freshness (GET /:uid freshness after a reload): blocking [needs_approval], evaluation { pass 10, total 10, not_evaluated 0, reused { version 1, results 10 } }, review.released_version 1', 'Status chip: the open review was withdrawn, so lifecycleStatus reads published again · discarded = true → the discard line']), { h: 1310, rail: rail29(), toast: toast });
+    else if (B === 'SK30') html = crop('<div class="skr-refwrap"><div><span class="eye">Refusals from POST /:uid/restore · each by its code, in the dialog</span><div class="skr-refg">' + J(REF.map(refCard)) + '</div></div>' + rail30() + '</div>', 1440);
+    else if (B === 'SK31A') html = states();
+    else if (B === 'SK31B') html = page(refusedPage(), { h: 760, av: ['TV', '[T. Vance], HQ admin'], rail: rail('<section class="skr-quiet"><span class="eye">' + st('Refused') + '</span><p>Nothing was read, so nothing is proposed.</p></section>', { lead: 'This page was refused.' }) });
+    else if (B === 'SK33') html = page(dhead() + g(diffCard() + reviewCard() + versionsCard({ warn: true, sel: 1 })), { h: 1360, rail: rail26(), keepRail: true, overlay: restoreDlg({ sugg: true }) });
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(dhead() + g(diffCard() + reviewCard() + versionsCard({ warn: true })), { h: 1240, rail: rail26() });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

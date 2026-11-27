@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 Beehiiv · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · Beehiiv Newsletter · #8819 · addendum to Grow v2 (#4861), GR-32 to GR-42</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">The venture’s own Beehiiv newsletter in Grow: publication figures read on demand, and drafts handed to Beehiiv</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Five briefed parts, BH1 to BH5 (#2407’s BH6, phone and dark, is folded into GR-40 and GR-41). A new “From Beehiiv” part (id="from-beehiiv") after From Mercury on /grow/distribution and on /grow/revenue-and-traction; the connected Newsletter tab on /grow/distribution/newsletter with a draft composer; the Beehiiv tab of the Publish sheet (PUB1); the result after confirm; and the newsletter line on the Updates row. No new route. Publication-level figures only (owner answer F1): active, free and premium subscribers, average open and click rates, and the last 20 sent posts, each “From Beehiiv, as of <date>”. No list, subscriber or address is drawn. Every Beehiiv action ends in a draft (B1): “Draft only: not sent to subscribers”, and the result says “Draft created”, never “Sent”. Sync, Accept and Dismiss are for the member whose Beehiiv serves the venture; Delete for any writer; a support session sees figures only. Eadwyn proposes newsletter drafts in the rail (#5130) with Accept, Edit and Discard. Zero, Not recorded, Unreadable and ◇ Not offered yet never look alike (D5129). PUB1, PUB4, PUB8 and PUB9 on Publish · Boards are reused unchanged. Violet dashed ◇ tags mark backend work (#8819); amber ⚑ tags mark the owner’s questions, drawn as pick A. Decision file: D4861-p2.md.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Fri 27 Nov 2026 · checked against main d26a93a252 · [Northwind Labs], [Northwind Notes], [Maya Ruiz], [Teammate A] and every figure are fictional sample data; last snapshot 2026-11-20</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Beehiiv Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-32', 'Distribution · From Beehiiv · desktop 1440 (BH1)', 'Inside Distribution, after From Mercury. Eyebrow “From Beehiiv · [Northwind Notes]”, the line “Your publication’s audience. Never your subscribers’ addresses.”, the source line “From Beehiiv, as of 2026-11-20” (no Last synced date is returned) and Sync from Beehiiv, the one violet button. Five figures with their change since 2026-11-13: 1,284 active, 1,188 free, 96 premium, 48.2% average open rate, 6.1% average click rate. The last 20 sent posts, three shown, one with clicks Not recorded. The channel proposal “Track [Northwind Notes] as a Distribution channel?”. Eadwyn proposes November’s newsletter from what shipped. The crops: the Accept dialog (link a channel, or create one with UTM source [northwind-notes]), Delete on a figure and on a post, after Accept with Undo, after Dismiss with no Undo.', [F('GR32', false, 1540), C('GR32C', 'Accept · Delete · after Accept · after Dismiss', 1740, 785)]],
+      ['GR-33', 'Revenue and traction · From Beehiiv · desktop 1440 (BH2)', 'Active and premium subscribers only, beside the revenue block and never inside it, with “Paid-subscription revenue is not read from Beehiiv. These are subscribers, shown beside revenue and never as revenue.” No Sync here: “Sync on Distribution”. Eadwyn proposes a newsletter on the subscriber change. States: loading, one figure Not recorded, Unreadable with the revenue block still loaded, not linked, never synced, and a support session.', [F('GR33', false, 1000), C('GR33S', 'States on this part', 1740, 670)]],
+      ['GR-34', 'Distribution › Newsletter tab · connected · desktop 1440 (BH1)', 'The tab no board drew. Header “[Northwind Notes] on Beehiiv · Connected” with Change publication; “You publish from Beehiiv. Axal VC creates drafts only.”; Start a newsletter draft, the primary; Recent issues (the last five sent posts, “See all on Distribution”); Results with Opens 48.2% and Clicks 6.1%, and Unsubscribes as ◇ “Not offered yet” (⚑ pick A). Eadwyn’s proposal opens the composer when accepted. States: loading, Results Not recorded, Unreadable, not linked, no posts synced, support session.', [F('GR34', false, 920), C('GR34S', 'States on this tab', 1740, 596)]],
+      ['GR-35', 'Newsletter tab · draft composer with Eadwyn · desktop 1440 (BH1)', 'One text, saved as you type; the first line is the title. Section lines Intro, What shipped, Customer story (with consent) and Call to action, each with “Ask Eadwyn for this section”; a proposal for What shipped with Accept, Edit and Discard. “+ Add a section” carries ◇ (sections are lines in one text today). Publish to… is the primary, with “Draft only: not sent to subscribers” under it (⚑ pick A: the composer lives here).', [F('GR35', false, 940)]],
+      ['GR-36', 'Publish to… · the Beehiiv preview tab · desktop 1440 (BH3)', 'The PUB1 sheet as a grey frame, opened from a sent update, with the Beehiiv tab active. Title (your first line) at 42 of 250 characters, a dashed ◇ subtitle, the email-width paragraphs with one dashed ◇ source tag, 1,840 of 20,000 characters, and “[Northwind Notes] on Beehiiv · Draft only: not sent to subscribers”. States: no body (Send off), loading, the title over the limit, no publication (main’s sentence), and the preview failing.', [C('GR36', false, 1480, 528), C('GR36S', 'States of the tab', 1740, 841)]],
+      ['GR-37', 'After the draft · desktop crops (BH4)', '(a) “Draft created in [Northwind Notes]. You publish it from Beehiiv.” with Open in Beehiiv ↗, and the no-link version. (b) Unknown: check Beehiiv before trying again, Mark as not sent, no Retry. (b2) Failed after confirm: drafts need a paid plan. (c) The Updates row with “Newsletter · 1,240 recipients · 51% opened · 7% clicked, as of 2026-11-20”. (d) The same row Not recorded.', [C('GR37', false, 1740, 508)]],
+      ['GR-38', 'Empty and not connected · desktop crops (BH5)', 'Not linked with Connect Beehiiv; not connected as a refusal; the publication picker for [Northwind Labs]; served by [Teammate A]; linked but never synced; the company not switched on; the publication not switched on for drafts. Every sentence is main’s.', [C('GR38', false, 1740, 537)]],
+      ['GR-39', 'States · desktop 1440 (BH5)', 'Distribution and the composer: loading bars, Not recorded with its reason, Unreadable with Try again, the publication list failing, the four refusals (support session, not the serving member, sign in again, rate limited), Syncing, Synced with its counts (5 figures, 20 posts, 1 kept deleted), a partial sync, and the composer saving and failing with the edits kept.', [C('GR39', 'Loading to refusals', 1740, 897), C('GR39B', 'Refusals, syncing and the composer', 1740, 803)]],
+      ['GR-40', 'Phone 390', 'Distribution: figures as a two-column grid of cards, posts as cards, the proposal with full-width Accept and Dismiss. Revenue and traction: two stacked figure cards under the revenue block. The Newsletter tab stacks header, Results, Start a newsletter draft, Recent issues. The composer and the Beehiiv preview in full-height sheets; the picker as a bottom sheet; the after-the-draft crops at 390. Every target is 44px; no table is wider than the screen.', [P('GR40A', 'Distribution'), P('GR40B', 'Distribution · further down'), P('GR40C', 'Revenue and traction'), P('GR40D', 'Newsletter tab'), P('GR40E', 'Composer · full-height sheet'), P('GR40F', 'Beehiiv preview · full-height sheet'), P('GR40G', 'Publication picker · bottom sheet'), C('GR40H', 'After the draft at 390', 1330, 365)]],
+      ['GR-41', 'Dark · desktop 1440 and phone 390', 'GR-32 and GR-34 on the dark tokens, and the phone Distribution part and Newsletter tab in dark. States keep their words and shapes; the ◇ placeholders stay dashed.', [F('GR41', 'Distribution · dark', 1540), F('GR41B', 'Newsletter tab · dark', 920), P('GR41P', 'Phone · Distribution · dark'), P('GR41Q', 'Phone · Newsletter tab · dark')]],
+      ['GR-42', 'Where each part sits', 'The brief’s handoff: where each part sits, the PUB boards reused unchanged (PUB1, PUB4, PUB8, PUB9), the ◇ list, the departure from D4495 on Unsubscribes, and the copy rules.', [W('GR42')]],
+      ['GRB-H', 'Handoff', 'What was checked on main and what it showed (no page renders parts.from_beehiiv yet), ◇ and ⚑ with the picks drawn, the decision file D4861-p2.md, the acceptance mapped to boards, frontend only for #8820, handoffs to siblings, and accessibility.', [W('GRBH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
