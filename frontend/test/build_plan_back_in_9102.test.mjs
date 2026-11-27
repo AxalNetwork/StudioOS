@@ -84,7 +84,7 @@ async function mounted({ handle = handler(), props = {}, phone = false } = {}) {
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => root.render(h(MemoryRouter, null, h(BuildPlan, { tab: 'progress', projectId: 3, search: '?project_id=3', cards: [], role: 'founder', phone, ...props }))));
-  const flush = () => act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(document.body); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
