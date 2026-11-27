@@ -24,6 +24,8 @@ import DealReferencesTab from '../../components/deals/DealReferencesTab';
 import DealPaperRow from './DealPaper';
 import DealSyndicates from '../../components/deals/DealSyndicates';
 import FromMercury from '../investor/FromMercury';
+import DealActionDialog from '../../components/deals/DealActionDialog';
+import { withdrawLine } from '../../components/deals/dealActionModel';
 import { ProofDoor, useProofTargets } from '../investor/ProofOfFunds';
 import { ownDealTarget, showsProof } from '../investor/proofOfFundsModel';
 import { tabHref } from '../dealPageModel';
@@ -555,7 +557,8 @@ export function DealTerms({ deal, investor }) {
  * D5906 (#5906, board DE09): the investor's Investment tab, four cards in
  * the canvas's order: Your commitment, Investment route, Round and Closing
  * status. Each reads alone and fails alone; a commitment that could not be
- * read is never drawn as none. The Commit and Withdraw dialogs are as before.
+ * read is never drawn as none. D5914 (DE14): Withdraw is drawn in the DX14
+ * shell (`components/deals/DealActionDialog.jsx`); Commit is `DealCommitDialog.jsx`.
  */
 export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
   const currency = deal.currency || 'USD';
@@ -695,17 +698,21 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
         <DealSyndicates projectId={deal.project_id} dealId={deal.id} user={user} />
       </section>
       {withdrawing && c.state === 'ready' && (
-        <ConfirmDialog testId="deal-withdraw-dialog" title={`Withdraw your ${c.amount} commitment?`} danger act="Withdraw"
-          sub="Your commitment stops counting toward the round. Your reason is kept with the withdrawal in the studio’s record."
+        // D5914 (DE14): Withdraw in the DX14 shell; Return to HQ in Super Admin Investor preview (D5915).
+        <DealActionDialog testId="deal-withdraw-dialog" goId="deal-withdraw-dialog-confirm" title="Withdraw your commitment" danger
+          act={`Withdraw ${c.amount}`} busyLabel="Withdrawing…" cancel="Keep commitment"
+          fallback="Your commitment could not be withdrawn. Try again."
           check={() => withdrawError(reason)}
           onConfirm={() => dealWorkroomApi.withdraw(deal.id, c.uid, reason.trim())}
-          onClose={(changed) => { setWithdrawing(false); setReason(''); if (changed) { loadMine(); reloadRound(); reloadStage(); } }}>
+          onDone={() => { setWithdrawing(false); setReason(''); loadMine(); reloadRound(); reloadStage(); }}
+          onClose={() => { setWithdrawing(false); setReason(''); }}>
+          <p className={`m-0 ${SUB}`} data-testid="deal-withdraw-line">{withdrawLine({ amount: c.amount, venture: deal.project_name, confirmed: c.confirmed })}</p>
           <label className="flex flex-col gap-1.5">
             <span className={EYE}>Reason · required</span>
             <textarea rows={3} value={reason} maxLength={WITHDRAW_MAX} onChange={(e) => setReason(e.target.value)} className={FIELD} placeholder="Write a reason…" data-testid="deal-withdraw-reason" />
             <span className={SUB}>{reason.length} / {WITHDRAW_MAX}</span>
           </label>
-        </ConfirmDialog>
+        </DealActionDialog>
       )}
     </div>
   );

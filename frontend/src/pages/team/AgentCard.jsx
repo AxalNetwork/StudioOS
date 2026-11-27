@@ -85,7 +85,7 @@ export const ON_TEAM = 'On your team';
 export const CHOSEN = 'Chosen';
 const EYE = 'font-mono text-[10px] font-semibold uppercase tracking-[.11em] text-axal-muted dark:text-gray-400';
 
-export default function AgentCard({ persona, legend, size = 'full', onTeam = false, selected = false, footer = null, actions = null, testId, sub }) {
+export default function AgentCard({ persona, legend, size = 'full', onTeam = false, selected = false, footer = null, actions = null, testId, sub, lead = null }) {
   const name = String(persona?.name || '').trim() || 'Unnamed agent';
   const tagline = String(persona?.tagline || '').trim();
   if (size === 'chip') {
@@ -127,6 +127,8 @@ export default function AgentCard({ persona, legend, size = 'full', onTeam = fal
           </span>
         </div>
       </div>
+      {/* D8769 (#8769, TMM03): a card can lead with the work before the persona's values. */}
+      {lead ? <div className="flex flex-col gap-1" data-testid="agent-card-lead">{lead}</div> : null}
       <div className="flex flex-col gap-1"><span className={EYE}>Core values</span><ValueChips persona={persona} legend={legend} /></div>
       <div className="flex flex-col gap-1"><span className={EYE}>Risk</span><RiskScale risk={persona?.risk} /></div>
       <div className="flex flex-col gap-1">

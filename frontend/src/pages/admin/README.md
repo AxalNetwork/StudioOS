@@ -10,10 +10,13 @@ Everything here is gated to the `admin` role in `App.jsx`; the guard is on the
 route, not in the component.
 
 `AdminStudioHome.jsx` is the admin profile's `/studio` landing (rendered by
-`Dashboard` when the active role is admin). It is Eadwyn, then
-`StudioPosture.jsx` (the admin bank on record), `StudioNeedsDecision.jsx` (four
-link tiles, worst first), then `AdminStudioOverview.jsx`: one card per other
-Admin page. All three read their figures and the one `UNAVAILABLE` sentinel
+`Dashboard` when the active role is admin). Since D8728 it is
+`StudioNeedsDecision.jsx` (Needs a decision — `StudioOverdueCard.jsx`, the
+overdue approvals from the Inbox's own `age=past` read, modelled in
+`studioOverdue.js` — then At a glance, four link tiles), then
+`StudioSetup.jsx` (Eadwyn's interview as one resumable row, with
+`StudioPosture.jsx`, the admin bank on record), then `AdminStudioOverview.jsx`:
+one card per other Admin page. All of them read their figures and the one `UNAVAILABLE` sentinel
 from `adminStudioOverview.js` (D246). The strip and the cards also read
 `GET /api/admin/studio/glance` (D443, corrected by D447), which answers on both
 tiers. Until that glance arrives the first paint says it is reading, and a

@@ -148,7 +148,12 @@ test('the page: the summary, the seven columns, the decision actions and the sec
     for (const id of ['screening-move-1', 'screening-pass-1', 'screening-passes-toggle']) assert.match(v.props(by(v, id)).className, /min-h-\[44px\]/, id);
 
     // Move to diligence adds the deal to the flow at Diligence (it is not in the flow yet).
+    // D5914 (DE14): it is said first, in its own dialog; nothing moves before the press.
     await press(v, 'screening-move-1');
+    await settle(v);
+    assert.deepEqual(s.calls, [], 'Move to diligence waits for its dialog');
+    assert.match(v.text(), /It leaves Screening and moves to Diligence in your deal flow[\s\S]*The founder is not notified\./);
+    await press(v, 'dealflow-diligence-go');
     await settle(v);
     assert.deepEqual(s.calls, [['add', { deal_id: 1, stage: 'diligence' }]]);
     assert.ok(v.text().includes('Moved Acme Robotics to Diligence in your deal flow.'));
@@ -161,7 +166,7 @@ test('Pass opens the reason dialog, and nothing is written without a reason', as
   try {
     await settle(v);
     await press(v, 'screening-pass-3');
-    assert.ok(v.text().includes('Pass on Quayside Pay?'), 'the deal flow\'s pass dialog opens');
+    assert.ok(v.text().includes('Pass on Quayside Pay'), 'the deal flow\'s pass dialog opens');
     await press(v, 'dealflow-pass-go');
     // Mutation checked: calling the pass before passBody's reason check → a pass with no reason is sent and this fails.
     assert.deepEqual(s.calls, [], 'a pass was sent with no reason');

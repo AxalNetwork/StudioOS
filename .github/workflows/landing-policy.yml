@@ -2,6 +2,9 @@ name: Landing policy
 
 on:
   pull_request:
+    # #6481 (D6481-p2): Ready for review writes a fresh report for the same head, so a report from before
+    # LANDING_AUTO changed (or from the draft) does not keep a ready PR out of the feeder.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
 
 permissions:

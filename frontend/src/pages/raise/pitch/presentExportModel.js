@@ -59,15 +59,30 @@ const GRADED = new Set(['Measured', 'Reviewed', 'Sourced', 'Stated']);
 /**
  * The line under a figure in "Show sources": its binding's area, grade and
  * day (D896's `source_key`, `grade`, `as_of`). Bound to a slot nothing filled,
- * "Not recorded on StudioOS"; no binding at all, null.
+ * "Not recorded on StudioOS"; no binding at all, null. D8772 Q3 A: a source
+ * with no readable day says "date not recorded", as the HTML export's
+ * appendix does (`sourceLines`), so the reader knows the figure is undated.
  */
+export const SOURCE_DATE_NOT_RECORDED = 'date not recorded';
+
 export function sourceOf(binding) {
   if (!binding || typeof binding !== 'object' || !str(binding.source_key)) return null;
   const grade = GRADED.has(binding.grade) ? binding.grade : null;
   if (!grade) return SOURCE_NOT_ON_STUDIOOS;
   const area = AREAS[str(binding.source_key).split('.')[0]] || 'StudioOS';
-  const day = binding.as_of ? dayLabel(binding.as_of) : null;
-  return `Source: ${area} · ${grade}${day && day !== 'Date not recorded' ? ` · ${day}` : ''}`;
+  return `Source: ${area} · ${grade} · ${sourceDayOf(binding) || SOURCE_DATE_NOT_RECORDED}`;
+}
+
+/** A binding's recorded day as the viewer writes it ("20 Nov"), or null when it has none that reads as a date. */
+export function sourceDayOf(binding) {
+  const day = binding?.as_of ? dayLabel(binding.as_of) : null;
+  return day && day !== 'Date not recorded' ? day : null;
+}
+
+/** True when the figure has a graded source and that source carries no day: the case Q3 names. No source, false. */
+export function undatedSource(binding) {
+  const line = sourceOf(binding);
+  return !!line && line !== SOURCE_NOT_ON_STUDIOOS && !sourceDayOf(binding);
 }
 
 /**
@@ -303,15 +318,23 @@ export const notesOf = (card) => card?.notes || NO_NOTES;
 
 export const EXPORT_TITLE = (v) => `Export ${versionLabel(v)}`;
 
+/**
+ * D8771 (#8771): each line says what the writer on main makes, never an older
+ * writer's. PowerPoint has been the editable file since D1574 (`pptxEditable.ts`:
+ * text boxes, native charts for nine types, diagram shapes and pictures; any
+ * other chart a picture or text), not "One picture per card"; the .odp
+ * (`odp.ts`) writes no native chart; the PDF is checked to keep its text as text
+ * (`pdfExport.checkDeckPdf`). `exportDisclosureModel` says the rest per version.
+ */
 export const FORMATS = [
-  { id: 'pdf', label: 'PDF', line: 'Every card, as it prints', available: true },
-  { id: 'pptx', label: 'PowerPoint', line: 'One picture per card', available: true },
+  { id: 'pdf', label: 'PDF', line: 'Every card as a page at the deck’s size · text stays text', available: true },
+  { id: 'pptx', label: 'PowerPoint', line: 'Editable text, shapes and most charts · some charts as pictures', available: true },
   // D904 (#2683): a new, editable presentation in the member's own Drive.
-  { id: 'google_slides', label: 'Google Slides', line: 'Created in your Drive, editable', available: true },
+  { id: 'google_slides', label: 'Google Slides', line: 'The same editable file, made in your Drive', available: true },
   { id: 'html', label: 'HTML', line: 'One file, offline', available: true },
   // D1604 (#3716, pd8b) on D1603's route (#3882): an editable OpenDocument
   // Presentation for LibreOffice Impress and the other open suites.
-  { id: 'odp', label: 'Slides-suite file (.odp)', line: 'Editable in LibreOffice and other open suites', available: true },
+  { id: 'odp', label: 'Slides-suite file (.odp)', line: 'Editable text and shapes in LibreOffice and other open suites · charts as pictures or text', available: true },
 ];
 
 const LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));

@@ -46,7 +46,7 @@ const held = () => { let resolve; const promise = new Promise((r) => { resolve =
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ITEMS = [{ uid: A, title: 'Setup wizard' }, { uid: B, title: 'Live ETA panel' }];
-const LOVABLE = { provider: 'lovable', text: 'Build a clickable prototype.', prompt_chars: 321, link: 'https://lovable.dev/?autosubmit=true#prompt=Build', handoffs: [] };
+const LOVABLE = { provider: 'lovable', text: 'Build a clickable prototype.', prompt_chars: 321, link: 'https://lovable.dev/#prompt=Build', handoffs: [] };
 const ISSUES = { provider: 'github', issues: [{ plan_item_uid: A, title: 'Setup wizard', body: 'b', url: 'https://github.com/northwind/app/issues/new' }], markdown: '## Setup wizard', repository: 'northwind/app', handoffs: [] };
 
 async function mountSend(Send, { navigator: clipboard = undefined } = {}) {

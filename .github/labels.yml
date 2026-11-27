@@ -291,3 +291,6 @@
 - name: "sla:breached"
   color: "B60205"
   description: "Security task still open seven days after filing (D8074)"
+- name: "scan:batch"
+  color: "5319E7"
+  description: "Remediation batch of Code Scanning trackers; S21 claims it as one unit (D7259)"

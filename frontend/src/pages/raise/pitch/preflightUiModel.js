@@ -22,6 +22,8 @@
 import { cardTitle } from './editorModel.js';
 import { SEVERITY } from './preflightModel.js';
 import { aiTokens } from './newDeckModel.js';
+import { itemsByKey, refreshMetric } from './figuresModel.js';
+import { valueText } from './sourcesModel.js';
 
 export const BUILD = Object.freeze({
   P1: { issue: 4208, live: true, what: 'Dismissals kept for every editor of this version' },
@@ -120,28 +122,134 @@ export function headline(finding, slides) {
   return t.startsWith(prefix) ? cap(t.slice(prefix.length)) : t;
 }
 
+// ── D8772 (#8772): the finding names its element, and the same problem on several elements is one heading ──
+
+/** Q1 option A (D8772): the groups keep their names; each row carries a severity chip. */
+export const SEVERITY_WORDS = Object.freeze({ blocking: 'Blocks export', warning: 'Warning' });
+const clip = (s, n = 40) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+const words = (v) => String(v ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * The element's own name, from what the slide shows, so two tiles of one kind on one slide read
+ * apart: a metric is its label and value ("MRR $34.2k"), an image its alt text, a chart its first
+ * series, a link or audio its label, a video its title. Null when the block shows nothing to name
+ * it by (text is told apart only when it has to be: `distinguish`).
+ */
+export function elementOf(block) {
+  if (!block || typeof block !== 'object') return null;
+  let name = '';
+  if (block.kind === 'metric') name = [words(block.label), words(block.value)].filter(Boolean).join(' ');
+  else if (block.kind === 'image') name = words(block.alt);
+  else if (block.kind === 'chart') name = words(block.title) || words((Array.isArray(block.series) ? block.series : []).map((x) => x?.label).find((l) => words(l)));
+  else if (block.kind === 'link' || block.kind === 'audio') name = words(block.label);
+  else if (block.kind === 'video') name = words(block.title);
+  return name ? clip(name) : null;
+}
+
+/** A text block's first words, quoted, for telling two text blocks on one slide apart. */
+const excerptOf = (block) => {
+  const t = words(block?.text);
+  return t ? `“${clip(t, 32)}”` : null;
+};
+
 /** One finding as the panel draws it, with its screen-reader name ("Slide 4, title, the text is cut off at export size"). */
 export function rowOf(finding, slides) {
   const card = Array.isArray(slides) ? slides[finding.card] : null;
   const block = finding.block != null ? (card?.blocks || []).find((b) => b?.id === finding.block) || null : null;
   const name = finding.block != null && !block ? 'Block' : blockName(block);
+  const element = elementOf(block);
   const line = headline(finding, slides);
+  const thing = element ? `${name.toLowerCase()} ${element}` : name.toLowerCase();
+  const severityWord = finding.severity === SEVERITY.blocking ? SEVERITY_WORDS.blocking : SEVERITY_WORDS.warning;
+  const problem = line.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase());
   return {
     id: finding.id,
     check: finding.check,
     severity: finding.severity,
+    severityWord,
     dismissible: Boolean(finding.dismissible),
     card: finding.card,
     block: finding.block,
     slide: finding.card + 1,
-    where: `Slide ${finding.card + 1} · ${name}`,
+    kind: name,
+    element,
+    where: `Slide ${finding.card + 1} · ${name}${element ? ` · ${element}` : ''}`,
     headline: line,
     detail: finding.detail,
     fix: finding.fix,
-    label: `Slide ${finding.card + 1}, ${name.toLowerCase()}, ${line.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase())}`,
+    problem,
+    label: `Slide ${finding.card + 1}, ${thing}, ${problem}`,
+    ...buttonLabels(finding.card + 1, thing, severityWord),
     // #3661 PF3: a contrast finding's colour pair, for the card beside the slide.
     pair: finding.pair ?? null,
   };
+}
+
+/** D8772: each Show and Dismiss button says which element it is for ("Show metric MRR $34.2k on slide 3"). */
+function buttonLabels(slide, thing, severityWord) {
+  return {
+    showLabel: `Show ${thing} on slide ${slide}`,
+    dismissLabel: `Dismiss the ${severityWord.toLowerCase()} on ${thing}, slide ${slide}`,
+  };
+}
+
+/**
+ * D8772: rows on one slide that still read alike (two text blocks, or two tiles with the same label
+ * and value) get what tells them apart: a text block's first words, else its place on the slide
+ * ("block 2 of 3"). Rows about the same block are the same element and keep the same name.
+ */
+export function distinguish(rows, slides) {
+  const byWhere = new Map();
+  for (const r of rows) {
+    if (r.block == null) continue;
+    const list = byWhere.get(r.where) || [];
+    list.push(r);
+    byWhere.set(r.where, list);
+  }
+  const renamed = new Map();
+  for (const list of byWhere.values()) {
+    if (new Set(list.map((r) => r.block)).size < 2) continue;
+    const blocks = (Array.isArray(slides) ? slides[list[0].card] : null)?.blocks || [];
+    const extras = new Map(list.map((r) => {
+      const at = blocks.findIndex((b) => b?.id === r.block);
+      return [r.block, { excerpt: r.element ? null : excerptOf(blocks[at]), place: at >= 0 ? `block ${at + 1} of ${blocks.length}` : `block ${r.block}` }];
+    }));
+    const excerpts = [...extras.values()].map((e) => e.excerpt);
+    const unique = excerpts.every((e) => e) && new Set(excerpts).size === excerpts.length;
+    for (const r of list) {
+      const e = extras.get(r.block);
+      const extra = unique ? e.excerpt : e.place;
+      const thing = `${r.kind.toLowerCase()}${r.element ? ` ${r.element}` : ''} ${extra}`;
+      renamed.set(r.id, {
+        ...r,
+        element: r.element ? `${r.element} · ${extra}` : extra,
+        where: `${r.where} · ${extra}`,
+        label: `Slide ${r.slide}, ${thing}, ${r.problem}`,
+        ...buttonLabels(r.slide, thing, r.severityWord),
+      });
+    }
+  }
+  return rows.map((r) => renamed.get(r.id) || r);
+}
+
+/**
+ * Q2 option A (D8772): rows about the same problem on the same slide (same check, same headline)
+ * sit under one heading, with a row per element; every finding keeps its own row and id, so a
+ * dismissal still names one finding. A problem found once is a cluster of one, drawn as before.
+ * `heading` is "Slide 3 · The source's date is not recorded · 2 elements".
+ */
+export function clustersOf(rows) {
+  const out = [];
+  const at = new Map();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const key = `${r.card ?? '-'}|${r.check ?? '-'}|${r.headline}`;
+    if (!at.has(key)) { at.set(key, out.length); out.push({ key, rows: [] }); }
+    out[at.get(key)].rows.push(r);
+  }
+  return out.map((c) => ({
+    ...c,
+    heading: c.rows.length > 1 ? `Slide ${c.rows[0].slide} · ${c.rows[0].headline.replace(/\.$/, '')} · ${c.rows.length} elements` : null,
+  }));
 }
 
 // ── #3661 PF3: the finding drawn on its slide ───────────────────────────────
@@ -215,7 +323,7 @@ function firstMeasuredCard(key, slides) {
 /** The panel's four groups. `dismissed` is a Set of finding ids. */
 export function groupsOf(result, { slides = [], dismissed = new Set(), failed = [] } = {}) {
   if (!result) return null;
-  const rows = (result.findings || []).map((f) => rowOf(f, slides));
+  const rows = distinguish((result.findings || []).map((f) => rowOf(f, slides)), slides);
   const fix = rows.filter((r) => r.severity === SEVERITY.blocking);
   const warnings = rows.filter((r) => r.severity !== SEVERITY.blocking);
   const look = warnings.filter((r) => !dismissed.has(r.id));
@@ -254,13 +362,132 @@ export function clockLabel(at, now = Date.now()) {
   return `checked at ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-/** The panel's sub line: "v3 · checked just now · 12 slides", or "· before your edit" when out of date. */
-export function subLine({ version, at, now = Date.now(), slides = 0, current = true, running = false }) {
-  const v = version != null ? `v${version}` : 'This version';
+/**
+ * The panel's sub line: "v3 · checked just now · 12 slides", or "· before your edit" when out of date.
+ * D8772: `draft` (the editor holds unsaved edits, and the panel checks them) says so: "Your draft,
+ * edited from v3 · …", never "v3", which is the saved version the export sends.
+ */
+export function subLine({ version, at, now = Date.now(), slides = 0, current = true, running = false, draft = false }) {
+  const v = draft ? draftName(version) : version != null ? `v${version}` : 'This version';
   if (running) return `${v} · checking now · ${plural(slides, 'slide', 'slides')}`;
   const when = clockLabel(at, now);
   if (!when) return `${v} · ${plural(slides, 'slide', 'slides')}`;
   return current ? `${v} · ${when} · ${plural(slides, 'slide', 'slides')}` : `${v} · ${when} · before your edit`;
+}
+
+// ── D8772 (#8772): draft or saved version, and the repair checked on the same one ──
+
+/** "Your draft, edited from v7". */
+export const draftName = (version) => `Your draft, edited from ${version != null ? `v${version}` : 'the saved version'}`;
+
+/**
+ * What a check on the draft does not cover: the saved version is what Export and Share send, and
+ * it is checked again when they open. With `fixed` (the re-check found the repair), it says the
+ * repair is in the draft only until it is saved as a new version.
+ */
+export function draftLine({ version, fixed = 0 } = {}) {
+  const v = version != null ? `v${version}` : 'the saved version';
+  const saved = version != null ? `The saved v${version}` : 'The saved version';
+  if (fixed > 0) return `Fixed in your draft. ${saved} still has ${fixed === 1 ? 'it' : 'them'}: save a new version, and Export and Share check that version again.`;
+  return `This checked your draft, with your unsaved edits. Export and Share send ${v} and check it again when they open.`;
+}
+
+/**
+ * Where focus goes when the founder comes back to the check from a finding (PTF04): the same row
+ * when it is still found, else the next one that was after it in the last check, else the one
+ * before it, else nothing (the headline takes it). `order` is the ids as the last check listed them.
+ */
+export function focusAfter(order, rows, id) {
+  const now = new Set((Array.isArray(rows) ? rows : []).map((r) => r.id));
+  if (id == null) return null;
+  if (now.has(id)) return id;
+  const list = Array.isArray(order) ? order : [];
+  const i = list.indexOf(id);
+  if (i < 0) return null;
+  for (let j = i + 1; j < list.length; j += 1) if (now.has(list[j])) return list[j];
+  for (let j = i - 1; j >= 0; j -= 1) if (now.has(list[j])) return list[j];
+  return null;
+}
+
+/**
+ * The headline of a check (PTF13), the words a screen reader is told, and whether export may go:
+ *   · blockers: "2 to fix before you export or share" (tone fix): export waits until they are fixed;
+ *   · warnings only: "No blockers · 3 warnings to confirm" (tone look): export after they are confirmed;
+ *   · nothing found: "Nothing to fix" (tone ok), and only then: a warning is never "nothing";
+ * a slide that could not be checked is added to each, and is never a pass.
+ * `groups` is `groupsOf()`'s, or a gate (`gateOf()`'s, which carries `unchecked` as a count).
+ */
+export function headlineOf(groups) {
+  if (!groups) return null;
+  const fix = groups.fix?.length || 0;
+  const look = groups.look?.length || 0;
+  const unchecked = Array.isArray(groups.unchecked) ? groups.unchecked.length : Number(groups.unchecked) || 0;
+  const tail = unchecked ? ` ${plural(unchecked, 'item', 'items')} couldn’t be checked, which is not a pass.` : '';
+  if (fix) {
+    return {
+      text: `${fix} to fix before you export or share`,
+      tone: 'fix', allowed: 'none',
+      announce: `${plural(fix, 'blocker', 'blockers')}: export waits until ${fix === 1 ? 'it is' : 'they are'} fixed.${look ? ` ${plural(look, 'warning', 'warnings')}.` : ''}${tail}`,
+    };
+  }
+  if (look) {
+    return {
+      text: `No blockers · ${plural(look, 'warning', 'warnings')} to confirm`,
+      tone: 'look', allowed: 'confirm',
+      announce: `No blockers. ${plural(look, 'warning', 'warnings')}: export after you confirm ${look === 1 ? 'it' : 'them'}.${tail}`,
+    };
+  }
+  return { text: NOTHING_TO_FIX, tone: unchecked ? 'unchecked' : 'ok', allowed: 'all', announce: `${NOTHING_TO_FIX}.${tail}` };
+}
+
+/** "20 Nov 2026" (UTC), or null. */
+export function dateWords(value) {
+  const v = String(value ?? '');
+  const t = Date.parse(v.length === 10 ? `${v}T00:00:00Z` : v);
+  return Number.isFinite(t) ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(t) : null;
+}
+
+const MISSING_DATE = /source's date is not recorded/;
+const MOVED = /its figure has changed in its store/;
+/**
+ * D8772 (PTF03): the repair a source finding on a bound metric tile offers where Show leaves the
+ * founder, from the sources read the editor already holds (`GET /api/decks/sources`). Nothing is
+ * saved: the tile changes in the draft, like Refresh from records, until a version is saved.
+ *   · the date is not recorded, and the store holds the same snapshot with a date: bind it again,
+ *     which keeps the value and adds the date ("Add the source date · 20 Nov 2026");
+ *   · the figure moved in its store (or the date is missing and the store moved too): refresh to
+ *     the store's figure, named ("Refresh to $36.0k · as of 20 Nov 2026");
+ *   · otherwise a line that says why there is nothing to press (the source was not read, or it
+ *     records no date either).
+ * Null for any other finding.
+ */
+export function repairOf(row, block, items) {
+  if (!row || row.check !== 'sources' || !block || block.kind !== 'metric' || !block.binding?.source_key) return null;
+  const missing = MISSING_DATE.test(String(row.headline || ''));
+  const moved = MOVED.test(String(row.headline || ''));
+  if (!missing && !moved) return null;
+  const item = itemsByKey(items).get(block.binding.source_key) || null;
+  if (!item) return { state: 'unread', line: 'Its source has not been read here, so there is nothing to bind again yet.' };
+  if (item.state !== 'recorded') return { state: 'gone', line: 'Its source records no figure now. The tile keeps what it shows until you change it.' };
+  const when = dateWords(item.as_of);
+  const same = (item.snapshot_hash ?? null) === (block.binding.snapshot_hash ?? null);
+  if (missing && same && !when) return { state: 'no_date', line: 'Its source records no date either. Add one where the figure is recorded, then come back.' };
+  const next = refreshMetric(block, item);
+  const keeps = String(block.value ?? '').trim();
+  if (same) {
+    return {
+      // The same snapshot: the figure is the same, so the tile keeps its own words for it.
+      state: 'ready', block: { ...next, value: block.value }, edit: 'Add source date',
+      action: `Add the source date · ${when}`,
+      line: `Binds ${keeps || 'the figure'} to its source again: the value stays, the date is added in your draft.`,
+    };
+  }
+  const now = valueText(item) || 'the store’s figure';
+  return {
+    state: 'ready', block: next, edit: 'Refresh figure',
+    action: `Refresh to ${now}${when ? ` · as of ${when}` : ''}`,
+    line: `The store moved from ${keeps || 'the figure on the tile'}. Refresh changes the tile in your draft.`,
+  };
 }
 
 /** The out-of-date banner (pf4). */
@@ -306,6 +533,8 @@ export function gateOf(groups, kind) {
   const n = fix.length;
   return {
     kind,
+    // D8772: what could not be checked rides along, so the gate's headline never calls it a pass.
+    unchecked: Array.isArray(groups.unchecked) ? groups.unchecked.length : 0,
     open: n > 0 || look.length > 0,
     title: share ? 'Before you share' : 'Before you export',
     fix,
