@@ -258,8 +258,46 @@ export async function seedObligations(
       if (opts.failOnError) throw e;
     }
   }
+  // D9200 (#9200): an acceptance recorded before these rows existed counts. The
+  // person's own `legal_acceptances` row for the CURRENT document version is the
+  // evidence `recordTermsAcceptance` would have satisfied the row from, had the
+  // row existed; without this read the row was born 'pending' and the person was
+  // asked to accept again. Only their own rows are read, nothing is written to
+  // `legal_acceptances`, an older version does not count, and a row that is
+  // already satisfied, waived or expired is never moved by it (ON CONFLICT below). An unreadable
+  // table (before migration 245) reads as "no acceptance", the old behaviour.
+  const acceptedNow = new Map<string, { surface: string; accepted_at: string }>();
+  try {
+    const r = await env.DB.prepare(
+      `SELECT obligation_key, surface, accepted_at
+         FROM legal_acceptances
+        WHERE user_id = ?
+          AND document_version = CASE obligation_key WHEN 'tos_v1' THEN ? WHEN 'privacy_v1' THEN ? END
+        ORDER BY accepted_at ASC, id ASC`,
+    ).bind(userId, LEGAL_DOCUMENT_VERSIONS.tos_v1, LEGAL_DOCUMENT_VERSIONS.privacy_v1)
+      .all<{ obligation_key: string; surface: string; accepted_at: string }>();
+    for (const row of r?.results || []) {
+      if (!acceptedNow.has(row.obligation_key)) acceptedNow.set(row.obligation_key, row);
+    }
+  } catch { /* legal_acceptances not present yet: nothing has been accepted */ }
   let inserted = 0;
   for (const d of defs) {
+    const acc = SATISFIABLE_BY_CLICKWRAP.has(d.key as ObligationKey) ? acceptedNow.get(d.key) : undefined;
+    // The same evidence_meta shape `recordTermsAcceptance` writes, so the Trust
+    // Center's provenance line reads the same act the same way. The onboarding
+    // surface records under the default source; any other surface is its own.
+    const ttl = acc ? ttlForObligation(d.key as ObligationKey) : null;
+    const status = acc ? 'satisfied' : 'pending';
+    const expiresAt = acc && ttl !== null && ttl !== undefined
+      ? new Date(Date.parse(acc.accepted_at) + ttl).toISOString()
+      : null;
+    const meta = acc
+      ? JSON.stringify({
+        source: acc.surface === 'onboarding_licence' ? 'signup_clickwrap' : acc.surface,
+        surface: acc.surface,
+        accepted_at: acc.accepted_at,
+      })
+      : null;
     try {
       // Insert-or-reactivate. If a previous role-change waived this
       // obligation (status='waived', required=0), the role flip back
@@ -267,17 +305,34 @@ export async function seedObligations(
       // the user would silently stay non-compliant. We reactivate by
       // restoring the required flag and bumping waived/expired rows
       // back to 'pending'. Already-satisfied rows are NOT downgraded.
+      // D9200: a new row takes `status`, `expires_at` and `evidence_meta` from
+      // the VALUES. An existing row moves only from 'pending'/'in_review' to
+      // 'satisfied', and only on the person's own current-version acceptance
+      // (the same guard `recordTermsAcceptance` uses), so an account seeded
+      // 'pending' after accepting is healed rather than asked again; its first
+      // evidence_meta is kept. SQLite reads the old row in every SET term.
       const r: any = await env.DB.prepare(
-        `INSERT INTO legal_obligations (user_id, obligation_key, required, status)
-         VALUES (?, ?, ?, 'pending')
+        `INSERT INTO legal_obligations (user_id, obligation_key, required, status, expires_at, evidence_meta)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id, obligation_key) DO UPDATE SET
            required   = excluded.required,
            status     = CASE WHEN legal_obligations.status IN ('waived','expired')
                              THEN 'pending'
+                             WHEN legal_obligations.status IN ('pending','in_review')
+                              AND excluded.status = 'satisfied'
+                             THEN 'satisfied'
                              ELSE legal_obligations.status END,
+           expires_at = CASE WHEN legal_obligations.status IN ('pending','in_review')
+                              AND excluded.status = 'satisfied'
+                             THEN excluded.expires_at
+                             ELSE legal_obligations.expires_at END,
+           evidence_meta = CASE WHEN legal_obligations.status IN ('pending','in_review')
+                                 AND excluded.status = 'satisfied'
+                                THEN COALESCE(legal_obligations.evidence_meta, excluded.evidence_meta)
+                                ELSE legal_obligations.evidence_meta END,
            updated_at = CURRENT_TIMESTAMP
          RETURNING id`,
-      ).bind(userId, d.key, d.required).first();
+      ).bind(userId, d.key, d.required, status, expiresAt, meta).first();
       if (r?.id) inserted += 1;
     } catch (e) {
       console.error('[trust] seed insert failed', d.key, e);
