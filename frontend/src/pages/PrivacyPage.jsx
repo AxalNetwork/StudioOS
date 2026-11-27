@@ -9,11 +9,10 @@ import LegalDocument from './site/LegalDocument';
  * sections 0 to 9 (section 9, Google user data, added for Google's OAuth
  * verification in D1379; contact moved to 10), their headings in sentence case, and its date as "Last
  * updated". The canvas's policy waits on the owner and counsel; see
- * LegalDocument. Section 7 still describes four cookie categories; the
- * preferences dialog now draws only the ones the site sets (D680), and the
- * text changes when the owner's does.
+ * LegalDocument. D8831 carries the owner-approved factual corrections, including the three
+ * cookie categories; regulatory claims remain for counsel on #5511.
  */
-export const PRIVACY_UPDATED = 'October 29, 2026';
+export const PRIVACY_UPDATED = 'November 27, 2026';
 export const PRIVACY_EMAIL = 'privacy@axal.vc';
 
 const INTRO = (
@@ -65,7 +64,7 @@ const SECTIONS = [
           <li><strong>Onboarding:</strong> To verify your identity and suitability for private placements.</li>
           <li><strong>Transaction Processing:</strong> To facilitate capital calls, distributions, and K-1 tax reporting.</li>
           <li><strong>Compliance:</strong> To meet anti-money laundering (AML) and "know your customer" (KYC) regulatory requirements.</li>
-          <li><strong>AI & Analytics:</strong> We may use anonymized data to improve our deal-matching algorithms. We do not sell your personal data to third parties for marketing.</li>
+          <li><strong>AI processing:</strong> AI-assisted analysis, matching, summaries and document workflows may involve personal data you submit or select. AI runs on Cloudflare Workers AI and AI Gateway; an external model provider receives a request only when that provider is enabled for the feature. We do not sell your personal data to third parties for marketing.</li>
         </ul>
       </>
     ),
@@ -80,6 +79,7 @@ const SECTIONS = [
           <li><strong>Affiliates:</strong> With <strong>Axal VC Holdings LLC</strong> only as necessary to administer brand/IP rights, and with <strong>Axal VC GP LLC</strong> only as necessary to operate Axal VC Spin-Out Lab Fund I LP (subscription processing, capital calls, distributions, regulatory filings).</li>
           <li><strong>Service Providers:</strong> Fund administrators, legal counsel, and KYC/AML verification vendors. These providers are contractually bound to maintain 2026 SEC-level data security standards.</li>
           <li><strong>Regulatory Bodies:</strong> When required by the SEC, FINRA, or other governmental authorities.</li>
+          <li><strong>Company formation:</strong> If you request company formation in a country, information the filing needs about you and the people named in it is shared with the named formation partner that files there. The partner may carry out its own identity checks. Axal VC Management LLC arranges the service; it does not file.</li>
           <li><strong>Target Companies:</strong> Basic identity info may be shared with companies in which you are actively seeking to invest (for their cap table management).</li>
         </ul>
       </>
@@ -119,6 +119,13 @@ const SECTIONS = [
     body: (
       <>
         <p>We retain your NPI for as long as your account is active and for the minimum period required by SEC and IRS regulations (typically 7 years after the dissolution of a fund or termination of a relationship).</p>
+        <p>Recorded retention periods for Platform features include:</p>
+        <ul>
+          <li><strong>Call audio:</strong> Deleted after 30 days by default, or the period you choose where offered. Transcripts stay with their interview until you or your company delete it.</li>
+          <li><strong>Referral cookies:</strong> Up to 30 days for a referral code or 90 days for a referral handle in your browser.</li>
+          <li><strong>Signup measurement events:</strong> With Analytics enabled, kept for 180 days.</li>
+          <li><strong>Google access tokens:</strong> Kept encrypted until you disconnect Google.</li>
+        </ul>
       </>
     ),
   },
@@ -127,13 +134,13 @@ const SECTIONS = [
     h: 'Cookies & similar technologies',
     body: (
       <>
-        <p>We use cookies and similar browser storage to operate the Platform and to remember your preferences. On your first visit a cookie banner lets you accept all, reject all, or choose specific categories; you can change your choice at any time via the <strong>"Cookie preferences"</strong> link in our site footer. Your choice is stored in your browser. We group cookies into four categories:</p>
+        <p>We use cookies and similar browser storage to operate StudioOS and remember your cookie choices. On your first visit, you can accept all, reject all optional categories, or choose which optional categories to enable. You can change or withdraw either optional choice at any time using <strong>Cookie preferences</strong> in the site footer.</p>
         <ul>
-          <li><strong>Essential:</strong> Required for the Platform to function — signing in, keeping your session secure, and remembering your privacy choices. Always on; cannot be turned off.</li>
-          <li><strong>Functional:</strong> Remember your preferences and settings (such as theme and layout) to improve your experience.</li>
-          <li><strong>Analytics:</strong> Help us understand how the Platform is used so we can improve it. We record your preference now; the Platform does not currently load third-party analytics.</li>
-          <li><strong>Advertising:</strong> Would support measuring or tailoring marketing. We record your preference now; the Platform does not currently load advertising cookies.</li>
+          <li><strong>Essential:</strong> Supports sign-in, session security and the settings you choose, including cookie preferences, and first-party error reports sent only to Axal VC. Essential storage is always on.</li>
+          <li><strong>Analytics (Sign-up measurement):</strong> If you enable Analytics, we measure which signup steps are reached and which link brought you here, using a random browser ID. This measurement is sent only to Axal VC. Analytics also lets us count visits to active referral handles using a separate random ID kept in your browser for the life of that tab.</li>
+          <li><strong>Marketing (Referral cookie):</strong> If you enable Marketing, a first-party cookie remembers the first referral link you use so we can credit the referrer and apply eligible offers. The cookie lasts up to <strong>30 days for a referral code</strong> or <strong>90 days for a referral handle</strong>, measured from the first qualifying use.</li>
         </ul>
+        <p>Turning off Analytics stops optional analytics measurement and clears the handle visit ID from your browser. Turning off Marketing stops referral attribution through the cookie and clears it. You can still sign up with either optional category turned off.</p>
       </>
     ),
   },
@@ -142,7 +149,7 @@ const SECTIONS = [
     h: 'Interviews recorded by founders',
     body: (
       <>
-        <p>Founders who use the Platform can record interviews with people who have no Axal VC account. <Link to="/privacy/interviews">When a founder records you</Link> says what is kept, who can read it, for how long, and how to say no or ask for deletion.</p>
+        <p>Interview and meeting recording and transcription happen only with notice and, where the law requires, consent, including for participants without an account. Call audio is deleted after 30 days by default; transcripts and the findings drawn from them stay with the interview until it is deleted. A meeting provider may keep its own copy under its terms. Founders who use the Platform can record interviews with people who have no Axal VC account. <Link to="/privacy/interviews">When a founder records you</Link> says what is kept, who can read it, for how long, and how to say no or ask for deletion.</p>
       </>
     ),
   },
@@ -156,7 +163,8 @@ const SECTIONS = [
           <li><strong>Google Calendar:</strong> We read your calendar events to find the call you attach to an interview, and we create calendar events with a Google Meet link when you schedule a call from Axal VC.</li>
           <li><strong>Google Meet:</strong> When you start a call from Record a Session, we create the Meet meeting for you and set it so your Axal VC note-taker can join and Meet can transcribe it. After a call you attached to an interview, we read that call's participants and transcript and add them to the interview.</li>
           <li><strong>Google Drive and Google Sheets:</strong> We open only the files you choose in Google's own file picker, or the spreadsheet you connect for fund reporting.</li>
-          <li><strong>Gmail:</strong> If you connect a mailbox, we send the emails you send from Axal VC through it. We do not read your inbox.</li>
+          <li><strong>Gmail:</strong> If you connect a mailbox, we send the emails you send from Axal VC through it. We do not read your inbox. An earlier connection that granted read-only Gmail access can remove it in Connectors.</li>
+          <li><strong>Google Search Console:</strong> We read your site's search performance for the venture you connect it to, using read-only access.</li>
           <li><strong>Your Google profile:</strong> Your name and email address, to show which account is connected.</li>
         </ul>
         <p>Axal VC's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. In particular:</p>

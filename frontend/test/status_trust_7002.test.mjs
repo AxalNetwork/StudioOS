@@ -39,6 +39,9 @@ import { LAST_UPDATE_NOT_RECORDED, NO_INCIDENT_RECORDED, statusSummary, summaryL
 import {
   DATA_REQUESTS, REPORT_WAYS, SUBPROCESSORS_REQUEST, UNCHECKED_WHY, dataRequestHref, documentTable, legalDay, lineMark,
 } from '../src/pages/site/trustCenterModel.js';
+import { TERMS_UPDATED } from '../src/pages/TermsPage.jsx';
+import { PRIVACY_UPDATED } from '../src/pages/PrivacyPage.jsx';
+import { RISK_UPDATED } from '../src/pages/RiskDisclosuresPage.jsx';
 import { currentInterviewNotice } from '../src/pages/InterviewNoticePage.jsx';
 import StatusPage from '../src/pages/StatusPage.jsx';
 import TrustCenter from '../src/pages/site/TrustCenter.jsx';
@@ -206,7 +209,11 @@ test('4: every legal row reads as a day word, and text that is not a date stays 
   const v = await mount(h(TrustCenter), '/trust/documents');
   try {
     const t = v.text();
-    for (const d of ['8 Jul 2026', '29 Oct 2026', '31 Mar 2026']) assert.ok(t.includes(d), `the table shows ${d}`);
-    assert.ok(!/July 8, 2026|October 29, 2026|March 31, 2026/.test(t), 'no row keeps the long form');
+    for (const date of [TERMS_UPDATED, PRIVACY_UPDATED, RISK_UPDATED]) {
+      const [month, day, year] = date.replace(',', '').split(' ');
+      const short = `${day} ${month.slice(0, 3)} ${year}`;
+      assert.ok(t.includes(short), `the table shows ${short}`);
+      assert.ok(!t.includes(date), 'no row keeps the long form');
+    }
   } finally { await v.close(); }
 });
