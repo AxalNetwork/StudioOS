@@ -10,7 +10,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ACCOUNT_STORES, type ErasureAnswer } from '../src/services/accountDataInventory.ts';
+import { ACCOUNT_STORES, type ErasureAnswer } from './_account_data_inventory_9045.ts';
 import { buildWorld, eraseSubject, kvSnapshot, observe, rolledBack, rowOf, SUBJECT, type Observed, type World } from './_account_stores_9045.ts';
 
 let world: World;

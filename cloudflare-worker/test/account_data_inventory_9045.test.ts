@@ -3,7 +3,7 @@
  * undecided answer to the owner.
  *
  * Fails when a D1 table names a person (a `user_id`/`*_user_id` column, an `email`/`*_email` column, or a foreign key
- * to `users`) and is not in `accountDataInventory.ts`, is listed and no longer names one, or names them by columns the
+ * to `users`) and is not in `_account_data_inventory_9045.ts`, is listed and no longer names one, or names them by columns the
  * inventory does not list; when Worker source builds an R2 key under a user id or an email under a prefix not listed;
  * when a KV write names a person in a namespace not listed; when the data export reads a table not marked as exported
  * (or the reverse); when a store D8530 also lists answers account erasure differently; and when an unspecified
@@ -19,7 +19,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { loadSchema } from './_schema_once.mjs';
 import {
   ACCOUNT_STORES, NOT_STORES, QUESTIONS, personColumnsOf, unlistedTables, unspecifiedAnswers,
-} from '../src/services/accountDataInventory.ts';
+} from './_account_data_inventory_9045.ts';
 import { VENTURE_SPACE_STORES } from '../src/services/ventureSpaceDataInventory.ts';
 
 const SRC = fileURLToPath(new URL('../src/', import.meta.url));

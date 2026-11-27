@@ -4,7 +4,7 @@
  *
  * The world is the real migrated schema (`_schema_once.mjs`), never hand-copied DDL, and the row builders are
  * D8530's (`_venture_stores_8530.ts`). For every D1 table in the account inventory
- * (`src/services/accountDataInventory.ts`) it writes two rows from the table's own columns: row A names the subject
+ * (`test/_account_data_inventory_9045.ts`) it writes two rows from the table's own columns: row A names the subject
  * (every user-id column and every foreign key to `users` is the subject's id, every email column the subject's
  * address) and row B a control person. The subject sponsors one agent and the control person another; the rows the
  * erasure reaches through an agent (its runs, its duties, a task assigned to it, a compute request and its object)
@@ -19,7 +19,7 @@ import { loadSchema } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { eraseAccountAgents } from '../src/agents/erasure.ts';
 import { columnsOf, seedRow, repairReferences, rowOf, observe, type Observed } from './_venture_stores_8530.ts';
-import { PERSON_EMAIL, PERSON_USER_ID, type AccountStore } from '../src/services/accountDataInventory.ts';
+import { PERSON_EMAIL, PERSON_USER_ID, type AccountStore } from './_account_data_inventory_9045.ts';
 
 export { rowOf, observe, type Observed };
 export const SUBJECT = 2, CONTROL = 4;
