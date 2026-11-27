@@ -64,7 +64,7 @@ const SECTIONS = [
           <li><strong>Onboarding:</strong> To verify your identity and suitability for private placements.</li>
           <li><strong>Transaction Processing:</strong> To facilitate capital calls, distributions, and K-1 tax reporting.</li>
           <li><strong>Compliance:</strong> To meet anti-money laundering (AML) and "know your customer" (KYC) regulatory requirements.</li>
-          <li><strong>AI processing:</strong> AI-assisted analysis, matching, summaries and document workflows may involve personal data you submit or select. AI runs on Cloudflare Workers AI and AI Gateway; an external model provider receives a request only when that provider is enabled for the feature. We do not sell your personal data to third parties for marketing.</li>
+          <li><strong>AI processing:</strong> AI-assisted analysis, matching, summaries and document workflows may involve personal data you submit or select. AI runs on Cloudflare Workers AI and AI Gateway; an external model provider receives a request only when that provider is enabled for the feature. We may use anonymized data to improve our deal-matching algorithms. We do not sell your personal data to third parties for marketing.</li>
         </ul>
       </>
     ),
