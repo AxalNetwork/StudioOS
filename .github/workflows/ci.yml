@@ -1053,6 +1053,12 @@ jobs:
       - name: Fund report print (fixtures, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/report_print_6250.spec.js --retries=0 --trace off
+      # #8524 (D8524, D8524-p2): the eSign signer's own journey at 1440 and 390 — open the link, sign, complete,
+      # download the signed PDF, revisit, and a two-signer envelope in order, with an axe pass. The real eSign
+      # router runs on SQLite with isolated fixtures (tests/e2e/_esign_e2e_server.mjs); no email, no preview.
+      - name: eSign signer journey (real router on SQLite, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/esign_signer_journey.spec.js --retries=0 --trace off
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
