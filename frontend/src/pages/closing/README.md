@@ -20,6 +20,7 @@ D1213 (#2424), built to the owner's canvas: `design/incoming/Closing Room Page.d
 | `investorRoomModel.js` | Pure: the investor room's header, chips, the action by step, the paper's signers, the conditions kept to the deal, the evidence sides, the commitment before a closing and the account change notice (D8926). |
 | `roomShared.jsx` | What both rooms share: the read hook, each line's paper read, the no-access card, the money and Not recorded cells, the cap-table card (D8926). |
 | `PaperState.jsx` | A line's paper as the agreement lifecycle's pill and its detail, or words only where no lifecycle word applies (D4811 part 22). |
+| `EvidenceDialogs.jsx` | An Admin's receipt acts on one closing: record an Axal entity's Mercury credit or a phone-verified transfer as evidence, withdraw a piece with a reason, add a late line (D9108). |
 
 ## Where it lives
 
