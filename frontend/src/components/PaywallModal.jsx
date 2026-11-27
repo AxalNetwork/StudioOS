@@ -18,6 +18,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Lock, Check, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { openCheckout } from './checkout/checkoutEntry';
+import { INSTITUTIONAL_CONTACT_HREF } from './checkout/checkoutModel';
 import QuotaCard from './QuotaCard';
 import { PRICE_UNREAD, PRICE_UNREAD_LINE, priceOf, usePlansRead } from '../lib/planPrices';
 import { useEscapeClose } from './useEscapeClose';
@@ -254,7 +255,7 @@ export default function PaywallModal({ user }) {
                     </li>
                   ))}
                 </ul>
-                {plan.custom ? <Link to="/contact" onClick={() => setOpen(false)} className="mt-5 w-full py-2.5 rounded-lg font-medium text-sm text-center text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700">Contact Axal VC</Link> : <button
+                {plan.custom ? <Link to={INSTITUTIONAL_CONTACT_HREF} onClick={() => setOpen(false)} data-testid={`paywall-contact-${tier}`} className="mt-5 w-full py-2.5 rounded-lg font-medium text-sm text-center text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700">Contact Axal VC</Link> : <button
                   type="button"
                   onClick={() => startCheckout(tier)}
                   data-testid={`paywall-upgrade-${tier}`}

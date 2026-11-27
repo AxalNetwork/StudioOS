@@ -225,7 +225,7 @@ test('PAYX13: Investor Plus with no price mirrored yet is not on sale (D1334), a
   const inst = await sheet({ user, role: 'investor', plan: planForKey(READ, 'investor:institutional') });
   try {
     assert.match(inst.text('checkout-mode-notsold'), /Contact Axal VC/);
-    assert.equal(inst.props('checkout-contact-sales').href, '/contact', 'the contact page, inside the app');
+    assert.equal(inst.props('checkout-contact-sales').href, '/contact?topic=invest', 'the contact page, inside the app, on Investing / LP (#9066)');
     assert.deepEqual(inst.calls, []);
   } finally { await inst.close(); }
 });
