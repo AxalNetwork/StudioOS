@@ -300,3 +300,86 @@ export function ledgerSettings(row) {
   const copy = COPY_LABEL[row.copy] || COPY_LABEL[presetOf(row.notes, row.sources)];
   return `${copy} · notes ${row.notes ? 'included' : 'not included'} · appendix ${row.sources ? 'included' : 'not included'}`;
 }
+
+// ── part 3: the export history, the states around an export, and what is announced ──
+
+const NR = 'Not recorded';
+/** `GET /api/decks/:id/exports` returns the venture's newest 50 rows. */
+export const HISTORY_LIMIT = 50;
+export const HISTORY_UNREADABLE = 'The export history could not be read. Exporting still works.';
+/** Q3, answered no by the owner (2026-11-27): no exported file is kept, so an older row offers none. */
+export const FILE_NOT_KEPT = 'File not kept';
+
+const parseAt = (value) => {
+  if (!value) return null;
+  // D1 stores "YYYY-MM-DD HH:MM:SS" in UTC.
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(value)) ? `${String(value).replace(' ', 'T')}Z` : String(value);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+/** When an export was recorded, as the history says it: "Thu 26 Nov, 14:20" (UTC, as D1 stores it). */
+export function whenLabel(value) {
+  const d = parseAt(value);
+  return d ? new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(d) : 'Date not recorded';
+}
+/** A fingerprint as a history row shows it: its first six and last four hex characters. */
+export const historyHash = (h) => (typeof h === 'string' && /^[0-9a-f]{64}$/.test(h) ? `${h.slice(0, 6)}…${h.slice(-4)}` : NR);
+const included = (v) => (v ? 'Included' : 'Not included');
+
+/**
+ * The export history (PTX07), one row per ledger row, newest first. A row from
+ * before the settings were recorded says Not recorded for the copy and both
+ * settings, never "not included". No file is kept (Q3, owner: no), so only the
+ * file this dialog made, matched by its fingerprint, can be saved again, and
+ * only while the dialog is open.
+ */
+export function historyRows(rows, { fileHash = null } = {}) {
+  return (Array.isArray(rows) ? rows : []).map((r, i) => {
+    const recorded = r?.notes != null && r?.sources != null;
+    const hash = typeof r?.content_hash === 'string' ? r.content_hash : null;
+    return {
+      key: r?.id ?? `row-${i}`,
+      when: whenLabel(r?.created_at),
+      version: versionLabel(r),
+      format: formatLabel(r?.format),
+      copy: recorded ? COPY_LABEL[r.copy] || COPY_LABEL[presetOf(r.notes, r.sources)] : NR,
+      notes: recorded ? included(r.notes) : NR,
+      sources: recorded ? included(r.sources) : NR,
+      recorded,
+      hash: historyHash(hash),
+      by: str(r?.by) || NR,
+      again: Boolean(fileHash && hash && hash === fileHash),
+    };
+  });
+}
+
+/** The line under the history: how many rows, in what order, and what an older row's Not recorded means. */
+export function historyFoot(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const older = list.some((r) => r?.notes == null || r?.sources == null);
+  return `${plural(list.length, 'export')} · newest first · up to ${HISTORY_LIMIT}.${older ? ' Rows from before notes and appendix were recorded say Not recorded for what was included.' : ''}`;
+}
+
+/** The ledger row this export wrote, found by its fingerprint: who and when, for the completed panel; null until it is read. */
+export function recordedLine(rows, hash) {
+  if (!hash) return null;
+  const r = (Array.isArray(rows) ? rows : []).find((x) => x?.content_hash === hash);
+  if (!r) return null;
+  return `Recorded ${whenLabel(r.created_at)} UTC${str(r.by) ? ` · by ${str(r.by)}` : ''}`;
+}
+
+/** Changing the copy says, politely, what goes into the file (PTX11): "Investor copy. Speaker notes not included. Sources appendix included, page 13." */
+export function copyAnnouncement(copy, plan, { notes, sources }) {
+  const where = sources && plan && Number.isInteger(plan.count) ? `, ${plan.unit} ${plan.count}` : '';
+  return `${COPY_LABEL[copy]}. Speaker notes ${notes ? 'included' : 'not included'}. Sources appendix ${sources ? `included${where}` : 'not included'}.`;
+}
+
+/** Said when an export starts; the settings and version are locked until it ends (PTX06). */
+export const exportingLine = (format, version) => `Exporting ${formatLabel(format)} of ${versionLabel(version)}. The settings and version are locked until it ends.`;
+
+/** The phone's one-line fold of the preview (PTX11, 390 px): "13 slides · 16:9 · notes not included". */
+export function foldLine(format, cards, { notes, sources, theme = null, methodId = null } = {}) {
+  const plan = planOf(format, cards, { notes, sources, theme, methodId });
+  const aspect = format === 'pdf' ? pdfPageOf(cards, theme, methodId).aspect : format === 'html' ? (theme?.aspect === '4:3' ? '4:3' : '16:9') : '16:9';
+  return `${plural(plan.count, plan.unit)} · ${aspect} · notes ${notes ? 'included' : 'not included'}`;
+}
