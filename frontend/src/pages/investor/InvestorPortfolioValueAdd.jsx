@@ -198,6 +198,10 @@ export default function InvestorPortfolioValueAdd() {
         ...(row.revision == null ? {} : { expected_revision: Number(row.revision) }),
       });
       setConfirming(null);
+      // D4818 part 4: the Worker accepted the move, so say so, naming the
+      // entry, in the status region that is already in the page. The row's
+      // new state still comes from the ledger read again below.
+      setNotice({ entryUid: row.uid, kind: 'saved', message: savedText(next, row) });
       reload();
     } catch (error) {
       const company = row.project_name || error?.data?.project_name || null;
@@ -241,7 +245,7 @@ export default function InvestorPortfolioValueAdd() {
   };
 
   const table = {
-    filter, me, busy, history, confirming, noticeFor: notice?.entryUid || null,
+    filter, me, busy, history, confirming, noticeFor: notice && notice.kind !== 'saved' ? notice.entryUid : null,
     onAsk: (row, next) => {
       askedFrom.current = { uid: row.uid, testid: `button-va-${next === 'meeting' ? 'meeting' : MOVE_TESTID[next]}-${row.uid}` };
       setNotice(null); setConfirming({ uid: row.uid, next, error: '' });
@@ -278,7 +282,9 @@ export default function InvestorPortfolioValueAdd() {
       </section> : null}
       {/* D4818 part 3: the live region is in the page before a move is confirmed, so its outcome is announced. */}
       <div className="pf-live" role="status" data-testid="region-va-support-notice">
-        {notice ? (
+        {notice?.kind === 'saved' ? (
+          <p className="va-saved" data-testid="status-va-support-saved">{notice.message}</p>
+        ) : notice ? (
           <div className={notice.kind === 'conflict' ? 'pf-partial va-notice' : 'pf-failure'} data-testid={`status-va-support-${notice.kind}`}>
             <span>{notice.message}</span>
             <button type="button" className="pf-link-button" onClick={() => { setNotice(null); reload(); }}>Reload the ledger</button>
@@ -504,6 +510,13 @@ function confirmText(next, c) {
   if (next === 'delivered') return <>Mark {what} as delivered? Today’s date is recorded as the delivery date, and a delivered entry cannot be reopened.</>;
   if (next === 'cancelled') return <>Cancel {what}? The entry stays in the ledger as cancelled, with today’s date, and cannot be reopened.</>;
   return <>Withdraw {what}? The entry stays in the ledger as withdrawn and cannot be reopened.</>;
+}
+
+const SAVED_WORDS = { in_progress: 'is started', delivered: 'is marked delivered', withdrawn: 'is withdrawn', cancelled: 'is cancelled' };
+/** D4818 part 4: what a saved move says, naming the entry and its company. A meeting (an object) is recorded on its entry. */
+function savedText(next, row) {
+  const entry = `${row.project_name ? `${row.project_name}: ` : ''}“${row.summary || 'this entry'}”`;
+  return `${entry} ${typeof next === 'string' ? SAVED_WORDS[next] || 'is saved' : 'has its meeting recorded'}.`;
 }
 
 /** D6203: an introduction's meeting: Yes with its date, No, or Not recorded with why. */

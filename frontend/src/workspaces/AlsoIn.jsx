@@ -20,11 +20,12 @@ export default function AlsoIn({ role, row, className = '' }) {
       data-testid={`also-in-${row.toLowerCase().replace(/[^a-z]+/g, '-')}`}
       className={`mt-4 rounded-xl border border-[#ececf1] bg-white p-4 dark:border-[#2c2b3c] dark:bg-[#171622] ${className}`.trim()}
     >
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Also in {row}</div>
+      {/* D4818 part 4: muted, not faint (axal-faint is 2.6:1 on white); the link is violet-300 in dark (violet-600 there is 3.1:1). */}
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">Also in {row}</div>
       <ul className="mt-2 grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
         {pages.map((p) => (
           <li key={p.route}>
-            <Link to={p.route} data-testid={`link-also-in-${p.route.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`} className="text-[12.5px] font-semibold text-axal-violet hover:underline">
+            <Link to={p.route} data-testid={`link-also-in-${p.route.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`} className="text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">
               {p.label}
             </Link>
             <span className="ml-1.5 text-[11.5px] text-axal-muted">{p.description}</span>
