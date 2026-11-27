@@ -1,4 +1,4 @@
-/** D9025 (#9025): the shared Network directory's member reads and the caller's own private overlay (`/api/network/directory`, D7674). */
+/** D9025 (#9025): the shared Network directory's member reads, the caller's own private overlay and (D9071) organization people counts (`/api/network/directory`, D7674). */
 import { request } from '../api.js';
 
 /** `{ q, kind, cursor, limit }` as a query string; an empty value is left out, so the Worker applies its own default. */
@@ -21,6 +21,11 @@ export const networkDirectoryApi = {
   overlay: (uid) => request(`/network/directory/entries/${encodeURIComponent(uid)}/overlay`),
   /** Writes only the caller's own row; send `saved`, `private_note` or both. */
   saveOverlay: (uid, body) => request(`/network/directory/entries/${encodeURIComponent(uid)}/overlay`, { method: 'PUT', body: JSON.stringify(body) }),
+  /**
+   * D9071 (#9071): distinct published people per organization, by affiliation status, for up to 50 organizations:
+   * `{ counts: { [uid]: { people, current, former, unknown } } }`; a uid that is not a visible organization is absent.
+   */
+  peopleCounts: (uids) => request(`/network/directory/organizations/people-counts?uids=${encodeURIComponent((uids || []).join(','))}`),
   /** Removes the caller's own overlay on this person. */
   clearOverlay: (uid) => request(`/network/directory/entries/${encodeURIComponent(uid)}/overlay`, { method: 'DELETE' }),
 };
