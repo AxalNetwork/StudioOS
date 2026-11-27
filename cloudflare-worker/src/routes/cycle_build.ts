@@ -1609,6 +1609,22 @@ function dateValue(v: unknown): string | null | false {
   return dateOnly(v) ? v as string : false;
 }
 /**
+ * D8776 (#8776, owner question 2, option A): an item's quarter, written on the Product roadmap item as `Q1 2027`.
+ * `2027-Q1`, `q1 2027` and `Q1-2027` are the same quarter; anything else is refused rather than stored as a
+ * group of its own on Quarters, dependencies and scenarios. Undefined is never returned: absent is the caller's.
+ */
+export function quarterValue(v: unknown): string | null | false {
+  if (v == null || v === '') return null;
+  if (typeof v !== 'string') return false;
+  const s = v.trim();
+  if (!s) return null;
+  const qy = /^Q([1-4])[\s-]*(20\d{2})$/i.exec(s);
+  const yq = /^(20\d{2})[\s-]*Q([1-4])$/i.exec(s);
+  if (qy) return `Q${qy[1]} ${qy[2]}`;
+  if (yq) return `Q${yq[2]} ${yq[1]}`;
+  return false;
+}
+/**
  * D690 (#1693 decision 15): every write logs one entity row through
  * logCycleWrite's statement form, in the write's own batch, under today's
  * action names. A write that changes no record logs `project`, which no Build
@@ -2075,7 +2091,7 @@ app.patch('/roadmap/:id', async c => {
 async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare(
-    'SELECT objective, kanban_status, owner_user_id, target_date, kpi_key, feedback_theme, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
+    'SELECT objective, kanban_status, owner_user_id, target_date, kpi_key, feedback_theme, feature_id, quarter FROM roadmap_okrs WHERE id = ? AND project_id = ?',
   ).bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Roadmap item not found' }, 404);
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
@@ -2085,6 +2101,9 @@ async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const ownerId = has('owner_user_id') ? (body.owner_user_id == null ? null : positiveId(body.owner_user_id)) : existing.owner_user_id;
   const due = has('target_date') ? dateValue(body.target_date) : existing.target_date;
   const theme = has('feedback_theme') ? text(body.feedback_theme) : existing.feedback_theme;
+  // D8776 (#8776): the quarter is set here, on the item, so Quarters, dependencies and scenarios can place it.
+  const quarter = has('quarter') ? quarterValue(body.quarter) : existing.quarter;
+  if (quarter === false) return c.json({ detail: 'Write the quarter as Q1 2027' }, 400);
   if (!title || due === false || theme === false || (body.owner_user_id != null && !ownerId)
     || (column !== undefined && !(ROADMAP_COLUMNS as readonly unknown[]).includes(column))) return c.json({ detail: 'Invalid roadmap field' }, 400);
   const kpi = await kpiChecked(c, ctx.project, body); if (kpi instanceof Response) return kpi;
@@ -2094,14 +2113,15 @@ async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
     if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
   }
   // A body that only moves the item is the move, which logs itself.
-  if (column === undefined || ['title', 'owner_user_id', 'target_date', 'kpi_key', 'feedback_theme', 'feature_id'].some(has)) {
+  if (column === undefined || ['title', 'owner_user_id', 'target_date', 'kpi_key', 'feedback_theme', 'feature_id', 'quarter'].some(has)) {
     const newTheme = theme && theme !== existing.feedback_theme ? theme : null;
     await c.env.DB.batch([
-      c.env.DB.prepare('UPDATE roadmap_okrs SET objective = ?, owner_user_id = ?, target_date = ?, kpi_key = ?, feedback_theme = ?, feature_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
-        .bind(title, ownerId, due, kpi === undefined ? existing.kpi_key : kpi, theme, featureId === undefined ? existing.feature_id : featureId, id, ctx.project.id),
+      c.env.DB.prepare('UPDATE roadmap_okrs SET objective = ?, owner_user_id = ?, target_date = ?, kpi_key = ?, feedback_theme = ?, feature_id = ?, quarter = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
+        .bind(title, ownerId, due, kpi === undefined ? existing.kpi_key : kpi, theme, featureId === undefined ? existing.feature_id : featureId, quarter, id, ctx.project.id),
       ...(newTheme ? [feedbackLink(c.env, ctx.project.id, id!, title, newTheme)] : []),
       logged(c.env, ctx.project.id, ctx.user.id, 'product-roadmap', id!, 'build_roadmap_details_changed',
-        ['title', 'feedback_theme', 'feature_id'].some(has) ? 'Item details changed' : 'Owner, date or KPI changed'),
+        ['title', 'feedback_theme', 'feature_id'].some(has) ? 'Item details changed'
+          : ['owner_user_id', 'target_date', 'kpi_key'].some(has) || !has('quarter') ? 'Owner, date or KPI changed' : 'Quarter changed'),
     ]);
   }
   // The column goes through the roadmap's own move, so `okr_column_moves` still feeds "shipped this month".
