@@ -218,7 +218,8 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
       const sheet = page.getByRole('dialog');
       await expect(sheet).toBeVisible({ timeout: 15_000 });
       await expect(sheet).toContainText('Validate + Build');
-      await expect(page).toHaveURL(/\/pricing\?for=founder$/); // the sheet is open and the ask is spent
+      // The sheet is open and the ask is spent; the interval it opened on stays in the address (#8717).
+      await expect(page).toHaveURL(/\/pricing\?for=founder&interval=monthly$/);
       expect(await kept(page), 'the return is spent once').toBeNull();
       expect(worker.account(email)?.role).toBe('exploring');
       await pageHolds(page, 'Pricing, the chosen plan\'s checkout');
