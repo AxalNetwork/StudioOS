@@ -122,6 +122,33 @@ async function recordResult(env: Env, idempotencyKey: string, result: unknown): 
   } catch {/* best-effort cache */}
 }
 
+/**
+ * D9034 (#9034): the job DLQ consumer's own retries. `studioos-job-queue-dlq`
+ * has `max_retries = 3`, `retry_delay = JOB_DLQ_RETRY_SECONDS` and no dead
+ * letter queue of its own (wrangler.toml, every environment), so a message
+ * whose mirror keeps failing is deleted by the platform. The delayed retry
+ * rides out a short D1 outage; the final attempt (counted as the agent DLQ's
+ * `DLQ_FINAL_ATTEMPT` is, so a fourth delivery the platform may make is also
+ * final) writes an `error_logs` row naming the job type and message id before
+ * it acks, so a lost dead letter is never only a `console.error`.
+ */
+export const JOB_DLQ_FINAL_ATTEMPT = 3;
+export const JOB_DLQ_RETRY_SECONDS = 60;
+
+/** The last-attempt record: job type and message id, never the payload. Best-effort. */
+async function recordLostDeadLetter(env: Env, message: Message<JobMessage>, jobType: string): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO error_logs (level, source, message, details) VALUES ('ERROR', 'dlq-consumer', ?, ?)`,
+    ).bind(
+      'job dead letter not mirrored after the final attempt',
+      JSON.stringify({ job_type: jobType, message_id: message.id ?? null, attempts: message.attempts ?? null }),
+    ).run();
+  } catch {
+    console.error('[dlq-consumer] lost dead letter could not be recorded', jobType, message.id);
+  }
+}
+
 export async function dlqConsumer(
   batch: MessageBatch<JobMessage>,
   env: Env,
@@ -130,15 +157,18 @@ export async function dlqConsumer(
   for (const message of batch.messages) {
     const body = message.body || ({} as JobMessage);
     try {
+      // D9034: one row per message. A retried delivery (a later step threw)
+      // finds the row already there and adds nothing (idx_cf_dlq_message).
       await env.DB.prepare(
-        `INSERT INTO cf_dlq_mirror (message_id, job_type, payload, attempts, error, received_at)
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`
+        `INSERT OR IGNORE INTO cf_dlq_mirror (message_id, job_type, payload, attempts, error, received_at, idempotency_key)
+         VALUES (?, ?, ?, ?, ?, datetime('now'), ?)`
       ).bind(
         message.id || crypto.randomUUID(),
         body.job_type || 'unknown',
         JSON.stringify(body.payload ?? {}),
         message.attempts ?? 0,
         `CF DLQ message; timestamp=${message.timestamp}`,
+        typeof body.idempotency_key === 'string' && body.idempotency_key ? body.idempotency_key : null,
       ).run();
       // D8533 — an email whose job ran out of retries reads `dlq` until it is replayed.
       if (body.job_type === 'email_send') {
@@ -153,7 +183,12 @@ export async function dlqConsumer(
       message.ack();
     } catch (e: any) {
       console.error('[dlq-consumer] mirror failed:', e?.message || e);
-      message.retry();
+      if (Number(message.attempts ?? 1) >= JOB_DLQ_FINAL_ATTEMPT) {
+        await recordLostDeadLetter(env, message, body.job_type || 'unknown');
+        message.ack();
+      } else {
+        message.retry({ delaySeconds: JOB_DLQ_RETRY_SECONDS });
+      }
     }
   }
 }
