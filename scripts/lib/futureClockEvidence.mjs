@@ -3,13 +3,23 @@
 // D5663: validate complete, attempt-bound future-clock artifacts before any recovery decision.
 import { createHash } from 'node:crypto';
 
-// These Worker integration suites already require explicit local Wrangler opt-in.
-// Match their bare TAP skip markers exactly. A runtime skip with a reason, a
-// duplicate marker, or any other skipped assertion is incomplete evidence.
-const OPTIONAL_WRANGLER_TESTS = new Set([
-  'runtime drift — every derived /api path is mounted (no 404)',
-  'Stripe webhook fulfilment invariants (MI Pro)',
-  'Stripe webhook fulfilment invariants (founder tier + investor)',
+// Tests that skip themselves, deterministically, on every Actions runner unless
+// an environment opts them in. Each is matched by its exact top-level TAP name
+// AND its exact skip directive: '' is a bare `# SKIP` (the Worker suites'
+// `skip: !process.env.X`), any other string is the one reason that test prints.
+// A skip with a different reason, a duplicate marker, a skipped subtest, or any
+// other skipped assertion is incomplete evidence.
+const OPTIONAL_SKIPS = new Map([
+  // Worker integration suites: explicit local Wrangler opt-in.
+  ['runtime drift — every derived /api path is mounted (no 404)', ''],
+  ['Stripe webhook fulfilment invariants (MI Pro)', ''],
+  ['Stripe webhook fulfilment invariants (founder tier + investor)', ''],
+  // D8920: frontend suites. D7142's 600+ MiB proof runs only with D7142_LARGE=1;
+  // D7905's ACL behaviour needs root, which an Actions runner job is not.
+  ["bounded memory: a >600 MiB export, past Node's string limit, under --max-old-space-size=512 (D7142_LARGE=1)",
+    'set D7142_LARGE=1 to write and read a 600+ MiB export'],
+  ['D7905 behaviour: under umask 0077 the candidate UID reads the staged inputs and nothing else of the listener',
+    'needs root, setfacl and setpriv to switch to the candidate UID'],
 ]);
 
 export function inspectTap(tap) {
@@ -29,8 +39,8 @@ export function inspectTap(tap) {
       || failedRoots > failed + cancelled || failed > 0 && !failedRoots
       || !lines.some(s => /^# duration_ms [\d.]+$/.test(s)) || lines.some(s => /^\s*Bail out!/.test(s))) return { state: 'unknown', code: 'tap_incomplete' };
   const optionalSkips = lines.flatMap(line => {
-    const match = /^ok \d+ - (.+) # SKIP$/.exec(line);
-    return match && OPTIONAL_WRANGLER_TESTS.has(match[1]) ? [match[1]] : [];
+    const match = /^ok \d+ - (.+?) # SKIP(?: (.+))?$/.exec(line);
+    return match && OPTIONAL_SKIPS.has(match[1]) && OPTIONAL_SKIPS.get(match[1]) === (match[2] ?? '') ? [match[1]] : [];
   });
   const onlyOptionalSkips = skipped === optionalSkips.length && skipped === new Set(optionalSkips).size;
   if (cancelled || todo || !onlyOptionalSkips || passed + failed === 0) return { state: 'unknown', code: 'tests_not_executed', tests, failed };

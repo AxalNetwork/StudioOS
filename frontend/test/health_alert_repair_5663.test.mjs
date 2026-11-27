@@ -127,6 +127,60 @@ test('future-clock evidence accepts only the existing opt-in Wrangler skip marke
     tap(false).replace('fixture', `${optional[0]} # SKIP`).replace('# pass 1', '# pass 0').replace('# skipped 0', '# skipped 1'),
   ]) assert.equal(inspectTap(report).code, 'tests_not_executed');
 });
+// D8920 (#8920): the nightly's frontend parts each carried one of these skips, so
+// both read as tests_not_executed (run 45987090967). Each is accepted only by its
+// exact name AND its exact reason, as the test source prints it.
+const FRONTEND_SKIPS = [
+  { file: 'frontend/test/d1_backup_stream_d7142.test.mjs',
+    name: "bounded memory: a >600 MiB export, past Node's string limit, under --max-old-space-size=512 (D7142_LARGE=1)",
+    reason: 'set D7142_LARGE=1 to write and read a 600+ MiB export' },
+  { file: 'frontend/test/runner_executor_isolation_7905.test.mjs',
+    name: 'D7905 behaviour: under umask 0077 the candidate UID reads the staged inputs and nothing else of the listener',
+    reason: 'needs root, setfacl and setpriv to switch to the candidate UID' },
+];
+const withMarkers = (markers, fail = false) => tap(fail)
+  .replace('1..1\n', `${markers.map((m, i) => `ok ${i + 2} - ${m}\n`).join('')}1..${markers.length + 1}\n`)
+  .replace('# tests 1', `# tests ${markers.length + 1}`)
+  .replace('# skipped 0', `# skipped ${markers.length}`);
+test('D8920: future-clock evidence accepts the frontend opt-in skips only with their exact reason', () => {
+  const [large, acl] = FRONTEND_SKIPS.map(s => `${s.name} # SKIP ${s.reason}`);
+  const wrangler = 'Stripe webhook fulfilment invariants (MI Pro) # SKIP';
+  assert.equal(inspectTap(withMarkers([large])).code, 'complete_green');
+  assert.equal(inspectTap(withMarkers([acl])).code, 'complete_green');
+  assert.equal(inspectTap(withMarkers([large, acl, wrangler])).code, 'complete_green');
+  assert.equal(inspectTap(withMarkers([large, acl], true)).code, 'assertion_failure');
+  for (const markers of [
+    [`${FRONTEND_SKIPS[0].name} # SKIP`],                                       // bare marker: the reason is part of the match
+    [`${FRONTEND_SKIPS[0].name} # SKIP ${FRONTEND_SKIPS[1].reason}`],           // another test's reason
+    [`${FRONTEND_SKIPS[0].name} # SKIP ${FRONTEND_SKIPS[0].reason} now`],       // reason with a suffix
+    [`${FRONTEND_SKIPS[1].name} # SKIP flaky`],
+    [`Stripe webhook fulfilment invariants (MI Pro) # SKIP ${FRONTEND_SKIPS[0].reason}`], // bare-only names stay bare
+    [`${FRONTEND_SKIPS[0].name} copy # SKIP ${FRONTEND_SKIPS[0].reason}`],      // a near-name
+    [large, large],                                                             // a duplicate marker
+    [`unexpected # SKIP ${FRONTEND_SKIPS[0].reason}`],
+  ]) assert.equal(inspectTap(withMarkers(markers)).code, 'tests_not_executed', markers.join(' | '));
+  // An exact marker on a nested subtest is not a top-level skip: the count no longer matches.
+  const nested = tap(false).replace('ok 1 - fixture\n', `    ok 1 - ${large}\n    1..1\nok 1 - fixture\n`).replace('# tests 1', '# tests 2').replace('# skipped 0', '# skipped 1');
+  assert.equal(inspectTap(nested).code, 'tests_not_executed');
+});
+test('D8920: each accepted frontend skip is still declared, with that reason, by its test file', () => {
+  for (const { file, name, reason } of FRONTEND_SKIPS) {
+    const source = readFileSync(file, 'utf8');
+    assert.ok(source.includes(name.replace(/'/g, "\\'")) || source.includes(name), `${file} no longer names "${name}"`);
+    assert.ok(source.includes(`'${reason}'`), `${file} no longer skips with "${reason}"`);
+  }
+});
+test('D8920: real Node TAP for the frontend skip markers reads as complete green', () => {
+  const dir = mkdtempSync(join(tmpdir(), 's8920-real-skip-'));
+  try {
+    const file = join(dir, 'fixture.test.mjs');
+    writeFileSync(file, `import test from 'node:test';\ntest('ran', () => {});\n${FRONTEND_SKIPS.map(s => `test(${JSON.stringify(s.name)}, { skip: ${JSON.stringify(s.reason)} }, () => {});`).join('\n')}\n`);
+    const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
+    const child = spawnSync(process.execPath, ['--test', '--test-reporter=tap', file], { encoding: 'utf8', env });
+    assert.equal(child.status, 0, child.stdout + child.stderr);
+    assert.deepEqual(inspectTap(child.stdout), { state: 'green', code: 'complete_green', tests: 3, failed: 0 });
+  } finally { rmSync(dir, { recursive: true }); }
+});
 test('producer records the actual child exit and digest atomically without swallowing clock verification', () => {
   const dir = mkdtempSync(join(tmpdir(), 's38-fc-'));
   try {
