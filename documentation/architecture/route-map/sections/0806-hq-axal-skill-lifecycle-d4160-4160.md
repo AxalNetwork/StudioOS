@@ -12,7 +12,7 @@ The client is `frontend/src/lib/api/adminHqSkills.js`. The page (H6) is not on m
 | Route | Who | What it answers |
 | --- | --- | --- |
 | `GET /api/admin/ai-agents/skills` | Super Admin | `{ skills: [{ uid, name, area, level, status: draft\|in_review\|published\|retired, version \| null, agents, tokens_per_run: null, golden: { pass, total, meets_bar }, last_eval }], pass_bar }` |
-| `GET /api/admin/ai-agents/skills/:uid` | Super Admin | `{ skill, review: { open, approved, history }, cases, evals: { cases: [{ uid, name, results: [{ model, result, detail, run_at }] }], models, pass, total, meets_bar, last_run, pass_bar }, versions, retired }` |
+| `GET /api/admin/ai-agents/skills/:uid` | Super Admin | `{ skill, review: { open, approved, history }, cases, evals: { cases: [{ uid, name, results: [{ model, result, detail, run_at }] }], models, pass, total, meets_bar, last_run, pass_bar }, versions, retired, timeline }`; `timeline` (D4533 part 5): `{ rows: [{ id, kind: publish\|review\|draft_restore\|retirement, at, actor, version \| null, … }], truncated, unreadable }`, newest first, merged from the existing rows |
 | `GET /api/admin/ai-agents/skills/:uid/diff?from=vN&to=draft\|vM` | Super Admin | `{ from, to, frontmatter: [{ field, from, to }], steps: [{ op: same\|added\|removed, text }] }`; 400 `version_unknown` |
 | `POST /api/admin/ai-agents/skills/:uid/review` | Super Admin | `{ reviewer_uid }` → 201 `{ status: 'in_review', review }`; 422 `reviewer_invalid`, `reviewer_is_author`; 409 `review_open`, `retired` |
 | `POST /api/admin/ai-agents/skills/:uid/review/approve` | the named reviewer | `{ comment? }` → `{ status, review }`; 403 `self_approval`, `not_reviewer`; 409 `no_review`, `review_stale` |
