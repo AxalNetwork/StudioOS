@@ -188,7 +188,9 @@ export const FOUNDER_ZONE_ACTIONS = {
     // Was 'the request flow lives on a surface a founder cannot open', which
     // stopped being true when that surface, the AI Matches page, was removed.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
+    // #9106: the sheet D6637 built for every licence (two accepted ties, each decides). Secondary on purpose:
+    // the canvas (NID01) keeps the primary for Request an introduction, still unbuilt above.
+    { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },
   ],
   // BOTH NOTES WERE TOO WEAK, and the filter half of this row is what showed

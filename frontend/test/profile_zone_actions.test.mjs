@@ -140,7 +140,8 @@ const PROFILES = {
     // (verdict). Each has its home on a module page or record (#1659, #1704).
     // 10 → 11 (D7171 part 2): `research/markets`'s `New market research`. Its
     // `Export view` is the builder's export (D7172's scoped export), not a handler.
-    handlers: 11,
+    // 11 → 12 (#9106): `network/introductions`'s `Offer one`, the D6637 sheet, was `unbuilt`; the gap count falls by one.
+    handlers: 12,
     // D7171 part 2: the Markets header is the D7036 directory canvas's (RMD-01, RMD-08), not this artboard's.
     withheld: { 'research/companies': ['Compare'], 'research/markets': ['New deep-dive', 'Export', 'Cite in deck'] },
     offCanvas: { 'research/markets': ['Export view', 'New market research'] },
