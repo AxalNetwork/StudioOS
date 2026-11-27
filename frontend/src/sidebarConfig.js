@@ -215,7 +215,9 @@ export const SIDEBAR_GROUPS = {
     { key: 'branch', label: 'Branch', items: [
       { to: '/studio', icon: DoorOpen, label: 'Studio' },
       { to: '/branch/accounts', icon: Users, label: 'Accounts' },
-      { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
+      // D8728 part 3 (⚑2 A, owner question open): Studio's overdue count opens
+      // `/admin/approvals?age=past` on a branch too, so the row lights there.
+      { to: '/branch/approvals', icon: Inbox, label: 'Approvals', match: ['/branch/approvals', '/admin/approvals'] },
       { to: '/branch/programs', icon: Calendar, label: 'Programs' },
       // D1117 (#2997): the Partner invitations desk is the branch's too; its row lights on the desk.
       { to: '/branch/community', icon: Network, label: 'Community', match: ['/branch/community', '/admin/partner-invitations'] },

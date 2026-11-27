@@ -96,7 +96,7 @@ export function HqApprovals({ view, limit = 5 }) {
             {' · '}
             {l.count === null
               ? <Unreadable what={l.label} claim="That is not the same as nothing pending." />
-              : <><span className="tabular-nums">{nf(l.count)}</span> pending · oldest {l.age || 'undated'}{l.sla === 'past' ? ' · past the window' : l.sla === 'due_soon' ? ' · due soon' : ''}</>}
+              : <><span className="tabular-nums">{nf(l.count)}</span> pending · oldest {l.age || 'undated'}{l.sla === 'past' ? ' · overdue' : l.sla === 'due_soon' ? ' · due soon' : ''}</>}
           </li>
         ))}
       </ul>

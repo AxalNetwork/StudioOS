@@ -23,6 +23,12 @@ export const OVERDUE_TO = `${OVERDUE_PATH}${OVERDUE_SEARCH}`;
 /** Router state Studio sends, so Approvals draws "Studio › Approvals" only when Studio opened it. */
 export const FROM_STUDIO = Object.freeze({ from: '/studio' });
 export const fromStudio = (state) => state?.from === FROM_STUDIO.from;
+/**
+ * D8728 part 3: the state a link inside Approvals passes on, so opening,
+ * stepping through or closing an item keeps the visit Studio opened (its
+ * crumb). Only Studio's marker rides along; any other router state stays put.
+ */
+export const keepStudio = (state) => (fromStudio(state) ? FROM_STUDIO : undefined);
 
 /** A lane line's landing: the same filter plus the lane (canvas SAD12 S5, SAD13 L5). */
 export const laneTo = (key) => `${OVERDUE_TO}&lane=${encodeURIComponent(key)}`;
@@ -124,7 +130,9 @@ export function ownerText(row) {
 /**
  * SAD04: Back, the crumb or "‹ Studio" restores Studio's scroll and puts focus
  * on the control that left it. Studio notes both on the way out; the card
- * takes the note once it has drawn. Per tab (sessionStorage), and every access
+ * takes the note once it has drawn. D8728 part 3: every link the card has into
+ * Approvals notes itself (the primary action, each lane line, Open Approvals,
+ * See what was decided), not the primary action alone. Per tab (sessionStorage), and every access
  * is guarded: a blocked store only loses the restore, never the page.
  */
 export const RETURN_KEY = 'axal:studio-return';

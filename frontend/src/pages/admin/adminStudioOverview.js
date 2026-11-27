@@ -88,15 +88,12 @@ export function approvalsGlance(lanes) {
   if (!open.length) return { kind: 'empty', text: 'Nothing is waiting.' };
   const worst = open.slice().sort((a, b) => (Number(b.oldest_age_hours) || 0) - (Number(a.oldest_age_hours) || 0))[0];
   const age = ageText(worst.oldest_age_hours);
-  const sla = worst.sla === 'past'
-    ? 'past the window'
-    : worst.sla === 'due_soon'
-      ? 'oldest due within 24h'
-      : null;
+  // D8728 part 3 (SAD21): the line is a total, for information. Its urgency
+  // ("past the window", "oldest due within 24h") is retired on Studio: what is
+  // overdue is the overdue card's, in the Inbox's words, from the Inbox's read.
   const bits = [
     worst.label,
     age ? `oldest ${age}` : 'oldest item has no readable date',
-    sla,
     `${worst.count} open`,
   ].filter(Boolean);
   // `sla` and `unreadable` ride along for the needs-a-decision strip, so its

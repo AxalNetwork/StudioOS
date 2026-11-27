@@ -12,6 +12,11 @@
  * a render test; in production it is undefined and the card reads itself.
  *
  * Nothing here decides or assigns: the action is a link, as on main.
+ *
+ * D8728 part 3: every link the card has into Approvals is a `StudioLink`,
+ * which sends Studio's router state and notes itself on the way out, so Back
+ * returns focus to whichever control left (a lane line, Open Approvals), not
+ * only to the primary action.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -69,7 +74,30 @@ function useStudioReturn(ready) {
   }, [ready]);
 }
 
-const leave = () => rememberStudioExit(REVIEW_ID, { scrollY: typeof window !== 'undefined' ? window.scrollY : 0 });
+const leave = (id) => rememberStudioExit(id, { scrollY: typeof window !== 'undefined' ? window.scrollY : 0 });
+
+/** The ids of the card's other ways into Approvals, each noted on the way out (SAD04, SAD20). */
+export const OPEN_IDS = Object.freeze({
+  onTime: 'studio-overdue-on-time-open',
+  unavailable: 'studio-overdue-unavailable-open',
+  zero: 'studio-overdue-open',
+  decided: 'studio-overdue-decided',
+});
+export const laneLinkId = (key) => `studio-overdue-lane-${key}`;
+
+/**
+ * D8728 part 3: a link from the card into Approvals. It sends Studio's router
+ * state (so Approvals draws the crumb) and notes its own id and the scroll, so
+ * the return puts focus back on this control, whichever one left (SAD20:
+ * "focus returns to the control that left").
+ */
+function StudioLink({ id, to, className, children }) {
+  return (
+    <Link id={id} to={to} state={FROM_STUDIO} onClick={() => leave(id)} className={className} data-testid={id}>
+      {children}
+    </Link>
+  );
+}
 
 function Figure({ figure, words, testId }) {
   return (
@@ -112,7 +140,7 @@ function OnTime({ n }) {
     <p className={`mt-3 flex flex-wrap items-center gap-x-2 border-t border-axal-hairline pt-3 dark:border-gray-700 ${SUB}`} data-testid="studio-overdue-on-time">
       <span className="font-bold text-axal-ink dark:text-gray-100">{line}</span>
       <span>under 72 hours, not overdue.</span>
-      <Link to="/admin/approvals" state={FROM_STUDIO} className={LINK}>Open Approvals</Link>
+      <StudioLink id={OPEN_IDS.onTime} to="/admin/approvals" className={LINK}>Open Approvals</StudioLink>
     </p>
   );
 }
@@ -140,7 +168,7 @@ export default function StudioOverdueCard({ read: readProp, scope, frozen = fals
     return (
       <div className={CARD} data-testid="studio-overdue-unavailable">
         <Unreadable what="Approvals" claim="This is not a claim that nothing is overdue. The rest of Studio read normally." onRetry={read.reload} />
-        <Link to="/admin/approvals" state={FROM_STUDIO} className={LINK}>Open Approvals →</Link>
+        <StudioLink id={OPEN_IDS.unavailable} to="/admin/approvals" className={LINK}>Open Approvals →</StudioLink>
       </div>
     );
   }
@@ -173,15 +201,15 @@ export default function StudioOverdueCard({ read: readProp, scope, frozen = fals
               <li key={l.key} className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-axal-ink dark:text-gray-100">
                 <span className="font-bold">{l.label}</span>
                 <span className={SUB}>· {l.count} overdue{l.oldest ? ` · oldest ${l.oldest}` : ''}</span>
-                <Link to={laneTo(l.key)} state={FROM_STUDIO} className={LINK} data-testid={`studio-overdue-lane-${l.key}`}>Lane: {l.label} →</Link>
+                <StudioLink id={laneLinkId(l.key)} to={laneTo(l.key)} className={LINK}>Lane: {l.label} →</StudioLink>
               </li>
             ))}
           </ul>
         ) : view.oldest ? <OverdueItem row={view.oldest} /> : null}
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <Link id={REVIEW_ID} to={OVERDUE_TO} state={FROM_STUDIO} onClick={leave} className={PRIMARY} data-testid={REVIEW_ID}>
+          <StudioLink id={REVIEW_ID} to={OVERDUE_TO} className={PRIMARY}>
             {reviewLabel(view)} →
-          </Link>
+          </StudioLink>
           <span className={`hidden sm:inline ${SUB}`}>Opens Approvals with <b className="text-axal-ink dark:text-gray-100">{AGE_CHIP}</b> in {scope}.</span>
         </div>
         <OnTime n={view.onTime} />
@@ -203,7 +231,7 @@ export default function StudioOverdueCard({ read: readProp, scope, frozen = fals
         <p className={`mt-2 ${SUB}`}>
           Nothing is waiting in Approvals for {scope}: all {view.lanesAll} lanes answered with 0 open.
         </p>
-        <Link to="/admin/approvals/decided" state={FROM_STUDIO} className={LINK}>See what was decided</Link>
+        <StudioLink id={OPEN_IDS.decided} to="/admin/approvals/decided" className={LINK}>See what was decided</StudioLink>
       </div>
     );
   }
@@ -227,7 +255,7 @@ export default function StudioOverdueCard({ read: readProp, scope, frozen = fals
             : view.kind === 'partial-zero' ? 'Nothing overdue was read; this is not a claim that nothing is.'
               : 'Nothing is overdue in Approvals.'}
       </p>
-      <Link to="/admin/approvals" state={FROM_STUDIO} className={LINK}>Open Approvals</Link>
+      <StudioLink id={OPEN_IDS.zero} to="/admin/approvals" className={LINK}>Open Approvals</StudioLink>
     </div>
   );
 }

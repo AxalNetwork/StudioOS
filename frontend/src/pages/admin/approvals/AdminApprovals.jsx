@@ -6,7 +6,7 @@ import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { fromStudio } from '../studioOverdue';
+import { fromStudio, keepStudio } from '../studioOverdue';
 import { useHeldGlance } from '../heldFigures';
 import { HQ_LANES, LINE, MOVED_KEY, MOVED_NOTICE, RAIL_NOTE, TITLE, laneViews, tabOf } from './approvalsModel';
 import { assignItems, queueStep, decidedQueryOf, inboxQueryOf, itemOfPath, refusalToast, waitingFigure } from './inboxModel';
@@ -41,6 +41,10 @@ import { Decided } from './ApprovalsDecided';
  * link has none, so it never claims a route the reader did not take (SAD13
  * L6). On a branch the scope chip names the territory the read ran for
  * (`branchLabel`) instead of HQ's fixed "HQ-held accounts" label.
+ *
+ * D8728 part 3: opening an item, stepping to the next or previous one and
+ * closing it pass Studio's marker on (`keepStudio`), so the crumb stays for
+ * the whole visit instead of going with the first item opened.
  */
 
 
@@ -117,7 +121,8 @@ export function ApprovalsPage({ viewer = null }) {
     inbox.reload();
     after?.();
   };
-  const closeItem = () => navigate({ pathname: '/admin/approvals', search: loc.search });
+  // D8728 part 3: closing an item keeps the visit Studio opened, crumb and all.
+  const closeItem = () => navigate({ pathname: '/admin/approvals', search: loc.search }, { state: keepStudio(loc.state) });
 
   // D4814 (P0): on the Inbox the tab reads `waitingFigure`, the same number as
   // Waiting and All. It used to read `unfiltered_total`, which the Worker sends
@@ -153,7 +158,7 @@ export function ApprovalsPage({ viewer = null }) {
       {tab === 'lanes' ? <Lanes views={views} glance={glance} inbox={inbox} superAdmin={superAdmin} /> : null}
       {tab === 'decided' ? <Decided decided={decided} superAdmin={superAdmin} /> : null}
       {item ? (
-        <ItemDrawer key={`${item.lane}-${item.id}`} at={item} step={onInbox && inbox.status === 'ready' ? queueStep(inbox.reply, item) : null} search={loc.search}
+        <ItemDrawer key={`${item.lane}-${item.id}`} at={item} step={onInbox && inbox.status === 'ready' ? queueStep(inbox.reply, item) : null} search={loc.search} state={keepStudio(loc.state)}
           canTake={canTake} onClose={closeItem} onAssign={openAssign} onTake={take} />
       ) : null}
       {assignFor ? <AssignDialog items={assignFor.rows} title={assignFor.title} line={assignFor.line} inbox={inbox} callerId={user?.id} onClose={() => setAssignFor(null)} onDone={doneAssign} /> : null}
