@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { HEALTH_WORD, NOT_RATED, modeValue, nextAction, progressText } from './boardAttention';
 import HealthPill from './HealthPill';
+import { BackToFeedLink } from '../FromStudioBack';
 
 const monthName = (period) => {
   const m = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
@@ -55,7 +56,8 @@ export function sheetSections(row) {
   ];
 }
 
-export default function EngagementSheet({ row, onClose }) {
+// D8733 (#8733, SOP05): opened from the Studio firm feed, the Sheet carries the way back, after Close in tab order.
+export default function EngagementSheet({ row, onClose, backToStudio = false }) {
   const closeRef = useRef(null);
   const opener = useRef(typeof document !== 'undefined' ? document.activeElement : null);
   useEffect(() => {
@@ -86,6 +88,7 @@ export default function EngagementSheet({ row, onClose }) {
             <button ref={closeRef} type="button" onClick={onClose} aria-label="Close engagement"
               className="grid h-11 w-11 place-items-center rounded-lg text-[#18181b] hover:bg-[#f4f3f7] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#7c3aed] dark:text-gray-100 dark:hover:bg-gray-800">✕</button>
           </div>
+          {backToStudio && <BackToFeedLink />}
           <h2 id={headingId} className="mt-1 text-[20px] font-extrabold text-[#18181b] dark:text-gray-100">{row.client || 'Client not recorded'}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[14px] text-[#6b6577] dark:text-gray-400">
             <HealthPill health={row.health} />
