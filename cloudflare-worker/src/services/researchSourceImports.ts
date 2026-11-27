@@ -14,9 +14,8 @@
  *   · a seal that names ids (missing, hash differs, unexpected, altered, refused) against the expected list the
  *     client sends, whose per-source digest must equal the manifest's;
  *   · one `admin_audit_log` row (`adminAuditStatement`) in the same `DB.batch` as each run open, seal, reconcile and
- *     removal. Because the store's own `openRun`, `sealRun` and removal functions run their batches themselves, those
- *     three are composed here from the store's exported SQL, planner and digest helpers (handoff to #7742: a
- *     statement-returning variant would let this file call the store instead).
+ *     removal. The store's writes come from its statement-returning variants (`openRunStatements`,
+ *     `sealStatusStatement`, `removalStatements`, D7745-p3), so this file adds only the audit row, not a copy of them.
  *
  * No function here returns, logs or audits a field value. Refusals name codes, sources, columns, record ids and counts.
  * The package hash recipe is not registered (`HASH_RECIPES` is empty, D7742): every stated row hash is kept as declared
@@ -26,7 +25,7 @@
 import type { Env } from '../types';
 import { adminAuditStatement } from './adminAudit';
 import {
-  HASH_RECIPES, SQL as STORE_SQL, bodyJson, membershipDigest, rulesFromRequest,
+  HASH_RECIPES, SQL as STORE_SQL, bodyJson, membershipDigest, openRunStatements, removalStatements, sealStatusStatement,
   sha256Hex, validateManifest, writeChunk,
   type CellValue, type ColumnClass, type ColumnRule, type ColumnRuleInput, type ContactHandling, type Manifest, type SourceRecordInput,
 } from './researchSourceRecords';
@@ -90,17 +89,6 @@ const named = (ids: Array<{ source_key: string; provider_record_id: string }>) =
 export const SQL = Object.freeze({
   openRunsCount: `SELECT uid, status FROM research_source_runs WHERE status IN ('running', 'uncertain', 'partial') ORDER BY started_at LIMIT 1`,
   runByKey: `SELECT uid, payload_sha256, status FROM research_source_runs WHERE idempotency_key = ?1`,
-  // The run is written only while none is open: the check and the insert are one statement.
-  insertRunIfNoneOpen: `INSERT INTO research_source_runs (uid, idempotency_key, acted_by_user_id, worker_version, payload_sha256,
-    hash_recipe_id, manifest_json, status, started_at)
-    SELECT ?1, ?2, ?3, ?4, ?5, ?8, ?6, 'running', ?7
-    WHERE NOT EXISTS (SELECT 1 FROM research_source_runs WHERE status IN ('running', 'uncertain', 'partial'))`,
-  // The store's rules insert, written only when the run above was.
-  insertRulesForRun: `INSERT INTO research_source_column_rules (source_key, column_name, column_order, class, contact_handling, role,
-    fixed_at, fixed_by_run_uid)
-    SELECT json_extract(value, '$.s'), json_extract(value, '$.c'), json_extract(value, '$.o'), json_extract(value, '$.k'),
-      json_extract(value, '$.h'), json_extract(value, '$.r'), ?2, ?3 FROM json_each(?1)
-    WHERE EXISTS (SELECT 1 FROM research_source_runs WHERE uid = ?3)`,
   runRow: `SELECT uid, idempotency_key, acted_by_user_id, worker_version, payload_sha256, hash_recipe_id, manifest_json, status,
     counts_json, uncertain_chunks_json, started_at, verified_at FROM research_source_runs WHERE uid = ?1`,
   listRuns: `SELECT uid, acted_by_user_id, worker_version, payload_sha256, status, counts_json, uncertain_chunks_json, started_at,
@@ -290,53 +278,33 @@ export async function openImportRun(db: D1Database, env: Env, actorId: number, i
   }
   const manifest = validateManifest(input?.manifest as Manifest);
   checkDeclaredExclusions(manifest);
-  // allowHeld is never set: #7739 Q3 = B. A `held` contact column is refused (`held_not_enabled`).
-  const requested = rulesFromRequest(manifest, input?.column_classes as Record<string, Record<string, ColumnRuleInput>>, false);
 
-  const prior = await db.prepare(SQL.runByKey).bind(key).first<{ uid: string; payload_sha256: string }>();
-  if (prior) {
-    if (prior.payload_sha256 !== fileSha) throw new ImportRefusal(409, 'idempotency_key_reused');
-    return { run: runSummary(await runOrRefuse(db, prior.uid)), replayed: true };
-  }
+  // The store's open, its writes returned (D7745-p3): the key replay, the removed-source and column-rule checks, and
+  // allowHeld never set (#7739 Q3 = B: a `held` contact column is refused, `held_not_enabled`). `exclusive` makes the
+  // run insert itself refuse while another run is open, so two opens cannot race past the check below.
+  const planned = await openRunStatements(db, {
+    idempotencyKey: key, actorUserId: actorId, payloadSha256: fileSha,
+    hashRecipeId: typeof input.hash_recipe_id === 'string' ? input.hash_recipe_id : null, manifest,
+    columnClasses: input?.column_classes as Record<string, Record<string, ColumnRuleInput>>,
+    workerVersion: env.WORKER_DEPLOY_VERSION ?? null, allowHeld: false, now,
+  }, { exclusive: true });
+  if (planned.replayed) return { run: runSummary(await runOrRefuse(db, planned.run_uid)), replayed: true };
   const open = await db.prepare(SQL.openRunsCount).first<{ uid: string; status: string }>();
   if (open) throw new ImportRefusal(409, 'run_open', { run_uid: open.uid, status: open.status });
 
   const sourceKeys = manifest.sources.map((s) => s.source_key);
-  const removals = (await db.prepare(STORE_SQL.activeRemovals).bind(JSON.stringify(sourceKeys)).all<{ scope: string; source_key: string }>()).results ?? [];
-  const removedSource = removals.find((r) => r.scope === 'source');
-  if (removedSource) throw new ImportRefusal(409, 'source_removed', { source: removedSource.source_key });
-
-  const stored = await readRules(db, sourceKeys);
-  const newRules: Array<Record<string, unknown>> = [];
-  for (const s of manifest.sources) {
-    const have = stored.get(s.source_key);
-    const want = requested.get(s.source_key)!;
-    if (have) {
-      for (const [column, rule] of want) {
-        const fixed = have.get(column);
-        if (!fixed || fixed.class !== rule.class || fixed.contact !== rule.contact || fixed.role !== rule.role) {
-          throw new ImportRefusal(409, 'column_rules_disagree', { source: s.source_key, column });
-        }
-      }
-      continue;
-    }
-    s.columns.forEach((column, order) => {
-      const rule = want.get(column)!;
-      newRules.push({ s: s.source_key, c: column, o: order, k: rule.class, h: rule.contact, r: rule.role });
-    });
-  }
-  const runUid = crypto.randomUUID();
-  const at = now.toISOString();
+  const runUid = planned.run_uid;
+  const [insertRun, ...rest] = planned.statements;
   try {
     await db.batch([
-      db.prepare(SQL.insertRunIfNoneOpen).bind(runUid, key, actorId, env.WORKER_DEPLOY_VERSION ?? null, fileSha, JSON.stringify(manifest), at,
-        typeof input.hash_recipe_id === 'string' ? input.hash_recipe_id : null),
+      insertRun,
+      // Right after the run insert: `onlyIfChanged` writes the row only if that insert wrote.
       adminAuditStatement(env, actorId, AUDIT_ACTIONS.opened, {
         run_uid: runUid, source_keys: sourceKeys, file_sha256_declared: fileSha,
         list_digests_declared: Object.fromEntries(manifest.sources.map((s) => [s.source_key, s.digest])),
         expected_records: Object.fromEntries(manifest.sources.map((s) => [s.source_key, s.expected_records])),
       }, { onlyIfChanged: true }),
-      db.prepare(SQL.insertRulesForRun).bind(JSON.stringify(newRules), at, runUid),
+      ...rest,
     ]);
   } catch (e) {
     // The same key sent twice at once: the second insert meets the unique key; answer the first run.
@@ -501,7 +469,7 @@ export async function sealImportRun(db: D1Database, env: Env, actorId: number, r
   const verifiedAt = status === 'uncertain' ? null : now.toISOString();
   const digests = Object.fromEntries(Object.entries(sources).map(([k, v]) => [k, (v as { list_digest: unknown }).list_digest]));
   await db.batch([
-    db.prepare(STORE_SQL.setStatus).bind(run.uid, status, verifiedAt),
+    sealStatusStatement(db, run.uid, status, now),
     adminAuditStatement(env, actorId, AUDIT_ACTIONS.sealed, {
       run_uid: run.uid, status, source_keys: manifest.sources.map((s) => s.source_key), list_digests: digests,
       counts: { missing: missing.length, hash_differs: hashDiffers.length, unexpected: unexpected.length, altered: altered.length, refused: refused.length },
@@ -596,16 +564,9 @@ export async function removeImported(db: D1Database, env: Env, actorId: number, 
   const open = await db.prepare(SQL.openRunsCount).first<{ uid: string; status: string }>();
   if (open) throw new ImportRefusal(409, 'run_open', { run_uid: open.uid, status: open.status });
 
-  const before = await db.prepare(STORE_SQL.countRecord).bind(sourceKey, id).first<{ records: number; private_fields: number; flags: number }>();
-  const counts = scope === 'private_fields' ? { private_fields: Number(before?.private_fields ?? 0) }
-    : { records: Number(before?.records ?? 0), private_fields: Number(before?.private_fields ?? 0), flags: Number(before?.flags ?? 0) };
-  const statements = [db.prepare(STORE_SQL.deletePrivate).bind(sourceKey, id)];
-  if (scope !== 'private_fields') {
-    statements.push(db.prepare(STORE_SQL.deleteFlags).bind(sourceKey, id));
-    statements.push(db.prepare(STORE_SQL.deleteRecords).bind(sourceKey, id));
-  }
-  statements.push(db.prepare(STORE_SQL.insertRemoval).bind(actorId, now.toISOString(), scope, sourceKey, id, JSON.stringify(counts)));
-  statements.push(adminAuditStatement(env, actorId, AUDIT_ACTIONS.removal, { scope, source_key: sourceKey, provider_record_id: id, counts }));
-  await db.batch(statements);
+  // The store's removal, its writes returned (D7745-p3), with the audit row added to the same batch.
+  const { counts, statements } = await removalStatements(db, scope, { sourceKey, providerRecordId: id ?? undefined, actorUserId: actorId, now });
+  await db.batch([...statements,
+    adminAuditStatement(env, actorId, AUDIT_ACTIONS.removal, { scope, source_key: sourceKey, provider_record_id: id, counts })]);
   return { scope, source_key: sourceKey, provider_record_id: id, counts };
 }
