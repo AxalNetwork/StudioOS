@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
 import useRecordCrumb from '../admin/useRecordCrumb';
-import { benchmarkTiles, editorFields, editorPatch, readingDraft } from './benchmarkRead';
+import { HISTORY_EMPTY, benchmarkTiles, editorFields, editorPatch, historyRows, readingDraft } from './benchmarkRead';
 import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
 import { researchBenchmarkFundsApi } from '../../lib/api/researchBenchmarkFunds';
 import { oursProvenance } from './oursFromFundRead.js';
@@ -38,6 +38,12 @@ import OursFromFund from './OursFromFund.jsx';
  * figure was entered on this row or copied from a fund's recorded TVPI or DPI,
  * and `OursFromFund` offers that copy. A typed figure is replaced only after
  * the writer confirms; a hand edit of Ours drops the fund link at the Worker.
+ *
+ * EACH RESTATEMENT IS KEPT (D6277). The Restatement history card lists what
+ * each save replaced (field, earlier value, date), newest first, as text with
+ * its unit and no chart. A history the Worker could not read says Unavailable
+ * and the rest of the page still loads; an empty one says no earlier version
+ * is recorded.
  */
 
 const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
@@ -184,6 +190,8 @@ export default function BenchmarkDetail({ role = 'investor' }) {
   const draft = readingDraft(item, { thin });
   const wantsPeer = Boolean(form?.peer_value?.trim());
   const cons = detail?.constituents || [];
+  // D6277: null when the Worker could not read the history (Unavailable).
+  const history = historyRows(item, detail?.history);
   // D772 (#2098): the benchmark is the rail's record.
   useRecordCrumb(item?.metric || null, 'benchmark', item ? uid : null);
 
@@ -387,6 +395,45 @@ export default function BenchmarkDetail({ role = 'investor' }) {
                   A tracked row has no peer set to name members of. Enter a sourced peer figure below first.
                 </p>
               )}
+            </Card>
+
+            {/* D6277: what each restatement replaced, newest first, as text. */}
+            <Card data-testid="benchmark-history">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className={eyebrow}>Restatement history</span>
+                {history && history.length > 0 && (
+                  <span className="text-[11px] text-axal-muted">
+                    {`${history.length} ${history.length === 1 ? 'value' : 'values'} replaced`}
+                  </span>
+                )}
+              </div>
+              {history === null ? (
+                <div className="mt-2.5">
+                  <Unreadable what="The earlier versions of this benchmark" claim="This is not an empty history. The current figures above are unaffected." />
+                </div>
+              ) : history.length === 0 ? (
+                <p data-testid="benchmark-history-empty" className="mt-2.5 text-[12px] text-axal-muted">{HISTORY_EMPTY}</p>
+              ) : (
+                <div className="mt-2.5 overflow-x-auto">
+                  <table className="w-full text-left text-[12px]">
+                    <thead><tr>{['Field', 'Earlier value', 'Replaced'].map((h) => <th key={h} scope="col" className={th}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {history.map((r) => (
+                        <tr key={r.id} className="border-t border-axal-hairline align-top dark:border-gray-800">
+                          <td className="py-2 pr-3 font-semibold">{r.field}</td>
+                          <td className={`py-2 pr-3 break-words ${r.key === 'reading' ? 'whitespace-pre-wrap' : 'font-mono'}`}>
+                            {r.earlier ?? <Unrecorded />}
+                          </td>
+                          <td className="whitespace-nowrap py-2 font-mono text-axal-muted">{r.replaced || <Unrecorded />}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="mt-2.5 text-[11.5px] leading-relaxed text-axal-muted">
+                A save that changes a value keeps what it replaced. Edits made before this history was kept were overwritten and are not recorded.
+              </p>
             </Card>
 
             <Card>
