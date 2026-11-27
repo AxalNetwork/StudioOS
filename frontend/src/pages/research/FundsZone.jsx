@@ -661,6 +661,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         </ZoneBody>
 
         {canSyncSheets ? <SheetsSyncCard /> : null}
+        {canSyncSheets ? <Card padding="md" data-testid="source-imports-door"><h3 className="text-sm font-extrabold tracking-tight">Source imports <span className="text-[11px] font-semibold text-axal-muted dark:text-gray-400">· Super admin only</span></h3><p className="mt-1 text-[13px] text-gray-600 dark:text-gray-300">Private source records: load a file as captured and read it back. A source record is not a fund.</p><Link to="/research/source-imports" className="mt-2 inline-flex min-h-[44px] items-center text-[13px] font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200">Open source imports →</Link></Card> : null}
 
         <Card padding="lg">
           <h3 className="text-sm font-extrabold tracking-tight">Add a fund</h3>
