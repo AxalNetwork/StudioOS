@@ -10,7 +10,14 @@
  * D7166 (#7166): a size reads in its list's own currency (`size_currency`
  * EUR or USD), and the size filter works in one currency at a time. A row is
  * one fund vehicle: `vehicleLabel` names it from the manager and `fund_number`.
+ *
+ * D7744 (#7744): the currency is the row's own (`size_currency` as the Worker
+ * marks it), any three-letter code. EUR, USD and GBP print with their mark;
+ * another code prints as the code ("CHF 75M"). The size currency control
+ * offers the currencies the answer lists (`size_currencies`), and no sentence
+ * falls back to "euros": a currency is named by its own word or code.
  */
+import { currencyCode } from '../../lib/money.js';
 
 export const PAGE_SIZES = [25, 50, 100];
 
@@ -49,10 +56,32 @@ export const STAGE_REASON = 'The fund directory records no stage for any fund ye
 /** D7166: no list records where a fund invests, so it reads Not recorded and is not a filter. */
 export const GEOGRAPHY_REASON = 'No list records where a fund invests. Manager HQ is where the manager is based, not where it invests.';
 
-/** D7166: the currencies the size filter works in, one at a time. */
+/** D7166: the currencies the size filter works in, one at a time, before the API has answered (D7744: it lists its own). */
 export const SIZE_CURRENCIES = [['EUR', 'Euros (EUR)'], ['USD', 'US dollars (USD)']];
-const MARK = { EUR: '€', USD: 'US$' };
-const CURRENCY_WORD = { EUR: 'euros', USD: 'US dollars' };
+const MARK = { EUR: '€', USD: 'US$', GBP: '£' };
+const CURRENCY_WORD = { EUR: 'euros', USD: 'US dollars', GBP: 'pounds sterling' };
+
+/** D7744: a currency's word in a sentence ("euros"); a code with no word is named by itself, never as euros. */
+export function currencyWord(code) {
+  return CURRENCY_WORD[code] || String(code || '');
+}
+
+/** D7744: the mark printed before a figure: "€", "US$", "£", or the code and a space ("CHF "). */
+export function currencyMark(code) {
+  return MARK[code] || (code ? `${code} ` : '');
+}
+
+/**
+ * D7744: the size currency control's options — the currencies the answer lists
+ * (`size_currencies`), as [code, label]. The asked currency is kept when the
+ * answer does not list it, so the control still shows what is asked; before an
+ * answer, the asked currency alone.
+ */
+export function sizeCurrencyOptions(data, asked = 'EUR') {
+  const listed = Array.isArray(data?.size_currencies) ? data.size_currencies.filter((c) => /^[A-Z]{3}$/.test(c)) : [];
+  const codes = listed.includes(asked) ? listed : [...listed, asked];
+  return codes.map((c) => [c, CURRENCY_WORD[c] ? `${CURRENCY_WORD[c][0].toUpperCase()}${CURRENCY_WORD[c].slice(1)} (${c})` : c]);
+}
 
 export const EMPTY_QUERY = Object.freeze({
   q: '', hq_country: '', focus: '', size_band: '', size_min: '', size_max: '', size_currency: 'EUR',
@@ -110,10 +139,10 @@ export function pageList(page, pages) {
   return out;
 }
 
-/** Cents → "€1,375M" / "US$2.5M", in the currency the API marked. */
+/** Cents → "€1,375M" / "US$2.5M" / "CHF 40M", in the currency the API marked. */
 export function moneyM(cents, currency = 'EUR') {
   const m = Number(cents) / 100 / 1_000_000;
-  return `${MARK[currency] || ''}${m.toLocaleString('en-US', { maximumFractionDigits: m < 10 ? 1 : 0 })}M`;
+  return `${currencyMark(currency)}${m.toLocaleString('en-US', { maximumFractionDigits: m < 10 ? 1 : 0 })}M`;
 }
 
 /** Euro cents → "€1,375M" / "€2.5M". Only ever called on a row the API marked EUR. */
@@ -123,11 +152,12 @@ export function eurM(cents) {
 
 /**
  * The size to print with its currency code, or null with the reason it is not
- * recorded. Only a currency the API marked (EUR or USD) is ever printed.
+ * recorded. Only a currency the API marked is ever printed (D7744: any listed
+ * ISO code, the same set the profile's `amount` prints, so the two agree).
  */
 export function sizeOf(item) {
   const currency = item?.size_currency;
-  if (item && MARK[currency] && item.fund_size_cents != null) {
+  if (item && currencyCode(currency) && item.fund_size_cents != null) {
     return { text: moneyM(item.fund_size_cents, currency), currency, reason: null };
   }
   return { text: null, currency: null, reason: item?.size_reason || 'Not recorded' };
@@ -180,7 +210,7 @@ export function activeFilters(query, facets) {
   if (query.hq_country) out.push({ key: 'hq_country', label: `HQ: ${label(facets?.hq_country, query.hq_country)}` });
   if (query.focus) out.push({ key: 'focus', label: `Focus: ${label(facets?.focus, query.focus)}` });
   const ccy = query.size_currency || 'EUR';
-  const mark = MARK[ccy] || '';
+  const mark = currencyMark(ccy);
   if (query.size_band === UNSIZED) {
     out.push({ key: 'size_band', label: `Size: not recorded in ${ccy}` });
   } else if (query.size_band) {
@@ -205,7 +235,10 @@ export function activeFilters(query, facets) {
 export function coverageRows(coverage) {
   const f = coverage?.fields || {};
   return [
-    ['Size in a known currency', Number(f.size_eur || 0) + Number(f.size_usd || 0)],
+    // D7744: every currency the rows record (`size_by_currency`), else the two counts an older answer carries.
+    ['Size in a known currency', f.size_by_currency
+      ? Object.values(f.size_by_currency).reduce((t, n) => t + Number(n || 0), 0)
+      : Number(f.size_eur || 0) + Number(f.size_usd || 0)],
     ['Manager HQ', f.hq],
     ['Website', f.website],
     ['Stated focus', f.sector_focus],
@@ -266,7 +299,7 @@ export function showUnsized() {
 /** The link's accessible name, which starts with its visible text (WCAG 2.5.3). */
 export function showUnsizedLabel(query, facets) {
   const n = Number(facets?.size_not_comparable || 0);
-  const word = CURRENCY_WORD[query.size_currency || 'EUR'] || 'euros';
+  const word = currencyWord(query.size_currency || 'EUR');
   return `Show them: the ${num(n)} ${n === 1 ? 'fund' : 'funds'} with no size in ${word}`;
 }
 
@@ -281,8 +314,29 @@ export function sizeExclusion(query, facets) {
   if (!sizeFiltered(query) || query.size_band === UNSIZED || !facets) return null;
   const n = Number(facets.size_not_comparable || 0);
   if (!n) return null;
-  const word = CURRENCY_WORD[query.size_currency || 'EUR'] || 'euros';
+  const word = currencyWord(query.size_currency || 'EUR');
   return `${num(n)} ${n === 1 ? 'fund has' : 'funds have'} no size in ${word}, so the size filter leaves ${n === 1 ? 'it' : 'them'} out.`;
+}
+
+/** D7744: the sentence under the filters — what the size filter compares in, from the asked currency. */
+export function sizeCompareLine(query, facets) {
+  const ccy = query?.size_currency || 'EUR';
+  const n = Number(facets?.size_not_comparable || 0);
+  return `Sizes compare in ${ccy} only: ${num(n)} matching ${n === 1 ? 'fund has' : 'funds have'} no size in ${currencyWord(ccy)} and sit outside the size filter.`;
+}
+
+/** D7744: the coverage card's sentence on sizes with no recorded currency; null when there are none. */
+export function unknownCurrencyLine(coverage) {
+  const n = Number(coverage?.fields?.size_unknown_currency || 0);
+  if (!n) return null;
+  return `${num(n)} more ${n === 1 ? 'fund holds a size' : 'funds hold sizes'} whose currency is not recorded. Those sizes are not shown, banded or sorted until the currency is known.`;
+}
+
+/** D7744: a list's size text in the sources line, from the currencies its sized rows record. */
+export function listSizeText(source) {
+  const list = Array.isArray(source?.size_currencies) ? source.size_currencies
+    : (source?.size_currency ? [source.size_currency] : []);
+  return list.length ? `sizes in ${list.join(', ')}` : 'size currency not recorded, so no size is shown';
 }
 
 /**
