@@ -68,6 +68,7 @@ import {
   needsBaseline,
   sqlQuote,
   verifyMarked,
+  presentAddColumns,
   BASELINE_CUTOFF,
   bootstrapStateProblem,
 } from './lib/migrationPlan.mjs';
@@ -206,17 +207,9 @@ function recordMigration(target, file, options) {
   recordMigrations(target, [file], options);
 }
 
-// --verify-marked: check every ledgered file's tables and columns against the
-// live schema and un-mark the ones whose effect is absent, so the next plain
-// run applies them for real. GOTCHAS §Migrations is the procedure this
-// automates; DEPLOY.md's "never delete a ledger row" is about files that
-// EXECUTED, and a row a baseline wrote without executing is the one exception
-// that document's own §4(b) creates.
-function verifyMarkedRun(target, files, appliedSet) {
-  if (appliedSet.size === 0) {
-    console.log('[migrate-d1] --verify-marked: the ledger is empty, nothing is marked.');
-    return;
-  }
+// Live-schema probes over wrangler, cached per run: is a table there, and which
+// columns does it have. Shared by --verify-marked and the apply path (D8937).
+function schemaProbes(target) {
   const existsCache = new Map();
   const columnsCache = new Map();
   const tableExists = (t) => {
@@ -238,6 +231,21 @@ function verifyMarkedRun(target, files, appliedSet) {
     }
     return columnsCache.get(t);
   };
+  return { tableExists, tableColumns };
+}
+
+// --verify-marked: check every ledgered file's tables and columns against the
+// live schema and un-mark the ones whose effect is absent, so the next plain
+// run applies them for real. GOTCHAS §Migrations is the procedure this
+// automates; DEPLOY.md's "never delete a ledger row" is about files that
+// EXECUTED, and a row a baseline wrote without executing is the one exception
+// that document's own §4(b) creates.
+function verifyMarkedRun(target, files, appliedSet) {
+  if (appliedSet.size === 0) {
+    console.log('[migrate-d1] --verify-marked: the ledger is empty, nothing is marked.');
+    return;
+  }
+  const { tableExists, tableColumns } = schemaProbes(target);
 
   const { verified, missing, unverifiable } = verifyMarked(files, appliedSet, { tableExists, tableColumns });
   console.log(
@@ -523,7 +531,29 @@ function main() {
 
   if (MODE_BASELINE) printAudit(files);
 
+  // D8937: in apply mode, a pending file whose ADD COLUMNs are already on the
+  // target (runtime DDL added them first) runs without those ALTERs, or
+  // refuses when only some are there. Baseline keeps its own marking rule.
+  // Fresh probes per file: an earlier file in this run may have changed the
+  // schema (a rebuild drops columns), so a run-wide cache could lie.
   const exec = (file) => {
+    if (!MODE_BASELINE && !classifyIdempotency(file.sql).idempotent) {
+      const found = presentAddColumns(file.sql, schemaProbes(target));
+      if (found.state === 'partial') {
+        throw new Error(
+          `${found.reason}. Already on ${target.label}: ${found.present.join(', ')}. ` +
+            `Missing: ${found.missing.join(', ') || 'none'}. Not applied; resolve by hand (DEPLOY.md §4).`,
+        );
+      }
+      if (found.state === 'satisfied') {
+        console.log(
+          `[migrate-d1]   ${file.name}: its added column(s) are already present ` +
+            `(${found.present.join(', ')}); running the rest of the file only.`,
+        );
+        if (found.remainder) wrangler(target, { command: found.remainder });
+        return;
+      }
+    }
     console.log(`[migrate-d1]   applying ${file.name} ...`);
     wrangler(target, { file: `sql/migrations/${file.name}` });
   };

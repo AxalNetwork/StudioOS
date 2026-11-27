@@ -418,6 +418,57 @@ export function expectedEffects(sql) {
 }
 
 /**
+ * D8937: a pending file whose `ADD COLUMN`s are already on the target.
+ *
+ * Runtime DDL (`runSchemaBootstrap`, #5343) can add a migration's columns
+ * before the migration itself reaches a target: production ran the Worker
+ * that bootstraps them while the deploys that would have applied the file
+ * failed. Replaying the file then dies on `duplicate column name`, on every
+ * deploy, although its effect is present (7707, 2026-11-27, #8317).
+ *
+ * Returns, for one pending file:
+ *  - `none`: no added column exists yet (or the file adds none, or it is a
+ *    rebuild) — apply it as written;
+ *  - `satisfied`: every added column exists and everything else in the file is
+ *    re-runnable — run `remainder` (the file without those ALTERs) and record it;
+ *  - `partial`: some added columns exist and some do not, or the remainder is
+ *    not re-runnable — refuse and name them; a person decides.
+ * A rebuild (`DROP TABLE` / `RENAME`) is always `none`: its columns belong to
+ * a table the file replaces, so their presence proves nothing.
+ *
+ * @param {string} sql
+ * @param {{ tableExists:(t:string)=>boolean, tableColumns:(t:string)=>Set<string> }} probes
+ * @returns {{ state:'none'|'satisfied'|'partial', present:string[], missing:string[], remainder:string, reason?:string }}
+ */
+export function presentAddColumns(sql, probes) {
+  const body = stripComments(sql);
+  const none = { state: 'none', present: [], missing: [], remainder: '' };
+  if (/\bDROP\s+TABLE\b|\bRENAME\s+(?:TO|COLUMN)\b/i.test(body)) return none;
+  const re =
+    /\bALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)[^;]*;?/gi;
+  const adds = [...body.matchAll(re)].map((m) => ({ text: m[0], table: m[1].toLowerCase(), column: m[2].toLowerCase() }));
+  if (adds.length === 0) return none;
+  const present = [];
+  const missing = [];
+  for (const a of adds) {
+    const name = `${a.table}.${a.column}`;
+    if (probes.tableExists(a.table) && probes.tableColumns(a.table).has(a.column)) present.push(name);
+    else missing.push(name);
+  }
+  if (present.length === 0) return { ...none, missing };
+  if (missing.length) {
+    return { state: 'partial', present, missing, remainder: '', reason: 'some added columns exist and some do not' };
+  }
+  let remainder = body;
+  for (const a of adds) remainder = remainder.replace(a.text, ' ');
+  const rest = classifyIdempotency(remainder);
+  if (!rest.idempotent) {
+    return { state: 'partial', present, missing, remainder: '', reason: `the rest of the file is not re-runnable: ${rest.reasons.join('; ')}` };
+  }
+  return { state: 'satisfied', present, missing, remainder: /[^\s;]/.test(remainder) ? remainder.trim() : '' };
+}
+
+/**
  * Check every ledgered file against the live schema.
  *
  * A baseline RECORDS non-idempotent files without executing them, on the

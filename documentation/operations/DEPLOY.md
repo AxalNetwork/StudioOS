@@ -458,6 +458,8 @@ ones without executing them, and prints exactly which it marked so you can
 verify them by hand. Run it **once per environment**. Afterwards, plain runs
 apply only genuinely new migrations.
 
+**(b2) `duplicate column name` on a new migration (D8937).** If runtime DDL added a pending file's columns first, the runner checks that before it executes the file. When every added column is present and the rest of the file is safe to re-run, it runs only the rest and records the file. When only some are present, it stops and names them. Then compare the live table (`PRAGMA table_info`) with the file, and write a forward fix for the missing columns.
+
 **(c) A multi-statement file failed partway.**
 D1 applies a `--file` batch as one implicit transaction and rolls the whole
 file back on the first error, so nothing of it landed and it is not in the

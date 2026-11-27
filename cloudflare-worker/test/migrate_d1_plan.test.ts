@@ -41,6 +41,7 @@ import {
   bootstrapStateProblem,
   sqlQuote,
   verifyMarked,
+  presentAddColumns,
 } from '../../scripts/lib/migrationPlan.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -407,6 +408,113 @@ test('verifyMarked separates present, absent and unverifiable ledger rows', () =
   // A file that is not in the ledger is simply not a marked row.
   const partial = new Map([...engine.appliedSet()].filter(([k]) => k !== '002_absent.sql'));
   assert.deepEqual(verifyMarked(files, partial, probes).missing.map((m) => m.file.name), ['003_table_absent.sql']);
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * D8937: a pending file whose ADD COLUMNs runtime DDL already put on the target.
+ * Production failed every deploy on 7707 (`duplicate column name`) although its
+ * columns, table and index were all there (#8317, 2026-11-27).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+function probesOf(db: InstanceType<typeof DatabaseSync>) {
+  return {
+    tableExists: (t: string) =>
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t) !== undefined,
+    tableColumns: (t: string) =>
+      new Set((db.prepare(`PRAGMA table_info(${t})`).all() as any[]).map((r) => String(r.name).toLowerCase())),
+  };
+}
+
+const D8937_FILE =
+  '-- header prose: ALTER TABLE rows ADD COLUMN not_real TEXT;\n' +
+  'ALTER TABLE rows ADD COLUMN period TEXT;\n' +
+  'ALTER TABLE rows ADD COLUMN scope TEXT CHECK (scope IS NULL OR scope IN (\'a\', \'b\'));\n' +
+  'CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, source TEXT NOT NULL);\n' +
+  'CREATE INDEX IF NOT EXISTS idx_runs_source ON runs(source);\n';
+
+test('D8937: every added column already present -> satisfied, and the remainder runs and creates the rest', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, period TEXT, scope TEXT)');
+  const found = presentAddColumns(D8937_FILE, probesOf(db));
+  assert.equal(found.state, 'satisfied');
+  assert.deepEqual(found.present, ['rows.period', 'rows.scope']);
+  assert.deepEqual(found.missing, []);
+  assert.doesNotMatch(found.remainder, /ADD\s+COLUMN/i, 'the replayed ALTERs are left out');
+  assert.throws(() => db.exec(D8937_FILE), /duplicate column name/, 'the file as written fails, as production did');
+  db.exec(found.remainder);
+  assert.ok(probesOf(db).tableExists('runs'), 'the remainder still creates what the file adds besides the columns');
+  assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_runs_source'").get());
+  db.exec(found.remainder);  // and it is re-runnable
+});
+
+test('D8937: no added column present -> none (apply the file as written)', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY)');
+  const found = presentAddColumns(D8937_FILE, probesOf(db));
+  assert.equal(found.state, 'none');
+  assert.deepEqual(found.missing, ['rows.period', 'rows.scope']);
+  db.exec(D8937_FILE);
+  assert.ok(probesOf(db).tableColumns('rows').has('scope'));
+});
+
+test('D8937: some present, some missing -> partial, naming both', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, period TEXT)');
+  const found = presentAddColumns(D8937_FILE, probesOf(db));
+  assert.equal(found.state, 'partial');
+  assert.deepEqual(found.present, ['rows.period']);
+  assert.deepEqual(found.missing, ['rows.scope']);
+  assert.equal(found.remainder, '');
+});
+
+test('D8937: columns present but the rest is not re-runnable -> partial', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, period TEXT)');
+  const found = presentAddColumns('ALTER TABLE rows ADD COLUMN period TEXT;\nINSERT INTO rows (id) VALUES (1);', probesOf(db));
+  assert.equal(found.state, 'partial');
+  assert.match(found.reason, /not re-runnable/);
+});
+
+test('D8937: a rebuild is never treated as already applied', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, period TEXT)');
+  const rebuild =
+    'CREATE TABLE rows_next (id INTEGER PRIMARY KEY);\nALTER TABLE rows_next ADD COLUMN period TEXT;\n' +
+    'DROP TABLE rows;\nALTER TABLE rows_next RENAME TO rows;';
+  assert.equal(presentAddColumns(rebuild, probesOf(db)).state, 'none');
+  assert.equal(presentAddColumns('CREATE TABLE IF NOT EXISTS t (a);', probesOf(db)).state, 'none', 'no ADD COLUMN');
+  // A present column in a file that also drops a table: the drop could be the
+  // column's own table being replaced, so presence proves nothing -> apply as written.
+  const withDrop = 'ALTER TABLE rows ADD COLUMN period TEXT;\nDROP TABLE IF EXISTS rows_old;';
+  assert.equal(presentAddColumns(withDrop, probesOf(db)).state, 'none');
+});
+
+test('D8937: the real 7707 file is satisfied where runtime DDL added its columns, and applies where it did not', () => {
+  const sql = fs.readFileSync(path.join(REAL_MIGRATIONS, '202611191833_7707_market_intel_row_dates_runs.sql'), 'utf8');
+  const base = 'CREATE TABLE market_intel_rows (id INTEGER PRIMARY KEY, source_key TEXT, ts TEXT)';
+  const bootstrapped = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  bootstrapped.exec(base);
+  for (const c of ['observed_period', 'observed_period_end', 'published_at', 'retrieved_at', 'coverage_area', 'scope']) {
+    bootstrapped.exec(`ALTER TABLE market_intel_rows ADD COLUMN ${c} TEXT`);
+  }
+  const found = presentAddColumns(sql, probesOf(bootstrapped));
+  assert.equal(found.state, 'satisfied');
+  assert.equal(found.present.length, 6);
+  bootstrapped.exec(found.remainder);
+  assert.ok(probesOf(bootstrapped).tableExists('market_intel_source_runs'));
+
+  const fresh = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  fresh.exec(base);
+  assert.equal(presentAddColumns(sql, probesOf(fresh)).state, 'none');
+  fresh.exec(sql);
+  assert.ok(probesOf(fresh).tableColumns('market_intel_rows').has('coverage_area'));
+});
+
+test('D8937: the CLI checks pending non-idempotent files in apply mode, with fresh probes per file', () => {
+  const cli = fs.readFileSync(path.join(HERE, '..', '..', 'scripts', 'migrate-d1.mjs'), 'utf8');
+  assert.match(cli, /presentAddColumns\(file\.sql, schemaProbes\(target\)\)/);
+  assert.match(cli, /!MODE_BASELINE && !classifyIdempotency\(file\.sql\)\.idempotent/);
+  assert.match(cli, /found\.state === 'partial'[\s\S]*?throw new Error/);
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
