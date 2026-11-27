@@ -61,8 +61,8 @@ const build = {
   // order, one line per connector (buildParts.jsx). GitHub's are D782's;
   // Vercel's and Lovable's lines wait there for their tasks.
   parts: toFnMap(buildPartsMap()),
-  // D6036 (#6036): Product roadmap's board links /build/roadmap itself, as Dependencies and Scenarios (D6034 part 2,
-  // option A), so the module draws no second door to it.
+  // D6036 (#6036): Product roadmap's board links /build/roadmap itself (D6034 part 2, option A), so the module draws
+  // no second door to it. D8776 (#8776) names that link after the page it opens, "Quarters, dependencies and scenarios".
   tools: toFnMap({
     'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
     // D5078 (#5078, BD20 C): the operating cadence's one entry is Operating systems › Cadence (OperatingSystemsHome).

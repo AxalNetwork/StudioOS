@@ -4,8 +4,9 @@ import { request } from '../api.js';
  * D1082 (#2947): Build in Lovable, on an experiment (Validate) and on
  * Prototype / MVP (Build). Each cycle mounts the same four routes
  * (`services/lovable/launch.ts`):
- *   draft(body)    { project_id, record } -> { prompt, prompt_chars, max, left_out, cut?, check, last_opened_at }
- *   check(body)    { project_id, prompt } -> { prompt_chars, check: { ok, line, findings } }
+ *   draft(body)    { project_id, record, alias? } -> { prompt, prompt_chars, max, left_out, cut?, check, last_opened_at,
+ *                  venture_name, venture_label, venture_lines, alias, support_session }   (D8773: alias drafted by the Worker, never saved)
+ *   check(body)    { project_id, prompt } -> { prompt_chars, check: { ok, line, findings, advisories, advisory_line?, checked_at } }
  *   launch(body)   { project_id, record, prompt } -> { url, handoff: { uid, opened_at } }
  *   launches(pid)  -> { launches: [{ record, opened_at, times }] }
  * The page opens `url` in a new tab; the Worker never calls Lovable.

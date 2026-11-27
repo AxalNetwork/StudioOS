@@ -25,6 +25,7 @@ function fixture() {
     history: {id: 'PR42', headRefOid: head, isInMergeQueue: false, timelineItems: {totalCount: 0}},
     log: `  BASE_SHA: ${base}\n  HEAD_SHA: ${head}\n  PR_NUMBER: 42\n  LANDING_AUTO: true\n  CHECKOUT_OUTCOME: success\n * refs/pull/42/head -> FETCH_HEAD`,
     classificationCalls: [],
+    rulesIssue: {number: 6480, state: 'open', state_reason: null},
   };
   const reader = createGitHubReader({
     repo, token: 'fixture', classify: async (...args) => { facts.classificationCalls.push(args); return {tier: 'T0'}; },
@@ -43,6 +44,7 @@ function fixture() {
       if (path === '/rules/branches/main') return asResponse([{type: 'merge_queue'},
         {type: 'required_status_checks', parameters: {required_status_checks: [{context: full, integration_id: 15368}]}}]);
       if (path === '/issues/5500') return asResponse({state: 'closed', state_reason: 'completed'});
+      if (path === '/issues/6480') return asResponse(facts.rulesIssue);
       if (path === '/search/issues') return asResponse({incomplete_results: false, items: [], total_count: 0});
       if (path === '/pulls/42') return asResponse(pull);
       if (path === '/pulls/42/files') return asResponse(facts.files);
@@ -82,6 +84,22 @@ test('does not accept a draft fast-tier job, wrong app, workflow or PR', async (
     change(facts);
     assert.equal((await reader.readCandidate(number)).fullSuitePassed, false);
   }
+});
+test('#6481 D6481-p2: a PR that edits ci.yml has no full-suite proof, whatever its own run reported', async () => {
+  for (const edit of [{filename: '.github/workflows/ci.yml'}, {filename: 'docs/ci.yml', previous_filename: '.github/workflows/ci.yml'}]) {
+    const {facts, reader} = fixture();
+    facts.files = [edit];
+    assert.equal((await reader.readCandidate(number)).fullSuitePassed, false);
+  }
+  const {facts, reader} = fixture();
+  facts.files = [{filename: 'docs/ci.yml'}];
+  assert.equal((await reader.readCandidate(number)).fullSuitePassed, true);
+});
+test('#6481 D6481-p2: reads the landing rules issue state as GitHub reports it', async () => {
+  const {facts, reader} = fixture();
+  assert.deepEqual(await reader.readRulesIssue(), {number: 6480, state: 'open', state_reason: null});
+  facts.rulesIssue = {number: 6480, state: 'closed', state_reason: 'completed'};
+  assert.deepEqual(await reader.readRulesIssue(), {number: 6480, state: 'closed', state_reason: 'completed'});
 });
 test('authenticates the exact policy workflow and invokes the trusted classifier only for verified log facts', async () => {
   const {facts, reader} = fixture();

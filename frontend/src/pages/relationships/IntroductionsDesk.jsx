@@ -63,8 +63,20 @@ const SELECT = 'min-h-[32px] rounded-[9px] border border-axal-hairline bg-white 
 const PILL = 'inline-flex items-center rounded-full border border-axal-hairline bg-axal-ground px-2 py-0.5 text-[10.5px] font-bold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400';
 const HIGHLIGHT = 'ring-2 ring-axal-violet ring-offset-1';
 const today = () => new Date().toISOString().slice(0, 10);
+// D6257: below 640px each log row is a stacked card whose cells name
+// themselves, so the table never scrolls sideways (NW8.1 at 390px).
+const CELL = 'max-sm:block max-sm:px-0 max-sm:py-1 max-sm:before:block max-sm:before:text-[10px] max-sm:before:font-bold max-sm:before:uppercase max-sm:before:tracking-[.04em] max-sm:before:text-axal-muted max-sm:before:content-[attr(data-label)] dark:max-sm:before:text-gray-400';
+const DIRECTIONS = Object.freeze([{ key: '', label: 'All' }, { key: 'received', label: 'Received' }, { key: 'sent', label: 'Sent' }]);
 
-export default function IntroductionsDesk({ testId = 'introductions' }) {
+/**
+ * `variant="investor"` (D6257, NW3 of the Network v2 Investor canvas): the
+ * log is the page's first section, From your team, with its received and sent
+ * counts, "no credit is used", and the canvas's All / Received / Sent views
+ * over the same rows. Every other licence keeps the desk as it was.
+ */
+export default function IntroductionsDesk({ testId = 'introductions', variant = 'default' }) {
+  const investor = variant === 'investor';
+  const [direction, setDirection] = useState('');
   const [params] = useSearchParams();
   /**
    * #4609 — THE TARGET IS RESOLVED, AND THIS DESK ONLY CLAIMS ITS OWN.
@@ -106,6 +118,13 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
     return () => { live = false; };
   }, [filter.team, filter.status]);
   useEffect(() => load(), [load]);
+  // D6257: a request sent from the page's Request introduction sheet is read back here.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const reread = () => load();
+    window.addEventListener('network:intro-requested', reread);
+    return () => window.removeEventListener('network:intro-requested', reread);
+  }, [load]);
   // The member's own teams, for the Team column and filter. Never another team's.
   useEffect(() => { relationshipsApi.sharing().then((d) => setTeams(d?.teams || [])).catch(() => setTeams([])); }, []);
 
@@ -126,12 +145,14 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
 
   const data = read.data;
   const inbox = (data?.received || []).filter(isOpenForMe);
-  const rows = logRows(data, teams);
+  const allRows = logRows(data, teams);
+  const counts = { received: allRows.filter((x) => x.side !== 'sent').length, sent: allRows.filter((x) => x.side === 'sent').length };
+  const rows = investor && direction ? allRows.filter((x) => (direction === 'sent' ? x.side === 'sent' : x.side !== 'sent')) : allRows;
   const due = followUps(data);
 
   // D4329's introLink: `intro` names a request's uid, present in the inbox, the
   // log, or both — never a count or a presence hint for one the caller cannot see.
-  const introPresent = introUid ? inbox.some((r) => r.uid === introUid) || rows.some((x) => x.uid === introUid) : false;
+  const introPresent = introUid ? inbox.some((r) => r.uid === introUid) || allRows.some((x) => x.uid === introUid) : false;
   const introMissing = read.status === 'ok' && !!introUid && !introPresent;
   const setHighlightRef = (uid) => (el) => {
     if (el) highlightRefs.current.set(uid, el); else highlightRefs.current.delete(uid);
@@ -193,9 +214,20 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
 
       <section className={`${CARD} flex flex-col gap-3`} aria-labelledby={`${testId}-log-title`} data-testid={`${testId}-log`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id={`${testId}-log-title`} className={`m-0 text-[16px] font-extrabold ${INK}`}>Introductions</h2>
+          <h2 id={`${testId}-log-title`} data-testid={`${testId}-log-title`} className={`m-0 text-[16px] font-extrabold ${INK}`}>{investor ? 'From your team' : 'Introductions'}</h2>
+          {investor && read.status === 'ok' ? <span className={MUTED} data-testid={`${testId}-team-line`}>{counts.received} received · {counts.sent} sent · no credit is used</span> : null}
           {Number.isFinite(data?.follow_ups_due) ? <span className={PILL} data-testid={`${testId}-due`}>Follow-ups due · {data.follow_ups_due}</span> : null}
         </div>
+        {investor ? (
+          <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Direction" data-testid={`${testId}-direction`}>
+            {DIRECTIONS.map((d) => (
+              <button key={d.key || 'all'} type="button" role="radio" aria-checked={direction === d.key} onClick={() => setDirection(d.key)} data-testid={`${testId}-direction-${d.key || 'all'}`}
+                className={`${BTN} border max-sm:min-h-[44px] ${direction === d.key ? 'border-axal-violet bg-violet-50 text-axal-violet dark:border-violet-500 dark:bg-violet-950 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}>
+                {d.key && read.status === 'ok' ? `${d.label} · ${counts[d.key]}` : d.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           <label className="flex items-center gap-1.5 text-[12px] font-bold text-axal-muted dark:text-gray-400">Team
             <select className={SELECT} value={filter.team} onChange={(e) => setFilter((f) => ({ ...f, team: e.target.value }))} data-testid={`${testId}-filter-team`}>
@@ -217,11 +249,12 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
             <button type="button" className={GHOST} onClick={load}>Try again</button>
           </div>
         ) : null}
-        {read.status === 'ok' && !rows.length ? <p className={`m-0 ${MUTED}`} data-testid={`${testId}-empty`}>{LOG_EMPTY}</p> : null}
+        {read.status === 'ok' && !allRows.length ? <p className={`m-0 ${MUTED}`} data-testid={`${testId}-empty`}>{LOG_EMPTY}</p> : null}
+        {read.status === 'ok' && allRows.length > 0 && !rows.length ? <p className={`m-0 ${MUTED}`} data-testid={`${testId}-direction-empty`}>{direction === 'sent' ? 'You have sent no request.' : 'Nobody has asked you for an introduction.'} {allRows.length} in all.</p> : null}
         {rows.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse">
-              <thead>
+          <div className="sm:overflow-x-auto">
+            <table className="w-full border-collapse sm:min-w-[720px]">
+              <thead className="max-sm:hidden">
                 <tr className="border-b border-axal-hairline dark:border-gray-700">
                   {['When', 'Who for', 'Team', 'Status', 'Outcome', 'Follow-up', ''].map((h) => <th key={h} scope="col" className="px-2 py-2 text-left text-[11px] font-bold uppercase tracking-[.04em] text-axal-muted dark:text-gray-400">{h}</th>)}
                 </tr>
@@ -229,17 +262,17 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
               <tbody>
                 {rows.map((x) => (
                   <tr key={x.uid} ref={setHighlightRef(x.uid)} tabIndex={-1} aria-current={x.uid === introUid ? 'true' : undefined}
-                    className={`border-b border-axal-hairline align-top last:border-0 dark:border-gray-700 ${x.uid === introUid ? HIGHLIGHT : ''}`} data-testid={`${testId}-row-${x.uid}`}>
-                    <td className={`px-2 py-2 text-[12.5px] tabular-nums ${INK}`}>{x.when}</td>
-                    <td className="px-2 py-2"><span className={`block text-[12.5px] font-bold ${INK}`}>{x.who}</span><span className={MUTED}>{x.person}</span></td>
-                    <td className={`px-2 py-2 text-[12.5px] ${INK}`}>{x.team}</td>
+                    className={`border-b border-axal-hairline align-top last:border-0 max-sm:mb-2 max-sm:block max-sm:rounded-[10px] max-sm:border max-sm:p-3 dark:border-gray-700 ${x.uid === introUid ? HIGHLIGHT : ''}`} data-testid={`${testId}-row-${x.uid}`}>
+                    <td data-label="When" className={`px-2 py-2 text-[12.5px] tabular-nums ${INK} ${CELL}`}>{x.when}</td>
+                    <td data-label="Who for" className={`px-2 py-2 ${CELL}`}><span className={`block text-[12.5px] font-bold ${INK}`}>{x.who}</span><span className={MUTED}>{x.person}</span></td>
+                    <td data-label="Team" className={`px-2 py-2 text-[12.5px] ${INK} ${CELL}`}>{x.team}</td>
                     {/* #4611 finding 11: the note the decline form promised the
                         asker would read, beside the verdict that occasioned it.
                         Drawn only when one was written — an absent note is not
                         "no reason given", it is a teammate who answered without
                         typing one, and inventing a sentence for that would be
                         the honesty rule's own counter-example. */}
-                    <td className="px-2 py-2"><span className={PILL}>{x.status}</span>
+                    <td data-label="Status" className={`px-2 py-2 ${CELL}`}><span className={PILL}>{x.status}</span>
                       {x.decision ? (
                         <span className="mt-1 block" data-testid={`${testId}-decision-note-${x.uid}`}>
                           <span className={`block text-[11px] font-bold uppercase tracking-[.04em] text-axal-muted dark:text-gray-400`}>{x.decision.context}</span>
@@ -247,10 +280,10 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
                         </span>
                       ) : null}
                     </td>
-                    <td className={`px-2 py-2 text-[12.5px] ${INK}`} data-testid={`${testId}-outcome-${x.uid}`}>{x.outcome}</td>
-                    <td className={`px-2 py-2 text-[12.5px] ${INK}`}>{x.followUp}</td>
-                    <td className="px-2 py-2">
-                      <button type="button" className={QUIET} onClick={() => setRecord({ uid: x.uid, side: x.side === 'sent' ? 'asker' : 'teammate' })} data-testid={`${testId}-row-${x.uid}-open`}>Open record</button>
+                    <td data-label="Outcome" className={`px-2 py-2 text-[12.5px] ${INK} ${CELL}`} data-testid={`${testId}-outcome-${x.uid}`}>{x.outcome}</td>
+                    <td data-label="Follow-up" className={`px-2 py-2 text-[12.5px] ${INK} ${CELL}`}>{x.followUp}</td>
+                    <td className="px-2 py-2 max-sm:block max-sm:px-0">
+                      <button type="button" className={`${QUIET} max-sm:min-h-[44px]`} onClick={() => setRecord({ uid: x.uid, side: x.side === 'sent' ? 'asker' : 'teammate' })} data-testid={`${testId}-row-${x.uid}-open`}>Open record</button>
                       <RowActions row={x.row} side={x.side} busy={busy === x.uid} act={act} testId={`${testId}-row-${x.uid}`} />
                       {notice?.uid === x.uid ? <p className="m-0 text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert">{notice.text}</p> : null}
                     </td>

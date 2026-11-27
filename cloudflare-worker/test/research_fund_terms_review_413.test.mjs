@@ -22,6 +22,8 @@ function database() {
   db.exec(stripForeignKeys(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'users')));
   db.prepare("INSERT INTO users(id,role,name,email) VALUES(11,'founder','Fixture founder','fixture@example.test')").run();
   db.exec(read('365')); db.exec(read('378')); db.exec(read('406')); db.exec(read('376'));
+  // D7744: each row's own size currency and record kind (migration 202611270508_7744), stamped for the listed lists.
+  db.exec(readFileSync(new URL('../sql/migrations/202611270508_7744_research_fund_size_currency_and_kind.sql', import.meta.url), 'utf8'));
   for (const [prefix, table] of [['228_research_company_directory.sql', 'research_company_directory'], ['229_research_market_directory.sql', 'research_market_directory'], ['136', 'signals'], ['136', 'signal_companies'], ['037', 'market_intel_rows'], ['037', 'market_intel_indexes']]) {
     const ddl = splitStatements(read(prefix)).find(sql => sql.startsWith('CREATE TABLE ') && sql.slice(0, sql.indexOf('(')).trim().endsWith(` ${table}`));
     if (!ddl) throw new Error(`Missing migration DDL for ${table}`);

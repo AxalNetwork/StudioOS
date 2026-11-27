@@ -32,6 +32,8 @@ function tableFrom(prefix: string, table: string): string {
   return stripForeignKeys(sql.slice(start, sql.indexOf('\n);', start) + 3)) + ';';
 }
 const thisMigration = readFileSync(resolve(MIGRATIONS, '202611180253_6278_research_benchmark_fund.sql'), 'utf8');
+// D6277: the history a changed "Ours" is kept in.
+const historyMigration = readFileSync(resolve(MIGRATIONS, '202611270437_6277_research_benchmark_history.sql'), 'utf8');
 const valuations = readFileSync(resolve(MIGRATIONS, '417_fund_position_valuations.sql'), 'utf8');
 
 // Fund performance's fixture (fund_performance_d627.test.ts), plus fund 30
@@ -57,7 +59,8 @@ CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, action TEXT, details TEXT, ac
 
 function fixture(opts: { failFundList?: boolean } = {}) {
   const { DB, db } = makeD1(schema + valuations + tableFrom('217', 'research_benchmarks')
-    + tableFrom('303', 'research_benchmark_constituents') + stripForeignKeys(thisMigration));
+    + tableFrom('303', 'research_benchmark_constituents') + stripForeignKeys(thisMigration)
+    + stripForeignKeys(historyMigration));
   db.exec(`INSERT INTO fund_position_valuations(position_id,valuation_date,value_cents,source,recorded_by) VALUES
     (201,'2023-01-01',12100,'Latest',1),(202,'2023-01-01',30000,'Latest',1);`);
   const add = db.prepare(`INSERT INTO research_benchmarks (id, uid, owner_user_id, metric, our_value, updated_at)
@@ -145,6 +148,20 @@ test('a typed "Ours" is never overwritten without the writer confirming', async 
   // Swapping one recorded figure for another needs no confirmation: neither was typed.
   assert.equal((await f.use(3, 'b-typed', { fund_id: 10, metric: 'tvpi' })).status, 200);
   assert.equal(f.row('b-typed').our_value, '1.31×');
+});
+
+test('D6277: a fund figure that replaces "Ours" keeps the earlier one in history; the same figure again keeps nothing', async (t) => {
+  pin(t);
+  const f = fixture();
+  const hist = () => f.db.prepare('SELECT benchmark_id, owner_user_id, our_value FROM research_benchmark_history ORDER BY id').all()
+    .map((r: any) => ({ ...r }));
+  assert.equal((await f.use(3, 'b-typed', { fund_id: 10, metric: 'tvpi', replace: true })).status, 200);
+  assert.deepEqual(hist(), [{ benchmark_id: 2, owner_user_id: 3, our_value: '1.4x' }]);
+  // The same recorded figure again is not a restatement.
+  assert.equal((await f.use(3, 'b-typed', { fund_id: 10, metric: 'tvpi' })).status, 200);
+  assert.equal(hist().length, 1);
+  const read = await f.detail(3, 'b-typed');
+  assert.deepEqual(read.body.history.map((h: any) => h.our_value), ['1.4x']);
 });
 
 test('a figure that is not recorded is refused with its reason, never written as zero', async (t) => {

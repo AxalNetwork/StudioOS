@@ -355,6 +355,17 @@ export function getXPostMetrics(accessToken: string, accountId: string | number,
   });
 }
 
+/**
+ * D8815 (#8815): one authenticated GET under `api.x.com/2`, for a founder's own
+ * Grow reads (`services/x/reads.ts` names the paths). `path` starts with `/` and
+ * carries its own query; the breaker, the 429 and 401 handling and the 15-second
+ * deadline are this client's.
+ */
+export function xApiGet<T>(path: string, accessToken: string, accountId: string | number): Promise<T> {
+  if (!path.startsWith('/') || path.startsWith('//')) throw new XError('x_api_error', 'Not an X API path.');
+  return authJsonCall<T>({ method: 'GET', url: `${API_BASE}${path}`, accessToken, accountId, signal: AbortSignal.timeout(15_000) });
+}
+
 export async function getMe(accessToken: string, accountId: string | number): Promise<XMeResponse> {
   return authJsonCall<XMeResponse>({
     method: 'GET',

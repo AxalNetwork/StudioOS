@@ -121,8 +121,21 @@ import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realti
 import { bindingKey } from '../util/schemaBootstrap';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 import { studioOption } from '../services/advisor/studioRail';
+import { rolePreviewRefusal, rolePreviewShell } from '../util/investorPreview';
 
 const advisor = new Hono<{ Bindings: Env }>();
+
+// D8730 (#8730): a Founder or Exploring preview is a role, not a person. Every
+// write the browser sends from one carries `X-Axal-Preview-Shell`, and an admin
+// sending it is refused before any handler runs, so nothing typed in a preview
+// reaches the operator's own conversation. Reads pass; only the header's
+// presence costs the auth read here, so no other request pays for it.
+advisor.use('*', async (c, next) => {
+  if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS' || !rolePreviewShell(c)) return next();
+  const refused = rolePreviewRefusal(c, await requireAuth(c));
+  if (refused) return refused;
+  return next();
+});
 
 // ---------------------------------------------------------------------------
 // Task #9 — 'exploring' persona overlay.
@@ -1956,7 +1969,10 @@ advisor.get('/progress', async (c) => {
   // reachable target per module (e.g. Skills 3/5, Archetype 0/3) instead of one
   // shallow "0 / 17". `complete` means every module has reached confidence.
   // Admin / unknown personas have no fit bank → applicable:false.
-  const profilingVisible = filterByContext(profilingBankFor(persona), {
+  // D8730 (#8730): a still-exploring visitor is only ever asked the discovery
+  // bank (`workingBankFor`), so the fit bank of their suggested role could never
+  // move here. Profiling waits for membership, and says so: applicable:false.
+  const profilingVisible = isExploringUser(user) ? [] : filterByContext(profilingBankFor(persona), {
     persona,
     week: gate.week,
     tiers: gate.tiers,
@@ -2020,6 +2036,65 @@ advisor.get('/progress', async (c) => {
     // Surface answered count even for users with no /start yet.
     _answered_in_conversation: capturedSet.size,
   });
+});
+
+// ---------------------------------------------------------------------------
+// D8730 (#8730) — GET /preview-examples?shell=founder|exploring&track=…
+//
+// An HQ-held Founder or Exploring preview is a role, not a person, so its
+// interview draws the first questions of THAT role's bank as labelled examples
+// and no answer at all. Before this read the preview mounted the operator's own
+// conversation, so a Super Admin previewing Founder was asked the admin bank
+// and offered /admin links. A question is product copy; an answer is personal,
+// so the envelope carries prompts and options only: no conversation, no
+// answer, no count. Admins only, and nothing is written.
+//
+//   founder              → the founder bank as a new founder sees it (week 1,
+//                          no tiers, no milestones): two examples, then the
+//                          next two as "Next up" with their pages.
+//   exploring, no track  → the role question a visitor is asked first.
+//   exploring, a track   → the first two questions of that track's
+//                          12-question discovery bank.
+// ---------------------------------------------------------------------------
+export const PREVIEW_TRACKS = ['founder', 'investor', 'advisor', 'partner'] as const;
+type PreviewExample = { id: string; section: string | null; prompt: string; options: string[]; page_target: string | null };
+
+function previewExample(q: Question): PreviewExample {
+  return {
+    id: q.id,
+    section: q.section || null,
+    prompt: q.prompt,
+    options: Array.isArray(q.options) ? q.options.slice() : [],
+    page_target: q.page_target || null,
+  };
+}
+
+export function previewExamplesFor(shell: string, track: string | null): { shell: string; track: string | null; bank: string; total: number; examples: PreviewExample[]; next_up: PreviewExample[] } | null {
+  if (shell === 'founder') {
+    const bank = filterByContext(bankFor('founder', { spinoutLabActive: false }), {
+      persona: 'founder', week: 1, tiers: new Set(), completedMilestones: new Set(),
+    }).visible;
+    return { shell, track: null, bank: 'founder', total: bank.length, examples: bank.slice(0, 2).map(previewExample), next_up: bank.slice(2, 4).map(previewExample) };
+  }
+  if (shell !== 'exploring') return null;
+  if (track === null) {
+    return { shell, track: null, bank: 'role', total: 1, examples: [previewExample(ROLE_DETECTOR[0])], next_up: [] };
+  }
+  if (!(PREVIEW_TRACKS as readonly string[]).includes(track)) return null;
+  const bank = explorerBankForTrack(track as Persona);
+  return { shell, track, bank: 'discovery', total: bank.length, examples: bank.slice(0, 2).map(previewExample), next_up: [] };
+}
+
+advisor.get('/preview-examples', async (c) => {
+  await requireAdmin(c);
+  const shell = String(c.req.query('shell') || '').toLowerCase();
+  const rawTrack = String(c.req.query('track') || '').toLowerCase();
+  const out = previewExamplesFor(shell, rawTrack && rawTrack !== 'none' ? rawTrack : null);
+  if (!out) {
+    return c.json({ error: 'preview_role_unknown', message: 'Pick Founder or Exploring, and a track Exploring offers.', detail: 'Pick Founder or Exploring, and a track Exploring offers.' }, 400);
+  }
+  c.header('Cache-Control', 'no-store');
+  return c.json(out);
 });
 
 // ---------------------------------------------------------------------------

@@ -312,6 +312,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'routes/deck_rehearsals.ts': 'a deck rehearsal\'s recording (D1580): held an hour for transcription, then deleted unless the founder keeps it; kept audio is not yet a measured D1169 store',
   'services/recordStore.ts': 'the write-once record writer (D6651): it holds no store of its own; each member upload that calls it is guarded at its own site above',
   'services/workGraphBlobs.ts': 'WorkGraph content-addressed revision bytes (D5581 part 3): verified by digest and held to their own per-tenant byte cap, not a measured D1169 member store',
+  'services/agents/workspaceCheckpointR2.ts': 'an agent workspace checkpoint (D5568 part 2): checksum-verified run snapshots on an injected, not-yet-bound bucket, held by the run\'s own quota and retention, not a measured D1169 member store',
 };
 
 test('every R2 write in the Worker is a guarded member upload or named as something else', () => {

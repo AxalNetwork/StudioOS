@@ -9,7 +9,7 @@ import { ChartToolbar } from './ChartTools';
 import { FIGURE_LINE } from './deckAssistModel';
 import { areaLabel } from './deckV2Model';
 import { areaKind, pickGroup } from './gridSelection';
-import { NOTES_PLACEHOLDER, placementProblem } from './editorModel';
+import { NOTES_HELPER, NOTES_PLACEHOLDER, placementProblem } from './editorModel';
 import { elementsLibrary } from './deckV2Adapter';
 import { ARRANGE_OPS, DECOR_RULE, LAYERS_TITLE, arrange, arrangeState, decorLabel, decorPlan, decorSel, itemsOf } from './arrangeModel';
 import TextWords from './TextWords';
@@ -98,7 +98,9 @@ export function SpeakerNotes({ card, index, readOnly, notesMax, onNotes }) {
     <label className={`${CARD} flex flex-col gap-1.5 px-4 py-3`}>
       <span className={EYE}>Speaker notes · card {index + 1}</span>
       <textarea className={`${FIELD} min-h-[72px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly}
-        maxLength={notesMax} spellCheck onChange={(e) => onNotes(e.target.value)} data-testid="pitch-editor-notes" />
+        maxLength={notesMax} spellCheck onChange={(e) => onNotes(e.target.value)} aria-describedby="pitch-editor-notes-helper" data-testid="pitch-editor-notes" />
+      {/* D8771 (#8771): who reads these notes, and when they leave Axal VC. */}
+      <span id="pitch-editor-notes-helper" className={MUTED} data-testid="pitch-editor-notes-helper">{NOTES_HELPER}</span>
     </label>
   );
 }
