@@ -39,7 +39,7 @@ async function replaceAll(m, find, replace) {
 async function pressExport(m) {
   await m.press(m.by('deck-toolbar-share'));
   await m.press(m.by('deck-toolbar-item-export'));
-  await until(m, () => m.by('pitch-preflight-gate-nothing') || m.by('pitch-export-dialog') || m.by('pitch-preflight-gate-fix-list'));
+  await until(m, () => m.by('pitch-preflight-gate-nothing') || m.by('pitch-preflight-gate-warnings') || m.by('pitch-export-dialog') || m.by('pitch-preflight-gate-fix-list'));
   if (m.by('pitch-export-dialog')) await exportChecked(m);
 }
 async function until(m, ready) {

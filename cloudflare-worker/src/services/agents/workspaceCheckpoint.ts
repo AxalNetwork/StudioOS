@@ -1,8 +1,8 @@
 /**
  * D5568: immutable, encrypted, checksum-verified workspace checkpoints with an atomic, generation-fenced pointer,
  * portable restore from image digest + exact SHA, retention/quota/delete/export/GC plans and a metrics report.
- * Unmounted: the R2 bucket, the pointer's durable store (D1 row or scope DO) and the tenant key provider are
- * injected ports. Only filesystem state is captured; processes, RAM, sockets and PIDs are never migrated.
+ * Unmounted: the R2 bucket, the pointer's durable store (the run's DO transaction, owner answer A; D5568 part 2) and the
+ * tenant key provider are injected ports. Only filesystem state is captured; processes, RAM, sockets and PIDs are never migrated.
  */
 import { z } from 'zod';
 import { executorEligibility, WORKSPACE_VERSION, workspacePath, workspaceReference, workspaceRefusal, workspaceSpecSchema,
@@ -53,6 +53,13 @@ export async function validateCheckpointManifest(input: unknown): Promise<Worksp
   return { ok: true, value: m };
 }
 
+/** A port's typed refusal (D5568 part 2). The service maps `checksum_mismatch` and `stale_gc` to its own refusals, any other throw to 503. */
+export class CheckpointStoreRefusal extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.name = 'CheckpointStoreRefusal'; this.code = code; }
+}
+const portCode = (error: unknown, keep: string[]) => error instanceof CheckpointStoreRefusal && keep.includes(error.code) ? error.code : null;
+
 /** R2-shaped port. `list` reads one tenant/run prefix; `delete` is used only by an explicit, fenced plan. */
 export interface CheckpointObjectStore {
   put(key: string, bytes: Uint8Array, meta: { sha256: string }): Promise<void>;
@@ -68,7 +75,7 @@ export interface CheckpointCipher {
 type Committed = { sequence: number; manifest_key: string; manifest_sha256: string; bytes: number; created_at: number; objects: string[]; generation: number };
 export type CheckpointPointer = { tenant_id: number; run_id: string; origin_region: string; generation: number; deleted: boolean;
   head: Committed | null; history: Committed[]; tokens: Record<string, { tree_hash: string; sequence: number; manifest_sha256: string; manifest_key: string; bytes: number }> };
-/** The commit point. Backed by one D1 row with a conditional UPDATE, or the run's DO transaction; memory only in tests. */
+/** The commit point. Backed by the run's DO transaction (owner answer A, `workspaceCheckpointStore.ts`); memory only in tests. */
 export interface CheckpointPointerStore { transaction<T>(change: (rows: Map<string, CheckpointPointer>) => T): Promise<T> }
 export type CheckpointPolicy = { max_file_bytes: number; tenant_quota_bytes: number; keep_last: number; ttl_ms: number };
 const rowKey = (tenant_id: number, run_id: string) => `${tenant_id}/${run_id}`;
@@ -88,11 +95,16 @@ export function createCheckpointService({ objects, pointers, cipher, clock, poli
   /** Read-after-write: the bytes the store returns must hash to what was sent before the pointer may move. */
   async function putVerified(key: string, bytes: Uint8Array): Promise<WorkspaceResult<string>> {
     const sha = await sha256Hex(bytes);
-    try { await objects.put(key, bytes, { sha256: sha }); } catch { return refuse('checkpoint_upload_interrupted', 503); }
+    try { await objects.put(key, bytes, { sha256: sha }); } catch (e) { return portCode(e, ['checksum_mismatch']) ? refuse('checksum_mismatch', 422) : refuse('checkpoint_upload_interrupted', 503); }
     let stored: Uint8Array | null;
-    try { stored = await objects.get(key); } catch { return refuse('checkpoint_upload_interrupted', 503); }
+    try { stored = await objects.get(key); } catch (e) { return portCode(e, ['checksum_mismatch']) ? refuse('checksum_mismatch', 422) : refuse('checkpoint_upload_interrupted', 503); }
     if (!stored || await sha256Hex(stored) !== sha) return refuse('checksum_mismatch', 422);
     return { ok: true, value: sha };
+  }
+  /** A store that verifies its own checksum on read refuses with `checksum_mismatch`; any other failure is 503, never a throw. */
+  async function readObject(key: string): Promise<WorkspaceResult<Uint8Array | null>> {
+    try { return { ok: true, value: await objects.get(key) }; }
+    catch (e) { return portCode(e, ['checksum_mismatch']) ? refuse('checksum_mismatch', 422) : refuse('checkpoint_store_unavailable', 503); }
   }
 
   const service = {
@@ -207,7 +219,9 @@ export function createCheckpointService({ objects, pointers, cipher, clock, poli
       if (row.deleted) return refuse('checkpoint_deleted');
       if (spec.execution_generation !== row.generation) return refuse('stale_generation');
       if (!row.head) return refuse('no_checkpoint');
-      const raw = await objects.get(row.head.manifest_key);
+      const read = await readObject(row.head.manifest_key);
+      if (!read.ok) return read;
+      const raw = read.value;
       if (!raw || await sha256Hex(raw) !== row.head.manifest_sha256) return refuse('checksum_mismatch', 422);
       let decoded: unknown;
       try { decoded = JSON.parse(new TextDecoder().decode(raw)); } catch { return refuse('invalid_checkpoint_manifest', 422); }
@@ -226,7 +240,9 @@ export function createCheckpointService({ objects, pointers, cipher, clock, poli
       let restored_bytes = 0;
       for (const path of m.deleted) if (!worktree.remove(path).ok) return fail('restore_verification_failed');
       for (const f of m.files) {
-        const sealed = await objects.get(f.object_key);
+        const got = await readObject(f.object_key);
+        if (!got.ok) { worktree.release(); return got; }
+        const sealed = got.value;
         if (!sealed || await sha256Hex(sealed) !== f.object_sha256) return fail('checksum_mismatch');
         const plain = await cipher.open(spec.tenant_id, m.encryption.key_id, aadFor(m, f.path, f.sha256), sealed);
         if (!plain || plain.length !== f.size || await sha256Hex(plain) !== f.sha256) return fail('checksum_mismatch');
@@ -282,8 +298,12 @@ export function createCheckpointService({ objects, pointers, cipher, clock, poli
         return true;
       });
       if (!fresh) return refuse('stale_gc');
-      for (const key of plan.delete) await objects.delete(key);
-      return { ok: true, value: { deleted: plan.delete.length } };
+      let deleted = 0;
+      for (const key of plan.delete) {
+        try { await objects.delete(key); deleted++; }
+        catch (e) { return portCode(e, ['stale_gc']) ? refuse('stale_gc') : refuse('checkpoint_store_unavailable', 503); }
+      }
+      return { ok: true, value: { deleted } };
     },
     /** Same-tenant, origin-region export of the acknowledged head: keys and checksums, plus the egress it would cost. */
     async exportPlan(tenant_id: number, run_id: string, region: string): Promise<WorkspaceResult<{ manifest_key: string; manifest_sha256: string; objects: string[]; egress_bytes: number }>> {

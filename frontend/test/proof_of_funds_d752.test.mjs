@@ -331,7 +331,7 @@ test('CommitModal: the optional last step after the commitment is recorded; Done
       const m = await mount();
       try {
         await m.render(h(CommitModal, { deal: { id: 1, project_name: 'Venture', minimum_check: 1000 }, user: INVESTOR, onClose() {}, onDone: (o) => done.push(o) }));
-        const confirm = m.nodes().find((n) => n.tagName === 'BUTTON' && /Confirm Commitment/.test((n.childNodes || []).map((c) => c.nodeValue ?? c.textContent ?? '').join('')));
+        await m.tick('commit-ack'); const confirm = m.by('commit-go'); // D5914 (DE14): the confirmation is required
         await act(async () => { m.pr(confirm).onClick(); }); await m.settle();
         assert.ok(m.text().includes('Commitment recorded.'));
         assert.deepEqual(done, []);
@@ -343,7 +343,7 @@ test('CommitModal: the optional last step after the commitment is recorded; Done
     const m = await mount();
     try {
       await m.render(h(CommitModal, { deal: { id: 1, project_name: 'Venture', minimum_check: 1000 }, user: BRANCH_INVESTOR, onClose() {}, onDone: (o) => done.push(o) }));
-      const confirm = m.nodes().find((n) => n.tagName === 'BUTTON' && /Confirm Commitment/.test((n.childNodes || []).map((c) => c.nodeValue ?? c.textContent ?? '').join('')));
+      await m.tick('commit-ack'); const confirm = m.by('commit-go'); // D5914 (DE14): the confirmation is required
       await act(async () => { m.pr(confirm).onClick(); }); await m.settle();
       assert.deepEqual(done, [undefined], 'straight to onDone on a branch');
       assert.ok(!m.text().includes('Commitment recorded.'));

@@ -21,7 +21,8 @@ import { checkPatch } from './model/patch.mjs';
 import { parseTask } from './model/task.mjs';
 import { publishRecordProblems, readPatchRecord } from './model/record.mjs';
 import {
-  KIND, afterStage, checkResolution, conflictLines, gate, instructions, reservationName, reservedToday, testsFor, verifyCommands,
+  KIND, afterStage, checkResolution, conflictLines, gate, instructions, manualCheck, manualRequest, MANUAL_SWITCH, requestRan,
+  reservationName, reservedToday, testsFor, verifyCommands,
 } from './resolve-rules.mjs';
 
 const DATA_BUDGET = 180_000;
@@ -37,6 +38,19 @@ export const output = (k, v) => {
 };
 const summary = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${s}\n`); };
 const prNumber = (v) => { const n = Number(v); return Number.isSafeInteger(n) && n > 0 ? n : null; };
+
+const QUEUE_STATE = 'query($owner:String!,$name:String!,$n:Int!){repository(owner:$owner,name:$name){pullRequest(number:$n){isInMergeQueue}}}';
+/** #7109: whether the pull request is in the merge queue; null when it cannot be read, which a manual request treats as moved. */
+async function inMergeQueue(gh, n) {
+  try {
+    const v = (await gh.graph(QUEUE_STATE, { n }))?.pullRequest?.isInMergeQueue;
+    return typeof v === 'boolean' ? v : null;
+  } catch { return null; }
+}
+/** #7109: the live fields a manual request is pinned to. */
+const manualLive = async (gh, pr) => ({
+  state: pr?.state, head: pr?.head?.sha, base: pr?.base?.sha, mergeable: pr?.mergeable ?? null, inMergeQueue: await inMergeQueue(gh, pr?.number),
+});
 
 /** A partial clone of the PR head and main in a temp folder; nothing from either is run. */
 export function cloneFor(repoUrl, headSha, root) {
@@ -99,13 +113,21 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   if (Number(env.GITHUB_RUN_ATTEMPT) !== 1) return finish({ pr: n, decision: 'skip', reasons: ['a rerun does not call the model again'], day });
 
   const pr = await gh.get(`pulls/${n}`);
+  // #7109: a manual request is checked against its pins, its own switch and the queue before anything else is read.
+  const manual = manualRequest(env);
+  if (manual?.invalid) return finish({ pr: n, decision: 'skip', reasons: [manual.invalid], day });
+  if (manual) {
+    const m = manualCheck(manual, await manualLive(gh, pr), env);
+    if (m.decision !== 'resolve') return finish({ pr: n, head: pr.head?.sha, ref: pr.head?.ref, day, manual, ...m });
+  }
   try { pr.files = (await pages(gh, `pulls/${n}/files`, 30)).map((f) => ({ path: f.filename, previousPath: f.previous_filename })); } catch { pr.files = null; }
   try { pr.commits = await pages(gh, `pulls/${n}/commits`, 3); } catch { pr.commits = null; }
   const breakers = await readBreakers(gh, env);
   let runs = null;
   let reserved = null;
+  let all = null;
   try {
-    const all = (await gh.get('actions/workflows/landing-bot-conflict.yml/runs?branch=main&per_page=100')).workflow_runs;
+    all = (await gh.get('actions/workflows/landing-bot-conflict.yml/runs?branch=main&per_page=100')).workflow_runs;
     runs = runsOf(all, Number(env.GITHUB_RUN_ID));
     const today = all.filter((r) => String(r.created_at).startsWith(day) && r.id !== Number(env.GITHUB_RUN_ID));
     const byRun = new Map();
@@ -113,7 +135,11 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
     reserved = reservedToday(byRun, day);
   } catch { /* stays null: attempts and budget refuse */ }
 
-  const base = { pr: n, head: pr.head?.sha, ref: pr.head?.ref, day };
+  const base = { pr: n, head: pr.head?.sha, ref: pr.head?.ref, day, ...(manual ? { manual } : {}) };
+  // #7109: one request runs once, whatever number of times Merge Control had to dispatch it.
+  if (manual && (!Array.isArray(all) || requestRan(all, manual.request, Number(env.GITHUB_RUN_ID)))) {
+    return finish({ ...base, decision: 'skip', reasons: [Array.isArray(all) ? 'this request has already run' : 'the resolver runs could not be read'] });
+  }
   // Rules that need no clone first: a PR the bot may not touch is not cloned.
   const ctx = { env, event: env.GITHUB_EVENT_NAME, dispatchPr: n, repo: env.GITHUB_REPOSITORY, breakers, botLogin: env.LANDING_BOT_LOGIN, now, runs, reserved };
   const pre = gate(pr, ctx);
@@ -150,6 +176,18 @@ export async function planStage(env, { gh = client({ repo: env.GITHUB_REPOSITORY
   }
 }
 
+/** #7109: one sticky line for a manual request that did not run or push, and no label: nothing needs a session. */
+async function report(env, app, plan, reasons) {
+  const why = (reasons || []).join('; ') || 'not recorded';
+  const id = plan.manual?.request ?? 'Not recorded';
+  await upsertSticky(app, plan.pr, env.LANDING_BOT_LOGIN, [
+    `The "Fix conflicts" request ${id} did not push anything: ${why}.`,
+    'Nothing was changed on this branch. If the queue removes it for a conflict again, the Merge queue conflict check offers the button again.',
+  ]);
+  summary(`- #${plan.pr}: manual request ${id} reported, ${why}`);
+  return { outcome: 'reported', why };
+}
+
 async function handBack(env, app, gh, pr, cause, files) {
   let issue = null;
   const i = prIssue(pr?.body);
@@ -168,6 +206,7 @@ export async function applyStage(env, {
 } = {}) {
   const plan = JSON.parse(readFileSync(join(env.PLAN_DIR, 'plan.json'), 'utf8'));
   const pr = await gh.get(`pulls/${plan.pr}`);
+  if (plan.decision === 'report') return report(env, app, plan, plan.reasons);
   if (plan.decision === 'handback') return handBack(env, app, gh, pr, plan.reasons.join('; ') || 'the resolver refused this conflict', plan.files ?? []);
   if (plan.decision !== 'resolve') return { outcome: 'skipped' };
   if (env.MODEL_OUTCOME !== 'passed') {
@@ -175,7 +214,11 @@ export async function applyStage(env, {
   }
 
   // Re-read: the session may have pushed, someone may have labelled bot:off, a breaker may have opened.
-  const quiet = async (why) => { summary(`- #${plan.pr}: not pushed, ${why}`); return { outcome: 'skipped', why }; };
+  const quiet = async (why) => {
+    // #7109: the requester of a manual repair is told why nothing was pushed, unless a switch turned it off.
+    if (plan.manual && !/is off|is not true/.test(why)) return report(env, app, plan, [why]);
+    summary(`- #${plan.pr}: not pushed, ${why}`); return { outcome: 'skipped', why };
+  };
   const fresh = async () => {
     const now = await gh.get(`pulls/${plan.pr}`);
     if (now.state !== 'open') return 'the pull request is closed';
@@ -183,6 +226,12 @@ export async function applyStage(env, {
     if (mode(env) === 'off') return 'the landing bot is off';
     if ((now.labels || []).some((l) => l.name === LABELS.off)) return `it is labelled ${LABELS.off}`;
     if ((await readBreakers(gh, env)).open) return 'a breaker is open';
+    if (plan.manual) {
+      // #7109: the switch, the base and the queue are pinned too; a moved head is the hand-back above.
+      if (env[MANUAL_SWITCH] !== 'true') return `${MANUAL_SWITCH} is off`;
+      const m = manualCheck(plan.manual, { ...(await manualLive(gh, now)), mergeable: false }, env);
+      if (m.decision !== 'resolve') return m.reasons.join('; ');
+    }
     return null;
   };
   // #8506: a head that moved after the resolution was verified is a definitive hand-back, as an exhausted keeper is

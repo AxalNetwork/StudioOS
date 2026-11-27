@@ -60,7 +60,7 @@ const cell = (rows: any[], key: string) => rows.filter(r => r.source_observation
 test('the importer builds exactly the recorded request and registers under its own source', () => {
   for (const [url, params] of [[Object.keys(RECORDED)[0], MICRO], [Object.keys(RECORDED)[1], C12], [Object.keys(RECORDED)[2], TOTAL]] as const)
     assert.equal(sbsUrl(sbsParams(params)), url);
-  assert.deepEqual(Object.keys(IMPORTERS), ['world-bank', 'eurostat-sbs', 'census-cbp']);
+  assert.deepEqual(Object.keys(IMPORTERS), ['world-bank', 'eurostat-sbs', 'census-cbp', 'bls-ce']);
   assert.equal(IMPORTERS['eurostat-sbs'].source_id, 'eurostat-sbs');
 });
 

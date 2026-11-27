@@ -1,0 +1,46 @@
+{
+  "us_de_ccorp": {
+    "type": "documents_only",
+    "next_steps": []
+  },
+  "us_wy_ccorp": {
+    "type": "documents_only",
+    "next_steps": [
+      "File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)",
+      "Appoint a Wyoming registered agent",
+      "Apply for an EIN with the IRS once the state approves the filing"
+    ]
+  },
+  "us_de_llc": {
+    "type": "documents_only",
+    "next_steps": [
+      "File the Certificate of Formation with the Delaware Division of Corporations",
+      "Apply for an EIN via IRS Form SS-4 (kit included)",
+      "Open a US business bank account"
+    ]
+  },
+  "uk_ltd": {
+    "type": "documents_only",
+    "next_steps": [
+      "File IN01 on Companies House (https://www.gov.uk/limited-company-formation)",
+      "Register for Corporation Tax with HMRC within 3 months",
+      "Open a UK business bank account"
+    ]
+  },
+  "sg_pte": {
+    "type": "documents_only",
+    "next_steps": [
+      "Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)",
+      "Engage a Singapore-resident director (or nominee director service)",
+      "Appoint a company secretary within 6 months"
+    ]
+  },
+  "ee_oy": {
+    "type": "documents_only",
+    "next_steps": [
+      "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
+      "Engage a Company Service Provider for the registered address",
+      "File the OÜ via the Estonian Business Register e-portal"
+    ]
+  }
+}

@@ -60,7 +60,7 @@ export async function loginAs(page, who = 'founder') {
 // binding's single-page-application fallback and answers `/api/auth/*` the way `cloudflare-worker/src/routes/auth.ts`
 // does for the email link, over synthetic accounts kept in memory:
 //
-//   · POST /api/auth/register       creates an `exploring` account, or 409 `email_already_registered`;
+//   · POST /api/auth/register       creates an `exploring` account (its lane kept as `suggested_role`, #8680), or 409;
 //   · POST /api/auth/magic/start    writes the link to `outbox` (no email leaves) and answers 202, or 400 on a bad address;
 //   · GET  /api/auth/magic/verify   spends the link once, sets the httpOnly `studioos_auth` and readable
 //                                   `studioos_csrf` cookies and 302s to MAGIC_LANDING (as auth.ts does), or to
@@ -102,8 +102,9 @@ export async function startLocalWorker({ handle = null } = {}) {
   const harness = {
     origin: '', outbox, requests,
     /** A synthetic account; `onboarded` accounts have finished setup. */
-    addAccount({ email, name = 'Synthetic Member', role = 'founder', onboarded = true }) {
-      const user = { id: ++seq, email: email.toLowerCase(), name, role, roles: [role], kyc_status: 'approved', email_verified: true, is_super_admin: 0 };
+    addAccount({ email, name = 'Synthetic Member', role = 'founder', onboarded = true, suggested_role = null }) {
+      // `suggested_role`: the lane an `exploring` account chose at signup, as /me returns it (#8680).
+      const user = { id: ++seq, email: email.toLowerCase(), name, role, roles: [role], kyc_status: 'approved', email_verified: true, is_super_admin: 0, suggested_role };
       accounts.set(user.email, { user, onboarded });
       return user;
     },
@@ -148,7 +149,8 @@ export async function startLocalWorker({ handle = null } = {}) {
       const address = String(body?.email || '').toLowerCase().trim();
       if (!EMAIL_RE.test(address)) return send(400, { error: 'Please enter a valid email address' });
       if (accounts.has(address)) return send(409, { code: 'email_already_registered', detail: 'An account already exists for this email.' });
-      const user = harness.addAccount({ email: address, name: String(body?.name || address.split('@')[0]), role: 'exploring', onboarded: false });
+      const lane = ['founder', 'partner', 'investor'].includes(body?.role) ? body.role : null;
+      const user = harness.addAccount({ email: address, name: String(body?.name || address.split('@')[0]), role: 'exploring', onboarded: false, suggested_role: lane });
       return send(201, { ok: true, user_id: user.id });
     }
     if (path === '/api/auth/magic/start' && req.method === 'POST') {

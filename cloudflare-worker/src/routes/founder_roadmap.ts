@@ -126,13 +126,18 @@ async function loadProject(env: Env, projectId: number): Promise<ProjectRow | nu
     .bind(projectId).first<ProjectRow>();
 }
 
-type OkrRow = { id: number; objective: string; kanban_status: string | null; quarter: string | null; sort_order: number };
+type OkrRow = {
+  id: number; objective: string; kanban_status: string | null; quarter: string | null; sort_order: number;
+  target_date: string | null; owner: string | null;
+};
 type DepRow = { id: number; okr_id: number; blocks_okr_id: number; note: string | null; created_at: string };
 
 async function loadOkrs(env: Env, projectId: number): Promise<OkrRow[]> {
   const r = await env.DB.prepare(
-    'SELECT id, objective, kanban_status, quarter, sort_order FROM roadmap_okrs'
-    + ' WHERE project_id = ? ORDER BY sort_order ASC, id ASC',
+    // D8776 (#8776, BLR02): the landing's rows say when each item is due and who owns it, as Product roadmap does.
+    'SELECT o.id, o.objective, o.kanban_status, o.quarter, o.sort_order, o.target_date, u.name AS owner'
+    + ' FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id'
+    + ' WHERE o.project_id = ? ORDER BY o.sort_order ASC, o.id ASC',
   ).bind(projectId).all<OkrRow>();
   return r.results || [];
 }
@@ -188,6 +193,8 @@ founderRoadmap.get('/:projectId', async (c) => {
       quarter: o.quarter,
       kanban_status: o.kanban_status,
       sort_order: o.sort_order,
+      target_date: o.target_date ?? null,
+      owner: o.owner ?? null,
       state,
       state_label: STATE_LABELS[state],
       blocks: blocksOf.get(Number(o.id)) ?? [],
@@ -246,6 +253,8 @@ founderRoadmap.get('/:projectId', async (c) => {
     // The page must not have to infer this from an empty list: a roadmap with no
     // links and a roadmap whose store is not there look identical otherwise.
     store_ready: ready,
+    // D8776 (#8776, BLR06): a reader the writes below would refuse is offered no edit at all.
+    can_write: canWrite(project, user),
   });
 });
 

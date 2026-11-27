@@ -8,6 +8,7 @@
  *   is removed.
  * - It removes the benchmark's named constituents, and does so BEFORE the row.
  * - It touches no other benchmark's constituents.
+ * - D6277: it removes the benchmark's history too, owner-scoped, before the row.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,6 +46,8 @@ function freshDb() {
   db.exec(tableFrom('303', 'research_benchmark_constituents'));
   // D6278: the fund-link columns PATCH clears on a hand edit.
   db.exec(stripForeignKeys(readFileSync(resolve(MIGRATIONS, '202611180253_6278_research_benchmark_fund.sql'), 'utf8')));
+  // D6277: the history PATCH writes and DELETE removes.
+  db.exec(stripForeignKeys(readFileSync(resolve(MIGRATIONS, '202611270437_6277_research_benchmark_history.sql'), 'utf8')));
   db.prepare('INSERT INTO users (id, role) VALUES (?, ?)').run(OWNER, 'investor');
   db.prepare('INSERT INTO users (id, role) VALUES (?, ?)').run(OTHER, 'investor');
   const b = db.prepare(
@@ -103,7 +106,9 @@ test('the owner’s delete removes the row and its own constituents, constituent
   assert.deepEqual(benchmarks(db), ['b-also-mine', 'b-theirs']);
   assert.deepEqual(named(db), ['c3', 'c4'], 'only b-mine’s constituents go');
   const deletes = seen.filter((s) => /^DELETE /.test(s));
-  assert.equal(deletes.length, 2);
+  assert.equal(deletes.length, 3);
   assert.match(deletes[0], /^DELETE FROM research_benchmark_constituents WHERE .*owner_user_id = \?/);
-  assert.match(deletes[1], /^DELETE FROM research_benchmarks WHERE .*owner_user_id = \?/);
+  // D6277: its history goes too, owner-scoped, before the row.
+  assert.match(deletes[1], /^DELETE FROM research_benchmark_history WHERE .*owner_user_id = \?/);
+  assert.match(deletes[2], /^DELETE FROM research_benchmarks WHERE .*owner_user_id = \?/);
 });

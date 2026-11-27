@@ -215,7 +215,9 @@ test('Export runs the check first: to fix holds it back; warnings only offer Exp
     await w.press(w.by('deck-toolbar-share'));
     await w.press(w.by('deck-toolbar-item-export'));
     for (let i = 0; i < 6 && !w.by('pitch-preflight-gate-anyway'); i += 1) await w.settle();
-    assert.match(w.text(w.by('pitch-preflight-gate-nothing')), /Nothing to fix/);
+    // D8772: warnings alone are never "Nothing to fix".
+    assert.equal(w.by('pitch-preflight-gate-nothing'), undefined);
+    assert.match(w.text(w.by('pitch-preflight-gate-warnings')), /^No blockers · \d+ warnings? to confirm$/);
     await w.press(w.by('pitch-preflight-gate-anyway'));
     assert.ok(w.by('pitch-export-dialog'), 'Export anyway opens the dialog');
   } finally { await w.close(); }

@@ -10,6 +10,11 @@
  *                                                   assigned HQ owner and Super Admins (counts for any other admin),
  *                                                   and each such read is written to formation_case_access_log
  *   GET /api/admin/formation/filings                every filing by state, with days since it was submitted
+ *   GET  /api/admin/formation/cases/:uid/eligible-partners  D6710: firms covering the case's form and a service, each
+ *                                                   with why it may not be offered, ranked (services/formationAssignments.ts)
+ *   POST /api/admin/formation/cases/:uid/offer      D6710: offer a service on the case to an eligible firm, after a re-screen
+ *   POST /api/admin/formation/cases/:uid/reassign   D6710: move it to another firm; the old firm's access ends at once and
+ *                                                   it is sent a deletion or return request (step-up)
  *
  * WHO. `requireHqAdmin` on every route: an admin on HQ; a non-admin is refused,
  * and a branch gets the named `hq_only` refusal. `GET /api/admin/incorporations`
@@ -21,6 +26,8 @@ import { isSuperAdmin, requireHqAdmin, requireStepUp } from '../auth';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import { decideScreening } from '../services/formationScreening';
+import { eligiblePartners, offerCase, reassignCase } from '../services/formationAssignments';
+import { SERVICES } from '../services/formationPartners';
 import { HQ_ACTIONS, writeHqCase } from '../services/formationHqActions';
 import { STAGES } from '../services/formationCase';
 import {
@@ -213,6 +220,40 @@ for (const decision of ['clear','decline'] as const) {
   });
 }
 
+cases.get('/:uid/eligible-partners', async (c) => {
+  const admin = await requireHqAdmin(c);
+  const uid = c.req.param('uid');
+  if (!UID.test(uid)) return c.json({ detail: 'Not found' }, 404);
+  const service = String(c.req.query('service') || 'formation');
+  if (!(SERVICES as readonly string[]).includes(service)) return refuse(c, 400, { code: 'invalid_service', message: `A service is one of ${SERVICES.join(', ')}.` });
+  try {
+    const row = await readCaseByUid(c.env, uid);
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    if (!isSuperAdmin(admin) && Number(row.hq_owner_user_id) !== Number(admin.id)) {
+      return refuse(c, 403, { code: 'case_owner_required', message: HQ_REFUSALS.case_owner_required });
+    }
+    const now = new Date();
+    const partners = await eligiblePartners(c.env, row, service as any, now);
+    return c.json({ case_uid: uid, service, country: row.country, form_key: row.form_key, partners, read_at: now.toISOString() });
+  } catch (e) { return unreadable(c, e); }
+});
+
+for (const action of ['offer', 'reassign'] as const) {
+  cases.post(`/:uid/${action}`, async (c) => {
+    const admin = await requireHqAdmin(c);
+    if (action === 'reassign') await requireStepUp(c);
+    const uid = c.req.param('uid');
+    if (!UID.test(uid)) return c.json({ detail: 'Not found' }, 404);
+    const body = await c.req.json().catch(() => null);
+    if (!body || Array.isArray(body) || typeof body !== 'object') return refuse(c, 400, { code: 'invalid_body', message: 'Send a JSON object for this case action.' });
+    const result = action === 'offer' ? await offerCase(c.env, admin, uid, body) : await reassignCase(c.env, admin, uid, body);
+    if (!result.ok) {
+      return refuse(c, result.status, { code: result.error, message: HQ_REFUSALS[result.error] ?? result.error.replaceAll('_', ' ') + '.', ...(result.detail ? { extra: result.detail } : {}) });
+    }
+    return c.json(result);
+  });
+}
+
 const HQ_REFUSALS: Record<string, string> = {
   case_moved: 'This case changed. Reload it before trying again.',
   case_owner_required: 'Only the assigned HQ owner or a Super Admin can act on this case.',
@@ -222,6 +263,27 @@ const HQ_REFUSALS: Record<string, string> = {
   founder_approval_required: 'The founder must approve the current filing pack first.',
   registration_not_pending: 'This case has no partner registration awaiting confirmation.',
   document_not_on_case: 'Choose a document belonging to this case.',
+  // D6710: offer and reassign.
+  legacy_case: 'A legacy case is not offered to a partner here.',
+  case_on_hold: 'This case is on hold. Resolve the hold first.',
+  form_not_chosen: 'The case has no chosen company form yet, so no partner coverage applies.',
+  invalid_service: 'Choose a partner service.',
+  formation_partner_required: 'Choose the partner to offer this case to.',
+  invalid_expiry: 'An offer expires after 1 to 336 hours.',
+  invalid_notice_kind: 'A request to the previous partner is a deletion_request or a return_request.',
+  partner_has_no_coverage: 'That partner does not cover this form and service.',
+  partner_not_verified: 'That partner is not verified.',
+  coverage_off: "That partner's coverage for this form and service is switched off.",
+  credential_missing: 'That partner holds no licence for this country.',
+  credential_expired: "That partner's licence for this country has expired.",
+  dpa_missing: 'That partner has no signed data agreement.',
+  restricted_place: "One of this case's countries is a restricted place for that partner.",
+  restricted_places_unreadable: "That partner's restricted places are not all two-letter country codes, so they cannot be checked.",
+  assignment_exists: 'This service is already offered or assigned. Reassign it instead.',
+  no_assignment: 'This service is not offered or assigned yet. Offer it instead.',
+  same_partner: 'The case is already with that partner.',
+  people_required: 'Add the people on this case before offering it, so they can be screened.',
+  screening_unavailable: 'The screening lists could not be read. Try again in a moment.',
 };
 
 function safeJson(v: unknown) { try { return JSON.parse(String(v)); } catch { return null; } }
