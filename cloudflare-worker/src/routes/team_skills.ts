@@ -33,9 +33,15 @@
  * A2 (#3956): an agent's skills, assigning a skill, the radar, coverage.
  *   GET  /agents/:uid/skills             { can_manage, skills, radar: { axes } | null, values: null }
  *   PUT  /agents/:uid/skills             { skills: [{ uid, version? }] }: set the whole list, gated; the same shape
- *   GET  /agents/:uid/skills/available   the role's published skills, most used first, each with `blocked`
+ *   GET  /agents/:uid/skills/available   D8768: every published skill the agent's company can read, each with
+ *                                        `eligibility { state, code, tool, fit }` (`services/agents/skillEligibility.ts`),
+ *                                        natural fit first; `counts` and per-area `areas` (drafts as a count only)
+ *   GET  /:scope/:id/skills/eligible?role=&persona=   D8768: the same answer for an agent not yet added (the wizard):
+ *                                        its tools judged against the sponsor's approvable read tools, each skill's
+ *                                        `tools_to_grant` (what step 3 will ask for)
  *   GET  /skills/:uid/agents             the agents using a skill that the caller can see, with their scope
- *   GET  /skills/:uid/assignable         the skill's role's agents the caller can manage: assigned, blocked, skill_count
+ *   GET  /skills/:uid/assignable         every agent the caller can manage (D8768: any role; fit only sorts): assigned,
+ *                                        blocked, `eligibility`, skill_count; and `counts`
  *   POST /skills/:uid/assign             { agent_uids }: pins the current version; partial, { added, refused }
  *   GET  /:scope/:id/coverage            per axis, the team's people's highest level and its agents'
  *
@@ -83,8 +89,14 @@
  *  - Attach (`services/agents/skillLinks.ts`'s `attachCheck`): readable from
  *    the agent's company (404 `not_found`), a published version (422
  *    `version_not_published`), not retired (409 `skill_retired`; one already
- *    pinned stays), not suspended by HQ (409 `skill_suspended`, D4161), of the agent's role (422 `role_mismatch`), and its tools in
- *    the agent's `tool_grants_json` (422 `tool_not_approved`, `{ tool }`).
+ *    pinned stays), not suspended by HQ (409 `skill_suspended`, D4161), and its tools in
+ *    the agent's `tool_grants_json` (422 `tool_not_approved`, `{ tool }`). D8768: no role gate; the roles a
+ *    version was written for are natural fit, a recommendation (D4116).
+ *  - D8768: every card carries `job` (the description without a routing clause or planning text, `customerJob`) and
+ *    `inputs` (D4667's required inputs, null when not recorded). `GET /skills` adds `areas`: per taxonomy area, how
+ *    many are listed, published, Axal's and the company's drafts (counted, never named, for a reader) and unreadable.
+ *    `GET /skills/:uid` adds `attach_refusal` (why it cannot be attached at all) and `alternative`, a published skill
+ *    in the same area, for a draft or a retired skill.
  *    Changing an agent's skills is 403 `not_manager` for anyone else.
  *
  * A person is `{ uid, name }`, never an email. Nothing here runs a model.
@@ -122,6 +134,10 @@ import {
 } from '../services/agents/skillLinks';
 import { checkDiscoveryRequest, discoverSkills, type DiscoverySkill } from '../services/agents/skillDiscovery';
 import { withDiscoveryEvidence, type EvidenceRow } from '../services/agents/skillDiscoveryEvidence';
+import {
+  areaEligibility, axesOfTags, byEligibility, countEligibility, customerJob, eligibilityOf, isUnpublished, pickAlternative, skillInputsOf,
+  sponsorToolPool, toolsToGrant, type AltCandidate, type EligibilityState,
+} from '../services/agents/skillEligibility';
 
 type C = Context<{ Bindings: Env }>;
 type SkillRow = {
@@ -232,6 +248,9 @@ function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts,
     uid: s.uid, scope: s.scope, slug: s.slug, status: s.status, version: s.current_version || null,
     author: s.scope === 'hq' ? 'Axal' : authorName,
     ...partsDto(shown, tax),
+    // D8768: the job in the customer's words, and what it needs (null: not recorded).
+    job: customerJob(shown.purpose),
+    inputs: skillInputsOf(s.slug),
     used_by: usedByCount,
     context_tokens: contextTokens,
     updated_at: s.updated_at,
@@ -306,7 +325,42 @@ async function libraryCards(env: Env, tax: Taxonomy, company: { id: number; comp
   return cards;
 }
 
+/**
+ * D8768: the library's facts for counting, drafts included, in one read: each live (not retired) skill of HQ and of
+ * `companyId`, its published version's tags (null when that version row is missing: unreadable) and its draft's tags.
+ */
+type CountRow = { id: number; uid: string; scope: 'hq' | 'company'; status: SkillRow['status']; current_version: number; draft_tags: string; v_version: number | null; v_tags: string | null };
+async function countRows(env: Env, companyId: number | null): Promise<CountRow[]> {
+  return all<CountRow>(env,
+    `SELECT s.id, s.uid, s.scope, s.status, s.current_version, v.version AS v_version, v.taxonomy_json AS v_tags,
+       (SELECT json_group_array(json_object('slug', t.taxonomy_skill_slug, 'level', t.level))
+          FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t) AS draft_tags
+       FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+      WHERE s.status <> 'retired' AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?)) ORDER BY s.id`, companyId ?? -1);
+}
+/** A counted skill's areas: its published version's, else its draft's. */
+const countAxes = (r: CountRow, tax: Taxonomy) => axesOfTags(parse<Tag[]>(isUnpublished(r) || r.v_version == null ? r.draft_tags : r.v_tags, []), tax.category);
+
+/** D8768 (TMS01): per area, listed · published · Axal's drafts · the company's drafts · unreadable. Drafts are counted, never named. */
+function libraryAreas(rows: CountRow[], tax: Taxonomy) {
+  return RADAR_AXES.map((axis) => {
+    const here = rows.filter((r) => countAxes(r, tax).includes(axis.slug));
+    const drafts = here.filter((r) => isUnpublished(r));
+    return {
+      area: axis.slug, label: axis.label, listed: here.length,
+      published: here.filter((r) => !isUnpublished(r) && r.v_version != null).length,
+      drafts_axal: drafts.filter((r) => r.scope === 'hq').length,
+      drafts_company: drafts.filter((r) => r.scope === 'company').length,
+      unreadable: here.filter((r) => !isUnpublished(r) && r.v_version == null).length,
+    };
+  });
+}
+
 // ── The library ─────────────────────────────────────────────────────────────
+
+/** D8768: what `q` searches: the name, the job, what it needs and what it proposes. */
+const searchText = (k: { name: string; purpose: string; job: string | null; output_label: string | null; inputs: Array<{ field: string }> | null }) =>
+  [k.name, k.purpose, k.job, k.output_label, ...(k.inputs ?? []).map((i) => i.field)].filter(Boolean).join(' ').toLowerCase();
 
 router.get('/skills', async (c) => {
   const user = await requireAuth(c);
@@ -325,6 +379,7 @@ router.get('/skills', async (c) => {
   const canWriteHq = isSuperAdmin(user as any);
   const canWriteCompany = company ? await canEditAsMember(c.env, company, user) : false;
   const cards = await libraryCards(c.env, tax, company, canWriteHq, canWriteCompany);
+  const areas = libraryAreas(await countRows(c.env, company?.id ?? null), tax);
   // The role grid counts every readable skill, before the filters narrow the list.
   const agentCounts = company
     ? await all<{ role_key: string; n: number }>(c.env, `SELECT a.role_key, COUNT(*) AS n FROM team_agents a LEFT JOIN projects p ON p.id = a.project_id
@@ -337,7 +392,7 @@ router.get('/skills', async (c) => {
   }));
   let list = cards.filter((k) => (!role || k.roles.some((x) => x.key === role))
     && (!category || k.tags.some((t) => t.category === category))
-    && (!q || `${k.name} ${k.purpose}`.toLowerCase().includes(q)));
+    && (!q || searchText(k).includes(q)));
   list = sort === 'az' ? list.sort((a, b) => a.name.localeCompare(b.name))
     : sort === 'new' ? list.sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       : list.sort((a, b) => b.used_by - a.used_by || a.name.localeCompare(b.name));
@@ -346,8 +401,32 @@ router.get('/skills', async (c) => {
     hq: list.filter((k) => k.scope === 'hq'),
     company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: canWriteCompany } : null,
     can_write_hq: canWriteHq,
+    areas,
   });
 });
+
+/**
+ * D8768: a published, live skill the caller can read (HQ's, or the skill's own company's) that shares an area with
+ * `s`, the same output kind first, then the most used. Null when none does.
+ */
+async function alternativeFor(env: Env, user: User, s: SkillRow, card: { output_kind: string; tags: Array<{ category: string | null }> }) {
+  const axes = [...new Set(card.tags.map((t) => t.category).filter((x): x is string => !!x))];
+  if (!axes.length) return null;
+  const tax = await taxonomy(env);
+  const rows = await all<SkillRow & { v_tags: string; v_name: string; v_output: string; used: number }>(env,
+    `SELECT s.*, v.taxonomy_json AS v_tags, v.name AS v_name, v.output_kind AS v_output,
+       (SELECT COUNT(*) FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id WHERE l.skill_id = s.id AND a.status <> 'removed') AS used
+       FROM agent_skills s JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+      WHERE s.status = 'published' AND s.current_version > 0 AND s.id <> ?
+        AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?)) ORDER BY s.id`, s.id, s.company_id ?? -1);
+  const candidates: AltCandidate[] = [];
+  for (const r of rows) {
+    if (!(await mayRead(env, r, user))) continue;
+    candidates.push({ uid: r.uid, name: r.v_name, output_kind: r.v_output, axes: axesOfTags(parse<Tag[]>(r.v_tags, []), tax.category), used_by: Number(r.used) || 0 });
+  }
+  const pick = pickAlternative({ uid: s.uid, output_kind: card.output_kind, axes }, candidates);
+  return pick ? { uid: pick.uid, name: pick.name } : null;
+}
 
 router.get('/skills/:uid', async (c) => {
   const user = await requireAuth(c);
@@ -382,8 +461,11 @@ router.get('/skills/:uid', async (c) => {
     }
     groups.set(key, g);
   }
+  // D8768 (TMS03): why it cannot be attached at all, and a published skill in its area to take instead.
+  const attachRefusal = isUnpublished(s) ? 'version_not_published' : s.status === 'retired' ? 'skill_retired' : null;
+  const alternative = attachRefusal ? await alternativeFor(c.env, user, s, card) : null;
   return c.json({
-    skill: { ...card, skill_md: current?.skill_md ?? null },
+    skill: { ...card, skill_md: current?.skill_md ?? null, attach_refusal: attachRefusal, alternative },
     versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null, release_note: v.release_note ?? null })),
     agents: [...groups.values()],
   });
@@ -812,7 +894,6 @@ const refusalWords: Record<AttachCode, string> = {
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again. An agent that has it keeps it at its pinned version.',
   skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
-  role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
   capability_missing: 'That skill uses a tool this agent has no capability for. HQ grants capabilities in AI agents › Policies.',
 };
@@ -859,27 +940,93 @@ async function readableAgent(c: C, user: User) {
   return { a, scope };
 }
 
+type GateAgent = NonNullable<Parameters<typeof eligibilityOf>[1]>;
+type EligibleItem = Record<string, any> & { uid: string; name: string; used_by: number; eligibility: Awaited<ReturnType<typeof eligibilityOf>> };
+
+/**
+ * D8768: the one list every picker reads, for a real agent or one not yet added. Every live (not retired) skill of
+ * HQ and of the agent's company is judged by `eligibilityOf`. A published one the caller can
+ * read is listed with its card; a draft, or one the caller may not read, is only counted (owner's Q1, option A).
+ * `toolPool`, for the wizard, names what each skill's tools would ask step 3 for.
+ */
+async function eligibleList(c: C, user: User, agent: GateAgent, companyId: number | null, pinned: Map<number, number>, toolPool: Array<{ integration_uid: string; tool: string }> | null = null) {
+  const tax = await taxonomy(c.env);
+  const counted = new Map((await countRows(c.env, companyId)).map((r) => [r.id, r]));
+  // A retired skill is offered to nobody (D4160); an agent that has it keeps it, on its own skills list.
+  const rows = await all<SkillRow>(c.env,
+    `SELECT s.* FROM agent_skills s WHERE s.status <> 'retired' AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?)) ORDER BY s.id`, companyId ?? -1);
+  const skills: EligibleItem[] = [];
+  const states: Array<{ axes: string[]; state: EligibilityState }> = [];
+  let hidden = 0;
+  for (const s of rows) {
+    const row = counted.get(s.id);
+    const axes = row ? countAxes(row, tax) : [];
+    if (isUnpublished(s) || !(await mayRead(c.env, s, user))) {
+      // A draft, or a skill the caller may not read: counted, never named.
+      states.push({ axes, state: 'listed' });
+      hidden++;
+      continue;
+    }
+    const eligibility = await eligibilityOf(c.env, agent, s, { pinned: pinned.get(s.id) ?? null, category: tax.category });
+    states.push({ axes, state: eligibility.state });
+    const card: Record<string, any> = eligibility.state === 'unreadable'
+      ? { uid: s.uid, scope: s.scope, slug: s.slug, status: s.status, version: s.current_version || null, name: s.name, purpose: s.purpose, job: customerJob(s.purpose), inputs: skillInputsOf(s.slug), tools: [], used_by: 0, run_cost: null }
+      : await cardOf(c.env, s, user, tax, '');
+    skills.push({
+      ...card, uid: s.uid, name: String(card.name), used_by: Number(card.used_by) || 0, eligibility,
+      assigned: eligibility.state === 'attached', pinned_version: pinned.get(s.id) ?? null,
+      blocked: eligibility.state === 'blocked' ? { code: eligibility.code, tool: eligibility.tool } : null,
+      ...(toolPool ? { tools_to_grant: toolsToGrant(Array.isArray(card.tools) ? card.tools : [], toolPool) } : {}),
+    });
+  }
+  skills.sort(byEligibility);
+  return {
+    skills,
+    counts: countEligibility(states.filter((x) => x.state !== 'listed').map((x) => x.state), hidden),
+    areas: areaEligibility(states),
+  };
+}
+
 router.get('/agents/:uid/skills/available', async (c) => {
   const user = await requireAuth(c);
   const got = await readableAgent(c, user);
   if (!got) return say(c, 404, 'not_found', 'There is no such agent.');
   const { a } = got;
-  const tax = await taxonomy(c.env);
-  const companyId = await agentCompanyId(c.env, a);
-  const rows = await all<SkillRow>(c.env,
-    `SELECT s.* FROM agent_skills s WHERE s.status = 'published' AND s.current_version > 0
-       AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?)) ORDER BY s.id`, companyId ?? -1);
   const pinned = new Map((await all<{ skill_id: number; version: number }>(c.env, 'SELECT skill_id, version FROM agent_skill_links WHERE agent_id = ?', a.id)).map((l) => [l.skill_id, l.version]));
-  const out = [];
-  for (const s of rows) {
-    const blocked = await attachCheck(c.env, a, s, s.current_version, pinned.get(s.id) ?? null);
-    // Only the agent's own role's skills are offered; a tool it lacks is shown, blocked.
-    if (blocked && blocked.code !== 'tool_not_approved') continue;
-    const card = await cardOf(c.env, s, user, tax, '');
-    out.push({ ...card, assigned: pinned.has(s.id), pinned_version: pinned.get(s.id) ?? null, blocked: blocked ? { code: blocked.code, tool: blocked.tool ?? null } : null });
+  return c.json(await eligibleList(c, user, a, await agentCompanyId(c.env, a), pinned));
+});
+
+/**
+ * D8768 (TMS07, TMS08): the wizard's read, for an agent not yet added to this team. Its role and persona come from
+ * the query. It holds no grants yet, so a skill's tools are judged against the read tools the caller could approve
+ * at step 3 (`sponsorToolPool`), and each skill names them as `tools_to_grant`. A pool that cannot be read leaves
+ * every skill that needs a tool `unreadable` (`tools_unreadable`), never eligible. Reads only.
+ */
+router.get('/:scope/:id/skills/eligible', async (c) => {
+  const user = await requireAuth(c);
+  const scope = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+  if (!scope) return say(c, 404, 'not_found', 'There is no such team.');
+  if (!(await canRead(c.env, scope, user))) return say(c, 403, 'not_member', 'Only the team can see which skills an agent could take.');
+  const role = roleOf(c.req.query('role') ?? '');
+  if (!role) return say(c, 400, 'role_unknown', SKILL_MESSAGES.role_unknown);
+  const personaKey = c.req.query('persona') || null;
+  if (personaKey && !personaOf(personaKey)) return say(c, 400, 'persona_unknown', 'Choose one of the agents.');
+  const pool = await sponsorToolPool(c.env, user.id);
+  const [companyCol, projectCol] = scopeCols(scope);
+  const agent: GateAgent = {
+    id: null, scope_kind: scope.kind, company_id: companyCol, project_id: projectCol, role_key: role.key, persona_key: personaKey,
+    tool_grants_json: JSON.stringify(pool ?? []),
+  };
+  const companyId = await agentCompanyId(c.env, agent);
+  const out = await eligibleList(c, user, agent, companyId, new Map(), pool ?? []);
+  if (pool === null) {
+    for (const k of out.skills) {
+      if (Array.isArray(k.tools) && k.tools.length) k.eligibility = { ...k.eligibility, state: 'unreadable', code: 'tools_unreadable', tool: null };
+    }
+    out.skills.sort(byEligibility);
+    out.counts = countEligibility(out.skills.map((k) => k.eligibility.state), out.counts.drafts);
   }
-  out.sort((x, y) => y.used_by - x.used_by || x.name.localeCompare(y.name));
-  return c.json({ skills: out });
+  return c.json({ ...out, tools_unreadable: pool === null });
 });
 
 router.get('/agents/:uid/skills', async (c) => {
@@ -1153,35 +1300,38 @@ router.get('/skills/:uid/agents', async (c) => {
  * With a company chosen in the switcher (`active`), only that company's agents and those on a project with no company, as every
  * founder-ownership read narrows (`projectInActiveCompany`); null means no company chosen.
  */
-async function candidateAgents(env: Env, user: User, roles: string[], active: number | null): Promise<AgentRow[]> {
-  if (!roles.length) return [];
+async function candidateAgents(env: Env, user: User, active: number | null): Promise<AgentRow[]> {
+  // D8768: every role. The roles a skill was written for only sort the list (natural fit, D4116).
   if (isAdmin(user)) {
-    return all<AgentRow>(env, `SELECT * FROM team_agents WHERE status <> 'removed' AND role_key IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 500`, JSON.stringify(roles));
+    return all<AgentRow>(env, `SELECT * FROM team_agents WHERE status <> 'removed' ORDER BY id LIMIT 500`);
   }
   return all<AgentRow>(env,
     `SELECT a.* FROM team_agents a LEFT JOIN projects p ON p.id = a.project_id
-      WHERE a.status <> 'removed' AND a.role_key IN (SELECT value FROM json_each(?))
+      WHERE a.status <> 'removed'
         AND (a.company_id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)
           OR p.company_id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)
           OR p.founder_id = ?)
         AND (? IS NULL OR COALESCE(a.company_id, p.company_id) IS NULL OR COALESCE(a.company_id, p.company_id) = ?)
-      ORDER BY a.id LIMIT 500`, JSON.stringify(roles), user.id, user.id, user.founder_id ?? -1, active, active);
+      ORDER BY a.id LIMIT 500`, user.id, user.id, user.founder_id ?? -1, active, active);
 }
 
 router.get('/skills/:uid/assignable', async (c) => {
   const user = await requireAuth(c);
   const s = await skillByUid(c.env, c.req.param('uid'));
   if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
-  const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
-  const roles = current ? versionParts(current).roles : [];
+  const current = !isUnpublished(s) ? await versionOf(c.env, s.id, s.current_version) : null;
+  const tax = await taxonomy(c.env);
   const agents = [];
-  for (const a of await candidateAgents(c.env, user, roles, await activeCompanyFor(c, user))) {
+  for (const a of await candidateAgents(c.env, user, await activeCompanyFor(c, user))) {
     const scope = await scopeOfAgent(c.env, a);
     if (!scope || !(await canManage(c.env, scope, user))) continue;
     const pinned = await c.env.DB.prepare('SELECT version FROM agent_skill_links WHERE agent_id = ? AND skill_id = ?').bind(a.id, s.id).first<{ version: number }>();
     // A company skill is assignable only inside its company.
     if (s.scope === 'company' && s.company_id !== await agentCompanyId(c.env, a)) continue;
-    const blocked = pinned ? null : await attachCheck(c.env, a, s, s.current_version);
+    // D8768: the one rule (`eligibilityOf`); a draft is `listed` for every agent, and fit only sorts.
+    const eligibility = await eligibilityOf(c.env, a, s, { pinned: pinned?.version ?? null, category: tax.category });
+    const blocked = eligibility.state === 'blocked' || eligibility.state === 'listed' || eligibility.state === 'unreadable'
+      ? { code: eligibility.code, tool: eligibility.tool } : null;
     const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE agent_id = ?').bind(a.id).first<{ n: number }>();
     // D4121: what a run with this skill would cost this agent over a run with none (#4224 draws it), never a 0 for an unknown price.
     let change: number | null = null;
@@ -1194,11 +1344,11 @@ router.get('/skills/:uid/assignable', async (c) => {
     }
     agents.push({
       uid: a.uid, name: agentName(a), role_key: a.role_key, skill_count: Number(count?.n ?? 0), assigned: !!pinned,
-      blocked: blocked ? { code: blocked.code, tool: blocked.tool ?? null } : null, scope: await scopeLine(c.env, a),
+      blocked, eligibility, scope: await scopeLine(c.env, a),
       run_cost_change_microusd: change,
     });
   }
-  return c.json({ agents });
+  return c.json({ agents, counts: countEligibility(agents.map((x) => x.eligibility.state)) });
 });
 
 router.post('/skills/:uid/assign', async (c) => {
