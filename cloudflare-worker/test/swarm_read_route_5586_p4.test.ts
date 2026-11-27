@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
-import swarmRead, { SWARM_NOT_RECORDED, SWARM_READ_DEPS, mount } from '../src/routes/work_graph_swarm.ts';
+import swarmRead, { SWARM_NOT_RECORDED, SWARM_READ_DEPS, mount } from '../src/routes/swarm_read.ts';
 import { IMAGE_MODELS, readImageModelCapacity, readRegisteredAgents } from '../src/services/agents/swarmRecorders.ts';
 import { WORKSPACE_ADMISSION_OBJECT } from '../src/services/agents/workspaceAdmissionClient.ts';
 

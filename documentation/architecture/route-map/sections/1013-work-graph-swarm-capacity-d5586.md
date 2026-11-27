@@ -2,7 +2,7 @@
 
 There is no page, canvas or client method here. The route is read-only and **off by default**: unless
 `WORK_GRAPH_SWARM_READ=on`, every route answers 404 `swarm_read_off`. It is mounted at `/api/work-graph/swarm` by
-`cloudflare-worker/src/routes/work_graph_swarm.ts`.
+`cloudflare-worker/src/routes/swarm_read.ts`.
 
 Who can read: a signed-in person linked to the company, with the Owner, Admin or Founder role, or the primary admin.
 The company's records must not live under another tenant. Any other caller gets the same 404 `not_found`.
