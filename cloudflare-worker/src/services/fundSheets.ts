@@ -188,41 +188,92 @@ export function buildSheetsAuthUrl(env: Env, state: string, loginHint?: string):
   return `${GOOGLE_AUTH_URL}?${p.toString()}`;
 }
 
-export async function makeSheetsState(env: Env, userId: number): Promise<string> {
+/**
+ * D9151: the cookie that binds a Connect to the browser that started it. Its
+ * value is random and travels only in this cookie; the state row keeps its
+ * SHA-256. The state alone proves Connect minted it, not where: any browser
+ * bringing back a valid state would land the token, linked to whichever Google
+ * account completed consent (login CSRF). PKCE is not that binding here: the
+ * verifier would sit server-side beside the nonce, so it travels with the state.
+ */
+export const SHEETS_BINDING_COOKIE = 'studioos_sheets_state';
+export const SHEETS_BINDING_PATH = '/api/research/funds/sheet';
+
+async function sha256Hex(v: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function sameString(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let j = 0; j < a.length; j++) diff |= a.charCodeAt(j) ^ b.charCodeAt(j);
+  return diff === 0;
+}
+
+/** Every value the Cookie header carries under `name` (a host-only one can sit beside a `.axal.vc` one). */
+export function sheetsBindingValues(cookieHeader: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const part of String(cookieHeader || '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    const value = v.join('=');
+    if (k === SHEETS_BINDING_COOKIE && value) out.push(value);
+  }
+  return out;
+}
+
+/**
+ * Issue the signed, single-use, ten-minute state, and the browser binding the
+ * caller sets as the `SHEETS_BINDING_COOKIE` on the Connect response.
+ */
+export async function makeSheetsState(env: Env, userId: number): Promise<{ state: string; binding: string }> {
   const nonce = crypto.randomUUID().replace(/-/g, '');
   const sig = await hmacSign(env.JWT_SECRET || '', nonce);
+  const binding = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const expires = new Date(Date.now() + STATE_TTL_SECONDS * 1000).toISOString();
   const nowIso = new Date().toISOString();
   await env.DB.prepare(
     `DELETE FROM oauth_state_tokens WHERE expires_at < ? AND expires_at != ''`,
   ).bind(nowIso).run().catch(() => null);
   await env.DB.prepare(
-    `INSERT INTO oauth_state_tokens (state, user_id, provider, expires_at)
-     VALUES (?, ?, ?, ?)`,
-  ).bind(nonce, userId, 'google_sheets', expires).run();
-  return `${nonce}.${sig}`;
+    `INSERT INTO oauth_state_tokens (state, user_id, provider, expires_at, extra_json)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).bind(nonce, userId, 'google_sheets', expires, JSON.stringify({ binding_sha256: await sha256Hex(binding) })).run();
+  return { state: `${nonce}.${sig}`, binding };
 }
 
-export async function consumeSheetsState(env: Env, raw: string | null | undefined): Promise<number | null> {
+/**
+ * Spend the state and return who started Connect, or null. The row is deleted
+ * before any other check, so a state is spent on first use whatever follows.
+ * Null when the signature, the row, the expiry or the browser binding fails:
+ * one of `bindings` (the cookie values this browser sent) must hash to the
+ * binding stored at Connect.
+ */
+export async function consumeSheetsState(
+  env: Env, raw: string | null | undefined, bindings: readonly string[],
+): Promise<number | null> {
   if (!raw || typeof raw !== 'string') return null;
   const i = raw.indexOf('.');
   if (i < 0) return null;
   const nonce = raw.slice(0, i);
   const sig = raw.slice(i + 1);
   const expected = await hmacSign(env.JWT_SECRET || '', nonce);
-  if (sig.length !== expected.length) return null;
-  let diff = 0;
-  for (let j = 0; j < sig.length; j++) diff |= sig.charCodeAt(j) ^ expected.charCodeAt(j);
-  if (diff !== 0) return null;
+  if (!sameString(sig, expected)) return null;
   const row = await env.DB.prepare(
-    `SELECT user_id, expires_at FROM oauth_state_tokens
+    `SELECT user_id, expires_at, extra_json FROM oauth_state_tokens
       WHERE state = ? AND provider = ?`,
-  ).bind(nonce, 'google_sheets').first<{ user_id: number; expires_at: string }>();
+  ).bind(nonce, 'google_sheets').first<{ user_id: number; expires_at: string; extra_json: string | null }>();
   await env.DB.prepare(
     `DELETE FROM oauth_state_tokens WHERE state = ?`,
   ).bind(nonce).run();
   if (!row) return null;
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return null;
+  let stored = '';
+  try { stored = String(JSON.parse(row.extra_json || '{}')?.binding_sha256 || ''); } catch { stored = ''; }
+  if (!stored) return null;
+  let bound = false;
+  for (const b of bindings) if (sameString(await sha256Hex(b), stored)) bound = true;
+  if (!bound) return null;
   return row.user_id as number;
 }
 
