@@ -2,6 +2,8 @@
   "GET /api/users/:id": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/users_routes_d9041.test.ts",
+    "note": "A member reads only their own record (403 otherwise); an admin reads their own and any non-admin's, and gets 403 super_admin_required on another admin's or the Super Admin's; the Super Admin reads any. The linked founder and partner rows are named columns, not SELECT *. D9041."
   }
 }
