@@ -263,7 +263,7 @@ Every scheduled workflow polls: the #4571 guard forbids `workflow_run`.
 
 | Workflow | What it does | Triggers | Switch |
 |---|---|---|---|
-| `landing-feeder.yml` | Puts an eligible T0/T1 PR in the merge queue, once, on its exact head (#6481) | every 10 minutes (`4-59/10`), manual dispatch with one `pr` | `LANDING_AUTO` `true` and `LANDING_BOT_ENABLED` |
+| `landing-feeder.yml` | Puts an eligible T0/T1 PR in the merge queue, once, on its exact head (#6481) | every 10 minutes (`4-59/10`), manual dispatch with one `pr` | `LANDING_AUTO` `true` and `LANDING_BOT_FEEDER_ENABLED` (its own switch, D6481-p2) |
 | `landing-bot-keeper.yml` | Merges main into conflicted PRs that are not queued, with no model (#6474) | push to `main`, every 15 minutes (`7-59/15`), manual dispatch with one `pr` | `LANDING_BOT_ENABLED` |
 | `landing-bot-conflict.yml` | Resolves the conflicted files with a model, keeping both sides (#6475) | manual dispatch with one `pr`, sent by the keeper | `LANDING_BOT_ENABLED` `true` or `dispatch` |
 | `landing-bot-ejection.yml` | Classifies merge-queue ejections; restores an entry, asks the keeper, or labels `ejected` (#6476) | every 10 minutes (`3-59/10`), manual dispatch with one `pr` | `LANDING_BOT_ENABLED` |
@@ -290,7 +290,8 @@ refresh also stops above `LANDING_BOT_MAX_QUEUED_RUNS` queued CI runs.
 | Actions variable | Read by | Unset means |
 |---|---|---|
 | `LANDING_AUTO` | the feeder, `landing-policy.yml` | no automatic queue entry |
-| `LANDING_BOT_ENABLED` | every bot workflow above but the indicator | off |
+| `LANDING_BOT_ENABLED` | every bot workflow above but the indicator and the feeder | off |
+| `LANDING_BOT_FEEDER_ENABLED` | the feeder only (D6481-p2): `true` or `dispatch`, as `LANDING_BOT_ENABLED`; scheduled sweeps also wait until #6480 is closed | off |
 | `LANDING_CONFLICT_LABELS` | the conflict indicator | skipped |
 | `LANDING_BOT_LOGIN` | the feeder: the App's `<slug>[bot]` login | the keeper's merges count as unattributed, so the feeder holds those PRs |
 | `LANDING_BOT_FEED_PER_SWEEP` | the feeder | 0 |

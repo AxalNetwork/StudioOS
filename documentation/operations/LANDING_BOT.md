@@ -10,7 +10,7 @@ what a session does about each label is in `AGENTS.md` § "What the landing bot
 does to your PR".
 
 **Only the owner changes the switch and the caps.** No session, Session 1
-included, sets `LANDING_BOT_ENABLED`, `LANDING_AUTO`, `LANDING_CONFLICT_LABELS`
+included, sets `LANDING_BOT_ENABLED`, `LANDING_BOT_FEEDER_ENABLED`, `LANDING_AUTO`, `LANDING_CONFLICT_LABELS`
 or any cap below. The owner sets `LANDING_BOT_ENABLED=true` only after #6480 is
 merged, so that every session can read the rules the bot follows before it
 acts on their PRs.
@@ -23,7 +23,8 @@ applies from the next run.
 
 | To stop | Do this | What keeps running |
 |---|---|---|
-| Every bot | Delete `LANDING_BOT_ENABLED`, or set it to anything but `true` or `dispatch`. Then cancel any bot run still in progress on the Actions tab. | The conflict indicator, if `LANDING_CONFLICT_LABELS` is `true`; it only labels. |
+| Every bot but the feeder | Delete `LANDING_BOT_ENABLED`, or set it to anything but `true` or `dispatch`. Then cancel any bot run still in progress on the Actions tab. | The conflict indicator, if `LANDING_CONFLICT_LABELS` is `true`; it only labels. The feeder, if `LANDING_BOT_FEEDER_ENABLED` is set. |
+| The feeder | Delete `LANDING_BOT_FEEDER_ENABLED` (its own switch, D6481-p2), or set `LANDING_AUTO` to `false`. | The other bots. |
 | Automatic queue entry only | Set `LANDING_AUTO` to `false`. | The other bots. This also stops every agent queueing through the `land-pr` skill. |
 | Scheduled runs, keeping manual ones | Set `LANDING_BOT_ENABLED` to `dispatch`. Only a manual run on one named PR then acts. | Nothing on a schedule. |
 | Model calls | Set `LANDING_BOT_DAILY_MODEL_RUNS` to `0`. The resolver hands conflicts back; main repair tries a plain revert only. | The no-model keeper, refresh, handler and feeder. |

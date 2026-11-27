@@ -22,8 +22,8 @@ jobs:
     if: >-
       github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
       github.run_attempt == 1 && vars.LANDING_AUTO == 'true' &&
-      (vars.LANDING_BOT_ENABLED == 'true' ||
-       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_ENABLED == 'dispatch'))
+      (vars.LANDING_BOT_FEEDER_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' && vars.LANDING_BOT_FEEDER_ENABLED == 'dispatch'))
     environment: landing-bot
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -35,7 +35,12 @@ jobs:
       checks: read
     env:
       LANDING_AUTO: ${{ vars.LANDING_AUTO }}
-      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      # #6481 (D6481-p2): the feeder's own switch, default off. LANDING_BOT_ENABLED (keeper, refresh, repair,
+      # recovery) does not reach this job, and this switch does not reach them.
+      LANDING_BOT_FEEDER_ENABLED: ${{ vars.LANDING_BOT_FEEDER_ENABLED }}
+      # The landing App's login (`<slug>[bot]`): its keeper merges then count as no-model (owner, 2026-11-17).
+      # Job-wide so the plan and the recheck before each write classify the same commits the same way.
+      LANDING_BOT_LOGIN: ${{ vars.LANDING_BOT_LOGIN }}
       LANDING_BOT_FEED_PER_SWEEP: ${{ vars.LANDING_BOT_FEED_PER_SWEEP }}
       LANDING_BOT_DAILY_FEEDS: ${{ vars.LANDING_BOT_DAILY_FEEDS }}
       LANDING_BOT_QUEUE_FAIL_BREAKER: ${{ vars.LANDING_BOT_QUEUE_FAIL_BREAKER }}
@@ -52,8 +57,6 @@ jobs:
       - name: Select eligible PRs
         id: plan
         env:
-          # The landing App's login (`<slug>[bot]`): its keeper merges then count as no-model (owner, 2026-11-17).
-          LANDING_BOT_LOGIN: ${{ vars.LANDING_BOT_LOGIN }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/landing-bot/feeder.mjs plan
       - name: Reserve daily queue slots
