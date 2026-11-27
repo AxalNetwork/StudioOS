@@ -61,5 +61,6 @@ subscription, which is disabled at the org level for this account.
 Proprietary — platform IP owned by Axal VC Holdings LLC and licensed
 to Axal VC Management LLC for operation.
 | `agent-compute/` | D4557: separate default-off general compute host and bounded Container runtime. |
+| `workspace-engine/` | D5566: separate default-off coding sandbox host (preview-only candidate), its container image and local image evidence. |
 
 D5676: `cloudflare-archive-observer/` is the independent disabled metadata observer for `cloudflare-worker-tail/`; no raw archive body enters notification receipts.

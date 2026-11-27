@@ -21,7 +21,7 @@ import type { RouteMount } from '../util/routeRegistry';
 import { refuse } from '../util/refusal';
 import { readableFunds } from '../services/readableFunds';
 import { readFundPerformance } from '../services/fundPerformance';
-import { BENCHMARK_NOT_FOUND, OURS_FUND_METRICS, type OursFundMetric, benchmarkDetail, ownedBenchmark } from '../services/researchBenchmarks';
+import { BENCHMARK_NOT_FOUND, OURS_FUND_METRICS, type OursFundMetric, benchmarkChanged, benchmarkDetail, historySnapshot, ownedBenchmark } from '../services/researchBenchmarks';
 import research from './research';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -92,11 +92,17 @@ r.post('/:uid/ours-from-fund', async (c) => {
       extra: { typed_value: row.our_value, proposed: { fund_id: fundId, metric, display: fig.display, as_of: perf.as_of } },
     });
   }
-  await c.env.DB.prepare(
+  // D6277: replacing "Ours" is a restatement like a PATCH, so the row as it was
+  // is kept in the same batch when the figure changes.
+  const at = new Date().toISOString();
+  const update = c.env.DB.prepare(
     `UPDATE research_benchmarks
         SET our_value = ?, fund_id = ?, our_value_metric = ?, our_value_as_of = ?, updated_at = ?
       WHERE id = ? AND owner_user_id = ?`
-  ).bind(fig.display, fundId, metric, perf.as_of, new Date().toISOString(), row.id, user.id).run();
+  ).bind(fig.display, fundId, metric, perf.as_of, at, row.id, user.id);
+  await c.env.DB.batch(benchmarkChanged(row, { ...row, our_value: fig.display })
+    ? [historySnapshot(c.env, row.id, user.id, at), update]
+    : [update]);
   const fresh = await ownedBenchmark(c.env, user.id, row.uid);
   return c.json(await benchmarkDetail(c, user, fresh!));
 });

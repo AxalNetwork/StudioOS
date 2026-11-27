@@ -1,10 +1,19 @@
 import { holdsOnlyLicence } from './accountLicences';
 import type { Env, User } from '../types';
 import { userMayReadDeal } from '../routes/deals';
+import { hiddenDealIds, hiddenJson } from './dealPreparation';
 
-/** A project is visible to an investor only through an existing readable deal. */
+/**
+ * A project is visible to an investor only through an existing readable deal.
+ *
+ * D5454 (#5454, R4): a deal whose preparation is never released or unknown is a deal that does not exist for every
+ * reader (`hiddenDealIds('transactional')`), so it opens nothing. A withdrawn or archived release still does, for the
+ * invited or committed investor `userMayReadDeal` already requires. A guard failure throws; nothing is admitted.
+ */
 export async function mayReadProjectDeal(env: Env, user: User, projectId: number): Promise<boolean> {
-  const deals = await env.DB.prepare('SELECT id FROM deals WHERE project_id = ?').bind(projectId).all<{ id: number }>();
+  const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
+  const deals = await env.DB.prepare('SELECT id FROM deals WHERE project_id = ? AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))')
+    .bind(projectId, hidden).all<{ id: number }>();
   for (const deal of deals.results || []) {
     if (await userMayReadDeal(env, user, deal.id)) return true;
   }
@@ -30,6 +39,11 @@ export async function mayReadProjectDeal(env: Env, user: User, projectId: number
  *
  * D1254: an investor's counterpart must be on a shared open deal; an intro
  * alone does not authorize that investor. Self and admin access stay as above.
+ *
+ * D5454 (#5454, R4): a deal whose preparation is never released or unknown is
+ * not an open deal for anyone (`hiddenDealIds('transactional')`); a withdrawn
+ * or archived release still is, between the parties already on it. A guard
+ * failure throws, so no score is read past it.
  * All or nothing: a batch with one id the caller may not read is refused whole.
  */
 export async function mayReadTrustScores(env: Env, user: User, ids: number[]): Promise<boolean> {
@@ -49,6 +63,7 @@ export async function mayReadTrustScores(env: Env, user: User, ids: number[]): P
 /** The ids in `others` that are `userId`'s counterparty in an open intro or an open deal. */
 export async function counterpartiesOf(env: Env, userId: number, others: number[], includeIntros = true): Promise<Set<number>> {
   const list = JSON.stringify(others);
+  const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
   const rows = await env.DB.prepare(`
     WITH want(id) AS (SELECT CAST(value AS INTEGER) FROM json_each(?)),
     members(user_id, project_id) AS (
@@ -61,6 +76,7 @@ export async function counterpartiesOf(env: Env, userId: number, others: number[
     open_deals(deal_id, project_id, lead_partner_id) AS (
       SELECT d.id, d.project_id, d.lead_partner_id FROM deals d
        WHERE d.status NOT IN ('funded','rejected') AND d.passed_at IS NULL
+         AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
     ),
     deal_sides(deal_id, user_id) AS (
       SELECT i.deal_id, i.investor_user_id FROM deal_invitations i
@@ -82,6 +98,6 @@ export async function counterpartiesOf(env: Env, userId: number, others: number[
       FROM pairs
      WHERE (pairs.a = ? AND pairs.b IN (SELECT id FROM want))
         OR (pairs.b = ? AND pairs.a IN (SELECT id FROM want))
-  `).bind(list, includeIntros ? 1 : 0, userId, userId, userId).all<{ id: number }>();
+  `).bind(list, hidden, includeIntros ? 1 : 0, userId, userId, userId).all<{ id: number }>();
   return new Set((rows.results || []).map(row => Number(row.id)));
 }

@@ -6,8 +6,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { investorZoneActions } from '../src/workspaces/investorZoneActions.js';
-import { storeGapFor } from '../src/workspaces/noStoreCopy.js';
+import { investorZoneActions, INVESTOR_ZONE_ACTIONS } from '../src/workspaces/investorZoneActions.js';
+import { INVESTOR_ZONE_FILTERS } from '../src/workspaces/investorZoneFilters.js';
+import * as noStoreCopy from '../src/workspaces/noStoreCopy.js';
+
+const { storeGapFor } = noStoreCopy;
 
 const op = (zone, label) => investorZoneActions(zone).find((a) => a.label === label);
 
@@ -37,12 +40,42 @@ test('IR2 New request is withheld and Attach to deal points at the deal, not at 
   assert.match(a.title, /already shows its deal/);
 });
 
-test('IR4: the investor’s Markets zone states that theses wait on a decision', () => {
+// D6274 (#6274): #1023 closed with question 5 unanswered; it was asked again
+// on #6274 and the owner answered 5 A (a thesis is the investor's own). The
+// card now states that answer and is blocked on the unbuilt store, not on a
+// decision.
+test('IR4: the investor’s Markets zone states the owner’s thesis answer and the missing store', () => {
   const gap = storeGapFor('markets', 'investor');
   assert.equal(gap.blocks, 'a thesis');
-  assert.equal(gap.eyebrow, 'Blocked on a decision');
-  assert.match(gap.why, /owner’s decision, asked on #1023/);
+  assert.equal(gap.eyebrow, 'Blocked on a store');
+  assert.match(gap.why, /a thesis is yours, not your firm’s \(#6274\)/);
+  assert.match(gap.why, /not built yet/);
   assert.match(gap.why, /nothing here invents one/);
+  assert.doesNotMatch(gap.why, /owner’s decision, asked on/);
   // The founder's canvas draws a saved analysis, not theses, and keeps its own entry.
   assert.equal(storeGapFor('markets', 'founder').blocks, 'a saved market analysis');
+});
+
+// D6274: no string these three modules hand to the screen may cite closed
+// #1023. Code comments are not read, only the exported data a zone renders.
+function strings(value, out = [], seen = new Set()) {
+  if (typeof value === 'string') out.push(value);
+  else if (value && typeof value === 'object' && !seen.has(value)) {
+    seen.add(value);
+    for (const v of value instanceof Set ? [...value] : Object.values(value)) strings(v, out, seen);
+  }
+  return out;
+}
+
+test('no customer-facing string in the investor zone copy cites closed #1023', () => {
+  const sources = {
+    noStoreCopy: Object.fromEntries(Object.entries(noStoreCopy).filter(([, v]) => typeof v !== 'function')),
+    INVESTOR_ZONE_ACTIONS,
+    INVESTOR_ZONE_FILTERS,
+  };
+  for (const [name, value] of Object.entries(sources)) {
+    const all = strings(value);
+    assert.ok(all.length > 0, `${name} exported no strings to check`);
+    for (const text of all) assert.doesNotMatch(text, /#1023\b/, `${name} cites #1023: ${text}`);
+  }
 });

@@ -179,7 +179,9 @@ test('Lovable, Notion and Vercel: the prompt with the brief and every marker, Ma
   assert.match(lv.body.text, /Problem: Slow setup/);
   assert.match(lv.body.text, /Build:\n- Slow setup\n- /);
   assert.deepEqual(markersIn(lv.body.text), [f.marker, m.marker]);
-  assert.equal(lv.body.link, `https://lovable.dev/?autosubmit=true#prompt=${encodeURIComponent(lv.body.text)}`);
+  // D8773 (owner, 2026-11-27): no autosubmit; Lovable waits for the founder's send.
+  assert.equal(lv.body.link, `https://lovable.dev/#prompt=${encodeURIComponent(lv.body.text)}`);
+  assert.doesNotMatch(lv.body.link, /autosubmit/);
   const row: any = db.prepare("SELECT * FROM build_handoffs WHERE provider = 'lovable'").get();
   assert.equal(row.marker, `${f.marker} ${m.marker}`);
   assert.equal(row.target, 'lovable.dev');

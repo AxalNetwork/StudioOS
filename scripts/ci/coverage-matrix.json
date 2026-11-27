@@ -68,6 +68,10 @@
     "scripts": {
       "checks": ["agent-provenance.yml#provenance", "claude-review.yml#selftest", "ownership.yml#ownership", "release-alpha-rename.yml#rename", "release-draft.yml#draft", "release-rehearsal.yml#release-window", "suite:test:guards", "suite:test:retention"],
       "gaps": []
+    },
+    "workspace-engine": {
+      "checks": ["suite:test:worker", "workspace-image.yml#validate"],
+      "gaps": []
     }
   },
   "issues": {
@@ -126,7 +130,8 @@
     "release-rehearsal.yml#release-window": "unit",
     "round-call-worker-contracts.yml#contracts": "unit",
     "runner-benchmark.yml#benchmark": "unit",
-    "schema-rehearsal.yml#rehearse": "staging"
+    "schema-rehearsal.yml#rehearse": "staging",
+    "workspace-image.yml#validate": "unit"
   },
   "services": {
     "accounts": {

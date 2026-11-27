@@ -72,5 +72,7 @@ test('the five homes are lazy: Dashboard\'s own imports reach none of them', () 
   }
   assert.match(dash, /from '\.\/StudioHomesLazy'/);
   const lazy = readFileSync(new URL('../src/pages/StudioHomesLazy.jsx', import.meta.url), 'utf8');
-  assert.equal((lazy.match(/lazy\(\(\) => import\(/g) || []).length, 5, 'each home is its own dynamic import');
+  // D8730 (#8730): the sixth is the Founder preview, its own chunk too, so a member never fetches it.
+  assert.equal((lazy.match(/lazy\(\(\) => import\(/g) || []).length, 6, 'each home, and the Founder preview, is its own dynamic import');
+  assert.doesNotMatch(dash, /from '\.\/founder\/FounderStudioPreview'/, 'the Founder preview is not a static import');
 });

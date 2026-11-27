@@ -159,7 +159,8 @@ test('11. /studio/tickets/new is the founder\'s ticket form, on ?type=, keeping 
   assert.equal(withProjectId('/studio', ''), '/studio');
 
   // The home reads the path and `?type=`; both handlers keep project_id.
-  assert.match(HOME, /const \{ pathname, search \} = useLocation\(\);/);
+  // D8729: the home keeps the location itself too, for the history state it writes back.
+  assert.match(HOME, /const location = useLocation\(\);\n\s+const \{ pathname, search \} = location;/);
   assert.match(HOME, /const ticket = pathname === STUDIO_TICKET_PATH \? \{ type: ticketTypeOf\(search\) \} : null;/);
   assert.match(HOME, /const onTicketOpen = \(type\) => navigate\(withProjectId\(type === 'task' \? `\$\{STUDIO_TICKET_PATH\}\?type=task` : STUDIO_TICKET_PATH, search\)\);/);
   assert.match(HOME, /const onTicketClose = \(\) => navigate\(withProjectId\(ticket\?\.type === 'task' \? `\$\{STUDIO_PATH\}\?tab=tasks` : STUDIO_PATH, search\), \{ replace: true \}\);/);
@@ -219,12 +220,12 @@ test('12. below 1024px the founder\'s /studio is the phone page: the bar, its ow
   assert.doesNotMatch(none, /remain below/);
   assert.doesNotMatch(conv, new RegExp(NO_ADVISOR), 'said only when the advisor is missing');
 
-  // The home: below 1024px StudioPhone draws the chat, then FounderStudioBody's
-  // strip, profile card and modules (D1419, #3698 owner answer A, superseding
-  // D701's no-zone page), one chat element for either width.
+  // The home: below 1024px StudioPhone draws FounderStudioBody, which (D8729, #8729, owner Q3 A, superseding
+  // D1419's chat-first phone page) opens with the venture and its Next card, then Eadwyn's collapsed row with
+  // the one chat element under it, then the strip, profile card and modules.
   assert.match(HOME, /const phone = usePhoneWidth\(\);/);
-  assert.match(HOME, /if \(phone\) \{\n\s+return <StudioPhone tab=\{tab\} ticketOpen=\{Boolean\(ticket\)\} advisorAvailable=\{advisorAvailable\} after=\{body\(true\)\}>\{chat\}<\/StudioPhone>;\n\s+\}/);
-  assert.match(HOME, /<FounderStudioBody user=\{user\}[^\n]*phone=\{inPhone\}>\n\s+\{inPhone \? null : chat\}\n\s+<\/FounderStudioBody>/);
+  assert.match(HOME, /if \(phone\) \{\n\s+return <StudioPhone tab=\{tab\} ticketOpen=\{Boolean\(ticket\)\}>\{body\(true\)\}<\/StudioPhone>;\n\s+\}/);
+  assert.match(HOME, /<FounderStudioBody user=\{user\}[^\n]*phone=\{inPhone\}\n[^\n]*eadwynOpen=\{tab !== 'conversation' \|\| Boolean\(ticket\)\}>\n\s+\{chat\}\n\s+<\/FounderStudioBody>/);
   const after = page({ after: h('div', null, 'STUB MODULES') });
   assert.ok(after.indexOf('STUB CHAT') < after.indexOf('STUB MODULES'), 'Eadwyn first, then the modules');
   assert.match(HOME, /\n\s+phone=\{phone\}\n\s+venture=\{venture\}\n\s+belowThread=\{phone \? <StudioConversations \/> : null\}\n/);

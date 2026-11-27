@@ -38,11 +38,12 @@ test('the options are H38\'s, in H38\'s order and words, with Exploring kept las
   assert.deepEqual(PREVIEW_SHELLS.map((o) => [o.label, o.what]), [
     ['HQ', 'The eleven-row shell.'],
     ['HQ’s own accounts', 'The eight-row Admin shell over accounts HQ holds directly (Subsidiary S20).'],
-    ['Founder', 'The founder shell.'],
+    // D8730 (#8730, SPV05): the Founder and Exploring lines gain a second sentence saying what the preview shows.
+    ['Founder', 'The founder shell. Interview questions show as examples.'],
     ['Investor', 'The investor shell.'],
     ['Partner', 'The operating partner shell.'],
     ['Advisor', 'The advisor shell.'],
-    ['Exploring', 'The exploring shell.'],
+    ['Exploring', 'The exploring shell. Pick the visitor state to show.'],
   ]);
   assert.equal(PREVIEW_TRIGGER, 'Preview shell');
   assert.equal(PREVIEW_HEADER, 'Preview shell · this browser only');

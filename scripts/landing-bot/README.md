@@ -166,8 +166,17 @@ handler never queue one.
 | `LANDING_BOT_MAX_CONFLICT_FILES` | The most conflicted files a model is asked to resolve. Unset is 0: none. |
 | `LANDING_BOT_MAX_CONFLICT_LINES` | The most lines inside conflict blocks, across those files. Unset is 0: none. |
 | `LANDING_BOT_DAILY_MODEL_RUNS` | Resolver runs that may call a model per UTC day. Unset is 0. |
+| `LANDING_BOT_MANUAL_CONFLICT` | `true` lets a manual "Fix conflicts" request (#7109) run. Anything else: the request stops in `plan`, quietly. |
 
-Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`.
+**A manual request (#7109, D7109).** Merge Control's advisory **Merge queue conflict** check dispatches this same
+workflow when a repository writer clicks **Fix conflicts**, with `expected_head`, `expected_base` and a 16-hex
+`request` id (also in the run name). `plan` stops before any model call unless `LANDING_BOT_MANUAL_CONFLICT` is
+`true`, the head and base are the pinned ones, the PR is out of the merge queue, GitHub still reports the conflict,
+and no earlier run carries the id; `apply` checks the switch, base and queue again before it pushes. A request
+that cannot run leaves one sticky line saying why (`report`), with no label. Every rule above still applies: the
+request only narrows when the resolver runs, and the owner still lands the result.
+
+Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`, `frontend/test/landing_bot_manual_conflict_7109.test.mjs`.
 
 ## The ejection handler
 
@@ -186,7 +195,13 @@ ejection, then:
   - `[alert] merge queue stalled` is not open;
   - this PR has had fewer than 2 re-queues in 24 hours;
   - the repository is under `LANDING_BOT_DAILY_REQUEUES`;
-  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`.
+  - the last 20 queue runs' failure share is under `LANDING_BOT_QUEUE_FAIL_BREAKER`;
+  - **then, just before the enqueue,** a fresh landing decision for that exact head allows it (D6476-p7):
+    `readLandingDecision()` from `feeder-github.mjs`, which runs `landPr.decide()`. That means `LANDING_AUTO` is
+    true now and on the head's `landing policy` report, #5500 is done, main still requires the merge queue, the
+    tier is T0 or T1, `landing-policy.yml` is untouched and `[alert] merge queue stalled` is not open.
+    `requeuePolicy()` and `gateRequeue()` in `ejection-rules.mjs` turn a refusal into a wait, or into a hand-back
+    for T2, a draft, a PR not open on main or an edited `landing-policy.yml`.
 
 Otherwise it labels `ejected` with the reasons. One sticky comment says which.
 ## The conflict indicator

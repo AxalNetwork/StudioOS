@@ -19,6 +19,10 @@ export const LP_WORKSPACE = '/spinout-lab/investor-workspace';
 export const COMMITMENT = LP_WORKSPACE + '#my-commitment';
 export const NOTICES = LP_WORKSPACE + '#my-notices';
 export const BOOKLET = LP_WORKSPACE + '#subscription-booklet';
+/** D8731 (#8731): Axal VC Fund › Fund and terms, the fund brief every investor may read. */
+export const FUND_TERMS = LP_WORKSPACE + '#fund';
+/** D8731: router state a Studio card link carries, so the destination can offer ‹ Studio on phone. */
+export const FROM_STUDIO = { from: 'studio' };
 export const INBOX = '/inbox';
 
 /* ------------------------------------------------------------------ dates */
@@ -100,7 +104,8 @@ export function needsYouRows(records = {}, failures = {}, today) {
   const callsUnreadable = holdings.some((h) => !h.calls_known);
   const rows = [];
   const unlinked = !sources.fund.unreadable && fund?.unlinked_commitment === true;
-  if (unlinked) rows.push({ key: 'link-lp', kind: 'link', title: 'Open the LP workspace to link your commitment', detail: 'A commitment under your email is not linked to this account yet.', action: { label: 'Open', to: LP_WORKSPACE } });
+  // D8731: the label names the heading it opens; the plain lp-portal read there links the row.
+  if (unlinked) rows.push({ key: 'link-lp', kind: 'link', title: 'Link your commitment in Axal VC Fund', detail: 'A commitment under your email is not linked to this account yet.', action: { label: 'Link my commitment', to: COMMITMENT } });
 
   const seen = new Set();
   for (const h of holdings) {

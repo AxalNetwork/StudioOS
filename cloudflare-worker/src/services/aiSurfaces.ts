@@ -64,6 +64,8 @@ export const AI_SURFACE = {
   growPublish: '/grow',
   /** D4488: Distribution draft proposals. */
   growDistribution: '/grow/distribution',
+  /** D8827: Team › Skills › Compare with Axal — Eadwyn's version summary and per-conflict proposals (`POST /api/teams/skills/:uid/proposals`). It writes nothing. */
+  teamSkillCompare: '/account/companies/settings/team/skills',
   /** Build · Plan the build — Eadwyn's wording of the plan (`POST /api/cycles/build/plan/word`), D1071. */
   buildPlan: '/build/plan',
   /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */

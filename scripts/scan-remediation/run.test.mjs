@@ -27,6 +27,7 @@ function fixture(rows, { tracked = [], pulls = [], claimed = [] } = {}) {
   };
   const trackers = {
     trackedNumbers: () => tracked,
+    trackerFor: () => null,
     ensure: async n => { calls.push(['ensure', n]); return { issue: { number: 500 + n }, actionable: !claimed.includes(n) }; },
     closeFixed: async a => calls.push(['fixed', a.number]),
     markReady: async i => calls.push(['ready', i.number]),
@@ -35,6 +36,7 @@ function fixture(rows, { tracked = [], pulls = [], claimed = [] } = {}) {
   };
   const deps = {
     loadTrackers: async () => trackers,
+    loadBatches: async () => [],
   };
   return { calls, run: (extra = {}) => reconcile(api, { ...options, ...extra }, deps) };
 }
