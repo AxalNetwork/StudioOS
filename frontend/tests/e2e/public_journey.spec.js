@@ -301,3 +301,168 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     });
   });
 }
+
+// ── #8680 (D8680): member sign-up links across the deployed-style redirect ──────────────────────────────────────────
+//
+// The email link answers `/dashboard?magic=ok` (an existing account, a pre-registered member included) or
+// `/onboarding/chat?magic=ok` (an address with no account) with only the httpOnly cookie set. These follow it to where
+// each member is allowed to be, reload there, and read the sign-in page's reason when the link cannot be used or the
+// session it made cannot be read. Desktop width only: the redirect is the same at 390, which the journeys above cover.
+const SIGNUP_LANES = [
+  { lane: 'founder', role: 'founder' },
+  { lane: 'investor', role: 'investor' },
+  { lane: 'partner', role: 'partner' },
+  { lane: 'advisor', role: null }, // registerCopy.js LANE_ROLE: the advisor lane sends no role
+];
+const LICENCE_PICKER = { level: 1, name: 'Choose your adventure' };
+const signedInAs = (page) => page.evaluate(() => { try { return JSON.parse(localStorage.getItem('user') || 'null')?.email ?? null; } catch { return null; } });
+/** A link for `email` sent the way the sign-in page sends it, without walking its steps. */
+async function sendLink(page, worker, email) {
+  const res = await page.request.post(`${worker.origin}/api/auth/magic/start`, { data: { email } });
+  expect(res.status()).toBe(202);
+  return worker.linkFor(email);
+}
+/** The sign-in page's send-a-new-link step, already open: the way back in after a link that could not be used. */
+async function sendNewLinkFromHere(page, worker, email) {
+  await expect(page.getByRole('heading', { level: 1, name: 'Email me a sign-in link' })).toBeVisible();
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByRole('button', { name: 'Send sign-in link', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Check your email' })).toBeFocused();
+  return worker.linkFor(email);
+}
+
+test.describe('member sign-up links (#8680)', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  test.setTimeout(90_000);
+  let worker;
+  test.beforeEach(async ({ context }) => {
+    worker = await startLocalWorker({ handle: answers });
+    await controlledBrowser(context, worker.origin, CONSENT_VERSION);
+  });
+  test.afterEach(async ({ page }) => {
+    if (!page.isClosed()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await worker?.close();
+  });
+
+  for (const { lane, role } of SIGNUP_LANES) {
+    test(`a new ${lane} from the audience sign-up link → the email link → signed in on setup, and a reload keeps it`, async ({ page }) => {
+      const email = `new.${lane}@example.test`;
+      await page.goto(`${worker.origin}/register?lane=${lane}`);
+      await page.getByLabel('Full Name', { exact: true }).fill(`Synthetic ${lane}`);
+      await page.getByLabel('Email', { exact: true }).fill(email);
+      await page.getByRole('button', { name: 'Email me a link to create my account', exact: true }).click();
+      await expect.poll(() => worker.outbox.length).toBe(1);
+      expect(worker.outbox[0]).toMatchObject({ to: email, purpose: 'signup' });
+      expect(worker.account(email)).toMatchObject({ role: 'exploring', suggested_role: role });
+
+      // The pre-registered account is an existing one to auth.ts: the link lands on /dashboard?magic=ok.
+      await page.goto(worker.linkFor(email));
+      await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/onboarding');
+      await expect(page.getByRole('heading', LICENCE_PICKER)).toBeVisible({ timeout: 15_000 });
+      expect(await signedInAs(page)).toBe(email);
+      expect(worker.requests.some((r) => r.path === '/api/auth/me' && r.signedIn)).toBe(true);
+
+      await page.reload();
+      await expect(page.getByRole('heading', LICENCE_PICKER)).toBeVisible({ timeout: 15_000 });
+      expect(pathOf(page)).toBe('/onboarding');
+    });
+  }
+
+  test('a returning member pending review, in a browser that held another account → the review screen, kept on reload', async ({ page }) => {
+    const other = 'other.founder@example.test';
+    const email = 'pending.founder@example.test';
+    worker.addAccount({ email: other, name: 'Other Founder', role: 'founder' });
+    worker.addAccount({ email, name: 'Synthetic Pending', role: 'exploring', suggested_role: 'founder' });
+
+    await page.goto(await sendLink(page, worker, other));
+    await expect.poll(() => signedInAs(page), { timeout: 15_000 }).toBe(other);
+    expect(pathOf(page)).not.toBe('/login');
+
+    await page.goto(await sendLink(page, worker, email));
+    await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/exploring');
+    await expect(page.getByRole('heading', { level: 1, name: 'Welcome, Synthetic' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Founder · under review', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Membership under review/)).toBeVisible();
+    expect(await signedInAs(page)).toBe(email);
+
+    await page.reload();
+    await expect(page.getByText('Founder · under review', { exact: true })).toBeVisible({ timeout: 15_000 });
+    expect(pathOf(page)).toBe('/exploring');
+    expect(await signedInAs(page)).toBe(email);
+  });
+
+  test('an address with no account → the ordinary email sign-in → the onboarding redirect → setup, kept on reload', async ({ page }) => {
+    const email = 'first.visit@example.test';
+    await page.goto(`${worker.origin}/login`);
+    const link = await emailLinkSignIn(page, worker, email);
+    await page.goto(link);
+    await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/onboarding');
+    await expect(page.getByRole('heading', LICENCE_PICKER)).toBeVisible({ timeout: 15_000 });
+    expect(worker.account(email)?.role).toBe('exploring');
+    await page.reload();
+    await expect(page.getByRole('heading', LICENCE_PICKER)).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('a link already used → the reason and a new link → signed in', async ({ page }) => {
+    const email = 'twice@example.test';
+    worker.addAccount({ email, name: 'Synthetic Pending', role: 'exploring', suggested_role: 'investor' });
+    const link = await sendLink(page, worker, email);
+    await page.goto(link);
+    await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/exploring');
+    // Another browser, as far as the app can tell: no cookie, nothing kept (leave first, so no read races the clear).
+    await page.evaluate(() => localStorage.removeItem('user'));
+    await page.goto('about:blank');
+    await page.context().clearCookies();
+
+    await page.goto(link);
+    await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/login');
+    await expect(page.getByRole('alert').filter({ hasText: 'That sign-in link has expired or was already used. Send a new one.' })).toBeVisible();
+    expect(new URL(page.url()).search).not.toContain('magic_error');
+    await pageHolds(page, 'sign-in after a used link');
+    await page.goto(await sendNewLinkFromHere(page, worker, email));
+    await expect(page.getByText('Investor · under review', { exact: true })).toBeVisible({ timeout: 15_000 });
+  });
+
+  for (const [status, reason] of [
+    [503, 'Your link was accepted, but we could not load your account just now. This is a problem on our side. Send a new link, or try again in a moment.'],
+    [401, 'Your link was accepted, but this browser did not keep you signed in. Check that cookies are allowed for this site, then send a new link.'],
+  ]) {
+    test(`a link whose session cannot be read (${status}) → the reason and a new link, never a bare Sign in`, async ({ page }) => {
+      const email = `unread.${status}@example.test`;
+      worker.addAccount({ email, name: 'Synthetic Pending', role: 'exploring', suggested_role: 'partner' });
+      // The browser held another account: an identity the probe cannot confirm must not be drawn instead.
+      const other = `other.${status}@example.test`;
+      worker.addAccount({ email: other, name: 'Other Founder', role: 'founder' });
+      await page.goto(await sendLink(page, worker, other));
+      await expect.poll(() => signedInAs(page), { timeout: 15_000 }).toBe(other);
+      // Every read of the session refuses until the page has settled: the shell reads /me too, and its read may be first.
+      const down = { refused: 0, on: true };
+      await page.route('**/api/auth/me', (route) => {
+        if (!down.on) return route.fallback();
+        down.refused += 1;
+        return route.fulfill({ status, contentType: 'application/json', body: '{"detail":"Synthetic refusal"}' });
+      });
+      await page.goto(await sendLink(page, worker, email));
+      await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/login');
+      expect(down.refused).toBeGreaterThan(0);
+      down.on = false;
+      await expect(page.getByRole('alert').filter({ hasText: reason })).toBeVisible();
+      expect(new URL(page.url()).search).not.toContain('magic_error');
+      expect(await signedInAs(page)).toBeNull();
+      await expect(page.getByRole('heading', { level: 1, name: 'Email me a sign-in link' })).toBeVisible();
+      await pageHolds(page, `sign-in after an unreadable session (${status})`);
+
+      // The reason is spent: a signed-out move to a protected page inside the app reads the plain sign-in page.
+      await page.evaluate(() => { window.history.pushState({}, '', '/studio'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await expect.poll(() => pathOf(page), { timeout: 15_000 }).toBe('/login');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(page.getByRole('alert').filter({ hasText: 'Your link was accepted' })).toHaveCount(0);
+      expect(new URL(page.url()).search).not.toContain('magic_error');
+
+      // The way back in: a new link from the sign-in page.
+      await page.goto(`${worker.origin}/login`);
+      await page.goto(await emailLinkSignIn(page, worker, email));
+      await expect(page.getByText('Partner · under review', { exact: true })).toBeVisible({ timeout: 15_000 });
+    });
+  }
+});

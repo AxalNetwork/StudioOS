@@ -7,7 +7,7 @@ import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
   clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
-  keepThroughSetup, loginRedirectFor, markPendingNextRedirected, markRestoredArrival, pendingNextRedirected,
+  keepThroughSetup, loginRedirectFor, withLinkFailure, markPendingNextRedirected, markRestoredArrival, pendingNextRedirected,
 } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
@@ -1686,7 +1686,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
 function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true, supportLeftMs = null, onExtendImpersonation, supportReason = null }) {
   const location = useLocation();
-  const { oauthBootstrapping } = useAuth();
+  const { oauthBootstrapping, linkBootstrapFailure } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
   const [accessLevel, setAccessLevel] = useState(user?.access_level || null);
   // Task #24 — authoritative role from /api/me. The login token / stored
@@ -1898,7 +1898,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   if (!user) {
     // #4646: a Learning deep link comes back to the exact course, lesson or webinar after sign-in, through every method.
-    return <Navigate to={loginRedirectFor(location)} state={{ from: location }} replace />;
+    // D8680 (#8680): an email link that was opened but left no session says why on /login, with the new-link step open.
+    return <Navigate to={withLinkFailure(loginRedirectFor(location), linkBootstrapFailure)} state={{ from: location }} replace />;
   }
 
   // Task #1 — route to the stored invite/deep-link target (at most once per
