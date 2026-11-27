@@ -1,0 +1,75 @@
+name: Red-PR repair trigger
+
+# #5622 (D5622-p2): when CI finishes red on a pull request, ask red-PR repair
+# (landing-bot-red-pr.yml) to look at it, once. A reviewed #4571 WF-4
+# TRUSTED_WORKFLOW_RUN entry: GitHub runs this file from main, so what runs is
+# main's code. The CI run is data. Nothing here checks out the pull request's
+# branch, downloads its artifacts or reads its digest; the one job reads the run
+# and the pull request from the API and recomputes the verdict with main's
+# scripts/lib/ciClassify.mjs (scripts/landing-bot/redPr.mjs `trigger`). It
+# dispatches only for `pr_failure` on an open, ready agent/ or claude/ branch
+# from this repository whose author is not a bot, quiet for 30 minutes, not
+# labelled bot:off or needs-session. The dispatched run checks every rule again
+# and holds the limits. CLOSED BY DEFAULT: it acts only when
+# LANDING_BOT_ENABLED is true and both LANDING_BOT_RED_PR_MAX_FILES and
+# LANDING_BOT_RED_PR_MAX_LINES are set. No secret and no App token here; the
+# dispatch uses GITHUB_TOKEN with actions write only.
+# scripts/landing-bot/README.md, "Red-PR repair", has the rules.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: pr-repair-trigger-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    name: Recompute the verdict and ask red-PR repair once
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      vars.LANDING_BOT_ENABLED == 'true' &&
+      vars.LANDING_BOT_RED_PR_MAX_FILES != '' && vars.LANDING_BOT_RED_PR_MAX_LINES != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    env:
+      LANDING_BOT_ENABLED: ${{ vars.LANDING_BOT_ENABLED }}
+      LANDING_BOT_RED_PR_MAX_FILES: ${{ vars.LANDING_BOT_RED_PR_MAX_FILES }}
+      LANDING_BOT_RED_PR_MAX_LINES: ${{ vars.LANDING_BOT_RED_PR_MAX_LINES }}
+      CI_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      # Main's own commit: a workflow_run checkout with no ref is the default branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/landing-bot
+            scripts/lib
+            merge-control/src/lib
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Read the run and the pull request, recompute the verdict
+        id: trigger
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/landing-bot/redPr.mjs trigger
+      - name: Ask red-PR repair for this pull request
+        if: steps.trigger.outputs.dispatch == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.trigger.outputs.pr }}
+          HEAD_SHA: ${{ steps.trigger.outputs.head_sha }}
+          RUN: ${{ steps.trigger.outputs.run }}
+        run: gh workflow run landing-bot-red-pr.yml --repo "$GITHUB_REPOSITORY" --ref main -f pr="$PR" -f head_sha="$HEAD_SHA" -f run="$RUN"

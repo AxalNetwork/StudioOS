@@ -202,6 +202,11 @@
       "channel": "#axalvc-actions-landing-bot-model"
     },
     {
+      "id": null,
+      "path": ".github/workflows/landing-bot-red-pr.yml",
+      "channel": "#axalvc-actions-landing-bot-red-pr"
+    },
+    {
       "id": 424608420,
       "path": ".github/workflows/landing-bot-refresh.yml",
       "channel": "#axalvc-actions-landing-bot-refresh"
@@ -310,6 +315,11 @@
       "id": 422890505,
       "path": ".github/workflows/pr-preview-deploy.yml",
       "channel": "#axalvc-actions-pr-preview-deploy"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/pr-repair.yml",
+      "channel": "#axalvc-actions-pr-repair"
     },
     {
       "id": 404322234,

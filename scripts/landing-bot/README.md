@@ -22,6 +22,7 @@ its data, passes it in, and does only what these functions allow.
 | `resolve-rules.mjs` | The conflict resolver's rules (#6475), pure: `gate()` and `afterStage()` before any model call, `checkResolution()` (both sides' added lines kept, no test dropped, no skip added, only the conflicted files), the verify commands and today's reservations. |
 | `resolve.mjs` | The conflict resolver's entry point (`plan`, `apply`): stages the merge, builds the model task, then re-checks the patch and the resolution with main's code and pushes a normal merge commit, or hands back. |
 | `mainRepair.mjs` | Main repair (#6477): the pure decision (`confirmRed()`, `ownership()`, `choose()`), the patch and revert checks, and the entry point (`plan`, `claim`, `apply`) that takes the repair issue and opens one `main-repair` PR, or steps aside. |
+| `redPr.mjs` | Red-PR repair (#5622, D5622-p2): the pure rules (`triggerGate()`, `gate()`, `allowedFiles()`, `checkRepair()`) and the entry point (`trigger`, `plan`, `apply`) that recomputes a PR's verdict with main's `ciClassify`, asks the model runner for a fix, and commits it to the PR's own branch once `pathGuard()`, `merge-control/src/lib/patchGuard.mjs` and `merge-policy.mjs` all pass, or hands back. |
 | `model/` | The model runner (#6473): task validation and caps, the read-and-edit tools, the provider loop, the patch checks and the three SDK adapters, called by `.github/workflows/landing-bot-model.yml`. [Its README](model/README.md). |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
@@ -185,7 +186,7 @@ Tests: `frontend/test/landing_bot_conflict_6475.test.mjs`, `frontend/test/landin
 ejection, then:
 - **conflict:** asks the branch keeper; once the keeper's merge has cleared the conflict, the entry may be
   restored;
-- **own failure:** labels `ejected` and asks red-PR repair (#5622) once it exists;
+- **own failure:** labels `ejected` and asks red-PR repair (#5622, `landing-bot-red-pr.yml`), which checks every rule again;
 - **timeout, manual, unknown:** labels `ejected` only;
 - **cascade, flake, infrastructure:** restores the entry on the same head (`enqueuePullRequest` with
   `expectedHeadOid`), but only when all of these hold:
@@ -309,3 +310,45 @@ works beside a session. Four jobs:
 
 Tests: `frontend/test/landing_bot_main_repair_6477.test.mjs`.
 
+## Red-PR repair
+
+Two workflows (#5622, D5622-p2). Both ship switched off: nothing runs until the owner sets the two limit variables
+below, and `LANDING_BOT_ENABLED`.
+
+- **`.github/workflows/pr-repair.yml`** starts when CI completes (`workflow_run`). It is a reviewed #4571 WF-4
+  `TRUSTED_WORKFLOW_RUN` entry. GitHub runs it from main. It has no secret, no checkout of the branch and no artifact,
+  and its token is `actions: write`, `contents: read` and `pull-requests: read`. `redPr.mjs trigger` reads the run by
+  id and the PR from the API. It recomputes the verdict with main's `../lib/ciClassify.mjs` (`verdictFor()`).
+  It asks `landing-bot-red-pr.yml` once, with `GITHUB_TOKEN`, only when all of these hold:
+  - the verdict is `pr_failure`;
+  - the run is CI's own `pull_request` run, from this repository, on the PR's current head;
+  - the branch starts with `agent/` or `claude/`, never `repair/` or main;
+  - the author is not a bot, and the PR is open and not a draft;
+  - nothing was pushed for 30 minutes;
+  - the PR is not labelled `bot:off` or `needs-session`.
+- **`.github/workflows/landing-bot-red-pr.yml`** is dispatched by the trigger or by the ejection handler, with one PR.
+  - **`plan`** (`landing-bot`, a read-only token) trusts nothing it was handed. It checks every rule again: the
+    verdict, `eligible()`, the head the trigger read, two `attempts()` per PR for its whole life (the bot's commits
+    count, a session's never reset it), one try per head and `budget()`. Before the model is called it reserves the
+    attempt, the head and today's run as artifacts.
+  - **`repair`** is the model runner on the PR's branch, with no GitHub write. It may edit the PR's own non-test
+    files and the failure's, each clearing `pathGuard()` and `patchGuard.mjs`. It verifies with the installs, the
+    typecheck and the failing command. The logs, the PR text and the failure list are data files, never instructions.
+  - **`apply`** (`landing-bot`, the App token, no model key, main's scripts, no PR code run) re-checks the patch with
+    `checkPatch()`, `pathGuard()`, `patchGuard.validate()` and the committed diff with `merge-policy.mjs`. It refuses
+    a change to an existing test, fixture, baseline, allowlist, guard or timeout, a deleted or renamed file, an added
+    skip, only or todo, fewer tests or assertions, binary or mode changes, and anything over the limits. A refusal
+    labels the PR `needs-session` with one comment. Otherwise it commits ONE commit on the planned head and re-reads
+    the head. It pushes a normal push to the PR's own branch, never forced and never main. A moved head pushes
+    nothing.
+
+**A person signs off the repaired head.** The commit carries `Landing-Bot-Kind: red-pr`, so the feeder never queues
+it (`repairStatus()`). The bot never queues or merges it, and the sign-off has no expiry.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_RED_PR_MAX_FILES` | Most files one repair may change. Unset or 0: every repair is refused. |
+| `LANDING_BOT_RED_PR_MAX_LINES` | Most changed lines (added plus removed) in one repair. Unset or 0: every repair is refused. |
+| `LANDING_BOT_DAILY_MODEL_RUNS`, `LANDING_BOT_DAILY_PUSHES` | The shared daily caps, counted from this workflow's day reservations. |
+
+Tests: `frontend/test/landing_bot_red_pr_5622.test.mjs` and `merge-control/test/repair_patch_guard_5622.test.ts`.
