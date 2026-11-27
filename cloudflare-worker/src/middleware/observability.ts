@@ -22,7 +22,75 @@ function shouldMeter(path: string) {
   return path.startsWith('/api/') && !SKIP_METRICS_PATHS.some(p => path === p || path.startsWith(p));
 }
 
-export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
+/**
+ * D9202 (#9202) — the D1 `system_metrics` 'request' row is SAMPLED, one in
+ * this many, because Analytics Engine already carries every request and D1
+ * runs writes one at a time on the same database as real writes. The row's
+ * `value` column holds the number of requests it stands for (this rate for a
+ * sampled row, 1 for a row kept whole), so every reader counts with
+ * `SUM(value)` and averages weighted by it; rows written before the change
+ * have value 1 and read the same way.
+ */
+export const REQUEST_METRIC_SAMPLE_EVERY = 10;
+
+/**
+ * How many requests this request's `system_metrics` row stands for, or 0 for
+ * no row. A 5xx or a 429 is rare and is what the monitoring health figure and
+ * the rate-limited count are made of, so it is always kept, at weight 1.
+ * Everything else is kept when `rand` falls in the first 1/N of [0, 1).
+ */
+export function requestMetricWeight(status: number, rand: number): number {
+  if (status >= 500 || status === 429) return 1;
+  return rand < 1 / REQUEST_METRIC_SAMPLE_EVERY ? REQUEST_METRIC_SAMPLE_EVERY : 0;
+}
+
+/**
+ * D9202 — a READ (GET, HEAD) writes at most one `activity_logs` row per
+ * account per endpoint per UTC minute, per isolate. Every reader of the
+ * middleware's rows asks a coarser question — distinct accounts per day, per
+ * week, per hour of activity, the first logged day, the newest request — and a
+ * minute bucket nests inside each of those, so each still sees the account.
+ * A WRITE (any other method) is logged every time: the Stripe webhook's
+ * delivery count, refusal streak and newest success/failure read one row per
+ * POST, and a write is the kind of request an audit should never collapse.
+ *
+ * The map holds key → minute. It is per isolate, so two isolates may each
+ * write one row for the same minute: the cap bounds the writes, it does not
+ * promise uniqueness. It is cleared whole past ACTIVITY_DEDUPE_CAP keys, so
+ * memory stays bounded; a clear costs at most one extra row per key.
+ */
+const ACTIVITY_DEDUPE_CAP = 10_000;
+const activitySeen = new Map<string, number>();
+
+/** For tests: forget which reads this isolate has already logged. */
+export function resetActivityLogDedupe(): void { activitySeen.clear(); }
+
+/** Whether this read was already logged for this account, endpoint and minute; records it if not. */
+function readAlreadyLogged(userId: number | null, method: string, endpoint: string, atMs: number): boolean {
+  const key = `${userId ?? 'anon'}\u0000${method}\u0000${endpoint}`;
+  const minute = Math.floor(atMs / 60_000);
+  if (activitySeen.get(key) === minute) return true;
+  if (activitySeen.size >= ACTIVITY_DEDUPE_CAP) activitySeen.clear();
+  activitySeen.set(key, minute);
+  return false;
+}
+
+export type ObservabilityOptions = {
+  /** The sampling draw for `system_metrics`, in [0, 1). Tests pin it. */
+  random?: () => number;
+};
+
+let defaultDraw: () => number = Math.random;
+
+/**
+ * For tests that mount the whole Worker (the D1 statement budgets): pin the
+ * sampling draw of the middleware index.ts already built. No argument restores
+ * Math.random.
+ */
+export function setRequestMetricDrawForTests(draw?: () => number): void { defaultDraw = draw ?? Math.random; }
+
+export const observabilityMiddleware = (opts: ObservabilityOptions = {}): MiddlewareHandler<{ Bindings: Env }> => {
+  const random = opts.random ?? (() => defaultDraw());
   return async (c, next) => {
     const start = Date.now();
     const path = new URL(c.req.url).pathname;
@@ -54,11 +122,17 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
         let userId: number | null = null;
         let actor: string | null = null;
         let role: string = 'anon';
+        // D9202 — the Analytics Engine tier label is the plan auth already
+        // loaded: resolveCurrentUser hydrates `mi_subscription_plan` from
+        // `mi_pro_subscriptions` once per request, the same column the
+        // middleware used to SELECT again here on every signed-in request.
+        let tier = 'free';
         try {
           const u = cached !== undefined ? cached : await getCurrentUser(c);
           userId = u?.id ?? null;
           actor = u?.email ?? null;
           role = u?.role ?? 'anon';
+          if (u?.mi_subscription_plan) tier = String(u.mi_subscription_plan);
         } catch {}
 
         // ---- D5981: section incident producer (off unless its start time is set) ----
@@ -72,16 +146,20 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
 
         // ---- increment a metric counter (skip self-monitoring paths) ----
         if (shouldMeter(path)) {
-          try {
-            await env.DB.prepare(
-              `INSERT INTO system_metrics (metric_name, value, labels) VALUES (?, ?, ?)`
-            ).bind(
-              'request',
-              1,
-              JSON.stringify({ endpoint: recorded, method, status, latency_ms: latency, role }),
-            ).run();
-          } catch (e) {
-            console.error('system_metrics insert failed', e);
+          // D9202 — sampled; `value` is the number of requests the row stands for.
+          const weight = requestMetricWeight(status, random());
+          if (weight > 0) {
+            try {
+              await env.DB.prepare(
+                `INSERT INTO system_metrics (metric_name, value, labels) VALUES (?, ?, ?)`
+              ).bind(
+                'request',
+                weight,
+                JSON.stringify({ endpoint: recorded, method, status, latency_ms: latency, role }),
+              ).run();
+            } catch (e) {
+              console.error('system_metrics insert failed', e);
+            }
           }
 
           // Task #13 — also write to Workers Analytics Engine when the
@@ -95,19 +173,6 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
             // that worked around a type which already existed.
             const ae = env.ANALYTICS;
             if (ae && typeof ae.writeDataPoint === 'function') {
-              // Resolve subscription tier opportunistically. We don't want
-              // to add a D1 hop on every single request, so only fetch when
-              // we have a user id AND the binding is configured.
-              let tier = 'free';
-              if (userId != null) {
-                try {
-                  const row = await env.DB
-                    .prepare('SELECT plan FROM mi_pro_subscriptions WHERE user_id = ?')
-                    .bind(userId)
-                    .first<{ plan: string | null }>();
-                  if (row?.plan) tier = String(row.plan);
-                } catch {}
-              }
               ae.writeDataPoint({
                 // Indexes (cardinality-bounded; first one is the sampling key).
                 //
@@ -148,7 +213,9 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
         }
 
         // ---- write activity_logs row with latency / status ----
-        if (activityLogged(path, status)) {
+        // D9202 — a read is logged once per account, endpoint and minute; a write every time.
+        const isRead = method === 'GET' || method === 'HEAD';
+        if (activityLogged(path, status) && !(isRead && readAlreadyLogged(userId, method, recorded, start))) {
           try {
             await env.DB.prepare(
               `INSERT INTO activity_logs (action, details, actor, user_id, endpoint, method, status_code, latency_ms)
