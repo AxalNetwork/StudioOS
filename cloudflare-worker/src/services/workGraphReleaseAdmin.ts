@@ -81,9 +81,15 @@ export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Objec
   // Part 16 (D5585-p16): a line's name.
   line_name_invalid: 'A line name is 1 to 120 characters of text, with no control or text-direction characters.',
   stale_line_name: 'The line’s name has changed since you loaded it. Reload the line and rename it again.',
+  // Part 18 (D5585-p18): the origins that may read a company's site records.
+  site_origin_invalid: 'An origin is https:// and a host name, with an optional port and nothing after it.',
+  stale_site_origins: 'The company’s list of origins has changed since you loaded it. Reload it and try again.',
+  already_allowed: 'That origin is already on this company’s list.',
+  not_allowed: 'That origin is not on this company’s list, so there is nothing to remove.',
+  site_origin_limit: 'This company already lists the most origins it may. Remove one before adding another.',
 });
 export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503,
-  line_name_invalid: 400 });
+  line_name_invalid: 400, site_origin_invalid: 400 });
 
 export const RELEASE_DRAIN_LIMITS = Object.freeze({
   /** Effects one scheduled drain delivers at most. */
