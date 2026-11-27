@@ -2,6 +2,7 @@
 //
 // D5663: issue-backed health episodes and durable delivery intent; transports are injected for tests/adapters.
 import { ALERT_KINDS, mainState, message, safeDeadlineCandidates, safeStallIdentities } from './lib/githubAlerts.mjs';
+import { OPS_REASONS } from './lib/opsScheduleHealth.mjs';
 const marker = /\n?<!-- studioos-health:v1 ([^\n]+) -->/g;
 const locks = new Map();
 export function safeHealthFacts(facts = {}) {
@@ -9,10 +10,13 @@ export function safeHealthFacts(facts = {}) {
   for (const key of ['pr', 'queued', 'waitedMin', 'days', 'failedCount', 'ignored', 'identityCount', 'ageHours', 'objectCount', 'byteCount']) if (Number.isSafeInteger(Number(facts[key])) && Number(facts[key]) >= 0) out[key] = Number(facts[key]);
   if (['run_failed', 'heartbeat_missing', 'heartbeat_invalid', 'run_reported_failure', 'copy_missing', 'missed_run', 'healthy'].includes(facts.backupReason)) out.backupReason = facts.backupReason;
   // D8754: only the named reasons and workflow files, never a run's log, secret or environment detail.
-  const opsReasons = Array.isArray(facts.opsReasons) ? facts.opsReasons.filter(r => ['approval_pending', 'backup_stale', 'schedule_missed', 'credentials_missing'].includes(r)) : [];
+  const opsReasons = Array.isArray(facts.opsReasons) ? facts.opsReasons.filter(r => OPS_REASONS.includes(r)) : [];
   if (opsReasons.length) out.opsReasons = [...new Set(opsReasons)];
   const opsWorkflows = Array.isArray(facts.opsWorkflows) ? facts.opsWorkflows.filter(w => /^[a-z0-9-]{1,60}\.yml$/.test(w)) : [];
   if (opsWorkflows.length) out.opsWorkflows = [...new Set(opsWorkflows)].slice(0, 10);
+  // D9050: the last published commit and its age in hours, nothing else from the deploy run.
+  if (/^[a-f0-9]{40}$/.test(facts.releaseSha || '')) out.releaseSha = facts.releaseSha;
+  if (Number.isSafeInteger(facts.releaseAgeHours) && facts.releaseAgeHours >= 0) out.releaseAgeHours = facts.releaseAgeHours;
   if (/^[a-f0-9]{40}$/.test(facts.sha || '')) out.sha = facts.sha;
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(facts.cutoff || '')) out.cutoff = facts.cutoff; // #6463: the queue cutoff, as parseQueueCutoff writes it
   if (['budget_refused', 'configuration_error', 'reviewed', 'duplicate'].includes(facts.outcome)) out.outcome = facts.outcome;

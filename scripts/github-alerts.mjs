@@ -9,7 +9,8 @@
  *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL;
  *                                                  failing test names to the job log and GITHUB_STEP_SUMMARY only (D7124)
  *   node scripts/github-alerts.mjs queue-stalled   (reads merge_group runs, their jobs and `ci-failure-id` annotations: checks: read, D7125)
- *   node scripts/github-alerts.mjs ops-schedules   (reads the D1 backup, magic-link probe and admin drift runs: actions: read, D8754)
+ *   node scripts/github-alerts.mjs ops-schedules   (reads the D1 backup, magic-link probe and admin drift runs, and the
+ *                                                  Worker deploy's runs, jobs and the main tip: actions: read, D8754, D9050)
  *
  * Always: GITHUB_TOKEN (issues: write for the three alert kinds; actions: read
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
@@ -23,6 +24,7 @@ import { createHealthMonitor, runSource } from './health-alert-episodes.mjs';
 import { webhookDelivery } from './health-alert-transport.mjs';
 import { fileRecoveryHealth, latestFileSnapshotRun } from './lib/fileRecoveryHealth.mjs';
 import { WATCHED, opsScheduleHealth, workflowHealth } from './lib/opsScheduleHealth.mjs';
+import { readReleaseEvidence, releaseHealth, releaseWorkflowResult } from './lib/releaseHealth.mjs';
 import { futureClockReport } from './future-clock-report.mjs';
 import { breakDate, futureClockLogLines, futureClockSummary, withFutureClockRunLine } from './lib/futureClockNames.mjs';
 
@@ -153,10 +155,15 @@ async function main() {
       } catch (error) { console.log(JSON.stringify({ event: 'ops_schedule_unreadable', workflow: spec.workflow, error: String(error.message) })); }
       results.push(workflowHealth(spec, runs, failedSteps, now));
     }
+    // D9050: whether the deploy workflow actually published, beside the scheduled jobs (same permissions).
+    const release = releaseHealth({ ...(await readReleaseEvidence({ gh, repo })), now });
+    results.push(releaseWorkflowResult(release));
     const state = opsScheduleHealth(results);
-    console.log(JSON.stringify({ event: 'ops_schedule_state', active: state.active, reasons: state.reasons, workflows: state.workflows, ageHours: state.ageHours }));
+    console.log(JSON.stringify({ event: 'ops_schedule_state', active: state.active, reasons: state.reasons, workflows: state.workflows, ageHours: state.ageHours,
+      release: { active: release.active, ageHours: release.ageHours, lastPublishedSha: release.lastPublishedSha, waitingApproval: release.waitingApproval } }));
     if (state.active === null) process.exitCode = 1;
-    return apply('ops-schedules', state.active, { opsReasons: state.reasons, opsWorkflows: state.workflows, ageHours: state.ageHours ?? undefined },
+    return apply('ops-schedules', state.active, { opsReasons: state.reasons, opsWorkflows: state.workflows, ageHours: state.ageHours ?? undefined,
+      releaseSha: release.lastPublishedSha ?? undefined, releaseAgeHours: release.ageHours ?? undefined },
       runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
   if (mode === 'queue-deadline') {
