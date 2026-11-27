@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import directory from '../src/routes/network_directory.ts';
 import { APPLY_CONTRACT, APPLY_SCHEMA, recordsDigest } from '../src/services/networkDirectoryApply.ts';
-import { LINKEDIN_PROFILE, PEOPLE_APPLY_CONTRACT, peopleEnvelope, replanPeople } from '../src/services/networkDirectoryPeopleApply.ts';
+import { LINKEDIN_PROFILE, PEOPLE_APPLY_CONTRACT, isPersonalProfileLink, linkedInUrl, peopleEnvelope, replanPeople } from '../src/services/networkDirectoryPeopleApply.ts';
 import { VERSION, buildDirectoryPlan } from '../../scripts/lib/networkDirectoryPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -157,12 +157,15 @@ test('a contact field is refused and counted, wherever it is planted, and its va
   value('a personal site in a name', angel('atCasey', `Casey ${MARKER} www.casey.example`));
   value('a personal site in the profile column', folk('fkAvery', 'Avery Example', { Urls: `https://${MARKER}.example/about` }));
   value('an email in the profile column', angel('atCasey', 'Casey Example', { LinkedIn: `${MARKER}@example.test` }));
+  // CodeQL js/regex/missing-regexp-anchor: a site that only mentions linkedin.com is still a personal site, judged by its host.
+  value('a non-LinkedIn site naming linkedin.com in the profile column', folk('fkAvery', 'Avery Example', { Urls: `https://${MARKER}.example/?u=linkedin.com` }));
   value('a phone in a company cell', folk('fkAvery', 'Avery Example', { Companies: [NORTHWIND, '0612345678'] }));
   const avery = [folk('fkAvery', 'Avery Example')];
   cases.push(['an email in a manifest reason', avery, manifestFor(avery, { rows: [prow(avery[0], 'accept', { reasons: [`asked ${MARKER}@example.test`] })] })]);
   cases.push(['a phone in a title override', avery, manifestFor(avery, { rows: [prow(avery[0], 'accept', { title: `Partner +33 6 12 34 56 78 ${MARKER}` })] })]);
   cases.push(['an email channel review', avery, manifestFor(avery, { duplicate_channel_groups: [{ channel_type: 'email', records: [] }] })]);
   cases.push(['a personal profile as a firm website', avery, manifestFor(avery, { organizations: [{ ...NORTHWIND_ORG, website: 'https://linkedin.com/in/' + MARKER.toLowerCase() }] })]);
+  cases.push(['a bare personal profile as a firm website', avery, manifestFor(avery, { organizations: [{ ...NORTHWIND_ORG, website: 'www.linkedin.com/in/' + MARKER.toLowerCase() }] })]);
   const f = fixture();
   for (const [name, records, manifest] of cases) {
     const r = await f.call(PATH, 'POST', 9, await upload(records, manifest));
@@ -393,4 +396,12 @@ test('the people service accepts no SQL, selects no private source cell and neve
   assert.doesNotMatch(code, /raw_json|network_directory_private_sources/);
   assert.doesNotMatch(code, /prepare\(/, 'every statement is the shared apply’s, built from the server’s own plan');
   assert.doesNotMatch(code, /published/);
+});
+
+test('LinkedIn is recognised by the parsed host, never a substring (CodeQL js/regex/missing-regexp-anchor)', () => {
+  // Mutation checked: each helper restored to its old substring test, a host substring, a bare URL left unnormalised, and the scheme/credentials check removed.
+  for (const v of ['https://linkedin.com/in/a-b', 'https://www.linkedin.com/company/x', 'https://fr.linkedin.com/in/a', 'linkedin.com/in/a', ' www.linkedin.com/in/a ']) assert.ok(linkedInUrl(v), v);
+  for (const v of ['https://evil.example/?u=linkedin.com', 'https://linkedin.com.evil.example/in/a', 'https://evil.example/linkedin.com/in/a', 'https://notlinkedin.com/in/a', 'mailto:a@linkedin.com', 'https://a:b@linkedin.com/in/x', 'ftp://linkedin.com/in/a', '']) assert.equal(linkedInUrl(v), null, v);
+  for (const v of ['https://linkedin.com/in/a', 'www.linkedin.com/in/a', 'https://fr.linkedin.com/IN/a']) assert.ok(isPersonalProfileLink(v), v);
+  for (const v of ['https://linkedin.com/company/northwind', 'https://evil.example/linkedin.com/in/a', 'https://northwind.example']) assert.equal(isPersonalProfileLink(v), false, v);
 });

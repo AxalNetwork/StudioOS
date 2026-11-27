@@ -60,6 +60,18 @@ const MANIFEST_INVALID = 'The review manifest is not a version 1 manifest in the
 const cellStrings = (v: unknown): string[] => typeof v === 'string' ? [v] : Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 
 const contactValue = (s: string) => EMAIL_VALUE.test(s) || PHONE_VALUE.test(s);
+/** A LinkedIn URL by its parsed host, never a substring: `https://evil.example/?u=linkedin.com` is not one (CodeQL js/regex/missing-regexp-anchor). A bare `linkedin.com/...` counts. */
+export function linkedInUrl(value: string): URL | null {
+  const v = value.trim();
+  try {
+    // Only a value with no scheme at all is read as https; `mailto:` and other schemes stay what they are.
+    const u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v}`);
+    if (!/^https?:$/.test(u.protocol) || u.username || u.password) return null;
+    const host = u.hostname.toLowerCase();
+    return host === 'linkedin.com' || host.endsWith('.linkedin.com') ? u : null;
+  } catch { return null; }
+}
+export const isPersonalProfileLink = (value: string) => /^\/in\//i.test(linkedInUrl(value)?.pathname ?? '');
 
 /**
  * The people envelope: the shared checks, then every record and manifest cell held to the professional mapping.
@@ -86,7 +98,7 @@ export function peopleEnvelope(body: Record<string, unknown>, env: Pick<Env, 'EN
       }
       if (field === PROFILE_FIELD[r.source as string]) {
         if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) continue;
-        if (typeof value === 'string' && (contactValue(value) || (SITE_VALUE.test(value) && !/linkedin\.com/i.test(value)))) {
+        if (typeof value === 'string' && (contactValue(value) || (SITE_VALUE.test(value) && !linkedInUrl(value)))) {
           counts.contact_fields++; touched.contact.add(i); continue;
         }
         if (typeof value !== 'string' || !LINKEDIN_PROFILE.test(value.trim())) { counts.invalid_linkedin_urls++; touched.linkedin.add(i); }
@@ -127,7 +139,7 @@ export function peopleEnvelope(body: Record<string, unknown>, env: Pick<Env, 'EN
     if (o.source !== 'folk_french_vcs' || typeof o.source_organization_key !== 'string' || !folkCompanies.has(o.source_organization_key.trim())) {
       throw refuse(422, 'organisation_records_refused', PEOPLE_ONLY);
     }
-    if (typeof o.website === 'string' && /linkedin\.com\/in\//i.test(o.website)) {
+    if (typeof o.website === 'string' && isPersonalProfileLink(o.website)) {
       throw refuse(422, 'contact_field_refused', 'An organisation website is a personal profile link. Nothing was written.', { ...counts, contact_fields: 1, records_affected: 0 });
     }
   }
