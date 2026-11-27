@@ -11,7 +11,9 @@
  *   snapshot --out DIR                 every open issue and PR, plus main's sha and the time
  *   delta    --out DIR [--since ISO]   the open issues a weekly pass must re-read (delta.json);
  *                                      --since defaults to the newest audit note in the last 30 days
- *   plan     --in RESULT.json --out DIR  verified findings → plan.json, proposals → proposals.json (both carry the run id)
+ *   evidence --dir DIR --issues 1,2     record facts before the independent verifier reads them
+ *   report   --out DIR [--since ISO]     bounded, read-only lifecycle suggestions
+ *   plan     --in RESULT.json --out DIR  verified findings and evidence → plan.json
  *   apply    --dir DIR --run ID [--go] notes, labels and closes from plan.json
  *   file     --dir DIR --run ID [--go] new tasks from proposals.json, then one list per parent
  *
@@ -23,13 +25,14 @@
  * so it also works behind a proxy that injects credentials.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   planLabels, describeLabelChange, slotPicker, slotLoad, proposalLabels, classifyProposal,
   marker, parseMarkers, alreadyDone, staleReasons, renderNote, planFromFindings, deltaSelect, RUN_ID,
+  prRelationships, claimEvidence, generatedIssue, issueEvidenceDigest, lifecycleSuggestion, applyReviewedItem, verifiedClosure,
 } from './lib/coordinator.mjs';
 
 const REPO = process.env.COORDINATOR_REPO || 'AxalNetwork/StudioOS';
@@ -53,7 +56,7 @@ function authArgs() {
 }
 
 export function gh(method, path, body) {
-  const args = ['-sS', '-X', method, '-H', 'Accept: application/vnd.github+json', '-H', 'Content-Type: application/json',
+  const args = ['-sS', '--connect-timeout', '10', '--max-time', '40', '-X', method, '-H', 'Accept: application/vnd.github+json', '-H', 'Content-Type: application/json',
     '-w', '\n%{http_code}', ...authArgs(), path.startsWith('https://api.github.com/') ? path : API + path];
   if (body !== undefined) args.push('--data-binary', '@-');
   let raw;
@@ -67,9 +70,9 @@ export function gh(method, path, body) {
   try { return text.trim() ? JSON.parse(text) : null; } catch { throw new Error(`${method} ${path} → ${status}: not JSON`); }
 }
 
-function pages(path) {
+function pages(path, limit = 100) {
   const all = [];
-  for (let p = 1; p <= 100; p++) {
+  for (let p = 1; p <= limit; p++) {
     const rows = gh('GET', `${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${p}`);
     all.push(...rows);
     if (rows.length < 100) return all;
@@ -80,13 +83,104 @@ function pages(path) {
 const arg = (name, dflt) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : dflt; };
 const flag = name => process.argv.includes(`--${name}`);
 const readJson = (p, d) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : d);
-const writeJson = (p, v) => writeFileSync(p, JSON.stringify(v, null, 1));
+function writeJson(path, value) {
+  const pending = `${path}.${process.pid}.pending`;
+  try {
+    writeFileSync(pending, JSON.stringify(value, null, 1), { mode: 0o600 });
+    renameSync(pending, path);
+  } finally {
+    rmSync(pending, { force: true });
+  }
+}
 const labelsOf = i => i.labels.map(l => (typeof l === 'string' ? l : l.name));
 const slim = i => ({ number: i.number, title: i.title, state: i.state, state_reason: i.state_reason || null, body: i.body || '', labels: labelsOf(i), created_at: i.created_at, updated_at: i.updated_at });
 const requireRun = (runId, recorded) => {
   if (!RUN_ID.test(String(runId || ''))) throw new Error('--run <id> is required: a letter or digit, then letters, digits, dot, dash or underscore');
   if (recorded && recorded !== runId) throw new Error(`--run ${runId} does not match the run ${recorded} this folder was planned for`);
 };
+
+const canonicalLabels = issue => ({ ...slim(issue), labels: labelsOf(issue).sort() });
+const issueNumbers = value => [...new Set((String(value || '').match(/#[1-9]\d*\b/g) || []).map(value => Number(value.slice(1))))];
+const ownNote = (comment, note) => note && comment.user?.login === note.login && comment.body === note.body;
+const digestComments = comments => issueEvidenceDigest(comments.map(c => [c.id, c.updated_at, c.user?.login, c.author_association, c.body]));
+
+function namedDependencies(issue) {
+  const lines = String(issue.body || '').split('\n');
+  return issueNumbers(lines.filter(line => /^\s*(?:[-*]\s+)?(?:depends on|blocked by|blocked on|waiting on)\b/i.test(line)).join('\n')
+    + '\n' + (String(issue.body || '').match(/^#{1,6}\s+Dependencies\s*$\n([\s\S]*?)(?=^#{1,6}\s|$(?![\s\S]))/im)?.[1] || ''))
+    .filter(n => n !== issue.number);
+}
+
+function readClaim(number, issue, comments, handbackComment) {
+  let ref;
+  try { ref = gh('GET', `/git/ref/heads/claim/${number}`).object.sha; }
+  catch (error) { return claimEvidence(number, { status: error.status, handbackComment }, issue, comments); }
+  try { return claimEvidence(number, { ref, message: gh('GET', `/git/commits/${ref}`).message }, issue, comments); }
+  catch { return claimEvidence(number, { ref }, issue, comments); }
+}
+
+function readInclusion(pr, mainSha) {
+  if (!pr.merged_at || !pr.merge_commit_sha) return 'unmerged';
+  if (pr.merge_commit_sha === mainSha) return 'ancestor';
+  try {
+    const { status } = gh('GET', `/compare/${pr.merge_commit_sha}...${mainSha}?per_page=1`);
+    return status === 'ahead' || status === 'identical' ? 'ancestor' : 'not_an_ancestor';
+  } catch { return 'unknown'; }
+}
+
+function readFacts(number, mainSha, openPulls, { note, extraIssues = [], extraPulls = [], handbackComment, bounded = false } = {}) {
+  const getPages = path => pages(path, bounded ? 3 : 100);
+  const issue = canonicalLabels(gh('GET', `/issues/${number}`));
+  const comments = getPages(`/issues/${number}/comments`);
+  const linked = getPages(`/issues/${number}/timeline`).filter(row => ['cross-referenced', 'connected'].includes(row.event))
+    .map(row => row.source?.issue || row.subject)
+    .filter(row => row?.pull_request && row.repository_url === API).map(row => row.number);
+  const named = openPulls.filter(pr => prRelationships(pr.body, REPO).has(number)).map(pr => pr.number);
+  const pullNumbers = [...new Set([...named, ...linked, ...extraPulls])].sort((a, b) => a - b);
+  const dependencyNumbers = [...new Set([...namedDependencies(issue), ...extraIssues])].sort((a, b) => a - b);
+  if (bounded && pullNumbers.length + dependencyNumbers.length > 8) throw new Error('related evidence exceeded the report cap');
+  const prs = pullNumbers.map(n => {
+    const pr = gh('GET', `/pulls/${n}`);
+    const relationship = prRelationships(pr.body, REPO).get(number) || 'linked';
+    return { number: n, url: pr.html_url, relationship, state: pr.state, draft: pr.draft,
+      implementation: relationship !== 'linked' || extraPulls.includes(n), base: pr.base.ref,
+      baseRepo: pr.base.repo.full_name, head: pr.head.sha, mergedAt: pr.merged_at, mergeSha: pr.merge_commit_sha,
+      bodyHash: issueEvidenceDigest(pr.body || ''), inclusion: readInclusion(pr, mainSha) };
+  });
+  const dependencies = dependencyNumbers.map(n => {
+    const item = canonicalLabels(gh('GET', `/issues/${n}`));
+    return { number: n, state: item.state, url: `https://github.com/${REPO}/issues/${n}`,
+      digest: issueEvidenceDigest(item), commentDigest: digestComments(getPages(`/issues/${n}/comments`)) };
+  });
+  const foreignComments = comments.filter(c => !ownNote(c, note));
+  const claim = readClaim(number, issue, foreignComments, handbackComment);
+  const commentDigest = digestComments(foreignComments);
+  return { issue, comments, facts: { mainSha, commentDigest, claim, prs, dependencies }, extraIssues, extraPulls, handbackComment };
+}
+
+function evidence(dir, ids, extraIssues, extraPulls, handbackComment) {
+  const snap = readJson(join(dir, 'snapshot.json'));
+  const path = join(dir, 'evidence.json');
+  const previous = readJson(path, { mainSha: snap.mainSha, items: {} });
+  if (previous.mainSha !== snap.mainSha || gh('GET', '/commits/main').sha !== snap.mainSha) throw new Error('main moved; take a new snapshot before collecting evidence');
+  const selected = new Set(ids);
+  const open = pages('/pulls?state=open');
+  previous.unknown ||= {};
+  for (const issue of snap.issues.filter(item => selected.has(item.number))) {
+    try {
+      const { comments, ...data } = readFacts(issue.number, snap.mainSha, open, { extraIssues, extraPulls, handbackComment });
+      if (data.issue.updated_at !== issue.updated_at || staleReasons(issue, data.issue, [], null).length) throw new Error('issue moved since snapshot');
+      delete previous.unknown[issue.number];
+      previous.items[issue.number] = data;
+    } catch (error) {
+      console.log(`#${issue.number}: ${error.message}; re-triage`);
+      delete previous.items[issue.number];
+      previous.unknown[issue.number] = error.message;
+    }
+  }
+  writeJson(path, previous);
+  console.log(`evidence: ${Object.keys(previous.items).length} issues on ${snap.mainSha}`);
+}
 
 function snapshot(out) {
   mkdirSync(out, { recursive: true });
@@ -119,11 +213,90 @@ function delta(out, since) {
     const n = Number(/\/issues\/(\d+)$/.exec(c.issue_url)?.[1]);
     if (n && (!lastNoteAt[n] || c.created_at > lastNoteAt[n])) lastNoteAt[n] = c.created_at;
   }
-  const merged = pages(`/pulls?state=closed&sort=updated&direction=desc`).filter(p => p.merged_at && p.merged_at > since);
-  const pick = deltaSelect({ issues: snap.issues, since, lastNoteAt, mergedPrBodies: merged.map(p => `${p.title}\n${p.body || ''}`) });
+  const merged = recentPulls(since);
+  const changed = changedDependencies(snap.issues, since);
+  const pick = deltaSelect({ issues: snap.issues, since, lastNoteAt, mergedPrBodies: merged.map(p => p.body), changedDependencies: changed, repo: REPO });
   const list = [...pick].map(([number, why]) => ({ number, why }));
   writeJson(join(out, 'delta.json'), { since, list });
   console.log(`delta since ${since}: ${list.length} of ${snap.issues.length} open issues to re-read (${merged.length} PRs merged since)`);
+}
+
+function recentPulls(since) {
+  const rows = [];
+  for (let page = 1; page <= 10; page++) {
+    const list = gh('GET', `/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=${page}`);
+    rows.push(...list.filter(p => p.merged_at && p.updated_at > since));
+    if (list.length < 100 || list.at(-1).updated_at <= since) return rows;
+  }
+  throw new Error('recent pull evidence exceeded the report cap');
+}
+
+function changedDependencies(issues, since, eventIssues = []) {
+  const changed = new Set([...eventIssues, ...pages(`/issues?state=closed&since=${encodeURIComponent(since)}`)
+    .filter(item => !item.pull_request && item.closed_at > since).map(item => item.number)]);
+  return new Map(issues.map(issue => [issue.number, namedDependencies(issue).find(n => changed.has(n))])
+    .filter(([, dependency]) => dependency));
+}
+
+function report(out, since = new Date(Date.now() - 36 * 36e5).toISOString(), event = {}, selectedIssues = []) {
+  if (Number.isNaN(Date.parse(since))) throw new Error('--since must be an ISO time');
+  if (parseMarkers(event.comment?.body).length) { console.log('coordinator note ignored'); return; }
+  const stopAt = Date.now() + 4 * 60_000;
+  // Keep automatic runs read-only. A PR body or event can select evidence,
+  // never the command, repository, credential, or source checkout.
+  mkdirSync(out, { recursive: true });
+  const all = pages('/issues?state=open');
+  const mainSha = gh('GET', '/commits/main').sha;
+  const issues = all.filter(issue => !issue.pull_request).map(slim);
+  const openPulls = all.filter(issue => issue.pull_request);
+  const eventIssues = [...selectedIssues, ...prRelationships(event.pull_request?.body, REPO).keys(), ...(event.issue && !event.issue.pull_request ? [event.issue.number] : [])];
+  const recent = recentPulls(since);
+  const changed = changedDependencies(issues, since, [...eventIssues, ...recent.map(pr => pr.number), event.pull_request?.number].filter(Boolean));
+  const lastNoteAt = {};
+  for (const comment of pages(`/issues/comments?since=${encodeURIComponent(since)}`)) {
+    const number = Number(/\/issues\/(\d+)$/.exec(comment.issue_url)?.[1]);
+    if (parseMarkers(comment.body).some(m => m.kind === 'note') && (!lastNoteAt[number] || comment.created_at > lastNoteAt[number])) lastNoteAt[number] = comment.created_at;
+  }
+  const pick = deltaSelect({ issues, since, lastNoteAt, mergedPrBodies: recent.map(pr => pr.body), changedDependencies: changed, eventIssues, repo: REPO });
+  // Surface state inconsistencies even when their issue has been quiet.
+  for (const issue of issues) {
+    const states = issue.labels.filter(l => l.startsWith('state:'));
+    const inconsistent = states.length !== 1 || (issue.labels.includes('needs-design') || issue.labels.includes('needs-decision')) && !states.includes('state:blocked');
+    if (!pick.has(issue.number) && !generatedIssue(issue) && (states.includes('state:review') || issue.labels.includes('task') && inconsistent)) {
+      pick.set(issue.number, 'check its recorded task state');
+    }
+  }
+  const byNumber = new Map(issues.map(issue => [issue.number, issue]));
+  const ordered = [...pick].filter(([n]) => !selectedIssues.length || selectedIssues.includes(n))
+    .sort(([a, aTrigger], [b, bTrigger]) => Number(eventIssues.includes(b)) - Number(eventIssues.includes(a))
+    || Number(aTrigger === 'check its recorded task state') - Number(bTrigger === 'check its recorded task state') || a - b);
+  const entries = [];
+  const observe = ([number, trigger]) => {
+    const issue = byNumber.get(number);
+    const url = `https://github.com/${REPO}/issues/${number}`;
+    if (generatedIssue(issue)) return { number, url, trigger, suggestion: { action: 'observe', reason: 'generated report or alert' } };
+    try {
+      const extraPulls = recent.filter(pr => prRelationships(pr.body, REPO).has(number)).map(pr => pr.number);
+      const { issue: current, facts } = readFacts(number, mainSha, openPulls, { extraPulls, bounded: true });
+      const { prs, dependencies, claim } = facts;
+      const suggestion = lifecycleSuggestion(current, { claim, prs, dependencies });
+      return { number, url, trigger, suggestion, claim: claim.state, prs, dependencies };
+    } catch { return { number, url, trigger, suggestion: { action: 'observe', reason: 'evidence read incomplete' } }; }
+  };
+  for (const item of ordered.slice(0, 20)) {
+    if (Date.now() >= stopAt) break;
+    entries.push(observe(item));
+  }
+  const counts = {};
+  for (const { suggestion } of entries) {
+    const action = suggestion?.action || 'none';
+    counts[action] = (counts[action] || 0) + 1;
+  }
+  const unique = issueEvidenceDigest({ mainSha, entries });
+  const deferred = ordered.length - entries.length;
+  writeJson(join(out, 'report.json'), { mainSha, since, id: unique, counts, deferred, entries });
+  console.log(`report ${unique.slice(0, 12)} on ${mainSha}: ${entries.length} checked, ${deferred} deferred. No GitHub writes.`);
+  for (const row of entries) console.log(`${row.url} — ${row.suggestion?.action || 'no proposed change'}${row.suggestion?.reason ? ` (${row.suggestion.reason})` : ''}`);
 }
 
 function plan(input, out) {
@@ -132,8 +305,18 @@ function plan(input, out) {
   const findings = (result.findings || []).filter(Boolean);
   const runId = result.runId;
   requireRun(runId);
-  const steps = planFromFindings(findings);
-  writeJson(join(out, 'plan.json'), { runId, steps });
+  const snap = readJson(join(out, 'snapshot.json'));
+  const reviewed = readJson(join(out, 'evidence.json'), { items: {} });
+  if (reviewed.mainSha && reviewed.mainSha !== snap.mainSha) throw new Error('evidence and snapshot name different main revisions');
+  const steps = planFromFindings(findings, {
+    evidence: reviewed.items,
+    canClose: (finding, data) => verifiedClosure(finding, data, {
+      repo: REPO,
+      readBlob: (path, sha) => gh('GET', `/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${sha}`),
+      readPullFiles: number => pages(`/pulls/${number}/files`),
+    }),
+  });
+  writeJson(join(out, 'plan.json'), { runId, mainSha: snap.mainSha, steps });
   writeJson(join(out, 'proposals.json'), { runId, proposals: (result.proposals || []).filter(Boolean), unfiled: result.unfiled || [] });
   if ((result.privateNotes || []).length) {
     writeJson(join(out, 'private-notes.json'), result.privateNotes);
@@ -145,43 +328,49 @@ function plan(input, out) {
 
 async function apply(dir, runId, go) {
   const snap = readJson(join(dir, 'snapshot.json'));
-  const { runId: planned, steps } = readJson(join(dir, 'plan.json'));
+  const { runId: planned, mainSha, steps } = readJson(join(dir, 'plan.json'));
   requireRun(runId, planned);
-  const bySnap = new Map(snap.issues.map(i => [i.number, i]));
+  if (mainSha !== snap.mainSha) throw new Error('take a fresh snapshot and plan with reviewed evidence');
   const ledgerPath = join(dir, `applied-${runId}.json`), stalePath = join(dir, `stale-${runId}.json`);
   const ledger = readJson(ledgerPath, {});
-  const stale = {}; // only what THIS pass skipped; an earlier dry run's list never lingers
-  const skip = (n, why) => { stale[n] = why; console.log(`#${n} skipped: ${why.join(', ')}`); };
-  const date = snap.at.slice(0, 10);
-  const recentMs = Date.now() - 3 * 864e5;
+  const stale = {};
+  const skip = (n, why) => { stale[n] = [why]; console.log(`#${n} skipped: ${why}`); };
+  const login = go ? gh('GET', 'https://api.github.com/user').login : null;
   for (const s of steps) {
     if (ledger[s.number] || (!s.note && !s.labelChange && !s.close)) continue;
-    const base = bySnap.get(s.number);
-    if (!base) { skip(s.number, ['not in the snapshot']); continue; }
-    const live = slim(gh('GET', `/issues/${s.number}`));
-    const fresh = pages(`/issues/${s.number}/comments?since=${encodeURIComponent(snap.at)}`).filter(c => c.created_at > snap.at);
-    const noteDone = alreadyDone(fresh.map(c => c.body), runId, 'note');
-    let why = staleReasons(base, live, fresh, runId);
-    // An interrupted run of this plan posts its note BEFORE it closes, so a closed issue counts as ours only with our note on it and the close reason we planned.
-    if (s.close && live.state === 'closed' && (!s.note || noteDone) && live.state_reason === s.close && why.every(w => w === 'closed since the snapshot' || w === 'labels changed')) {
-      ledger[s.number] = 'closed by an earlier attempt of this run'; if (go) writeJson(ledgerPath, ledger); continue;
+    const base = s.evidence;
+    if (!base || base.facts.mainSha !== mainSha || base.issue.number !== s.number) { skip(s.number, 'missing reviewed evidence'); continue; }
+    if (base.facts.claim.state !== 'absent' || generatedIssue(base.issue)) { skip(s.number, 'issue has protected ownership or is generated'); continue; }
+    let lc;
+    try {
+      lc = s.labelChange ? planLabels(base.issue.labels, s.labelChange, { kind: s.kind }) : null;
+    } catch (error) { skip(s.number, error.message); continue; }
+    const patch = s.close
+      ? { state: 'closed', state_reason: s.close, labels: base.issue.labels.filter(l => !l.startsWith('state:') && !['needs-decision', 'needs-design'].includes(l)) }
+      : lc?.changed ? { labels: [...lc.labels].sort() } : {};
+    const body = s.note ? renderNote(s.note, { runId, mainSha, date: snap.at.slice(0, 10), labelText: lc?.changed ? describeLabelChange(lc) : '', closing: s.close || false, footer: FOOTER }) : null;
+    if (!body && Object.keys(patch).length) { skip(s.number, 'a state change needs its verified note'); continue; }
+    const note = body ? { body, login } : null;
+    const read = () => {
+      const currentMain = gh('GET', '/commits/main').sha;
+      if (currentMain !== mainSha) throw new Error('recorded main moved');
+      const current = readFacts(s.number, mainSha, pages('/pulls?state=open'), { note, extraIssues: base.extraIssues, extraPulls: base.extraPulls, handbackComment: base.handbackComment });
+      if (gh('GET', '/commits/main').sha !== mainSha) throw new Error('recorded main moved during revalidation');
+      return { ...current, noteDone: current.comments.some(comment => ownNote(comment, note)) };
+    };
+    let result;
+    try {
+      result = await applyReviewedItem({ evidence: base, patch, note: body, read, go,
+        post: text => gh('POST', `/issues/${s.number}/comments`, { body: text }),
+        change: value => gh('PATCH', `/issues/${s.number}`, value) });
+    } catch (error) { skip(s.number, error.message); continue; }
+    if (result.stale) { skip(s.number, result.stale); continue; }
+    console.log(`#${s.number}: ${result.recovered ? 'recovered' : go ? 'applied' : 'would apply'}${s.close ? ` close(${s.close})` : ''}`);
+    if (go && (result.applied || result.recovered)) {
+      ledger[s.number] = new Date().toISOString();
+      writeJson(ledgerPath, ledger);
+      await sleep(1000);
     }
-    let lc = null, labelError = null;
-    try { lc = s.labelChange ? planLabels(live.labels, s.labelChange, { kind: s.kind, activeClaim: live.labels.includes('state:in-progress') && Date.parse(live.updated_at) > recentMs }) : null; } catch (e) { labelError = e.message; }
-    if (s.labelChange && why.includes('labels changed') && lc && !lc.changed) why = why.filter(w => w !== 'labels changed'); // already at the target
-    if (why.length) { skip(s.number, why); continue; }
-    if (labelError) console.log(`#${s.number}: label change refused (${labelError}); the note is posted without it`);
-    const closeLabels = s.close ? live.labels.filter(l => !l.startsWith('state:') && l !== 'needs-decision' && l !== 'needs-design') : null;
-    const body = s.note ? renderNote(s.note, { runId, mainSha: snap.mainSha, date, labelText: lc?.changed ? describeLabelChange(lc) : '', closing: s.close || false, footer: FOOTER }) : null;
-    if (s.close && !body) { skip(s.number, ['a close needs its note']); continue; }
-    console.log(`#${s.number}: ${body && !noteDone ? 'note' : ''}${lc?.changed ? ` labels(${describeLabelChange(lc)})` : ''}${s.close ? ` close(${s.close})` : ''}`);
-    if (!go) continue;
-    if (body && !noteDone) { gh('POST', `/issues/${s.number}/comments`, { body }); await sleep(1200); }
-    if (lc?.changed || s.close) {
-      gh('PATCH', `/issues/${s.number}`, s.close ? { labels: closeLabels, state: 'closed', state_reason: s.close } : { labels: lc.labels });
-      await sleep(800);
-    }
-    ledger[s.number] = new Date().toISOString(); writeJson(ledgerPath, ledger);
   }
   if (go) writeJson(stalePath, stale);
   console.log(`${go ? 'applied' : 'dry run'}: ${Object.keys(ledger).length} done, ${Object.keys(stale).length} skipped${go ? ` (re-triage them: ${stalePath})` : ''}`);
@@ -245,12 +434,24 @@ async function main() {
   const cmd = process.argv[2];
   const dir = arg('dir', arg('out'));
   if (cmd !== 'plan' && !dir) throw new Error('--dir (or --out) is required');
+  const ids = name => (arg(name) || '').split(',').filter(Boolean).map(value => {
+    if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error(`invalid --${name} number`);
+    return Number(value);
+  });
   if (cmd === 'snapshot') snapshot(dir);
   else if (cmd === 'delta') delta(dir, arg('since'));
+  else if (cmd === 'report') report(dir, arg('since'), process.env.GITHUB_EVENT_PATH ? readJson(process.env.GITHUB_EVENT_PATH, {}) : {}, ids('issues'));
+  else if (cmd === 'evidence') {
+    const issues = ids('issues');
+    if (!issues.length) throw new Error('evidence needs --issues with issue numbers');
+    const handback = ids('handback-comment');
+    if (handback.length && (issues.length !== 1 || handback.length !== 1)) throw new Error('a handback comment applies to exactly one issue');
+    evidence(dir, issues, ids('related-issues'), ids('related-pulls'), handback[0]);
+  }
   else if (cmd === 'plan') { if (!dir || !arg('in')) throw new Error('plan needs --in and --out'); plan(arg('in'), dir); }
   else if (cmd === 'apply') await apply(dir, arg('run'), flag('go'));
   else if (cmd === 'file') await file(dir, arg('run'), flag('go'));
-  else { console.error('usage: coordinator.mjs snapshot|delta|plan|apply|file (see the header)'); process.exit(2); }
+  else { console.error('usage: coordinator.mjs snapshot|delta|report|evidence|plan|apply|file (see the header)'); process.exit(2); }
 }
 if (import.meta.url === pathToFileURL(resolve(process.argv[1] || '')).href) {
   main().catch(e => { console.error(e.message); process.exit(1); });

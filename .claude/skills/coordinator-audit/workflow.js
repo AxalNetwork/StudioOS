@@ -20,6 +20,8 @@ HARD RULES (read-only):
 - Repo checkout: ${REPO} at main ${SHA}. Read it; never edit, commit, branch, install, build or create worktrees. Write nothing except your one notes file under ${OUT}.
 - GitHub is READ ONLY: never post, edit, label, close or create anything. Read with curl -sS "https://api.github.com/repos/AxalNetwork/StudioOS/issues/N", ".../issues/N/comments?per_page=100", ".../issues/N/timeline?per_page=100".
 - ${OUT}/snapshot.json holds every open issue (number, title, labels, body, updated_at) and open PR.
+- ${OUT}/evidence.json records the reviewed issue, related PR and dependency facts, claim observation and comment digest for the same main. A missing or unknown claim observation cannot support a write.
+- Exclude generated alerts and landing reports from task transitions. Keep legacy label-based ownership unresolved until a verified handback.
 - Labels and their meaning are in AGENTS.md (§ Task protocol, § STATUS, § Missing UI). A PR saying "Part of #N" leaves #N open on purpose.
 - Never state something you did not check: write "not checked". Audit documents are snapshots; re-check the code.
 - Security: an exploitable flaw goes ONLY in private_notes, never in notes or findings.
@@ -32,7 +34,7 @@ const LABEL_CHANGE = {
     state: { type: 'string', enum: ['state:ready', 'state:in-progress', 'state:blocked', 'state:review'] },
     add: { type: 'array', items: { type: 'string', enum: ['needs-decision', 'needs-design'] } },
     remove: { type: 'array', items: { type: 'string' } },
-    slot: { type: 'string', description: 'S02 to S37, never S18 or S32; S01 only for a tracker, design brief or owner action. Never move an issue that is in progress with activity in the last 3 days. Omit to keep the slot.' },
+    slot: { type: 'string', description: 'S02 to S39, never S18 or S32; S01 only for a tracker, design brief or owner action. Never move a held or unknown claim. Omit to keep the slot.' },
   },
 }
 
@@ -69,6 +71,13 @@ const VERIFY_SCHEMA = {
       evidence: { type: 'string' }, remaining_work: { type: 'string' }, blocked_on: { type: 'string' }, recommended_action: { type: 'string' }, owner_question: { type: 'string' } } },
     label_change_ok: { type: 'boolean', description: 'false if the proposed label change is wrong or breaks AGENTS.md' },
     safe_to_close: { type: 'boolean', description: 'only for close verdicts; default false when unsure' },
+    scope_complete: { type: 'boolean', description: 'all acceptance criteria and remaining scope verified at the snapshot main' },
+    source_prs: { type: 'array', items: { type: 'integer' }, description: 'implementation PRs recorded in evidence.json' },
+    main_paths: { type: 'array', items: { type: 'object', properties: {
+      pr: { type: 'integer' }, path: { type: 'string' }, blob: { type: 'string' },
+    }, required: ['pr', 'path', 'blob'] }, description: 'repo-relative paths and exact blob SHAs at snapshot main, with one or more witnesses per source PR' },
+    completed_children: { type: 'array', items: { type: 'integer' }, description: 'recorded children that fully deliver this parent' },
+    replacement_issue: { type: 'integer', description: 'recorded closed replacement for close_superseded' },
     unfinished: { type: 'string' },
     reason: { type: 'string' },
   }, required: ['number', 'note_supported', 'label_change_ok', 'reason'] } } },
@@ -100,7 +109,7 @@ ${RULES}`, { label: `triage:${nums[0]}-${nums[nums.length - 1]}`, phase: 'Triage
     const v = await agent(`A first auditor wrote these findings about StudioOS issues. Each one becomes a public status note, and some change labels or close the issue. Try to REFUTE every claim: re-read each issue and its comments, check every PR number, file path, date and "not built" claim against main and GitHub. For each issue:
 - note_supported: false if a claim is wrong and you cannot correct it; put corrected text in corrected.
 - label_change_ok: false if the proposed label change is wrong or breaks AGENTS.md.
-- For close_done and close_superseded: list every acceptance criterion, part and child; safe_to_close is true only if every one is on main and nothing open still belongs to it. Default false when unsure; name what is unfinished.
+- For close_done and close_superseded: list every acceptance criterion, part and child; safe_to_close is true only if every one is on main and nothing open still belongs to it. Default false when unsure; name what is unfinished. Provide the structured evidence above. Follow topic-branch merges to the actual main commit; for a squashed topic, verify the matching PR file blobs on main. Treat partial PR text and closed child labels as evidence to investigate, then verify actual full scope independently.
 
 Findings:
 ${JSON.stringify(res.issues)}

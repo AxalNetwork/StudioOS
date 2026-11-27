@@ -1,0 +1,48 @@
+name: Coordinator lifecycle report
+
+on:
+  schedule:
+    - cron: '41 */12 * * *'
+  issues:
+    types: [closed, reopened, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request_target:
+    types: [opened, reopened, closed, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: coordinator-lifecycle-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (!github.event.issue.pull_request &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      !contains(github.event.comment.body, '<!-- coordinator-audit:v1'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Read lifecycle evidence from GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COORDINATOR_REPO: ${{ github.repository }}
+        run: |
+          set -o pipefail
+          node scripts/coordinator.mjs report --out "$RUNNER_TEMP/coordinator-report" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coordinator-lifecycle-report
+          path: ${{ runner.temp }}/coordinator-report/report.json
+          if-no-files-found: ignore
+          retention-days: 14
