@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import * as m from '../../scripts/lib/ciScorecard.mjs';
+import { classifyPr, LEGACY_SESSION, TRAILERS } from '../../scripts/ci/agent-provenance.mjs';
 
 const at = (h, min = 0) => `2026-11-26T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00Z`;
 const start = Date.parse(at(0));
@@ -17,14 +18,14 @@ const commit = (message, date = at(1), parents = 1) => ({
   event: 'committed', sha: sha(), message, author: { name: 'someone', date }, committer: { name: 'someone', date },
   parents: Array.from({ length: parents }, () => ({ sha: sha() })),
 });
-const added = h => ({ event: 'added_to_merge_queue', created_at: at(h), actor: { login: 'x', type: 'User' } });
-const removed = h => ({ event: 'removed_from_merge_queue', created_at: at(h), actor: { login: 'x', type: 'User' } });
-const merged = h => ({ event: 'merged', created_at: at(h), commit_id: sha(), actor: { login: 'x', type: 'User' } });
+const added = (h, min) => ({ event: 'added_to_merge_queue', created_at: at(h, min), actor: { login: 'x', type: 'User' } });
+const removed = (h, min) => ({ event: 'removed_from_merge_queue', created_at: at(h, min), actor: { login: 'x', type: 'User' } });
+const merged = (h, min) => ({ event: 'merged', created_at: at(h, min), commit_id: sha(), actor: { login: 'x', type: 'User' } });
 
 /** A PR as the collector builds it, from raw timeline events. */
 const pr = (number, events, mergedAt) => {
   const allEntries = m.queueEntries(events);
-  return { number, mergedAt, allEntries, entries: allEntries, events: m.slimEvents(events), provenance: m.prProvenance(events) };
+  return { number, mergedAt, allEntries, entries: allEntries, events: m.slimEvents(events), provenance: m.prProvenance(events, classifyPr) };
 };
 
 // S03: four PRs. 7 waited 60 min; 8 was ejected once (02:00-03:00) and merged at 05:00 (180 min from the first entry);
@@ -55,7 +56,7 @@ test('prProvenance takes the slot classifyPr reads from the commit trailers', ()
   assert.deepEqual(s03[1].provenance, { status: 'fail', slot: 'S03' });
   assert.deepEqual(human.provenance, { status: 'human', slot: null });
   assert.deepEqual(legacy.provenance, { status: 'fail', slot: null });
-  assert.deepEqual(m.prProvenance([]), { status: 'unavailable', slot: null });
+  assert.deepEqual(m.prProvenance([], classifyPr), { status: 'unavailable', slot: null });
 });
 
 test('two slots, a human PR and an untrailed PR yield four rows with the right medians and counts', () => {
@@ -76,7 +77,7 @@ test('the median is p50 over the row: three PRs of 30, 60 and 180 min read 60', 
 
 test('no slot is taken from the branch name; two slots, no trailer or no provenance go to untrailed', () => {
   const branchOnly = { number: 50, mergedAt: at(20), head: { ref: 'agent/claude/50-x' }, branch: 'agent/claude/50-x', allEntries: [],
-    provenance: m.prProvenance([commit('Plain message on an agent branch')]) };
+    provenance: m.prProvenance([commit('Plain message on an agent branch')], classifyPr) };
   assert.deepEqual(branchOnly.provenance, { status: 'human', slot: null });
   const twoSlots = pr(51, [commit(`A\n\n${chain('S03', '#51')}`), commit(`B\n\n${chain('S04', '#51')}`), added(20), merged(21)], at(21));
   const brokenSlot = pr(52, [commit('A\n\nAgent-Slot: S3\nAgent-Task: #52\nAgent-Run: manual'), added(20), merged(21)], at(21));
@@ -97,8 +98,16 @@ test('the report renders the by-slot table and marks a small sample', () => {
   assert.doesNotMatch(empty.slice(empty.indexOf('### Queue by agent slot')), /n\/a/);
 });
 
+test('the scorecard holds the slot shape and legacy trailer to agent-provenance.mjs, and does not import it', () => {
+  assert.equal(m.LEGACY_SESSION, LEGACY_SESSION);
+  for (const v of ['S01', 'S08', 'S10', 'S99', 'S00', 'S1', 'S100', 's08', 'S0a', ' S08']) assert.equal(m.SLOT.test(v), TRAILERS['Agent-Slot'](v), v);
+  const lib = readFileSync(new URL('../../scripts/lib/ciScorecard.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(lib, /from '\.\.\/ci\//);
+});
+
 test('the collector reads the slot from the timeline it already fetches, with no new request', () => {
   const cli = readFileSync(new URL('../../scripts/ci-scorecard.mjs', import.meta.url), 'utf8');
-  assert.match(cli, /events: slimEvents\(events\), provenance: prProvenance\(events\),/);
+  assert.match(cli, /events: slimEvents\(events\), provenance: prProvenance\(events, classifyPr\),/);
+  assert.match(cli, /import \{ classifyPr \} from '\.\/ci\/agent-provenance\.mjs';/);
   assert.doesNotMatch(cli, /commits\?|\/commits`|git log/);
 });

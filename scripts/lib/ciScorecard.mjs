@@ -10,7 +10,6 @@ import * as ci from './ciClassify.mjs';
 import { REQUIRED } from './requiredChecks.mjs';
 import { count, dispatchable, KINDS, LABELS } from '../landing-bot/rules.mjs';
 import { DEFAULT_ORDER as PROVIDERS } from '../landing-bot/model/loop.mjs';
-import { classifyPr, LEGACY_SESSION, TRAILERS } from '../ci/agent-provenance.mjs';
 
 const minute = 60_000;
 const stamp = Date.parse;
@@ -439,18 +438,26 @@ export function outcomeCounts(rows) {
  * whose commits name no one slot goes to `untrailed`: no trailer, two slots,
  * or only the legacy `Claude-Session` trailer, which stands in for
  * `Agent-Session` before the cutover and carries no slot.
+ *
+ * This file does not import agent-provenance.mjs: the landing bot workflows
+ * load it (through queueDeadline.mjs and prRisk.mjs) from a sparse checkout
+ * without scripts/ci (workflow_sparse_imports_8314). The collector passes
+ * classifyPr in; the test holds SLOT and LEGACY_SESSION to that file's.
  */
 export const HUMAN_ROW = 'human';
 export const UNTRAILED_ROW = 'untrailed';
 export const SMALL_SAMPLE = 3;
+/** agent-provenance.mjs's `Agent-Slot` shape and legacy session trailer. */
+export const SLOT = /^S(?:0[1-9]|[1-9][0-9])$/;
+export const LEGACY_SESSION = 'Claude-Session';
 
-/** The provenance of one PR from its raw timeline events: classifyPr's status and slot, nothing else. */
-export function prProvenance(events) {
+/** The provenance of one PR from its raw timeline events: `classify` (classifyPr)'s status and slot, nothing else. */
+export function prProvenance(events, classify) {
   const commits = (events || []).filter(e => e?.event === 'committed').map(e => ({
     sha: String(e.sha ?? ''), parents: (e.parents || []).map(p => p?.sha).filter(Boolean),
     committedAt: e.committer?.date ?? null, message: String(e.message ?? ''),
   }));
-  const { status, slot } = classifyPr({ number: null, commits });
+  const { status, slot } = classify({ number: null, commits });
   return { status, slot };
 }
 
@@ -458,7 +465,7 @@ export function prProvenance(events) {
 export function slotRowOf(pr) {
   const provenance = pr?.provenance;
   if (provenance?.status === 'human') return HUMAN_ROW;
-  return typeof provenance?.slot === 'string' && TRAILERS['Agent-Slot'](provenance.slot) ? provenance.slot : UNTRAILED_ROW;
+  return typeof provenance?.slot === 'string' && SLOT.test(provenance.slot) ? provenance.slot : UNTRAILED_ROW;
 }
 
 /**
