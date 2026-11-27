@@ -22,8 +22,18 @@
  *                        stepping down for 2, 1 or no points (`chartPlan`).
  *   Read this slide      the takeaway, the data as a table, the source and
  *                        what the blank structure holds (`readSlide`).
+ *
+ * D8770 part 3 (canvas PTP08, PTP16, PTP20 to PTP25):
+ *   Chrome and decor     the template's own chrome (`templateChrome`,
+ *                        `chromeLines`) and each card's decor (`decorPlan`):
+ *                        rules drawn here, icons, shapes and textures from the
+ *                        elements library (`decorArt`, `decorArtSrc`).
+ *   Example unavailable  a template the example covers none of shows its
+ *                        blank structure and says so (`viewFor`).
+ *   The phone            the sheet's one card (`sheetCard`), the full-size
+ *                        title (`phoneHeading`) and its hint.
  */
-import { SLIDE_SIZES, aspectOf } from './gridModel';
+import { FRAME, SLIDE_SIZES, aspectOf, boxOf } from './gridModel';
 import { EXAMPLE_AS_OF, EXAMPLE_COMPANY, cardKeyOf, exampleFor } from './templateExamples';
 
 export const VIEWS = Object.freeze({ example: 'Example', blank: 'Blank structure' });
@@ -115,6 +125,8 @@ export function previewFace(theme) {
     body: stack(fonts.body.face, fonts.body.fallback),
     mono: stack(fonts.mono.face, fonts.mono.fallback),
     themed: Boolean(c.ground || fonts.display.face),
+    // D8770 part 3: the template's chrome travels with its face, so every preview card draws it.
+    chrome: templateChrome(theme),
   };
 }
 
@@ -465,4 +477,157 @@ export function carryLines(read, label) {
       ['Art', 'No image is generated · no model runs'],
     ],
   };
+}
+
+// ── Example unavailable (canvas PTP16) ──────────────────────────────────────
+
+export const EXAMPLE_UNAVAILABLE = 'Example unavailable';
+export const EXAMPLE_UNAVAILABLE_LINE = 'The example has no card for this template’s layouts, so the blank structure is shown.';
+
+/** How many of the cards the example has words for (by catalogue card and layout). */
+export function exampleCoverage(cards) {
+  return (Array.isArray(cards) ? cards : []).filter((s) => exampleFor(cardKeyOf(s), s?.layout)).length;
+}
+
+/**
+ * The view the preview draws: the one chosen, except that a template the
+ * example covers none of (one of Yours whose cards were renamed, say) falls
+ * back to the blank structure, so placeholders are never shown as if they
+ * were the example.
+ */
+export function viewFor(view, cards) {
+  if (view !== 'example') return 'blank';
+  return exampleCoverage(cards) > 0 ? 'example' : 'blank';
+}
+
+// ── The template's chrome and decor (canvas PTP08, PTP11) ───────────────────
+
+const CHROME_KEYS = ['slide_number', 'footer_rule', 'venture_mark', 'section_label'];
+const MARKS = ['top_left', 'bottom_left'];
+
+/**
+ * The chrome a template sets (`templateLibrary.compose`'s `theme.chrome`):
+ * where the venture's name sits (top left, bottom left or nowhere), the slide
+ * number bottom right, a hairline over the footer, and the card's own title
+ * as a section label. A theme with no template chrome (a saved version's, in
+ * Yours) keeps the preview's plain chrome: the name top left and the number.
+ */
+export function templateChrome(theme) {
+  const c = theme && typeof theme === 'object' && theme.chrome && typeof theme.chrome === 'object' ? theme.chrome : null;
+  if (!c || !CHROME_KEYS.some((k) => k in c)) return { mark: 'top_left', number: true, rule: false, section: false, template: false };
+  return { mark: MARKS.includes(c.venture_mark) ? c.venture_mark : null, number: c.slide_number === 'bottom_right', rule: c.footer_rule === true, section: c.section_label === true, template: true };
+}
+
+/**
+ * The chrome's two lines for one card: the top (the name and, with a section
+ * label, the card's title) and the bottom (the name when it sits bottom left,
+ * then the example's source line). Empty parts are left out.
+ */
+export function chromeLines(slide, chrome, name) {
+  const ch = chrome || templateChrome(null);
+  const title = str(slide?.title);
+  const top = [ch.mark === 'top_left' ? name : null, ch.section && title ? title : null].filter(Boolean);
+  const bottom = [ch.mark === 'bottom_left' ? name : null, sourceLine(slide)].filter(Boolean);
+  return { top: top.join(' · ') || null, bottom: bottom.join(' · ') || null };
+}
+
+export const DECOR_TONES = Object.freeze(['ink', 'accent', 'muted', 'surface']);
+const DIVIDER_STYLES = ['line', 'double', 'dashed', 'dotted', 'accent'];
+const ART_KINDS = ['icon', 'shape', 'texture'];
+/** A heading's rule at export size: the canvas's 56 px at 960 wide, doubled. */
+export const RULE_PX = 112;
+const RULE_H = 8;
+const MAX_DECOR = 16;
+const cell = (n) => Number.isInteger(n) && n >= 1 && n <= 12;
+
+/** A decor tone's colour in the template's face. */
+export function toneColour(tone, face) {
+  const f = face || previewFace(null);
+  return { ink: f.ink, accent: f.accent, muted: f.muted, surface: f.bg }[DECOR_TONES.includes(tone) ? tone : 'ink'];
+}
+
+/**
+ * A card's decor as the preview draws it, at export size (canvas PTP08):
+ *   divider   under a heading, a short rule in the gutter below its area (a
+ *             double rule for Kitchen Table), so it never sits over the
+ *             words; in a one-column area spanning rows, a vertical rule
+ *   icon, shape, texture   the elements library's own drawing in its area
+ * At most 16 items; an item with no area or an unknown kind is left out.
+ */
+export function decorPlan(slide, aspect = '16:9') {
+  const list = Array.isArray(slide?.decor) ? slide.decor.slice(0, MAX_DECOR) : [];
+  const out = [];
+  list.forEach((d, i) => {
+    const g = d?.grid;
+    if (!g || ![g.c1, g.c2, g.r1, g.r2].every(cell) || g.c2 < g.c1 || g.r2 < g.r1) return;
+    const id = typeof d.id === 'string' && d.id ? d.id : `d${i + 1}`;
+    const tone = DECOR_TONES.includes(d.tone) ? d.tone : 'ink';
+    const box = boxOf(g, aspect);
+    if (d.kind === 'divider') {
+      const style = DIVIDER_STYLES.includes(d.ref) ? d.ref : 'line';
+      if (g.c1 === g.c2 && g.r2 > g.r1) {
+        out.push({ id, kind: 'divider', style, tone, vertical: true, box: { x: box.x + Math.round(box.w / 2) - RULE_H / 2, y: box.y, w: RULE_H, h: box.h } });
+      } else {
+        out.push({ id, kind: 'divider', style, tone, vertical: false, box: { x: box.x, y: box.y + box.h + Math.round((FRAME.gutter - RULE_H) / 2), w: Math.min(box.w, RULE_PX), h: RULE_H } });
+      }
+      return;
+    }
+    if (ART_KINDS.includes(d.kind) && typeof d.ref === 'string' && d.ref) out.push({ id, kind: d.kind, ref: d.ref, tone, box });
+  });
+  return out;
+}
+
+/** The icons a template's cards name, for one read of the elements library. */
+export function decorIcons(cards) {
+  const refs = new Set();
+  for (const s of Array.isArray(cards) ? cards : []) for (const d of decorPlan(s)) if (d.kind === 'icon') refs.add(d.ref);
+  return [...refs].sort();
+}
+
+/** Whether any card has decor the elements library draws (an icon, shape or texture). */
+export const needsDecorArt = (cards) => (Array.isArray(cards) ? cards : []).some((s) => decorPlan(s).some((d) => d.kind !== 'divider'));
+
+/**
+ * The library's drawings by `kind:ref`, from `deckV2Adapter.elementsLibrary`'s
+ * read (`{ available, value }`). An unavailable library gives none, and the
+ * preview leaves that ornament out.
+ */
+export function decorArt(read) {
+  const v = read && read.available === true && read.value && typeof read.value === 'object' ? read.value : null;
+  if (!v) return null;
+  const out = {};
+  const add = (kind, list) => { for (const x of Array.isArray(list) ? list : []) if (typeof x?.ref === 'string' && typeof x?.svg === 'string' && x.svg.startsWith('<svg')) out[`${kind}:${x.ref}`] = x.svg; };
+  add('shape', v.shapes);
+  add('texture', v.textures);
+  add('icon', v.icons?.items);
+  return out;
+}
+
+/**
+ * A library drawing in the item's tone, as an image source. The library draws
+ * each item in `var(--deck-ink)`; the item's tone takes its place, and the
+ * other theme variables take the face's colours.
+ */
+export function decorArtSrc(svg, tone, face) {
+  if (typeof svg !== 'string' || !svg.startsWith('<svg')) return null;
+  const f = face || previewFace(null);
+  const map = { ink: toneColour(tone, f), accent: f.accent, muted: f.muted, surface: f.bg };
+  const filled = svg.replace(/var\(--deck-(ink|accent|muted|surface)\)/g, (_, t) => map[t]);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(filled)}`;
+}
+
+// ── The phone (canvas PTP20 to PTP25) ───────────────────────────────────────
+
+export const PHONE_HINT = 'Turn the phone for a larger slide · pinch to zoom';
+
+/** The card the phone sheet shows: the first with a chart (Kitchen Table's traction), else the first. */
+export function sheetCard(cards) {
+  const list = Array.isArray(cards) ? cards : [];
+  const i = list.findIndex((s) => (Array.isArray(s?.blocks) ? s.blocks : []).some((b) => b?.kind === 'chart'));
+  return i >= 0 ? i : 0;
+}
+
+/** "3 of 13 · Traction": the full-size title on a phone. */
+export function phoneHeading(blank, index, count) {
+  return `${index + 1} of ${count} · ${str(blank?.title) || `Card ${index + 1}`}`;
 }
