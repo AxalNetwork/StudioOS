@@ -111,3 +111,5 @@ Team › Skills has no roles. These hold for every skill screen here:
 - **Read-only members** read every skill, and see no New and no Assign.
 - **A read that fails says it could not be read,** with Try again. It never
   says "No skills". Only an answered, empty area says it has none.
+
+CompanyTasks.jsx reads company tasks and lets a company editor prepare a brief on this device or assign a human task. Agent briefs remain local until the run and review contract is available.

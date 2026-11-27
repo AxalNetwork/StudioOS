@@ -33,6 +33,7 @@ export { NOT_RECORDED };
 
 export const TABS = [
   { key: 'people', label: 'People and agents' },
+  { key: 'tasks', label: 'Tasks', companyOnly: true },
   { key: 'skills', label: 'Skills' },
   { key: 'roles', label: 'Roles and rule books' },
   { key: 'approvals', label: 'Approvals' },
@@ -159,6 +160,7 @@ export function peopleFromCompany(detail, meId, vocab) {
     const recorded = String(m.name || '').trim();
     return {
       key: `u-${m.user_id}`,
+      uid: m.user_uid,
       userId: m.user_id,
       // `name` stays a string for the dialogs' sentences; `unnamed` draws it muted.
       name: recorded || NOT_RECORDED,

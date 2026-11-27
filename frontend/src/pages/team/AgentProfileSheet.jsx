@@ -176,7 +176,7 @@ function CapEditor({ name, current, refusal, onCancel, onSave }) {
   );
 }
 
-export default function AgentProfileSheet({ uid, scope = null, canManage, editCap = false, editSponsor = false, onClose, onChanged }) {
+export default function AgentProfileSheet({ uid, scope = null, canManage, onAssign, editCap = false, editSponsor = false, onClose, onChanged }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(editCap ? 'cap' : editSponsor ? 'sponsor' : null);
   const [refusal, setRefusal] = useState('');
@@ -204,6 +204,7 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
         headerActions={a ? <span className="flex items-center gap-1.5"><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : null}</span> : null}
         footer={manage ? (
           <div className="flex justify-end gap-2">
+            {onAssign && <button type="button" className={BTN_PRIMARY} onClick={onAssign}>Assign a task</button>}
             <button type="button" className={BTN_SECONDARY} disabled={a.source === 'mcp_client' && a.paused_reason === 'awaiting_connection'} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
             <button type="button" className={BTN_DANGER} onClick={() => setConfirm('remove')} data-testid="agent-remove">Remove</button>
             {a.source !== 'mcp_client' ? <>

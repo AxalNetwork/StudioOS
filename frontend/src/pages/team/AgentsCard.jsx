@@ -59,7 +59,7 @@ function StatusPill({ row }) {
 const GRID = 'md:grid-cols-[minmax(0,1.75fr)_minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,1.3fr)_150px_108px_40px]';
 const COLS = ['Agent', 'Source', 'Sponsor', 'Status', 'This month', 'Last activity'];
 
-function AgentRow({ row, onOpen }) {
+function AgentRow({ row, onOpen, onAssign }) {
   return (
     <div role="row" tabIndex={0} onClick={() => onOpen?.(row)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.(row); }}
       className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 hover:bg-axal-ground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet/50 dark:border-gray-800 dark:hover:bg-gray-800/50`}
@@ -96,6 +96,7 @@ function AgentRow({ row, onOpen }) {
       <span role="cell" className="hidden font-mono text-[12.5px] text-axal-ink md:block dark:text-gray-200">{row.spend || <Unrecorded />}</span>
       <span role="cell" className="hidden font-mono text-[12.5px] text-axal-ink md:block dark:text-gray-200">{row.last || <Unrecorded />}</span>
       <span role="cell" className="flex justify-end">
+        {onAssign && <button type="button" className={BTN_TEXT} onKeyDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onAssign(row); }}>Assign a task</button>}
         <button type="button" aria-label={`Actions for the ${row.roleOrUnrecorded} agent`} aria-haspopup="menu" onClick={(e) => { e.stopPropagation(); onOpen?.(row); }}
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800">⋯</button>
       </span>
@@ -103,16 +104,16 @@ function AgentRow({ row, onOpen }) {
   );
 }
 
-function AgentTable({ rows, onOpen, label }) {
+function AgentTable({ rows, onOpen, onAssign, label }) {
   return (
     <div role="table" aria-label={label}>
       <HeadRow grid={GRID} cols={COLS} />
-      {rows.map((r) => <AgentRow key={r.key} row={r} onOpen={onOpen} />)}
+      {rows.map((r) => <AgentRow key={r.key} row={r} onAssign={onAssign} onOpen={onOpen} />)}
     </div>
   );
 }
 
-export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, addOff = null, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, addOff = null, planLocked = false, onAdd, onOpen, onAssign, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
   const aside = <SkillsLink scope={scope} testId="team-agents-skills" />;
@@ -172,14 +173,14 @@ export default function AgentsCard({ block, loading, kind, scope = null, company
             <div key={g.key} className="mb-4" data-testid={`team-agents-group-${g.key}`}>
               <p className="m-0 font-mono text-[11px] font-medium uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">{g.title}</p>
               <p className={`m-0 mb-1 ${MONO}`}>{g.line}</p>
-              <AgentTable rows={g.rows} onOpen={onOpen} label={g.title} />
+              <AgentTable rows={g.rows} onAssign={g.key === 'company' ? onAssign : null} onOpen={onOpen} label={g.title} />
             </div>
           ))}
           <p className={`m-0 ${MUTED}`}>{agentsFootLine(companyName)}</p>
         </>
       ) : (
         <>
-          <AgentTable rows={groups.flatMap((g) => g.rows)} onOpen={onOpen} label="AI agents" />
+          <AgentTable rows={groups.flatMap((g) => g.rows)} onAssign={onAssign} onOpen={onOpen} label="AI agents" />
           {agents.some((a) => a.status === 'paused') ? <p className={`m-0 mt-3 ${MUTED}`}>A paused agent keeps its history and its open proposals.</p> : null}
           <p className={`m-0 mt-3 ${MUTED}`}>{AGENTS_FOOT}</p>
         </>

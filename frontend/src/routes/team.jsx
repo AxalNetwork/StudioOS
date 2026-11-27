@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { Route } from 'react-router-dom';
+import { Navigate, Route, useLocation, useParams } from 'react-router-dom';
 
 const TeamAgentsPage = lazy(() => import('../pages/team/TeamAgentsPage'));
 const ProjectSettingsPage = lazy(() => import('../pages/team/ProjectSettingsPage'));
@@ -29,9 +29,18 @@ const SkillComparePage = lazy(() => import('../pages/team/SkillComparePage.jsx')
  * them), and the members read decides the rest. None is wrapped in a rail
  * shell (owner question T1 on #3727).
  */
+function CompanyWorkRedirect() {
+  const { uid } = useParams();
+  const { search, hash } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set('tab', 'tasks');
+  return <Navigate replace to={`/account/companies/${encodeURIComponent(uid)}/settings/team?${params}${hash}`} />;
+}
+
 export default function teamRoutes({ guard, labRoles }) {
   return (
     <>
+      <Route path="/account/companies/:uid/work" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CompanyWorkRedirect />)} />
       <Route path="/account/companies/:uid/settings/team" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <TeamAgentsPage form="company" />)} />
       {/* #5964 (owner Q1 option A): Compare with Axal is its own page. The Worker's read gate decides who sees it
           (the company's members and HQ's admins; another company gets "There is no such skill"). */}
