@@ -123,7 +123,7 @@ function freshDb() {
       name TEXT, email TEXT
     );
     CREATE TABLE activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action_type TEXT,
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT NOT NULL, action_type TEXT,
       entity_type TEXT, entity_id TEXT, ip_address TEXT, user_agent TEXT,
       metadata TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -271,9 +271,9 @@ test('a download is recorded, and a failed recording does not fail the download'
   const e = env(db);
   assert.equal((await get(e, `/${FUND}/lpa/download`, lp)).status, 200);
   const row: any = db.prepare(
-    `SELECT action_type, entity_type, entity_id FROM activity_logs WHERE user_id = ?`,
+    `SELECT action, action_type, entity_type, entity_id FROM activity_logs WHERE user_id = ?`,
   ).get(LP);
-  assert.deepEqual({ ...row }, { action_type: 'fund_lpa_downloaded', entity_type: 'vc_fund', entity_id: '1' });
+  assert.deepEqual({ ...row }, { action: 'fund_lpa_downloaded', action_type: 'fund_lpa_downloaded', entity_type: 'vc_fund', entity_id: '1' });
 
   // Same download with the audit table gone: the reader still gets their
   // agreement. A recorded act must not be undone by its own bookkeeping.

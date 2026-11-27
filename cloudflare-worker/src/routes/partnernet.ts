@@ -198,6 +198,7 @@ async function ensureSchema(env: Env) {
     `CREATE TABLE IF NOT EXISTS activity_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
+      action TEXT,
       action_type TEXT,
       entity_type TEXT,
       entity_id TEXT,
@@ -370,14 +371,21 @@ function pair(a: number, b: number): [number, number] { return a < b ? [a, b] : 
 export async function logActivity(env: Env, userId: number, actionType: string, opts: {
   entityType?: string; entityId?: string | number; metadata?: any; ip?: string; ua?: string;
 } = {}) {
-  try {
-    await env.DB.prepare(`INSERT INTO activity_logs (user_id, action_type, entity_type, entity_id, ip_address, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .bind(userId, actionType, opts.entityType || null, opts.entityId != null ? String(opts.entityId) : null, opts.ip || null, opts.ua || null, JSON.stringify(opts.metadata || {})).run();
-    const today = new Date().toISOString().slice(0, 10);
-    await env.DB.prepare(`INSERT INTO activity_stats (user_id, stat_date, action_count) VALUES (?, ?, 1) ON CONFLICT(user_id, stat_date) DO UPDATE SET action_count = action_count + 1, updated_at = CURRENT_TIMESTAMP`)
-      .bind(userId, today).run();
-    await env.DB.prepare(`UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?`).bind(userId).run();
-  } catch (e: any) { console.error('logActivity:', e?.message); }
+  // D8534 finding 3 (#9015): `activity_logs.action` is NOT NULL, so the row
+  // writes it with the same value as `action_type`, as `recordFundActivity` in
+  // funds.ts does. The three writes are independent: one that fails is logged
+  // and never skips the others or breaks the caller.
+  const today = new Date().toISOString().slice(0, 10);
+  const writes: [string, () => Promise<unknown>][] = [
+    ['activity row', () => env.DB.prepare(`INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, ip_address, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(userId, actionType, actionType, opts.entityType || null, opts.entityId != null ? String(opts.entityId) : null, opts.ip || null, opts.ua || null, JSON.stringify(opts.metadata || {})).run()],
+    ['activity stats', () => env.DB.prepare(`INSERT INTO activity_stats (user_id, stat_date, action_count) VALUES (?, ?, 1) ON CONFLICT(user_id, stat_date) DO UPDATE SET action_count = action_count + 1, updated_at = CURRENT_TIMESTAMP`)
+      .bind(userId, today).run()],
+    ['last active', () => env.DB.prepare(`UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?`).bind(userId).run()],
+  ];
+  for (const [what, write] of writes) {
+    try { await write(); } catch (e: any) { console.error('logActivity:', what, actionType, e?.message); }
+  }
 }
 
 async function recomputeNetworkScore(env: Env, userId: number, force = false): Promise<number | null> {
