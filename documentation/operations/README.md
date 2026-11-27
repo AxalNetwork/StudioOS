@@ -72,3 +72,4 @@ and a link in `documentation/README.md`.
 | [Production credentials](PRODUCTION_CREDENTIALS.md) | D7145 environment setup, token permissions, verification and retirement. |
 | `runner-image-8008/` | Review the Linux candidate runtime contract, offline image inputs and qualification evidence gates (D8008). |
 | `RESEARCH_SOURCE_IMPORT.md` | D7745: preview, apply in bounded chunks, seal, reconcile and remove a private Research package; pacing, 429s and which digest proves what. |
+| `LANDING_BOT.md` | D6480: turn the landing bot off and on, change its caps, read its sticky comment and rotate its App key; only the owner changes the switch and the caps. |
