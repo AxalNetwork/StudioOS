@@ -26,6 +26,10 @@ import { holdsLicence } from '../services/accountLicences';
  *   POST  /links/:uid/dismiss?project=&scope=  Not this one: the next sync lands it as its own row
  *   POST  /items/:uid/link                { fed: "issue:owner/repo#n" | "pull:owner/repo#n" } a link by hand
  *
+ * D9102 (#9102): what a link by hand picks from (`listUnmarked`), the founder's only.
+ *
+ *   GET   /fed?project=&scope=            GitHub issues and pull requests with no marker and no link, newest 200, with total
+ *
  * D968 (#3351): the later stages (`services/buildStates.ts`).
  *
  *   GET   /states?project=&scope=&limit=&offset=   each accepted, landed item's Built, Live and Tested, paged
@@ -42,7 +46,7 @@ import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { railFor, refuseRun } from '../util/railContext';
-import { acceptLink, dismissLink, linkByHand, listHandoffs, listLinks, sendHandoff } from '../services/buildHandoffs';
+import { acceptLink, dismissLink, linkByHand, listHandoffs, listLinks, listUnmarked, sendHandoff } from '../services/buildHandoffs';
 import { STATES_PAGE, STATES_PAGE_MAX, listStates } from '../services/buildStates';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -216,6 +220,8 @@ const linkUid = (c: any) => String(c.req.param('uid') ?? '');
 app.post('/handoffs', scoped(true, async (ctx, c) => sendHandoff(c.env, ctx.user, ctx.projectId, ctx.scope, await bodyOf(c))));
 app.get('/handoffs', scoped(false, async (ctx, c) => ({ handoffs: await listHandoffs(c.env, ctx.projectId, ownsVentureOf(ctx)) })));
 app.get('/links', scoped(false, async (ctx, c) => ({ links: await listLinks(c.env, ctx.projectId, ctx.partner) })));
+// D9102 (#9102): the unmarked fed items a link by hand picks from. The founder's only, like the link writes.
+app.get('/fed', scoped(true, async (ctx, c) => listUnmarked(c.env, ctx.projectId)));
 // D968 (#3351): each accepted, landed item's Built, Live and Tested, from the row it landed in. Paged.
 app.get('/states', scoped(false, async (ctx, c) => {
   const limit = c.req.query('limit') === undefined ? STATES_PAGE : Number(c.req.query('limit'));

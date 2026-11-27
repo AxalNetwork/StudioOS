@@ -25,6 +25,9 @@
  * 'connector'`, the fed item as `source_ref`) instead of a new row. Accept
  * links it; Dismiss lets the next sync land it as its own row.
  *
+ * BY HAND (D9102). An item that came back with no marker landed as its own
+ * row; `listUnmarked` lists those with no link, and `linkByHand` links one.
+ *
  * Logs keep ids and codes, never text.
  */
 import type { Env, User } from '../types';
@@ -434,4 +437,49 @@ export async function linkByHand(env: Env, user: User, itemUid: string, fed: unk
   ]);
   if (!ins.meta?.changes) throw new PlanItemError('already_linked', 409, 'This GitHub item is already linked or waiting for your decision.');
   return view((await linkOf(env, item.project_id, uid)));
+}
+
+/** At most this many unmarked fed items in one read (D9102). */
+export const UNMARKED_MAX = 200;
+type UnmarkedRow = { external_id: string; kind: string; local_table: string | null; local_id: number | null; first_seen_at: string; last_seen_at: string; title: string | null; total: number };
+
+/**
+ * D9102 (#9102): the venture's GitHub issues and pull requests that came back
+ * with no plan marker and have no link waiting or made, for Back in's "Link
+ * to a plan item…". The ledger is unique per integration, not per venture, so
+ * one item held by two integrations (GitHub reconnected) is one row: the
+ * ledger row that has a local row, else the newest, with the newest
+ * `last_seen_at` and the first `first_seen_at`. The title is the local row's
+ * (`roadmap_okrs.objective` for an issue, `mvp_features.title` for a pull
+ * request), read only on this venture, else null. An item `linkByHand` would
+ * refuse as `already_linked` is left out. Newest first, at most 200, with the
+ * count of distinct items.
+ */
+export async function listUnmarked(env: Env, projectId: number) {
+  const ref = `project:${projectId}`;
+  const rows = (await env.DB.prepare(`WITH fed AS (
+      SELECT f.external_id, f.kind, f.local_table, f.local_id,
+        ROW_NUMBER() OVER (PARTITION BY f.external_id ORDER BY (f.local_id IS NULL), datetime(f.last_seen_at) DESC, f.id DESC) AS rn,
+        MIN(f.first_seen_at) OVER (PARTITION BY f.external_id) AS first_seen_at,
+        MAX(datetime(f.last_seen_at)) OVER (PARTITION BY f.external_id) AS last_seen_at
+      FROM connector_fed_items f
+      WHERE f.project_id = ? AND f.kind IN ('issue', 'pull_request')
+        AND (f.external_id GLOB 'issue:*/*#[1-9]*' OR f.external_id GLOB 'pull:*/*#[1-9]*')
+        AND NOT EXISTS (SELECT 1 FROM ai_rail_proposals p WHERE p.record_ref = ? AND p.rail_option = ? AND p.source_ref = f.external_id AND p.status IN ('proposed', 'accepted'))
+    )
+    SELECT fed.external_id, fed.kind, fed.local_table, fed.local_id, fed.first_seen_at, fed.last_seen_at,
+      CASE fed.local_table WHEN 'roadmap_okrs' THEN r.objective WHEN 'mvp_features' THEN m.title END AS title,
+      COUNT(*) OVER () AS total
+    FROM fed
+    LEFT JOIN roadmap_okrs r ON fed.local_table = 'roadmap_okrs' AND r.id = fed.local_id AND r.project_id = ?
+    LEFT JOIN mvp_features m ON fed.local_table = 'mvp_features' AND m.id = fed.local_id AND m.project_id = ?
+    WHERE fed.rn = 1
+    ORDER BY fed.last_seen_at DESC, fed.external_id
+    LIMIT ?`).bind(projectId, ref, LINK_OPTION, projectId, projectId, UNMARKED_MAX).all<UnmarkedRow>()).results || [];
+  const items = rows.filter(r => FED.test(r.external_id)).map(r => ({
+    fed: r.external_id, fed_kind: r.kind, title: r.title == null ? null : String(r.title).slice(0, 300),
+    local_table: r.local_table ?? null, local_id: r.local_id == null ? null : String(r.local_id),
+    first_seen_at: r.first_seen_at, last_seen_at: r.last_seen_at,
+  }));
+  return { items, total: rows.length ? Number(rows[0].total) - (rows.length - items.length) : 0 };
 }

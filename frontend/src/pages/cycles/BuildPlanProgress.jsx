@@ -6,7 +6,7 @@ import { buildPlanApi } from '../../lib/api/buildPlan';
 import {
   BACK_IN_FOOT, BUCKETS, BUILT_UNREAD, CHART_FOOT, MODULE_FILTERS, NOT_RECORDED_FOOT, PER_PAGE, PROGRESS_FILTERS, SORTS, STAGES, STAGE_FILTERS, STAGE_WORD,
   TOOL_FILTERS, TRAIL_FOOT, asOfLine, builtPerWeek, chartLabel, filterCount, filterRows, pageRows, phoneStatus, progressRows, stageChart, stageLead, trailNodes, trailTable,
-  waitingLinks, weekLine,
+  NO_PICKABLE, UNMARKED_CLAIM, UNMARKED_WHAT, linkedLine, pickGroups, unmarkedMore, unmarkedRows, waitingLinks, weekLine,
 } from './buildProgressModel';
 import { ventureSearch } from './buildPlanModel';
 import { ChoiceField } from './BuildPlanCards';
@@ -22,6 +22,11 @@ import { ChoiceField } from './BuildPlanCards';
  * the links (D1068 `/links`). Only the plan's read can blank the page. A
  * failed sends or links read makes its stage "Not recorded", with the reason,
  * and says so above the chart.
+ *
+ * D9102 (#9102): for the founder only, a fifth read, the GitHub items that
+ * came back with no plan marker (`GET /plan/fed`), answers alone too. Each is
+ * a Back in row with "Link to a plan item…", which opens an inline picker of
+ * the accepted items; only Link writes (D1068's link by hand).
  */
 
 const CARD = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900';
@@ -65,9 +70,23 @@ export async function readAllStates(projectId, scope, client = buildPlanApi) {
 }
 
 /** The four reads; the sends, links and states answer alone, and null means that read failed. */
-function useProgress(projectId, scope) {
+function useProgress(projectId, scope, actions) {
   const [state, setState] = useState({ status: 'loading', plan: null, handoffs: null, links: null, states: null });
   const [tick, setTick] = useState(0);
+  // D9102: the fifth read, the founder's only, answering alone; it never blanks Progress.
+  const [unmarked, setUnmarked] = useState({ status: 'off', read: null });
+  const [unmarkedTick, setUnmarkedTick] = useState(0);
+  useEffect(() => {
+    if (!projectId || !actions) { setUnmarked({ status: 'off', read: null }); return undefined; }
+    let alive = true;
+    setUnmarked((u) => (u.status === 'ready' ? u : { status: 'loading', read: null }));
+    buildPlanApi.unmarked(projectId, scope).then(
+      (read) => { if (alive) setUnmarked({ status: 'ready', read }); },
+      () => { if (alive) setUnmarked({ status: 'unreadable', read: null }); },
+    );
+    return () => { alive = false; };
+  }, [projectId, scope, actions, tick, unmarkedTick]);
+  const retryUnmarked = useCallback(() => setUnmarkedTick((n) => n + 1), []);
   useEffect(() => {
     if (!projectId) return undefined;
     let alive = true;
@@ -87,7 +106,7 @@ function useProgress(projectId, scope) {
     return () => { alive = false; };
   }, [projectId, scope, tick]);
   const reload = useCallback(() => setTick((n) => n + 1), []);
-  return { ...state, reload };
+  return { ...state, unmarked, retryUnmarked, reload };
 }
 
 /** VB10's stacked bars, one row per module; Not recorded drawn dashed. */
@@ -429,11 +448,72 @@ export function ItemTrail({ projectId, row, handoffs, links, onClose, search = '
   );
 }
 
-/** VB9: what arrived from the founder's tools, each waiting for Link or Not this one. */
-function BackIn({ projectId, scope, rows, onClose, onDone }) {
+/**
+ * D9102: one GitHub item with no plan marker. "Link to a plan item…" opens an
+ * inline list of the accepted items, nothing chosen; Link is the one write.
+ * There is no "Not this one": the item already landed as its own row.
+ */
+function UnmarkedRow({ row, groups, open, onOpen, onClose, linked, onLinked, phone }) {
+  const [pick, setPick] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const tap = phone ? '!min-h-[44px]' : '';
+  useEffect(() => { if (!open) { setPick(null); setError(''); } }, [open]);
+  const link = async () => {
+    const chosen = groups.flatMap((g) => g.items).find((i) => i.uid === pick);
+    if (!chosen) return;
+    setBusy(true); setError('');
+    try { await buildPlanApi.linkByHand(chosen.uid, row.fed); onLinked(row, linkedLine(chosen)); } catch (e) {
+      setError(e?.data?.message || e?.data?.detail || e?.message || 'It was not linked. Try again.');
+    } finally { setBusy(false); }
+  };
+  return (
+    <li className="flex min-w-0 flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="plan-back-in-unmarked">
+      <span className="w-fit rounded-full border border-axal-lavender-edge bg-axal-lavender px-2 py-px text-[11px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">{row.source}</span>
+      <span className="text-[13px] font-semibold text-axal-ink [overflow-wrap:anywhere] dark:text-gray-100" data-testid="plan-back-in-unmarked-line">{row.line}</span>
+      {linked ? <span className="text-[12.5px] font-semibold text-emerald-800 [overflow-wrap:anywhere] dark:text-emerald-300" role="status" data-testid="plan-back-in-linked">{linked}</span> : null}
+      {!linked && !open ? (
+        <span className="flex flex-wrap gap-2">
+          <button type="button" className={`${BTN} ${tap}`} onClick={onOpen} data-testid="plan-back-in-pick-open">Link to a plan item…</button>
+        </span>
+      ) : null}
+      {!linked && open ? (
+        <fieldset className="m-0 flex min-w-0 flex-col gap-2 rounded-lg border border-axal-hairline p-2.5 dark:border-gray-700" data-testid="plan-back-in-picker">
+          <legend className={`${EYE} px-1`}>The plan item this delivers</legend>
+          {groups.length ? groups.map((g) => (
+            <div key={g.module} className="flex min-w-0 flex-col gap-1" role="radiogroup" aria-label={g.label}>
+              <span className={EYE}>{g.label}</span>
+              {g.items.map((i) => (
+                <label key={i.uid} className="flex min-h-[44px] min-w-0 cursor-pointer items-center gap-2 rounded-md px-1.5 text-[12.5px] text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">
+                  <input type="radio" name={`plan-pick-${row.fed}`} value={i.uid} checked={pick === i.uid} onChange={() => setPick(i.uid)} className="shrink-0" data-testid={`plan-back-in-pick-${i.uid}`} />
+                  <span className="min-w-0 [overflow-wrap:anywhere]"><span className="font-semibold">{i.kindWord}</span> · {i.title}</span>
+                </label>
+              ))}
+            </div>
+          )) : <p className={MUTED} data-testid="plan-back-in-pick-none">{NO_PICKABLE}</p>}
+          <span className="flex flex-wrap gap-2">
+            {groups.length ? <button type="button" className={`${BTN_P} ${tap}`} disabled={!pick || busy} onClick={link} data-testid="plan-back-in-pick-link">Link</button> : null}
+            <button type="button" className={`${BTN} ${tap}`} disabled={busy} onClick={onClose} data-testid="plan-back-in-pick-cancel">Cancel</button>
+          </span>
+        </fieldset>
+      ) : null}
+      {error ? <span role="alert" className="text-[12.5px] text-red-700 [overflow-wrap:anywhere] dark:text-red-300" data-testid="plan-back-in-pick-refused">{error}</span> : null}
+    </li>
+  );
+}
+
+/** VB9: what arrived from the founder's tools, each waiting for Link or Not this one, then D9102's unmarked items. */
+function BackIn({ projectId, scope, rows, unmarked, plan, phone, onClose, onDone }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState({});
   const [decided, setDecided] = useState({});
+  const [picking, setPicking] = useState(null);
+  // A linked row keeps its line in the drawer after the reload leaves it out of the read.
+  const [linked, setLinked] = useState({});
+  const groups = useMemo(() => pickGroups(plan), [plan]);
+  const fresh = unmarkedRows(unmarked.read);
+  const shown = [...fresh, ...Object.values(linked).map((l) => l.row).filter((r) => !fresh.some((x) => x.fed === r.fed))];
+  const more = unmarked.status === 'ready' ? unmarkedMore(unmarked.read) : null;
   const act = async (uid, run, word) => {
     setBusy(uid); setError((e) => ({ ...e, [uid]: '' }));
     try { await run(); setDecided((d) => ({ ...d, [uid]: word })); onDone(); } catch (e) {
@@ -441,9 +521,9 @@ function BackIn({ projectId, scope, rows, onClose, onDone }) {
     } finally { setBusy(null); }
   };
   return (
-    <Lightbox label="Back in" title={`Arrived from your tools · ${rows.length}`} sub="Back in" onClose={onClose} width={660} testId="plan-back-in"
-      footer={<div className="flex flex-wrap items-center justify-between gap-2"><span className={MUTED}>{BACK_IN_FOOT}</span><button type="button" className={actionGhost} onClick={onClose}>Close</button></div>}>
-      <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+    <Lightbox label="Back in" title={`Arrived from your tools · ${rows.length + fresh.length}`} sub="Back in" onClose={onClose} width={660} testId="plan-back-in"
+      footer={<div className="flex flex-wrap items-center justify-between gap-2"><span className={MUTED}>{BACK_IN_FOOT}{more ? <span data-testid="plan-back-in-more"> {more}</span> : null}</span><button type="button" className={`${actionGhost} ${phone ? '!min-h-[44px]' : ''}`} onClick={onClose}>Close</button></div>}>
+      <ul className="m-0 flex min-w-0 list-none flex-col gap-2.5 p-0">
         {rows.map((r) => (
           <li key={r.uid} className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="plan-back-in-row">
             <span className="w-fit rounded-full border border-axal-lavender-edge bg-axal-lavender px-2 py-px text-[11px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">{r.source}</span>
@@ -451,14 +531,20 @@ function BackIn({ projectId, scope, rows, onClose, onDone }) {
             <span className={MUTED}>{r.ask}</span>
             {decided[r.uid] ? <span className="text-[12.5px] font-semibold text-emerald-800 dark:text-emerald-300" role="status" data-testid="plan-back-in-done">{decided[r.uid]}</span> : (
               <span className="flex flex-wrap gap-2">
-                <button type="button" className={BTN_P} disabled={busy === r.uid} onClick={() => act(r.uid, () => buildPlanApi.acceptLink(projectId, r.uid, scope), 'Linked.')} data-testid="plan-back-in-link">Link</button>
-                <button type="button" className={BTN} disabled={busy === r.uid} onClick={() => act(r.uid, () => buildPlanApi.dismissLink(projectId, r.uid, scope), 'Not linked. It lands as its own item on the next sync and is never proposed again.')} data-testid="plan-back-in-dismiss">Not this one</button>
+                <button type="button" className={`${BTN_P} ${phone ? '!min-h-[44px]' : ''}`} disabled={busy === r.uid} onClick={() => act(r.uid, () => buildPlanApi.acceptLink(projectId, r.uid, scope), 'Linked.')} data-testid="plan-back-in-link">Link</button>
+                <button type="button" className={`${BTN} ${phone ? '!min-h-[44px]' : ''}`} disabled={busy === r.uid} onClick={() => act(r.uid, () => buildPlanApi.dismissLink(projectId, r.uid, scope), 'Not linked. It lands as its own item on the next sync and is never proposed again.')} data-testid="plan-back-in-dismiss">Not this one</button>
               </span>
             )}
             {error[r.uid] ? <span role="alert" className="text-[12.5px] text-red-700 dark:text-red-300" data-testid="plan-back-in-refused">{error[r.uid]}</span> : null}
           </li>
         ))}
+        {shown.map((r) => (
+          <UnmarkedRow key={r.fed} row={r} groups={groups} phone={phone} open={picking === r.fed} onOpen={() => setPicking(r.fed)} onClose={() => setPicking(null)}
+            linked={linked[r.fed]?.line || null} onLinked={(row, line) => { setLinked((l) => ({ ...l, [row.fed]: { row, line } })); setPicking(null); onDone(); }} />
+        ))}
       </ul>
+      {unmarked.status === 'loading' ? <p className={`${MUTED} mt-2.5`} aria-busy="true" data-testid="plan-back-in-unmarked-loading">Reading…</p> : null}
+      {unmarked.status === 'unreadable' ? <div className="mt-2.5" data-testid="plan-back-in-unmarked-unread"><Unreadable what={UNMARKED_WHAT} claim={UNMARKED_CLAIM} onRetry={unmarked.retry} /></div> : null}
     </Lightbox>
   );
 }
@@ -469,7 +555,7 @@ function BackIn({ projectId, scope, rows, onClose, onDone }) {
  * already gives a partner accepted items and links only.
  */
 export default function PlanProgress({ projectId, scope = 'venture', search = '', phone = false, actions = true, nowIso = new Date().toISOString() }) {
-  const p = useProgress(projectId, scope);
+  const p = useProgress(projectId, scope, actions);
   const [open, setOpen] = useState(null);
   const [backIn, setBackIn] = useState(false);
   // D4602 (#4602): one filter model for both widths.
@@ -478,6 +564,9 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
   const weeks = useMemo(() => builtPerWeek(rows, nowIso), [rows, nowIso]);
   const chart = useMemo(() => stageChart(rows), [rows]);
   const waiting = p.status === 'ready' && actions ? waitingLinks(p.links, p.plan) : [];
+  // D9102: the door opens for waiting proposals or unmarked items, and counts both.
+  const unmarked = p.status === 'ready' && actions ? unmarkedRows(p.unmarked.read) : [];
+  const arrived = waiting.length + unmarked.length;
 
   if (p.status === 'loading') {
     return <section className={CARD} aria-busy="true" data-testid="plan-progress-loading"><span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`}>Reading…</span></section>;
@@ -492,10 +581,11 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
       {p.handoffs == null ? <Unreadable what="Your sends" claim="This is not a claim that nothing was sent. Sent shows as not recorded." onRetry={p.reload} /> : null}
       {p.links == null ? <Unreadable what="What came back from your tools" claim="This is not a claim that nothing came back. In progress shows as not recorded." onRetry={p.reload} /> : null}
       {p.states == null ? <Unreadable what="Built, live and tested" claim="This is not a claim that nothing was built. Those stages show as not recorded." onRetry={p.reload} /> : null}
-      {waiting.length ? (
+      {actions && !arrived && p.unmarked.status === 'unreadable' ? <Unreadable what={UNMARKED_WHAT} claim={UNMARKED_CLAIM} onRetry={p.retryUnmarked} /> : null}
+      {arrived ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-axal-lavender-edge bg-axal-lavender px-3.5 py-3 text-[13px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-900/30 dark:text-gray-100" data-testid="plan-back-in-door">
-          <span>Arrived from your tools · {waiting.length}. Nothing is linked until you press Link.</span>
-          <button type="button" className={BTN_P} onClick={() => setBackIn(true)} data-testid="plan-back-in-open">Review</button>
+          <span>Arrived from your tools · {arrived}. Nothing is linked until you press Link.</span>
+          <button type="button" className={`${BTN_P} ${phone ? '!min-h-[44px]' : ''}`} onClick={() => setBackIn(true)} data-testid="plan-back-in-open">Review</button>
         </div>
       ) : null}
       <div className={`grid min-w-0 grid-cols-1 gap-[14px] ${phone ? '' : 'lg:grid-cols-3'}`}>
@@ -512,7 +602,7 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
         ? <PhoneItems rows={filterRows(rows, filter.f, filter.sort)} all={rows} onOpen={setOpen} state={filter} />
         : <ItemsTable rows={rows} onOpen={setOpen} state={filter} />}
       {open ? <ItemTrail projectId={projectId} row={open} handoffs={p.handoffs} links={p.links} search={search} onClose={() => setOpen(null)} /> : null}
-      {backIn ? <BackIn projectId={projectId} scope={scope} rows={waiting} onClose={() => setBackIn(false)} onDone={p.reload} /> : null}
+      {backIn ? <BackIn projectId={projectId} scope={scope} rows={waiting} unmarked={{ ...p.unmarked, retry: p.retryUnmarked }} plan={p.plan} phone={phone} onClose={() => setBackIn(false)} onDone={p.reload} /> : null}
     </div>
   );
 }
