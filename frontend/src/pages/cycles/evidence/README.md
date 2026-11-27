@@ -16,6 +16,8 @@ The founder's Evidence view and the investor's evidence block, from the owner's 
 | `InvestorEvidence.jsx` | D1268: the investor's block (VR8 before the NDA, VR9 after it), one item's drawer (VR10) and the phone (VR18), on D1265's read. `EvidenceSummary` (the deal page), `SharedEvidence` (the diligence room) and `InvestorEvidence` (an investor's round call). It imports no `ui` index |
 | `ShareOutside.jsx` | D6864 (#6864): Share outside Axal's composer (RA-27), Shared links with Revoke (RA-29, `/raise/evidence/shared`) and Add evidence by hand (RA-32) |
 | `shareOutsideModel.js` | D6864: the reader choice, what each row tells the reader, link state words and glyphs, and the composer's and Add evidence's checks |
+| `OrganicSearchEvidence.jsx` | D5841 part 2 (#5841): Organic search, the sheet `?organic=` opens over the view (founders only): pinned Search Console figures with their state (current, corrected and re-review, missing, access lost, withdrawn, replaced), Withdraw and Re-review, and choosing one whole week's figure for one organic-search claim, Private, on #5842's client |
+| `organicEvidenceModel.js` | D5841 part 2: which claims a Search Console figure may back, the weeks that can be pinned, a selection's state and actions, the `?organic=` address and the refusal sentences |
 
 `../cycleModel.js` lights Evidence after Overview in Raise's tab rail; `../../DealRoomPage.jsx` mounts `EvidenceSummary`, `../../founder/RoundCallPage.jsx` mounts `InvestorEvidence` on an investor's call, and `../../research/DiligenceRoom.jsx` mounts `SharedEvidence`. `../CycleRoute.jsx` mounts `EvidencePart` on every Raise module; `../../raise/pitch/PitchEditor.jsx` mounts `SlideEvidence`. A share-link deck draws none of it.
 
