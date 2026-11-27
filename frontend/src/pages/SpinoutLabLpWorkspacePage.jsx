@@ -5,7 +5,7 @@ import { useProofTargets, ProofDoor } from './investor/ProofOfFunds';
 import { useLocation } from 'react-router-dom';
 import { api, spinoutLab } from '../lib/api';
 import { lpAccessState, lpHasReports, SPINOUT_FUND_SLUG, fundTerms, LP_STATES } from '../lib/spinoutFundModel';
-import { PROFILE_CHIP, EXTERNAL_DOCS, LBL, MONO, Chip } from './investor/fund/FundWorkspaceSupport';
+import { PROFILE_CHIP, standingWords, EXTERNAL_DOCS, LBL, Chip } from './investor/fund/FundWorkspaceSupport';
 import { programFigures, fundFigures } from '../lib/spinoutFundFigures';
 import { selectHolding, fmtDate, quarterOf, lastClosedQuarter } from '../lib/quarterlyReportViewModel';
 import { Landmark, Lock } from 'lucide-react';
@@ -138,11 +138,11 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     wantsNotices: !loading && !!portal && derived.holdings > 0,
   });
 
-  const [chipTone, chipText] = PROFILE_CHIP[state] || PROFILE_CHIP.visitor;
+  const chipTone = (PROFILE_CHIP[state] || PROFILE_CHIP.visitor)[0];
+  // D9006: the canvas words, with the commitment from the record for a committed standing.
+  const chipText = standingWords(state, derived.commitmentCents);
   const hasReports = lpHasReports(state);
   const showApply = !err && state === 'visitor';
-
-  const commitLabel = derived.commitmentK > 0 ? `$${derived.commitmentK}K` : '—';
 
   // D6137: every figure below is a string from the read, the same strings the
   // fund brief prints (lib/spinoutFundFigures.js). The program block keeps its
@@ -272,9 +272,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         recipient: {
           name: user?.name,
           email: user?.email,
-          standing: derived.commitmentK > 0
-            ? `${PROFILE_CHIP[derived.state]?.[1] || 'Investor'} · $${derived.commitmentK}K committed`
-            : PROFILE_CHIP[derived.state]?.[1],
+          // D9006: the chip's words, amount included once.
+          standing: standingWords(derived.state, derived.commitmentCents),
         },
         metrics: live,
       });
@@ -325,7 +324,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         chipTone={chipTone}
         chipText={chipText}
         derived={derived}
-        commitLabel={commitLabel}
         isAdmin={isAdmin}
       />
     ),
@@ -421,11 +419,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       {!loading && !err && (
         <div className="-mt-4 mb-6 flex flex-wrap items-center gap-2.5" data-testid="lp-standing">
           <Chip tone={chipTone}>{chipText}</Chip>
-          {derived.commitmentK > 0 && (
-            <span className={`text-[12px] font-semibold text-gray-600 dark:text-gray-300 ${MONO}`}>
-              {commitLabel} committed
-            </span>
-          )}
           {user?.name && (
             <span className="text-[12px] text-gray-500 dark:text-gray-400">{user.name}</span>
           )}

@@ -7,7 +7,7 @@ import { EmailGp } from '../../SpinoutLabLpCommitment';
 import GpReportDesk from './GpReportDesk';
 
 export default function FundReportsSection({
-  F, kpis, ARCHIVE_FILTERS, setArchiveFilter, archiveFilter, archive, hasReports, holding, generateReport, reportBusy, reportErr, ambiguousFund, portal, state, chipTone, chipText, derived, commitLabel, isAdmin
+  F, kpis, ARCHIVE_FILTERS, setArchiveFilter, archiveFilter, archive, hasReports, holding, generateReport, reportBusy, reportErr, ambiguousFund, portal, state, chipTone, chipText, derived, isAdmin
 }) {
 return (
 <section id="reports" aria-label="Reports" tabIndex={-1} className="space-y-6 scroll-mt-6">
@@ -170,7 +170,6 @@ return (
                 <div className="text-[10px] font-bold uppercase tracking-wider opacity-80">Your access</div>
                 <div className="text-[12.5px] font-bold">
                   {chipText}
-                  {derived.commitmentK > 0 && ` · ${commitLabel} committed`}
                 </div>
               </div>
             </div>

@@ -367,8 +367,8 @@ export const LP_STATE_RANK = { visitor: 0, pending: 0, approved: 1, committed: 2
  * @param {object|null} portal  the raw DTO: { lp_holdings, performance, ... }
  * @param {object|null} application  the caller's own row from
  *   GET /api/spinout-lab/lp-application, or null
- * @returns {{ state: string, commitmentK: number, lpaSigned: boolean,
- *   holdings: number, applicationStatus: string|null }}
+ * @returns {{ state: string, commitmentK: number, commitmentCents: number|null,
+ *   lpaSigned: boolean, holdings: number, applicationStatus: string|null }}
  */
 export function lpAccessState(portal, application = null) {
   const rows = Array.isArray(portal?.performance) ? portal.performance : [];
@@ -387,7 +387,7 @@ export function lpAccessState(portal, application = null) {
     const state = applicationStatus === 'pending' || applicationStatus === 'approved'
       ? 'pending'
       : 'visitor';
-    return { state, commitmentK: 0, lpaSigned: false, holdings: 0, applicationStatus };
+    return { state, commitmentK: 0, commitmentCents: null, lpaSigned: false, holdings: 0, applicationStatus };
   }
 
   // `commitment` is dollars in the worker DTO (funds.ts:61); the design's whole
@@ -399,6 +399,14 @@ export function lpAccessState(portal, application = null) {
   // Compare in DOLLARS and floor only for display. Rounding first would let
   // $249,999 become 250 and clear the $250K participation tier.
   const commitmentK = Math.floor(commitmentDollars / 1000);
+  // D9006: the standing chip prints the commitment in whole cents, formatted
+  // like the rest of the workspace. Summed per row so no float total is rounded
+  // once; null when nothing is recorded, so the chip prints no amount, never $0.
+  const centsTotal = rows.reduce((sum, r) => {
+    const n = Number(r?.commitment);
+    return sum + (Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0);
+  }, 0);
+  const commitmentCents = centsTotal > 0 ? centsTotal : null;
   const lpaSigned = rows.some((r) => !!r?.lpa_signed);
 
   let state;
@@ -407,7 +415,7 @@ export function lpAccessState(portal, application = null) {
   else if (lpaSigned) state = 'approved';
   else state = 'pending';
 
-  return { state, commitmentK, lpaSigned, holdings, applicationStatus };
+  return { state, commitmentK, commitmentCents, lpaSigned, holdings, applicationStatus };
 }
 
 /** Shared CTA for the investor landing page. Null preserves visitor copy. */
