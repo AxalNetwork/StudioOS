@@ -7,7 +7,7 @@ the tab from the path and mounts one of these; Summary and Terms are
 are `../LicenceFrame.jsx`.
 
 - `ContractTab.jsx` — the contract in force and the one waiting (D804).
-- `StatementsTab.jsx` — HQ's statements and disputing a line (D804).
+- `StatementsTab.jsx` — The initial and annual fee invoices (D9112), royalty statements and disputing a line (D804).
 - `RequestsTab.jsx` — the six requests to HQ, the renewal timeline and "Your
   requests" with HQ's answers (D804; the sixth, Request a program, is D988's).
 - `RequestChangeSheet.jsx` — the "Request a change" sheet for the licence's
