@@ -54,11 +54,44 @@
 /privacy/v2-draft
   X-Robots-Tag: noindex, nofollow
 
-# NO Content-Security-Policy here, and that is a decision rather than an
-# omission. The Worker's CSP is nonce-based and generated per request, which a
-# static header file cannot reproduce. index.html carries an inline boot
-# watchdog, so a naive `script-src 'self'` would break the app on load, and a
-# wrong CSP on the frontend is a white screen for every visitor. The static
-# shell has never carried a CSP, so shipping without one is not a regression.
-# Adding a correct static CSP needs the inline scripts enumerated and hashed
-# against a deployed preview.
+# D9166 (#9166) revises the note that stood here (D36): the shell now carries a
+# Content-Security-Policy, built from hashes rather than the Worker's per-request
+# nonce. Every executable inline <script> in index.html (theme init, the dev
+# flag, the dev service-worker killer, the boot watchdog) and its one inline
+# event handler (the font stylesheet's onload, behind 'unsafe-hashes') is allowed
+# by its sha256; the JSON-LD block is data and needs none. 'unsafe-inline' and
+# 'unsafe-eval' are not in script-src. The origins are the third parties the SPA
+# loads (Stripe, Turnstile, Google sign-in, the Picker and reCAPTCHA, Meta's
+# SDK, the video hosts); D9166 names the file behind each one.
+#
+# REPORT-ONLY FOR NOW. A wrong policy on the shell is a white screen for every
+# visitor, so it ships as Content-Security-Policy-Report-Only and is read on a
+# PR preview and in production consoles (anything Cloudflare injects, such as
+# an analytics beacon, shows up there) before the follow-up renames it to the
+# enforcing header.
+#
+# THE LINE IS GENERATED AND CHECKED. The Vite plugin in frontend/vite.config.js
+# (scripts/lib/spaCsp.mjs) hashes the built docs/index.html and writes the line
+# into docs/_headers; the build fails when this committed copy is stale, and
+# names the line to commit (SPA_CSP_WRITE=1 writes it). It is committed because
+# the PR preview copies this file as-is, and the Worker's record cards send the
+# same value (socialCards.ts SHELL_HEADERS, pinned to this file by
+# social_cards_d1439.test.ts). frontend/test/spa_csp_9166.test.mjs fails if any
+# shell in docs/ has inline code without its hash here, and
+# scripts/check-spa-live.mjs checks the live header against the live shell.
+/*
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'sha256-dBGj+e/NaqsfFw4c8qA301HtqGJSSCd8v/S3nhmD2pc=' 'sha256-/PTziFTk6Dt/0Fcgs6yNpF4ys5xIJeohGtBpNJF7d9Y=' 'sha256-+pU4C5szN74PxrhEyWpPn1Apyx2qt+UWn8MBdhJmvNo=' 'sha256-DdjksPuk5lQ2eFx0WeQMDJvIaEXcvO609doQlj1FcOU=' 'unsafe-hashes' 'sha256-MhtPZXr7+LpJUY5qtMutB+qWfQtMaPccfe7QXtCcEYc=' https://js.stripe.com https://challenges.cloudflare.com https://accounts.google.com https://apis.google.com https://www.google.com https://www.gstatic.com https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://axal.vc https://app.axal.vc https://www.axal.vc wss://axal.vc wss://app.axal.vc https://api.stripe.com https://*.cloudflareaccess.com https://accounts.google.com https://www.facebook.com; frame-src 'self' blob: https://js.stripe.com https://hooks.stripe.com https://*.stripe.network https://challenges.cloudflare.com https://accounts.google.com https://docs.google.com https://www.google.com https://www.facebook.com https://calendly.com https://www.youtube-nocookie.com https://player.vimeo.com https://iframe.videodelivery.net https://*.cloudflarestream.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+# The two standalone pages are not the SPA shell: verify-email.html loads its
+# own CDN script and inline code, and offline.html is the service worker's
+# fallback. The shell's policy is detached from them (rules apply in file
+# order, so these come after the /* rule above); a policy of their own is a
+# separate change.
+/verify-email
+  ! Content-Security-Policy-Report-Only
+/verify-email.html
+  ! Content-Security-Policy-Report-Only
+/offline
+  ! Content-Security-Policy-Report-Only
+/offline.html
+  ! Content-Security-Policy-Report-Only

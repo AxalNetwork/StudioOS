@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import fs from 'fs';
+import { cspLine, policyForShell, policyInHeaders, withPolicy } from '../scripts/lib/spaCsp.mjs';
 
 const disableRocketLoader = {
   name: 'disable-cloudflare-rocket-loader',
@@ -17,8 +19,44 @@ const disableRocketLoader = {
   },
 };
 
+// D9166 (#9166): the shell's Content-Security-Policy, computed from the built
+// shell. Once Vite has written docs/ (public/ copied in), this hashes every
+// executable inline <script> and inline event handler in docs/index.html and
+// writes the policy into docs/_headers (scripts/lib/spaCsp.mjs builds it). The
+// same line is committed in frontend/public/_headers, because the PR preview
+// copies that file as-is and the Worker's record cards mirror it
+// (socialCards.ts SHELL_HEADERS); a build whose shell no longer matches the
+// committed line fails here and names the line to commit. SPA_CSP_WRITE=1
+// writes it into frontend/public/_headers instead of failing.
+const spaCsp = {
+  name: 'spa-csp',
+  apply: 'build',
+  closeBundle: {
+    order: 'post',
+    sequential: true,
+    handler() {
+      const outDir = path.resolve(__dirname, '../docs');
+      const sourcePath = path.resolve(__dirname, 'public/_headers');
+      const policy = policyForShell(fs.readFileSync(path.join(outDir, 'index.html'), 'utf8'));
+      const source = fs.readFileSync(sourcePath, 'utf8');
+      if (policyInHeaders(source) !== policy) {
+        if (process.env.SPA_CSP_WRITE !== '1') {
+          throw new Error(
+            '[spa-csp] frontend/public/_headers carries a stale shell CSP: the inline scripts in index.html changed (D9166).\n'
+            + `Commit this line under its /* rule, and the same value as SHELL_HEADERS in cloudflare-worker/src/services/socialCards.ts:\n${cspLine(policy)}\n`
+            + 'Or run the build with SPA_CSP_WRITE=1 to write it into frontend/public/_headers.',
+          );
+        }
+        fs.writeFileSync(sourcePath, withPolicy(source, policy));
+      }
+      const built = path.join(outDir, '_headers');
+      fs.writeFileSync(built, withPolicy(fs.readFileSync(built, 'utf8'), policy));
+    },
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), disableRocketLoader],
+  plugins: [react(), tailwindcss(), disableRocketLoader, spaCsp],
   // Oxc's es2020 target applies to transformed dev sources, not plain .js.
   // Production uses Vite 8's baseline-widely-available default (Safari 16.4).
   // A lower target cannot make unsupported RegExp features work at runtime;

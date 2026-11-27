@@ -303,3 +303,4 @@ run remains the integration signal for JavaScript, SQLite and child processes.
 | `company_analysis_saved_work_7814.test.mjs` | D7814: late re-reads, loaded-record saves and mounted dirty/clean navigation guards. |
 | `effective_legal_facts_8831.test.mjs` | D8831: approved policy corrections, protected regulatory rows, email-only notice and existing receipt versions. |
 `capital_overview_6079.test.mjs` (D6079) checks independently rendered source states, real evidence and source-specific retry.
+| `spa_csp_9166.test.mjs` | D9166: every inline script and handler in every built shell is hashed in `docs/_headers`; one value in `_headers`, the build and `SHELL_HEADERS`; Report-Only, standalone pages detached. |
