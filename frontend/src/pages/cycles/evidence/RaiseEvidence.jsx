@@ -17,7 +17,7 @@
  * the deal page's Evidence tab, an investor's round call and the diligence room.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { WorkerRail } from '../../../ui';
 import RailFrame from '../../../ui/RailFrame';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
@@ -33,6 +33,8 @@ import { EvidenceError, EvidenceForbidden, EvidenceLoading, EvidenceMain } from 
 import { ClaimDrawer, ItemDrawer } from './EvidenceDrawers';
 import { InvestorPreview, ReviewQueue } from './EvidenceReview';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+// D5841 part 2: the founder's explicit Search Console path (`?organic=` opens it; Grow's report links here).
+import OrganicSearchSheet from './OrganicSearchEvidence';
 
 /** The read's page: the first 100 of each list. */
 export const PAGE = Object.freeze({ limit: 100 });
@@ -106,12 +108,20 @@ export default function RaiseEvidence() {
   const rail = <WorkerRail workspace="Raise" role="founder" stance="Evidence-led view" coverage={[state.read ? 'Evidence pack: read from your records' : 'Evidence pack: reading']} footer="Traceable surface · no unsupported automated actions" />;
   const [sheet, setSheet] = useState(null);
   const [sharedKey, setSharedKey] = useState(0);
+  // D5841 part 2: `?organic=<week|open>` (and `&organic_claim=<uid>`) opens Organic search over the view, founders only.
+  const [params, setParams] = useSearchParams();
+  const organic = params.get('organic');
+  const closeOrganic = () => { const next = new URLSearchParams(params); next.delete('organic'); next.delete('organic_claim'); setParams(next, { replace: true }); };
+  const openOrganic = () => { const next = new URLSearchParams(params); next.set('organic', 'open'); setParams(next); };
+  const plain = new URLSearchParams(params); plain.delete('organic'); plain.delete('organic_claim');
+  const plainSearch = plain.toString() ? `?${plain.toString()}` : '';
   // D6864 (RA-27, RA-29, RA-32): Share outside Axal and Add evidence are founders' actions, secondary beside Look again.
   // Super Admins and capital staff get no Share action (can_decide is the founders' alone).
   const look = founder && (view.page === 'view' || view.page === 'shared') ? (
     <div className="flex flex-wrap gap-2">
       {view.page === 'view' ? <button type="button" className={BTN_S} onClick={() => reload({ refresh: true })} disabled={!!state.busy} data-testid="evidence-look-again">{state.busy ? 'Looking…' : 'Look again'}</button> : null}
       <button type="button" className={BTN_S} onClick={() => setSheet('add')} data-testid="evidence-add-typed">Add evidence</button>
+      {view.page === 'view' ? <button type="button" className={BTN_S} onClick={openOrganic} data-testid="evidence-organic">Organic search</button> : null}
       <button type="button" className={BTN_S} onClick={() => setSheet('share')} data-testid="evidence-share-outside">Share outside Axal</button>
       {view.page === 'view' ? <Link className={BTN_S} to={sharedHref(search)} data-testid="evidence-shared-links">Shared links</Link> : null}
     </div>
@@ -124,6 +134,10 @@ export default function RaiseEvidence() {
         <EvidenceBody key={sharedKey} state={shown} view={view} search={search} projectId={projectId} reload={reload} onShareOutside={() => setSheet('share')} />
         {sheet === 'share' ? <ShareOutsideSheet projectId={projectId} onClose={() => setSheet(null)} onMade={() => setSharedKey((k) => k + 1)} /> : null}
         {sheet === 'add' ? <AddEvidenceSheet projectId={projectId} onClose={() => setSheet(null)} onAdded={() => reload()} /> : null}
+        {organic && founder && view.page === 'view' && !view.drawer && projectId ? (
+          <OrganicSearchSheet projectId={projectId} claims={state.read?.claims?.rows ?? null} week={organic === 'open' ? null : organic} claim={params.get('organic_claim')}
+            search={plainSearch} onClose={closeOrganic} onChanged={() => reload()} />
+        ) : null}
       </main>
     </RailFrame>
   );
