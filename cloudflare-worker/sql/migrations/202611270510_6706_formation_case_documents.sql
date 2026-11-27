@@ -23,6 +23,7 @@
 -- has no consent_to_act_at. formationFilings.ts refuses first, with a code.
 --
 -- Additive only. STANDS ALONE under the runner: no BEGIN/COMMIT.
+-- forward-fix: cloudflare-worker/sql/forward-fixes/202611270510_6706_formation_case_documents.fix.sql
 
 ALTER TABLE formation_case_documents ADD COLUMN origin TEXT
   CHECK (origin IS NULL OR origin IN ('generated', 'signed_copy', 'consent_upload'));
