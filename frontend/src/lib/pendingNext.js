@@ -329,14 +329,86 @@ export function clearDestinationAfterSetup() {
  * sanitiser), with `ended=1` when a destination is kept, so the sign-in page can say the session ended. An area that
  * keeps no destination still goes to a bare `/login`, as before.
  */
-export function sessionEndedRedirectFor(location) {
+export function sessionEndedRedirectFor(location, reason = SESSION_ENDED_EXPIRED) {
+  const flag = reason === SESSION_ENDED_IDLE ? SESSION_ENDED_IDLE : '1';
   const to = loginRedirectFor(location);
-  return to === '/login' ? to : `${to}&ended=1`;
+  if (to !== '/login') return `${to}&ended=${flag}`;
+  // D8793 (#8793): every other protected page keeps its destination too. The audit's HQ and Investor tabs landed on a
+  // bare `/login` with no reason given and no way back. The path is kept only in the URL (never drawn on the signed-out
+  // page), through the same sanitiser; one that fails it, or a sign-in page itself, keeps only the reason.
+  const pathname = String(location?.pathname || '');
+  const here = `${pathname}${location?.search || ''}${location?.hash || ''}`;
+  const safe = NEVER_KEPT_AFTER_SESSION_END.some((p) => underPrefix(pathname, p)) ? null : sanitizeNextPath(here);
+  return safe ? `/login?next=${encodeURIComponent(safe)}&ended=${flag}` : `/login?ended=${flag}`;
 }
 
 /** The line the sign-in page shows after `sessionEndedRedirectFor`, for a kept destination in a named area. */
 export function sessionEndedLine(area) {
   return area ? `Your session ended. Sign in again to go back to ${area.name}.` : null;
+}
+
+// ---------------------------------------------------------------------------
+// D8793 (#8793) — an interrupted session says so, keeps where it was, and is told apart from a sign-out.
+// ---------------------------------------------------------------------------
+
+/** `ended=1`: the server answered 401 to a signed-in page. `ended=idle`: the 20-minute inactivity sign-out. */
+export const SESSION_ENDED_EXPIRED = 'expired';
+export const SESSION_ENDED_IDLE = 'idle';
+const NEVER_KEPT_AFTER_SESSION_END = Object.freeze(['/login', '/register', '/logout']);
+
+/** Interim wording until the canvas lands (`needs-design`). None names the page, the project or the account. */
+export const SESSION_ENDED_BACK = 'Your session ended. Sign in again to go back to the page you were on.';
+export const SESSION_ENDED_PLAIN = 'Your session ended. Sign in again to continue.';
+export const SESSION_IDLE_BACK = 'You were signed out after a period without activity. Sign in again to go back to the page you were on.';
+export const SESSION_IDLE_PLAIN = 'You were signed out after a period without activity. Sign in again to continue.';
+
+/**
+ * The sign-in page's sentence for an interrupted session, or null for an ordinary visit (no `ended`) — a deliberate
+ * sign-out lands on a bare `/login` and gets none. A kept destination in a named area keeps D7178's line.
+ */
+export function sessionEndedNotice(next, search = '') {
+  let ended = null;
+  try { ended = new URLSearchParams(search || '').get('ended'); } catch { ended = null; }
+  if (ended !== '1' && ended !== SESSION_ENDED_IDLE) return null;
+  const kept = sanitizeNextPath(next);
+  if (ended === SESSION_ENDED_IDLE) return kept ? SESSION_IDLE_BACK : SESSION_IDLE_PLAIN;
+  const area = destinationArea(kept);
+  if (area) return sessionEndedLine(area);
+  return kept ? SESSION_ENDED_BACK : SESSION_ENDED_PLAIN;
+}
+
+/**
+ * Other open tabs. A session that ends in one tab clears the stored user, and every other tab mirrors that and meets
+ * the route guard signed out. The tab where it ended leaves a short-lived marker first, so those tabs are sent to the
+ * same explained, destination-keeping sign-in, while a deliberate sign-out clears it and they get the plain page.
+ */
+const SESSION_ENDED_KEY = 'gvpn:session-ended';
+export const SESSION_ENDED_MARKER_TTL_MS = 2 * 60 * 1000;
+
+export function markSessionEnded(reason = SESSION_ENDED_EXPIRED, now = Date.now()) {
+  safeWriteJSON(SESSION_ENDED_KEY, { reason: reason === SESSION_ENDED_IDLE ? SESSION_ENDED_IDLE : SESSION_ENDED_EXPIRED, ts: now });
+}
+
+export function clearSessionEnded() {
+  safeRemove(SESSION_ENDED_KEY);
+}
+
+/** The reason a session ended in some tab within the last two minutes, or null (none, stale or unreadable). */
+export function sessionEndedRecently(now = Date.now()) {
+  const v = safeReadJSON(SESSION_ENDED_KEY, null);
+  const ok = v && typeof v === 'object' && Number.isFinite(v.ts) && v.ts <= now && now - v.ts <= SESSION_ENDED_MARKER_TTL_MS
+    && (v.reason === SESSION_ENDED_EXPIRED || v.reason === SESSION_ENDED_IDLE);
+  if (!ok) {
+    if (v !== null) safeRemove(SESSION_ENDED_KEY);
+    return null;
+  }
+  return v.reason;
+}
+
+/** Where the route guard sends a tab that is signed out: explained and kept after an interruption, else as before. */
+export function signedOutRedirectFor(location, now = Date.now()) {
+  const reason = sessionEndedRecently(now);
+  return reason ? sessionEndedRedirectFor(location, reason) : loginRedirectFor(location);
 }
 
 let restoredSpent = false;

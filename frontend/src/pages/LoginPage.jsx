@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { googleSignInApi } from '../lib/api/googleSignIn.js';
 import { appleSignInApi } from '../lib/api/appleSignIn.js';
 import { track } from '../lib/funnel';
-import { signInContextFor, storePendingNext, sameOriginNextPath } from '../lib/pendingNext';
+import { sessionEndedNotice, signInContextFor, storePendingNext, sameOriginNextPath } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import {
@@ -142,6 +142,15 @@ function signInContext() {
   try { return signInContextFor(safeNextPath(), window.location.search); } catch { return null; }
 }
 
+/**
+ * D8793 (#8793): why this sign-in was asked for, when a session was interrupted (`ended=1` after a 401, `ended=idle`
+ * after the inactivity sign-out) — for every kept page, not only the named areas. Null on an ordinary visit and after
+ * a chosen sign-out. Never names the page, project or account.
+ */
+function endedNotice() {
+  try { return sessionEndedNotice(safeNextPath(), window.location.search); } catch { return null; }
+}
+
 /** The step this load opens: a magic-link return opens its retry view. */
 function initialStep() {
   try {
@@ -234,6 +243,7 @@ export default function LoginPage() {
   useForcedLightTheme();
   const phone = usePhoneLayout();
   const [context] = useState(signInContext);
+  const [ended] = useState(endedNotice);
   const [step, setStep] = useState(initialStep);
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
@@ -1005,9 +1015,9 @@ export default function LoginPage() {
             {context.area.what} {context.area.who}
           </p>
         )}
-        {context?.ended && (
+        {ended && (
           <p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] leading-relaxed text-sky-900" data-testid="login-session-ended">
-            {context.ended}
+            {ended}
           </p>
         )}
         {banners}

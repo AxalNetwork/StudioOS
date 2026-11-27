@@ -6,8 +6,9 @@ import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
-  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
-  keepThroughSetup, loginRedirectFor, markPendingNextRedirected, markRestoredArrival, pendingNextRedirected,
+  clearDestinationAfterSetup, clearSessionEnded, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
+  keepThroughSetup, markPendingNextRedirected, markRestoredArrival, markSessionEnded, pendingNextRedirected,
+  SESSION_ENDED_IDLE, sessionEndedRedirectFor, signedOutRedirectFor,
 } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
@@ -1898,7 +1899,8 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
 
   if (!user) {
     // #4646: a Learning deep link comes back to the exact course, lesson or webinar after sign-in, through every method.
-    return <Navigate to={loginRedirectFor(location)} state={{ from: location }} replace />;
+    // D8793 (#8793): a tab signed out because the session ended in another tab keeps its page and is told why.
+    return <Navigate to={signedOutRedirectFor(location)} state={{ from: location }} replace />;
   }
 
   // Task #1 — route to the stored invite/deep-link target (at most once per
@@ -2488,7 +2490,12 @@ function AppInner() {
     } catch (e) { /* logout must never block the UI sign-out */ }
   }, [setUser]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (opts) => {
+    // D8793 (#8793): the 20-minute inactivity sign-out (`useInactivityTimeout`) is not a chosen one. It keeps this
+    // page and says why, and leaves the marker other tabs read; a chosen sign-out clears it, so they get the plain page.
+    const idle = opts?.reason === 'inactivity';
+    const to = idle ? sessionEndedRedirectFor(window.location, SESSION_ENDED_IDLE) : '/login';
+    if (idle) markSessionEnded(SESSION_ENDED_IDLE); else clearSessionEnded();
     await clearSession();
     // Full-document navigation to the sign-in screen (NOT client-side routing):
     // a fresh load fetches the current index.html + chunks rather than relying
@@ -2499,7 +2506,7 @@ function AppInner() {
     // chunk during the awaited teardown; the stale-chunk error from that is
     // absorbed calmly by RouteErrorBoundary + the vite:preloadError reload
     // (see main.jsx) — not by this navigation.
-    window.location.replace('/login');
+    window.location.replace(to);
   }, [clearSession]);
 
   // D5509 — capture a referral on entry or when the visitor opts in on that page.

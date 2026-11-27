@@ -164,7 +164,8 @@ test('every other area, and anything unsafe, goes to a bare /login as before', (
 
 test('the route guard uses the redirect, and the sign-in page reads the destination for every method', () => {
   const app = src('App.jsx');
-  assert.match(app, /<Navigate to=\{loginRedirectFor\(location\)\} state=\{\{ from: location \}\} replace \/>/);
+  // D8793 (#8793): `signedOutRedirectFor` is `loginRedirectFor` unless a session just ended in another tab.
+  assert.match(app, /<Navigate to=\{signedOutRedirectFor\(location\)\} state=\{\{ from: location \}\} replace \/>/);
   const login = src('pages/LoginPage.jsx');
   // The authenticator, Google and passkey paths each read the validated destination; the email link stores it first.
   const uses = login.match(/safeNextPath\(\)/g) || [];
