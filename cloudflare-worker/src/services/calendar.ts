@@ -455,23 +455,33 @@ export async function refreshMicrosoftAccessTokenFor(
   env: Env, userId: number, tok: { raw: string; wasPlaintext: boolean },
 ): Promise<string> {
   const { accessToken, refreshToken } = await refreshMicrosoftTokens(env, tok.raw);
-  if (refreshToken && refreshToken !== tok.raw) await storeRotatedMicrosoftToken(env, userId, refreshToken);
-  else if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
+  if (refreshToken && refreshToken !== tok.raw) await storeMicrosoftRefreshToken(env, userId, refreshToken, 'rotated');
+  else if (tok.wasPlaintext) await storeMicrosoftRefreshToken(env, userId, tok.raw, 'rolled_forward');
   return accessToken;
 }
 
 /**
- * The rotated token, encrypted, on the member's row. A failure is logged and not
- * thrown: the access token in hand still works, and the stored token stays the
- * one Microsoft issued at connect or at the last stored rotation.
+ * The member's refresh token, encrypted, on their row: a rotation (which moves
+ * `updated_at`) or a legacy plaintext row rolled forward (which does not). A
+ * failure is logged and not thrown: the access token in hand still works, and
+ * the stored token stays the one Microsoft issued at connect or at the last
+ * stored rotation. The tagged `sql` keeps `user_id = ?` text out of this file's
+ * refresh path, which the auth inventory would otherwise read as an ownership
+ * check on every route that refreshes a token (#4570).
  */
-async function storeRotatedMicrosoftToken(env: Env, userId: number, refreshToken: string): Promise<void> {
+async function storeMicrosoftRefreshToken(
+  env: Env, userId: number, plaintext: string, why: 'rotated' | 'rolled_forward',
+): Promise<void> {
   try {
-    const enc = await encryptString(env, refreshToken);
-    await env.DB.prepare('UPDATE microsoft_oauth_tokens SET refresh_token = ?, updated_at = ? WHERE user_id = ?')
-      .bind(enc, new Date().toISOString(), userId).run();
+    const enc = await encryptString(env, plaintext);
+    const sql = getSQL(env);
+    if (why === 'rotated') {
+      await sql`UPDATE microsoft_oauth_tokens SET refresh_token = ${enc}, updated_at = ${new Date().toISOString()} WHERE user_id = ${userId}`;
+    } else {
+      await sql`UPDATE microsoft_oauth_tokens SET refresh_token = ${enc} WHERE user_id = ${userId}`;
+    }
   } catch (e) {
-    console.warn('[CAL] ms rotated refresh token not stored', { user: userId, error: e instanceof Error ? e.name : 'unknown' });
+    console.warn('[CAL] ms refresh token not stored', { user: userId, why, error: e instanceof Error ? e.name : 'unknown' });
   }
 }
 
