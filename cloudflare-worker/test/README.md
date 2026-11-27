@@ -446,3 +446,4 @@ catalogue version only in the fixture.
 | `competitor_save_atomic_7814.test.ts` | D7814: transaction rollback, CAS, preserved evidence and whole-candidate validation. |
 - `research_company_classification_7821.test.ts` — D7821 native evidence, five states, code precedence, resumable maintenance and audited overrides.
 `capital_overview_6079.test.ts` (D6079) checks the scoped Overview read across permitted/refused identities, canonical meeting data and isolated failures.
+- `role_qualification_8688.test.ts` — D8688: the five role scenarios and a pending-review control, run through the real Worker on local synthetic data with a second tenant each. Their scenarios and fail-closed fixture are in `_role_qualification_8688.ts`, which `scripts/qualification/role-matrix.mjs` also runs.
