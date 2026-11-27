@@ -34,6 +34,7 @@ import { notify } from '../notify';
 import { PMF_INPUT_KEYS } from '../scoring/pmf';
 import { SCOPE_ORDER, VENTURE_MODEL_V1, type AnyScopeKey } from './model';
 import { confidenceWord, type StoredScope } from './store';
+import { hiddenDealIds, hiddenJson } from '../dealPreparation';
 
 export const REVIEW_CAP = 15;
 export const REASON_MIN = 10;
@@ -62,8 +63,8 @@ const STATEMENTS = {
   member: `SELECT role FROM project_members WHERE project_id = ? AND user_id = ? AND status = 'accepted' AND removed_at IS NULL LIMIT 1`,
   advisorShare: `SELECT enabled FROM venture_score_sharing WHERE project_id = ? AND audience = 'advisor' AND user_id = ?`,
   investorSwitch: `SELECT enabled FROM venture_score_sharing WHERE project_id = ? AND audience = 'investors' AND user_id = 0`,
-  listed: 'SELECT COUNT(*) AS n FROM deals WHERE project_id = ?',
-  dealProject: 'SELECT project_id FROM deals WHERE id = ?',
+  listed: 'SELECT COUNT(*) AS n FROM deals WHERE project_id = ? AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))',
+  dealProject: 'SELECT project_id FROM deals WHERE id = ? AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))',
   onDeal: `SELECT (EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = ? AND i.investor_user_id = ?)
               OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = ? AND k.investor_user_id = ?)) AS on_deal`,
   nda: `SELECT 1 AS present FROM pairwise_ndas n
@@ -138,11 +139,21 @@ export async function viewerOf(env: Env, user: User, project: { id: number; foun
   return null;
 }
 
-/** The investors' switch: the founder's row, or on once the venture is listed. */
+/**
+ * The investors' switch: the founder's row, or on once the venture is listed.
+ *
+ * D5454 (#5454, R4; `D5454-p4.md`): "listed" counts the venture's deals in `transactional` mode. A deal whose
+ * preparation is never released or unknown does not exist for any reader, so it lists nothing. A withdrawn or archived
+ * release still counts: every caller asks only for an investor already on one of the venture's deals (the score route
+ * and `dealSummary`/`deal_case` after `investorOnDeal` or `visibleDeal`, `dealCompareNote` after
+ * `requireComparableDeals`), which is the audience D5454 §3 keeps for an unlisted release; nobody reaches a score
+ * through this switch alone. A guard failure throws, so the switch is never read as on past it.
+ */
 export async function investorsMaySee(env: Env, projectId: number): Promise<{ on: boolean; set: boolean }> {
   const row = await env.DB.prepare(STATEMENTS.investorSwitch).bind(projectId).first<{ enabled: number }>();
   if (row) return { on: Number(row.enabled) === 1, set: true };
-  const listed = await env.DB.prepare(STATEMENTS.listed).bind(projectId).first<{ n: number }>();
+  const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
+  const listed = await env.DB.prepare(STATEMENTS.listed).bind(projectId, hidden).first<{ n: number }>();
   return { on: Number(listed?.n ?? 0) > 0, set: false };
 }
 
@@ -152,9 +163,11 @@ export async function investorOnDeal(env: Env, userId: number, dealId: number): 
   return Number(row?.on_deal) === 1;
 }
 
+/** D5454: a deal the preparation guard hides (`transactional`) has no venture here: the route answers 404. */
 export async function dealProject(env: Env, dealId: number): Promise<number | null> {
   if (!Number.isSafeInteger(dealId) || dealId < 1) return null;
-  const row = await env.DB.prepare(STATEMENTS.dealProject).bind(dealId).first<{ project_id: number | null }>();
+  const hidden = hiddenJson(await hiddenDealIds(env, 'transactional'));
+  const row = await env.DB.prepare(STATEMENTS.dealProject).bind(dealId, hidden).first<{ project_id: number | null }>();
   return row?.project_id == null ? null : Number(row.project_id);
 }
 
