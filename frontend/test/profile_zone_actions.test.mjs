@@ -268,7 +268,8 @@ const PROFILES = {
     // network picker is now supplied by its page.
     // TWENTY-THIRD: `network/introductions`'s `Offer one` (D6637), supplied by its page.
     // TWENTY-FOURTH: `research/markets`'s `Edit thesis` (D7171 part 2).
-    handlers: 25,
+    // TWENTY-FIFTH: `network/introductions`'s `Request an intro` (D6257), the page's request sheet.
+    handlers: 26,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -1756,7 +1757,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 8, advisor: 5, partner: 3 }[name], `${name}: the reader saw ${primaries.length} primaries`); // D4844: Proof's Ask for consent is secondary now
+    assert.equal(primaries.length, { founder: 0, investor: 9, advisor: 5, partner: 3 }[name], `${name}: the reader saw ${primaries.length} primaries`); // D4844: Proof's Ask for consent is secondary now
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.
