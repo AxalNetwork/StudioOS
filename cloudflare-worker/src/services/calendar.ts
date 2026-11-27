@@ -120,6 +120,18 @@ const MICROSOFT_SCOPES = [
   'User.Read',
 ];
 
+/**
+ * #9028 — whether a Microsoft grant's `scope` carries Calendars.ReadWrite, the
+ * permission every calendar copy and Teams meeting needs. Microsoft may name it
+ * bare or under the Graph resource (`https://graph.microsoft.com/…`), and scope
+ * names are case-insensitive. A grant without it is refused at the callback.
+ */
+export function microsoftGrantHasCalendarScope(scope: unknown): boolean {
+  return String(scope ?? '').split(/[\s,]+/)
+    .map((s) => s.replace(/^https:\/\/graph\.microsoft\.com\//i, '').toLowerCase())
+    .includes('calendars.readwrite');
+}
+
 function msTenant(env: Env): string {
   return env.MICROSOFT_TENANT_ID || 'common';
 }
@@ -402,7 +414,15 @@ export async function exchangeMicrosoftCode(env: Env, code: string): Promise<any
   return r.json();
 }
 
-export async function refreshMicrosoftAccessToken(env: Env, refreshToken: string): Promise<string> {
+/**
+ * #9028 — one refresh at Microsoft's token endpoint: the access token, and the
+ * refresh token when Microsoft rotated it (null when the answer carries none).
+ * Callers go through `refreshMicrosoftAccessTokenFor`, which stores a rotated
+ * token; nothing else refreshes, so no caller can drop one.
+ */
+async function refreshMicrosoftTokens(
+  env: Env, refreshToken: string,
+): Promise<{ accessToken: string; refreshToken: string | null }> {
   if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
   const body = new URLSearchParams({
     refresh_token: refreshToken,
@@ -418,7 +438,41 @@ export async function refreshMicrosoftAccessToken(env: Env, refreshToken: string
     console.warn('[CAL] ms refresh', r.status);
     throw new Error(`refresh_failed:${r.status}`);
   }
-  return ((await r.json()) as any).access_token as string;
+  const json = (await r.json()) as { access_token?: unknown; refresh_token?: unknown };
+  const rotated = typeof json.refresh_token === 'string' && json.refresh_token ? json.refresh_token : null;
+  return { accessToken: json.access_token as string, refreshToken: rotated };
+}
+
+/**
+ * #9028 — a member's Microsoft access token, keeping their connection alive.
+ * Microsoft may return a new refresh token on any refresh; when it does, the new
+ * one is encrypted and stored on the member's `microsoft_oauth_tokens` row with
+ * `updated_at`, so the next refresh uses it. When it does not, the stored token
+ * stays, and a legacy plaintext row is rolled forward to ciphertext as before.
+ * Throws `refresh_failed:<status>` on a refused refresh, like the refresh itself.
+ */
+export async function refreshMicrosoftAccessTokenFor(
+  env: Env, userId: number, tok: { raw: string; wasPlaintext: boolean },
+): Promise<string> {
+  const { accessToken, refreshToken } = await refreshMicrosoftTokens(env, tok.raw);
+  if (refreshToken && refreshToken !== tok.raw) await storeRotatedMicrosoftToken(env, userId, refreshToken);
+  else if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
+  return accessToken;
+}
+
+/**
+ * The rotated token, encrypted, on the member's row. A failure is logged and not
+ * thrown: the access token in hand still works, and the stored token stays the
+ * one Microsoft issued at connect or at the last stored rotation.
+ */
+async function storeRotatedMicrosoftToken(env: Env, userId: number, refreshToken: string): Promise<void> {
+  try {
+    const enc = await encryptString(env, refreshToken);
+    await env.DB.prepare('UPDATE microsoft_oauth_tokens SET refresh_token = ?, updated_at = ? WHERE user_id = ?')
+      .bind(enc, new Date().toISOString(), userId).run();
+  } catch (e) {
+    console.warn('[CAL] ms rotated refresh token not stored', { user: userId, error: e instanceof Error ? e.name : 'unknown' });
+  }
 }
 
 export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> {
@@ -1787,8 +1841,7 @@ export async function syncUserToMicrosoft(
 ): Promise<SyncSummary> {
   const tok = await loadRefreshToken(env, 'microsoft_oauth_tokens', userId);
   if (!tok) throw new Error('not_connected');
-  const accessToken = await refreshOrRefuse(() => refreshMicrosoftAccessToken(env, tok.raw));
-  if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
+  const accessToken = await refreshOrRefuse(() => refreshMicrosoftAccessTokenFor(env, userId, tok));
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'microsoft', accessToken);
 }
 
