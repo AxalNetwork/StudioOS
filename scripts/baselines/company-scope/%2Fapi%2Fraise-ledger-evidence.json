@@ -1,0 +1,14 @@
+{
+  "GET /api/raise-ledger-evidence": {
+    "kind": "filter"
+  },
+  "POST /api/raise-ledger-evidence/selections": {
+    "kind": "target"
+  },
+  "POST /api/raise-ledger-evidence/selections/:uid/review": {
+    "kind": "target"
+  },
+  "POST /api/raise-ledger-evidence/selections/:uid/withdraw": {
+    "kind": "target"
+  }
+}

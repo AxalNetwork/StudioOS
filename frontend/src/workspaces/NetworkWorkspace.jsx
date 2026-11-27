@@ -373,7 +373,10 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       {/* D1357 (#3572, RI1): "Let my team see who I know", Network's own setting for it. */}
       {slug === 'relationships' && <Suspense fallback={null}><SharingCard testId="network-sharing" /></Suspense>}
       {/* D1357 (#3572, RI4–RI6): what teammates asked of you, follow-ups, and every introduction asked or made. */}
-      {slug === 'introductions' && <Suspense fallback={null}><IntroductionsDesk /></Suspense>}
+      {/* D6257 (#6257, NW3): on the investor's zone the log is the first of the
+          canvas's three sections, From your team; the body below draws Curated
+          matches and Your asks, each counted apart. */}
+      {slug === 'introductions' && <Suspense fallback={null}><IntroductionsDesk variant={role === 'investor' ? 'investor' : 'default'} /></Suspense>}
       {body}
     </WorkspaceShell>
   );
