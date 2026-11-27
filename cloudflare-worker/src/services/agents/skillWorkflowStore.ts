@@ -138,7 +138,38 @@ export async function readVersion(env: Env, owner: OwnerScope, uid: string, vers
   return row ? { id: row.id, definition: JSON.parse(row.definition_json), definition_hash: row.definition_hash } : null;
 }
 
-export type RunScope = { kind: 'company'; company_id: number } | { kind: 'project'; project_id: number };
+/**
+ * D4535 part 2: every workflow in the owner scope, newest change first, with
+ * no definition body. The scope is bound, so another company's reads as none.
+ */
+export async function listWorkflows(env: Env, owner: OwnerScope): Promise<Array<{
+  uid: string; slug: string; status: string; current_version: number; has_draft: boolean; name: string | null; updated_at: string;
+}>> {
+  const [scope, company] = ownerCols(owner);
+  const rows = (await env.DB.prepare(
+    `SELECT uid, slug, status, current_version, draft_json IS NOT NULL AS has_draft,
+            json_extract(draft_json, '$.name') AS name, updated_at
+       FROM agent_skill_workflows WHERE scope = ? AND IFNULL(company_id, 0) = IFNULL(?, 0)
+      ORDER BY updated_at DESC, id DESC LIMIT 200`,
+  ).bind(scope, company).all<any>()).results ?? [];
+  return rows.map((r) => ({
+    uid: r.uid, slug: r.slug, status: r.status, current_version: Number(r.current_version),
+    has_draft: !!r.has_draft, name: r.name ?? null, updated_at: r.updated_at,
+  }));
+}
+
+/** D4535 part 2: a workflow's published versions (number, hash, policy, time), inside the owner scope. */
+export async function listVersions(env: Env, owner: OwnerScope, uid: string):
+  Promise<Array<{ version: number; definition_hash: string; policy_version: string; published_at: string }> | null> {
+  const w = await readWorkflow(env, owner, uid);
+  if (!w) return null;
+  const rows = (await env.DB.prepare(
+    'SELECT version, definition_hash, policy_version, published_at FROM agent_skill_workflow_versions WHERE workflow_id = ? ORDER BY version',
+  ).bind(w.id).all<any>()).results ?? [];
+  return rows.map((r) => ({ version: Number(r.version), definition_hash: r.definition_hash, policy_version: r.policy_version, published_at: r.published_at }));
+}
+
+export type RunScope ={ kind: 'company'; company_id: number } | { kind: 'project'; project_id: number };
 const runScopeCols = (s: RunScope) => [s.kind, s.kind === 'company' ? s.company_id : null, s.kind === 'project' ? s.project_id : null] as const;
 
 export type AdmittedRun = {
