@@ -152,7 +152,7 @@ router.get('/', (c) =>
   answer(c, async () => {
     const user = await requireAuth(c);
     const q = c.req.query();
-    return c.json(await listForRequester(c.env.DB, user.id, { state: q.state, cursor: q.cursor, limit: q.limit }));
+    return c.json(await listForRequester(c.env.DB, user.id, { state: q.state, next_actor: q.next_actor, cursor: q.cursor, limit: q.limit }));
   }),
 );
 router.post('/', (c) =>

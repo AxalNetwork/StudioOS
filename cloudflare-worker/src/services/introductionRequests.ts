@@ -574,15 +574,24 @@ function pageOut(rows: any[], limit: number, view: (r: any) => any) {
   return { items: page.map(view), next_cursor: rows.length > limit ? encodeCursor(page[page.length - 1]) : null };
 }
 
-export async function listForRequester(db: DB, userId: number, q: { state?: string | null; cursor?: string | null; limit?: string | null }) {
+/** Who acts next; the requester's desk draws one lane per value (D9068, NIE01). */
+export const NEXT_ACTORS = ['requester', 'operator', 'target', 'none'] as const;
+
+export async function listForRequester(db: DB, userId: number, q: { state?: string | null; next_actor?: string | null; cursor?: string | null; limit?: string | null }) {
   const limit = pageSize(q.limit);
   const cur = decodeCursor(q.cursor);
   if (q.state && !REQUEST_STATES.includes(q.state as RequestState)) throw refusal(400, 'state_invalid', 'That is not a request state.');
-  const state = q.state || null;
+  if (q.next_actor && !(NEXT_ACTORS as readonly string[]).includes(q.next_actor)) throw refusal(400, 'next_actor_invalid', 'That is not who acts next.');
+  const state = q.state || null, actor = q.next_actor || null;
   // The total and the page share one WHERE, so the count is the whole set the pages walk.
-  const total = await db.prepare(`SELECT COUNT(*) AS n FROM network_intro_requests r WHERE r.requester_user_id = ? AND (? IS NULL OR r.state = ?)`).bind(userId, state, state).first();
-  const rows = (await db.prepare(REQUEST_SELECT + ` WHERE r.requester_user_id = ? AND (? IS NULL OR r.state = ?)` + PAGE_TAIL).bind(userId, state, state, ...cursorBinds(cur, limit)).all()).results || [];
-  return { total: total?.n ?? 0, ...pageOut(rows, limit, (r) => requesterView(r)) };
+  const WHERE = ` WHERE r.requester_user_id = ? AND (? IS NULL OR r.state = ?) AND (? IS NULL OR r.next_actor = ?)`;
+  const binds = [userId, state, state, actor, actor];
+  const total = await db.prepare(`SELECT COUNT(*) AS n FROM network_intro_requests r` + WHERE).bind(...binds).first();
+  const rows = (await db.prepare(REQUEST_SELECT + WHERE + PAGE_TAIL).bind(...binds, ...cursorBinds(cur, limit)).all()).results || [];
+  // Every lane's count from one read, whatever the filter: a lane with nothing in it is a counted zero.
+  const counted = (await db.prepare(`SELECT next_actor, COUNT(*) AS n FROM network_intro_requests WHERE requester_user_id = ? GROUP BY next_actor`).bind(userId).all()).results || [];
+  const lanes = Object.fromEntries(NEXT_ACTORS.map((a) => [a, Number(counted.find((x: any) => x.next_actor === a)?.n ?? 0)]));
+  return { total: total?.n ?? 0, lanes, ...pageOut(rows, limit, (r) => requesterView(r)) };
 }
 
 // ── Operator ───────────────────────────────────────────────────────────────────────────────────────────────────

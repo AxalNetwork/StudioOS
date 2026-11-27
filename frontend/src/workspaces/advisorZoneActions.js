@@ -191,7 +191,8 @@ export const ADVISOR_ZONE_ACTIONS = {
   // the response has carried the counterpart's since the partner side's work.
   // The zone opens the partner panel's own `ConsentLog` over its rows.
   'network/introductions': [
-    { label: 'New introduction', unbuilt: 'introductions arrive as propositions; none is composed here' },
+    // D9068 (#9068): an advisor asks Axal for an introduction the same way as every licence (D7678, NIE09B).
+    { label: 'New introduction', to: '/network/introductions/requests/new' },
     { label: 'Consent log', kind: 'handler', handler: 'consentLog' },
     { label: 'Export', kind: 'export' },
   ],

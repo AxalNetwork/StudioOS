@@ -185,9 +185,9 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    // Was 'the request flow lives on a surface a founder cannot open', which
-    // stopped being true when that surface, the AI Matches page, was removed.
-    { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
+    // Was 'the request flow lives on a surface a founder cannot open', then a gap once the AI Matches page went.
+    // D9068 (#9068): the request through Axal (D7678's request sheet), on /api/intro-requests.
+    { label: 'Request an intro', to: '/network/introductions/requests/new' },
     { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
     { label: 'Export', kind: 'export' },
   ],
