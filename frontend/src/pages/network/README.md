@@ -5,6 +5,8 @@ The pages that read the shared Network directory (`/api/network/directory`, D767
 | Path | What it is |
 |---|---|
 | `NetworkPeoplePage.jsx` | D9025 (#9025): Network › People, the Discoverable scope's search with the server's total and cursor pages, and the Person Sheet at `/network/people/:uid`. |
+| `NetworkOrganizationsDirectory.jsx` | D9071 (#9071): Network › Organizations' Shared directory scope, each organization with its distinct people by status, and the scope control. |
+| `NetworkOrganizationPage.jsx` | D9071: one organization, people first (`/network/organizations/:uid`), with the Person Sheet in its context. |
 | `directory/` | The pieces every directory page shares: the address model, the page read, the search box, total and pager, the Person Sheet and the viewer's private overlay. |
 
 ## The rules for adding here

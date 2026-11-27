@@ -23,6 +23,7 @@ import {
 import PersonSheet from './directory/PersonSheet.jsx';
 import { day, focusLine, readListState, writeListState } from './directory/directoryModel.js';
 import { useDirectoryPage } from './directory/useDirectoryPage.js';
+import { orgPath } from './directory/orgModel.js';
 import { networkDirectoryApi } from '../../lib/api/networkDirectory.js';
 
 const NOUN = ['person', 'people'];
@@ -152,7 +153,7 @@ export default function NetworkPeoplePage({ api = networkDirectoryApi }) {
         ) : null}
         <p className={`m-0 text-[11.5px] ${MUTED}`}>The shared directory lists published profiles from named sources. A listing is not a relationship, and nobody is contacted when you open, save or note someone.</p>
       </section>
-      {uid ? <PersonSheet uid={uid} onClose={closeSheet} api={api} /> : null}
+      {uid ? <PersonSheet uid={uid} onClose={closeSheet} api={api} orgHref={(orgUid) => orgPath(orgUid)} /> : null}
     </div>
   );
 }
