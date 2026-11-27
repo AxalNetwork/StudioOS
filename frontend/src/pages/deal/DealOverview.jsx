@@ -9,8 +9,9 @@
  * attention and Changed, and Open scorecard; no overall score) beside What's
  * new (material changes, dated); Investment case (why this deal: summary,
  * thesis fit and its reasons, main evidence; beside it the firm's questions
- * and risks and what the scorecard is missing) beside Your position. Each
- * block reads on its own and fails on its own, with Try again. A founder and
+ * and risks and what the scorecard is missing; one case read since D9109)
+ * beside Your position. Each block reads on its own and fails on its own,
+ * with Try again. A founder and
  * studio staff keep the scorecard and the deal's details; the rest is the
  * investor's.
  */
@@ -19,11 +20,11 @@ import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { reportError } from '../../lib/log';
 import { dealContextApi } from '../../lib/api/dealContext.js';
-import { dealViewsApi } from '../../lib/api/dealViews.js';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
 import { notesHref, tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
 import {
-  CASE_TAGS, caseNotes, missingEvidence, scoreSummary, termsAtGlance, thesisFitOf, whatsNewList, whatsNewOf,
+  caseView, scoreSummary, termsAtGlance, whatsNewList, whatsNewOf,
 } from './dealFrameModel';
 import { DealDeckCard } from './DealDeck';
 import { DealStrip, useScopeStrips } from '../../components/scoring/scorecard/Scorecard';
@@ -93,14 +94,17 @@ function WhatsNew({ dealId, className = '' }) {
   );
 }
 
-/** One read with its own state and Try again. `fetcher` is stable for the key. */
-function useRead(fetcher, key, where) {
+/**
+ * One read with its own state and Try again. `fetcher` is stable for the key. With `keep`, Try again
+ * on a read that answered keeps that answer (marked `reloading`) until the new one arrives (D9109).
+ */
+function useRead(fetcher, key, where, { keep = false } = {}) {
   const [read, setRead] = useState({ status: 'loading' });
   const load = useCallback(() => {
     let alive = true;
-    setRead({ status: 'loading' });
+    setRead((was) => (keep && was.status === 'ready' ? { ...was, reloading: true } : { status: 'loading' }));
     fetcher().then((data) => { if (alive) setRead({ status: 'ready', data }); })
-      .catch((e) => { reportError(`DealOverview:${where}`, e); if (alive) setRead({ status: 'unreadable' }); });
+      .catch((e) => { reportError(`DealOverview:${where}`, e); if (alive) setRead({ status: 'unreadable', error: e }); });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
@@ -165,21 +169,82 @@ function ScoreSummary({ dealId, strips, className = '' }) {
 }
 
 /**
- * DE04's Investment case. Why this deal: the deal's summary, the investor's thesis fit with its reasons,
- * and the main evidence, which opens on the Evidence tab (reading it here would log an open of the
- * founder's evidence the investor did not make). Beside it: the firm's notes tagged Question or Risk,
- * and the scopes the scorecard has not enough recorded for. Each part reads and fails on its own.
+ * DE04's Investment case (D9109, #9109), from the one case read (`GET /api/deals/:id/case`, D6173).
+ * Why this deal: the deal's summary, the investor's thesis fit with its reasons, and the main evidence
+ * as counts (the case read logs no evidence open; the Evidence tab, where the open is real, stays the
+ * way in). Beside it: the firm's notes tagged Question or Risk, then what the scorecard is missing.
+ * Each block says why when it has nothing, and one Try again reads the case again while the blocks
+ * that drew keep drawing.
  */
-function InvestmentCase({ deal, strips, className = '' }) {
+function InvestmentCase({ deal, className = '' }) {
   const id = deal.id;
-  const [fitRead, retryFit] = useRead(() => dealViewsApi.fit([id]), `fit:${id}`, 'fit');
-  const [qRead, retryQ] = useRead(() => dealContextApi.notes(id, { limit: 3, tag: 'Question' }), `q:${id}`, 'questions');
-  const [rRead, retryR] = useRead(() => dealContextApi.notes(id, { limit: 3, tag: 'Risk' }), `r:${id}`, 'risks');
-  const fit = thesisFitOf(fitRead, id);
-  const notes = caseNotes({ Question: qRead, Risk: rRead });
-  const missing = strips.status === 'loading' ? { state: 'loading' }
-    : strips.status === 'error' ? { state: 'unreadable' } : missingEvidence(stripOf(strips.items.get(Number(id))));
-  const retryNotes = () => { if (qRead.status === 'unreadable') retryQ(); if (rRead.status === 'unreadable') retryR(); };
+  const { company } = useActiveCompany();
+  const [read, retry] = useRead(() => dealContextApi.investmentCase(id), `case:${id}:${company?.id ?? ''}`, 'case', { keep: true });
+  const v = caseView(read);
+  if (v.state === 'hidden') return null;
+  const reading = (testId) => <p className={`m-0 ${SUB}`} aria-live="polite" data-testid={testId}>Reading…</p>;
+  const failed = (line, testId) => (
+    <>
+      <p className={`m-0 ${SUB}`} data-testid={testId}>{line}</p>
+      <TryAgain onClick={retry} testId={`${testId}-retry`} />
+    </>
+  );
+  /** One block's state: loading, its reason with Try again, or its own reason when nothing is recorded. */
+  const unless = (b, testId, recorded) => {
+    if (b.state === 'loading') return reading(`${testId}-reading`);
+    if (b.state === 'unreadable') return failed(b.line, `${testId}-unreadable`);
+    if (b.state === 'not_recorded') return <p className={`m-0 ${SUB}`} data-testid={`${testId}-none`}>{b.line}</p>;
+    return recorded();
+  };
+  let why; let open;
+  if (v.state === 'loading') { why = reading('deal-case-why-reading'); open = reading('deal-case-open-reading'); }
+  else if (v.state === 'unreadable') { why = failed(v.why, 'deal-case-why-unreadable'); open = failed(v.open, 'deal-case-open-unreadable'); }
+  else if (v.state === 'firm_required') {
+    const ask = <p className={`m-0 ${SUB}`}>{v.line} Pick it in the company switcher, then the case reads again.</p>;
+    why = <div data-testid="deal-case-firm">{ask}</div>;
+    open = <div data-testid="deal-case-firm-open">{ask}</div>;
+  } else {
+    why = (
+      <>
+        <div className="flex flex-col gap-1" data-testid="deal-case-fit">
+          {unless(v.fit, 'deal-case-fit', () => (
+            <>
+              <b className="text-axal-ink dark:text-gray-100">{v.fit.line}</b>
+              {v.fit.reasons.length > 0 && <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100">{v.fit.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
+            </>
+          ))}
+        </div>
+        <div className="flex flex-col gap-1" data-testid="deal-case-evidence">
+          <span className="text-axal-muted dark:text-gray-400">Main evidence</span>
+          {unless(v.evidence, 'deal-case-evidence', () => (
+            <>
+              <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100" data-testid="deal-case-evidence-list">
+                {v.evidence.rows.map((g) => <li key={g.key}>{g.text}{g.newest && <span className="text-axal-muted dark:text-gray-400"> · newest {g.newest}</span>}</li>)}
+              </ul>
+              {v.evidence.partial && <p className={`m-0 ${SUB}`} data-testid="deal-case-evidence-partial">{v.evidence.partial}</p>}
+            </>
+          ))}
+          <Link to={tabHref(id, 'evidence')} className={LINK_ALONE}>Open the shared evidence</Link>
+        </div>
+      </>
+    );
+    open = (
+      <>
+        {unless(v.notes, 'deal-case-notes', () => (
+          <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100" data-testid="deal-case-notes">
+            {v.notes.rows.map((n) => <li key={n.uid}><span className="text-axal-muted dark:text-gray-400">{n.tag}: </span>{n.text}</li>)}
+          </ul>
+        ))}
+        {v.notes.state === 'not_recorded' && <Link to={notesHref(id)} className={LINK_ALONE} data-testid="deal-case-notes-add">Add one in Firm notes</Link>}
+        {v.notes.state === 'recorded' && v.notes.more && <Link to={notesHref(id)} className={LINK_ALONE} data-testid="deal-case-notes-more">{v.notes.more}</Link>}
+        <div className="flex flex-col gap-1" data-testid="deal-case-missing">
+          {unless(v.missing, 'deal-case-missing', () => (
+            <p className={`m-0 ${v.missing.thin ? 'text-axal-ink dark:text-gray-100' : SUB}`} data-testid="deal-case-missing-line">{v.missing.line}</p>
+          ))}
+        </div>
+      </>
+    );
+  }
   return (
     <section className={`${CARD} flex min-w-0 flex-col gap-3 px-4 py-4 ${className}`} data-testid="deal-case">
       <h3 className={H3}>Investment case</h3>
@@ -189,53 +254,11 @@ function InvestmentCase({ deal, strips, className = '' }) {
           {deal.description
             ? <p className="m-0 text-axal-ink dark:text-gray-100" data-testid="deal-case-summary">{deal.description}</p>
             : <p className={`m-0 ${SUB}`} data-testid="deal-case-summary">No summary is recorded on this deal.</p>}
-          <div className="flex flex-col gap-1" data-testid="deal-case-fit">
-            {fit.state === 'loading' && <p className={`m-0 ${SUB}`}>Reading your thesis fit…</p>}
-            {fit.state === 'unreadable' && (
-              <>
-                <p className={`m-0 ${SUB}`}>{fit.line || 'Fit to your thesis could not be read.'} That is not a claim that it does not fit.</p>
-                <TryAgain onClick={retryFit} testId="deal-case-fit-retry" />
-              </>
-            )}
-            {fit.state === 'scored' && (
-              <>
-                <b className="text-axal-ink dark:text-gray-100">{fit.line}</b>
-                {fit.reasons.length > 0 && <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100">{fit.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
-              </>
-            )}
-            {['unavailable', 'not_set', 'not_enough'].includes(fit.state) && <p className={`m-0 ${SUB}`}>{fit.line}</p>}
-          </div>
-          <p className="m-0" data-testid="deal-case-evidence">
-            <span className="text-axal-muted dark:text-gray-400">Main evidence: </span>
-            <Link to={tabHref(id, 'evidence')} className={LINK_ALONE}>Open the shared evidence</Link>
-          </p>
+          {why}
         </div>
         <div className="flex min-w-0 flex-col gap-2 text-[12.5px] leading-[1.55]" data-testid="deal-case-open">
           <span className={EYE}>Open questions · risks</span>
-          {notes.state === 'loading' && <p className={`m-0 ${SUB}`}>Reading your firm’s notes…</p>}
-          {notes.state === 'unreadable' && (
-            <>
-              <p className={`m-0 ${SUB}`}>Your firm’s questions and risks could not be read. That is not a claim that there are none.</p>
-              <TryAgain onClick={retryNotes} testId="deal-case-notes-retry" />
-            </>
-          )}
-          {notes.state === 'none' && <p className={`m-0 ${SUB}`} data-testid="deal-case-notes-none">No note at your firm is tagged {CASE_TAGS.join(' or ')}. <Link to={notesHref(id)} className={LINK}>Add one in Firm notes</Link></p>}
-          {notes.state === 'some' && (
-            <ul className="m-0 list-disc pl-4 text-axal-ink dark:text-gray-100" data-testid="deal-case-notes">
-              {notes.rows.map((n) => <li key={n.uid}><span className="text-axal-muted dark:text-gray-400">{n.tag}: </span>{n.text}</li>)}
-            </ul>
-          )}
-          {notes.state === 'some' && notes.more > 0 && <Link to={notesHref(id)} className={LINK_ALONE} data-testid="deal-case-notes-more">{notes.more} more in Firm notes</Link>}
-          <div data-testid="deal-case-missing">
-            {missing.state === 'loading' && <p className={`m-0 ${SUB}`}>Reading the scorecard…</p>}
-            {missing.state === 'unreadable' && (
-              <>
-                <p className={`m-0 ${SUB}`}>What the scorecard is missing could not be read.</p>
-                <TryAgain onClick={strips.retry} testId="deal-case-missing-retry" />
-              </>
-            )}
-            {['some', 'none', 'closed'].includes(missing.state) && <p className={`m-0 ${missing.state === 'some' ? 'text-axal-ink dark:text-gray-100' : SUB}`}>{missing.line}</p>}
-          </div>
+          {open}
         </div>
       </div>
     </section>
@@ -251,7 +274,7 @@ export default function DealOverview({ deal, investor, position = null }) {
       <div className="grid gap-3.5 lg:grid-cols-12">
         <ScoreSummary dealId={deal.id} strips={strips} className={investor ? 'lg:col-span-7' : 'lg:col-span-12'} />
         {investor && <WhatsNew dealId={deal.id} className="lg:col-span-5" />}
-        {investor && <InvestmentCase deal={deal} strips={strips} className="lg:col-span-7" />}
+        {investor && <InvestmentCase deal={deal} className="lg:col-span-7" />}
         {investor && position && <div className="flex min-w-0 flex-col lg:col-span-5">{position}</div>}
       </div>
       <div className="grid gap-3.5 lg:grid-cols-3">
