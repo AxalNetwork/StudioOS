@@ -7,7 +7,7 @@
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BUDGET, LANDING_BUDGET, QUEUE_WORKFLOWS, botKind, candidateRows, evenlySpaced, greenAt, landingReport, mergeCommit, providerFromLog,
-  pushesMissingQueueRun, queueDeadline, queueEntries, jobSample, readyAt, report, slimEvents, unionRuns } from './lib/ciScorecard.mjs';
+  prProvenance, pushesMissingQueueRun, queueDeadline, queueEntries, jobSample, readyAt, report, slimEvents, unionRuns } from './lib/ciScorecard.mjs';
 import { dispatchable, KINDS } from './landing-bot/rules.mjs';
 import { REQUIRED } from './lib/requiredChecks.mjs';
 
@@ -81,8 +81,8 @@ async function collectPrs(runs, start, now) {
     const at = row?.merged_at || events.findLast(e => e.event === 'merged')?.created_at;
     const mergedAt = Date.parse(at) >= start && Date.parse(at) <= now ? at : null;
     const allEntries = queueEntries(events);
-    // D6479: the events the landing rows read, kept small.
-    const pr = { number, mergeCommit: mergeCommit(events), mergedAt, allEntries, events: slimEvents(events),
+    // D6479: the events the landing rows read, kept small. D9027: the slot its commits' trailers name, from the same events.
+    const pr = { number, mergeCommit: mergeCommit(events), mergedAt, allEntries, events: slimEvents(events), provenance: prProvenance(events),
       entries: allEntries.filter(e => Date.parse(e.start) <= now && (!e.end || Date.parse(e.end) >= start)),
       readyAt: mergedAt ? readyAt(events, { createdAt: row?.created_at, mergedAt }) : null, greenAt: null };
     // One read per merged PR: the pull_request runs on its merged head, for the time it went green.
