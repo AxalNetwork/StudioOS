@@ -7,7 +7,8 @@
 | `repoControl.ts` | One object per repository: durable deduplication, issue leases, append-only audit and reconciliation; D5990: one policy decision per SHA and `policy_version`, posted as the `merge-control/policy` check run. |
 | `github.ts` | Short-lived GitHub App installation token and bounded GitHub API client; D5990: the policy check's separate `checks: write` scope. |
 | `policy.ts` | D5620: the bundled landing-policy classifier and `policy_version`, the deployed commit injected with `wrangler deploy --define`; a build without it refuses to load. |
-| `policyCheck.ts` | D5620: fail-closed `evaluate({base, head})` over the compare file list; cap, missing patch, API error, exception and timeout are T2. D5990: `policyTarget`, `decide` (a T2 merge-group head stays action_required until sign-off) and `checkRunBody`. |
+| `policyCheck.ts` | D5620: fail-closed `evaluate({base, head})` over the compare file list; cap, missing patch, API error, exception and timeout are T2. D5990: `policyTarget`, `decide` (a T2 merge-group head passes only on D8834 sign-off evidence) and `checkRunBody`. |
+| `signoff.ts` | D8834: the owner-only `POST /signoff` route, the exact head-SHA sign-off key, and the evidence that binds a T2 merge-group candidate to its signed pull request head. |
 | `types.ts` | Delivery/run contracts and generated bindings plus owner-installed secrets. |
 | `lib/` | Pure cancellation and fencing policies. |
 | `runnerScaleProvider.ts` | D7889: unavailable live-provider boundary and bounded, checkpointed inventory collection; no provisioning API is enabled. |

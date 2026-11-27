@@ -5,6 +5,7 @@
 | `control.test.ts` | Real SQLite state, restart, deduplication, retries, signatures and policy. |
 | `policy_check_5620.test.ts` | D5620: one classifier, refused build without `policy_version`, T0/T1 pass, T2 and every failure never pass. |
 | `policy_check_run_5990.test.ts` | D5990: the `merge-control/policy` check run against a fake GitHub: conclusions, the T2 merge-group rule, fail-closed errors and timeout, one conclusion per SHA, kill switch, labels/comments/reviews, append-only audit and the webhook fields. |
+| `signoff_8834.test.ts` | D8834: owner sign-off route and the T2 merge-group rule: exact-SHA key, candidate binding, fail-closed lookup errors, audit, owner token and ignored labels/comments/reviews. |
 | `repair_policy_5622.test.ts` | D5622: CI repair eligibility and breaker inputs. |
 | `runtime-loader.mjs` | Node-only platform base-class adapter and stand-in for the build's `policy_version` define; never imported by production. |
 | `runner_scale_7889.test.ts` | D7889: simulated 1/5/10/50 stages, CAS/restart, drain races, lifecycle budgets, complete inventory and credential-free supervisor actions. |

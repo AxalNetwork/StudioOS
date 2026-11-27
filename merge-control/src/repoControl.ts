@@ -1,4 +1,4 @@
-/** D5618: one durable coordinator per repository, insert-only audit and restart-safe event/lease state. D5990: the policy check run. */
+/** D5618: one durable coordinator per repository, insert-only audit and restart-safe event/lease state. D5990: the policy check run. D8834: owner sign-off. */
 import { DurableObject } from 'cloudflare:workers';
 import type { Delivery, Env, GithubApi, Run } from './types.ts';
 import { changeLease, type LeaseInput, type LeaseState } from './lib/lease.ts';
@@ -7,9 +7,14 @@ import { githubClient, POLICY_PERMISSIONS } from './github.ts';
 import { checkRunBody, decide, evaluate, policyTarget } from './policyCheck.ts';
 import type { Decision, PolicyTarget } from './policyCheck.ts';
 import { POLICY_VERSION } from './policy.ts';
+import { currentSignoff, mergeGroupSignoff, prHeadKey, signedOffCheckRunBody, signoffKey } from './signoff.ts';
+import type { RecordedHead, Signoff, SignoffInput, SignoffOutcome } from './signoff.ts';
 
-/** D5990: one decision per head and policy_version; `posted` turns true once its check run is created. */
-interface StoredDecision { decision: Decision; posted: boolean }
+/**
+ * D5990: one decision per head and policy_version; `posted` turns true once its check run is created.
+ * D8834: `signedOff` turns true once the sign-off's success has been posted on a pull request head.
+ */
+interface StoredDecision { decision: Decision; posted: boolean; signedOff?: boolean }
 
 export class RepoControl extends DurableObject<Env> {
   private serial: Promise<unknown> = Promise.resolve();
@@ -87,6 +92,11 @@ export class RepoControl extends DurableObject<Env> {
       if (!previous) await this.ctx.storage.put(key, { done: false, event });
       await this.ctx.storage.put('last-delivery', { id: event.delivery, at: event.at });
       const target = policyTarget(event);
+      // D8834: the head a later merge group of this pull request is bound to; the newest by ingress time wins.
+      if (target?.kind === 'pull_request' && target.pr !== null) {
+        const seen = await this.ctx.storage.get<RecordedHead>(prHeadKey(target.pr));
+        if (!seen || event.at >= seen.at) await this.ctx.storage.put(prHeadKey(target.pr), { sha: target.head, at: event.at });
+      }
       if (target && !await this.off()) await this.policy(target, event.delivery, injectedApi);
       const sha = destroyedTarget(event);
       if (sha && !await this.off()) {
@@ -106,22 +116,57 @@ export class RepoControl extends DurableObject<Env> {
    * one policy. A client or posting error throws before anything is marked
    * posted, and the Queue retries it; evaluate itself never yields success
    * on an error or a timeout.
+   *
+   * D8834: a pull request head with a current sign-off posts the sign-off's
+   * success instead, once. A T2 merge-group head is decided with the sign-off
+   * evidence for its enqueued pull request head.
    */
-  private async policy(target: PolicyTarget, delivery: string, injectedApi?: GithubApi) {
+  private async policy(target: PolicyTarget, delivery: string | null, injectedApi?: GithubApi) {
     const key = `policy:${target.head}:${POLICY_VERSION}`;
     let stored = await this.ctx.storage.get<StoredDecision>(key);
-    if (stored?.posted) return;
+    const signed = target.kind === 'pull_request' && target.pr !== null
+      ? currentSignoff(await this.ctx.storage.get<Signoff>(signoffKey(target.pr, target.head))) : null;
+    if (stored?.posted && (!signed || stored.signedOff)) return;
     const api = await this.client(injectedApi, POLICY_PERMISSIONS);
     if (!stored) {
-      const decision = decide(await evaluate({ base: target.base, head: target.head }, { api }), target);
+      const result = await evaluate({ base: target.base, head: target.head }, { api });
+      const evidence = target.kind === 'merge_group' && result.tier === 'T2'
+        ? await mergeGroupSignoff(api, target, (k) => this.ctx.storage.get(k)) : null;
+      const decision = decide(result, target, evidence);
       stored = { decision, posted: false };
       await this.ctx.storage.put(key, stored);
       this.audit('policy', delivery, { sha: decision.head, base: decision.base, event: decision.kind, pr: target.pr,
         tier: decision.tier, conclusion: decision.conclusion, policy_version: decision.policy_version, at: Date.now() });
     }
     if (await this.off()) return;
-    await api('POST', 'check-runs', checkRunBody(stored.decision, this.env.REPOSITORY));
-    await this.ctx.storage.put(key, { ...stored, posted: true });
+    await api('POST', 'check-runs', signed ? signedOffCheckRunBody(stored.decision, signed, this.env.REPOSITORY) : checkRunBody(stored.decision, this.env.REPOSITORY));
+    await this.ctx.storage.put(key, { ...stored, posted: true, signedOff: signed !== null });
+  }
+  /**
+   * D8834: the owner signs off one pull request head. It must be the head
+   * Merge Control last recorded for that pull request, with a decision under
+   * this policy_version. Stores `{pr, head_sha, actor, policy_version, at}`
+   * once, writes one `signoff` audit row, and re-posts the check on that SHA
+   * as success. Refused, storing nothing, while the kill switch is on.
+   */
+  async signoff(input: SignoffInput, injectedApi?: GithubApi): Promise<SignoffOutcome> {
+    return this.ordered(async (): Promise<SignoffOutcome> => {
+      if (await this.off()) return { status: 409, error: 'kill_switch_on' };
+      const seen = await this.ctx.storage.get<RecordedHead>(prHeadKey(input.pr));
+      if (seen?.sha !== input.head_sha) return { status: 409, error: 'not_current_head' };
+      const stored = await this.ctx.storage.get<StoredDecision>(`policy:${input.head_sha}:${POLICY_VERSION}`);
+      if (!stored || stored.decision.kind !== 'pull_request') return { status: 409, error: 'no_decision' };
+      const key = signoffKey(input.pr, input.head_sha);
+      let record = currentSignoff(await this.ctx.storage.get<Signoff>(key));
+      if (!record) {
+        record = Object.freeze({ pr: input.pr, head_sha: input.head_sha, actor: input.actor, policy_version: POLICY_VERSION, at: Date.now() });
+        await this.ctx.storage.put(key, record);
+        this.audit('signoff', null, record);
+      }
+      await this.policy({ kind: 'pull_request', head: input.head_sha, base: stored.decision.base, pr: input.pr }, null, injectedApi);
+      const after = await this.ctx.storage.get<StoredDecision>(`policy:${input.head_sha}:${POLICY_VERSION}`);
+      return { status: 200, signoff: record, posted: after?.signedOff === true };
+    });
   }
   async reconcile(injectedApi?: GithubApi) {
     return this.ordered(async () => {
