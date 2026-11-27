@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { articles as api, publications } from '../lib/api';
@@ -8,6 +8,7 @@ import NetworkSubNav from '../components/site/NetworkSubNav';
 import { FilterPills, EmptyNote } from '../components/site/SiteBlocks';
 import { titleCase } from '../lib/absence';
 import { articleFilterOptions, articleMeta, initials, sectorLabel, tintFor } from '../lib/siteResources';
+import { articleListMessage, articleListState, offersShowAll } from '../lib/articleListState';
 import './site/network.css';
 
 /**
@@ -38,6 +39,36 @@ const ROLE_FILTERS = [
 ];
 
 const PAGE_SIZE = 12;
+
+/**
+ * D8791 (#8791) — the list's state for one read, drawn with the page's
+ * existing note and button styles until the canvas lands (`needs-design`).
+ * A zero result under a filter names the filters and offers the full list in
+ * one action; a failed read says Unreadable; only an unfiltered, successful,
+ * empty read says the publication is empty. The polite status repeats the
+ * sentence, with the count, for assistive technology.
+ */
+export function ArticleListStatus({ state, onShowAll }) {
+  const message = articleListMessage(state);
+  return (
+    <>
+      <p className="sr-only" role="status" aria-live="polite" data-testid="articles-status">{state.kind === 'loading' ? '' : message}</p>
+      {state.kind !== 'list' && (
+        <EmptyNote>
+          {message}
+          {offersShowAll(state) && onShowAll && (
+            <>
+              {' '}
+              <button type="button" onClick={onShowAll} className="ax-btn ax-btn-sm ax-btn-quiet" data-testid="articles-show-all">
+                Show all articles
+              </button>
+            </>
+          )}
+        </EmptyNote>
+      )}
+    </>
+  );
+}
 
 /** One card: category, date and read time, title, excerpt, author, Read →. */
 export function ArticleCard({ a, category, featured = false }) {
@@ -82,6 +113,8 @@ function BrowseArticles() {
   const [search, setSearch] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const pillsRef = useRef(null);
 
   // Debounce search so we don't fire on every keystroke.
   useEffect(() => {
@@ -94,6 +127,7 @@ function BrowseArticles() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setFailed(false);
     try {
       const params = {
         limit: PAGE_SIZE,
@@ -107,6 +141,7 @@ function BrowseArticles() {
       setTotal(r.total || 0);
     } catch (e) {
       reportError('Articles:list', e);
+      setFailed(true);
       setItems([]);
       setTotal(0);
     } finally {
@@ -133,10 +168,23 @@ function BrowseArticles() {
   const pills = useMemo(() => articleFilterOptions(sectors), [sectors]);
   const category = (key) => sectorLabel(sectors, key);
   const featuredShown = showFeatured && featuredItems.length > 0;
+  const listState = articleListState({ loading, failed, items, total, sector, role, q: debouncedQ, sectors, roles: ROLE_FILTERS });
+
+  // One action back to the full list: every filter cleared, the search box
+  // emptied, page one, and focus kept in the filters on the "All" pill.
+  const showAll = () => {
+    setSector('');
+    setRole('');
+    setSearch('');
+    setDebouncedQ('');
+    setPage(0);
+    const all = pillsRef.current?.querySelector('button[aria-pressed]');
+    if (all && typeof all.focus === 'function') all.focus();
+  };
 
   return (
     <>
-      <div className="ax-art-pills">
+      <div className="ax-art-pills" ref={pillsRef}>
         <FilterPills options={pills} value={sector} onChange={setSector} label="Article categories" />
       </div>
       <div className="ax-nw-tools">
@@ -167,13 +215,8 @@ function BrowseArticles() {
 
       <section aria-labelledby={featuredShown ? 'ax-art-latest-h' : undefined}>
         {featuredShown && <h2 id="ax-art-latest-h" className="ax-lbl-q ax-nw-panel-k ax-art-k">Latest</h2>}
-        {loading ? (
-          <EmptyNote>Loading…</EmptyNote>
-        ) : items.length === 0 ? (
-          <EmptyNote>
-            {debouncedQ ? `No articles matching “${debouncedQ}”.` : 'No articles yet. Be the first to publish.'}
-          </EmptyNote>
-        ) : (
+        <ArticleListStatus state={listState} onShowAll={showAll} />
+        {listState.kind === 'list' && (
           <>
             <div className="ax-art-grid">
               {items.map((a) => <ArticleCard key={a.id} a={a} category={category(a.sector)} />)}
