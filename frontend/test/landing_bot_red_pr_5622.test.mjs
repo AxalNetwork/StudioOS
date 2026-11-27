@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   AGENT_BRANCH_PREFIXES, allowedFiles, applyStage, branchAllowed, buildTask, checkRepair, ciRunProblems, gate, planStage,
-  reservations, triggerGate, triggerStage, trustedVerdict,
+  reservations, summaryText, triggerGate, triggerStage, trustedVerdict,
 } from '../../scripts/landing-bot/redPr.mjs';
 import { gitIn } from '../../scripts/landing-bot/keeper-merge.mjs';
 import { manifestFor, patchFor } from '../../scripts/landing-bot/model/patch.mjs';
@@ -394,7 +394,8 @@ function triggerFakes({ pulls = [{ number: 4321, state: 'open', head: { sha: HEA
 
 test('#5622: the trigger reads the run and PR from the API and asks once, only for pr_failure', async () => {
   const env = { ...ENV, GITHUB_REPOSITORY: REPO, CI_RUN_ID: '77' };
-  const go = await triggerStage(env, triggerFakes(), { now: NOW });
+  // CodeQL js/superfluous-trailing-arguments: `now` must be inside the options, or the quiet rule reads the real clock.
+  const go = await triggerStage(env, { ...triggerFakes(), now: NOW });
   assert.equal(go.decision, 'dispatch', JSON.stringify(go));
   assert.deepEqual([go.pr, go.head, go.run], [4321, HEAD, 77]);
   const inherited = await triggerStage(env, { gh: triggerFakes({ mainJobs: [{ name: 'suite (frontend-1-of-2)', conclusion: 'failure' }] }).gh, now: NOW });
@@ -464,4 +465,14 @@ test('#5622: landing-bot-red-pr.yml: dispatch only, a plan with no write, a mode
   }
   // The ejection handler's existing dispatch now finds it.
   assert.match(read('.github/workflows/landing-bot-ejection.yml'), /gh workflow run landing-bot-red-pr\.yml --repo "\$GITHUB_REPOSITORY" --ref main -f pr="\$pr"/);
+});
+
+test('#5622: the job summary is inert text: API-read names cannot inject Markdown, HTML or control characters (CodeQL js/http-to-file-access)', () => {
+  // Mutation checked: the escape removed, the control-character strip removed, and the line cap removed.
+  const s = summaryText('### Red-PR repair plan for #12\n\nskip: job [x](https://evil.example) <img src=x> `run`\u001b[31m');
+  assert.ok(s.startsWith('### Red-PR repair plan for \\#12'), s);
+  assert.doesNotMatch(s, /(?<!\\)[\[\]<>`]/, s);
+  assert.doesNotMatch(s, /\u001b/, s);
+  assert.equal(summaryText('- #5: handed back (x)'), '- \\#5: handed back \\(x\\)');
+  assert.ok(summaryText('a'.repeat(900)).length <= 500);
 });

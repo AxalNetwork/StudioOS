@@ -221,7 +221,20 @@ export function commitMessage({ plan, provider, model }) {
 
 // ---------------------------------------------------------------------------------------------- effects below
 
-const summary = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${s}\n`); };
+/**
+ * One job-summary block. Its text mixes fixed reasons with values read from the API (run and job names, a
+ * verdict), so every line is made inert before it reaches the summary file: control characters dropped,
+ * Markdown and HTML specials escaped, each line capped (CodeQL js/http-to-file-access).
+ */
+export function summaryText(s) {
+  return String(s ?? '').split('\n').map((line, i) => {
+    const plain = line.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, 500);
+    // The block's own "### " heading and "- " bullet are kept; everything else is escaped.
+    const lead = i === 0 && /^### /.test(plain) ? '### ' : /^- /.test(plain) ? '- ' : '';
+    return lead + plain.slice(lead.length).replace(/[\\`*_{}\[\]<>()#+!|~]/g, (c) => `\\${c}`);
+  }).join('\n');
+}
+const summary = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summaryText(s)}\n`); };
 
 async function artifactsNamed(gh, name) {
   try { return (await gh.get(`actions/artifacts?name=${encodeURIComponent(name)}&per_page=100`)).artifacts ?? null; } catch { return null; }
