@@ -76,7 +76,8 @@ test('the committed baseline parses: every section has a table, every key is kno
     assert.match(text, new RegExp(`^## ${s}`, 'm'), `${s} has a heading`);
   }
   // Until #8060–#8066 report, every value is "to be recorded" (update this when a STATUS is mirrored).
-  assert.deepEqual(rows.filter(r => r.expected !== null).map(r => r.key), []);
+  // D8641: the required contexts are mirrored from #7899's receipt.
+  assert.deepEqual(rows.filter(r => r.expected !== null).map(r => r.key), ['ruleset[main].required_status_checks']);
   assert.ok(!looksSecret(text.replace(/`[^`]*`/g, '')) && !/\b\d{7,}\b/.test(text), 'the baseline carries no id or secret');
 });
 

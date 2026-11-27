@@ -20,7 +20,7 @@ const job = (name, at, start, end, conclusion = end === null ? null : 'success')
   name, created_at: t(at), started_at: t(start), completed_at: end === null ? null : t(end),
   status: end === null ? 'in_progress' : 'completed', conclusion,
 });
-/** The three queue workflow runs of one candidate. `jobs(name)` gives [start, end, conclusion?]; `sampled: false` leaves every run without jobs. */
+/** The four queue workflow runs of one candidate. `jobs(name)` gives [start, end, conclusion?]; `sampled: false` leaves every run without jobs. */
 function candidate(c, pr, at, jobs, { sampled = true, status = 'completed', conclusion = 'success' } = {}) {
   const head_branch = `gh-readonly-queue/main/pr-${pr}-${sha('9')}`;
   const run = (path, names, id) => ({
@@ -28,7 +28,7 @@ function candidate(c, pr, at, jobs, { sampled = true, status = 'completed', conc
     created_at: t(at), updated_at: t(at + 1), status, conclusion,
     ...(sampled ? { jobs: names.map(n => job(n, at, ...jobs(n))) } : {}),
   });
-  return [run('ci.yml', CI, 1), run('gitleaks.yml', ['scan'], 2), run('migration-immutability.yml', ['applied migrations unchanged'], 3)];
+  return [run('ci.yml', CI, 1), run('gitleaks.yml', ['scan'], 2), run('migration-immutability.yml', ['applied migrations unchanged'], 3), run('dependency-review.yml', ['Dependency Review'], 4)];
 }
 const pr = (number, entries, mergeCommit = null) => ({ number, mergeCommit, mergedAt: null, entries });
 const removed = (start, end, reason = null) => ({ start: t(start), end: t(end), endEvent: 'removed_from_merge_queue', reason });

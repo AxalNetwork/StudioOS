@@ -73,6 +73,7 @@ From `scripts/lib/requiredChecks.mjs`.
 
 | Check | Job |
 | --- | --- |
+| `Dependency Review` | `dependency-review.yml#dependency-review` |
 | `api ↔ worker drift` | `ci.yml#drift` |
 | `applied migrations unchanged` | `migration-immutability.yml#gate` |
 | `frontend (build)` | `ci.yml#frontend` |
