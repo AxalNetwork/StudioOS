@@ -12,7 +12,14 @@ The proposal acceptance board of #3851 (`services/agents/evaluation.ts`: accepta
 
 `GET /api/admin/ai-agents/skills` (Super Admin only, `requireSuperAdmin`) returns `coverage` next to `skills`. It is computed by `services/agents/skillCoverage.ts` from two aggregate reads, a fixed number whatever the catalogue's size or the page asked for.
 
-The counts are always the whole catalogue's: a `?page=` read pages `skills`, never `coverage`. Only the validated filters in § Filters narrow them (D5970). A company's own analytics are not served yet. When they are, they read only that company's rows, behind `canEditAsMember`.
+The counts are always the whole catalogue's: a `?page=` read pages `skills`, never `coverage`. Only the validated filters in § Filters narrow them (D5970).
+
+**A company's own analytics** (D8912, #8912) are served at `GET /api/teams/skills/analytics?company=<uid>`, behind `canEditAsMember`: an Owner, Admin or Founder seat, or the primary admin, in that company. The seat is read server-side; the uid only names which of the caller's companies is meant.
+- No seat, another company or an unknown uid is 404 `not_found`. A member without an editor seat is 403 `not_company_admin`. A missing or repeated `company` is 400 `company_required`.
+- It returns `coverage`, `published_evaluation` and `executions`, computed by the same functions with `subject: 'company'`, over reads narrowed to that company's skills in SQL (`COMPANY_COVERAGE_SQL`, `COMPANY_LINKS_SQL`, `COMPANY_EXECUTIONS_SQL`, `COMPANY_OUTCOMES_SQL`). No HQ skill and no other company's uid, slug or count is read out.
+- In it, the "Scope" column below reads "the company's own skills" wherever it says HQ, with these exceptions, each `{ available: false, reason }`: `coverage.sources` (Axal's library files), `coverage.drafts.without_current_evaluation` (HQ release evidence, D4533), `coverage.overlap` (Axal's published skills), and the whole `published_evaluation` block (no evaluation runs on a company version until #4533).
+- `by_scope` holds `company` only. There is no paged `skills` list: the company's library read lists its skills.
+- It writes nothing.
 
 ## Catalogue and coverage (served now)
 
@@ -157,6 +164,12 @@ How a refusal is classed:
 
 Still not recorded: a run's whole start and end, workflow runs (#4535), and the refusals that end a scheduled run before its skill is read (`load` and `context` steps, and a session whose skill cannot be read).
 
+**A company's own executions** (D8912) are this block with `subject: 'company'`, served by `GET /api/teams/skills/analytics` (§ Where it is served):
+- The run, the window, the tokens, the integer micro-USD charge (`runs_unrecorded` and `runs_incomplete` never summed), the latency ranks and the outcome classes are the definitions above, unchanged.
+- `COMPANY_EXECUTIONS_SQL` is `EXECUTIONS_SQL`'s text with the runs narrowed, inside `runs`, to that company's skills. Its own skills are named (uid, current roles and tags), and the latency read takes their ids. `COMPANY_OUTCOMES_SQL` is `OUTCOMES_SQL` joined to that company's skills instead of HQ's.
+- `by_scope` is `{ company: { completed } }`. An HQ skill run by the company's agent is HQ's skill, not counted here.
+- `published_without_completed_runs` names the company's published skills with no completed run.
+
 ## Quality and maintenance signals (deferred)
 
 These combine the measures above, so each waits on the ones it uses:
@@ -212,4 +225,10 @@ Refusals are `400` with the code in `error` and a sentence in `message`. None fa
 
 The filters are matched in memory over the coverage and evaluation populations. Model and window are bound parameters of the history read. Overlap reuses the filtered catalogue population and reads its version metadata in one bounded query. Model and window do not apply to overlap. The scan returns up to 20 possible overlaps, with the full suggestion count and the number of rows skipped for missing metadata. See [D4536 part 3](decisions/D4536-p3.md) for the scoring rule.
 
-Not yet: a company administrator's read of their own company's analytics (a company scope, checked server-side and never taken from the client). The filters apply to `executions` as described in § Execution and usage.
+The filters apply to `executions` as described in § Execution and usage.
+
+**On a company's own read** (D8912, `GET /api/teams/skills/analytics`) the same parameters, checks and refusals apply, with `company` allowed beside them:
+- `scope` takes `company`; `hq` is `scope_not_served`.
+- The skill terms match the company's own skills by their current published version, as above. An HQ skill never matches, and a uid of another company's skill matches nothing.
+- `coverage.by_scope.company` is counted over the matched skills, never `{ available: false }`: the company's tags and roles are read here.
+- `filters` has no `skills` entry: the read serves no skill list.
