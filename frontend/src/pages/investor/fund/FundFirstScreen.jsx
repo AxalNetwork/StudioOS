@@ -10,6 +10,7 @@ import { DataState, StateChip } from '../../../ui';
 import { TIERS } from '../../../lib/spinoutFundModel';
 import { emailHref } from '../../email/emailModel.js';
 import { formatCents } from '../fundCallsModel';
+import { majorToMinor } from '../../../lib/money';
 import { arrivedItems, commitmentFigures, dayLabel, dueLines, signItems } from '../../../lib/fundFirstScreenModel';
 import { CARD, LBL, MONO, GATE } from './FundWorkspaceSupport';
 
@@ -263,7 +264,7 @@ export default function FundFirstScreen({
     );
   } else if (kind === 'applicant') {
     const sent = dayLabel(application?.created_at);
-    const target = application?.target_commitment != null ? money(Math.round(Number(application.target_commitment) * 100)) : null;
+    const target = application?.target_commitment != null ? money(majorToMinor(application.target_commitment, 'USD')) : null;
     body = (
       <Banner tone="violet" title="Application in review" testId="first-applicant"
         action={kyc?.loaded && kyc.status === 'approved' ? null : <Link to="/trust" className={BTN}>Start KYC / AML in Trust</Link>}>
