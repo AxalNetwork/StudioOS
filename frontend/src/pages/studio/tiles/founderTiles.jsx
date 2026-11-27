@@ -100,24 +100,27 @@ function labTools(modules, lab, onRetry) {
   };
 }
 
-function cycleTile(read, slug, onRetry, search) {
+// D8729 (#8729): a cycle tile carries the venture's `search`, so its Open link lands in that venture
+// (`StudioModuleTile`), and `nextLink` draws its own next step with the way back to Studio kept.
+function cycleTile(read, slug, onRetry, search, nextLink) {
   const s = cycleTileState(read, slug);
-  if (s.state !== TILE.READY) return { state: s.state, reason: s.reason, onRetry };
-  return { state: TILE.READY, note: s.card.range || null, body: <CardBody card={s.card} compact search={search} onRetry={onRetry} /> };
+  if (s.state !== TILE.READY) return { state: s.state, reason: s.reason, onRetry, search };
+  return { state: TILE.READY, note: s.card.range || null, search, body: <CardBody card={s.card} compact search={search} onRetry={onRetry} nextLink={nextLink} /> };
 }
 
 /**
  * One spec per founder Studio key. `cycles` maps a cycle to its overview read
- * (undefined while it loads, `{ failed }` when it failed).
+ * (undefined while it loads, `{ failed }` when it failed). `nextLink(key)`,
+ * when given, returns the drawer of that tile's next-step link (D8729).
  */
-export function founderTiles({ reads, cycles = {}, onRetry, onRetryCycle = () => {}, search = '' }) {
+export function founderTiles({ reads, cycles = {}, onRetry, onRetryCycle = () => {}, search = '', nextLink = null }) {
   const out = {
     company_progress: companyProgress(progressOf(reads.lab), onRetry),
     eadwyn_questions: eadwynQuestions(questionsOf(reads), onRetry),
     lab_tools: labTools(modulesOf(reads), reads.lab, onRetry),
   };
   for (const [key, { cycle, slug }] of Object.entries(CYCLE_KEYS)) {
-    out[key] = cycleTile(cycles[cycle], slug, () => onRetryCycle(cycle), search);
+    out[key] = cycleTile(cycles[cycle], slug, () => onRetryCycle(cycle), search, nextLink ? nextLink(key) : null);
   }
   return out;
 }

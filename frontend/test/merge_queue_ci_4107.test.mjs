@@ -179,10 +179,12 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   const verified = all.find((j) => j.id === 'verified');
   assert.equal(verified.if, "github.event_name == 'push'", 'a pull request or a queue entry never skips the suite');
   const v = verified.body.join('\n');
-  assert.match(v, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$SHA&event=merge_group&status=success/);
-  assert.match(v, /select\(\.head_sha == env\.SHA and \.event == "merge_group" and \.conclusion == "success"\)/);
+  // D5500: the lookup itself is scripts/ci/queue-run-lookup.mjs; queue_run_lookup_5500.test.mjs runs its fixtures.
+  assert.match(v, /run: node scripts\/ci\/queue-run-lookup\.mjs\n/);
   assert.match(v, /SHA: \$\{\{ github\.sha \}\}/);
-  assert.match(v, /permissions:\n\s+actions: read\n/, 'it reads run history and nothing else');
+  assert.match(v, /REPO: \$\{\{ github\.repository \}\}/);
+  assert.match(v, /permissions:\n\s+contents: read\n\s+actions: read\n\s+outputs:/, 'it reads its own script and run history, and nothing else');
+  assert.match(v, /persist-credentials: false/);
   assert.match(v, /outputs:\n\s+run: \$\{\{ steps\.lookup\.outputs\.run \}\}/, 'the job output is the lookup step\'s');
   assert.match(v, /id: lookup\n/);
   // The parts run unless that lookup found a run — including when it failed.

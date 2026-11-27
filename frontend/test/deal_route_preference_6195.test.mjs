@@ -47,6 +47,7 @@ async function mount() {
     async type(id, value) { await act(async () => { pr(need(id)).onChange({ target: { value } }); }); await settle(); },
     async press(re) { const b = buttonText(re); if (!b) throw new Error(`No button ${re}`); await act(async () => { pr(b).onClick?.(); }); await settle(); },
     async click(id) { await act(async () => { pr(need(id)).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
+    async tick(id) { await act(async () => { pr(need(id)).onChange({ target: { checked: true } }); }); await settle(); },
     async unmount() { await act(async () => root.unmount()); restore?.(); },
   };
 }
@@ -81,11 +82,13 @@ test('the commit dialog records a preference; none sends null; a change starts f
     assert.equal(m.pr(m.by('commit-route-direct')).checked, false);
     assert.match(m.text(), /This is your preference\. The studio sets the route in the closing room\./);
     await act(async () => { m.pr(m.by('commit-route-syndicate')).onChange(); }); await m.settle();
-    await m.press(/Confirm Commitment/);
+    await m.tick('commit-ack'); // D5914 (DE14): the confirmation is required
+    await m.press(/Commit \$/);
     assert.deepEqual(sent, [{ amount: 25000, notes: null, route_preference: 'syndicate' }]);
     await m.render(h(CommitModal, { key: 'change', deal: DEAL, user: INVESTOR, current: PENDING, onClose() {}, onDone() {} }));
     assert.equal(m.pr(m.by('commit-route-fund')).checked, true, 'Change starts from the stored preference');
     await act(async () => { m.pr(m.by('commit-route-none')).onChange(); }); await m.settle();
+    await m.tick('commit-ack');
     await m.press(/Save the change/);
     assert.deepEqual(sent[1], { amount: 60000, notes: null, route_preference: null }, 'choosing none clears it');
   } finally { await m.unmount(); api.createCommitment = saved; }

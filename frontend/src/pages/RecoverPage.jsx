@@ -10,6 +10,11 @@ import { refusalError } from '../lib/api';
 // All URLs in emitted emails / SMS land here (env.APP_URL → axal.vc).
 const API = '';  // same-origin via Cloudflare Worker
 
+// #8828 — the one page-level error that is about the email field. Only this
+// message marks the field invalid and is described to it; every other error is
+// about a later step, not the address typed.
+const EMAIL_REQUIRED = 'Enter your account email.';
+
 // Mirror the double-submit CSRF logic from frontend/src/lib/api.js: read the
 // JS-readable `studioos_csrf` cookie and echo it back in the X-CSRF-Token
 // header on every mutating (POST) request. The Worker only enforces CSRF when
@@ -121,7 +126,7 @@ export default function RecoverPage() {
   }, []);
 
   const startScan = async () => {
-    if (!email.trim()) { setError('Enter your account email.'); return; }
+    if (!email.trim()) { setError(EMAIL_REQUIRED); return; }
     setBusy(true); setError('');
     try {
       const r = await post('/start', { email: email.trim() });
@@ -200,6 +205,8 @@ export default function RecoverPage() {
     finally { setBusy(false); }
   };
 
+  const emailError = error === EMAIL_REQUIRED;
+
   // When arriving via magic URL, render a minimal status screen.
   if (linkToken && linkTicket) {
     return (
@@ -221,13 +228,15 @@ export default function RecoverPage() {
       <p className="text-sm text-gray-600 mb-5">
         Lost your authenticator? Pick the option you can still access. Each step adds friction so social-engineering takeovers stay blocked, while legitimate recovery completes in minutes.
       </p>
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && <Banner kind="error" id="recover-error">{error}</Banner>}
       {info && <Banner kind="info">{info}</Banner>}
 
       {mode === 'intro' && (
         <>
-          <label className="text-xs text-gray-600 block mb-1">Account email</label>
-          <input type="email" value={email} autoComplete="email"
+          <label htmlFor="recover-email" className="text-xs text-gray-600 block mb-1">Account email</label>
+          <input id="recover-email" type="email" value={email} autoComplete="email"
+            aria-describedby={emailError ? 'recover-error' : undefined}
+            aria-invalid={emailError ? true : undefined}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@company.com"
             className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-sm mb-3 dark:border-gray-700" />
@@ -371,9 +380,9 @@ function FlowBox({ children, onBack, title }) {
   );
 }
 
-function Banner({ kind, children }) {
+function Banner({ kind, id, children }) {
   const cls = kind === 'error'
     ? 'bg-red-50 border-red-200 text-red-700'
     : 'bg-violet-50 border-violet-200 text-violet-800';
-  return <div className={`text-xs border rounded-lg px-3 py-2 mb-4 ${cls}`}>{children}</div>;
+  return <div id={id} className={`text-xs border rounded-lg px-3 py-2 mb-4 ${cls}`}>{children}</div>;
 }

@@ -57,8 +57,9 @@ import { makeZoneActions } from './zoneActionBuilder';
  * `primary: true` (D1424, #3700) marks the one row a zone's header draws
  * filled, in indigo: Closing's Record wire, Reports' Chase all overdue,
  * Value-add's Log support, LPs' Add LP, Calls' New call, Reporting's New
- * reporting period (#6230) and Research › Ask's New brief. Screening, Commit,
- * Positions, Accounting and the Network zones have no live first step, so no
+ * reporting period (#6230), Research › Ask's New brief and Network ›
+ * Introductions' Request an intro (D6257). Screening, Commit, Positions,
+ * Accounting and the other Network zones have no live first step, so no
  * primary. Deal flow (the Deals
  * root) has no table: its "Set your thesis" primary is drawn by `DealFlow`
  * while no deal matches (owner answer C).
@@ -168,9 +169,9 @@ export const INVESTOR_ZONE_ACTIONS = {
     // action is absent and the archive says why.
     { canvas: 'Build pack', label: 'New reporting period', kind: 'handler', handler: 'newPeriod', primary: true },
     { label: 'Export archive', kind: 'export' },
-    // Was 'per-LP delivery is counted, never itemised'. Nothing counts it: a
-    // period records when it was issued, and no delivery row exists.
-    { label: 'Delivery log', unbuilt: 'issuing a period records when it was issued, not which LP received it, so there is no delivery to log' },
+    // D6240: each issued period records delivery per LP, and its own page lists
+    // them. No read joins those lists across periods into one log.
+    { label: 'Delivery log', unbuilt: 'each issued period lists its LPs’ delivery on its own page; no log across periods is built' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────
@@ -230,9 +231,11 @@ export const INVESTOR_ZONE_ACTIONS = {
   ],
   'network/introductions': [
     // WAS a link to /matches, whose deal cards carried the only button that
-    // called `introductionsRequest`. The AI Matching Engine was removed, the
-    // button with it, and nothing else asks for an intro.
-    { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
+    // called `introductionsRequest`, then a stated gap once that page went.
+    // D6257 (#6257, NW3.1): the page's own request sheet — who knows them
+    // among teammates who share (`/api/relationships/who-knows`), a team
+    // request, or an ask on a founder or startup on Axal. Never a link.
+    { label: 'Request an intro', kind: 'handler', handler: 'requestIntroduction', primary: true },
     // D6637 / D6263 Q8: offer between two accepted ties through existing propositions.
     { label: 'Offer one', kind: 'handler', handler: 'offerIntroduction' },
     { label: 'Export', kind: 'export' },

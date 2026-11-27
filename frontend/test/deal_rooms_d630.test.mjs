@@ -178,7 +178,7 @@ test('dr-transfers: a transfer refused by open conditions reads as a sentence, a
   }));
   const t = renderedText(markup);
   assert.match(t, /Record a transfer[\s\S]*2 open conditions\s*A transfer cannot be recorded while closing conditions are open\. Resolve them in the commit room\. Nothing was recorded\./);
-  assert.match(markup, /border-amber-300[^"]*" role="alert" data-testid="dr-refusal"/, 'open conditions are a warning, not an error');
+  assert.match(markup, /border-amber-300[^"]*" role="alert" data-testid="dr-transfer-form-refused"/, 'open conditions are a warning, not an error (D5914: inside the DX14 dialog)');
   assert.match(t, /No wire has been recorded for this round\./);
 });
 
@@ -189,7 +189,7 @@ test('dr-transfers: the amount is cents, and a bad amount is refused before it i
   for (const bad of ['', '0', '-5', '1.234', 'abc', '0.00']) assert.ok(Number.isNaN(amountToCents(bad)), bad);
   assert.equal(centsMoney(1250050), '$12,500.50');
   const code = codeOnly(read('components/deals/DealTransfersTab.jsx'));
-  assert.match(code, /if \(!Number\.isFinite\(cents\)\) \{ setRefusal\(transferRefusal\(\{ code: 'transfer_amount_invalid' \}\)\); return; \}/);
+  assert.match(code, /check=\{\(\) => \(Number\.isFinite\(cents\) \? null : transferRefusal\(\{ code: 'transfer_amount_invalid' \}\)\)\}/, 'D5914: the dialog refuses a bad amount before it sends');
   assert.match(code, /amount_cents: cents,/);
   const unread = text(h(TransfersView, { dealId: 1, state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
   assert.match(unread, /^UnavailableTransfers could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable

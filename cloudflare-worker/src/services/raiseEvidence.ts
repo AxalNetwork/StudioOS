@@ -4,7 +4,7 @@ import type { Env, User } from '../types';
 import { isSuperAdmin } from '../auth';
 import { ownsVenture } from '../routes/_founder_validate_helpers';
 import { logCycleWriteStatement, type CycleModules } from './cycleActivity';
-import { collectEvidenceSources, candidateKey, EVIDENCE_AREAS, EVIDENCE_RULES, type EvidenceCandidate, type EvidenceArea, type CollectedEvidence } from './raiseEvidenceSources';
+import { collectEvidenceSources, candidateKey, EVIDENCE_AREAS, EVIDENCE_RULES, isLedgerEvidence, LEDGER_EVIDENCE_KIND, type EvidenceCandidate, type EvidenceArea, type CollectedEvidence } from './raiseEvidenceSources';
 export { EVIDENCE_RULES, EVIDENCE_AREAS, collectEvidenceSources, evidenceDate, evidenceStale, evidenceHash, candidateKey } from './raiseEvidenceSources';
 import { grantFolderScope, investorCommitted, tierAdmits, type FolderScope } from './dataRoomAccess';
 import { hasActiveVentureNda } from './dealAccess';
@@ -184,7 +184,8 @@ export async function buildCandidates(ctx:RaiseEvidenceContext,opts:{force?:bool
     const byKey=new Map(rows.results.map(row=>[row.source_ref,row]));
     const pinned=await ctx.env.DB.prepare('SELECT area,source_table,source_ref FROM raise_evidence_items WHERE project_id=?').bind(ctx.projectId).all<Pick<EvidenceCandidate,'area'|'source_table'|'source_ref'>>();
     const taken=new Set(pinned.results.map(candidateKey));
-    const pending=sources.candidates.filter(c=>{const row=byKey.get(candidateKey(c));return row?row.status==='proposed'&&plain(row.payload_json)?.snapshot_hash!==c.snapshot_hash:!taken.has(candidateKey(c));});
+    // D5837: a ledger fact exists only as the founder's own choice (`raiseLedgerEvidence.ts`); it is never proposed.
+    const pending=sources.candidates.filter(c=>!isLedgerEvidence(c)).filter(c=>{const row=byKey.get(candidateKey(c));return row?row.status==='proposed'&&plain(row.payload_json)?.snapshot_hash!==c.snapshot_hash:!taken.has(candidateKey(c));});
     const selected=pending.slice(0,EVIDENCE_MAX_REFRESH_WRITES);
     for(let offset=0;offset<selected.length;offset+=50){
       const statements=selected.slice(offset,offset+50).map(c=>{const previous=byKey.get(candidateKey(c));const kind=c.source_label==='connector'?'connector':'module';
@@ -296,6 +297,9 @@ export async function setSharing(ctx:RaiseEvidenceContext,uid:string,data:Record
   if(data.visibility!==undefined&&!['private','summary','after_nda'].includes(String(data.visibility)))throw new RaiseEvidenceError('invalid',400);
   if(data.state!==undefined&&!['pinned','unpinned'].includes(String(data.state)))throw new RaiseEvidenceError('invalid',400);
   if(data.confirm_current!==undefined&&typeof data.confirm_current!=='boolean')throw new RaiseEvidenceError('invalid',400);
+  // D5837: a ledger fact is pinned to one exact revision. A correction is re-reviewed onto the new revision (a new, Private item),
+  // never confirmed in place, so "confirm current" cannot share a superseded figure.
+  if(isLedgerEvidence(old)&&data.confirm_current===true)throw new RaiseEvidenceError('changed',409);
   let visibility=(data.visibility??old.visibility) as RaiseEvidenceItem['visibility'];const state=(data.state??old.state) as RaiseEvidenceItem['state'];
   // Unpin and make-private remain possible when the source is gone or unreadable.
   let current:Omit<EvidenceCandidate,'backs'|'stale'|'date_reason'>=old;
@@ -391,8 +395,8 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
   if(ctx.founder){try{check=await checkClaims(ctx.env,ctx.projectId);claimCheck={outcome:check.outcome,surfaces:check.surfaces};}
     catch{claimCheck={outcome:'unreadable',surfaces:null,reason:'Claims could not be checked. Try again.'};}}
   const records=new Map(check?.claims.map(c=>[JSON.stringify([c.surface,c.surface_version,c.field_key]),claimRecord(c)])??[]);
-  const rawItems=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND (?=1 OR private_reason IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
-    .bind(ctx.projectId,ctx.founder?1:0,limit+1,offset).all<RaiseEvidenceItem>());
+  const rawItems=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND (?=1 OR (private_reason IS NULL AND kind<>?)) ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .bind(ctx.projectId,ctx.founder?1:0,LEDGER_EVIDENCE_KIND,limit+1,offset).all<RaiseEvidenceItem>());
   const rawProposals=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT id,uid,source_ref,source_kind,source_label,payload_json,status,usage_log_id,model FROM ai_rail_proposals
     WHERE record_ref=? AND rail_option=? AND kind='proposal' AND status='proposed'
       AND (?=1 OR json_extract(payload_json,'$.private_reason') IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
@@ -431,12 +435,12 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     const rows=await ctx.env.DB.prepare('SELECT id,uid,surface,surface_version,field_key,claim_kind,stated_value,state,checked_at FROM raise_claims WHERE project_id=? ORDER BY id DESC LIMIT ? OFFSET ?')
       .bind(ctx.projectId,limit+1,offset).all<{id:number;uid:string;surface:string;surface_version:string;field_key:string;claim_kind:string;stated_value:string|null;state:string;checked_at:string|null}>();
     const links=await ctx.env.DB.prepare(`SELECT c.uid AS claim_uid,i.uid AS item_uid,i.version AS item_version,l.how FROM raise_claim_evidence l JOIN raise_claims c ON c.id=l.claim_id AND c.project_id=l.project_id
-      JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE l.project_id=? AND (?=1 OR i.private_reason IS NULL) AND c.uid IN (SELECT value FROM json_each(?))`).bind(ctx.projectId,ctx.founder?1:0,JSON.stringify(rows.results.slice(0,limit).map(r=>r.uid))).all<{claim_uid:string;item_uid:string;item_version:number;how:string}>();
+      JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE l.project_id=? AND (?=1 OR (i.private_reason IS NULL AND i.kind<>?)) AND c.uid IN (SELECT value FROM json_each(?))`).bind(ctx.projectId,ctx.founder?1:0,LEDGER_EVIDENCE_KIND,JSON.stringify(rows.results.slice(0,limit).map(r=>r.uid))).all<{claim_uid:string;item_uid:string;item_version:number;how:string}>();
     return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>ctx.founder?{...row,record:records.get(JSON.stringify([row.surface,row.surface_version,row.field_key]))??null,links:links.results.filter(l=>l.claim_uid===row.uid)}:
       {uid:row.uid,surface:row.surface,claim_kind:row.claim_kind,state:row.state,checked_at:row.checked_at}),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
   const coverage=await(async()=>{try{const result=await ctx.env.DB.prepare(`SELECT area,source_label,state,visibility,COUNT(*) AS count FROM raise_evidence_items
-    WHERE project_id=? AND (?=1 OR private_reason IS NULL) GROUP BY area,source_label,state,visibility`).bind(ctx.projectId,ctx.founder?1:0)
+    WHERE project_id=? AND (?=1 OR (private_reason IS NULL AND kind<>?)) GROUP BY area,source_label,state,visibility`).bind(ctx.projectId,ctx.founder?1:0,LEDGER_EVIDENCE_KIND)
       .all<{area:string;source_label:string;state:string;visibility:string;count:number}>();return {state:'recorded',groups:result.results};}
     catch{return {state:'unreadable',groups:null,reason:'Coverage could not be read. Try again.'};}})();
   // D1266 (#3289): who opened the shared evidence in the last 30 days (`open_evidence`), for the founders and the venture's admins.
@@ -608,8 +612,14 @@ async function sharedView(env:Env,projectId:number,aud:EvidenceAudience,nda:bool
     g.count+=1;if(row.observed_on&&(!g.newest||row.observed_on>g.newest))g.newest=row.observed_on;m.set(k,g);return m;
   },new Map<string,{area:string;kind:string;source_label:string;count:number;newest:string|null}>()).values()]};
   if(!nda)return {nda_signed:false,before_nda:BEFORE_NDA,coverage,items:null,claims:null,partial};
-  const items=admitted==null?unreadable:{state:'recorded',rows:admitted.map(({row,stale})=>{
-    const base={uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,summary:row.summary,stale,sharing:row.visibility};
+  let ledger:Map<string,Record<string,unknown>>|null=new Map();
+  if(admitted?.some(a=>isLedgerEvidence(a.row))){try{ledger=await ledgerContexts(env,projectId,admitted.filter(a=>isLedgerEvidence(a.row)).map(a=>a.row.uid));}catch{ledger=null;}}
+  const items=admitted==null||ledger==null?unreadable:{state:'recorded',rows:admitted.flatMap(({row,stale})=>{
+    const context=isLedgerEvidence(row)?ledger!.get(row.uid):undefined;
+    // D5837: a ledger fact travels only with its own line's context; without it (no current selection) it is not shown.
+    if(isLedgerEvidence(row)&&!context)return [];
+    const base={uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,summary:row.summary,stale,sharing:row.visibility,
+      ...(context?{ledger:row.visibility==='after_nda'&&!valueWithheld(row)?context:{...context,amount:null}}:{})};
     if(row.visibility!=='after_nda')return {...base,value_num:null,value_unit:null,currency:null,value_reason:'Shared as a summary only.'};
     const withheld=valueWithheld(row);
     return withheld?{...base,value_num:null,value_unit:null,currency:null,value_reason:withheld}:{...base,value_num:row.value_num,value_unit:row.value_unit,currency:row.currency,value_reason:row.value_num==null?'No figure is recorded for this item.':null};
@@ -645,6 +655,20 @@ export async function previewEvidence(ctx:RaiseEvidenceContext,nda:boolean){
     audience:audience?{state:'recorded',data_room:Number(audience.grants)||0,nda_signed:Number(audience.ndas)||0}:{state:'unreadable',data_room:null,nda_signed:null,reason:'Who can see this could not be read. Try again.'}};
 }
 
+/**
+ * D5837: what a reader learns about a shared ledger fact, by item uid: the figure, the one line's label, the report, basis,
+ * currency, period and revision it was read from, and its exact amount. Never another line, the report itself, the snapshot
+ * uid or the connection. Only current selections: a withdrawn or replaced one has no context, so its item is not shown.
+ */
+export async function ledgerContexts(env:Env,projectId:number,itemUids:string[]):Promise<Map<string,Record<string,unknown>>>{
+  if(!itemUids.length)return new Map();
+  const rows=(await env.DB.prepare(`SELECT i.uid AS item_uid,s.figure,s.report,s.line_label,s.basis,s.currency,s.period_start,s.period_end,s.as_of,s.revision,s.provider,s.amount
+    FROM raise_ledger_selections s JOIN raise_evidence_items i ON i.id=s.item_id AND i.project_id=s.project_id
+    WHERE s.project_id=? AND s.status='current' AND i.uid IN (SELECT value FROM json_each(?))`).bind(projectId,JSON.stringify(itemUids)).all<Record<string,any>>()).results??[];
+  return new Map(rows.map(r=>[String(r.item_uid),{figure:r.figure,report:r.report,line:r.line_label,basis:r.basis,currency:r.currency,
+    period:r.as_of?{as_of:r.as_of}:{start:r.period_start,end:r.period_end},revision:Number(r.revision),provider:r.provider,amount:r.amount}]));
+}
+
 async function sha256Hex(text:string){
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -653,7 +677,8 @@ async function sha256Hex(text:string){
 export async function evidencePack(env:Env,projectId:number,opts:{audience:'scoring'}){
   if(opts?.audience!=='scoring')throw new RaiseEvidenceError('invalid',400);
   const current=await currentShared(env,projectId);
-  const items=current.rows.map(({row,stale})=>{const withheld=valueWithheld(row);const rule=EVIDENCE_RULES.find(r=>r.kind===row.kind);
+  // D5837: model scoring stays outside the ledger pilot, so a ledger fact is never in the scoring pack.
+  const items=current.rows.filter(({row})=>!isLedgerEvidence(row)).map(({row,stale})=>{const withheld=valueWithheld(row);const rule=EVIDENCE_RULES.find(r=>r.kind===row.kind);
     return {uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,stale,
       sharing:row.visibility,backs:[...(rule?.backs??[])],value_num:withheld?null:row.value_num,value_unit:withheld?null:row.value_unit,currency:withheld?null:row.currency};})
     .sort((a,b)=>a.uid<b.uid?-1:a.uid>b.uid?1:0);

@@ -7,11 +7,11 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
-import { AreaDot, CostLine, SkillCard, SkillImage, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
+import { AreaDot, CostLine, JobLines, SkillCard, SkillImage, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
 import { AssignSkillSheet, NewSkillSheet } from './SkillSheets.jsx';
 import { BasedOnLine, ExtendSkillSheet } from './SkillExtension.jsx';
 import {
-  AREAS, SORTS, areaCounts, areaFromParam, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillAreas, skillFileName,
+  AREAS, SORTS, areaCounts, areaFromParam, areaLine, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillAreas, skillFileName,
 } from './skillsModel.js';
 
 /**
@@ -160,6 +160,8 @@ export function Directory({ area, value, companyName, canNew, canAssign, onArea,
         <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200" data-testid="skills-dir-count">{list.length} {list.length === 1 ? 'skill' : 'skills'}</span>
         {canNew ? <button type="button" className={`${BTN_PRIMARY} ml-auto h-9`} onClick={onNew} data-testid="skills-new">New skill</button> : null}
       </div>
+      {area && areaLine((value.areas || []).find((x) => x.area === area.axis))
+        ? <span className={`font-mono text-[11.5px] ${MUTED}`} data-testid="skills-area-counts">{areaLine(value.areas.find((x) => x.area === area.axis))}</span> : null}
       <Filters area={area} onArea={onArea} q={q} setQ={setQ} sort={sort} setSort={setSort} />
       {!list.length ? (
         <HonestBlock testId="skills-empty">
@@ -218,7 +220,31 @@ export function UsingAgents({ block }) {
 }
 
 /** SK2: one skill's page. */
-export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign, companyUid = null, companyName = null, canExtend = false, onExtend }) {
+/**
+ * D8768 (TMS03): why a skill cannot be attached at all, from the Worker's `attach_refusal`, and its published
+ * alternative as the primary way on. Nothing here publishes or attaches anything.
+ */
+export function AttachRefusal({ s, onOpenSkill }) {
+  if (!s?.attach_refusal) return null;
+  const why = s.attach_refusal === 'skill_retired'
+    ? 'Retired, so it can’t be attached again. Agents that have it keep it at their version.'
+    : s.scope === 'hq'
+      ? 'Not published yet (version_not_published), so it can’t be attached. Axal publishes a skill once it passes the golden-case bar and review.'
+      : 'Not published yet (version_not_published), so it can’t be attached. An editor publishes it when it is ready.';
+  return (
+    <section role="status" className="flex flex-col gap-2 rounded-axal-lg border border-dashed border-axal-hairline bg-white p-4 dark:border-gray-600 dark:bg-gray-900" data-testid="skill-attach-refusal">
+      <span className={EYEBROW}>Can’t be attached</span>
+      <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-200">{why}</p>
+      {s.alternative ? (
+        <button type="button" className={`w-fit ${BTN_PRIMARY} h-9`} onClick={() => onOpenSkill?.(s.alternative.uid)} data-testid="skill-alternative">
+          {`Open ${s.alternative.name}, published`}
+        </button>
+      ) : <span className={MUTED} data-testid="skill-alternative-none">No published skill in its area yet.</span>}
+    </section>
+  );
+}
+
+export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign, companyUid = null, companyName = null, canExtend = false, onExtend, onOpenSkill }) {
   const [copied, setCopied] = useState('');
   if (!block) return <Loading />;
   if (!block.available) return block.unreadable ? <SkillsUnreadable what="This skill" onRetry={onRetry} /> : <HonestBlock>{block.reason}</HonestBlock>;
@@ -247,11 +273,14 @@ export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetr
         {can ? <button type="button" className={BTN_PRIMARY} onClick={() => onAssign(s)} data-testid="skill-page-assign">Assign to agents…</button> : null}
       </div>
       {copied ? <p role="status" className={`m-0 ${MUTED}`}>{copied}</p> : null}
+      <AttachRefusal s={s} onOpenSkill={onOpenSkill} />
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <section className={`${SECTION} flex flex-col gap-2.5`}>
           {s.markdown ? <pre className="m-0 whitespace-pre-wrap rounded-axal-md border border-axal-hairline bg-axal-ground/60 px-3.5 py-3 font-mono text-[12px] leading-[1.6] text-axal-ink dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200" data-testid="skill-md">{s.markdown}</pre> : null}
           <h3 className="m-0 mt-1 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">Purpose</h3>
           <p className="m-0 text-[13.5px] leading-[1.6] text-axal-ink dark:text-gray-200">{s.description || <Unrecorded />}</p>
+          {/* D8768 (TMS02): what it needs (D4667's inputs), what you get and the run cost, "Not recorded" where unknown. */}
+          <JobLines s={s} />
           <h3 className="m-0 mt-1 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">Steps</h3>
           {steps.length ? (
             <ol className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="skill-steps">
@@ -342,7 +371,7 @@ export default function SkillsTab({ scope, agentsBlock }) {
     body = <SkillPage block={page} agentsBlock={using} canAssign={canAssign} backTo={inDirectory ? (area ? area.name : 'All areas') : 'Areas'}
       companyUid={scope.kind === 'company' ? companyUid : null} companyName={companyName} canExtend={scope.kind === 'company' && !!companyUid && !!value?.can_edit}
       onExtend={(s) => setSheet({ kind: 'extend', skill: s })}
-      onBack={() => go({ skill: null })} onAssign={(s) => setSheet({ kind: 'assign', skill: s })}
+      onBack={() => go({ skill: null })} onAssign={(s) => setSheet({ kind: 'assign', skill: s })} onOpenSkill={(uid) => go({ skill: uid })}
       onRetry={() => { setPage(null); agents.skill(skillUid).then(setPage); }} />;
   } else if (!lib) {
     body = <Loading />;

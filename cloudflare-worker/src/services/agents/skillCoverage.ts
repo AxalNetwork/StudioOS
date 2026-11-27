@@ -15,16 +15,26 @@
  *
  * D5970 (#5970): `parseSkillFilters` and `matchesSkill`, the validated filters that narrow both blocks. See the last
  * section below; which filter applies to which block is `FILTER_BLOCKS`.
+ *
+ * D8912 (#8912): the same measures for one company's own skills (`subject: 'company'`), read by that company's
+ * editors (`routes/team_skill_analytics.ts`). The definitions are these functions, never a copy: `subject` only says
+ * whose skills are detailed. The company's rows are narrowed to its own skills in SQL (`COMPANY_COVERAGE_SQL`,
+ * `COMPANY_LINKS_SQL`), so no HQ draft and no other company's uid, slug or count reaches this function.
  */
 import { RADAR_AXES } from '../skillsTaxonomySchema.ts';
+import { CATALOGUE } from '../ai/catalogue.ts';
+import { MODEL_CONNECTIONS } from '../ai/moduleConnections.ts';
 import { compareResults, pairOutcome, type PairOutcome, type ResultRow } from './skillEvalCompare.ts';
 
-/** One `agent_skills` row with its aggregates; `slug` and `uid` are null for a company skill. */
+/** Whose skills a read details: HQ's catalogue (the Super Admin read), or one company's own (D8912). */
+export type Subject = 'hq' | 'company';
+
+/** One `agent_skills` row with its aggregates; in the HQ read, `slug` and `uid` are null for a company skill. */
 export type CoverageRow = {
   scope: 'hq' | 'company';
   status: 'draft' | 'published' | 'retired';
   slug: string | null;
-  /** D5970: what a `uid` filter matches; read for an HQ skill only. */
+  /** D5970: what a `uid` filter matches; read for an HQ skill only, and in a company's read (D8912) for its own. */
   uid?: string | null;
   current_version: number;
   published_roles_json: string | null;
@@ -36,6 +46,37 @@ export type CoverageRow = {
 };
 export type AdoptionRow = { links: number; agents: number; behind_current: number; published_without_links: number };
 export type Unavailable = { available: false; reason: string };
+
+// D8912: the per-skill aggregates coverage counts, written once for both reads so the two never define them apart.
+const COVERAGE_AGGREGATES = `(SELECT COUNT(*) FROM agent_skill_cases k WHERE k.skill_id = s.id AND k.removed_at IS NULL) AS live_cases,
+        (SELECT COUNT(*) FROM agent_skill_roles r WHERE r.skill_id = s.id) AS draft_roles,
+        (SELECT COUNT(*) FROM agent_skill_tags t WHERE t.skill_id = s.id) AS draft_tags,
+        EXISTS (SELECT 1 FROM agent_skill_reviews q WHERE q.skill_id = s.id AND q.status = 'requested') AS review_requested`;
+/** D4536: every skill's scope and status, and an HQ skill's current published roles and tags. No bind. */
+export const HQ_COVERAGE_SQL = `SELECT s.scope, s.status, s.current_version,
+        CASE WHEN s.scope = 'hq' THEN s.uid END AS uid,
+        CASE WHEN s.scope = 'hq' THEN s.slug END AS slug,
+        CASE WHEN s.scope = 'hq' THEN v.roles_json END AS published_roles_json,
+        CASE WHEN s.scope = 'hq' THEN v.taxonomy_json END AS published_tags_json,
+        ${COVERAGE_AGGREGATES}
+      FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version`;
+/** D8912: one company's own skills, with their current published roles and tags. Bound: the company id. */
+export const COMPANY_COVERAGE_SQL = `SELECT s.scope, s.status, s.current_version, s.uid, s.slug,
+        v.roles_json AS published_roles_json, v.taxonomy_json AS published_tags_json,
+        ${COVERAGE_AGGREGATES}
+      FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+      WHERE s.scope = 'company' AND s.company_id = ?`;
+const LINKS_SELECT = `SELECT s.uid, COUNT(l.id) AS links, group_concat(DISTINCT l.agent_id) AS agent_ids,
+        COALESCE(SUM(CASE WHEN l.version < s.current_version THEN 1 ELSE 0 END), 0) AS behind_current
+      FROM agent_skill_links l`;
+const LINKS_AGENTS = `JOIN team_agents a ON a.id = l.agent_id AND a.status <> 'removed'
+      GROUP BY s.id`;
+/** D4536: the pins per linked HQ skill, active agents only. No bind. */
+export const HQ_LINKS_SQL = `${LINKS_SELECT} JOIN agent_skills s ON s.id = l.skill_id AND s.scope = 'hq'
+      ${LINKS_AGENTS}`;
+/** D8912: the pins per linked skill of one company, active agents only. Bound: the company id. */
+export const COMPANY_LINKS_SQL = `${LINKS_SELECT} JOIN agent_skills s ON s.id = l.skill_id AND s.scope = 'company' AND s.company_id = ?
+      ${LINKS_AGENTS}`;
 
 /** An area with fewer published skills than this, by primary tag, is `thin`; none at all is `none`. */
 export const THIN_BELOW = 3;
@@ -49,6 +90,11 @@ type Counts = { draft: number; published: number; retired: number; review_reques
 const counts = (): Counts => ({ draft: 0, published: 0, retired: 0, review_requested: 0 });
 
 export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
+  /**
+   * D8912: whose skills are detailed (default HQ). A company's read holds that company's rows only: `by_scope` is its
+   * own counts, and the source library (Axal's files) and draft evaluation (HQ release evidence, D4533) are unavailable.
+   */
+  subject?: Subject;
   category: ReadonlyMap<string, string>;
   roleKeys: readonly string[];
   librarySlugs: readonly string[];
@@ -61,6 +107,7 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
    */
   filtered?: boolean;
 }) {
+  const subject: Subject = ctx.subject ?? 'hq';
   const byScope = { hq: counts(), company: counts() };
   const byRole = new Map<string, number>(ctx.roleKeys.map((k) => [k, 0]));
   const byArea = new Map<string, { primary: number; any: number }>(RADAR_AXES.map((a) => [a.slug, { primary: 0, any: 0 }]));
@@ -74,7 +121,7 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
     const c = byScope[r.scope];
     c[r.status]++;
     if (r.status !== 'retired' && r.review_requested) c.review_requested++;
-    if (r.scope !== 'hq') continue;
+    if (r.scope !== subject) continue;
     if (r.slug) hqSlugs.set(r.slug, r);
     if (r.status === 'draft') {
       drafts.total++;
@@ -108,10 +155,13 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
   const sourceOnly = [...library].filter((s) => !hqSlugs.has(s)).sort();
   const seeded = [...library].filter((s) => hqSlugs.has(s));
 
+  const company = subject === 'company';
   return {
-    by_scope: ctx.filtered
-      ? { hq: byScope.hq, company: { available: false, reason: 'A filtered read is HQ only: a company skill\'s tags and roles are never read.' } as Unavailable }
-      : byScope as { hq: Counts; company: Counts | Unavailable },
+    by_scope: company
+      ? { company: byScope.company } as { hq?: undefined; company: Counts }
+      : ctx.filtered
+        ? { hq: byScope.hq, company: { available: false, reason: 'A filtered read is HQ only: a company skill\'s tags and roles are never read.' } as Unavailable }
+        : byScope as { hq: Counts; company: Counts | Unavailable },
     by_role: ctx.roleKeys.map((role) => ({ role, published: byRole.get(role)! })),
     roles_without_published: ctx.roleKeys.filter((k) => byRole.get(k) === 0),
     by_area: RADAR_AXES.map((a) => {
@@ -124,13 +174,17 @@ export function catalogueCoverage(rows: readonly CoverageRow[], ctx: {
     published_untagged: untaggedPublished,
     drafts: {
       ...drafts,
-      without_current_evaluation: ctx.filtered
+      without_current_evaluation: company
+        ? { available: false, reason: 'A company draft has no release evidence to evaluate against (#4533).' } as Unavailable
+        : ctx.filtered
         ? { available: false, reason: 'Computed on the unfiltered full list only.' } as Unavailable
         : ctx.draftsWithoutCurrentEvaluation == null
           ? { available: false, reason: 'Computed on the full list only (read without ?page).' } as Unavailable
           : ctx.draftsWithoutCurrentEvaluation,
     },
-    sources: ctx.filtered
+    sources: company
+      ? { available: false, reason: 'The source library is Axal\'s files; a company skill has none.' } as Unavailable
+      : ctx.filtered
       ? { available: false, reason: 'The source library files are not filtered.' } as Unavailable
       : {
         library_files: library.size,
@@ -381,13 +435,16 @@ export const FILTER_BLOCKS: Readonly<Record<'coverage' | 'published_evaluation' 
   executions: FILTER_KEYS,
 };
 const STATUSES = ['draft', 'published', 'retired'] as const;
+/** D5970: the models a `model` filter may name: every chat model in the catalogue, a deprecated one included (its rows stay). */
+export const FILTER_MODEL_IDS: readonly string[] = CATALOGUE.filter((m) => MODEL_CONNECTIONS[m.id]?.operation === 'chat').map((m) => m.id);
 const UID = /^[0-9a-f]{32}$/;
 const VERSION = /^[1-9][0-9]{0,5}$/;
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAY_MS = 86_400_000;
 
 export type SkillFilters = {
-  scope: 'hq' | null;
+  /** The subject's own scope: `hq` on the HQ read, `company` on a company's read (D8912). */
+  scope: Subject | null;
   status: CoverageRow['status'] | null;
   uid: string | null;
   version: number | null;
@@ -422,6 +479,8 @@ export function parseSkillFilters(query: Record<string, string[]>, ctx: {
   roleKeys: readonly string[];
   modelIds: readonly string[];
   allowed?: readonly string[];
+  /** D8912: the one scope the read serves (default `hq`). */
+  scope?: Subject;
 }): { ok: true; filters: SkillFilters | null } | FilterRefusal {
   const no = (code: string, message: string): FilterRefusal => ({ ok: false, code, message });
   const given = new Map<FilterKey, string>();
@@ -436,8 +495,13 @@ export function parseSkillFilters(query: Record<string, string[]>, ctx: {
   const f: SkillFilters = { scope: null, status: null, uid: null, version: null, category: null, tag: null, role: null, model: null, window: null };
 
   if (given.has('scope')) {
-    if (v('scope') !== 'hq') return no('scope_not_served', 'This read serves HQ skills only: the scope filter takes "hq".');
-    f.scope = 'hq';
+    const served = ctx.scope ?? 'hq';
+    if (v('scope') !== served) {
+      return no('scope_not_served', served === 'hq'
+        ? 'This read serves HQ skills only: the scope filter takes "hq".'
+        : 'This read serves your company\'s own skills only: the scope filter takes "company".');
+    }
+    f.scope = served;
   }
   if (given.has('status')) {
     if (!(STATUSES as readonly string[]).includes(v('status'))) return no('status_unknown', `The status filter takes one of: ${STATUSES.join(', ')}.`);
@@ -486,11 +550,12 @@ export type MatchableSkill = {
 };
 
 /**
- * Whether a skill passes the filters' skill-level terms. A company skill never does: its tags and roles are not read.
+ * Whether a skill passes the filters' skill-level terms. Only the subject's skills can (HQ's by default): in the HQ
+ * read a company skill never does, its tags and roles are not read; in a company's read (D8912) an HQ skill never does.
  * Role, tag and category read the current published version, so a skill with no version matches none of them.
  */
-export function matchesSkill(s: MatchableSkill, f: SkillFilters, category: ReadonlyMap<string, string>): boolean {
-  if (s.scope !== 'hq') return false;
+export function matchesSkill(s: MatchableSkill, f: SkillFilters, category: ReadonlyMap<string, string>, subject: Subject = 'hq'): boolean {
+  if (s.scope !== subject) return false;
   if (f.status != null && s.status !== f.status) return false;
   if (f.uid != null && s.uid !== f.uid) return false;
   if (f.version != null && Number(s.current_version) !== f.version) return false;
@@ -503,12 +568,12 @@ export function matchesSkill(s: MatchableSkill, f: SkillFilters, category: Reado
   return true;
 }
 
-/** HQ's pins per linked HQ skill (active agents only), one row each; `agent_ids` is a comma list. */
+/** The pins per linked skill of the subject (active agents only), one row each; `agent_ids` is a comma list. */
 export type SkillLinkRow = { uid: string; links: number; agent_ids: string | null; behind_current: number };
 
-/** Coverage's adoption over the HQ skills in `rows`: every one unfiltered, the matched ones filtered. */
-export function adoptionOf(links: readonly SkillLinkRow[], rows: readonly CoverageRow[]): AdoptionRow {
-  const hq = new Map(rows.filter((r) => r.scope === 'hq' && r.uid).map((r) => [r.uid as string, r]));
+/** Coverage's adoption over the subject's skills in `rows` (HQ's by default): every one unfiltered, the matched ones filtered. */
+export function adoptionOf(links: readonly SkillLinkRow[], rows: readonly CoverageRow[], subject: Subject = 'hq'): AdoptionRow {
+  const hq = new Map(rows.filter((r) => r.scope === subject && r.uid).map((r) => [r.uid as string, r]));
   const agents = new Set<string>();
   const linked = new Set<string>();
   let n = 0, behind = 0;
