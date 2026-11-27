@@ -56,7 +56,7 @@ const HANDLERS: Record<EffectKind, Handler> = {
     return runStagedNextStage(env, uuid, appUrl);
   },
   formation_case_signed: async (env, uuid) => {
-    const { onCaseEnvelopeCompleted } = await import('./formationDocuments');
+    const { onCaseEnvelopeCompleted } = await import('./formationCaseSigned');
     return onCaseEnvelopeCompleted(env, uuid);
   },
 };
