@@ -5,6 +5,8 @@ workspace; `advisorStudioHome.css` styles the home. `AdvisorPreviewNotice.jsx`
 and `AdvisorSectionStub.jsx` explain previews and sections whose stores are
 not yet available. `advisorEarnings.js` derives recorded earnings facts. `advisorToday.js` builds the Studio's Today list from the bookings, the calendar and the slots, and says which of the three failed or is still loading (D4620).
 
+`advisorTodayView.js` writes every word on the Today card, and `AdvisorTodayTile.jsx` draws it: each booked session links to its Calendar item, and focus returns to its row (D8732).
+
 `AdvisorProfilePage.jsx` is the approved Ops A5 public profile.
 `PublicAdvisorBookingPage.jsx` opens a session type's `/b/*` link and reuses
 the directory booking dialog. Public responses omit account IDs and email;

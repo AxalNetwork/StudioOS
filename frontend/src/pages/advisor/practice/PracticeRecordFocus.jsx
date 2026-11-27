@@ -7,7 +7,8 @@ export function recordTarget(pathname, search) {
   const targets = {
     request: ['/practice/opportunities', `row-pr1-awaiting-${id}`],
     engagement: ['/practice/engagements', `card-pr2-${id}`],
-    session: ['/practice/sessions', `lifecycle-${id}`],
+    // D8732 (#8732): SessionActions draws each session as session-card-<id>; lifecycle-<id> named no node, so the focus never landed.
+    session: ['/practice/sessions', `session-card-${id}`],
     delivery: ['/practice/delivery', `row-pr3-${id}`],
   };
   const target = targets[p.get('record')];

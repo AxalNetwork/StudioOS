@@ -214,3 +214,37 @@ export function newMenu(role) {
   out.push({ key: 'agent', label: 'Schedule an AI agent', sub: 'Its work waits in Approvals' });
   return out;
 }
+
+/**
+ * D8732 (#8732): Open booking on an advisor's own session lands on its card in
+ * Practice › Sessions (`?record=session&id=`, `PracticeRecordFocus`), not on the
+ * top of the list. Any other kind, or another address, is left as the Worker sent it.
+ */
+export function pageHref(item) {
+  const id = Number(item?.source_id);
+  if (item?.kind === 'advisor_booking' && item?.href === '/practice/sessions' && Number.isSafeInteger(id) && id > 0) {
+    return `/practice/sessions?record=session&id=${id}`;
+  }
+  return item?.href || null;
+}
+
+/**
+ * D8732 (SAV05C): what Studio's Today showed (`state.today`, from
+ * `advisorTodayView.rowState`) against the item the drawer read now. A line
+ * when the status moved since; null when it did not, or nothing was handed in.
+ */
+export function changedSince(item, fallback) {
+  const was = String(fallback?.status || '').toLowerCase();
+  const now = String(item?.status || '').toLowerCase();
+  if (!was || !now || was === now) return null;
+  return `Studio showed this as ${fallback.statusWord || was} at ${fallback.readAt || 'its last read'}. This is the current record.`;
+}
+
+/** D8732 (SAV05A, SAV05B): the dated fallback's one line, from Today's read only. */
+export function fallbackLine(fallback) {
+  if (!fallback) return null;
+  return `From your Today list: ${[fallback.who, fallback.time, fallback.day].filter(Boolean).join(' · ')}`;
+}
+
+/** The day in Calendar that the fallback and the When link open (`?date=`, read by `calendarGrid.anchorOf`). */
+export const fallbackDayHref = (fallback) => (/^\d{4}-\d{2}-\d{2}$/.test(fallback?.date || '') ? `/calendar/agenda?date=${fallback.date}` : null);
