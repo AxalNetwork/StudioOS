@@ -17,4 +17,5 @@ page belongs in that page instead.
 | `useInactivityTimeout.js` | Session idle handling. |
 | `useEscapeClose.js` | Escape-to-close for drawers and modals. |
 | `useScrollToHash.js` | Scrolls to the section a URL hash names once it has rendered (D571: the Practice zones' redirected sections). |
+| `useCookieChoiceSettled.js` | #9201 — true once a cookie choice is stored and the cookie banner or dialog is closed (`isChoiceSettled()` in `../lib/cookieConsent.js`). The product tour waits on it so it never covers the chooser. |
 | `useForcedLightTheme.js` | Opts a surface out of dark mode (print and PDF views). |

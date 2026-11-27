@@ -186,6 +186,39 @@ export function subscribe(callback) {
   };
 }
 
+// #9201 — whether the visitor's cookie choice is settled: a choice is stored
+// AND the chooser (the first-visit banner or the preferences dialog) is not
+// drawn. CookieConsent reports what it draws through setChooserShown(). Anything
+// that would cover or inert the chooser (the product tour) waits on this, so
+// the choice stays reachable first. useCookieChoiceSettled() is the React hook.
+const CHOOSER_EVENT = 'axal:cookie_chooser_changed';
+let chooserShown = false;
+
+export function setChooserShown(shown) {
+  const next = Boolean(shown);
+  if (next === chooserShown) return;
+  chooserShown = next;
+  try {
+    window.dispatchEvent(new CustomEvent(CHOOSER_EVENT, { detail: next }));
+  } catch { /* no window */ }
+}
+
+export function isChoiceSettled() {
+  return isDecided() && !chooserShown;
+}
+
+// Calls back with isChoiceSettled() whenever the choice or the chooser changes.
+export function subscribeChoiceSettled(callback) {
+  if (typeof window === 'undefined') return () => {};
+  const onChooser = () => callback(isChoiceSettled());
+  const off = subscribe(onChooser);
+  window.addEventListener(CHOOSER_EVENT, onChooser);
+  return () => {
+    off();
+    window.removeEventListener(CHOOSER_EVENT, onChooser);
+  };
+}
+
 // Fired by the footer "Cookie preferences" link to reopen the chooser.
 export function openCookiePreferences() {
   try {
