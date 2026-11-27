@@ -1,0 +1,144 @@
+{
+  "jurisdictions": [
+    {
+      "id": "us_de_ccorp",
+      "label": "Delaware C-Corp",
+      "country": "United States",
+      "country_code": "US",
+      "entity_type": "C Corporation",
+      "summary": "The default for VC-backed startups.",
+      "est_cost_usd": null,
+      "time_to_form_days": null,
+      "fundraising_friendly": true,
+      "atlas_supported": false,
+      "pros": [
+        "Universally accepted by US VCs"
+      ],
+      "cons": [
+        "Annual filings + agent"
+      ],
+      "tax_summary": null,
+      "templates": [
+        "certificate_of_incorporation_de",
+        "bylaws",
+        "stock_purchase_agreement",
+        "section_83b"
+      ]
+    },
+    {
+      "id": "us_wy_ccorp",
+      "label": "Wyoming C-Corp",
+      "country": "United States",
+      "country_code": "US",
+      "entity_type": "C Corporation",
+      "summary": "A US corporation formed in Wyoming.",
+      "est_cost_usd": null,
+      "time_to_form_days": null,
+      "fundraising_friendly": true,
+      "atlas_supported": false,
+      "pros": [],
+      "cons": [
+        "Less familiar to US VCs than Delaware",
+        "Annual report + registered agent"
+      ],
+      "tax_summary": null,
+      "templates": [
+        "articles_of_incorporation_wy",
+        "bylaws",
+        "stock_purchase_agreement",
+        "section_83b"
+      ]
+    },
+    {
+      "id": "us_de_llc",
+      "label": "Delaware LLC",
+      "country": "United States",
+      "country_code": "US",
+      "entity_type": "Limited Liability Company",
+      "summary": "Hard to take VC.",
+      "est_cost_usd": null,
+      "time_to_form_days": null,
+      "fundraising_friendly": false,
+      "atlas_supported": false,
+      "pros": [
+        "Flexible operating agreement"
+      ],
+      "cons": [
+        "Most VCs cannot invest in LLCs"
+      ],
+      "tax_summary": null,
+      "templates": [
+        "operating_agreement",
+        "ein_application_kit",
+        "member_consent"
+      ]
+    },
+    {
+      "id": "uk_ltd",
+      "label": "UK Private Limited (Ltd)",
+      "country": "United Kingdom",
+      "country_code": "GB",
+      "entity_type": "Private Limited Company",
+      "summary": "Credible for European VCs.",
+      "est_cost_usd": null,
+      "time_to_form_days": null,
+      "fundraising_friendly": true,
+      "atlas_supported": false,
+      "pros": [],
+      "cons": [
+        "US VCs may want a flip",
+        "Public PSC register"
+      ],
+      "tax_summary": null,
+      "templates": [
+        "uk_memorandum_of_association",
+        "uk_articles_of_association",
+        "uk_form_in01_kit"
+      ]
+    },
+    {
+      "id": "sg_pte",
+      "label": "Singapore Pte Ltd",
+      "country": "Singapore",
+      "country_code": "SG",
+      "entity_type": "Private Limited (Pte. Ltd.)",
+      "summary": "Asia hub. Strong rule of law, English-language filings.",
+      "est_cost_usd": null,
+      "time_to_form_days": null,
+      "fundraising_friendly": true,
+      "atlas_supported": false,
+      "pros": [],
+      "cons": [
+        "Need SG-resident director"
+      ],
+      "tax_summary": null,
+      "templates": [
+        "sg_constitution",
+        "sg_acra_form_45_kit",
+        "sg_first_directors_resolution"
+      ]
+    },
+    {
+      "id": "ee_oy",
+      "label": "Estonia OÜ (e-Residency)",
+      "country": "Estonia",
+      "country_code": "EE",
+      "entity_type": "OÜ",
+      "summary": "Fully remote.",
+      "est_cost_usd": null,
+      "time_to_form_days": null,
+      "fundraising_friendly": false,
+      "atlas_supported": false,
+      "pros": [],
+      "cons": [
+        "Need e-Residency first"
+      ],
+      "tax_summary": null,
+      "templates": [
+        "ee_articles_of_association",
+        "ee_e_residency_application_kit",
+        "ee_founding_resolution"
+      ]
+    }
+  ]
+}
