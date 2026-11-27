@@ -49,6 +49,12 @@
 // of the ledger. The two rules above still hold; they are said where they
 // apply — the territory step, the suspend and terminate dialogs, the coverage
 // grid's legend — and no longer in the ledger's header.
+//
+// D5929 (#5929), BOARD L21 — NEW LICENCE AS A STEPPED ISSUANCE. New licence
+// and Issue first licence open `licences/IssueLicenceFlow.jsx` in place of the
+// ledger: six steps, the territory step's overlap rule where it applies, and
+// a question before leaving with anything entered. The inline draft form that
+// stood here is its step 1 now (#5931's card), with the kind explainer kept.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useRecordCrumb from './useRecordCrumb';
 import { RefreshCw } from 'lucide-react';
@@ -70,6 +76,7 @@ import { Detail } from './licences/LicenceDetail';
 import { CountsAndNeeds, LedgerMenus, LedgerTable } from './licences/LedgerTable';
 import { CoverageLine, LedgerZero, SeatUtilisation } from './licences/LedgerZero';
 import { FamilyChips, RegistryLedger } from './licences/RegistryLedger';
+import IssueLicenceFlow from './licences/IssueLicenceFlow';
 import { familyFromParam, familyToParam } from './licenceRegistryModel';
 
 // #4707 — re-exported for the tests and pages that import it from here.
@@ -149,9 +156,8 @@ export default function AdminLicences() {
   // current filters has arrived, the rows on screen are the old filter's, and
   // reconciling against them would move the selection for the wrong reason.
   const [dataFor, setDataFor] = useState(null);
+  // D5929 — New licence and Issue first licence open the stepped flow (board L21) in place of the ledger.
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
-  const [err, setErr] = useState('');
   // #4700: `data.items` is the server's page for the current search and kind,
   // so it is exactly the rows the list draws.
   const allItems = Array.isArray(data?.items) ? data.items : [];
@@ -296,31 +302,12 @@ export default function AdminLicences() {
     if (!wanted && Array.isArray(data?.items) && data.items.length) readRequests(data.items.map((l) => l.uid));
   }, [data, wanted, readRequests]);
 
-  async function create(e) {
-    e.preventDefault();
-    setErr('');
-    try {
-      const payload = {
-        licence_ref: form.licence_ref,
-        legal_entity_name: form.legal_entity_name,
-        brand_name: form.brand_name,
-        // Step 1 of H26. Migration 279 gave the ledger its kind column, so the
-        // refusal that used to sit above this is gone rather than reworded:
-        // the reason it gave stopped being true.
-        kind: form.kind,
-      };
-      const r = await api.licenceCreate(payload);
-      setCreating(false);
-      setForm({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
-      // Selected only once the ledger holds it, or reconciliation would move
-      // the selection off a row the list has not drawn yet.
-      await load();
-      setParam({ licence: r.uid, kind: kindFilter === 'all' || kindFilter === payload.kind ? kindFilter : 'all' });
-    } catch (e2) {
-      reportError('licence_create_failed', e2);
-      setErr(e2?.message || 'Could not create the licence.');
-    }
-  }
+  // D5929 — leaving the flow. A draft it created (or a licence it issued) is in the ledger now, so the ledger is
+  // read again; the flow itself asked first when there was anything to lose.
+  const leaveFlow = (made) => {
+    setCreating(false);
+    if (made) load();
+  };
 
 
   // D775 (#2101): H1 drew no rail. Licences is HQ-only (`hqOnly`), so the rail is HQ's.
@@ -350,6 +337,16 @@ export default function AdminLicences() {
             onClearHolder={() => { setHolderName(null); setParam({ holder: null }); }}
             onCounts={setFamilyCounts}
           />
+        </div>
+      </RailFrame>
+    );
+  }
+  // D5929 (#5929), board L21 — New licence as six steps, in place of the ledger. It reads and writes for itself.
+  if (creating) {
+    return (
+      <RailFrame rail={rail} data-testid="hq-licences-page">
+        <div className={`mx-auto max-w-6xl px-4 py-6 ${PHONE_TARGETS}`}>
+          <IssueLicenceFlow onLeave={leaveFlow} />
         </div>
       </RailFrame>
     );
@@ -385,65 +382,6 @@ export default function AdminLicences() {
       ? <Coverage items={summary.coverage} renewals={summary.renewals} onOpen={setSel} />
       : <Coverage items={summary.coverage} onOpen={setSel} />)
     : null);
-
-  const createForm = (
-    <>
-      {creating && (
-        <form onSubmit={create} className="mt-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <div className="mb-3" data-testid="licence-kind">
-            <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-500">Kind</div>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {[
-                ['subsidiary', 'Axal subsidiary'],
-                ['white_label', 'White-label operator'],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, kind: id }))}
-                  aria-pressed={form.kind === id}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                    form.kind === id
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200'
-                      : 'border-gray-300 text-gray-700 dark:border-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 max-w-2xl text-[12px] leading-relaxed text-gray-600 dark:text-gray-400">
-              {form.kind === 'white_label'
-                ? 'Same subsidiary console, their brand, no HQ brand desk. Members land on a platform host at activation; their admin binds a custom one later, in Settings → Domain. Super Admin stays on axal.vc.'
-                : 'Axal-branded territory. They still bind their own host in Admin Settings → Domain. Super Admin stays on axal.vc and app.axal.vc.'}
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm uppercase dark:border-gray-700"
-              placeholder="Reference, e.g. AXL-005" required aria-label="Licence reference"
-              value={form.licence_ref} onChange={(e) => setForm((f) => ({ ...f, licence_ref: e.target.value }))} />
-            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-              placeholder="Legal entity name" required aria-label="Legal entity name"
-              value={form.legal_entity_name} onChange={(e) => setForm((f) => ({ ...f, legal_entity_name: e.target.value }))} />
-            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-              placeholder="Brand name in product" aria-label="Brand name in product"
-              value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} />
-          </div>
-          {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-          <button
-            type="submit"
-            className="mt-3 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Create draft
-          </button>
-          <p className="mt-2 text-[11px] text-gray-500">
-            A new licence starts as a draft holding no territory. It cannot be activated until it
-            has a country, seats, terms and a renewal date.
-          </p>
-        </form>
-      )}
-    </>
-  );
 
   // ── A licence, open on its own (the detail slice redraws it to the canvas) ──
   if (wanted) {
@@ -496,12 +434,11 @@ export default function AdminLicences() {
       <div className={`mx-auto max-w-6xl px-4 py-6 ${PHONE_TARGETS}`}>
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>{title}{lede}</div>
-          <button type="button" onClick={() => setCreating((v) => !v)}
+          <button type="button" onClick={() => setCreating(true)} data-testid="licence-new"
             className="min-h-[36px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700">
-            {creating ? 'Cancel' : 'Issue first licence'}
+            Issue first licence
           </button>
         </header>
-        {createForm}
         {familyChips}
         {notFound && (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="licence-not-found">
@@ -539,13 +476,12 @@ export default function AdminLicences() {
             className="grid h-8 w-8 place-items-center rounded-md border max-md:h-11 max-md:w-11 border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             <RefreshCw size={14} aria-hidden="true" />
           </button>
-          <button type="button" onClick={() => setCreating((v) => !v)}
+          <button type="button" onClick={() => setCreating(true)} data-testid="licence-new"
             className="min-h-[36px] rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700">
-            {creating ? 'Cancel' : 'New licence'}
+            New licence
           </button>
         </div>
       </header>
-      {createForm}
       {familyChips}
       {notFound && (
         <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="licence-not-found">

@@ -192,14 +192,15 @@ test('L00: Why is this empty? is a closed disclosure that says the ledger is not
   } finally { await v.close(); }
 });
 
-test('L00: Issue first licence opens the existing New licence form', async () => {
+test('L00: Issue first licence opens New licence as six steps (D5929, L21) on step 1', async () => {
   const v = await mount('/admin/licences', worker());
   try {
-    assert.equal(v.has('licence-kind'), false);
+    assert.equal(v.has('licence-issue-flow'), false);
     await v.click('licence-issue-first');
-    assert.ok(v.has('licence-kind'), 'the draft form, unchanged');
-    assert.ok(v.nodes().some((n) => v.props(n)['aria-label'] === 'Licence reference'));
-    assert.match(v.text(), /Create draft/);
+    assert.ok(v.has('licence-issue-flow'), 'the stepped flow, in place of the ledger');
+    assert.equal(v.has('licence-zero'), false);
+    assert.ok(v.has('nl-step-1') && v.has('nl-kind'), 'step 1 is the draft form');
+    assert.match(v.text(), /Create draft and continue/);
   } finally { await v.close(); }
 });
 
