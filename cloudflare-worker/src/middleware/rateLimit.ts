@@ -8,6 +8,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
+import { recordPhase } from '../util/serverTiming';
 // D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
 import { redactPath } from '../util/pathRedaction';
 
@@ -746,6 +747,11 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         && !(b.scope === 'user' && !userId),
     );
 
+    // D9169 (#9169): the KV buckets are the request's `ratelimit` phase
+    // (Server-Timing), recorded at each of the three exits below; resolving the
+    // caller above is `auth` (auth.ts).
+    const limiterStart = performance.now();
+    const limiterDone = () => recordPhase(c.req.raw, 'ratelimit', performance.now() - limiterStart);
     for (let i = 0; i < matching.length; i++) {
       const b = matching[i];
 
@@ -796,6 +802,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
           await logBlock(env, ctx, {
             user_id: userId, endpoint: redactPath(path), bucket: named.name, count: -1, blocked: true,
           });
+          limiterDone();
           c.header('Retry-After', '30');
           c.header('X-RateLimit-Bucket', named.name);
           return c.json({
@@ -813,6 +820,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         await logBlock(env, ctx, {
           user_id: userId, endpoint: redactPath(path), bucket: b.name, count, blocked: true,
         });
+        limiterDone();
         const retryAfter = b.windowSec >= 3600 ? 3600 : 60;
         c.header('Retry-After', String(retryAfter));
         c.header('X-RateLimit-Bucket', b.name);
@@ -825,6 +833,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         }, 429);
       }
     }
+    limiterDone();
     return next();
   };
 };

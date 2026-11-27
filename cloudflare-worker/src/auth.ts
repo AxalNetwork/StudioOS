@@ -8,6 +8,7 @@ import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, FREEZING_STATUSES } from './util/auth
 import { hasMfaEnrolled, readAdminMfaPolicy } from './services/adminMfaPolicy';
 import { recordSecurityEvent } from './services/securityEvents';
 import { heldLicences, holdsLicence, isLicence, type Licence } from './services/accountLicences';
+import { timePhase } from './util/serverTiming';
 
 // Contexts live for one request. Repeated requireAuth/requireRole calls share
 // exactly one grant lookup, always keyed to the selected token's subject.
@@ -369,7 +370,8 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
   if (!byKey) { byKey = new Map(); requestCallers.set(c, byKey); }
   let pending = byKey.get(key);
   if (!pending) {
-    const p = resolveCurrentUser(c);
+    // D9169: the resolution, not each wait on it, is the request's `auth` phase (Server-Timing).
+    const p = timePhase(c.req?.raw, 'auth', () => resolveCurrentUser(c));
     pending = p;
     byKey.set(key, p);
     const memo = byKey;
