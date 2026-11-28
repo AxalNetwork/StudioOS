@@ -456,7 +456,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
         <SuggestAgentsSheet scope={kind} id={id} canManage={!!agentsBlock?.value?.can_manage} models={rolesBlock?.value?.models} roles={rolesBlock?.value?.roles} team={agentList}
           onClose={() => setSheet(null)} onAdded={loadAgents} />
       ) : null}
-      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} scope={scope} editCap={sheet.edit === 'cap'} editSponsor={sheet.edit === 'sponsor'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
+      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} scope={scope} editCap={sheet.edit === 'cap'} editSponsor={sheet.edit === 'sponsor'} editPause={sheet.edit === 'pause'} addSkills={sheet.edit === 'skills'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
       {dialog && dialogs[dialog.kind] ? dialogs[dialog.kind](dialog.p, () => setDialog(null), () => { setDialog(null); reload(); }) : null}
     </div>
   );

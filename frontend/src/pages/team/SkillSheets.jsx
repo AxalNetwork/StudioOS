@@ -403,9 +403,12 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
  * The Add-an-agent Skills step (D8768 TMS07, TMS08): the Worker's one rule for an agent not yet added, its role and
  * persona from the steps before. Up to three eligible skills of its natural fit are picked for you; a skill a policy
  * blocks says why; a picked skill names the tools step 3 will ask for. Nothing eligible says so, with counts and the
- * way on, and the step can still go on with no skills.
+ * way on. Next waits for a chosen skill unless skills are not open at all.
+ *
+ * D8769 part 3 (TMM04B, the owner's Q2 = A): the sheet's Next stays off until a skill is chosen (`skillsGate`), so
+ * the step hands its read up (`onBlock`); a read that failed says so with Try again, which reads it again.
  */
-export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList }) {
+export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList, onBlock }) {
   const [block, setBlock] = useState(null);
   const [reads, setReads] = useState(0);
   // D4121 AG3: what the agent would cost per run with these skills, before it is added (its cap comes at Review).
@@ -417,9 +420,11 @@ export function SkillsStep({ scope, role, model, persona, picked, setPicked, onL
   useEffect(() => {
     let alive = true;
     setBlock(null);
+    onBlock?.(null);
     agents.eligibleSkills(kind, scopeId, { role, persona }).then((b) => {
       if (!alive) return;
       setBlock(b);
+      onBlock?.(b);
       if (!b.available) return;
       const list = Array.isArray(b.value?.skills) ? b.value.skills : [];
       onList?.(list);
@@ -431,10 +436,15 @@ export function SkillsStep({ scope, role, model, persona, picked, setPicked, onL
     // TMS09: loading shows "—" counts; a failed read says so with Try again and keeps the picks; switched off is said.
     return (
       <div className="flex flex-col gap-2" data-testid="add-agent-skills">
-        {block && !block.unreadable
+        {block?.unreadable ? (
+          <HonestBlock role="alert" testId="add-agent-skills-unreadable"
+            action={<button type="button" className={`w-fit max-sm:min-h-[44px] ${BTN_SECONDARY}`} onClick={() => setReads((n) => n + 1)} data-testid="add-agent-skills-retry">Try again</button>}>
+            The skills this agent could take could not be read. That is not the same as having none.
+            <span>{pickerFailureWords(picked?.size || 0)}</span>
+          </HonestBlock>
+        ) : block
           ? <HonestBlock>Skills aren’t open yet. You can add skills from the agent’s profile later.</HonestBlock>
           : <PickerReadState block={block} what="The skills this agent could take" picks={picked?.size || 0} onRetry={() => setReads((n) => n + 1)} testPrefix="add-agent-skills" />}
-        {block?.unreadable ? <span className={MUTED}>You can also go on and add skills from the agent’s profile later.</span> : null}
       </div>
     );
   }

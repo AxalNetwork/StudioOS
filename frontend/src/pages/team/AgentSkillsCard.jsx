@@ -5,6 +5,7 @@ import { AgentRadar, RunCostLine, SkillRow } from './SkillParts.jsx';
 import { AddSkillsSheet } from './SkillSheets.jsx';
 import SkillsLink from './SkillsLink.jsx';
 import { radarVector, scopeChip, updateLabel } from './skillsModel.js';
+import { makesLine } from './agentChoiceModel.js';
 
 /**
  * D1612 (#3952, SK4, SK9b) — the agent profile's Skills and Values, from A2's
@@ -75,7 +76,7 @@ export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRe
           const retired = s.status === 'retired';
           const upd = !retired ? updateLabel(s) : null;
           return (
-            <SkillRow key={s.uid} s={s} version={s.pinned_version} retired={retired}
+            <SkillRow key={s.uid} s={s} version={s.pinned_version} retired={retired} makes={makesLine(s)}
               why={retired ? `Axal retired this skill. It keeps working at v${s.pinned_version}; pick a replacement.` : null}
               toolState={(t) => (t.approved === false ? 'no' : null)}>
               {canManage ? (
@@ -93,9 +94,10 @@ export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRe
   );
 }
 
-export default function AgentSkillsCard({ agent, canManage, skillsScope = null }) {
+export default function AgentSkillsCard({ agent, canManage, skillsScope = null, openAdd = false }) {
   const [block, setBlock] = useState(null);
-  const [adding, setAdding] = useState(false);
+  // D8769 part 3: the roster's "Add skills for {name}" opens the profile with Add skills already open, for a manager.
+  const [adding, setAdding] = useState(!!openAdd);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   const load = useCallback(() => { setBlock(null); agents.agentSkills(agent.uid).then(setBlock); }, [agent.uid]);
@@ -137,7 +139,7 @@ export default function AgentSkillsCard({ agent, canManage, skillsScope = null }
               onRemove={(s) => write(list.filter((x) => x.uid !== s.uid))} />
           )}
       {refusal ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{refusal}</p> : null}
-      {adding && value ? <AddSkillsSheet agent={agent} current={value.skills} radar={value.radar} onClose={() => setAdding(false)} onSaved={(v) => { setAdding(false); setBlock({ available: true, value: v }); }} /> : null}
+      {adding && value && manage ? <AddSkillsSheet agent={agent} current={value.skills} radar={value.radar} onClose={() => setAdding(false)} onSaved={(v) => { setAdding(false); setBlock({ available: true, value: v }); }} /> : null}
     </section>
   );
 }
