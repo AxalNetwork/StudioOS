@@ -30,6 +30,7 @@
  *   - counts every provider request in the drain's meter (cost telemetry, beside part 2's delivery rows).
  */
 import type { Env } from '../types';
+import { webhookChannel } from './workGraphReleaseWebhooks';
 import { deleteComment, fetchCommentsPage, githubConfigured, addComment, type GhResult } from './githubSync';
 import { STREAM_UID_RE, streamOf } from './learningStream';
 import { drainEffects, type DeliveryResult, type EffectHandler } from './workGraphEffects';
@@ -210,10 +211,19 @@ export function streamAdapter(env: Env, meter: ProviderMeter): ReleaseDeliveryAd
 // ---------------------------------------------------------------------------------------------------------------------
 
 /**
+ * Part 20 (D5585-p20): the distribution channels this env offers. The signed webhook, only while its signing key is
+ * set; otherwise none, as on main before part 20 (`RELEASE_DISTRIBUTION_CHANNELS`).
+ */
+export function releaseDistributionChannels(env: Env): ReleaseDistributionChannels {
+  const webhook = webhookChannel(env);
+  return webhook ? Object.freeze({ ...RELEASE_DISTRIBUTION_CHANNELS, webhook }) : RELEASE_DISTRIBUTION_CHANNELS;
+}
+
+/**
  * The real adapter of every target, over the env's existing bindings. `channels` are the external distribution
  * channels: none on main (D5585-p6 §2), so that target refuses `target_not_configured`; tests inject fakes.
  */
-export function releaseAdapters(env: Env, meter: ProviderMeter, channels: ReleaseDistributionChannels = RELEASE_DISTRIBUTION_CHANNELS): Required<ReleaseAdapters> {
+export function releaseAdapters(env: Env, meter: ProviderMeter, channels: ReleaseDistributionChannels = releaseDistributionChannels(env)): Required<ReleaseAdapters> {
   return {
     github_pr: githubPrAdapter(env, meter),
     stream: streamAdapter(env, meter),

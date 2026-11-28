@@ -81,9 +81,14 @@ export const RELEASE_REFUSAL_SENTENCES: Readonly<Record<string, string>> = Objec
   // Part 16 (D5585-p16): a line's name.
   line_name_invalid: 'A line name is 1 to 120 characters of text, with no control or text-direction characters.',
   stale_line_name: 'The line’s name has changed since you loaded it. Reload the line and rename it again.',
+  // Part 20 (D5585-p20): a company's signed-webhook destinations.
+  webhook_invalid: 'A webhook is a name of lower-case letters, digits and hyphens, an https URL on a public host, and at least one audience.',
+  stale_webhook: 'This webhook has changed since you loaded it. Reload it and try again.',
+  not_registered: 'That webhook is not registered for this company, so there is nothing to disable.',
+  webhook_limit: 'This company already has the most webhooks it may. Disable one before registering another.',
 });
 export const RELEASE_REFUSAL_STATUS: Readonly<Record<string, number>> = Object.freeze({ malformed: 400, unknown_authority: 400, not_found: 404, wrong_tenant: 403, queue_full: 503,
-  line_name_invalid: 400 });
+  line_name_invalid: 400, webhook_invalid: 400 });
 
 export const RELEASE_DRAIN_LIMITS = Object.freeze({
   /** Effects one scheduled drain delivers at most. */
