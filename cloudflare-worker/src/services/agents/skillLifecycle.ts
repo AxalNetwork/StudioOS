@@ -545,3 +545,131 @@ export async function pinnedAgents(env: Env, skillId: number): Promise<number> {
     WHERE l.skill_id = ? AND a.status <> 'removed'`).bind(skillId).first<{ n: number }>();
   return Number(r?.n ?? 0);
 }
+
+// ── The version timeline (D4533 part 5, part E) ─────────────────────────────
+
+/**
+ * D4533 part 5 (#4533, the owner's E = b): one skill's history as a single list, merged on read from rows that
+ * already exist. Nothing is stored for it, so there is no second audit store, and no event is made up for a time
+ * nothing recorded.
+ *
+ *   publish        `agent_skill_versions`: the version and its release note; the actor is `published_by`
+ *   review         `agent_skill_reviews` with a decision (approved, changes_requested, withdrawn): the reviewer, who
+ *                  asked, the decision time and the reviewer's comment. The actor is the reviewer for a decision (only
+ *                  the named reviewer may decide, D4160) and null for a withdrawal (a later request, restore or
+ *                  retirement withdrew it, and the row does not say who). An open request is not a decision and is
+ *                  not listed; GET /:uid answers it as `review.open`.
+ *   draft_restore  the `agent_skill_restore_proposed` audit row (`skillRecovery.ts`, its only record): the source
+ *                  version, the reason and whether unpublished edits were discarded (never their text); the actor is
+ *                  the audit row's admin
+ *   retirement     `agent_skill_retirements`: the reason, the replacement skill and the pinned count; the actor is `retired_by`
+ *
+ * `version` is the version a row is proven to belong to, and null when the rows cannot prove it: a publish is its
+ * version; an approval is the version whose manifest names it (`$.review.review_id`, D4533 §10.1), else null; a
+ * restore (it proposes a draft, and no row links that draft to a later version) and a retirement (its row names no
+ * version) are null. The release evidence (manifest, reused results) stays on `versions[]` and `freshness`; a row here
+ * neither repeats nor re-derives it.
+ *
+ * Order: newest first by the recorded time, read through `datetime()` so the stored text format does not decide; a
+ * row whose time cannot be read goes last. Rows recorded in the same second follow cause and effect, the effect
+ * first (`TIMELINE_RANK`): a publish above the approval it spent, a retirement or a restore above the review it
+ * withdrew. Then the newer source row first. At most `TIMELINE_MAX` rows; `truncated` says more were recorded. When
+ * the audit log cannot be read, the restores are left out and `unreadable` names them, never "none".
+ */
+export type TimelineKind = 'publish' | 'review' | 'draft_restore' | 'retirement';
+export const TIMELINE_MAX = 200;
+export const TIMELINE_RANK: Record<TimelineKind, number> = { retirement: 0, publish: 1, draft_restore: 2, review: 3 };
+
+type TimelinePerson = { uid: string; name: string | null } | null;
+export type TimelineRow =
+  | { id: string; kind: 'publish'; at: string; actor: TimelinePerson; version: number; release_note: string | null }
+  | { id: string; kind: 'review'; at: string; actor: TimelinePerson; version: number | null; decision: 'approved' | 'changes_requested' | 'withdrawn';
+      reviewer: TimelinePerson; requested_by: TimelinePerson; requested_at: string; decided_at: string; comment: string | null }
+  | { id: string; kind: 'draft_restore'; at: string; actor: TimelinePerson; version: null; source_version: number | null; reason: string | null; discarded_draft: boolean }
+  | { id: string; kind: 'retirement'; at: string; actor: TimelinePerson; version: null; reason: string; replacement: { uid: string; name: string | null } | null; pinned_agents: number };
+export type Timeline = { rows: TimelineRow[]; truncated: boolean; unreadable: TimelineKind[] };
+
+/** What the order reads: `sort_at` is `datetime()` of the recorded time (null: unreadable), `seq` the source row's id. */
+export type TimelineKey = { sort_at: string | null; seq: number; kind: TimelineKind };
+
+/** The timeline's order (see above). Pure, so the tie-break is tested on its own. */
+export function orderTimeline<T extends TimelineKey>(entries: readonly T[]): T[] {
+  return [...entries].sort((a, b) => {
+    if (a.sort_at !== b.sort_at) {
+      if (a.sort_at == null) return 1;
+      if (b.sort_at == null) return -1;
+      return a.sort_at < b.sort_at ? 1 : -1;
+    }
+    return TIMELINE_RANK[a.kind] - TIMELINE_RANK[b.kind] || b.seq - a.seq;
+  });
+}
+
+export async function skillTimeline(env: Env, s: { id: number; uid: string }): Promise<Timeline> {
+  // Each source reads its newest TIMELINE_MAX + 1, so the merged first TIMELINE_MAX are exact and `truncated` is known.
+  const limit = TIMELINE_MAX + 1;
+  const versions = (await env.DB.prepare(`SELECT id, version, published_at, published_by, release_note, datetime(published_at) AS sort_at
+      FROM agent_skill_versions WHERE skill_id = ? ORDER BY datetime(published_at) DESC, id DESC LIMIT ?`).bind(s.id, limit)
+    .all<{ id: number; version: number; published_at: string; published_by: number; release_note: string | null; sort_at: string | null }>()).results ?? [];
+  const reviews = (await env.DB.prepare(`SELECT r.id, r.status, r.comment, r.reviewer_id, r.requested_by, r.requested_at, r.decided_at, datetime(r.decided_at) AS sort_at,
+        CASE WHEN r.status = 'approved' THEN (SELECT MAX(v.version) FROM agent_skill_versions v
+          WHERE v.skill_id = r.skill_id AND json_extract(v.evidence_json, '$.review.review_id') = r.id) END AS version
+      FROM agent_skill_reviews r WHERE r.skill_id = ? AND r.status <> 'requested' ORDER BY datetime(r.decided_at) DESC, r.id DESC LIMIT ?`).bind(s.id, limit)
+    .all<{ id: number; status: 'approved' | 'changes_requested' | 'withdrawn'; comment: string | null; reviewer_id: number; requested_by: number;
+      requested_at: string; decided_at: string; sort_at: string | null; version: number | null }>()).results ?? [];
+  const retirement = await env.DB.prepare(`SELECT r.reason, r.pinned_agents, r.retired_at, r.retired_by, datetime(r.retired_at) AS sort_at,
+        x.uid AS replacement_uid, x.name AS replacement_name
+      FROM agent_skill_retirements r LEFT JOIN agent_skills x ON x.id = r.replacement_skill_id WHERE r.skill_id = ?`).bind(s.id)
+    .first<{ reason: string; pinned_agents: number; retired_at: string; retired_by: number; sort_at: string | null; replacement_uid: string | null; replacement_name: string | null }>();
+  const restores = await env.DB.prepare(`SELECT id, admin_user_id, exported_at, datetime(exported_at) AS sort_at,
+        json_extract(filters_json, '$.from_version') AS from_version, json_extract(filters_json, '$.reason') AS reason,
+        json_type(filters_json, '$.before.discarded_draft') IS NOT NULL AS discarded
+      FROM admin_audit_log WHERE action = 'agent_skill_restore_proposed' AND json_extract(filters_json, '$.skill_uid') = ?
+      ORDER BY datetime(exported_at) DESC, id DESC LIMIT ?`).bind(s.uid, limit)
+    .all<{ id: number; admin_user_id: number; exported_at: string; sort_at: string | null; from_version: unknown; reason: unknown; discarded: number }>()
+    .then((r) => r.results ?? []).catch(() => null);
+
+  type Entry = TimelineKey & { people: number[]; build: (p: (id: number | null) => TimelinePerson) => TimelineRow };
+  const entries: Entry[] = [];
+  for (const v of versions) {
+    entries.push({ sort_at: v.sort_at, seq: v.id, kind: 'publish', people: [v.published_by], build: (p) => ({
+      id: `publish:v${v.version}`, kind: 'publish', at: v.published_at, actor: p(v.published_by), version: v.version, release_note: v.release_note ?? null,
+    }) });
+  }
+  for (const r of reviews) {
+    const decided = r.status !== 'withdrawn';
+    entries.push({ sort_at: r.sort_at, seq: r.id, kind: 'review', people: [r.reviewer_id, r.requested_by], build: (p) => ({
+      id: `review:${r.id}`, kind: 'review', at: r.decided_at, actor: decided ? p(r.reviewer_id) : null, version: r.version == null ? null : Number(r.version),
+      decision: r.status, reviewer: p(r.reviewer_id), requested_by: p(r.requested_by), requested_at: r.requested_at, decided_at: r.decided_at,
+      // Only the reviewer's own comment, written to HQ with the decision; a withdrawal carries none.
+      comment: decided ? (r.comment ?? null) : null,
+    }) });
+  }
+  for (const r of restores ?? []) {
+    const from = Number(r.from_version);
+    entries.push({ sort_at: r.sort_at, seq: r.id, kind: 'draft_restore', people: [r.admin_user_id], build: (p) => ({
+      id: `draft_restore:${r.id}`, kind: 'draft_restore', at: r.exported_at, actor: p(r.admin_user_id), version: null,
+      source_version: Number.isSafeInteger(from) && from >= 1 ? from : null, reason: typeof r.reason === 'string' ? r.reason : null,
+      discarded_draft: Number(r.discarded) === 1,
+    }) });
+  }
+  if (retirement) {
+    entries.push({ sort_at: retirement.sort_at, seq: 0, kind: 'retirement', people: [retirement.retired_by], build: (p) => ({
+      id: 'retirement', kind: 'retirement', at: retirement.retired_at, actor: p(retirement.retired_by), version: null, reason: retirement.reason,
+      replacement: retirement.replacement_uid ? { uid: retirement.replacement_uid, name: retirement.replacement_name } : null,
+      pinned_agents: Number(retirement.pinned_agents),
+    }) });
+  }
+
+  const ordered = orderTimeline(entries);
+  const shown = ordered.slice(0, TIMELINE_MAX);
+  // The people, in one read. A person is `{ uid, name }`, never an email; one who cannot be found reads null.
+  const ids = [...new Set(shown.flatMap((e) => e.people))];
+  const people = new Map<number, { uid: string; name: string | null }>();
+  if (ids.length) {
+    const rows = (await env.DB.prepare('SELECT id, uid, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(ids))
+      .all<{ id: number; uid: string; name: string | null }>()).results ?? [];
+    for (const u of rows) people.set(Number(u.id), { uid: u.uid, name: u.name });
+  }
+  const person = (id: number | null) => (id == null ? null : people.get(Number(id)) ?? null);
+  return { rows: shown.map((e) => e.build(person)), truncated: ordered.length > TIMELINE_MAX, unreadable: restores ? [] : ['draft_restore'] };
+}

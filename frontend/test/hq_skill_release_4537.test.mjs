@@ -98,3 +98,22 @@ test('the card draws the decision, the changes and every version, newest first',
     assert.doesNotMatch(none.text(), /Ready to publish/);
   } finally { await none.unmount(); }
 });
+
+test('reviewers see reused evidence only when runs were reused', async () => {
+  for (const reused of [null, { version: 3, results: 1 }]) {
+    const ui = await mountContracts(h(ReleaseEvidence, { freshness: { evaluation: { reused, total: 2 } }, versions: [] }));
+    try { assert.equal(ui.text().includes('Results reused from v3'), reused !== null); }
+    finally { await ui.unmount(); }
+  }
+});
+
+test('the pins view groups agents by version and shows who can update', async () => {
+  const { PinVersions } = await import('../src/pages/hq/aiAgents/SkillPins.jsx');
+  const data = { agents_total: 1, versions: [{ version: 2, agents: 0, current: true }, { version: 1, agents: 1 }],
+    agents: [{ uid: 'test-agent', name: 'Example agent', pinned_version: 1, update_available: true }] };
+  const ui = await mountContracts(h(PinVersions, { data }));
+  try {
+    assert.match(ui.text(), /v2.*Current.*0 live agents.*v1.*1 live agent.*Example agent.*Update available/s);
+    assert.equal(ui.nodes().filter(node => node.tagName === 'BUTTON').length, 0);
+  } finally { await ui.unmount(); }
+});

@@ -31,6 +31,9 @@
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
  *                                    publish refuses on), each review's `changes`, each version's `evidence` (null: no manifest)
+ *                                    D4533 part 5: `timeline` { rows, truncated, unreadable }, one list of the skill's publishes,
+ *                                    decided reviews, draft restores and retirement, newest first, merged from the rows that
+ *                                    already record them (`skillTimeline`); a row's `version` is null where no row proves it
  *   GET  /:uid/diff?from=source|vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed;
  *                                    D4533: `evidence`, the cases added and removed, the required models and the evaluator
  *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft, on its evidence
@@ -90,7 +93,7 @@ import {
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import {
-  EVALUATOR, MODELS_MAX, caseSha, diffEvidence, evidenceChanges, evidenceFrom, evidenceHashOf, evidenceOf, liveCases, parseEvidence, releaseDecision, requiredModels, suiteRevision,
+  EVALUATOR, MODELS_MAX, caseSha, diffEvidence, evidenceChanges, evidenceFrom, evidenceHashOf, evidenceOf, liveCases, parseEvidence, releaseDecision, requiredModels, skillTimeline, suiteRevision,
   type Evidence,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
@@ -506,6 +509,8 @@ adminHqSkills.get('/:uid', async (c) => {
       reason: retired.reason, pinned_agents: retired.pinned_agents, at: retired.retired_at, by: await personOf(c.env, retired.retired_by),
       replacement: { uid: retired.replacement_uid, name: retired.replacement_name },
     } : null,
+    // D4533 part 5 (part E): the merged history, read from the same rows; the evidence stays on `versions[]` and `freshness`.
+    timeline: await skillTimeline(c.env, s),
   });
 });
 

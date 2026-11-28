@@ -12,6 +12,7 @@ import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import { AgentRadar } from '../../team/SkillParts';
 import { radarVector } from '../../team/skillsModel';
 import { DefinitionEditor } from './DefinitionEditor.jsx';
+import SkillPins from './SkillPins.jsx';
 import { ReleaseEvidence } from './ReleaseEvidence.jsx';
 import Registry, { RosterSwitch } from './Registry.jsx';
 import { definitionEditable } from './definitionModel';
@@ -570,6 +571,7 @@ export function Editor({ view, viewerUid }) {
       </Card>)}
       {/* D4537: the release decision and each version's manifest, in words (replaces the raw versions record). */}
       <ReleaseEvidence freshness={data.freshness} versions={data.versions} />
+      <SkillPins key={data.skill.uid} uid={data.skill.uid} />
       <SkillLifecycle data={data} viewerUid={viewerUid ?? user?.uid} reload={() => setAttempt(n => n + 1)} />
     </>}
   </div>;
