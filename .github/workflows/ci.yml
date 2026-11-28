@@ -995,7 +995,8 @@ jobs:
     name: editor visual regression and axe
     if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # #9038: 30 -> 45. The job ran about 18 minutes on main before the three frame and reload checks (#9038) were added.
+    timeout-minutes: 45
     container:
       image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
       options: --user 1001
@@ -1058,6 +1059,24 @@ jobs:
       - name: eSign signer journey (real router on SQLite, no preview)
         working-directory: frontend
         run: npx --no-install playwright test -c playwright.config.js tests/e2e/esign_signer_journey.spec.js --retries=0 --trace off
+      # #9037 (D9037): the axe gate on the ten top public routes, signed out, at 1440 and 390 in light and dark: no serious
+      # or critical WCAG 2.0/2.1 A or AA violation, no exceptions. The local Worker serves the docs/ built above; a route
+      # that renders Not Found fails. No preview, no account.
+      - name: Public routes axe gate (local Worker, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/axe-top-routes.spec.js --retries=0 --trace off
+      # #9038 (D9038): every workspace route of four licences rendered from the docs/ built above with /api/* stubbed:
+      # no crash, one h1, one rail, the zone asked for, the shell padding, no sideways scroll. PW_CHROMIUM_PATH is the
+      # pinned browser; with CI set a browser that cannot launch fails the step, it never reports SKIPPED.
+      - name: Workspace frames (built SPA, stubbed API)
+        run: node scripts/check-workspace-frames.mjs
+      # #9038 (D9038): the same routes with every read answered 500: each states the failure, no skeleton left up and no
+      # claim of "no records".
+      - name: Workspace frames with failed reads (built SPA, stubbed API)
+        run: node scripts/check-workspace-frames.mjs --fail-reads
+      # #9038 (D9038): a storm of service-worker controllerchange events reloads the page a bounded number of times.
+      - name: Service-worker reload loop is bounded (built SPA)
+        run: node scripts/check-reload-loop.mjs
       # #9039: Help guides into the Introductions desk (#4639). The local Worker serves the docs/ built above;
       # every /api/* answer is the spec's own synthetic fixture and the service worker is blocked. No preview, no account.
       - name: Help introductions journey (local Worker, fixtures, no preview)

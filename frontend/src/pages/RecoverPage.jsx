@@ -69,7 +69,7 @@ function Card({ icon: Icon, title, friction, body, cta, disabled, onClick }) {
         </div>
         <FrictionBadge level={friction} />
       </div>
-      <p className="text-xs text-gray-600 leading-relaxed mb-2">{body}</p>
+      <p className="text-xs text-gray-600 leading-relaxed mb-2 dark:text-gray-300">{body}</p>
       <span className="text-xs font-medium text-violet-700">{cta} →</span>
     </button>
   );
@@ -214,8 +214,8 @@ export default function RecoverPage() {
         <h2 className="text-xl font-bold mb-2">Completing recovery…</h2>
         {error && <Banner kind="error">{error}</Banner>}
         {info && <Banner kind="info">{info}</Banner>}
-        {busy && <p className="text-sm text-gray-600">Working…</p>}
-        <p className="text-xs text-gray-500 mt-6">
+        {busy && <p className="text-sm text-gray-600 dark:text-gray-300">Working…</p>}
+        <p className="text-xs text-gray-500 mt-6 dark:text-gray-400">
           You can close this tab once you see the redirect.
         </p>
       </Shell>
@@ -225,7 +225,7 @@ export default function RecoverPage() {
   return (
     <Shell>
       <h2 className="text-xl font-bold mb-1">Recover your account</h2>
-      <p className="text-sm text-gray-600 mb-5">
+      <p className="text-sm text-gray-600 mb-5 dark:text-gray-300">
         Lost your authenticator? Pick the option you can still access. Each step adds friction so social-engineering takeovers stay blocked, while legitimate recovery completes in minutes.
       </p>
       {error && <Banner kind="error" id="recover-error">{error}</Banner>}
@@ -233,7 +233,7 @@ export default function RecoverPage() {
 
       {mode === 'intro' && (
         <>
-          <label htmlFor="recover-email" className="text-xs text-gray-600 block mb-1">Account email</label>
+          <label htmlFor="recover-email" className="text-xs text-gray-600 block mb-1 dark:text-gray-300">Account email</label>
           <input id="recover-email" type="email" value={email} autoComplete="email"
             aria-describedby={emailError ? 'recover-error' : undefined}
             aria-invalid={emailError ? true : undefined}
@@ -312,7 +312,7 @@ export default function RecoverPage() {
 
       {mode === 'email' && (
         <FlowBox onBack={() => setMode('intro')} title="Email magic link">
-          <p className="text-xs text-gray-600 mb-3">
+          <p className="text-xs text-gray-600 mb-3 dark:text-gray-300">
             The link expires in 15 minutes and can only be used once. The resulting session is lower-assurance: billing, contracts, capital movement, DD downloads, KYC re-submission and impersonation are paused for 24 hours, and you must re-enrol your authenticator within 7 days.
           </p>
           <button onClick={sendEmailMagic} disabled={busy}
@@ -324,7 +324,7 @@ export default function RecoverPage() {
 
       {mode === 'trusted' && (
         <FlowBox onBack={() => setMode('intro')} title="Trusted contacts">
-          <p className="text-xs text-gray-600 mb-3">
+          <p className="text-xs text-gray-600 mb-3 dark:text-gray-300">
             Both contacts must sign in to Axal VC with their own authenticator to attest. You'll get a one-time claim link by email when both have approved.
           </p>
           <button onClick={startTrusted} disabled={busy}
@@ -350,11 +350,13 @@ export default function RecoverPage() {
   );
 }
 
+// #9037: every gray-500/600 line here has a dark variant; under a dark Appearance the page turns gray-900 and the
+// lead line and "Back to sign in" read 2.3:1 (axe-top-routes.spec.js).
 function Shell({ children }) {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4 dark:bg-gray-900">
       <div className="w-full max-w-md">
-        <Link to="/login" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6">
+        <Link to="/login" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6 dark:text-gray-300 dark:hover:text-gray-100">
           <ArrowLeft size={14} /> Back to sign in
         </Link>
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm dark:bg-gray-900 dark:border-gray-800">
@@ -371,7 +373,7 @@ function Shell({ children }) {
 function FlowBox({ children, onBack, title }) {
   return (
     <div>
-      <button onClick={onBack} className="text-xs text-gray-500 hover:text-gray-900 mb-3 flex items-center gap-1">
+      <button onClick={onBack} className="text-xs text-gray-500 hover:text-gray-900 mb-3 flex items-center gap-1 dark:text-gray-400 dark:hover:text-gray-100">
         <ArrowLeft size={12} /> Back to options
       </button>
       <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">{title}</h3>
