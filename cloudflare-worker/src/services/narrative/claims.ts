@@ -43,13 +43,17 @@ export const FIGURE_KINDS: Record<FigureKey, string[]> = {
   raise: [],
   // D1607: no pinned record kind holds a PostHog figure yet; the narrative check compares it with PostHog itself.
   active_users: [],
+  // D5842 part 2: only a founder-chosen Search Console aggregate of the same metric.
+  organic_search_clicks: ['search-console-aggregate'], organic_search_impressions: ['search-console-aggregate'], organic_search_ctr: ['search-console-aggregate'],
 };
 
 /** A KPI snapshot or a model assumption holds one metric (`<row>:<metric>`): the one each figure reads. */
 const FIGURE_METRIC: Partial<Record<FigureKey, string>> = {
   mrr: 'mrr', arr: 'arr', paying_customers: 'paying_accounts', headcount: 'headcount', net_burn: 'net_burn', churn: 'monthly_churn_pct', cac: 'cac',
+  organic_search_clicks: 'clicks', organic_search_impressions: 'impressions', organic_search_ctr: 'ctr',
 };
-const ONE_METRIC = new Set(['kpi-snapshot', 'model-assumption']);
+/** D5842 part 2: a Search Console aggregate is one metric too (`<selection>:<metric>`). */
+const ONE_METRIC = new Set(['kpi-snapshot', 'model-assumption', 'search-console-aggregate']);
 
 /** May this pinned record back this figure: its kind, and for a one-metric record its metric. */
 export function couldBack(figure: FigureKey, item: { kind: string; source_ref?: string | null }): boolean {
@@ -92,7 +96,7 @@ export async function narrativeClaims(env: Env, projectId: number, version: numb
   const links = stored.length ? (await env.DB.prepare(
     `SELECT l.claim_id, l.how, i.id, i.uid, i.kind, i.source_label, i.provider, i.observed_on, i.summary, i.version
        FROM raise_claim_evidence l JOIN raise_evidence_items i ON i.id = l.item_id AND i.project_id = l.project_id
-      WHERE l.project_id = ? AND l.claim_id IN (SELECT value FROM json_each(?)) AND (? = 1 OR i.private_reason IS NULL)`,
+      WHERE l.project_id = ? AND l.claim_id IN (SELECT value FROM json_each(?)) AND (? = 1 OR (i.private_reason IS NULL AND i.kind NOT IN ('ledger-fact', 'search-console-aggregate')))`,
   ).bind(projectId, JSON.stringify(stored.map((c) => c.id)), opts.founder ? 1 : 0).all<Item & { claim_id: number; how: string }>()).results || [] : [];
   const pinned = opts.founder ? (await env.DB.prepare(
     `SELECT id, uid, kind, source_ref, source_label, provider, observed_on, summary, version FROM raise_evidence_items

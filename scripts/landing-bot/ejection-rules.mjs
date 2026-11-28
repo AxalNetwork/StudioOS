@@ -143,9 +143,21 @@ export function keeperMergedSince(commits, removedAt, botLogin) {
 export const RETRYABLE_ELIGIBILITY = Object.freeze([/could not be read/, /a breaker is open/, /does not allow this trigger/]);
 const retryableEligibility = (r) => RETRYABLE_ELIGIBILITY.some((re) => re.test(String(r)));
 
+const label = (reasons) => ({ action: 'label', label: LABELS.ejected, reasons });
+/** A retryable condition waits, unlabelled, until RECOVERY_WINDOW_HOURS after the removal; then it is handed back. */
+function waitOrHandBack(retry, removedAtValue, now) {
+  const removedAt = time(removedAtValue);
+  const deadline = removedAt === null ? null : removedAt + RECOVERY_WINDOW_HOURS * HOUR;
+  if (deadline === null) return label([...retry, 'the removal time could not be read, so it is not retried']);
+  if (now >= deadline) return label([...retry, `still not restorable ${RECOVERY_WINDOW_HOURS} hours after the ejection: the owner re-queues it`]);
+  return { action: 'wait', reasons: retry, retryUntil: new Date(deadline).toISOString() };
+}
+
 /**
  * What to do. Re-queue only when everything holds. A condition that clears on its own (\`retry\`) waits, unlabelled,
  * for the next sweep inside RECOVERY_WINDOW_HOURS; one that needs the owner (\`owner\`) labels \`ejected\` at once.
+ * A \`requeue\` here is not yet permission: the sweep then reads the landing policy for that head and passes both
+ * through gateRequeue() (D6476-p7), and only its \`requeue\` reaches enqueuePullRequest.
  * @param c { klass, mergeable: GitHub's fresh true | false | null (unknown), keeperMerged, keeperAttempts: number | null (D6476-p6), removedAt, consent, checks: 'green'|'pending'|'failed'|'unknown'|'changed'
  *            (or the older checksGreenOnHead boolean), headUnchangedSinceChecks, eligible: { ok, reasons }, breakers: { open, reasons },
  *            openAlertTitles, requeues: [{ pr, at }] (bot re-queues), pr, now, env, queueRuns: [{ conclusion }] (last 20) }
@@ -155,20 +167,14 @@ export function decide(c) {
   const owner = [];
   const retry = [];
   const removedAt = time(c.removedAt);
-  const deadline = removedAt === null ? null : removedAt + RECOVERY_WINDOW_HOURS * HOUR;
-  const label = (reasons) => ({ action: 'label', label: LABELS.ejected, reasons });
-  const waitOrHandBack = () => {
-    if (deadline === null) return label([...retry, 'the removal time could not be read, so it is not retried']);
-    if (c.now >= deadline) return label([...retry, `still not restorable ${RECOVERY_WINDOW_HOURS} hours after the ejection: the owner re-queues it`]);
-    return { action: 'wait', reasons: retry, retryUntil: new Date(deadline).toISOString() };
-  };
+  const waitOrHandBackNow = () => waitOrHandBack(retry, c.removedAt, c.now);
   // Owner addition (#6476, 2026-11-21): only a positive \`true\` admits. An explicit \`false\` is a conflict whatever the
   // ejection's class (main can move under a cascade or infrastructure ejection too); \`null\` or unread waits.
   const neverRequeued = !REQUEUE_CLASSES.includes(c.klass);
   if (!neverRequeued && (c.mergeable === false || (c.klass === 'conflict' && c.mergeable !== true))) {
     if (c.mergeable !== false) {
       retry.push('GitHub has not yet said whether the head merges cleanly');
-      return waitOrHandBack();
+      return waitOrHandBackNow();
     }
     // A class that GitHub did not call a conflict, now conflicting, without consent: nothing to restore, so no keeper.
     if (c.klass !== 'conflict' && !c.consent?.valid) return label([c.consent?.reason ?? 'no consent', 'it now conflicts with main']);
@@ -182,7 +188,7 @@ export function decide(c) {
       return { action: 'keeper', reasons: ['GitHub reported a conflict: the branch keeper merges main, then this handler looks again'] };
     }
     retry.push('still conflicting: waiting for the branch keeper\'s scheduled merge of main');
-    return waitOrHandBack();
+    return waitOrHandBackNow();
   }
   if (c.klass === 'own-failure') return { action: 'repair', label: LABELS.ejected, reasons: ['its own failure: never re-queued; red-PR repair (#5622) is asked when it exists'] };
   if (c.klass === 'incompatible') return label(['red only in its merge group: compare it with the entry ahead before it re-enters']);
@@ -222,6 +228,63 @@ export function decide(c) {
     if (failed >= share) retry.push(`${Math.round(failed * 100)}% of the last 20 queue runs failed, at or above the ${share} breaker`);
   }
   if (owner.length) return label([...owner, ...retry]);
-  if (retry.length) return waitOrHandBack();
+  if (retry.length) return waitOrHandBackNow();
   return { action: 'requeue', reasons: [] };
+}
+
+/**
+ * D6476-p7: the gates of \`landPr.decide()\` (scripts/lib/landPr.mjs) whose failure is the owner's at once. Every other
+ * gate (agents may queue, main requires the merge queue, required checks green, the landing policy report, the
+ * stalled alert) can clear by itself or with a setting, so it waits inside RECOVERY_WINDOW_HOURS and is then handed
+ * back. A test pins this split against every gate name landPr.decide() emits.
+ */
+export const OWNER_POLICY_GATES = Object.freeze(['PR open on main', 'landing-policy.yml untouched']);
+export const RETRY_POLICY_GATES = Object.freeze(['agents may queue', 'main requires the merge queue', 'required checks green',
+  'landing policy T0/T1 for this head', 'merge queue not stalled']);
+const COMMIT = /^[0-9a-f]{40}$/;
+const flat = (v) => String(v ?? 'unread').replace(/[\r\n]+/g, ' ').slice(0, 300);
+
+/**
+ * D6476-p7: the landing policy for this exact head, read fresh just before a re-queue. A re-queue lands a PR just as
+ * the feeder's first entry does, so it needs what the feeder needs (feeder-plan.mjs): \`mayQueue\` from every gate of
+ * \`landPr.decide()\` (#5605 rows 3 and 6, #5500 done, main still requires the merge queue, landing-policy.yml
+ * untouched, required checks green, a T0/T1 \`landing policy\` report with LANDING_AUTO true for this head SHA, no
+ * open \`[alert] merge queue stalled\`), the repository variable LANDING_AUTO still \`true\` now, and a decision read
+ * for this PR on the head the enqueue will name. Anything unread or for another head waits; it never passes.
+ * @param p { landing: the feeder reader's readLandingDecision() result ({ pr, report, mayQueue, gates }) | null,
+ *            error: why it is null, number, headSha: the head the enqueue names (expectedHeadOid), env }
+ * @returns { ok, owner: string[], retry: string[] }
+ */
+export function requeuePolicy({ landing = null, error = null, number, headSha, env } = {}) {
+  const owner = [];
+  const retry = [];
+  if (env?.LANDING_AUTO !== 'true') retry.push(`LANDING_AUTO is ${env?.LANDING_AUTO ? `"${flat(env.LANDING_AUTO)}"` : 'unset'}, not true: agents do not land`);
+  if (!landing || typeof landing !== 'object' || !Array.isArray(landing.gates) || !landing.gates.length) {
+    retry.push(`the landing decision for this head could not be read${error ? ` (${flat(error)})` : ''}`);
+    return { ok: false, owner, retry };
+  }
+  if (!COMMIT.test(String(headSha ?? '')) || landing.pr?.number !== number || landing.pr?.head_sha !== headSha) {
+    retry.push('the landing decision was read for another head: the new head is read on the next sweep');
+    return { ok: false, owner, retry };
+  }
+  if (landing.pr.draft === true) owner.push('the pull request is a draft');
+  if (landing.report?.tier === 'T2') owner.push('the landing policy says T2: the owner lands it');
+  for (const g of landing.gates) {
+    if (g?.ok === true) continue;
+    (OWNER_POLICY_GATES.includes(g?.name) ? owner : retry).push(`landing gate "${flat(g?.name)}" fails: ${flat(g?.detail)}`);
+  }
+  if (landing.mayQueue !== true && !owner.length && !retry.length) retry.push('the landing decision does not allow queueing');
+  return { ok: landing.mayQueue === true && !owner.length && !retry.length, owner, retry };
+}
+
+/**
+ * D6476-p7: the last word before an enqueue. A \`requeue\` the fresh landing policy does not allow becomes a hand-back
+ * with \`ejected\` (an owner's gate) or a bounded wait (anything else). Every other decision passes through unchanged.
+ */
+export function gateRequeue(d, policy, { removedAt, now } = {}) {
+  if (d?.action !== 'requeue' || policy?.ok === true) return d;
+  const owner = Array.isArray(policy?.owner) ? policy.owner : [];
+  const retry = Array.isArray(policy?.retry) && policy.retry.length ? policy.retry : ['the landing policy was not confirmed'];
+  if (owner.length) return label([...owner, ...retry]);
+  return waitOrHandBack(retry, removedAt, now);
 }

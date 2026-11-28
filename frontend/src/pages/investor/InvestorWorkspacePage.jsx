@@ -5,6 +5,7 @@ import InvestorDealsWorkspace from './InvestorDealsWorkspace';
 import FundLocked from './FundLocked';
 import { zoneForPath } from './fundLockedModel';
 import { useLocation } from 'react-router-dom';
+import StudioBackLink from './StudioBackLink';
 import './investorWorkspace.css';
 
 const COPY = {
@@ -77,6 +78,8 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
   const chrome = (
     <main className="investor-workspace" data-testid={`investor-workspace-${key}`}>
       <div className="investor-frame">
+        {/* D8731 (#8731): ‹ Studio on a phone when a Studio card opened this page. */}
+        <StudioBackLink />
         <header className="investor-head">
           <div>
             <h1 className="investor-title" data-testid={`heading-investor-${key}`}>{meta.title}</h1>

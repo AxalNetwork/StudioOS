@@ -4,7 +4,7 @@ import { ArrowUpRight, BriefcaseBusiness, Building2, Eye, RefreshCw, ShieldCheck
 import { api } from '../../lib/api';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import { partnerTiles, usePartnerHome } from './PartnerHomeP2';
+import { FeedJumpLink, partnerTiles, usePartnerHome } from './PartnerHomeP2';
 import { NoFirmAttached } from './PartnerFirmProfileCard';
 import StudioModules from '../studio/StudioModules';
 import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
@@ -69,6 +69,10 @@ export default function PartnerStudioHome({
   const home = usePartnerHome(previewing);
   const tiles = partnerTiles(home.state, home.load);
   const dim = studio.editing ? 'sm-dim' : '';
+  // D8733 (Q2, A): on a phone, a jump link to the firm feed under the firm line, while the feed is placed and read.
+  const feedPlaced = (studio.placed || []).some((entry) => entry.key === 'firm_feed');
+  const reads = home.state.reads;
+  const feedJump = !previewing && !studio.editing && feedPlaced && home.state.status === 'ready' && reads && (reads.board || reads.retainers || reads.capacity);
 
   const Root = embedded ? 'section' : 'main';
   return (
@@ -92,6 +96,7 @@ export default function PartnerStudioHome({
         <span><BriefcaseBusiness size={12} /> {previewing ? 'Specialization withheld' : (partner?.specialization || 'Specialization not recorded')}</span>
         {!previewing && <Link to="/account" data-testid="link-partner-settings">Partner settings <ArrowUpRight size={12} /></Link>}
       </div>
+      {feedJump && <FeedJumpLink reads={reads} />}
 
       <section className={`partner-assistant ${dim}`} data-testid="module-eadwyn">
         {previewing ? <div className="partner-assistant-placeholder"><Sparkles size={18} /><div><strong>Eadwyn</strong><span>Partner/Operator assessment is unavailable in role preview.</span></div><Status>Preview only</Status></div>

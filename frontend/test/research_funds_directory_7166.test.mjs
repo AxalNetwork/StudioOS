@@ -70,7 +70,9 @@ test('a row is one vehicle: the label comes from fund_number, the manager sits u
 test('a size reads in its list’s own currency with the code; no size reads Not recorded', () => {
   assert.deepEqual(read.sizeOf(AFORE), { text: 'US$185M', currency: 'USD', reason: null });
   assert.deepEqual(read.sizeOf(FIVE), { text: '€582M', currency: 'EUR', reason: null });
-  assert.deepEqual(read.sizeOf({ ...AFORE, size_currency: 'GBP' }), { text: null, currency: null, reason: 'Not recorded' });
+  // D7744: any currency the API marks is printed in it (GBP with its mark); a code the money layer does not list is not.
+  assert.deepEqual(read.sizeOf({ ...AFORE, size_currency: 'GBP' }), { text: '£185M', currency: 'GBP', reason: null });
+  assert.deepEqual(read.sizeOf({ ...AFORE, size_currency: 'ZZZ' }), { text: null, currency: null, reason: 'Not recorded' });
   const { text } = view();
   assert.match(text, /US\$185MUSD/);
   assert.match(text, /€75MEUR/);

@@ -26,6 +26,7 @@
 import type { Env } from '../../types';
 import { offeredToEadwyn, type FillField } from './fields';
 import { neverFillReason } from './neverFill';
+import { isFounderChosen } from '../raiseEvidenceSources';
 import type { Citation } from './types';
 import type { ScopeContext } from './scopes';
 import { noteFirm } from '../dealNotes';
@@ -428,11 +429,13 @@ export async function dealSummarySources(env: Env, userId: number, dealId: numbe
           note: groups?.length ? 'Coverage only: the NDA is not signed, so no figure, file or quote behind it was used.' : 'The NDA is not signed, and nothing is shared before it.' });
       } else if (view.items?.state !== 'recorded') {
         sources.push({ key: 'evidence', label: 'Shared evidence', state: 'unreadable', note: 'The shared evidence could not be read.' });
-      } else if (!view.items.rows.length) {
+      } else if (!view.items.rows.filter((r: any) => !isFounderChosen(r)).length) {
         sources.push({ key: 'evidence', label: 'Shared evidence', state: 'none', note: 'The founder has shared no evidence with you.' });
       } else {
-        ctx.push(...view.items.rows.slice(0, 15).map((r: any) => `Evidence: ${r.area} · ${r.kind} · ${String(r.summary ?? '').slice(0, 200)}${r.value_num != null ? ` · ${r.value_num}${r.value_unit ? ` ${r.value_unit}` : ''}${r.currency ? ` ${r.currency}` : ''}` : ''}${r.observed_on ? ` (observed ${r.observed_on})` : ''}`));
-        sources.push({ key: 'evidence', label: 'Shared evidence', state: 'used', note: `${view.items.rows.length} item${view.items.rows.length === 1 ? '' : 's'} the founder shared with you.` });
+        // D5837, D5842 part 2: a founder-chosen ledger fact or Search Console aggregate is for the investor to read, never a model's input.
+        ctx.push(...view.items.rows.filter((r: any) => !isFounderChosen(r)).slice(0, 15).map((r: any) => `Evidence: ${r.area} · ${r.kind} · ${String(r.summary ?? '').slice(0, 200)}${r.value_num != null ? ` · ${r.value_num}${r.value_unit ? ` ${r.value_unit}` : ''}${r.currency ? ` ${r.currency}` : ''}` : ''}${r.observed_on ? ` (observed ${r.observed_on})` : ''}`));
+        const used = view.items.rows.filter((r: any) => !isFounderChosen(r)).length;
+        sources.push({ key: 'evidence', label: 'Shared evidence', state: 'used', note: `${used} item${used === 1 ? '' : 's'} the founder shared with you.` });
       }
     } catch (e: any) {
       sources.push(e?.code === 'not_found'

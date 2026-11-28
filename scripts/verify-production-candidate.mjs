@@ -1,12 +1,15 @@
 /**
- * D5501: require the exact main SHA and its six trusted Actions check results.
+ * D5501: require a main SHA and its six trusted Actions check results.
  *
- * D5501: admit only the exact main commit with all six trusted Actions checks.
+ * D5501: admit a main commit with all six trusted Actions checks. D8932: that
+ * commit is the tip, or an ancestor of it within a bound and not older than the
+ * Worker production serves.
  */
 import { resolve } from 'node:path';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { VERSION_PATH, versionVerdict } from './lib/deployProvenance.mjs';
 
 const repo = 'AxalNetwork/StudioOS';
 const workflows = {
@@ -16,6 +19,27 @@ const workflows = {
 };
 const fullSha = /^[0-9a-f]{40}$/;
 const apiRoot = `/repos/${repo}`;
+// D8932: how far a verified candidate may trail the main tip and still ship.
+export const MAX_BEHIND_COMMITS = 30;
+export const MAX_BEHIND_MS = 6 * 60 * 60_000;
+// D8932: the Worker production serves, as GET /api/public/version names it (D8073).
+const DEPLOYED_VERSION_URL = `https://axal.vc${VERSION_PATH}`;
+
+function commitTime(commit) {
+  const time = Date.parse(commit?.commit?.committer?.date ?? '');
+  if (!Number.isFinite(time)) throw new Error('Commit time unreadable.');
+  return time;
+}
+
+// GET /compare/{base}...{head}: `behind` means head is an ancestor of base, `ahead` that it descends from it.
+async function compare(get, base, head) {
+  const result = await get(`${apiRoot}/compare/${base}...${head}`);
+  if (!['identical', 'ahead', 'behind', 'diverged'].includes(result?.status) || !Number.isSafeInteger(result.ahead_by) ||
+      !Number.isSafeInteger(result.behind_by) || result.base_commit?.sha !== base) {
+    throw new Error('Commit comparison unreadable.');
+  }
+  return result;
+}
 
 async function checkWorkflow(get, candidate, file, contexts) {
   const { workflow_runs: runs } = await get(`${apiRoot}/actions/workflows/${file}/runs?head_sha=${candidate}&event=push&branch=main&per_page=100`);
@@ -50,16 +74,49 @@ async function checkWorkflow(get, candidate, file, contexts) {
   return { ...evidence, state: 'verified' };
 }
 
-export async function verifyCandidate(candidate, get) {
+async function readSha(readDeployed) {
+  try {
+    const sha = await readDeployed();
+    return fullSha.test(sha ?? '') ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+// D8932: `readDeployed` resolves the commit production serves; anything but a full SHA is unreadable.
+export async function verifyCandidate(candidate, get, readDeployed = async () => null) {
   if (!fullSha.test(candidate ?? '')) return { status: 'untrusted' };
   const tip = await get(`${apiRoot}/git/ref/heads/main`);
   if (tip.ref !== 'refs/heads/main' || tip.object?.type !== 'commit' || !fullSha.test(tip.object?.sha ?? '')) {
     throw new Error('Main ref unreadable.');
   }
-  if (tip.object.sha !== candidate) return { candidate, status: 'superseded', main: tip.object.sha };
+  const main = tip.object.sha;
+  let behind_by = 0, deployed;
+  if (main === candidate) {
+    // The tip keeps D5501's rule: it cannot be older than a main commit already served, so the read is evidence only.
+    deployed = await readSha(readDeployed);
+  } else {
+    const ancestry = await compare(get, main, candidate);
+    if (!['behind', 'identical'].includes(ancestry.status)) return { candidate, status: 'untrusted', main, comparison: ancestry.status };
+    if (ancestry.status === 'behind') {
+      if (ancestry.ahead_by !== 0 || ancestry.behind_by < 1 || ancestry.merge_base_commit?.sha !== candidate) {
+        throw new Error('Commit comparison unreadable.');
+      }
+      behind_by = ancestry.behind_by;
+      const lag = commitTime(ancestry.base_commit) - commitTime(ancestry.merge_base_commit);
+      if (behind_by > MAX_BEHIND_COMMITS || lag > MAX_BEHIND_MS) return { candidate, status: 'superseded', main, behind_by };
+    }
+    deployed = await readSha(readDeployed);
+    if (!deployed) return { candidate, status: 'unreadable', main, behind_by, deployed: null, reason: 'deployed version unreadable' };
+    if (deployed !== candidate) {
+      const progress = await compare(get, deployed, candidate);
+      if (!['ahead', 'identical'].includes(progress.status)) return { candidate, status: 'stale', main, behind_by, deployed };
+    }
+  }
   const checks = await Promise.all(Object.entries(workflows).map(([file, contexts]) => checkWorkflow(get, candidate, file, contexts)));
   const terminal = checks.find(check => ['untrusted', 'failed'].includes(check.state));
-  return { candidate, status: terminal ? 'blocked' : checks.every(check => check.state === 'verified') ? 'verified' : 'waiting', checks };
+  return { candidate, status: terminal ? 'blocked' : checks.every(check => check.state === 'verified') ? 'verified' : 'waiting',
+    main, behind_by, deployed, checks };
 }
 
 async function main(candidate, mode) {
@@ -84,10 +141,15 @@ async function main(candidate, mode) {
     if (!response.ok) throw new Error(`GitHub verification request failed (${response.status}).`);
     return response.json();
   }
+  async function readDeployed() {
+    const response = await fetch(DEPLOYED_VERSION_URL, { redirect: 'error', signal: AbortSignal.timeout(10_000),
+      headers: { Accept: 'application/json' } });
+    return versionVerdict(response.status, await response.text()).sha;
+  }
   const deadline = Date.now() + (mode === '--once' ? 0 : 95 * 60_000);
   let report;
   do {
-    try { report = await verifyCandidate(candidate, get); }
+    try { report = await verifyCandidate(candidate, get, readDeployed); }
     catch { report = { candidate, status: 'unreadable' }; }
     if (!['waiting', 'unreadable'].includes(report.status) || Date.now() >= deadline) break;
     await delay(60_000);
@@ -97,10 +159,14 @@ async function main(candidate, mode) {
     console.log('::notice title=StudioOS release outcome v1::' +
       ['superseded', stage, run, attempt, report.candidate, report.main].join(' '));
   }
-  if (decision && ['verified', 'superseded'].includes(report.status)) {
+  if (decision && ['verified', 'superseded', 'stale'].includes(report.status)) {
     if (report.status === 'superseded') {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY,
         `### Deployment skipped\n\nCandidate \`${candidate}\` was superseded by \`${report.main}\` on main before admission.\n`);
+    }
+    if (report.status === 'stale') {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+        `### Deployment skipped\n\nCandidate \`${candidate}\` is older than \`${report.deployed}\`, the version production serves.\n`);
     }
     appendFileSync(process.env.GITHUB_OUTPUT, `decision=${report.status}\n`);
     return;

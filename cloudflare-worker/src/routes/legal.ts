@@ -10,6 +10,7 @@ import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody, getTemplate } from '../services/legalTemplateStore';
 import { applyMergeFields } from '../services/mergeFields';
 import { checkCompanyName } from '../services/nameCheck';
+import { catalogueHandoffSteps, catalogueJurisdictions } from '../services/formationCatalogueReaders';
 import { stripeCall } from './billing';
 import { ensurePaymentsCustomer } from './payments';
 import { findCatalogPriceById, getCatalog, priceForPlanMetadata } from '../services/catalog';
@@ -104,9 +105,13 @@ export const JURISDICTIONS = [
   { id: 'ee_oy', label: 'Estonia OÜ (e-Residency)', country: 'Estonia', country_code: 'EE', entity_type: 'OÜ', summary: 'Fully remote.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: false, atlas_supported: false, pros: [], cons: ['Need e-Residency first'], tax_summary: null, templates: ['ee_articles_of_association', 'ee_e_residency_application_kit', 'ee_founding_resolution'] },
 ];
 
+// D6691 (#6691): read from the formation catalogue (HQ: the current version;
+// a branch: version 1), falling back to JURISDICTIONS, logged, when the
+// catalogue cannot answer. Version 1 is this array (D6690), so the response
+// is unchanged (`incorporation_catalogue_readers_6691.test.ts`).
 legal.get('/jurisdictions', async (c) => {
   await requireAuth(c);
-  return c.json({ jurisdictions: JURISDICTIONS });
+  return c.json({ jurisdictions: await catalogueJurisdictions(c.env, JURISDICTIONS) });
 });
 
 // Task #10 — live company-name availability check for the Incorporate wizard's
@@ -339,7 +344,8 @@ legal.post('/incorporate/wizard', async (c) => {
   }
 
   // D6683: no Atlas handoff (D4677 removed the call; no jurisdiction is atlas_supported).
-  const handoff: any = { type: 'documents_only', next_steps: [...(HANDOFF_NEXT_STEPS[j.id] ?? [])] };
+  // D6691: the steps are the catalogue form's after-filing pack items; HANDOFF_NEXT_STEPS is the logged fallback.
+  const handoff: any = { type: 'documents_only', next_steps: await catalogueHandoffSteps(c.env, j.id, HANDOFF_NEXT_STEPS) };
 
   await sql.end();
 

@@ -42,7 +42,8 @@ test('the four independent reads start together, and each is committed the momen
   assert.deepEqual(w.keys(), ['lab', 'queue']);
   w.d.advisor.resolve({ total: 3 }); w.d.projects.resolve([]);
   await done;
-  assert.deepEqual(new Set(w.keys()), new Set(['lab', 'queue', 'advisor', 'project', 'lifecycle', 'scores']));
+  // D8729 (#8729): the member's ventures are handed over too, for Switch venture, the chooser and the unavailable notice.
+  assert.deepEqual(new Set(w.keys()), new Set(['lab', 'queue', 'advisor', 'ventures', 'project', 'lifecycle', 'scores']));
 });
 
 test('the venture\'s lifecycle and scores start when projects answers, not after the advisor or the queue', async () => {

@@ -196,9 +196,10 @@ export const FOUNDER_ZONE_FILTERS = {
   ],
   // Objectives carry a quarter, a kanban column and a dependency field. No
   // scenario is stored anywhere in the roadmap source.
+  // D8776 (#8776, owner question 3, option A): By quarter is the first view; the Board view went to Product
+  // roadmap, which is the Now / Next / Later board, and Timeline with it. The page keeps the view in `?view=`.
   'build/roadmap': [
-    { canvas: 'Timeline', key: 'timeline' },
-    { canvas: 'Board', key: 'board' },
+    { canvas: 'By quarter', key: 'quarters' },
     // `Dependencies` WAS THE WORST KIND OF LIVE CHIP and is the reason migration
     // 254 exists. It drew, it selected, and it could never show a row: the page
     // filtered on `item.dependency || item.dependencies || item.blocks`, and
