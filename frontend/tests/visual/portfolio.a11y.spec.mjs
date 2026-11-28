@@ -180,11 +180,11 @@ test.describe('read recovery and dialogs', () => {
 const CO = '/portfolio/companies/northwind';
 const CO_NAME = 'Northwind Labs with a long registered company name';
 const CO_TABS = [
-  { id: 'overview', path: CO, label: 'Overview', title: `${CO_NAME} · Portfolio · Axal VC` },
-  { id: 'financials', path: `${CO}/financials`, label: 'Financials', title: `${CO_NAME} · Financials · Portfolio · Axal VC` },
-  { id: 'reports', path: `${CO}/reports`, label: 'Reports', title: `${CO_NAME} · Reports · Portfolio · Axal VC` },
-  { id: 'support', path: `${CO}/support`, label: 'Support', title: `${CO_NAME} · Support · Portfolio · Axal VC` },
-  { id: 'activity', path: `${CO}/activity`, label: 'Activity', title: `${CO_NAME} · Activity · Portfolio · Axal VC` },
+  { id: 'overview', path: CO, label: 'Overview', title: 'Company · Portfolio · Axal VC' }, // D8681: the tab names the screen, never the company
+  { id: 'financials', path: `${CO}/financials`, label: 'Financials', title: 'Financials · Company · Portfolio · Axal VC' },
+  { id: 'reports', path: `${CO}/reports`, label: 'Reports', title: 'Reports · Company · Portfolio · Axal VC' },
+  { id: 'support', path: `${CO}/support`, label: 'Support', title: 'Support · Company · Portfolio · Axal VC' },
+  { id: 'activity', path: `${CO}/activity`, label: 'Activity', title: 'Activity · Company · Portfolio · Axal VC' },
 ];
 const json = (body, status = 200) => [body, status];
 
