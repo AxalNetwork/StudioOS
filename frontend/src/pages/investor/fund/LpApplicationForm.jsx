@@ -37,12 +37,13 @@ const fmtTicket = (dollars) => (dollars >= 1_000_000
   : `$${Math.round(dollars / 1000)}K`);
 
 
-export default function LpApplicationForm({ loaded, existing, onSubmitted }) {
-  const [investorType, setInvestorType] = useState(existing?.investor_type || 'individual');
-  const [ticket, setTicket] = useState(existing?.target_commitment || 150_000);
+export default function LpApplicationForm({ loaded, existing, prefill, onSubmitted }) {
+  const initial = existing ? null : prefill;
+  const [investorType, setInvestorType] = useState(existing?.investor_type || initial?.investor_type || 'individual');
+  const [ticket, setTicket] = useState(existing?.target_commitment ?? (initial ? initial.target_commitment ?? '' : 150_000));
   const [prefs, setPrefs] = useState(() => new Set(existing?.preference_areas || []));
   const [accredited, setAccredited] = useState(!!existing?.accredited);
-  const [note, setNote] = useState(existing?.note || '');
+  const [note, setNote] = useState(existing?.note || initial?.note || '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -54,11 +55,16 @@ export default function LpApplicationForm({ loaded, existing, onSubmitted }) {
 
   const submit = async () => {
     if (busy || !accredited) return;
+    const commitment = Number(ticket);
+    if (!Number.isFinite(commitment) || commitment < TICKET_MIN || commitment > TICKET_MAX) {
+      setErr('Enter a target commitment from $50,000 to $2,000,000.');
+      return;
+    }
     setBusy(true); setErr('');
     try {
       const res = await spinoutLab.submitLpApplication({
         investor_type: investorType,
-        target_commitment: ticket,
+        target_commitment: commitment,
         preference_areas: [...prefs],
         accredited: true,
         note,
@@ -91,6 +97,9 @@ export default function LpApplicationForm({ loaded, existing, onSubmitted }) {
         Applications are reviewed individually within five business days; acceptance is selective
         and capacity-limited. Submitting an application creates no obligation on either side.
       </p>
+      {initial && <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+        Review the answers filled from your profile. Confirm accreditation separately below.
+      </p>}
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <div>
@@ -118,10 +127,18 @@ export default function LpApplicationForm({ loaded, existing, onSubmitted }) {
           <div className="flex items-baseline justify-between gap-2">
             <div className={LBL}>Target commitment</div>
             <div className={`${MONO} text-[13px] font-bold text-gray-900 dark:text-gray-100`}>
-              {fmtTicket(ticket)}
+              {ticket === '' ? 'Not entered' : initial ? `$${Number(ticket).toLocaleString('en-US')}` : fmtTicket(Number(ticket))}
             </div>
           </div>
-          <input
+          {initial ? <>
+            <input type="number" min={TICKET_MIN} max={TICKET_MAX} step="any" value={ticket}
+              onChange={(e) => setTicket(e.target.value)} aria-label="Target commitment (USD)"
+              className="mt-3 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-600 dark:bg-gray-900"
+              data-testid="input-target-commitment" />
+            {initial.target_out_of_range && <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+              The target you entered in onboarding was outside $50,000 to $2,000,000. Enter a new target here.
+            </p>}
+          </> : <input
             type="range"
             min={TICKET_MIN}
             max={TICKET_MAX}
@@ -131,7 +148,7 @@ export default function LpApplicationForm({ loaded, existing, onSubmitted }) {
             aria-label="Target commitment"
             className="mt-3 w-full accent-violet-600"
             data-testid="input-target-commitment"
-          />
+          />}
           <div className="mt-1 flex justify-between text-[10.5px] text-gray-400 dark:text-gray-500">
             <span>{fmtTicket(TICKET_MIN)} minimum</span>
             <span>{fmtTicket(TICKET_MAX)}</span>

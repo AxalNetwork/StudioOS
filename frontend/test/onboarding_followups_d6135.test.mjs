@@ -15,7 +15,7 @@ const PERSISTED = { ...ANSWERS, _investor_onboarding_version: 2 };
 const PROFILE = { investor_type: 'angel', sectors: ['General Tech'], stages: ['Seed'], geos: ['Europe'], ticket_band: '$10k-$50k', thesis_text: 'Synthetic thesis', contribute_to_signals: false, anti_thesis_sectors: ['Parenting/Families'], anti_thesis_stages: [], firm_name: null, accreditation_status: 'non_us', country: 'Canada', lp_intent: 'maybe', lp_target_usd: '50000', notes: 'Synthetic note' };
 function Probe() { return h('span', { 'data-testid': 'location' }, useLocation().pathname); }
 async function fixture({ role = 'investor', step = 7, legacy = false, completed = false, profileFail = false, progressFail = false } = {}) {
-  const methods = ['onboardingGetProgress', 'onboardingSaveProgress', 'onboardingComplete', 'saveInvestorProfile', 'getMe'];
+  const methods = ['onboardingGetProgress', 'onboardingSaveProgress', 'onboardingComplete', 'saveInvestorProfile', 'getInvestorProfile', 'getMe'];
   const original = Object.fromEntries(methods.map(k => [k, api[k]]));
   const oldDispatch = globalThis.dispatchEvent;
   const user = { id: 6135, role, name: 'Synthetic member' };
@@ -24,8 +24,14 @@ async function fixture({ role = 'investor', step = 7, legacy = false, completed 
   api.getMe = async () => user;
   api.onboardingGetProgress = async () => ({ flow: 'investor', step, total_steps: legacy ? 9 : 8, data: legacy ? { ...ANSWERS } : { ...PERSISTED }, completed_at: completed ? '2026-11-01' : null });
   api.onboardingSaveProgress = async v => { progress.push(v); if (state.progressFail) throw new Error('Synthetic unavailable progress'); return {}; };
-  api.onboardingComplete = async flow => { completions.push(flow); return {}; };
-  api.saveInvestorProfile = async v => { copies.push(v); if (state.profileFail) throw new Error('Synthetic unavailable profile'); return {}; };
+  api.onboardingComplete = async (flow, values) => {
+    completions.push(flow);
+    copies.push(values);
+    if (state.profileFail) throw new Error('Could not finish your investor profile.');
+    return { completed_at: true, profile: { ...PROFILE, completed_at: '2026-11-27' } };
+  };
+  api.saveInvestorProfile = async () => assert.fail('The wizard must use the atomic completion endpoint');
+  api.getInvestorProfile = async () => ({ profile: null });
   const m = await mountContracts(h(AuthProvider, null, h(OnboardingInvestorPage), h(Probe)), '/onboarding/investor', user);
   globalThis.dispatchEvent = () => true;
   const settle = async () => { for (let n = 0; n < 5; n++) await m.flush(); };
@@ -35,36 +41,33 @@ async function fixture({ role = 'investor', step = 7, legacy = false, completed 
   return { ...m, props, state, progress, copies, completions, settle, close };
 }
 
-test('a failed profile copy stays visible, retries the same answers and offers the eligible fund beside deal flow', async () => {
+test('a failed atomic finish keeps Review and retries the same answers before offering the fund', async () => {
   const m = await fixture({ profileFail: true });
   try {
     await m.click('Finish profile'); await m.settle();
-    assert.match(m.text(), /Your profile was not saved/);
+    assert.match(m.text(), /Could not finish your investor profile/);
     assert.equal(m.props('location').children, '/onboarding/investor');
     assert.deepEqual(m.progress.at(-1).data, PERSISTED);
     assert.equal(m.progress.at(-1).total_steps, 8);
     assert.deepEqual(m.completions, ['investor']);
-    assert.deepEqual(m.copies, [PROFILE]);
-    assert.ok(!('value_weights' in m.copies[0]));
+    assert.deepEqual(m.copies, [PERSISTED]);
     m.state.profileFail = false;
-    await m.click('Try again'); await m.settle();
+    await m.click('Finish profile'); await m.settle();
     assert.match(m.text(), /Your profile is saved/);
     assert.deepEqual(m.copies[0], m.copies[1]);
     assert.ok(m.props('investor-deals') && m.props('investor-fund'));
-    await m.click('Open the Axal VC Fund'); await m.settle();
+    await m.click('Read about the fund'); await m.settle();
     assert.equal(m.props('location').children, '/spinout-lab/investor-workspace');
   } finally { await m.close(); }
 });
 
-test('Continue anyway is explicit and does not retry the refused copy', async () => {
+test('a failed finish offers neither a bypass nor an ending', async () => {
   const m = await fixture({ profileFail: true });
   try {
     await m.click('Finish profile'); await m.settle();
-    await m.click('Continue anyway'); await m.settle();
-    assert.match(m.text(), /without saving your profile/);
+    assert.doesNotMatch(m.text(), /Continue anyway|Your profile is saved/);
     assert.equal(m.copies.length, 1);
-    await m.click('See deal flow'); await m.settle();
-    assert.equal(m.props('location').children, '/deals');
+    assert.ok(!m.props('investor-fund') && !m.props('investor-deals'));
   } finally { await m.close(); }
 });
 
@@ -111,10 +114,10 @@ test('reopening a completed wizard preserves answers and requires an explicit pr
   const m = await fixture({ completed: true });
   try {
     assert.equal(m.copies.length, 0);
-    assert.match(m.text(), /Your onboarding answers are saved/);
+    assert.match(m.text(), /Your profile still needs to be saved/);
     await m.click('Save profile'); await m.settle();
-    assert.deepEqual(m.copies, [PROFILE]);
-    assert.equal(m.completions.length, 0);
+    assert.deepEqual(m.copies, [PERSISTED]);
+    assert.equal(m.completions.length, 1);
   } finally { await m.close(); }
 });
 
@@ -139,12 +142,12 @@ test('every remaining step uses current thesis-fit copy and contains no unused v
 
 test('handoff stays unavailable while the profile save is still pending', async () => {
   const m = await fixture(); let reply;
-  api.saveInvestorProfile = () => new Promise(resolve => { reply = resolve; });
+  api.onboardingComplete = () => new Promise(resolve => { reply = resolve; });
   try {
     await m.click('Finish profile'); await m.settle();
-    assert.match(m.text(), /Saving your investor profile/);
+    assert.match(m.text(), /Review your answers/);
     assert.ok(!m.props('investor-fund') && !m.props('investor-deals'));
-    reply({}); await m.settle();
+    reply({ completed_at: true, profile: { ...PROFILE, completed_at: '2026-11-27' } }); await m.settle();
     assert.ok(m.props('investor-deals') && m.props('investor-fund'));
   } finally { await m.close(); }
 });

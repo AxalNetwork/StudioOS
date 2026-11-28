@@ -8,19 +8,26 @@ import { FeeStatements } from '../../SpinoutLabLpFeeStatement';
 import { MyNotices } from '../../SpinoutLabLpNotices';
 
 export default function FundParticipationSection({
-  showApply, applicationLoaded, application, setApplication, derived, proofOn, openProof, portal, err, load, proofTargets, proofKey, proofSheet, setProofSheet, setProofKey
+  showApply, applicationLoaded, application, prefill, setApplication, derived, proofOn, openProof, portal, err, load, proofTargets, proofKey, proofSheet, setProofSheet, setProofKey
 }) {
 return (
 <>
       {/* application — a real submission, upserted per (applicant, fund). */}
-      {showApply && (
-        <div>
+      {showApply && application?.status !== 'declined' && (
+        <div id="lp-application-entry" className="scroll-mt-6">
           <SectionLabel>Apply to participate</SectionLabel>
           <LpApplicationForm
             loaded={applicationLoaded}
             existing={application}
+            prefill={prefill}
             onSubmitted={(saved) => setApplication(saved)}
           />
+        </div>
+      )}
+      {showApply && application?.status === 'declined' && (
+        <div className="rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-700" data-testid="lp-application-status">
+          <p className="font-semibold">Application declined</p>
+          {application.review_note && <p>{application.review_note}</p>}
         </div>
       )}
 

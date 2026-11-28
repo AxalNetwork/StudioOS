@@ -21,6 +21,7 @@ import {
   ACCOUNT_FIELDS, ACCOUNT_WORDS, accountBody, accountFieldOf, accountForm, isAccountConflict, PAY_WORDS, ROOM_WAITS, SIGN_WORDS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, signActions, signingRows,
 } from './roomModel';
 import Sheet from '../../ui/Sheet.jsx';
+import { accountChange } from './investorRoomModel';
 
 const mutedText = 'm-0 text-[12.5px] text-gray-600 dark:text-gray-400';
 const NOT_YET_PILL = 'w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400';
@@ -168,7 +169,7 @@ export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
  * this line's commitment, and shows the number for the seconds the Worker
  * returns, then masks it again. Each refusal prints the Worker's sentence.
  */
-export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId, onClose }) {
+export function PaymentDrawer({ company, amount, route = null, projectId, dealId, commitmentId, onClose }) {
   const phone = usePhoneWidth();
   const [tick, setTick] = useState(0);
   const [read, setRead] = useState({ result: null, error: null, done: false });
@@ -212,7 +213,7 @@ export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId
   const tap = phone ? 'min-h-[44px]' : '';
   const rows = state.kind === 'ok' ? payRows(state.account, amount) : [];
   return (
-    <Sheet label="Payment instructions" eyebrow="Pay" title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
+    <Sheet label="Payment instructions" eyebrow={amount ? ['Your line', amount, route].filter(Boolean).join(' · ') : 'Pay'} title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
       footer={<Foot><button type="button" className={`${BTN.ghost} ${tap}`} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <Warning testId="closing-pay-warning">{PAY_WARNING(company)}</Warning>
@@ -241,6 +242,7 @@ export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId
                     {r.key === 'account' && full ? <span className="font-mono font-semibold" data-testid="closing-pay-full">{full}</span>
                       : r.value ? <span className={r.mono ? 'font-mono break-all' : 'break-words'}>{r.value}</span> : <Unrecorded reason={`The company’s account carries no ${r.label.toLowerCase()}.`} />}
                     {r.key === 'account' && full ? <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="closing-pay-hides">Hides in {left}s</span> : null}
+                    {r.key === 'account' && full ? <button type="button" className={`${BTN.link} ${tap}`} onClick={() => setFull(null)} data-testid="closing-pay-mask">Mask now</button> : null}
                     {r.key === 'account' && !full && commitmentId != null ? (
                       <button type="button" className={`${BTN.link} ${tap}`} onClick={() => { setRefused(null); setAsking(true); }} disabled={busy} data-testid="closing-pay-reveal">Reveal full number</button>
                     ) : null}
@@ -252,6 +254,12 @@ export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId
               <div className="flex flex-col gap-2" data-testid={`closing-pay-reveal-${refused.kind}`}>
                 <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert">{refused.text}</p>
                 {refused.retry ? <button type="button" className={`${BTN.ghost} w-fit ${tap}`} onClick={reveal} disabled={busy} data-testid="closing-pay-reveal-retry">Try again</button> : null}
+              </div>
+            ) : null}
+            {accountChange(state.account) ? (
+              <div className="flex flex-col gap-0.5 rounded-lg border border-gray-200 p-3 text-[12.5px] dark:border-gray-800" role="note" data-testid="closing-pay-changed">
+                <b>{accountChange(state.account).title}</b>
+                <span className="text-gray-600 dark:text-gray-400">{accountChange(state.account).text}</span>
               </div>
             ) : null}
             <p className={mutedText} data-testid="closing-pay-note">{dayOf(state.account.created_at) ? `Set on ${dayOf(state.account.created_at)}. ` : ''}{PAY_WORDS.revealNote}</p>

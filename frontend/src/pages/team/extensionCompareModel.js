@@ -13,6 +13,8 @@
  * "Not recorded", never "v0".
  */
 
+import { day } from '../account/companies/companiesModel.js';
+
 export const PART_ORDER = ['name', 'purpose', 'steps', 'tools', 'output_kind', 'tags', 'roles'];
 export const PART_LABELS = { name: 'Name', purpose: 'Purpose', steps: 'Steps', tools: 'Tools', output_kind: 'Output', tags: 'Skill tags', roles: 'Roles' };
 
@@ -112,11 +114,17 @@ export function conflictsFirst(rows) {
   return rows.filter((r) => r.marker === 'c').concat(rows.filter((r) => r.marker !== 'c'));
 }
 
-/** History: each published company version and the Axal version it was built on; a null base reads Not recorded. */
+/** A publisher's name as the base read sends it (D8826); blank, or anything holding "@", is not shown. */
+const publisher = (n) => (typeof n === 'string' && n.trim() && !n.includes('@') ? n.trim() : null);
+
+/**
+ * History: each published company version, the Axal version it was built on, and who published it and when (D8826).
+ * A null base, publisher or day reads Not recorded on the screen, never "v0" or a guessed name.
+ */
 export function historyRows(versions) {
   return (Array.isArray(versions) ? versions : [])
     .filter((v) => num(v?.version))
-    .map((v) => ({ version: v.version, builtOn: num(v.based_on_version) }));
+    .map((v) => ({ version: v.version, builtOn: num(v.based_on_version), by: publisher(v.by_name), on: day(v.published_at) }));
 }
 
 /**

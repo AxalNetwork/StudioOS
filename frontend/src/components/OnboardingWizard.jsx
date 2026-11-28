@@ -19,7 +19,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [completed, setCompleted] = useState(false);
-  const [resumedComplete, setResumedComplete] = useState(false);
+  const [completion, setCompletion] = useState(null);
   const [readError, setReadError] = useState(false);
   const [readAttempt, setReadAttempt] = useState(0);
   const [returnToReview, setReturnToReview] = useState(false);
@@ -43,7 +43,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
           // last saved; never resume past the last step.
           const safeStep = reviewFlow ? reviewFlow.resumeStep(p) : Math.max(0, Math.min(steps.length - 1, Number.isInteger(p.step) ? p.step : 0));
           setStepIdx(safeStep);
-          if (p.completed_at) { setCompleted(true); setResumedComplete(true); }
+          if (p.completed_at) setCompleted(true);
         }
       } catch {
         if (!cancelled && reviewFlow) setReadError(true);
@@ -124,7 +124,10 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
       const saved = await persist(stepIdx, nextValues);
       if (!saved && requireFinalSave) { setBusy(false); return; }
       try {
-        await api.onboardingComplete(flow);
+        const result = reviewFlow?.complete
+          ? await reviewFlow.complete(nextValues)
+          : await api.onboardingComplete(flow);
+        setCompletion(result);
         setCompleted(true);
         // TELL THE APP SHELL, or its wizard-resume gate undoes this.
         //
@@ -169,7 +172,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
   </section>;
 
   if (completed) {
-    if (renderComplete) return renderComplete(values, { resumed: resumedComplete });
+    if (renderComplete) return renderComplete(values, { completion });
     return (
       <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-800">
         <div className="mx-auto h-12 w-12 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center mb-4">

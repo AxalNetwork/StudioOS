@@ -31,6 +31,19 @@ export const COVERAGE_SORTS = [
 ];
 
 /**
+ * A cell's colour by its state. D5929 (#5929): New licence's territory step marks a country another licence holds
+ * with the same two taken tones, so the step and this grid cannot disagree about what a suspended holder means.
+ */
+export const COVERAGE_TONE = Object.freeze({
+  held_active: 'border-green-300 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200',
+  held_suspended: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
+  free: 'border-gray-200 bg-white text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500',
+});
+
+/** A holder's status as a cell state: a suspended licence is taken, like an active one, never free. */
+export const heldState = (status) => (status === 'suspended' ? 'held_suspended' : 'held_active');
+
+/**
  * #4700 — `items` is the summary's coverage (every licence that holds a
  * country) and `renewals` its soonest renewals with their total, both over the
  * whole ledger rather than the page on screen.
@@ -46,11 +59,7 @@ export function Coverage({ items, renewals, onOpen }) {
   const ordered = useMemo(() => sortCells(cells, sort), [cells, sort]);
   const pipeline = useMemo(() => renewalPipeline(renewals?.items || []), [renewals]);
 
-  const tone = {
-    held_active: 'border-green-300 bg-green-50 text-green-900 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200',
-    held_suspended: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
-    free: 'border-gray-200 bg-white text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500',
-  };
+  const tone = COVERAGE_TONE;
 
   return (
     <div className={`mt-4 grid gap-4 ${renewals === undefined ? '' : 'lg:grid-cols-[minmax(0,1fr)_320px]'}`} data-testid="hq-coverage">

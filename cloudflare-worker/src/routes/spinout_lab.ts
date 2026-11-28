@@ -1132,13 +1132,24 @@ async function ensureLpApplicationsSchema(env: Env): Promise<void> {
 // GET /lp-application — the caller's own application, or null.
 spinoutLab.get('/lp-application', async (c) => {
   const user = await requireAuth(c);
-  const { presentLpApplication } = await import('../services/lpApplications');
+  const { presentLpApplication, investorApplicationPrefill } = await import('../services/lpApplications');
+  c.header('Cache-Control', 'private, no-store');
   try {
     await ensureLpApplicationsSchema(c.env);
     const row = await c.env.DB.prepare(
       'SELECT * FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
     ).bind(user.id, LP_FUND_SLUG).first<any>();
-    return c.json({ ok: true, application: presentLpApplication(row) });
+    const application = presentLpApplication(row);
+    if (application || !['investor', 'admin'].includes(user.role)) return c.json({ ok: true, application });
+    const profile = await c.env.DB.prepare(
+      `SELECT investor_type, lp_target_usd, notes FROM investor_profiles
+       WHERE user_id = ? AND lp_intent = 'yes_now' AND completed_at IS NOT NULL
+         AND EXISTS (
+           SELECT 1 FROM onboarding_progress
+           WHERE user_id = investor_profiles.user_id AND flow = 'investor' AND completed_at IS NOT NULL
+         )`,
+    ).bind(user.id).first<{ investor_type: string | null; lp_target_usd: number | null; notes: string | null }>().catch(() => null);
+    return c.json({ ok: true, application, ...(profile ? { prefill: investorApplicationPrefill(profile) } : {}) });
   } catch {
     // A store that cannot be read must not read as "never applied" — that
     // would invite a duplicate submission and show the form to someone who

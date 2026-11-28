@@ -14,24 +14,28 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { investorProfile, NFX_SECTORS, LEGACY_SECTOR_OPTIONS } from '../src/routes/investor_signals.ts';
+import onboarding from '../src/routes/onboarding.ts';
+import spinoutLab from '../src/routes/spinout_lab.ts';
 import { NFX_SECTORS as FRONTEND_NFX_SECTORS } from '../../frontend/src/lib/nfxSectors.js';
-import { investorProfilePayload } from '../../frontend/src/lib/onboarding.js';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
   db.exec(`INSERT INTO users (id, role, name, email, is_active) VALUES
-    (2, 'investor', 'Investor', 'investor@example.test', 1);`);
+    (2, 'investor', 'Investor', 'investor@example.test', 1),
+    (3, 'founder', 'Founder', 'founder@example.test', 1);`);
   return { db, env: { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any };
 }
 const app = new Hono<any>(); app.route('/api/investor-profile', investorProfile);
+app.route('/api/onboarding', onboarding);
+app.route('/api/spinout-lab', spinoutLab);
 const path = '/api/investor-profile/me';
-async function call(env: any, method: string, body?: unknown) {
-  const token = await new SignJWT({ user_id: 2 })
+async function call(env: any, method: string, body?: unknown, url = path, userId = 2) {
+  const token = await new SignJWT({ user_id: userId })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
-  const response = await withThrownResponses(() => app.request(path, {
+  const response = await withThrownResponses(() => app.request(url, {
     method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }, env, { waitUntil() {}, passThroughOnException() {} } as any));
@@ -42,7 +46,7 @@ function stored(db: DatabaseSync) {
     FROM investor_profiles WHERE user_id = 2`).get() as any;
 }
 
-// What OnboardingInvestorPage's finish sends, built by its own payload helper.
+// The reviewed answers OnboardingInvestorPage sends to /onboarding/complete.
 const onboardingValues = {
   investor_type: 'angel', check_size: '$10k-$50k', stages: ['Seed'], geos: ['Europe'],
   sectors: ['FinTech', 'Creator/Passion Economy', 'Generative Tech/AI'],
@@ -50,6 +54,75 @@ const onboardingValues = {
   thesis_text: 'Technical founders in embedded finance.', contribute_to_signals: false,
   firm_name: 'Halden Family Office', accreditation_status: 'accredited', country: 'Canada', lp_intent: 'maybe',
 };
+
+const progressPath = '/api/onboarding/progress';
+const draftPath = '/api/onboarding/investor/thesis-draft';
+const completePath = '/api/onboarding/complete';
+const applyPath = '/api/spinout-lab/lp-application';
+const finish = (env: any, data = onboardingValues) => call(env, 'POST', { flow: 'investor', data }, completePath);
+
+test('Eadwyn drafts only from the authenticated investor’s saved closed-list answers without a write', async () => {
+  const { db, env } = fixture();
+  assert.equal((await call(env, 'POST', {}, draftPath)).status, 409);
+  assert.equal((await call(env, 'POST', {}, draftPath, 3)).status, 403);
+  const data = { ...onboardingValues, notes: 'private note', firm_name: 'private firm', lp_target_usd: 120_000 };
+  assert.equal((await call(env, 'PUT', { flow: 'investor', step: 5, total_steps: 8, data }, progressPath)).status, 200);
+  const draft = (await call(env, 'POST', { sectors: ['Payments'], user_id: 3 }, draftPath)).body.draft;
+  for (const expected of ['Seed', 'FinTech', 'Europe', '$10k-$50k', 'Web3/Crypto', 'Growth']) assert.ok(draft.includes(expected));
+  assert.doesNotMatch(draft, /private|accredit|120000|Payments|Technical founders/i);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM investor_profiles').get()?.n, 0);
+  assert.equal((await call(env, 'GET', undefined, progressPath)).body.data.thesis_text, onboardingValues.thesis_text);
+});
+
+test('finishing writes and reads back the profile before marking onboarding complete, and rolls back both on failure', async () => {
+  const { db, env } = fixture();
+  const body = { flow: 'investor', data: { ...onboardingValues, lp_intent: 'yes_now' } };
+  await call(env, 'PUT', { ...body, step: 7, total_steps: 8 }, progressPath);
+  assert.equal((await call(env, 'POST', { flow: 'investor' }, completePath)).status, 409);
+  assert.equal((await call(env, 'POST', { ...body, data: { ...body.data, stages: [] } }, completePath)).status, 422);
+  assert.equal((await call(env, 'POST', { ...body, data: { ...body.data, lp_target_usd: '75000 USD' } }, completePath)).status, 422);
+  db.exec(`CREATE TRIGGER fail_completion BEFORE INSERT ON onboarding_progress BEGIN
+    SELECT RAISE(ABORT, 'fixture progress write failure'); END;`);
+  assert.equal((await call(env, 'POST', body, completePath)).status, 503);
+  assert.equal(stored(db), undefined);
+  assert.equal((await call(env, 'GET', undefined, progressPath)).body.completed_at, null);
+  db.exec(`DROP TRIGGER fail_completion;
+    CREATE TRIGGER profile_first BEFORE INSERT ON onboarding_progress
+    WHEN NOT EXISTS (SELECT 1 FROM investor_profiles WHERE user_id = NEW.user_id AND completed_at IS NOT NULL)
+    BEGIN SELECT RAISE(ABORT, 'profile was not written first'); END;`);
+  const finished = await call(env, 'POST', body, completePath);
+  assert.equal(finished.status, 200);
+  assert.equal(finished.body.profile.lp_intent, 'yes_now');
+  assert.equal(finished.body.profile.contribute_to_signals, false);
+  assert.ok(finished.body.profile.completed_at);
+  assert.deepEqual(finished.body.profile, (await call(env, 'GET')).body.profile);
+  assert.ok((await call(env, 'GET', undefined, progressPath)).body.completed_at);
+});
+
+test('fund prefill gives only the caller’s ready answers, never replaces an application or certifies accreditation', async () => {
+  const { env } = fixture();
+  await call(env, 'PUT', { ...onboardingValues, ticket_band: onboardingValues.check_size, lp_intent: 'yes_now', lp_target_usd: 50_001 });
+  assert.ok(!('prefill' in (await call(env, 'GET', undefined, applyPath)).body));
+  const complete = (lp_target_usd: number) => call(env, 'POST', {
+    flow: 'investor', data: { ...onboardingValues, investor_type: 'institutional', lp_intent: 'yes_now', lp_target_usd, notes: 'For the fund' },
+  }, completePath);
+  await complete(50_001);
+  const result = await call(env, 'GET', undefined, applyPath);
+  assert.deepEqual(result.body, { ok: true, application: null, prefill: {
+    investor_type: 'institution', target_commitment: 50_001, target_out_of_range: false, note: 'For the fund',
+  } });
+  assert.ok(!('prefill' in (await call(env, 'GET', undefined, applyPath, 3)).body));
+  await complete(49_999);
+  assert.deepEqual((await call(env, 'GET', undefined, applyPath)).body.prefill, {
+    investor_type: 'institution', target_commitment: null, target_out_of_range: true, note: 'For the fund',
+  });
+  const form = { investor_type: 'institution', target_commitment: 50_001, note: '', accredited: false };
+  assert.equal((await call(env, 'POST', form, applyPath)).status, 400);
+  assert.equal((await call(env, 'POST', { ...form, accredited: true }, applyPath)).status, 200);
+  const existing = (await call(env, 'GET', undefined, applyPath)).body;
+  assert.equal(existing.application.status, 'pending');
+  assert.ok(!('prefill' in existing));
+});
 
 // What useInvestorProfile.save sends: the stored thesis columns whole, then the card's edits.
 function settingsSave(profile: any, edits: Record<string, unknown>) {
@@ -68,7 +141,7 @@ test('the Worker accepts exactly the NFX list the onboarding offers, in its orde
 
 test('onboarding NFX sectors and exclusions persist, read back and complete the profile', async () => {
   const { db, env } = fixture();
-  const saved = await call(env, 'PUT', investorProfilePayload(onboardingValues));
+  const saved = await finish(env);
   assert.equal(saved.status, 200);
   assert.deepEqual(saved.body.profile.sectors, onboardingValues.sectors);
   assert.deepEqual(saved.body.profile.anti_thesis_sectors, onboardingValues.anti_thesis_sectors);
@@ -87,9 +160,9 @@ test('onboarding NFX sectors and exclusions persist, read back and complete the 
 test('every NFX sector can be picked at once; unknown and repeated values are dropped', async () => {
   const { env } = fixture();
   const all = [...FRONTEND_NFX_SECTORS];
-  const saved = await call(env, 'PUT', investorProfilePayload({
+  const saved = await finish(env, {
     ...onboardingValues, sectors: [...all, 'Not A Sector', all[0], '  '], anti_thesis_sectors: ['fintech', 'Web3/Crypto'],
-  }));
+  });
   assert.equal(saved.status, 200);
   assert.deepEqual(saved.body.profile.sectors, all);
   assert.deepEqual(saved.body.profile.anti_thesis_sectors, ['Web3/Crypto'], 'matching is exact, as the list is');
@@ -97,7 +170,7 @@ test('every NFX sector can be picked at once; unknown and repeated values are dr
 
 test('Settings "My thesis" reads the onboarding row and its save keeps it whole', async () => {
   const { db, env } = fixture();
-  await call(env, 'PUT', investorProfilePayload(onboardingValues));
+  await finish(env);
   const { profile } = (await call(env, 'GET')).body;
   // The card toggles a sector it offers (a legacy label) on top of the NFX picks.
   const thesis = await call(env, 'PUT', settingsSave(profile, { sectors: [...profile.sectors, 'Climate'] }));
@@ -132,7 +205,7 @@ test('a profile saved with the legacy labels round-trips through a Settings save
 
 test('omitted sector arrays are preserved; an explicit empty array clears them', async () => {
   const { env } = fixture();
-  await call(env, 'PUT', investorProfilePayload(onboardingValues));
+  await finish(env);
   const partial = await call(env, 'PUT', { firm_name: 'Renamed' });
   assert.equal(partial.status, 200);
   assert.deepEqual(partial.body.profile.sectors, onboardingValues.sectors);

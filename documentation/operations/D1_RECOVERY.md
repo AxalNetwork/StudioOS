@@ -335,6 +335,12 @@ copy:
 - **The key:** each export is encrypted on the runner with `age` to the
   owner's **public** key. The private key never reaches CI.
 - **Retention:** 35 daily and 12 monthly recovery points.
+  This is the **independent copy's** retention only. The primary nightly
+  export in `studioos-backups` has its own lock and lifecycle (365 days in
+  the `backup-d1.yml` header and `INCIDENT_RESPONSE.md` § Backups), set in
+  the Cloudflare dashboard. No code here sets or checks either period, so
+  both are decision basis until the live settings are inspected
+  (`PROCESSING_AND_RETENTION_5510.md` §4.1, #5510).
 
 Until the owner finishes step 1 below, `DR_SECOND_COPY_ENABLED` is unset and
 nothing is copied.

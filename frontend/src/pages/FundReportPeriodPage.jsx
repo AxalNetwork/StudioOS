@@ -4,7 +4,7 @@ import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
 import { api } from '../lib/api';
 import { parseStamp } from '../ui/parseStamp.js';
-import { fundReportDeliveryLabel, fundReportDeliveryTime } from '../lib/fundReportDelivery';
+import { fundReportDeliveryLabel, fundReportDeliveryTime, lpDeliveryLabel, lpDeliveryNote, lpDeliveryStateLabel } from '../lib/fundReportDelivery';
 import { useLeaveGuard } from '../lib/leaveGuard';
 import { fundReportsApi } from '../lib/api/fundReports.js';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
@@ -60,7 +60,8 @@ export function PeriodReader({ data, onChanged = () => {} }) {
           <div><dt>Issued by</dt><dd><Recorded value={report.issued_by_name} reason={report.issued_by_name_reason || 'The issuer’s name was not recorded.'} /></dd></div>
           {data.can_manage && <div><dt>{report.lps_notified_at ? 'LPs notified at' : 'LP notices'}</dt><dd>
             {report.lps_notified_at && <time dateTime={report.lps_notified_at}>{fundReportDeliveryTime(report)} · </time>}{fundReportDeliveryLabel(report)}
-          </dd></div>}</dl></header>
+          </dd></div>}
+          {data.can_manage && report.lp_delivery && <div><dt>Delivered</dt><dd data-testid="period-lp-delivered">{lpDeliveryLabel(report)}{lpDeliveryNote(report) && <small>{lpDeliveryNote(report)}</small>}</dd></div>}</dl></header>
         {report.corrects_period_id && <p role="note">This report corrects <Link to={link(report.corrects_period_id)}>{report.corrects_period || label(report.corrects_period_id)}</Link>. The original remains issued.</p>}
         {report.corrected_by_period_id && <p role="note">Corrected by <Link to={link(report.corrected_by_period_id)}>{label(report.corrected_by_period_id)}</Link>. This report remains issued and readable.</p>}
         {Object.entries(SECTIONS).map(([section, title]) => <section key={section} aria-label={title}><h3>{title}</h3>
@@ -77,8 +78,41 @@ export function PeriodReader({ data, onChanged = () => {} }) {
         <p>These figures are frozen at issue. Missing figures are not recalculated from today’s records.</p>
       </aside>
     </div>
+    {data.can_manage && ('lp_deliveries' in report) && <LpDeliveryCard report={report} />}
     {data.can_manage && user?.role === 'admin' && <PackCard data={data} user={user} onChanged={onChanged} />}
   </>;
+}
+
+/**
+ * D6240: each LP of an issued period and how far its delivery got, for the
+ * fund's manager only (the Worker sends the list only past `requireFundGp`).
+ * No rows reads the Worker's reason: Not recorded for a period issued before
+ * delivery was recorded, never an empty list or 0 delivered.
+ */
+export function LpDeliveryCard({ report }) {
+  const rows = Array.isArray(report.lp_deliveries) ? report.lp_deliveries : null;
+  const reason = report.lp_deliveries_reason || 'Not recorded: no per-LP delivery was returned.';
+  const unreadable = /^Unreadable/.test(reason);
+  return <section className="fd-card fd-delivery" aria-label="Delivery to LPs" data-testid="period-lp-deliveries">
+    <h2>Delivery to LPs</h2>
+    {!rows ? <p data-testid="lp-deliveries-reason"><b>{unreadable ? 'Unreadable' : 'Not recorded'}</b> {reason.replace(/^(Not recorded|Unreadable):\s*/, '')}</p>
+      : <table><thead><tr><th>LP</th><th>State</th><th>Made available</th><th>Opened</th></tr></thead><tbody>
+        {rows.map(row => <tr key={row.lp_id} data-testid="row-lp-delivery">
+          <td>{row.name || `LP ${row.lp_id}`}{row.lp_removed && <small>LP record removed</small>}</td>
+          <td data-label="State"><span className={`fd-pill fd-delivery-${row.state}`}>{lpDeliveryStateLabel(row.state)}</span>{row.state === 'not_sent' && <small>No active linked account</small>}</td>
+          <td data-label="Made available"><DeliveryStamp value={row.made_available_at} none={row.state === 'failed' ? 'Notice failed' : 'Not made available'} /></td>
+          <td data-label="Opened"><DeliveryStamp value={row.opened_at} none="Not opened" /></td>
+        </tr>)}
+      </tbody></table>}
+    <p>Made available means the LP’s account received the in-app notice. Opened records the first time that account read this report; LPs have no acknowledgement step.</p>
+  </section>;
+}
+
+/** D6240: a delivery time in UTC, or what its absence means for that row (not a missing record). */
+function DeliveryStamp({ value, none }) {
+  const at = parseStamp(value);
+  return at === null ? <small>{none}</small>
+    : <time dateTime={value}>{new Date(at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</time>;
 }
 
 function ReportDate({ value, stamp = false, reason }) {

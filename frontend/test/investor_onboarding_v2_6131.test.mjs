@@ -5,12 +5,14 @@ import { mountContracts } from './_contracts_dom.mjs';
 import OnboardingInvestorPage from '../src/pages/OnboardingInvestorPage.jsx';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { api } from '../src/lib/api.js';
+import { investorOnboardingApi } from '../src/lib/api/investorOnboarding.js';
 import { investorResumeStep } from '../src/lib/onboarding.js';
 
 const answers = { _investor_onboarding_version: 2, investor_type: 'angel', firm_name: 'Synthetic office', accreditation_status: 'non_us', country: 'Canada', check_size: '$10k-$50k', stages: ['Seed'], sectors: ['General Tech'], geos: ['Europe'], anti_thesis_sectors: ['Parenting/Families'], anti_thesis_stages: ['Growth'], thesis_text: 'Synthetic thesis', contribute_to_signals: false, lp_intent: 'yes_now', lp_target_usd: '50000', notes: 'Synthetic note' };
 async function fixture({ step = 7, data = answers, readFails = false, saveFails = false } = {}) {
   const keys = ['getMe', 'onboardingGetProgress', 'onboardingSaveProgress', 'onboardingComplete', 'saveInvestorProfile', 'getCorporateProfile', 'updateCorporateProfile'];
   const original = Object.fromEntries(keys.map(key => [key, api[key]]));
+  const originalDraft = investorOnboardingApi.draftThesis;
   const state = { readFails, saveFails };
   const progress = [], entities = [];
   let completes = 0, reads = 0;
@@ -19,6 +21,7 @@ async function fixture({ step = 7, data = answers, readFails = false, saveFails 
   api.onboardingSaveProgress = async v => { progress.push(v); if (state.saveFails) throw Error('Synthetic save failed'); };
   api.onboardingComplete = async () => { completes++; };
   api.saveInvestorProfile = async () => ({});
+  investorOnboardingApi.draftThesis = async () => ({ draft: 'A draft from saved selections.' });
   api.getCorporateProfile = async () => ({ entity_name: 'Synthetic stored entity', entity_type: 'ag', tax_id_number: 'DO NOT COPY' });
   api.updateCorporateProfile = async v => { entities.push(v); return v; };
   const m = await mountContracts(React.createElement(AuthProvider, null, React.createElement(OnboardingInvestorPage)), '/onboarding/investor', { id: 6131, role: 'investor' });
@@ -26,9 +29,26 @@ async function fixture({ step = 7, data = answers, readFails = false, saveFails 
   await settle();
   const props = n => m.props(n);
   const edit = async label => { const node = m.nodes().find(n => props(n)?.['aria-label'] === `Edit ${label}`); assert.ok(node, label); props(node).onClick(); await settle(); };
-  const close = async () => { await m.unmount(); Object.assign(api, original); };
+  const close = async () => { await m.unmount(); Object.assign(api, original); investorOnboardingApi.draftThesis = originalDraft; };
   return { ...m, state, progress, entities, settle, edit, close, completes: () => completes, reads: () => reads };
 }
+
+test('Eadwyn discard preserves the thesis and Accept saves only on Continue', async () => {
+  const m = await fixture({ step: 5 });
+  try {
+    await m.click('Draft with Eadwyn'); await m.settle();
+    assert.match(m.text(), /A draft from saved selections/);
+    await m.click('Discard'); await m.settle();
+    assert.equal(m.progress.length, 0);
+    assert.equal(m.nodes().find(node => node.tagName === 'TEXTAREA')?.value, answers.thesis_text);
+    await m.click('Draft with Eadwyn'); await m.settle();
+    await m.click('Accept'); await m.settle();
+    assert.equal(m.progress.length, 0);
+    await m.click('Continue'); await m.settle();
+    assert.equal(m.progress.at(-1).data.thesis_text, 'A draft from saved selections.');
+    assert.equal(m.progress.at(-1).data.contribute_to_signals, false);
+  } finally { await m.close(); }
+});
 
 test('legacy indexes map to the same question and malformed positions remain valid', () => {
   assert.deepEqual(Array.from({ length: 9 }, (_, step) => investorResumeStep({ step, total_steps: 9 })), [0, 1, 2, 3, 3, 5, 4, 6, 6]);

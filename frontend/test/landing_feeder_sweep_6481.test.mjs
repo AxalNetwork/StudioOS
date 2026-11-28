@@ -11,12 +11,14 @@ function fixture() {
     sha: new Map(), gates: new Map(), main: { ...main }, freeSlots: 3, remaining: 3, ordered: [8, 5, 7],
     groups: Array.from({ length: 20 }, (_, i) => ({ id: i + 1, event: 'merge_group', status: 'completed', conclusion: 'success' })),
     reads: [], writes: [], budgetReads: 0, listOverrides: new Map(),
+    rulesIssue: { number: 6480, state: 'closed', state_reason: 'completed' },
   };
-  const env = { LANDING_BOT_ENABLED: 'true', LANDING_BOT_FEED_PER_SWEEP: '3', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.25' };
+  const env = { LANDING_BOT_FEEDER_ENABLED: 'true', LANDING_BOT_FEED_PER_SWEEP: '3', LANDING_BOT_QUEUE_FAIL_BREAKER: '0.25' };
   const reader = {
     readOrderedList: async () => state.ordered.map(number => ({ number, tier: 'T1', modelChanged: false, ...state.listOverrides.get(number) })),
     readMainHealth: async () => ({ mainRuns: [state.main], openAlertTitles: [], recentGroupRuns: state.groups }),
     readQueueState: async () => ({ freeQueueSlots: state.freeSlots }),
+    readRulesIssue: async () => state.rulesIssue,
     // #8076: an empty queue and no slot, so the admission holds never apply here (landing_concurrency_8076 covers them).
     readQueueEntries: async () => [],
     readOwningSlot: async () => '',
@@ -47,7 +49,7 @@ test('named dispatch reads and writes only the selected PR in either enabled mod
   for (const mode of ['dispatch', 'true']) {
     const { state, options } = fixture();
     Object.assign(options, { event: 'workflow_dispatch', dispatchPr: 5 });
-    options.env.LANDING_BOT_ENABLED = mode;
+    options.env.LANDING_BOT_FEEDER_ENABLED = mode;
     const plan = await planSweep(options);
     assert.deepEqual(plan, [{ number: 5, expectedHeadOid: head }]);
     assert.equal(state.writes.length, 0);
@@ -60,7 +62,7 @@ test('named dispatch reads and writes only the selected PR in either enabled mod
 test('scheduled runs require all-trigger mode; unsupported events cannot build or apply a plan', async () => {
   const { state, options } = fixture();
   for (const [mode, event] of [['off', 'schedule'], ['dispatch', 'schedule'], ['true', 'pull_request'], ['true', 'workflow_dispatch']]) {
-    options.env.LANDING_BOT_ENABLED = mode;
+    options.env.LANDING_BOT_FEEDER_ENABLED = mode;
     options.event = event;
     assert.deepEqual(await planSweep(options), []);
     assert.deepEqual(await applySweep(options, [{ number: 5, expectedHeadOid: head }]), []);
