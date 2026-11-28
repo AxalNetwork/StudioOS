@@ -123,7 +123,7 @@ export function evaluate({ skills, selected, allowlist }) {
   return { rows, failures };
 }
 
-const cell = (s) => String(s).replace(/\|/g, '\\|').replace(/\s+/g, ' ');
+const cell = (s) => String(s).replace(/[\\|]/g, '\\$&').replace(/\s+/g, ' ');
 
 /** The job summary: what ran, why, and each finding as skill, case and reason. */
 export function summaryMarkdown(selection, result, total) {
