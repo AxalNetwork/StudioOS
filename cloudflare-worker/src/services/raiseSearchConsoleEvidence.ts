@@ -25,7 +25,9 @@ import type { RaiseEvidenceContext } from './raiseEvidence';
 import { DATA_STATE, SEARCH_TYPE } from './searchConsoleSync';
 import { PROVIDER_TIMEZONE, addDays, validDay, weekStartOf, weekTotals, type DayRow } from './searchConsoleWeeks';
 
-export const SEARCH_CONSOLE_EVIDENCE_KIND = 'search-console-aggregate';
+/** The kind is declared once, beside the evidence rule that reads a pinned selection (D5842 part 2). */
+export { SEARCH_CONSOLE_EVIDENCE_KIND } from './raiseEvidenceSources';
+import { SEARCH_CONSOLE_EVIDENCE_KIND } from './raiseEvidenceSources';
 export const SEARCH_CONSOLE_EVIDENCE_TABLE = 'search_console_daily_totals';
 export const SEARCH_CONSOLE_EVIDENCE_PROVIDER = SEARCH_CONSOLE_KEY;
 export const SEARCH_CONSOLE_EVIDENCE_AREA: EvidenceArea = 'Investor narrative and Pitch deck';
