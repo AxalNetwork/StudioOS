@@ -633,7 +633,6 @@ sleep frontend/test/cycle_route_lazy_steps_d4574.test.mjs
 sleep frontend/test/dashboard_lazy_panels_d4574.test.mjs
 sleep frontend/test/data_room_access_d1107.test.mjs
 sleep frontend/test/data_room_d1108.test.mjs
-sleep frontend/test/data_room_d696.test.mjs
 sleep frontend/test/data_room_files_d1106.test.mjs
 sleep frontend/test/data_room_tool_d1101.test.mjs
 sleep frontend/test/dd_case_tabs_d1251.test.mjs
@@ -813,7 +812,6 @@ sleep frontend/test/pitch_judge_d1525.test.mjs
 sleep frontend/test/pitch_reports_pricing_d1540.test.mjs
 sleep frontend/test/pitch_review_d900.test.mjs
 sleep frontend/test/pitch_script_d4268.test.mjs
-sleep frontend/test/pitch_script_tile_4270.test.mjs
 sleep frontend/test/pitch_share_d902.test.mjs
 sleep frontend/test/pitch_share_preflight_4598.test.mjs
 sleep frontend/test/pitch_shell_3717.test.mjs

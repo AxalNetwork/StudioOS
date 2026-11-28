@@ -208,7 +208,8 @@ test('3. a failed quote read, pricing_unavailable and a loading price cannot be 
       assert.equal(m.pr(m.by('pitch-new-confirm')).disabled, true, `${name}: Confirm is off`);
       assert.doesNotMatch(m.text(m.by('pitch-new-dialog')), /no cost|free\b/i, `${name}: nothing says free`);
       const before = m.calls.filter(([n]) => n === 'build').length;
-      await m.pr(m.by('pitch-new-confirm')).onClick?.({ preventDefault() {} });
+      // D9211: the press goes through act like every other, so what it sets lands before the count below.
+      await act(async () => { await m.pr(m.by('pitch-new-confirm')).onClick?.({ preventDefault() {} }); });
       assert.equal(m.calls.filter(([n]) => n === 'build').length, before, `${name}: no build is sent`);
       if (name !== 'never answers') {
         assert.ok(m.by('pitch-new-reprice'), `${name}: the retry is offered`);

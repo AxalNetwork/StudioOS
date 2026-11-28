@@ -263,6 +263,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
 | `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+| `_actWarnings.mjs` | D9211 (#9211): imported by `_deck-loader.mjs`; counts each test file's React "not wrapped in act" warnings in its own process and fails the file above its entry in `act-warnings-baseline.json` (none when unlisted). `--write` rebuilds the baseline from `ACT_WARNINGS_RECORD` runs. |
+| `act_warnings_baseline_9211.test.mjs` | D9211: the baseline is sorted, real and under its ceiling (it only goes down); a real React warning is counted and one over the baseline fails the file. `_waitUntil.mjs`'s `waitForAct` is the act-wrapped wait that removes them. |
 | `verdict_v10_6018.test.mjs` | Unselected form, evidence gaps, Stop policy and recorded-decision separation. |
 | `pitch_editor_layout_6057.test.mjs` | PS04 inspector mounting, section headings, document toolbar and preserved actions. |
 | `founding_team_6037.test.mjs` | The founding summary, honest missing states and venture-scoped handoffs. |

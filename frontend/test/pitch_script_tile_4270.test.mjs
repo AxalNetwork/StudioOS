@@ -3,8 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
+import { readCounter, waitForAct } from './_waitUntil.mjs';
 import { deckQaApi } from '../src/lib/api/deckQa.js';
 import { deckRehearsalsApi } from '../src/lib/api/deckRehearsals.js';
 import QuestionsTab from '../src/pages/raise/pitch/QuestionsTab.jsx';
@@ -74,14 +75,18 @@ test('a rehearsal row: the report\'s figures, the duration marked over its targe
 async function mountQuestions(props = {}, read = READ) {
   const calls = [];
   const saved = { ...deckQaApi };
+  const reads = readCounter(); // D9211: each stubbed answer counted until it lands
   deckQaApi.questions = async (...a) => { calls.push(['questions', ...a]); return structuredClone(read); };
   deckQaApi.saveAnswer = async (deckId, key, body) => { calls.push(['saveAnswer', deckId, key, body]); return { question: key, written: { text: body.answer, source: body.source } }; };
   deckQaApi.addQuestion = async (...a) => { calls.push(['addQuestion', ...a]); return { question: {} }; };
   deckQaApi.removeAnswer = async (...a) => { calls.push(['removeAnswer', ...a]); return { written: null }; };
+  for (const k of ['questions', 'saveAnswer', 'addQuestion', 'removeAnswer']) deckQaApi[k] = reads.wrap(deckQaApi[k]);
   const m = await mountContracts(h(QuestionsTab, { deckId: 7, deckTitle: 'Seed deck', version: 3, readOnly: false, ...props }), '/raise/pitch/script?view=questions');
-  await m.flush();
+  // D9211 (#9211): settled when every answer the tab asked for has landed, inside act; a press runs inside act too.
+  const settle = () => waitForAct(() => reads.out === 0, { label: 'the questions\' reads to answer', describe: () => `${reads.out} read(s) out` });
+  await settle();
   const byTest = (id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
-  const press = async (id) => { const n = byTest(id); if (!n) throw new Error(`Missing ${id}`); await m.flush(); await new Promise((r) => setTimeout(r, 0)); await (async () => m.props(n).onClick({ stopPropagation() {} }))(); await m.flush(); };
+  const press = async (id) => { const n = byTest(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await m.props(n).onClick({ stopPropagation() {} }); }); await settle(); };
   return { m, calls, byTest, press, restore: async () => { Object.assign(deckQaApi, saved); await m.unmount(); } };
 }
 
@@ -141,6 +146,7 @@ test('Rehearsals: each run\'s figures, Not recorded where a run has none, and Op
   // Mutation checked: Open reading the list row instead of the run → no bars are drawn.
   const saved = { ...deckRehearsalsApi };
   const calls = [];
+  const reads = readCounter(); // D9211
   deckRehearsalsApi.list = async (id) => { calls.push(['list', id]); return { deck_id: id, rehearsals: [
     { uid: 'r1', created_at: '2026-11-02 18:20:00', duration_ms: 192_000, pitch_seconds: 180, wpm: 142, fillers: 4, cards_over: 2, notes_covered: 10, notes_total: 12, status: 'reported' },
     { uid: 'r2', created_at: '2026-10-31 09:05:00', duration_ms: 4_000, pitch_seconds: 180, wpm: null, fillers: null, cards_over: null, notes_covered: null, notes_total: null, status: 'failed' },
@@ -148,9 +154,12 @@ test('Rehearsals: each run\'s figures, Not recorded where a run has none, and Op
   deckRehearsalsApi.read = async (id, uid) => { calls.push(['read', id, uid]); return { rehearsal: { uid, report: { cards: [
     { card: 1, title: 'Title', time_ms: 9_000, budget_ms: 15_000, over: false }, { card: 2, title: 'Problem', time_ms: 27_000, budget_ms: 15_000, over: true },
   ] } } }; };
+  deckRehearsalsApi.list = reads.wrap(deckRehearsalsApi.list);
+  deckRehearsalsApi.read = reads.wrap(deckRehearsalsApi.read);
   const m = await mountContracts(h(RehearsalsTab, { deckId: 7, deckTitle: 'Seed deck' }), '/raise/pitch/script?view=rehearsals');
+  const settle = () => waitForAct(() => reads.out === 0, { label: 'the rehearsals\' reads to answer', describe: () => `${reads.out} read(s) out` });
   try {
-    await m.flush();
+    await settle();
     const text = m.text();
     assert.match(text, /2 runs of Seed deck/);
     assert.match(text, /2 Nov · 18:20/);
@@ -159,9 +168,8 @@ test('Rehearsals: each run\'s figures, Not recorded where a run has none, and Op
     assert.match(text, /Not recorded/);
     assert.match(text, /Failed/);
     const open = m.nodes().find((n) => m.props(n)?.['data-testid'] === 'pitch-rehearsal-open-r1');
-    await m.flush();
-    m.props(open).onClick();
-    await m.flush();
+    await act(async () => { m.props(open).onClick(); });
+    await settle();
     assert.deepEqual(calls.at(-1), ['read', 7, 'r1']);
     assert.match(m.text(), /0:27 of 0:15/);
     assert.match(m.text(), /The black tick is the card’s budget\./);

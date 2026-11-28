@@ -17,9 +17,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
+import { waitForAct } from './_waitUntil.mjs';
 import { roundCallsApi } from '../src/lib/api/roundCalls.js';
 import { prospectInvitesApi } from '../src/lib/api/prospectInvites.js';
 import RoundCallSheet, { acceptPlainTerms, counselState, plainTerms, seedChips, sendResult, canSend } from '../src/pages/founder/RoundCallSheet.jsx';
@@ -44,9 +45,13 @@ const pageOf = (o = {}, call = {}) => ({ viewer: 'founder', call: callOf(call), 
 
 const refusal = (status, code) => Object.assign(new Error('The Worker refused it.'), { status, code });
 
+// D9211 (#9211): an answer a test holds open on purpose (it resolves it itself, later).
+const HELD = new WeakSet();
+
 /** The sheet over a stubbed API: each key a value, a function, or a list answered in turn. */
 async function mountSheet(answers, props = {}) {
   const calls = [];
+  const reads = { out: 0 }; // D9211: answers not yet given, less those in HELD
   const saved = { ...roundCallsApi };
   // D6052: the invitations read (call_invite_6052.test.mjs tests it); here the viewer cannot invite.
   const savedInvites = { ...prospectInvitesApi };
@@ -56,25 +61,31 @@ async function mountSheet(answers, props = {}) {
     const queue = Array.isArray(answer) ? [...answer] : null;
     roundCallsApi[key] = async (...args) => {
       calls.push([key, ...args]);
-      const next = queue ? (queue.length > 1 ? queue.shift() : queue[0]) : answer;
-      const value = typeof next === 'function' ? next(...args) : next;
-      if (value instanceof Error) throw value;
-      return value;
+      reads.out += 1;
+      let counted = true;
+      try {
+        const next = queue ? (queue.length > 1 ? queue.shift() : queue[0]) : answer;
+        const value = typeof next === 'function' ? next(...args) : next;
+        if (HELD.has(value)) { reads.out -= 1; counted = false; }
+        if (value instanceof Error) throw value;
+        return await value;
+      } finally { if (counted) reads.out -= 1; }
     };
   }
   const view = await mountContracts(h(RoundCallSheet, { projectId: 7, onClose: () => {}, ...props }), '/raise/call');
-  for (let i = 0; i < 6; i++) await view.flush();
+  // D9211: settled once every answer the sheet asked for has landed, after at least one act-wrapped turn.
+  const settle = () => waitForAct(() => reads.out === 0, { label: 'the sheet\'s reads to answer', describe: () => `${reads.out} read(s) out; ${view.text().slice(0, 300)}` });
+  await settle();
   const byId = (id) => view.nodes().find((n) => view.props(n)?.id === id);
-  const settle = async () => { for (let i = 0; i < 6; i++) await view.flush(); };
   return {
-    calls, view,
+    calls, view, settle,
     names: () => calls.map((c) => c[0]),
     text: () => view.text(),
     value: (id) => view.props(byId(id))?.value,
-    async set(id, value) { const n = byId(id); assert.ok(n, `no #${id}`); view.props(n).onChange({ target: { value } }); await settle(); },
+    async set(id, value) { const n = byId(id); assert.ok(n, `no #${id}`); await act(async () => { view.props(n).onChange({ target: { value } }); }); await settle(); },
     async click(label) { await view.click(label); await settle(); },
-    async tick(label) { const n = view.nodes().find((x) => view.props(x)?.['aria-label'] === label || (x.tagName === 'LABEL' && x.textContent === label)); const box = n?.tagName === 'INPUT' ? n : n?.childNodes?.find((c) => c.tagName === 'INPUT'); assert.ok(box, `no ${label}`); view.props(box).onChange(); await settle(); },
-    async press(label) { const n = view.nodes().find((x) => x.tagName === 'BUTTON' && view.props(x)?.['aria-label'] === label); assert.ok(n, `no ${label}`); view.props(n).onClick(); await settle(); },
+    async tick(label) { const n = view.nodes().find((x) => view.props(x)?.['aria-label'] === label || (x.tagName === 'LABEL' && x.textContent === label)); const box = n?.tagName === 'INPUT' ? n : n?.childNodes?.find((c) => c.tagName === 'INPUT'); assert.ok(box, `no ${label}`); await act(async () => { view.props(box).onChange(); }); await settle(); },
+    async press(label) { const n = view.nodes().find((x) => x.tagName === 'BUTTON' && view.props(x)?.['aria-label'] === label); assert.ok(n, `no ${label}`); await act(async () => { view.props(n).onClick(); }); await settle(); },
     disabled: (label) => view.props(view.nodes().find((x) => x.tagName === 'BUTTON' && x.textContent.trim() === label))?.disabled === true,
     async done() { await view.unmount(); Object.assign(roundCallsApi, saved); Object.assign(prospectInvitesApi, savedInvites); },
   };
@@ -260,6 +271,7 @@ test('Eadwyn drafts only on request and only an explicit edit or accept applies 
 test('editing draft inputs discards even equivalent values and responses still in flight', async () => {
   let complete;
   const late = new Promise(resolve => { complete = resolve; });
+  HELD.add(late);
   const s = await mountSheet({
     availability: { enabled: true }, context: CONTEXT, list: { items: [] },
     termsDraft: [{ draft: 'First wording.' }, () => late, { draft: 'Latest wording.' }],
@@ -276,8 +288,8 @@ test('editing draft inputs discards even equivalent values and responses still i
     await s.set('call-minimum', '25000.00');
     await s.click('Ask Eadwyn to draft');
     assert.match(s.text(), /Latest wording/);
-    complete({ draft: 'Late wording.' });
-    await s.view.flush();
+    await act(async () => { complete({ draft: 'Late wording.' }); });
+    await s.settle();
     assert.match(s.text(), /Latest wording/);
     assert.doesNotMatch(s.text(), /Late wording/);
   } finally { await s.done(); }
