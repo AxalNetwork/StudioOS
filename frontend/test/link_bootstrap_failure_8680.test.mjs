@@ -40,7 +40,8 @@ test('LoginPage words both codes, and the guard and the probe carry them', () =>
   const login = read('frontend/src/pages/LoginPage.jsx');
   for (const code of LINK_BOOTSTRAP_FAILURES) assert.match(login, new RegExp(`\\n  ${code}: 'Your link was accepted, but `), code);
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Navigate to=\{withLinkFailure\(loginRedirectFor\(location\), linkBootstrapFailure\)\}/);
+  // D8793: the guard's sign-in address comes from signedOutRedirectFor (loginRedirectFor unless a session just ended).
+  assert.match(app, /<Navigate to=\{withLinkFailure\(signedOutRedirectFor\(location\), linkBootstrapFailure\)\}/);
   const sync = read('frontend/src/hooks/useAuthSync.jsx');
   assert.match(sync, /if \(magicMarker && outcome\?\.error\) \{\n\s+setLinkBootstrapFailure\(linkBootstrapFailureFor\(outcome\.error\)\);\n\s+setUser\(null\);/);
   assert.match(sync, /if \(linkBootstrapFailure && location\.pathname === '\/login'\) setLinkBootstrapFailure\(null\);/);

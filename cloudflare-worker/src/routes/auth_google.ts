@@ -311,6 +311,19 @@ export function sanitizeRedirect(raw: unknown): string {
   return raw;
 }
 
+/**
+ * D4580 part 2 (#4580): a callback's sign-in marker (`google=ok`, `apple=ok`) added to the query of a landing that
+ * may carry a fragment. Appended to the whole string, a kept destination such as `/grow/talent?tab=open#roles`
+ * became `…#roles&google=ok`: the marker went into the fragment, the SPA never saw it, did not probe `/me` for the
+ * cookie-only session and sent the person back to /login. The fragment stays last.
+ */
+export function withLandingMarker(landing: string, marker: string): string {
+  const hashAt = landing.indexOf('#');
+  const path = hashAt === -1 ? landing : landing.slice(0, hashAt);
+  const hash = hashAt === -1 ? '' : landing.slice(hashAt);
+  return `${path}${path.includes('?') ? '&' : '?'}${marker}${hash}`;
+}
+
 function configMissing(env: Env): boolean {
   return !env.GOOGLE_AUTH_CLIENT_ID || !env.GOOGLE_AUTH_CLIENT_SECRET;
 }
@@ -835,7 +848,7 @@ authGoogle.get('/callback', async (c) => {
     // on their next navigation.
     const requested = sanitizeRedirect(state.redirect);
     const landing = newSignup && requested === '/dashboard' ? '/onboarding' : requested;
-    const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
+    const url = `${appUrl(c.env)}${withLandingMarker(landing, `google=ok${newSignup ? '&google_signup=1' : ''}`)}`;
     return c.redirect(url, 302);
   } catch (e: any) {
     console.error('[auth_google] callback error', e?.message || e, e?.stack);

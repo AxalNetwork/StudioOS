@@ -291,6 +291,22 @@ test('a new account keeps an explicit destination (an invitation) instead of onb
   });
 });
 
+// D4580 part 2 (#4580): a kept Grow destination with a fragment. The marker goes in the query, the fragment stays
+// last, so the SPA reads `apple=ok` and probes /me for the cookie-only session instead of sending the person to /login.
+test('#4580: a destination with a fragment keeps the marker in the query and the fragment last', async () => {
+  const db = freshDb();
+  const env = envFor(db);
+  await withApple(await idToken(), async () => {
+    const r = await callback(env, await goodFields(env, {}, { redirect: '/grow/talent?tab=open#roles' }));
+    assert.equal(r.location, 'https://axal.vc/grow/talent?tab=open&apple=ok&apple_signup=1#roles');
+  });
+  db.prepare('DELETE FROM user_sessions').run();
+  await withApple(await idToken(), async () => {
+    const r = await callback(env, await goodFields(env, {}, { redirect: '/grow/talent#roles' }));
+    assert.equal(r.location, 'https://axal.vc/grow/talent?apple=ok#roles');
+  });
+});
+
 // ─────────────────────────────────────────────── existing accounts ──
 
 test('an existing verified account with an iCloud address is linked on first Apple sign-in', async () => {
