@@ -396,7 +396,6 @@ import companyLegal from './routes/company_legal';
 import companyDocuments from './routes/company_documents';
 import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
-import { serveHashedAsset } from './util/hashedAssets';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
 // `/api/partner/…` singular, which is a free first segment: `/api/partners` is
 // the public firm directory and a different path, and `/api/pipeline/vote*`
@@ -514,12 +513,12 @@ import { enqueueReembedChunks } from './util/reembedSweep';
 import { ensureInvestorSchema, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
 import { bindingKey } from './util/schemaBootstrap';
 // D9169 (#9169): Server-Timing — bootstrap, rate-limit and auth phases on every /api response.
-import { timePhase, withServerTiming } from './util/serverTiming';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
 import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from './agents/agentQueue';
-import { rateLimitMiddleware } from './middleware/rateLimit';
+// D9169: the Server-Timing helpers come through this existing import, so the frozen hub gains no entry (D5615).
+import { rateLimitMiddleware, timePhase, withServerTiming } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { csrfMiddleware } from './middleware/csrf';
@@ -2032,6 +2031,25 @@ function carriesCredential(request: Request, env: Env, url: URL): boolean {
     const eq = trimmed.indexOf('=');
     return eq > 0 && trimmed.slice(0, eq) === cookieName;
   });
+}
+
+/**
+ * D9168 (#9168): the answer for a hashed `/assets/*` file. A hashed name never changes content, so a 200 or 304
+ * leaves as `public, max-age=31536000, immutable`. A miss, including the SPA fallback's index.html for a hash this
+ * deploy no longer holds (Task #37), is a plain 404 with `no-store`. Inline here: index.ts is a frozen hub (D5615).
+ */
+function serveHashedAsset(assetRes: Response): Response {
+  const ctype = assetRes.headers.get('content-type') || '';
+  if (/text\/html/i.test(ctype) || assetRes.status === 404) {
+    return new Response('Asset not found\n', {
+      status: 404,
+      headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+    });
+  }
+  if (assetRes.status !== 200 && assetRes.status !== 304) return assetRes;
+  const headers = new Headers(assetRes.headers);
+  headers.set('cache-control', 'public, max-age=31536000, immutable');
+  return new Response(assetRes.body, { status: assetRes.status, statusText: assetRes.statusText, headers });
 }
 
 const studioos = {

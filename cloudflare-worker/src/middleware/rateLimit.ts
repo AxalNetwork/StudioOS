@@ -9,6 +9,8 @@ import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
 import { recordPhase } from '../util/serverTiming';
+// D9169: index.ts takes the Server-Timing helpers from here, its existing import (D5615 freezes index.ts's imports).
+export { timePhase, withServerTiming } from '../util/serverTiming';
 // D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
 import { redactPath } from '../util/pathRedaction';
 
