@@ -745,10 +745,10 @@ funds.post('/', async (c) => {
 });
 
 /**
- * D714 — an activity row, written directly. `logActivity` leaves
- * `activity_logs.action` (NOT NULL) unset and swallows the failure, so on a
- * database built from the migrations it records nothing — the LP-type route
- * below says the same. The act has already happened, so this never throws.
+ * D714 — an activity row, written directly. It was written because
+ * `logActivity` left `activity_logs.action` (NOT NULL) unset and recorded
+ * nothing; #9015 fixed that, and this stays as it is. The act has already
+ * happened, so this never throws.
  */
 async function recordFundActivity(
   env: Env, userId: number, action: string, entityType: string, entityId: number, metadata: Record<string, unknown>,
@@ -1088,9 +1088,8 @@ funds.put('/:id/lps/:lpId/type', async (c) => {
     `UPDATE limited_partners SET lp_type = ?, updated_at = datetime('now') WHERE id = ? AND fund_id = ?`,
   ).bind(lpType, lpId, fundId).run();
   if (Number((r as any)?.meta?.changes ?? 0) === 0) return c.json({ error: 'LP not found' }, 404);
-  // The actor, written here rather than through `logActivity`, whose INSERT
-  // leaves `activity_logs.action` (NOT NULL) unset and is swallowed by its own
-  // try/catch, so it records nothing on a database built from the migrations.
+  // The actor, written here directly. (`logActivity` left `activity_logs.action`
+  // unset and recorded nothing until #9015; this insert predates that fix.)
   await c.env.DB.prepare(
     `INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, metadata)
      VALUES (?, 'lp_type_set', 'lp_type_set', 'limited_partner', ?, ?)`,
