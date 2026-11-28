@@ -38,6 +38,7 @@ import {
 } from '../services/marketAssumptions';
 import { fillsForRow, filledColumns } from '../services/fills/provenance';
 import { refuse } from '../util/refusal';
+import { reportPrivateError } from '../util/errorPrivacy';
 import { MARKET_FIGURES, MARKET_PROVENANCE_REFUSALS, MarketProvenanceError, recordMarketFigures, resolveMarketProvenance, type MarketFigureKey, type MarketProvenance } from '../services/marketFigures';
 import { logAdminAction } from '../services/adminAudit';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
@@ -697,21 +698,29 @@ projects.post('', createProjectHandler);
 
 projects.post('/submit', async (c) => {
   const submitUser = await requireAuth(c);
-  const data = await c.req.json();
+  // D9189 (#9189): a body that is not a JSON object is refused here, before the
+  // score checks, so `null` cannot reach them and come back as engine text.
+  const data = await c.req.json().catch(() => undefined);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return c.json({ error: 'Send the intake as a JSON object.', code: 'invalid_body' }, 400);
+  }
 
   // Epic 5: reject any client-supplied score / tier / breakdown BEFORE any
   // DB writes. The /submit path is wide-open intake; a malicious founder
   // could otherwise send a pre-built TIER_1 payload AND have a project row
   // created as a side effect even when the request is rejected.
-  const { assertNoReservedFields, assertOfficialInputsComplete, MissingOfficialInputsError, signScore, detectAnomalies, INTEGRITY_VERSION } =
+  const { assertNoReservedFields, assertOfficialInputsComplete, MissingOfficialInputsError, ReservedFieldError, signScore, detectAnomalies, INTEGRITY_VERSION } =
     await import('../services/scoreIntegrity');
   try {
     assertNoReservedFields(data);
     assertOfficialInputsComplete(data);
   } catch (e) {
     if (e instanceof MissingOfficialInputsError) return c.json({ error: 'Complete all scoring inputs before submitting.', missing: e.missing, code: 'missing_official_inputs' }, 400);
-    const message = e instanceof Error ? e.message : 'Reserved field rejected';
-    return c.json({ error: message, code: 'reserved_field' }, 400);
+    // D9189: only the score-integrity module's own sentence goes back; anything
+    // else that threw is logged as a bounded classification and refused plainly.
+    if (e instanceof ReservedFieldError) return c.json({ error: e.message, field: e.field, code: 'reserved_field' }, 400);
+    reportPrivateError('refusal', e, 'intake_check_failed');
+    return c.json({ error: 'The intake could not be checked. Nothing was saved.', code: 'intake_check_failed' }, 500);
   }
 
   for (const field of ['sam', 'funding_needed']) {
