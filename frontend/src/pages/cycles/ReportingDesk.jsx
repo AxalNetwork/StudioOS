@@ -15,6 +15,7 @@ import { reportHref } from './reporting/builderModel.js';
 import { BAR_PRIMARY, CARD, Calendar, DueNext, DutiesTable, DutyDrawer, H2, MUTED, NeedsYou, PinnedBar } from './reporting/DeskBlocks.jsx';
 import { ExpectedDateDialog, ReminderDialog } from './reporting/ReportingDialogs.jsx';
 import ReportPage from './reporting/ReportPage.jsx';
+import ReportReadiness from './reporting/ReportReadiness.jsx';
 
 /**
  * D1056 (#2427), D1060 (#2930) — Grow's Reporting desk at `/grow/reporting`,
@@ -36,6 +37,9 @@ import ReportPage from './reporting/ReportPage.jsx';
  * D1062 (#2932), the founder at 390 (RPT20a): Due next, Needs you, the
  * periods as a list with their pills, and "Prepare [period] report" in a bar
  * pinned to the bottom of the page instead of the header's primary.
+ *
+ * D4866 (#4866, GR-10): for a writer, "Readiness for the next update" sits above the History, each figure as the
+ * Grow overview draws it (`reporting/ReportReadiness.jsx`).
  */
 
 const PILL = 'w-fit rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-700 dark:text-gray-400';
@@ -228,6 +232,8 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
               <Calendar desk={desk} canWrite={canWrite} onPrepare={prepare} onExpect={(p) => setDialog({ kind: 'expected', period: p })} busy={preparing} phone={phone} />
             </>
           )}
+          {/* D4866 (#4866, GR-10): readiness for the next update, from the overview's own figures; the writers' card. */}
+          {canWrite && <ReportReadiness projectId={projectId} search={s} />}
           <History projectId={projectId} onShare={readOnly ? undefined : action?.onOpen || action?.onClick} />
           {/* D1321 (#3482, PUB9): the second list, what the founder published outside Axal VC; the venture's team reads it. */}
           <PublishedOutside projectId={projectId} />

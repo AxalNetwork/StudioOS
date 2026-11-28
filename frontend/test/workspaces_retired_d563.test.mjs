@@ -29,13 +29,15 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import AlsoIn from '../src/workspaces/AlsoIn.jsx';
+import { growRelated, RELATED_BY_TASK } from '../src/pages/cycles/growRelatedModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = read('frontend/src/App.jsx');
 
 const PROFILES = ['founder', 'investor', 'partner', 'advisor'];
-const DOORS = ['row', 'also', 'lab'];
+// D4866 (#4866): 'related' — linked from the row's overview among the links picked for the founder's current task.
+const DOORS = ['row', 'also', 'lab', 'related'];
 
 /** The roles a route's guard names, and whether `labRoles(...)` widens it. */
 function guard(path) {
@@ -109,7 +111,7 @@ test('every kept page lights its sidebar row', () => {
     for (const [role, label, door] of homes) {
       const row = rowsOf(role).find((r) => r.label === label);
       assert.ok(lights(row, route), `${route} does not light ${role} · ${label}`);
-      if (door === 'also' || door === 'lab') {
+      if (door === 'also' || door === 'lab' || door === 'related') {
         assert.ok(Array.isArray(row.match) && row.match.some((p) => route === p || route.startsWith(`${p}/`)),
           `${route} lights ${role} · ${label} only by accident, not by its match list`);
       }
@@ -145,6 +147,22 @@ test('every "also" page is linked from its row\'s overview', () => {
   for (const f of BUCKET_BODIES) {
     assert.match(read(f), /<AlsoIn role=\{role\} row=\{bucket\.label\} \/>/, `${f} no longer draws the bucket's Also in list`);
   }
+});
+
+// D4866 (#4866, GR-02): a 'related' page is not in a static list; Grow's overview picks it for every task.
+test('every "related" page is one of the links Grow\'s overview picks, for every task, and no static list names it', () => {
+  const related = Object.entries(PAGE_HOMES).flatMap(([route, homes]) => homes.filter(([, , door]) => door === 'related').map(([role, row]) => [route, role, row]));
+  assert.deepEqual(related, [['/perks', 'founder', 'Grow']]);
+  for (const [route, role, row] of related) {
+    assert.equal(alsoInFor(role, row).some((w) => w.route === route), false, `${route} is still in ${role} · ${row}'s static list`);
+    for (const task of Object.keys(RELATED_BY_TASK)) {
+      const items = task === 'overview' ? [] : [{ key: 'x', area: task === 'reporting' ? 'Reporting' : task[0].toUpperCase() + task.slice(1), href: '/grow' }];
+      const out = growRelated({ state: 'ready', items, focus: { state: 'recorded' } }, '');
+      assert.equal(out.task, task);
+      assert.equal(out.links.at(-1).href, route, `${task} does not end with ${route}`);
+    }
+  }
+  assert.match(read('frontend/src/pages/cycles/GrowOverview.jsx'), /<GrowRelated attention=/, 'the Grow overview draws the related links');
 });
 
 test('the Also in list draws exactly the "also" pages, and a row with none draws nothing', () => {

@@ -12,6 +12,7 @@ import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
 import { buildOutcome } from './buildNav.js';
+import { GrowReportingLink } from './GrowRelated.jsx';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -139,7 +140,9 @@ export default function PhoneModulePage({
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
   // narrative), in every state: each tab has its own read.
-  const tabs = (subnav || more) ? <div className="mb-[14px] flex min-w-0 flex-col gap-2">{more && <div className="flex justify-end">{more}</div>}{subnav}</div> : null;
+  // D4866 (#4866, GR-10, GR-16): a Grow module keeps Reporting, Grow's utility, one tap away on a phone too.
+  const utility = meta.key === 'grow' ? <GrowReportingLink search={search} /> : null;
+  const tabs = (subnav || more || utility) ? <div className="mb-[14px] flex min-w-0 flex-col gap-2">{(more || utility) && <div className="flex flex-wrap justify-end gap-2">{utility}{more}</div>}{subnav}</div> : null;
 
   if (status === 'unreadable') {
     return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}{tabs}
