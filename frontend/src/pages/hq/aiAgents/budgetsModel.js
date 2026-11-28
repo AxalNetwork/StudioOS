@@ -11,7 +11,10 @@
  * Unavailable (AGENTS.md § Honesty, D5129), never 0.
  */
 
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED, titleCase } from '../../../lib/absence.js';
+import { parseMinor, toMajorString } from '../../../lib/money.js';
+
+export { NOT_RECORDED };
 export const UNAVAILABLE = 'Unavailable';
 export const NEAR_SHARE = 80;
 
@@ -35,7 +38,9 @@ export function tokensText(v) {
   return n.toLocaleString('en-US');
 }
 const whole = (v) => (finite(v) ? Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }) : NOT_RECORDED);
-export const centsText = (v) => (finite(v) ? `$${(Number(v) / 100).toFixed(2)}` : NOT_RECORDED);
+/** Cents as dollars through lib/money.js (D5373): $1234.56. */
+const usd = (v) => (finite(v) ? toMajorString(Math.round(Number(v)), 'USD') : null);
+export const centsText = (v) => { const d = usd(v); return d == null ? NOT_RECORDED : `$${d}`; };
 
 /**
  * An agent's four caps, in the canvas's order. `field` is the PUT body's key; `used` reads the read's `used`
@@ -96,7 +101,6 @@ export function sortByShare(agents) {
   });
 }
 
-const titleCase = (s) => String(s || '').replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 export const agentLabel = (a) => (a?.name ? String(a.name) : a?.role_key ? `${titleCase(a.role_key)} agent` : 'Unnamed agent');
 
 /** "Set by [name] · 3 Nov 2026", or that no cap has been set; who is Not recorded when the read names nobody. */
@@ -214,7 +218,7 @@ export const canSave = (changes, reason) => !!(changes?.ok && Object.keys(change
 export function ceilingsForm(own) {
   return Object.fromEntries(CEILINGS.map((c) => {
     const v = own?.[c.key];
-    return [c.key, finite(v) ? (c.money ? (Number(v) / 100).toFixed(2) : String(Number(v))) : ''];
+    return [c.key, finite(v) ? (c.money ? (usd(v) ?? '') : String(Number(v))) : ''];
   }));
 }
 
@@ -229,7 +233,9 @@ export function changedCeilings(form, own, platform) {
     const raw = String(form?.[c.key] ?? '').trim().replaceAll(',', '').replace(/^\$/, '');
     let next = null;
     if (raw !== '') {
-      const n = Number(raw) * (c.money ? 100 : 1);
+      // Dollars become cents through lib/money.js (D5373); a refused amount falls to the message below.
+      const parsed = c.money ? parseMinor(raw, 'USD') : null;
+      const n = c.money ? (parsed.ok ? parsed.minor : NaN) : Number(raw);
       if (!Number.isFinite(n) || n < 0 || Math.abs(n - Math.round(n)) > 1e-6) return { ok: false, field: c.key, message: `${c.label} is ${c.money ? 'a dollar amount' : 'a whole number'}, or blank for the platform figure.` };
       next = Math.round(n);
     }
