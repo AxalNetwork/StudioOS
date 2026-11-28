@@ -155,7 +155,8 @@ export async function swarmSnapshotFor(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'B
 
 /**
  * D5586 part 4: one bounded retention call on the coordinator (`swarmRetention.ts`), for a scheduler. It is
- * coordinator-wide and names no venture, so it is not a method of the venture-scoped client, and no route calls it.
+ * coordinator-wide and names no venture, so it is not a method of the venture-scoped client. No route calls it; the
+ * daily cron does (`swarmRetentionCron.ts`, D5586 part 5).
  * Never throws: no binding is `admission_unbound`, anything unreadable is `admission_unavailable`.
  */
 export async function runSwarmRetention(env: Pick<Env, 'WORKSPACE_ADMISSION' | 'BRANCH_DO_JURISDICTION'>): Promise<ClientResult<RetentionResultValue>> {

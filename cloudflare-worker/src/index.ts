@@ -2312,6 +2312,23 @@ const studioos = {
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
+        // D5586 part 5 (#5586): the swarm coordinator's bounded retention, daily
+        // at 03:17 UTC (the `17 3 * * *` trigger, owner answer C1). NOT GATED ON
+        // `hqCadences`: each deployment's coordinator holds its own state. No
+        // binding is `skipped`; it never throws into the tick.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 17) {
+          try {
+            const { runSwarmRetentionTick } = await import('./services/agents/swarmRetentionCron');
+            const r = await runSwarmRetentionTick(env);
+            if (r.outcome === 'done') {
+              cronSummary.push(`swarm retention ${r.note}`);
+              cronTasks.done('swarm retention', r.note);
+            } else if (r.outcome === 'skipped') cronTasks.skipped('swarm retention', r.note);
+            else taskFailed('swarm retention', r.code, r.note);
+          } catch (e) {
+            taskFailed('swarm retention', e);
+          }
+        }
         // D1256 (#3279) — the venture scorecard. Every 15 minutes, ventures
         // whose people's connectors synced since their last row; at 04:20 the
         // nightly recompute; at 04:30 on a quarter's first day the fairness

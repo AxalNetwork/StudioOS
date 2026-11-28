@@ -3,7 +3,7 @@
  * `SWARM_RETENTION_MS` are compacted to a tombstone, and in-state audit entries older than that which D1 already holds
  * are removed, at most `SWARM_RETENTION_BATCH` of each per storage transaction and `SWARM_RETENTION_MAX_BATCHES`
  * transactions per call. A scheduler calls it through the coordinator (`retireSwarmAdmission` in
- * `workspaceAdmissionClient.ts`); no cron is configured (D5586-p4 §3 names the schedule it would run on).
+ * `workspaceAdmissionClient.ts`); since part 5 the daily `17 3 * * *` cron runs it (`swarmRetentionCron.ts`, D5586-p5).
  *
  * WHAT IS KEPT. A retired ticket leaves `{ venture, state, bill, ended_at }` under its uid, so a redelivered request is
  * refused `ticket_retired` (never admitted, never billed twice), a repeated settle answers the first bill, and the

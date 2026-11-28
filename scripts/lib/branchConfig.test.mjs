@@ -211,7 +211,7 @@ test('the cron table\'s multi-line array is read, not dropped', () => {
   // config wrangler rejects — or, worse, silently drop the key.
   const hq = parseToml(TOML).sections.find((s) => s.name === 'env.production.triggers');
   assert.ok(hq.kv.get('crons').startsWith('[') && hq.kv.get('crons').endsWith(']'), hq.kv.get('crons'));
-  assert.equal(JSON.parse(hq.kv.get('crons')).length, 6, 'HQ declares six cadences');
+  assert.equal(JSON.parse(hq.kv.get('crons')).length, 7, 'HQ declares seven cadences (D5586-p5 added swarm retention)');
 });
 
 // D264 — the Durable Object jurisdiction reaches the Worker as a var.

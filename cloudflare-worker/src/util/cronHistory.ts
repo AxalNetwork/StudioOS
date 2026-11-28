@@ -74,6 +74,7 @@ export const CRON_TRIGGERS: ReadonlyArray<{ name: string; expr: string }> = [
   { name: 'mi_snapshot', expr: '0 4 * * *' },
   { name: 'daily_digest', expr: '0 9 * * *' },
   { name: 'weekly_digest', expr: '0 9 * * 2' },
+  { name: 'swarm_retention', expr: '17 3 * * *' },
 ];
 
 /**
@@ -87,8 +88,8 @@ export const BRANCH_CRONS: readonly string[] = ['* * * * *', '0 3 * * *'];
 
 /**
  * The triggers THIS deployment fires, and so the ones it is graded against.
- * HQ keeps CRON_TRIGGERS. A branch reads its own two: graded against HQ's six,
- * four of them would read "never fired" for ever, which is false, because a
+ * HQ keeps CRON_TRIGGERS. A branch reads its own two: graded against HQ's seven,
+ * five of them would read "never fired" for ever, which is false, because a
  * branch never fires them.
  */
 export function triggersFor(env: Pick<Env, 'BRANCH_CODE'>): ReadonlyArray<{ name: string; expr: string }> {

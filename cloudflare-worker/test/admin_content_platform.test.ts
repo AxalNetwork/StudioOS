@@ -337,6 +337,8 @@ test('each DECLARED trigger is read against its own schedule, from rows the writ
   await recordLeaseHeldFire(env, {
     triggerName: '0 9 * * 2', scheduledTime: now, holder: leaseHolderValue('b', now - 60_000, '* * * * *'),
   });
+  // D5586 part 5: the swarm retention trigger, run by its own invocation.
+  await writeCronRunHistory(env, { triggerName: '17 3 * * *', startedAt: ago(1), cronError: null, summary: [] });
   // A name no deployment declares is not a job HQ runs, however recent.
   await writeCronRunHistory(env, { triggerName: 'nightly-legacy', startedAt: ago(0), cronError: null, summary: [] });
 
@@ -357,6 +359,8 @@ test('each DECLARED trigger is read against its own schedule, from rows the writ
   assert.equal(by['0 9 * * *'].status, 'deduped');
   assert.equal(by['0 9 * * 2'].state, 'failed', 'a minute that ran nowhere read as healthy');
   assert.match(String(by['0 9 * * 2'].error), /this tick ran nothing/);
+  assert.equal(by['17 3 * * *'].state, 'ok');
+  assert.equal(by['17 3 * * *'].name, 'swarm_retention');
   for (const j of jobs.triggers) {
     assert.match(String(j.expected_at), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:00$/, `${j.trigger_name} has no expected time`);
   }

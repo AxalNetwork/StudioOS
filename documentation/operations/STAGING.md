@@ -74,7 +74,7 @@ This compares what `[env.preview]` declares with production's
 | Images, Stream | `IMAGES`, `STREAM` | account | not declared | None |
 | Tail consumer | — | `studioos-tail` | not declared | None |
 | Static assets | `ASSETS` | `./docs` | inherited from the top level (`./docs`) | The SPA is built before the deploy |
-| Crons | — | six schedules | `* * * * *`, `0 */6 * * *`, `0 4 * * *` | Declared |
+| Crons | — | seven schedules | `* * * * *`, `0 */6 * * *`, `0 4 * * *`, `17 3 * * *` (swarm retention, D5586-p5) | Declared |
 
 The isolation matrix has the same rows: `node scripts/check-preview-isolation.mjs --static --json`.
 
@@ -114,8 +114,8 @@ could not fetch the site directly, and no Cloudflare account API was called.
   `sqlite_master`, about 4,000 rows. About 60 Worker requests from the probes:
   health, the sign-in round trip, one R2 write and read, one KV write and
   read, and the shell routes. Static assets are free [W].
-- **Crons.** About 43,350 invocations a month (`* * * * *`, `0 */6 * * *`,
-  `0 4 * * *`). Each minute tick takes the KV lease (one read and one write)
+- **Crons.** About 43,380 invocations a month (`* * * * *`, `0 */6 * * *`,
+  `0 4 * * *`, `17 3 * * *`). Each minute tick takes the KV lease (one read and one write)
   and records its run in D1. The estimate allows about 200 rows read, 5 rows
   written and 100 ms of CPU per tick. Market-intel connectors stay off,
   because no `MI_FLAG_*` is set in `[env.preview.vars]`.

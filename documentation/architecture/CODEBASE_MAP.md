@@ -174,7 +174,7 @@ tables matter. `npm run deploy` uses `--env production`, which makes the
 
 ### 2.2 Cron triggers
 
-Six, byte-identical in both tables:
+Seven, byte-identical in both tables (preview declares four of them):
 
 ```
 * * * * *      queue drain + sub-minute internal dispatch
@@ -183,6 +183,7 @@ Six, byte-identical in both tables:
 0 4 * * *      market-intel composite (its investor-signals snapshot went with D670)
 0 9 * * *      daily digest emails
 0 9 * * 2      weekly digest emails (Monday)
+17 3 * * *     swarm coordinator retention (D5586 part 5)
 ```
 
 Weekdays are Cloudflare's numbering, 1 = Sunday … 7 = Saturday. The weekly

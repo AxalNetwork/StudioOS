@@ -72,11 +72,13 @@ test('the cron lists are unchanged: the sweep runs inside the every-minute dispa
     const v = inTable(prefix, 'triggers')[0]?.kv.get('crons');
     return v ? JSON.parse(v.replace(/,\s*\]/, ']')) : null;
   };
-  // Pinned literally: the lists as they were before D1528.
-  const HQ = ['* * * * *', '0 3 * * *', '0 */6 * * *', '0 4 * * *', '0 9 * * *', '0 9 * * 2'];
+  // Pinned literally: the lists as they were before D1528, plus the one line
+  // D5586 part 5 added for swarm retention (owner answer C1). The agent sweep
+  // still has no line of its own.
+  const HQ = ['* * * * *', '0 3 * * *', '0 */6 * * *', '0 4 * * *', '0 9 * * *', '0 9 * * 2', '17 3 * * *'];
   assert.deepEqual(crons(''), HQ);
   assert.deepEqual(crons('env.production.'), HQ);
-  assert.deepEqual(crons('env.preview.'), ['* * * * *', '0 */6 * * *', '0 4 * * *']);
+  assert.deepEqual(crons('env.preview.'), ['* * * * *', '0 */6 * * *', '0 4 * * *', '17 3 * * *']);
 });
 
 test('a branch gets its own agent queue, DLQ and Workflow; the check fails one that keeps HQ\'s', () => {
