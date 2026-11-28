@@ -27,7 +27,43 @@ const FAILURES = Object.freeze({
   link_invalid: 'Eadwyn AI could not use this meeting link. Check it and try again.',
   platform_blocked: 'The meeting platform did not allow Eadwyn AI to join.',
   obf_unavailable: 'Zoom authorization is required. Reconnect Zoom and join the meeting before sending Eadwyn AI.',
+  // D5813: the bot leaves without recording when it cannot post its notice (B2, notice before capture).
+  notice_failed: 'Eadwyn AI was admitted but could not post its recording notice in the meeting chat, so it left without recording.',
+  processing_failed: 'Eadwyn AI recorded the call, but the recording could not be saved for processing.',
 });
+// D5813 (D1451 part 3): a Teams admission that never came, said in Teams' own word for the waiting room.
+const TEAMS_NOT_ADMITTED = 'Eadwyn AI was not admitted from the Teams lobby. Ask the organizer to admit it from the lobby, or to let guests skip the lobby, then try again with a new session.';
+/**
+ * D5813 (D1451 part 3): the three Teams refusals the Worker recognises
+ * (`bot.blocked`, from the bot's allowlisted stage). Each says what happened,
+ * its one likely cause, and what the organizer can do; captcha has no
+ * organizer action, only the fallback. Any other `blocked` value is ignored
+ * and the member keeps the generic failure. Never a provider sentence or code.
+ */
+export const TEAMS_BLOCKED = Object.freeze({
+  guests_off: Object.freeze({
+    failure: 'This Teams meeting does not let anonymous guests join, so Eadwyn AI could not enter. Nothing was recorded.',
+    cause: 'The organizer’s Teams settings turn off anonymous join',
+    organizer: 'Ask the organizer, or their Teams admin, to let anonymous users join meetings, then try again with a new session.',
+  }),
+  bot_blocked: Object.freeze({
+    failure: 'This Teams organization blocks meeting bots, so Eadwyn AI was turned away. Nothing was recorded.',
+    cause: 'The organizer’s Teams admin blocks detected bots from meetings',
+    organizer: 'Ask the organizer’s Teams admin to allow Eadwyn AI in their meetings, then try again with a new session.',
+  }),
+  captcha: Object.freeze({
+    failure: 'Teams asked Eadwyn AI to solve a verification challenge. Eadwyn AI never answers one, so it did not join. Nothing was recorded.',
+    cause: 'Teams challenged the guest with a verification check',
+    organizer: null,
+  }),
+});
+/**
+ * D5813: Eadwyn AI's Teams capability in one set of words, shared with the
+ * Teams connector page (`teamsConnector.js`, D5810) and the run view, so the
+ * two never disagree: on, it joins as a guest; off, the fallback.
+ */
+export const TEAMS_BOT_GUEST = 'Eadwyn AI joins Teams calls as a guest with the meeting link, whichever account hosts it. It does not need your Microsoft connection.';
+export const TEAMS_BOT_OFF = 'Upload the recording or paste the transcript after the call.';
 // D5153 (#5153): the runtime never reported, so the meeting provider was never contacted.
 // Said plainly, with no provider cause; the operator's code stays in HQ.
 export const INFRASTRUCTURE_FAILURE = 'Eadwyn AI’s recording service did not start, so the meeting was not contacted and nothing was recorded. Try again in a few minutes.';
@@ -99,7 +135,7 @@ export function botDispatchPlan({ meetingUrl, consentGiven, scheduledAt = null, 
  * skew can delay/inflate it; this is never billing or time-limit authority.
  */
 export function botView(read, { unreadable = false, now = Date.now() } = {}) {
-  const empty = (state, label) => ({ state, label, canStop: false, poll: false, timer: null, participantCount: null, failure: null });
+  const empty = (state, label) => ({ state, label, canStop: false, poll: false, timer: null, participantCount: null, failure: null, note: null, blocked: null, organizer: null, cause: null, fallback: false });
   if (unreadable) return empty('unreadable', 'Unreadable');
   if (read === undefined) return empty('loading', 'Loading');
   if (read?.bot === null) return empty('missing', 'Not recorded');
@@ -111,6 +147,10 @@ export function botView(read, { unreadable = false, now = Date.now() } = {}) {
     timer = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
   }
   const waitingForFounder = (bot.status === 'joining' || bot.status === 'waiting_room') && bot.waiting_for === 'founder';
+  const teams = bot.platform === 'teams';
+  const infrastructure = bot.status === 'failed' && bot.failure_category === 'infrastructure';
+  // D5813: only a failed Teams run, never the service's own failure, and only a value this module knows.
+  const blocked = bot.status === 'failed' && teams && !infrastructure && own(TEAMS_BLOCKED, bot.blocked) ? bot.blocked : null;
   return {
     state: bot.status,
     label: waitingForFounder ? WAITING_FOR_FOUNDER : WORDS[bot.status],
@@ -122,11 +162,36 @@ export function botView(read, { unreadable = false, now = Date.now() } = {}) {
     failure: bot.status === 'stopped' && ['tokens','time_limit','access_revoked'].includes(bot.failure_code)
       ? ({ tokens:'Eadwyn AI stopped because there are not enough AI tokens to continue.',time_limit:'Eadwyn AI stopped at this plan’s call time limit.',access_revoked:'Eadwyn AI stopped because recording permission ended.' }[bot.failure_code])
       : bot.status === 'failed'
-      ? (bot.failure_category === 'infrastructure' ? INFRASTRUCTURE_FAILURE
-        : own(FAILURES, bot.failure_code) ? FAILURES[bot.failure_code] : 'Eadwyn AI could not record this call. Check the meeting before trying again.')
+      ? (infrastructure ? INFRASTRUCTURE_FAILURE
+        : blocked ? TEAMS_BLOCKED[blocked].failure
+          : teams && ['admission_refused', 'not_admitted'].includes(bot.failure_code) ? TEAMS_NOT_ADMITTED
+            : own(FAILURES, bot.failure_code) ? FAILURES[bot.failure_code] : 'Eadwyn AI could not record this call. Check the meeting before trying again.')
       : null,
-    infrastructure: bot.status === 'failed' && bot.failure_category === 'infrastructure',
+    note: waitingForFounder ? null : botNote(bot.status, teams),
+    infrastructure,
+    blocked,
+    cause: blocked ? TEAMS_BLOCKED[blocked].cause : null,
+    organizer: blocked ? TEAMS_BLOCKED[blocked].organizer : null,
+    // D5813: a refused Teams run offers the existing upload and paste routes; another failure keeps its own retry.
+    fallback: !!blocked,
   };
+}
+
+/**
+ * D5813: one plain line for each state, true of what the run has reported and
+ * nothing more. The notice comes before capture on every platform (B2), so
+ * "nothing is recorded" holds until `recording`.
+ */
+function botNote(status, teams) {
+  if (status === 'queued') return 'Eadwyn AI will join at the scheduled start time. Stop cancels that send.';
+  if (status === 'joining') return teams ? 'Eadwyn AI is opening the Teams meeting in a browser as a guest named Eadwyn AI, with its microphone and camera off.' : null;
+  if (status === 'waiting_room') return teams
+    ? 'Eadwyn AI is in the Teams lobby. The organizer admits it from the lobby. Nothing is recorded until it is admitted and has posted its recording notice in the meeting chat.'
+    : 'Admit Eadwyn AI from the call’s waiting room. Nothing is recorded until it is admitted and has posted its recording notice in the meeting chat.';
+  if (status === 'recording') return 'Eadwyn AI posted its recording notice in the meeting chat and is recording.';
+  if (status === 'processing') return 'The recording is being saved and processed. You can leave this page.';
+  if (status === 'done') return 'The recording was saved and processed.';
+  return null;
 }
 
 /**

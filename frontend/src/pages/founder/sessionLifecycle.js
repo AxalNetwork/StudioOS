@@ -122,15 +122,25 @@ const CAUSES = Object.freeze({
 });
 // D5153: the only cause when the runtime never started; never a provider's.
 const INFRASTRUCTURE_CAUSES = Object.freeze(['Eadwyn AI’s recording service did not start in time']);
-export function failureView(view, { botFailure = null, processingError = null } = {}) {
+/**
+ * D5813: `blocked` is `botView(...)`'s recognised Teams refusal
+ * (`{ blocked, cause, organizer }`); it replaces the step's generic causes
+ * with its one cause, adds the organizer's action, and offers the upload and
+ * paste fallbacks. Anything else keeps the step's causes.
+ */
+export function failureView(view, { botFailure = null, processingError = null, blocked = null } = {}) {
   if (!view?.failed) return null;
   const title = view.kind === 'bot'
     ? (botFailure || 'Eadwyn AI could not record this call.')
     : (processingError || 'Processing stopped. Your audio is safe.');
+  const refused = view.kind === 'bot' && !view.infrastructure && typeof blocked?.blocked === 'string' && typeof blocked.cause === 'string' ? blocked : null;
   return {
     title,
-    causes: view.kind === 'bot' && view.infrastructure ? [...INFRASTRUCTURE_CAUSES] : view.failedAt ? (CAUSES[view.failedAt] || []) : [],
+    causes: view.kind === 'bot' && view.infrastructure ? [...INFRASTRUCTURE_CAUSES] : refused ? [refused.cause] : view.failedAt ? (CAUSES[view.failedAt] || []) : [],
     retry: view.kind === 'processing' ? 'process' : 'new-session',
+    blocked: refused ? refused.blocked : null,
+    organizer: refused && typeof refused.organizer === 'string' ? refused.organizer : null,
+    fallback: !!refused,
   };
 }
 

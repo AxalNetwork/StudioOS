@@ -1,21 +1,41 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
-import { botView, createBotSession } from './meetingBotSession.js';
+import { Link } from 'react-router-dom';
+import { TEAMS_BOT_GUEST, TEAMS_BOT_OFF, botView, createBotSession } from './meetingBotSession.js';
 
 const BUTTON = 'rounded-md border border-gray-300 px-3 py-1.5 text-[13px] font-semibold disabled:opacity-50 dark:border-gray-700 dark:text-gray-100';
 const time = (ms) => Number.isSafeInteger(ms) && ms >= 0 ? `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}` : 'Not recorded';
 
+const LINK = 'text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center';
+
+/**
+ * D5813: after a recognised Teams refusal, what the organizer can do (none for
+ * a captcha) and the existing fallbacks: upload the call's recording, or paste
+ * its transcript in Record a session (`recordHref`, the session's own interview).
+ */
+export function BlockedActions({ view, recordHref = null }) {
+  if (!view?.blocked) return null;
+  return <div className="space-y-1.5" data-testid="bot-blocked-actions" data-blocked={view.blocked}>
+    {view.organizer && <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="bot-organizer-action"><span className="font-semibold">What the organizer can do: </span>{view.organizer}</p>}
+    <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="bot-fallback-note">{TEAMS_BOT_GUEST} {TEAMS_BOT_OFF}</p>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <Link to="/validate/record/calls/upload" className={LINK} data-testid="bot-fallback-upload">Upload the recording</Link>
+      {recordHref && <Link to={recordHref} className={LINK} data-testid="bot-fallback-paste">Paste the transcript</Link>}
+    </div>
+  </div>;
+}
+
 // D1455 (#3710, REC2): with `hideFailure`, the page's one failure panel says what failed; this card no longer repeats it in red.
 // #4018 (REC3): with `hideParticipants`, the page's participants timeline shows the roster, so this card's list goes.
-export function MeetingBotStatus({ snapshot, now = Date.now(), onStop, onRetry, participants, hideFailure = false, hideParticipants = false }) {
+export function MeetingBotStatus({ snapshot, now = Date.now(), onStop, onRetry, participants, hideFailure = false, hideParticipants = false, recordHref = null }) {
   const view = botView(snapshot.read, { unreadable: snapshot.unreadable, now });
   return <section className="space-y-3 rounded-2xl border border-axal-hairline bg-white p-5 text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100" data-testid="meeting-bot-panel" data-state={view.state}>
     <h2 className="m-0 text-[16px] font-bold">Eadwyn AI</h2>
     <p role="status" className="m-0 text-[14px] font-semibold" data-testid="bot-status">{view.label}{view.timer && <span className="ml-2 font-mono tabular-nums" aria-label="Approximate run time">Run time {view.timer}</span>}</p>
-    {view.state === 'queued' && <p className="text-[12px] text-axal-faint">Eadwyn AI will join at the scheduled start time. Stop cancels that send.</p>}
-    {view.state === 'processing' && <p className="text-[12px] text-axal-faint">The recording is being saved and processed. You can leave this page.</p>}
+    {view.note && <p className="text-[12px] text-axal-faint dark:text-gray-400" data-testid="bot-note">{view.note}</p>}
     {view.state === 'unreadable' && <p className="text-[12px] text-axal-faint">The bot status could not be read. This does not mean the bot has stopped.</p>}
-    {view.failure && !(hideFailure && view.state === 'failed') && <p role="alert" className="text-[13px] text-red-700 dark:text-red-300">{view.failure}</p>}
+    {view.failure && !(hideFailure && view.state === 'failed') && <p role="alert" className="text-[13px] text-red-700 dark:text-red-300" data-testid="bot-failure" data-blocked={view.blocked || undefined}>{view.failure}</p>}
+    {view.blocked && !hideFailure && <BlockedActions view={view} recordHref={recordHref} />}
     {snapshot.error && <p role="alert" className="text-[13px] text-red-700 dark:text-red-300">{snapshot.error}</p>}
     {view.participantCount !== null && <p className="text-[13px]" data-testid="bot-participant-count">{view.participantCount} in the latest roster</p>}
     <div className="flex flex-wrap gap-2">
