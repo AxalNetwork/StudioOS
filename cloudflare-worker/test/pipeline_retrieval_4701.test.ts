@@ -344,6 +344,7 @@ async function cast(e: any, userId: number, role: string, body: any) {
 test('a vote publishes the aggregate tally after the row is committed, and nothing private', async () => {
   const db = migratedDatabase();
   db.prepare("INSERT INTO users (id, email, name, role) VALUES (31,'inv@example.com','Ines Investor','investor')").run();
+  db.prepare("INSERT INTO projects (id, name, status) VALUES (9,'P','active')").run(); // the deal voted on (#9187)
   const room = fakeRoom(db);
   const e = envFor(db, undefined, { PIPELINE_ROOM: room.ns });
   const r = await cast(e, 31, 'investor', { vote_type: 'Strong_Buy', comment: 'PRIVATE-COMMENT-TEXT', anonymous: true });
@@ -366,6 +367,7 @@ test('a vote publishes the aggregate tally after the row is committed, and nothi
 test('a vote that is refused publishes nothing, and a dead room does not fail a committed vote', async () => {
   const db = migratedDatabase();
   db.prepare("INSERT INTO users (id, email, name, role) VALUES (31,'inv@example.com','I','investor')").run();
+  db.prepare("INSERT INTO projects (id, name, status) VALUES (9,'P','active')").run(); // the deal voted on (#9187)
   const room = fakeRoom(db);
   const bad = await cast(envFor(db, undefined, { PIPELINE_ROOM: room.ns }), 31, 'investor', { vote_type: 'Nonsense' });
   assert.equal(bad.status, 400);
