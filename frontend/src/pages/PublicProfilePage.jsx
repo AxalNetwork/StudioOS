@@ -6,6 +6,7 @@ import {
   Briefcase, Target, Star, Users, DollarSign,
   GraduationCap, Award,
 } from 'lucide-react';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { api, articles as articlesApi } from '../lib/api';
 import TrustScoreBadge from '../components/TrustScoreBadge';
 import FollowButton from '../components/profile/FollowButton';
@@ -322,14 +323,15 @@ export default function PublicProfilePage() {
   const [p, setP] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     setLoading(true); setError(null);
     api.publicGetUserByHandle(handle)
       .then(setP)
-      .catch((e) => setError(e.status === 404 ? 'Profile not found' : (e.message || 'Failed to load profile')))
+      .catch((e) => setError(pageReadFailure(e, { notFound: 'Profile not found', unreadable: 'This profile could not be read just now, which is not a claim that it does not exist.' })))
       .finally(() => setLoading(false));
-  }, [handle]);
+  }, [handle, attempt]);
 
   const role = (p?.role || 'admin').toLowerCase();
   const styles = ROLE_STYLES[role] || ROLE_STYLES.admin;
@@ -352,7 +354,10 @@ export default function PublicProfilePage() {
         {loading && <p className="text-sm text-gray-500">Loading…</p>}
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700">{error.message}</p>
+            {error.retry && (
+              <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-3 mr-4 inline-flex rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Try again</button>
+            )}
             <Link to="/" className="mt-3 inline-block text-sm text-violet-700 underline">Back to home</Link>
           </div>
         )}

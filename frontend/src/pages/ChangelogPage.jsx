@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, ExternalLink } from 'lucide-react';
 import { request } from '../lib/api';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { usePageMeta } from '../lib/seo';
 
 const AUDIENCE_COLOR = {
@@ -27,7 +28,8 @@ function AudienceBadge({ tag }) {
 export default function ChangelogPage() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
 
   usePageMeta({
     title: 'Changelog',
@@ -37,18 +39,19 @@ export default function ChangelogPage() {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true); setError(null);
     (async () => {
       try {
         const res = await request('/public/changelog');
         if (alive) setEntries(res.entries || []);
       } catch (ex) {
-        if (alive) setError(ex.message || 'Could not load the changelog.');
+        if (alive) setError(pageReadFailure(ex, { unreadable: 'The release notes could not be read, which is not a claim that there are none.' }));
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [attempt]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
@@ -66,7 +69,10 @@ export default function ChangelogPage() {
           <div className="flex items-center gap-2 text-gray-500"><Loader2 className="animate-spin" size={18} /> Loading…</div>
         )}
         {error && (
-          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">{error}</div>
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">
+            <p>{error.message}</p>
+            <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-3 inline-flex rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Try again</button>
+          </div>
         )}
 
         {!loading && !error && entries.length === 0 && (

@@ -14,6 +14,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Clock, Info, Loader2 } from 'lucide-react';
 import { request } from '../lib/api';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { overallStatus } from '../lib/statusOverall';
 import { DAY_WORDS, recordLine } from '../lib/statusHistory';
 import { OVERALL_WORDS, statusSummary, summaryLines } from '../lib/statusSummary';
@@ -51,8 +52,9 @@ function HistoryStrip({ cells }) {
 
 export default function StatusPage() {
   const [data, setData] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0);
 
   usePageMeta({
     title: 'System status',
@@ -62,18 +64,19 @@ export default function StatusPage() {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true); setError(null);
     (async () => {
       try {
         const res = await request('/public/status');
         if (alive) setData(res);
       } catch (ex) {
-        if (alive) setError(ex.message || 'Could not load status.');
+        if (alive) setError(pageReadFailure(ex, { unreadable: 'The status record could not be read just now, so this page makes no claim about any service.' }));
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [attempt]);
 
   const services = data?.services || [];
   const incidents = data?.incidents || [];
@@ -123,7 +126,10 @@ export default function StatusPage() {
           <div className="flex items-center gap-2 text-gray-500"><Loader2 className="animate-spin" size={18} /> Loading status…</div>
         )}
         {error && (
-          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">{error}</div>
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">
+            <p>{error.message}</p>
+            <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-3 inline-flex rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Try again</button>
+          </div>
         )}
 
         {!loading && !error && (

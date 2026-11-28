@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Star, ShieldCheck, Clock, Globe, Sparkles, CheckCircle2, Calendar,
 } from 'lucide-react';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { api, articles as articlesApi } from '../lib/api';
 import PublicNav from '../components/PublicNav';
 import PublicFooter from '../components/PublicFooter';
@@ -91,15 +92,16 @@ export default function PublicPartnerProfilePage() {
   const { slug } = useParams();
   const [p, setP] = useState(null);
   const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true); setError(null);
     api.publicGetPartner(slug)
       .then(setP)
-      .catch((e) => setError(e.status === 404 ? 'Partner not found' : (e.message || 'Failed to load partner')))
+      .catch((e) => setError(pageReadFailure(e, { notFound: 'Partner not found', unreadable: 'This partner profile could not be read just now, which is not a claim that it does not exist.' })))
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, [slug, attempt]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white">
@@ -116,7 +118,10 @@ export default function PublicPartnerProfilePage() {
         {loading && <p className="text-sm text-gray-500">Loading…</p>}
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700">{error.message}</p>
+            {error.retry && (
+              <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-3 mr-4 inline-flex rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Try again</button>
+            )}
             <Link to="/directory" className="mt-3 inline-block text-sm text-violet-700 underline">Browse all partners</Link>
           </div>
         )}

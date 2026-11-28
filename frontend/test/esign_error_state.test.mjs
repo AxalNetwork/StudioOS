@@ -40,7 +40,7 @@ test('loadError and error are two distinct state hooks', () => {
 });
 
 test('the initial envelope-fetch failure sets loadError, not error', () => {
-  const fetchBlock = SRC.slice(SRC.indexOf('api.esignFetchByToken'), SRC.indexOf('}, [token]);'));
+  const fetchBlock = SRC.slice(SRC.indexOf('api.esignFetchByToken'), SRC.indexOf('}, [token, attempt]);'));
   assert.match(
     fetchBlock,
     /\.catch\(\(e\) => \{ if \(alive\) setLoadError\(/,
@@ -54,7 +54,7 @@ test('the initial envelope-fetch failure sets loadError, not error', () => {
 });
 
 test('the full-page early-return gate checks loadError, not error', () => {
-  assert.match(SRC, /if \(loadError\) return <PageShell><ErrorCard message=\{loadError\} \/><\/PageShell>;/);
+  assert.match(SRC, /if \(loadError\) return <PageShell><ErrorCard message=\{loadError\} onRetry=\{\(\) => setAttempt\(\(n\) => n \+ 1\)\} \/><\/PageShell>;/);
   // The old gate must be gone, not just shadowed — a stray `if (error) return`
   // before the interactive UI would reintroduce the exact bug this guards.
   assert.doesNotMatch(SRC, /if \(error\) return/);

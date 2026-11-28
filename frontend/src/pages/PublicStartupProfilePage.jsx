@@ -4,6 +4,7 @@ import {
   ArrowLeft, Rocket, Globe, Target, Users, DollarSign,
   MapPin, Calendar, Newspaper,
 } from 'lucide-react';
+import { pageReadFailure } from '../lib/pageReadFailure';
 import { api } from '../lib/api';
 import FollowButton from '../components/profile/FollowButton';
 import PersonCard from '../components/profile/PersonCard';
@@ -32,14 +33,15 @@ export default function PublicStartupProfilePage() {
   const [s, setS] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     setLoading(true); setError(null);
     api.publicGetStartup(handle)
       .then(setS)
-      .catch((e) => setError(e.status === 404 ? 'Startup not found' : (e.message || 'Failed to load startup')))
+      .catch((e) => setError(pageReadFailure(e, { notFound: 'Startup not found', unreadable: 'This startup profile could not be read just now, which is not a claim that it does not exist.' })))
       .finally(() => setLoading(false));
-  }, [handle]);
+  }, [handle, attempt]);
 
   const t = s?.traction || {};
 
@@ -61,7 +63,10 @@ export default function PublicStartupProfilePage() {
         {loading && <p className="text-sm text-gray-500">Loading…</p>}
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700">{error.message}</p>
+            {error.retry && (
+              <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-3 mr-4 inline-flex rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">Try again</button>
+            )}
             <Link to="/" className="mt-3 inline-block text-sm text-violet-700 underline">Back to home</Link>
           </div>
         )}
