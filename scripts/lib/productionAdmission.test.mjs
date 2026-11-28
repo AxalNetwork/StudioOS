@@ -3,7 +3,7 @@
  * release workflows.
  *
  * D5501: disposable promotion fixtures over the real Actions admission
- * decision.
+ * decision. D8932: a recent main ancestor, its bounds and the deployed version.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,24 +12,40 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyCandidate } from '../verify-production-candidate.mjs';
+import { MAX_BEHIND_COMMITS, MAX_BEHIND_MS, verifyCandidate } from '../verify-production-candidate.mjs';
 import { checkProductionQueues } from '../check-production-queues.mjs';
 import { classifyStartup } from '../check-worker-startup.mjs';
 
 const repo = 'AxalNetwork/StudioOS';
 const a = 'a'.repeat(40);
 const b = 'b'.repeat(40);
+const c = 'c'.repeat(40);
+const noon = Date.UTC(2026, 10, 27, 12);
+const committed = hours => ({ commit: { committer: { date: new Date(noon - hours * 3_600_000).toISOString() } } });
+// GET /compare/{base}...{head}. `behind`: head is `by` commits behind base, committed `hours` before it.
+function comparison(base, head, { status = 'behind', by = 1, hours = 0 } = {}) {
+  return { status, ahead_by: status === 'ahead' ? by : 0, behind_by: status === 'behind' ? by : 0,
+    base_commit: { sha: base, ...committed(0) }, merge_base_commit: { sha: status === 'behind' ? head : base, ...committed(hours) } };
+}
 const contexts = {
   'ci.yml': ['frontend (build)', 'worker (typecheck)', 'api ↔ worker drift', 'test:drift (full suite)'],
   'migration-immutability.yml': ['applied migrations unchanged'],
   'gitleaks.yml': ['scan'],
 };
 
-function actions({ candidate = a, main = candidate, runChange = {}, jobChange = {}, missing = false, missingJob = false, olderRun = false, onRead } = {}) {
+function actions({ candidate = a, main = candidate, runChange = {}, jobChange = {}, missing = false, missingJob = false, olderRun = false, onRead,
+  compares = {} } = {}) {
   const files = Object.keys(contexts);
+  // A newer main is, by default, further ahead than the D8932 bound allows.
+  const known = { [`${main}...${candidate}`]: comparison(main, candidate, { by: 31 }), ...compares };
   return async path => {
     onRead?.(path);
     if (path.endsWith('/git/ref/heads/main')) return { ref: 'refs/heads/main', object: { type: 'commit', sha: main } };
+    const [, compared] = /\/compare\/([0-9a-f]{40}\.\.\.[0-9a-f]{40})$/.exec(path) ?? [];
+    if (compared) {
+      if (known[compared] == null) throw new Error('GitHub verification request failed (404).');
+      return known[compared];
+    }
     const runPath = /\/workflows\/([^/]+)\/runs\?(.*)$/.exec(path);
     if (runPath) {
       const [, file, query] = runPath;
@@ -91,19 +107,20 @@ test('a publish failure leaves migrations recorded and skips smoke without an au
 const workflow = name => readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
 const steps = source => source.split(/^      - name: /m).slice(1).map(step => step.trim());
 
-async function admissionCLI(t, { mode = '--wait-for-decision', stage = 'initial', fixture } = {}) {
+async function admissionCLI(t, { mode = '--wait-for-decision', stage = 'initial', fixture, deployed } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'release-admission-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const output = join(dir, 'output'), summary = join(dir, 'summary'), mock = join(dir, 'github.mjs');
   writeFileSync(output, '');
   writeFileSync(summary, '');
   const replies = {};
+  if (deployed) replies['https://axal.vc/api/public/version'] = { sha: deployed, version_id: null, built_at: null, missing: [] };
   if (fixture) {
     const get = actions(fixture);
     await verifyCandidate(a, async path => {
       replies['https://api.github.com' + path] = await get(path);
       return replies['https://api.github.com' + path];
-    });
+    }, async () => deployed);
   }
   // Exhaust the wait budget on the first API read. Missing fixture entries
   // simulate an unavailable API, without contacting GitHub or sleeping in CI.
@@ -143,6 +160,129 @@ test('initial admission permits a superseded no-op and only a verified candidate
     const result = await admissionCLI(t, { mode, stage: 'production-lock', fixture: { main: b } });
     assert.deepEqual([result.code, result.output], [1, ''], mode);
   }
+});
+
+// D8932 (#8933): candidate `a`, main tip `b`, deployed `c` unless a case says otherwise.
+const near = (extra = {}) => ({ [`${b}...${a}`]: comparison(b, a, { by: 3, hours: 1 }), [`${c}...${a}`]: comparison(c, a, { status: 'ahead', by: 2 }), ...extra });
+async function admit({ by = 3, hours = 1, status = 'behind', deployed = c, progress = 'ahead', compares, ...change } = {}) {
+  const get = actions({ main: b, compares: compares ?? {
+    [`${b}...${a}`]: comparison(b, a, { status, by, hours }),
+    [`${c}...${a}`]: comparison(c, a, { status: progress, by: 2 }),
+  }, ...change });
+  return verifyCandidate(a, get, typeof deployed === 'function' ? deployed : async () => deployed);
+}
+
+test('D8932: the tip is admitted as before and records the deployed version', async () => {
+  const tip = await verifyCandidate(a, actions(), async () => c);
+  assert.deepEqual([tip.status, tip.main, tip.behind_by, tip.deployed], ['verified', a, 0, c]);
+  // The tip keeps D5501's rule: an unreadable deployed version is recorded as null, never a refusal.
+  const unread = await verifyCandidate(a, actions(), async () => { throw new Error('offline'); });
+  assert.deepEqual([unread.status, unread.deployed], ['verified', null]);
+  assert.equal((await verifyCandidate(a, actions())).deployed, null);
+});
+
+test('D8932: an ancestor of main inside the bound and not older than production is admitted', async () => {
+  const result = await admit();
+  assert.deepEqual([result.status, result.main, result.behind_by, result.deployed], ['verified', b, 3, c]);
+  assert.equal(result.checks.length, 3);
+  const edge = await admit({ by: MAX_BEHIND_COMMITS, hours: MAX_BEHIND_MS / 3_600_000 });
+  assert.deepEqual([edge.status, edge.behind_by], ['verified', MAX_BEHIND_COMMITS]);
+  const same = await admit({ deployed: a, compares: { [`${b}...${a}`]: comparison(b, a) } });
+  assert.deepEqual([same.status, same.deployed], ['verified', a]);
+  assert.equal((await admit({ progress: 'identical' })).status, 'verified');
+  const identical = await admit({ status: 'identical' });
+  assert.deepEqual([identical.status, identical.behind_by], ['verified', 0]);
+  // Both admission points (initial and under the lock) accept it, so the rehearsal publishes.
+  const get = actions({ main: b, compares: near() });
+  assert.deepEqual([(await verifyCandidate(a, get, async () => c)).status, (await verifyCandidate(a, get, async () => c)).status],
+    ['verified', 'verified']);
+});
+
+test('D8932: the bound is 30 commits and 6 hours behind the tip', () => {
+  assert.deepEqual([MAX_BEHIND_COMMITS, MAX_BEHIND_MS], [30, 6 * 60 * 60_000]);
+});
+
+test('D8932: more than 30 commits behind is superseded', async () => {
+  assert.deepEqual(await admit({ by: MAX_BEHIND_COMMITS + 1 }), { candidate: a, status: 'superseded', main: b, behind_by: 31 });
+});
+
+test('D8932: more than 6 hours older than the tip is superseded', async () => {
+  assert.deepEqual(await admit({ by: 2, hours: 6.01 }), { candidate: a, status: 'superseded', main: b, behind_by: 2 });
+});
+
+test('D8932: a candidate that diverged from main or is ahead of it is untrusted', async () => {
+  for (const status of ['diverged', 'ahead']) {
+    assert.deepEqual(await admit({ status }), { candidate: a, status: 'untrusted', main: b, comparison: status });
+  }
+});
+
+test('D8932: a candidate older than the deployed version is stale', async () => {
+  for (const progress of ['behind', 'diverged']) {
+    assert.deepEqual(await admit({ progress }), { candidate: a, status: 'stale', main: b, behind_by: 3, deployed: c });
+  }
+});
+
+test('D8932: an unreadable deployed version refuses a non-tip candidate', async () => {
+  const unreadable = { candidate: a, status: 'unreadable', main: b, behind_by: 3, deployed: null, reason: 'deployed version unreadable' };
+  for (const deployed of [null, '', 'c'.repeat(39), 'C'.repeat(40), async () => { throw new Error('offline'); }]) {
+    assert.deepEqual(await admit({ deployed }), unreadable, String(deployed));
+  }
+});
+
+test('D8932: a failed or inconsistent compare read throws and never admits', async () => {
+  const bad = [
+    { [`${b}...${a}`]: null },
+    near({ [`${b}...${a}`]: { ...comparison(b, a), status: 'unknown' } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), behind_by: '3' } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), ahead_by: undefined } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), base_commit: { sha: c, ...committed(0) } } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), ahead_by: 1 } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), behind_by: 0 } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), merge_base_commit: { sha: c, ...committed(1) } } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), merge_base_commit: { sha: a, commit: { committer: { date: 'soon' } } } } }),
+    near({ [`${b}...${a}`]: { ...comparison(b, a), base_commit: { sha: b } } }),
+    { [`${b}...${a}`]: comparison(b, a) },
+    near({ [`${c}...${a}`]: { ...comparison(c, a, { status: 'ahead' }), base_commit: { sha: a } } }),
+    near({ [`${c}...${a}`]: { ...comparison(c, a, { status: 'ahead' }), ahead_by: undefined } }),
+    near({ [`${c}...${a}`]: { ...comparison(c, a, { status: 'ahead' }), behind_by: null } }),
+  ];
+  for (const compares of bad) await assert.rejects(admit({ compares }), /unreadable|failed/, JSON.stringify(compares));
+});
+
+test('D8932: each of the six checks still fails an admitted ancestor as before', async () => {
+  const files = Object.keys(contexts);
+  for (const [file, names] of Object.entries(contexts)) {
+    for (const context of names) {
+      const get = actions({ main: b, compares: near() });
+      const failing = async path => {
+        const reply = await get(path);
+        return reply.jobs ? { jobs: reply.jobs.map(job => job.name === context ? { ...job, conclusion: 'failure' } : job) } : reply;
+      };
+      const result = await verifyCandidate(a, failing, async () => c);
+      const check = result.checks.find(x => x.file === file);
+      assert.deepEqual([result.status, check.state, check.context, check.conclusion, check.run], ['blocked', 'failed', context, 'failure', files.indexOf(file) + 11]);
+    }
+  }
+  const missing = await verifyCandidate(a, actions({ main: b, compares: near(), missing: true }), async () => c);
+  assert.equal(missing.status, 'waiting');
+});
+
+test('D8932: the decision job skips a stale candidate and the lock recheck refuses it', async t => {
+  const compares = near({ [`${c}...${a}`]: comparison(c, a, { status: 'behind' }) });
+  const stale = await admissionCLI(t, { fixture: { main: b, compares }, deployed: c });
+  assert.deepEqual([JSON.parse(stale.stdout).status, stale.code, stale.output], ['stale', 0, 'decision=stale\n']);
+  assert.ok(stale.summary.includes(`\`${a}\` is older than \`${c}\``));
+  assert.ok(!stale.stdout.includes('::notice'));
+  const lock = await admissionCLI(t, { mode: '--once', stage: 'production-lock', fixture: { main: b, compares }, deployed: c });
+  assert.deepEqual([JSON.parse(lock.stdout).status, lock.code, lock.output], ['stale', 1, '']);
+  for (const [mode, stage, output] of [['--wait-for-decision', 'initial', 'decision=verified\n'], ['--once', 'production-lock', '']]) {
+    const result = await admissionCLI(t, { mode, stage, fixture: { main: b, compares: near() }, deployed: c });
+    const report = JSON.parse(result.stdout);
+    assert.deepEqual([report.status, report.main, report.behind_by, report.deployed, result.code, result.output], ['verified', b, 3, c, 0, output]);
+  }
+  // No version reply: the CLI's own read of /api/public/version fails closed.
+  const blind = await admissionCLI(t, { mode: '--once', stage: 'production-lock', fixture: { main: b, compares: near() } });
+  assert.deepEqual([JSON.parse(blind.stdout).status, blind.code], ['unreadable', 1]);
 });
 
 test('the Worker workflow consumes the decision before taking the production lock', () => {

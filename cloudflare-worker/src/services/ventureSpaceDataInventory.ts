@@ -337,6 +337,7 @@ const D1_TABLES: ReadonlyArray<readonly [string, Keyed, HardDelete]> = [
   ['raise_investor_updates', 'p', 'left'],
   ['raise_ledger_selections', 'p', 'cascade'],
   ['raise_pro_rata', 'p', 'left'],
+  ['raise_search_console_selections', 'p', 'cascade'],
   ['raise_prospect_invites', 'p', 'cascade'],
   ['raise_prospect_signals', 'p', 'cascade'],
   ['raise_prospects', 'p', 'left'],
