@@ -3,12 +3,26 @@
 // lives on the portal home). Fetches the investor's live billing + intro
 // quotas and renders slim progress bars. Renders only for investor users and
 // silently no-ops on error so it never breaks a paywall surface.
+//
+// #9019: a deal-room count the Worker could not read (or a billing read that
+// failed) is Unavailable, never "0 / N".
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Gauge } from 'lucide-react';
 import { api } from '../lib/api';
 
-function QBar({ used, cap, label }) {
+function UnavailableRow({ label, testId }) {
+  return (
+    <div data-testid={testId}>
+      <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300 mb-1">
+        <span className="font-medium">{label}</span>
+        <span>Unavailable</span>
+      </div>
+    </div>
+  );
+}
+
+function QBar({ used, cap, label, testId }) {
   const capN = Number(cap) || 0;
   const usedN = Math.max(0, Number(used) || 0);
   // Mirror InvestorQuotaBars: only a sentinel >=100k is treated as "unlimited".
@@ -18,7 +32,7 @@ function QBar({ used, cap, label }) {
   const warn = !unlimited && capN > 0 && usedN / capN >= 0.8 && !danger;
   const barCls = danger ? 'bg-red-500' : warn ? 'bg-amber-500' : 'bg-violet-600';
   return (
-    <div>
+    <div data-testid={testId}>
       <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300 mb-1">
         <span className="font-medium">{label}</span>
         <span>{unlimited ? `${usedN} used · unlimited` : `${usedN} / ${capN}`}</span>
@@ -33,6 +47,7 @@ function QBar({ used, cap, label }) {
 export default function QuotaCard({ user, className = '' }) {
   const [billing, setBilling] = useState(null);
   const [intros, setIntros] = useState(null);
+  const [settled, setSettled] = useState(false);
   const isInvestor = user?.role === 'investor';
 
   useEffect(() => {
@@ -42,6 +57,7 @@ export default function QuotaCard({ user, className = '' }) {
       if (cancelled) return;
       if (b.status === 'fulfilled') setBilling(b.value);
       if (i.status === 'fulfilled') setIntros(i.value);
+      setSettled(true);
     });
     return () => { cancelled = true; };
   }, [isInvestor]);
@@ -52,7 +68,9 @@ export default function QuotaCard({ user, className = '' }) {
   const introsUsed = intros?.used ?? billing?.quotas?.intros_used ?? 0;
   const introsCap = intros?.cap ?? billing?.quotas?.intros_per_quarter ?? 3;
   const dealroomCap = billing?.quotas?.dealroom_max ?? 1;
-  const dealroomsUsed = billing?.quotas?.dealroom_used ?? 0;
+  // #9019: null (count unreadable) or absent (billing read failed) is unknown.
+  const rawDealrooms = billing?.quotas?.dealroom_used;
+  const dealroomsUsed = typeof rawDealrooms === 'number' && Number.isFinite(rawDealrooms) ? rawDealrooms : null;
 
   return (
     <div className={`rounded-xl border border-violet-200 dark:border-violet-800/60 bg-violet-50/60 dark:bg-violet-900/20 p-4 ${className}`}>
@@ -67,7 +85,9 @@ export default function QuotaCard({ user, className = '' }) {
       </div>
       <div className="space-y-3">
         <QBar used={introsUsed} cap={introsCap} label="Warm intros / quarter" />
-        <QBar used={dealroomsUsed} cap={dealroomCap} label="Active deal rooms" />
+        {dealroomsUsed === null
+          ? (settled ? <UnavailableRow label="Active deal rooms" testId="quota-card-dealrooms" /> : null)
+          : <QBar used={dealroomsUsed} cap={dealroomCap} label="Active deal rooms" testId="quota-card-dealrooms" />}
       </div>
     </div>
   );

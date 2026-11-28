@@ -103,7 +103,8 @@ test('each Deals route names itself in the browser tab', () => {
   assert.ok(Object.values(DEALS_PAGE_TITLES).every((t) => !/StudioOS|From idea to funded/.test(t)));
   const routes = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
   assert.match(routes, /useEffect\(\(\) => \{ document\.title = pageTitle; \}, \[pageTitle\]\);/);
-  assert.match(read('frontend/src/pages/DealRoomPage.jsx'), /document\.title = `\$\{d\.project_name \|\| 'Deal'\} · Deal · Axal VC`;/);
+  // D8681 (#8681): a deal room names the screen, never the deal's project.
+  assert.match(read('frontend/src/pages/DealRoomPage.jsx'), /document\.title = DEAL_ROOM_TITLE;/);
 });
 
 test('the zone intros say what each zone is for, with no method or storage commentary', () => {

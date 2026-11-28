@@ -3,8 +3,8 @@
  * (canvas section DX4): Scorecard (the strip, Strongest, Needs attention,
  * Changed, Open scorecard; no overall score) beside What's new (material
  * changes, dated); Investment case (summary, thesis fit and reasons, main
- * evidence; the firm's questions and risks; what the scorecard is missing)
- * beside Your position (commitment, firm, route). Each block fails on its own
+ * evidence; the firm's questions and risks; what the scorecard is missing;
+ * one case read since D9109) beside Your position (commitment, firm, route). Each block fails on its own
  * with Try again.
  *
  * Model tests, then the real DealRoomPage mounted with a fetch the test controls.
@@ -24,7 +24,7 @@ import { forgetVisits } from '../src/pages/deal/dealVisit.js';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { stripOf } from '../src/components/scoring/scorecard/scorecardModel.js';
 import {
-  SCORE_CHANGE_NOT_RECORDED, caseNotes, missingEvidence, scoreSummary, thesisFitOf, whatsNewList, whatsNewOf,
+  SCORE_CHANGE_NOT_RECORDED, scoreSummary, whatsNewList, whatsNewOf,
 } from '../src/pages/deal/dealFrameModel.js';
 
 const h = React.createElement;
@@ -71,46 +71,7 @@ test('scoreSummary: Strongest and Needs attention from bands and confidence, Cha
   assert.equal(scoreSummary(null).state, 'loading');
 });
 
-test('missingEvidence: the scopes with not enough recorded, and a closed or unread scorecard says so', () => {
-  const m = missingEvidence(open(SCOPES));
-  assert.deepEqual(m.labels, ['Geographic', 'Legal and IP']);
-  assert.equal(m.line, 'Missing: Geographic, Legal and IP (not enough recorded).');
-  assert.equal(missingEvidence(open([sc('team', 'scored', 'Fair', 'High'), sc('political', 'not_expected')])).state, 'none', 'not expected yet is not missing');
-  assert.equal(missingEvidence({ state: 'closed' }).state, 'closed');
-  assert.equal(missingEvidence({ state: 'locked' }).state, 'closed');
-  assert.equal(missingEvidence({ state: 'unreadable' }).state, 'unreadable');
-});
-
-test('thesisFitOf: the fit and its reasons, or why there is none', () => {
-  const ready = (items) => ({ status: 'ready', data: { items } });
-  const fit = thesisFitOf(ready([{ deal_id: 9, score: 10 }, { deal_id: 4, state: 'recorded', score: 67, confidence_label: 'Medium', criteria: [
-    { key: 'sector', state: 'match' }, { key: 'stage', state: 'outside' }, { key: 'region', state: 'not_recorded' }, { key: 'ticket', state: 'not_set' }] }]), 4);
-  assert.equal(fit.line, 'Fit to my thesis 67 (Medium)');
-  assert.deepEqual(fit.reasons, ['Sector matches your thesis', 'Stage is outside your thesis'], 'not set and not recorded are not reasons');
-  assert.equal(thesisFitOf(ready([{ deal_id: 4, state: 'not_set', score: null }]), 4).state, 'not_set');
-  assert.equal(thesisFitOf(ready([{ deal_id: 4, state: 'not_enough_recorded', score: null }]), 4).state, 'not_enough');
-  assert.equal(thesisFitOf(ready([{ deal_id: 4, state: 'unavailable' }]), 4).state, 'unavailable');
-  assert.equal(thesisFitOf(ready([]), 4).state, 'unavailable', 'a fit for another deal is never this one\'s');
-  assert.equal(thesisFitOf(ready([{ deal_id: 4, state: 'unreadable', reason: 'The fit inputs could not be read.' }]), 4).state, 'unreadable');
-  assert.equal(thesisFitOf({ status: 'unreadable' }, 4).state, 'unreadable');
-  assert.equal(thesisFitOf({ status: 'loading' }, 4).state, 'loading');
-});
-
-test('caseNotes: the firm\'s Question and Risk notes, newest first, first line only, with how many more', () => {
-  const r = (items, total = items.length) => ({ status: 'ready', data: { items, total } });
-  const n = caseNotes({
-    Question: r([{ uid: 'q1', body: 'Unit economics at 50 units?\nMore detail here.', updated_at: '2026-11-10T09:00:00Z' }], 4),
-    Risk: r([{ uid: 'r1', body: 'Key-person risk on the CTO', updated_at: '2026-11-12T09:00:00Z' }, { uid: 'r2', body: '   ', updated_at: '2026-11-13T09:00:00Z' }]),
-  });
-  assert.equal(n.state, 'some');
-  assert.deepEqual(n.rows.map((x) => [x.tag, x.text]), [['Risk', 'Key-person risk on the CTO'], ['Question', 'Unit economics at 50 units?']]);
-  assert.equal(n.more, 4, 'six tagged notes, two shown');
-  assert.equal(caseNotes({ Question: r([]), Risk: r([]) }).state, 'none');
-  assert.equal(caseNotes({ Question: r([]), Risk: { status: 'unreadable' } }).state, 'unreadable', 'one failed read is not "none"');
-  assert.equal(caseNotes({ Question: { status: 'loading' }, Risk: r([]) }).state, 'loading');
-  const long = caseNotes({ Question: r([{ uid: 'q', body: 'x'.repeat(200) }]), Risk: r([]) });
-  assert.equal(long.rows[0].text.length, 140);
-});
+// The Investment case's model (`caseView`, D9109) is held by deal_investment_case_9109.test.mjs.
 
 test('whatsNewList: every change the read returns, newest first', () => {
   const w = whatsNewOf({ status: 'ready', data: { since: '2026-11-01T00:00:00Z', changes: [{ type: 'document', at: '2026-11-03T10:00:00Z' }, { type: 'deal', at: '2026-11-05T10:00:00Z' }, { type: 'firm_note', at: '2026-11-04T10:00:00Z' }] } });
@@ -147,11 +108,25 @@ async function mounted(url, handler, { user = INVESTOR } = {}) {
     requests, settle, has: (id) => byId(id).length > 0, textOf: (id) => text(byId(id)[0]), propOf: (id, key) => props(byId(id)[0])[key],
     ids: () => walk(container).map((n) => props(n)['data-testid']).filter(Boolean),
     async click(id) { await act(async () => props(byId(id)[0]).onClick?.({ preventDefault() {} })); await settle(); },
+    async clickButton(id, label) { const b = walk(byId(id)[0]).find((n) => n.tagName === 'BUTTON' && text(n).trim() === label); await act(async () => props(b).onClick?.({ preventDefault() {} })); await settle(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); localStorage.removeItem('user'); restore(); },
   };
 }
 
-const FIT = { items: [{ deal_id: 4, state: 'recorded', score: 75, confidence_label: 'High', criteria: [{ key: 'sector', state: 'match' }, { key: 'ticket', state: 'outside' }] }] };
+// D9109: the Investment case is one read, `GET /api/deals/4/case` (D6173).
+const CASE = {
+  deal_id: 4,
+  thesis_fit: { state: 'recorded', fit: { state: 'recorded', score: 75, confidence_label: 'High', criteria: [{ key: 'sector', state: 'match' }, { key: 'ticket', state: 'outside' }] } },
+  main_evidence: { state: 'recorded', partial: false, groups: [{ area: 'Capital model', kind: 'revenue-receipt', source_label: 'connector', count: 3, newest: '2026-11-03T10:00:00Z' }] },
+  open_questions: { state: 'recorded', items: [
+    { uid: 'r1', tag: 'risk', body: 'Key-person risk on the CTO', created_at: '2026-11-12T09:00:00Z' },
+    { uid: 'q1', tag: 'question', body: 'Unit economics at 50 units?', created_at: '2026-11-10T09:00:00Z' },
+    { uid: 'r2', tag: 'risk', body: 'Supplier concentration', created_at: '2026-11-09T09:00:00Z' },
+    { uid: 'r3', tag: 'risk', body: 'Long sales cycle', created_at: '2026-11-08T09:00:00Z' },
+    { uid: 'q2', tag: 'question', body: 'Who owns the firmware?', created_at: '2026-11-07T09:00:00Z' },
+  ] },
+  missing: { state: 'recorded', threshold: 0.5, scopes: [{ scope: 'geographic', label: 'Geographic', state: 'not_enough', coverage: null }, { scope: 'legal_ip', label: 'Legal and IP', state: 'not_enough', coverage: null }] },
+};
 function base(over = {}) {
   return (url, init = {}) => {
     const m = (init.method || 'GET').toUpperCase();
@@ -159,10 +134,8 @@ function base(over = {}) {
     if (/\/api\/deals\/4\/stage/.test(url)) return response({ my_stage: 'Diligence', reason: null, next_action: { label: 'Open the diligence case', href: '/due-diligence/dd1', kind: 'navigate' }, ic: { state: 'used' } });
     if (/\/api\/deals\/4\/whats-new/.test(url)) return response({ since: '2026-11-01T00:00:00Z', first_visit: false, changes: [{ type: 'document', at: '2026-11-03T10:00:00Z' }, { type: 'diligence_answer', at: '2026-11-09T10:00:00Z' }], unavailable: [] });
     if (/\/api\/deals\/4\/commitments/.test(url)) return response([OWN]);
-    if (/\/api\/deals\/4\/notes\?.*tag=Question/.test(url)) return response({ items: [{ uid: 'q1', body: 'Unit economics at 50 units?', updated_at: '2026-11-10T09:00:00Z' }], total: 1 });
-    if (/\/api\/deals\/4\/notes\?.*tag=Risk/.test(url)) return response({ items: [{ uid: 'r1', body: 'Key-person risk on the CTO', updated_at: '2026-11-12T09:00:00Z' }], total: 3 });
+    if (/\/api\/deals\/4\/case$/.test(url)) return response(CASE);
     if (/\/api\/deals\/4\/notes/.test(url)) return response({ items: [], total: 0 });
-    if (/\/api\/deals\/fit\?ids=4$/.test(url)) return response(FIT);
     if (/\/venture-scores\/batch/.test(url)) return response({ items: [{ deal_id: 4, scopes: SCOPES }] });
     if (/\/networkfx\/syndicates/.test(url)) return response([]);
     if (/\/api\/deals\/4(\?|$)/.test(url)) return response(DEAL);
@@ -189,27 +162,28 @@ test('mounted, an investor at /deals/4: DE04\'s four blocks in order, each from 
     assert.equal(v.textOf('deal-case-summary'), 'Ledger software for port operators.');
     assert.equal(v.textOf('deal-overview').split('Ledger software for port operators.').length - 1, 1, 'the summary is drawn once, in the case');
     assert.match(v.textOf('deal-case-fit'), /^Fit to my thesis 75 \(High\)Sector matches your thesisTicket is outside your thesis$/);
-    assert.equal(v.propOf('deal-case-evidence', 'children')[1].props.to, '/deals/4/evidence');
-    assert.match(v.textOf('deal-case-notes'), /^Risk: Key-person risk on the CTOQuestion: Unit economics at 50 units\?$/);
+    assert.equal(v.textOf('deal-case-evidence-list'), 'Capital model · Revenue receipt · 3 · newest 3 Nov 2026', 'D9109: the main evidence as counts');
+    assert.equal(v.propOf('deal-case-evidence', 'children').at(-1).props.to, '/deals/4/evidence');
+    assert.match(v.textOf('deal-case-notes'), /^Risk: Key-person risk on the CTOQuestion: Unit economics at 50 units\?Risk: Supplier concentration$/);
     assert.equal(v.textOf('deal-case-notes-more'), '2 more in Firm notes', 'D6164 part 3: the notes are Activity\'s Firm notes');
-    assert.equal(v.textOf('deal-case-missing'), 'Missing: Geographic, Legal and IP (not enough recorded).');
+    assert.equal(v.textOf('deal-case-missing'), 'Missing: Geographic (not enough recorded), Legal and IP (not enough recorded).');
     // Your position, with the route the read does not carry.
     assert.match(v.textOf('deal-position-amount'), /\$50,000 · Pending/);
     assert.equal(v.textOf('deal-position-route'), 'Not recorded');
-    assert.ok(v.requests.some((r) => /GET .*\/api\/deals\/fit\?ids=4$/.test(r)));
+    assert.equal(v.requests.filter((r) => /GET .*\/api\/deals\/4\/case$/.test(r)).length, 1, 'D9109: one case read');
+    assert.ok(!v.requests.some((r) => /\/api\/deals\/fit|\/notes\?.*tag=/.test(r)), 'no fit or tagged notes read for the card');
     assert.ok(!v.requests.some((r) => /\/api\/deals\/4\/evidence/.test(r)), 'the Overview never reads the evidence: that read logs an open');
   } finally { await v.close(); }
 });
 
 test('mounted, each block fails on its own with Try again, and Try again reads only that block again', async () => {
-  let fitCalls = 0; let riskCalls = 0;
+  let caseCalls = 0; let newsCalls = 0;
   const v = await mounted('/deals/4', base({
-    'deals/fit': () => { fitCalls += 1; return fitCalls === 1 ? response({ error: 'x' }, 503) : response(FIT); },
-    'notes\\?.*tag=Risk': () => { riskCalls += 1; return riskCalls === 1 ? response({ error: 'x' }, 503) : response({ items: [], total: 0 }); },
-    'whats-new': () => response({ error: 'x' }, 503),
+    'deals/4/case': () => { caseCalls += 1; return caseCalls === 1 ? response({ error: 'x' }, 503) : response(CASE); },
+    'whats-new': () => { newsCalls += 1; return response({ error: 'x' }, 503); },
   }));
   try {
-    assert.match(v.textOf('deal-case-fit'), /could not be read\. That is not a claim that it does not fit\./);
+    assert.match(v.textOf('deal-case-why'), /could not be read\. That is not a claim that there are none\./);
     assert.match(v.textOf('deal-case-open'), /could not be read\. That is not a claim that there are none\./);
     assert.ok(!v.has('deal-case-notes-none'), 'a failed read is never "none"');
     assert.match(v.textOf('deal-whats-new'), /could not be read/);
@@ -217,46 +191,45 @@ test('mounted, each block fails on its own with Try again, and Try again reads o
     assert.equal(v.textOf('deal-score-strongest'), 'StrongestMarket · StrongHigh confidence');
     assert.equal(v.textOf('deal-case-summary'), 'Ledger software for port operators.');
     assert.match(v.textOf('deal-position-amount'), /\$50,000/);
-    const questions = v.requests.filter((r) => /tag=Question/.test(r)).length;
-    await v.click('deal-case-fit-retry');
-    assert.equal(fitCalls, 2);
+    const news = newsCalls;
+    await v.click('deal-case-why-unreadable-retry');
+    assert.equal(caseCalls, 2);
     assert.match(v.textOf('deal-case-fit'), /^Fit to my thesis 75/);
-    await v.click('deal-case-notes-retry');
-    assert.equal(riskCalls, 2);
-    assert.equal(v.requests.filter((r) => /tag=Question/.test(r)).length, questions, 'the Question read that landed is not read again');
     assert.match(v.textOf('deal-case-notes'), /Question: Unit economics/);
+    assert.equal(newsCalls, news, 'the case\'s Try again reads only the case');
   } finally { await v.close(); }
 });
 
-test('mounted, a failed scorecard read: the summary and Missing say so and Try again reads it again', async () => {
+test('mounted, a failed scorecard read: the summary says so and Try again reads it again; Missing is the case read\'s', async () => {
   let calls = 0;
   const v = await mounted('/deals/4', base({ 'venture-scores/batch': () => { calls += 1; return calls === 1 ? response({ error: 'x' }, 503) : response({ items: [{ deal_id: 4, scopes: SCOPES }] }); } }));
   try {
     assert.match(v.textOf('deal-score-slot'), /could not be read/);
     assert.ok(!v.has('deal-score-summary'));
-    assert.equal(v.textOf('deal-case-missing'), 'What the scorecard is missing could not be read.Try again');
+    assert.equal(v.textOf('deal-case-missing'), 'Missing: Geographic (not enough recorded), Legal and IP (not enough recorded).', 'D9109: Missing comes from the case read');
     assert.match(v.textOf('deal-case-fit'), /^Fit to my thesis 75/, 'the fit stands');
-    await v.click('deal-case-missing-retry');
-    assert.equal(calls, 2);
-    assert.equal(v.textOf('deal-case-missing'), 'Missing: Geographic, Legal and IP (not enough recorded).');
+    await v.clickButton('deal-score-slot', 'Retry');
+    assert.equal(calls, 2, 'the scorecard\'s own Unreadable reads the strip again');
     assert.ok(v.has('deal-score-summary'));
   } finally { await v.close(); }
 });
 
 test('mounted, nothing to show: no notes, no fit thesis, a closed scorecard, a first visit; no commitment is "none", not unreadable', async () => {
   const v = await mounted('/deals/4', base({
-    'notes\\?': () => response({ items: [], total: 0 }),
-    'deals/fit': () => response({ items: [{ deal_id: 4, state: 'not_set', score: null }] }),
+    'deals/4/case': () => response({ deal_id: 4, thesis_fit: { state: 'not_recorded', reason: 'No thesis is recorded for you, so fit is not worked out.', fit: { state: 'not_set', score: null } },
+      main_evidence: { state: 'not_recorded', reason: 'No evidence is shared with you on this deal yet.' },
+      open_questions: { state: 'not_recorded', reason: 'Your firm has no note tagged Question or Risk on this deal.' },
+      missing: { state: 'not_recorded', reason: 'The founder has not shared the scorecard with investors.' } }),
     'venture-scores/batch': () => response({ items: [], not_readable: 1 }),
     'whats-new': () => response({ first_visit: true, changes: [] }),
     'deals/4/commitments': () => response([]),
     '/api/deals/4(\\?|$)': () => response({ ...DEAL, description: '' }),
   }));
   try {
-    assert.match(v.textOf('deal-case-notes-none'), /No note at your firm is tagged Question or Risk/);
-    assert.equal(v.textOf('deal-case-fit'), 'Set your thesis to see how this deal fits it.');
+    assert.equal(v.textOf('deal-case-notes-none'), 'Your firm has no note tagged Question or Risk on this deal.');
+    assert.equal(v.textOf('deal-case-fit'), 'No thesis is recorded for you, so fit is not worked out.');
     assert.equal(v.textOf('deal-case-summary'), 'No summary is recorded on this deal.');
-    assert.equal(v.textOf('deal-case-missing'), 'The scorecard is not open to you, so what is missing is not read here.');
+    assert.equal(v.textOf('deal-case-missing'), 'The founder has not shared the scorecard with investors.');
     assert.match(v.textOf('deal-score-slot'), /opens once you are invited/);
     assert.ok(!v.has('deal-score-summary') && !v.has('deal-score-open'));
     assert.match(v.textOf('deal-whats-new'), /first look/);
@@ -269,7 +242,7 @@ test('mounted, an Admin: the scorecard and the deal\'s details, and none of the 
   try {
     assert.ok(v.has('deal-score-slot') && v.has('deal-details'));
     for (const id of ['deal-whats-new', 'deal-case', 'deal-position']) assert.ok(!v.has(id), id);
-    assert.ok(!v.requests.some((r) => /deals\/fit|\/notes|whats-new/.test(r)), 'no investor read is made for staff');
+    assert.ok(!v.requests.some((r) => /deals\/fit|\/notes|whats-new|\/case/.test(r)), 'no investor read is made for staff');
   } finally { await v.close(); }
 });
 

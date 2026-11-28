@@ -94,6 +94,43 @@ test('a route price table resolves [CONST] keys', () => {
   assert.deepEqual(catalogueRows(row('@cf/acme/r-1', 'beta', '{}')), [{ id: '@cf/acme/r-1', status: 'beta', priced: false }]);
 });
 
+test('price-table and constant names are exact identifiers, including dollar signs', () => {
+  for (const [table, key] of [['PRICING', 'A'], ['$PRICING', '$A'], ['PRICING$', 'A$'], ['PRICE$S', 'A$B']]) {
+    const text = [
+      `const ${key}suffix = 'claude-decoy-1';`,
+      `const ${key} = 'claude-selected-1';`,
+      `const ${table}suffix = {`,
+      "  'claude-other-1': { input: 1 },",
+      '};',
+      `const ${table}: Record<string, P> = {`,
+      `  [${key}]: { input: 1 },`,
+      "  'claude-literal-1': { input: 2 },",
+      '  "claude-literal-2": { input: 3 },',
+      '  [MISSING]: { input: 4 },',
+      '};',
+    ].join('\n');
+    assert.deepEqual(localPriceIds(text, table), ['claude-selected-1', 'claude-literal-1', 'claude-literal-2']);
+    assert.deepEqual(localPriceIds(text, `${table}missing`), []);
+  }
+});
+
+test('provider accessor discovery preserves whole-word boundaries for every table', () => {
+  const rel = 'cloudflare-worker/src/services/access.ts';
+  for (const [name, accessor, id] of [
+    ['PROVIDER_MODELS', 'providerModelById', 'anthropic/claude-test-1'],
+    ['GATEWAY_IMAGE_MODELS', 'gatewayImageModelFor', 'bria/image-test-1'],
+    ['GATEWAY_TEXT_MODELS', 'gatewayTextModelById', 'openai/gpt-test-1'],
+  ]) {
+    const cat = { rel: CAT, text: `export const ${name} = Object.freeze([\n  {\n    id: '${id}',\n  },\n]);\n` };
+    for (const text of [accessor, name, `$${accessor}$`, `${accessor}.call`]) {
+      assert.deepEqual(byId(inv([cat, { rel, text }]), id).surfaces, [rel]);
+    }
+    for (const text of [`pre${accessor}`, `${accessor}_suffix`, `${accessor}2`, `_${name}`, '']) {
+      assert.deepEqual(byId(inv([cat, { rel, text }]), id).surfaces, []);
+    }
+  }
+});
+
 test('the repository: no gap beyond the reviewed allowlist, and the render is order-independent', () => {
   const sources = readSources(ROOT);
   const i = buildInventory(sources);

@@ -11,6 +11,7 @@ import {
   inputClass, buttonClass, ghostButtonClass, moneyDollars, formatDay,
 } from '../kit';
 import { usePipelineZone } from './usePipelineZone';
+import OpportunitySheet, { OPEN_OPPORTUNITY_CLASS } from './OpportunitySheet';
 import {
   TAB_LABEL, activityOf, lastActivity, nextAction, proposalStrip, sentPhrase, sheetTabs, stateOf,
 } from './proposalsFollowUp';
@@ -178,8 +179,11 @@ function MoreMenu({ actions = [] }) {
  * record holds, and Not recorded where it holds nothing. Writes stay the zone's:
  * Withdraw and the loss reason go through the zone's `run`, so a failed write keeps
  * its own sentence and a refresh keeps the sheet open on the same row.
+ *
+ * #9110 (D9110): Open opportunity closes this sheet and opens the shared `OpportunitySheet` for the same quote, the
+ * read-across view of its lead, negotiation and engagement. This sheet stays the place to record and decide.
  */
-function ProposalSheet({ row, tab, onTab, onClose, onRecordVersion, busy, run, note }) {
+function ProposalSheet({ row, tab, onTab, onClose, onRecordVersion, onOpenOpportunity, busy, run, note }) {
   const closeRef = useRef(null);
   const opener = useRef(typeof document !== 'undefined' ? document.activeElement : null);
   useEffect(() => {
@@ -215,8 +219,15 @@ function ProposalSheet({ row, tab, onTab, onClose, onRecordVersion, busy, run, n
         <div className="border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
           <div className="flex items-center justify-between">
             <Eyebrow>Proposal</Eyebrow>
-            <button ref={closeRef} type="button" onClick={onClose} aria-label="Close proposal"
-              className="grid h-11 w-11 place-items-center rounded-lg text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">✕</button>
+            <div className="flex items-center gap-1">
+              {onOpenOpportunity && (
+                <button type="button" onClick={() => onOpenOpportunity(row)} data-testid="proposal-open-opportunity" className={OPEN_OPPORTUNITY_CLASS}>
+                  Open opportunity
+                </button>
+              )}
+              <button ref={closeRef} type="button" onClick={onClose} aria-label="Close proposal"
+                className="grid h-11 w-11 place-items-center rounded-lg text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">✕</button>
+            </div>
           </div>
           <h2 id={headingId} className="mt-1 text-[20px] font-extrabold text-axal-ink dark:text-gray-100">{name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-axal-muted">
@@ -381,6 +392,13 @@ export default function PartnerProposalsZone() {
   };
   const openSheet = useCallback((id, tab = 'overview') => setSheet({ id, tab }), []);
   const closeSheet = useCallback(() => setSheet(null), []);
+  // #9110: the shared opportunity sheet, opened from a proposal's sheet. One sheet at a time: opening it closes
+  // the proposal's, and closing it returns focus to the row that opened the proposal.
+  const [opportunity, setOpportunity] = useState(null);
+  const openOpportunity = useCallback((r) => {
+    setSheet(null);
+    setOpportunity({ quoteId: r.quote_id, title: r.client || r.need_title || undefined });
+  }, []);
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
@@ -551,6 +569,7 @@ export default function PartnerProposalsZone() {
               tab={sheet?.tab}
               onTab={(t) => setSheet((s) => (s ? { ...s, tab: t } : s))}
               onClose={closeSheet}
+              onOpenOpportunity={openOpportunity}
               onRecordVersion={(id) => {
                 setEditId(id);
                 setSheet(null);
@@ -559,6 +578,13 @@ export default function PartnerProposalsZone() {
               busy={busy}
               run={run}
               note={note}
+            />
+          )}
+
+          {opportunity && (
+            <OpportunitySheet
+              opportunity={{ quoteId: opportunity?.quoteId }} title={opportunity?.title}
+              onClose={() => setOpportunity(null)}
             />
           )}
 

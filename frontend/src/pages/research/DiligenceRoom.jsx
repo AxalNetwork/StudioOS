@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
+import { Card, Pill, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../../ui';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -15,7 +16,7 @@ import { tabHref } from '../dealPageModel';
 import { SharedEvidence } from '../cycles/evidence/InvestorEvidence';
 import { createRecordGate } from './recordGate.js';
 import RoomDeals from './RoomDeals';
-import { AddToLibrarySheet, RoomFileLibrary, RoomLibraryNote, useRoomLibrary } from './RoomLibrary';
+import { AddToLibrarySheet, RoomFileActions, RoomLibraryNote, RoomLibraryProposal, useRoomLibrary } from './RoomLibrary';
 
 /**
  * `/research/diligence/:grantUid` — one data room, read by the investor who
@@ -164,6 +165,8 @@ export default function DiligenceRoom({ role = 'investor' }) {
   // D6913 (RS-13): which open files are in the caller's Library, and whether the founder allows it.
   const library = useRoomLibrary(room?.project?.uid || null);
   const [adding, setAdding] = useState(null);
+  // D6913 part 4 (RS-20 B): on a phone the row's actions open as one bottom sheet.
+  const phone = usePhoneWidth();
   const fileState = roomFileState(room);
   // Read only inside the ready branch, where the worker always sends the count.
   const withheld = room ? room.withheld_behind_nda : null;
@@ -204,10 +207,17 @@ export default function DiligenceRoom({ role = 'investor' }) {
           ‹ Diligence
         </Link>
 
+        {/* D6913 part 4 (RS-19 "Loading · room"): a skeleton in the room's own shape, and the sentence a reader hears. */}
         {state === 'loading' && (
-          <Card variant="dashed" padding="lg">
-            <p className="text-[12.5px] text-axal-muted">Loading this room.</p>
-          </Card>
+          <div className="space-y-3" aria-busy="true" role="status" data-testid="room-loading">
+            <span className="sr-only">Loading this room.</span>
+            <Skeleton className="h-24" />
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Skeleton className="h-20" /><Skeleton className="h-20" /><Skeleton className="h-20" /><Skeleton className="h-20" />
+            </div>
+            <Skeleton className="h-40" />
+            <p className="text-[12.5px] text-axal-muted" aria-hidden="true">Loading this room.</p>
+          </div>
         )}
 
         {state === 'unreadable' && (
@@ -273,6 +283,9 @@ export default function DiligenceRoom({ role = 'investor' }) {
 
             <RoomNda nda={room.nda} withheld={withheld} deals={room.deals} />
 
+            {/* D6913 part 4: Eadwyn proposes this room's open files not yet in your Library, and adds nothing itself. */}
+            <RoomLibraryProposal key={room.project.uid} room={room} read={library.read} onAdded={() => library.reload()} />
+
             <Card id="open-to-you" data-testid="room-open-files">
               <div className="flex items-baseline justify-between gap-3">
                 <span className={eyebrow}>Open to you</span>
@@ -304,13 +317,13 @@ export default function DiligenceRoom({ role = 'investor' }) {
                             {stagedSinceLastVisit(r.created_at, room.last_opened_at) === true ? <Pill tone="info" data-testid="room-file-new">New</Pill> : null}
                             {r.visibility === 'nda' ? <Pill tone="warn">NDA · signed</Pill> : null}
                             <span>{r.last_downloaded_at ? `Link issued ${when(r.last_downloaded_at)}` : 'Not downloaded'}</span>
-                            <RoomFileLibrary file={f} read={library.read} onAdd={setAdding} />
+                            <RoomFileActions file={f} read={library.read} onAdd={setAdding} fileHref={fileHref} phone={phone} />
                           </span>
                         );
                       }}
                     />
                   </div>
-                  <RoomLibraryNote read={library.read} />
+                  <RoomLibraryNote read={library.read} onRetry={library.reload} />
                   {adding ? <AddToLibrarySheet file={adding} room={room} onClose={() => setAdding(null)} onAdded={() => library.reload()} /> : null}
                   <p className="mt-3 border-t border-axal-hairline pt-2.5 text-[11px] text-axal-muted dark:border-gray-800">
                     Links are issued to you alone, work once, expire after two minutes. Not watermarked.

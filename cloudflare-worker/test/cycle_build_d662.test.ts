@@ -49,6 +49,9 @@ function fixture() {
   db.exec(readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/459_cycle_activity_convention.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/461_build_record_stores.sql', 'utf8'));
+  // D8775 (#8775): a must-have's reviewer and agent builder, a session's deliverable, and the project team an owner may come from.
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/202611270215_8775_build_feature_path.sql', 'utf8'));
+  db.exec("CREATE TABLE project_members(project_id INTEGER, user_id INTEGER, status TEXT DEFAULT 'accepted')");
   const sizes = readFileSync('cloudflare-worker/sql/migrations/605_member_file_sizes.sql', 'utf8');
   addColumnsFrom(db, sizes, 'formation_steps');
   addColumnsFrom(db, sizes, 'entity_obligations');

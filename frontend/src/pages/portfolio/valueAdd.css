@@ -39,6 +39,7 @@
 .va-pages{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;color:var(--pf-mu)}
 .va-pages .pf-btn:disabled{opacity:.5;cursor:not-allowed}
 .va-notice{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.va-saved{margin:0;padding:10px 12px;border-radius:9px;border:1px solid var(--pf-posE);background:var(--pf-posBg);color:var(--pf-pos);font-size:12.5px;font-weight:700}
 .va-form .va-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px;grid-auto-flow:column;grid-template-rows:auto auto}
 .va-form label{font-size:12px;font-weight:700;color:var(--pf-ink)}
 .va-form label em{font-weight:500;color:var(--pf-mu)}

@@ -35,6 +35,34 @@ test('the reader takes the method, path, money and key of a call, and skips the 
   assert.equal(rows[5].dynamicPath, true);
 });
 
+test('local keys retain dollar signs and resolve the exact nearest declaration before the call', () => {
+  for (const name of ['$key', 'key$', 'key$value']) {
+    for (const [expression, source] of [["'charge:order-1'", 'stable'], ['crypto.randomUUID()', 'random']]) {
+      const [row] = readCalls(file([
+        `const ${name} = 'earlier';`,
+        `let ${name} = ${expression};`,
+        'const unrelated = crypto.randomUUID();',
+        `await stripeCall(env, '/charges', body, { idempotencyKey: ${name} });`,
+        `const ${name} = 'later';`,
+      ].join('\n')));
+      assert.deepEqual([row.via, row.key, row.source], [name, expression, source]);
+      assert.equal(checkInventory(padded([row]), []).length, source === 'random' ? 1 : 0);
+    }
+  }
+});
+
+test('the idempotency key property accepts shorthand and ignores similarly named properties', () => {
+  const rows = readCalls(file([
+    "const idempotencyKey = 'charge:order-1';",
+    "await stripeCall(env, '/charges', body, { idempotencyKey });",
+    "await stripeCall(env, '/charges', body, { otherKey: 'x', idempotencyKey: 'charge:order-2', extra: 'y' });",
+    "await stripeCall(env, '/charges', body, { otheridempotencyKey: 'x' });",
+  ].join('\n')));
+  assert.deepEqual(rows.map((row) => [row.source, row.key]), [
+    ['stable', "'charge:order-1'"], ['stable', "'charge:order-2'"], ['none', null],
+  ]);
+});
+
 test('which paths move money', () => {
   for (const p of ['/refunds', '/payment_intents', '/payment_intents/pi_1/confirm', '/invoices/in_1/finalize', '/subscriptions/sub_1', '/customers/c/balance_transactions']) assert.equal(movesMoney('POST', p), true, p);
   for (const p of ['/customers', '/products', '/prices/p', '/setup_intents', '/billing_portal/sessions', '/webhook_endpoints']) assert.equal(movesMoney('POST', p), false, p);

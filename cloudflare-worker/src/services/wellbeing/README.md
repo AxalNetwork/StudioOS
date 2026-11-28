@@ -17,6 +17,9 @@ or the same review permission; the bucket key is never returned.
 
 `reflectionPeriods.ts` (D7118) is the member-local day, week and month a
 reflection belongs to, and the rules a write's period must meet.
+`storageReview.ts` (D7118 part 4) says how a row's answers are held at rest
+(encrypted, plaintext, unreadable) without keeping a value: the member's
+earlier check-ins carry it, and the Super Admin's storage review counts it.
 `recommend.ts` (D7119) holds the kinds of support, what a consented topic may
 suggest (never therapy, dietetics or spiritual guidance), the "Why this?"
 reasons, and the two reads the routes share: a member's preferences, and their

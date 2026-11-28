@@ -38,7 +38,9 @@ test('A6 hands off to its three zones and carries its loaded seed', () => {
   // D421. Every card linked to the legacy `/network?mode=workspace&tab=…`
   // while the three zones it summarises sat one pill away.
   const sections = desk.match(/const SECTIONS = \[([\s\S]*?)\];/)?.[1] || '';
+  // D9025 (#9025): People, the shared directory, is the fifth Network link, first after Overview.
   assert.deepEqual([...sections.matchAll(/\['(\w+)', '([^']+)'\]/g)].map((m) => [m[1], m[2]]), [
+    ['People', '/network/people'],
     ['Relationships', '/network/relationships'],
     ['Introductions', '/network/introductions'],
     ['Organizations', '/network/organizations'],

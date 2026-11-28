@@ -12,18 +12,22 @@
  * the other, and a failed list says so ("This is not an empty list"). A desk
  * with no case says "No diligence cases yet." with measured zeros; filters
  * that match nobody say what they asked for, with Clear filters.
+ *
+ * D9199 (#9199): a 402 is the plan gate on `/api/dd`, not a failure. The desk
+ * then draws one locked state with See plans and no Try again, since a retry
+ * cannot change a plan; every other failure keeps Try again.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Lock, MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { usePhoneWidth } from '../../ui';
 import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { reportError } from '../../lib/log';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import {
-  ADVISOR_NOTE, CHANGE_REFUSED, LIST_FAILED, LIST_FAILED_SUB, PAGE_SIZES, SORTS, SUBJECT_TYPES,
-  ageChart, canChangeCase, canOpenCase, decisionsChart, filterChips, listQuery, noMatchText, overviewTiles,
+  ADVISOR_NOTE, CHANGE_REFUSED, LIST_FAILED, LIST_FAILED_SUB, LIST_LOCKED_SUB, PAGE_SIZES, PLANS_PATH, SORTS, SUBJECT_TYPES,
+  ageChart, canChangeCase, canOpenCase, decisionsChart, filterChips, listFailure, listQuery, lockedTitle, noMatchText, overviewTiles,
   pageCount, rangeText, readCasesSearch, rowCells, stageStrip, writeCasesSearch,
 } from './ddListModel.js';
 import { BAND_WORD, DECISION_WORD } from './ddModel.js';
@@ -209,6 +213,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
   const [ov, setOv] = useState(null);
   const [list, setList] = useState(null);
   const [listState, setListState] = useState('loading');
+  const [locked, setLocked] = useState(null);
   const [readAt, setReadAt] = useState(null);
   const [qInput, setQInput] = useState(q);
   const [filtersOpen, setFiltersOpen] = useState(Object.keys(filters).length > 0);
@@ -220,7 +225,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
   const loadOverview = useCallback(async () => {
     setOv(null);
     try { setOv(await ddDeskApi.overview()); } catch (e) {
-      if (e?.status !== 404) reportError('DdCasesTab:overview', e);
+      if (e?.status !== 404 && e?.status !== 402) reportError('DdCasesTab:overview', e);
       setOv({ failed: true, status: e?.status });
     }
   }, []);
@@ -236,9 +241,10 @@ export default function DdCasesTab({ me, now = Date.now() }) {
       setReadAt(new Date());
     } catch (e) {
       if (request !== listRead.current) return;
-      if (e?.status === 404) { setListState('unavailable'); return; }
-      reportError('DdCasesTab:list', e);
-      setListState('failed');
+      const failure = listFailure(e);
+      if (failure === 'locked') setLocked({ title: lockedTitle(e) });
+      if (failure === 'failed') reportError('DdCasesTab:list', e);
+      setListState(failure);
     }
   }, [query]);
   useEffect(() => { loadOverview(); }, [loadOverview]);
@@ -275,13 +281,19 @@ export default function DdCasesTab({ me, now = Date.now() }) {
   return (
     <div data-testid="dd-cases">
       <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-        {canOpenCase(me?.role)
+        {listState === 'locked' ? null : canOpenCase(me?.role)
           ? <button type="button" className={primaryCls} onClick={openDialog} data-testid="dd-open-case"><Plus size={14} />Open a case</button>
           : <Note testId="dd-advisor-note">{ADVISOR_NOTE}</Note>}
       </div>
 
       {listState === 'unavailable' ? (
         <Note tone="warn" testId="dd-unavailable">Due diligence cases are kept by the production Worker and cannot be read in this development environment.</Note>
+      ) : listState === 'locked' ? (
+        <div className={cardCls}>
+          <Empty title={locked?.title} sub={LIST_LOCKED_SUB} testId="dd-list-locked">
+            <Link to={PLANS_PATH} className={primaryCls} data-testid="dd-see-plans"><Lock size={14} />See plans</Link>
+          </Empty>
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="dd-tiles">

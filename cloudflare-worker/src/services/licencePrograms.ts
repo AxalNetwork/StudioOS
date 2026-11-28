@@ -24,8 +24,13 @@
 import type { Env } from '../types';
 import { PROGRAMS, TERM_KEYS, presentGrant, programOf, readDefaults, type LicenceLite } from './programGrants';
 import { legalWaitingByProgram } from './agreementPolicies';
+import { withScheduleEnvelopes } from './programAgreements';
 
-/** The grant columns the copy carries, and the studio reads. */
+/**
+ * The grant fields the copy carries, and the studio reads. D9026: `schedule_contract_uid` is the copy's name for
+ * the schedule envelope, kept so a branch reading a copy pushed before D9026 (or after) reads the same field; HQ
+ * fills it from the grant's current schedule agreement version, never the grant's column (`programCopy`).
+ */
 export const COPY_COLUMNS = [
   'uid', 'program_key', 'state', ...TERM_KEYS,
   'schedule_contract_uid', 'schedule_signed_at', 'terms_revision', 'signed_revision', 'note', 'paused_at', 'ended_at', 'set_at',
@@ -59,9 +64,10 @@ async function acceptedHqServices(env: Env, licenceUid: string): Promise<HqServi
 /** The copy of one licence's programs, read fresh from HQ's store. Throws when a read fails. */
 export async function programCopy(env: Env, licenceId: number): Promise<ProgramCopy> {
   // A draft (D956) is HQ's, so it is not sent: the studio reads Not granted until HQ grants it.
-  const rows = ((await env.DB.prepare("SELECT * FROM program_grants WHERE licence_id = ? AND state <> 'draft' ORDER BY id")
-    .bind(licenceId).all<Record<string, unknown>>()).results || [])
-    .map((row) => Object.fromEntries(COPY_COLUMNS.map((k) => [k, row[k] ?? null])));
+  const read = await withScheduleEnvelopes(env, ((await env.DB.prepare("SELECT * FROM program_grants WHERE licence_id = ? AND state <> 'draft' ORDER BY id")
+    .bind(licenceId).all<Record<string, unknown>>()).results || []));
+  const rows: Array<Record<string, unknown>> = read
+    .map((row) => Object.fromEntries(COPY_COLUMNS.map((k) => [k, (k === 'schedule_contract_uid' ? row.schedule_envelope_uuid : row[k]) ?? null])));
   // D5052 (#5052): each grant carries whether the licence's frozen agreement policy still holds it out of force,
   // so a branch never reads a program as in force while its required agreement is unsigned. A read that fails
   // throws, and the push reports the section unreadable (#4686) rather than sending grants without it.
@@ -128,7 +134,9 @@ const entry = (p: ProgramIdentity, standing: Standing, grant: Record<string, unk
 export function studioPrograms(copy: ProgramCopy, licence: LicenceLite, today: string) {
   const byKey = new Map(copy.grants.map((g) => [String(g.program_key), g]));
   function issued(p: ProgramIdentity, row: Record<string, unknown>, custom = false) {
-    const { set_by_user_id: _by, licence_uid: _l, ...grant } = presentGrant(row, licence, today);
+    // D9026: the copy names the schedule envelope `schedule_contract_uid` (HQ fills it from the agreement rows).
+    const presented = { ...row, schedule_envelope_uuid: row.schedule_envelope_uuid ?? row.schedule_contract_uid ?? null };
+    const { set_by_user_id: _by, licence_uid: _l, ...grant } = presentGrant(presented, licence, today);
     const standing: Standing = grant.state === 'granted' ? (grant.in_force ? 'in_force' : 'granted') : grant.state as 'paused' | 'ended';
     return entry(p, standing, grant, custom);
   }

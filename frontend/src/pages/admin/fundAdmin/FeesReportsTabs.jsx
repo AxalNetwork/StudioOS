@@ -12,6 +12,8 @@ import { Line, NUM, TAP_LINK, Note, Panel, Section, Table } from './parts';
 import { ActFlow } from './MoneyFlow';
 import { actButton, feePeriodEffects, feeTermsEffects, reportIssueEffects } from './moneyFlowModel';
 import { useRead } from './useRead';
+import { AdmissionDialog, NetInvestedDialog, OffsetDialog, TermsDialog } from './feeInputs';
+import { countedText, entityLabel, termsDates, termsLabel } from './feeInputsModel';
 
 // D1165: the remaining fund tabs, drawn from the approved FND13/FND14 boards.
 const amount = (cents) => money(cents) ?? 'Not recorded';
@@ -38,15 +40,23 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // D9107: one recording dialog at a time; a record reloads the read and drops the preview, whose digest it changed.
+  const [dialog, setDialog] = useState(null);
+  const recorded = async () => { setDialog(null); setPreview(null); await read.reload(); };
   const run = async (fn, fallback) => {
     setBusy(true); setError('');
     try { await fn(); } catch (e) { setError(refusalText(e, fallback)); } finally { setBusy(false); }
   };
   const s = read.data;
+  const record = (testId, label, open) => (
+    <FundActControl access={access} act="fee.write" testId={`${testId}-refused`} className="text-[12px] text-axal-muted">
+      <button type="button" className={BTN.ghost} disabled={busy} data-testid={testId} onClick={open}>{label}</button>
+    </FundActControl>
+  );
   const admissions = (s?.lps || []).filter(l => String(l.id).includes(lpQuery.trim()));
   const missing = (s?.lps || []).filter((l) => l.admission_missing).length;
   const termCols = [
-    { key: 'rate', label: 'Terms', cell: (t) => `${bpsPercent(t.annual_bps) ?? 'Rate not recorded'} a year from ${t.effective_from}` },
+    { key: 'rate', label: 'Terms', cell: (t) => <><span className="block">{termsLabel(t, s?.terms)}</span><span className={`block text-[12px] font-normal text-axal-muted dark:text-gray-400 ${NUM}`}>{termsDates(t)}</span></> },
     { key: 'lpa', label: 'LPA', cell: (t) => t.lpa_reference || 'No LPA reference recorded' },
     { key: 'status', label: 'Status', cell: (t) => <Pill tone={t.status === 'confirmed' ? 'ok' : 'neutral'}>{t.status}</Pill> },
     { key: 'action', label: 'Action', align: 'right', cell: (t) => (t.status === 'draft' ? (
@@ -64,12 +74,12 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
   ];
   return (
     <FundFrame title="Management fees" testId="fees-section" funds={funds} fund={fund} overview={overview} onFund={onFund}
-      sub="The fee terms, the LPs' admission dates and each quarter's period. A Super Admin confirms terms and issues a period; any Admin prepares and previews.">
+      sub="The fee terms, the LPs' admission dates and each quarter's period. A Super Admin confirms terms and issues a period; any Admin records the terms, admission dates, net invested capital and offsets, and prepares and previews.">
       {fund && <div className="flex flex-col gap-4" data-testid="fees">
         {read.status === 'loading' ? <LoadingRows lines={3} />
           : read.status === 'unreadable' ? <Unreadable what="This fund's management fee" claim="This is not a claim that no fee is due." onRetry={read.reload} />
             : <div className="grid gap-4 lg:grid-cols-2">
-              <Panel label="Fee terms" testId="fee-terms">
+              <Panel label="Fee terms" testId="fee-terms" aside={record('fee-terms-record', 'Record terms', () => setDialog({ kind: 'terms' }))}>
                 {(s?.terms || []).length === 0 ? <Note><Unrecorded>No terms recorded</Unrecorded></Note>
                   : <Table cols={termCols} rows={s.terms} rowKey={(t) => t.uid} template="1.6fr 1fr .8fr 1.2fr" rowTestId={(t) => `fee-terms-${t.uid}`} />}
                 {missing > 0 && <Line a="Admission dates" b={`${missing} LP${missing === 1 ? ' has' : 's have'} no admission date recorded.`} tone="danger" />}
@@ -80,15 +90,37 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
               </Panel>
               <Panel label="Admission and net invested" testId="fee-admissions">
                 <div className="p-4"><input className={INPUT} aria-label="Search admission LP ids" placeholder="Search LP ids" value={lpQuery} onChange={e => setLpQuery(e.target.value)} /></div>
-                <Note>Net invested: {amount(s?.net_invested?.[0]?.net_invested_cents)}{s?.net_invested?.[0]?.as_of ? ` · as of ${s.net_invested[0].as_of}` : ' · No dated net invested capital is recorded.'}</Note>
+                <Line testId="fee-net-invested" a={`Net invested: ${amount(s?.net_invested?.[0]?.net_invested_cents)}${s?.net_invested?.[0]?.as_of ? ` · as of ${s.net_invested[0].as_of}` : ' · No dated net invested capital is recorded.'}`}
+                  action={record('fee-net-record', 'Record net invested', () => setDialog({ kind: 'net' }))} />
+                {(s?.net_invested || []).length > 0 && <Table testId="fee-net-list" cols={[
+                  { key: 'as_of', label: 'As of', mono: true, cell: n => n.as_of },
+                  { key: 'amount', label: 'Net invested', mono: true, cell: n => amount(n.net_invested_cents) },
+                  { key: 'source', label: 'Source', cell: n => n.source || 'No source recorded' },
+                ]} rows={s.net_invested} rowKey={n => n.uid} template=".8fr 1fr 1.6fr" rowTestId={n => `fee-net-${n.uid}`} />}
                 {admissions.length ? <Table cols={[
                   { key: 'lp', label: 'LP', cell: l => `LP #${l.id}` },
                   { key: 'admitted', label: 'Admitted', cell: l => l.admitted_on || <Unrecorded>No admission date recorded</Unrecorded> },
                   { key: 'commitment', label: 'Commitment', mono: true, cell: l => l.commitment_amount == null ? 'Not recorded' : amount(Math.round(Number(l.commitment_amount) * 100)) },
-                ]} rows={admissions} rowKey={l => l.id} template="1fr 1fr 1fr" /> : <Note>{lpQuery ? 'No LP id matches this search.' : 'No LP admission recorded.'}</Note>}
+                  { key: 'source', label: 'Source', cell: l => l.admitted_on ? [l.closing_label, l.source].filter(Boolean).join(' · ') || 'No source recorded' : '—' },
+                  { key: 'action', label: 'Action', align: 'right', cell: l => record(`fee-admission-record-${l.id}`, l.admitted_on ? 'Change date' : 'Record date', () => setDialog({ kind: 'admission', lp: l })) },
+                ]} rows={admissions} rowKey={l => l.id} template=".8fr 1fr 1fr 1.4fr 1fr" rowTestId={l => `fee-admission-${l.id}`} /> : <Note>{lpQuery ? 'No LP id matches this search.' : 'No LP admission recorded.'}</Note>}
                 <Note>Net invested capital is recorded for the fund. The read does not attribute it to individual LPs.</Note>
               </Panel>
               <FeeLines key={selected || s?.periods?.[0]?.quarter || 'empty'} apis={apis} access={access} fund={fund} quarter={selected || s?.periods?.[0]?.quarter} />
+              <div className="lg:col-span-2">
+              <Panel label="Offsets" testId="fee-offsets" aside={record('fee-offset-record', 'Record an offset', () => setDialog({ kind: 'offset' }))}>
+                {(s?.offsets || []).length === 0 ? <Note><Unrecorded>No offset recorded</Unrecorded></Note>
+                  : <Table cols={[
+                    { key: 'company', label: 'Company', cell: o => `Company #${o.project_id}` },
+                    { key: 'entity', label: 'Axal entity', cell: o => entityLabel(o.axal_entity) },
+                    { key: 'amount', label: 'Amount', mono: true, cell: o => amount(o.amount_cents) },
+                    { key: 'received', label: 'Received', mono: true, cell: o => o.received_on || 'Not recorded' },
+                    { key: 'what', label: 'Description', cell: o => <><span className="block">{o.description || 'No description recorded'}</span><span className="block text-[12px] text-axal-muted dark:text-gray-400">{o.source || 'No source recorded'}</span></> },
+                    { key: 'counted', label: 'Counted', cell: o => <Pill tone={o.counted_in ? 'ok' : 'neutral'}>{countedText(o)}</Pill> },
+                  ]} rows={s.offsets} rowKey={o => o.uid} template="1fr .8fr .9fr .9fr 1.8fr 1fr" rowTestId={o => `fee-offset-${o.uid}`} />}
+                <Note>Each offset is recorded for the fund. How it is shared between LPs is known only from a period's lines.</Note>
+              </Panel>
+              </div>
               <div className="lg:col-span-2" id="fee-prepare">
               <Panel label="Prepare a quarter" testId="fee-prepare">
                 <form className="flex flex-wrap items-end gap-2 px-4 py-3 sm:px-5" onSubmit={(e) => {
@@ -116,6 +148,10 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
               </Panel>
               </div>
             </div>}
+        {dialog?.kind === 'terms' && <TermsDialog apis={apis} fund={fund} state={s} onClose={() => setDialog(null)} onDone={recorded} />}
+        {dialog?.kind === 'admission' && <AdmissionDialog apis={apis} fund={fund} lp={dialog.lp} onClose={() => setDialog(null)} onDone={recorded} />}
+        {dialog?.kind === 'net' && <NetInvestedDialog apis={apis} fund={fund} onClose={() => setDialog(null)} onDone={recorded} />}
+        {dialog?.kind === 'offset' && <OffsetDialog apis={apis} fund={fund} onClose={() => setDialog(null)} onDone={recorded} />}
         {/* D4812 part 5: confirming terms and issuing a period go through the money flow. */}
         {confirmation && (() => {
           const terms = confirmation.terms ? (s?.terms || []).find((t) => t.uid === confirmation.terms) : null;

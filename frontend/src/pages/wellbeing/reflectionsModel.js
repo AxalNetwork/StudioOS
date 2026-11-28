@@ -206,6 +206,16 @@ export const isChanged = (e) => codeOf(e) === 'reflection_changed';
 /** What a saved reflection says, in words: only to you, encrypted. */
 export const PRIVATE_LINE = 'Only you can read this. Stored encrypted. Eadwyn never reads your check-ins, and nothing you write is sent to a model.';
 export const RETENTION_LINE = 'Kept until you delete it. You can export every reflection as a file, or delete one at any time.';
+/**
+ * D7118 part 4: how an earlier check-in is stored, from the Worker's `held`. The page's "Stored encrypted" is
+ * true of reflections; an earlier check-in the old writer kept without encryption says so, and one whose
+ * ciphertext no longer opens says that. An unknown or absent value says nothing rather than guess.
+ */
+export function earlierHeldLine(held) {
+  if (held === 'not_encrypted') return 'Stored without encryption: saved while encryption was unavailable. Delete it if you’d rather it were gone.';
+  if (held === 'partly_unreadable') return 'Part of this check-in can’t be read any more. It is unchanged; you can delete it.';
+  return null;
+}
 export const SAVES_ONLY = Object.freeze({
   day: 'Saves today’s entry only. This week’s reflection is not touched.',
   week: 'Saving replaces this week’s reflection. Your daily entries stay as they are.',

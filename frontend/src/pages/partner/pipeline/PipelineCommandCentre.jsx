@@ -4,11 +4,13 @@ import { api } from '../../../lib/api';
 import { partnerPipelineActivityApi } from '../../../lib/api/partnerPipelineActivity';
 import { NoPartnerProfile, formatDay, isNoPartnerProfile } from '../kit';
 import { Unreadable } from '../../../ui/Honesty';
+import { Sheet } from '../../../ui';
 import { NotRecorded } from '../../../workspaces/canvasKit';
 import {
-  ATTENTION_SHOWN, MOVEMENT_SHOWN, SETUP_LINKS, attentionItems, headlineMetrics, isFirstRun, lifecycleStrip, movementView, ok,
-  railSteps, riskItems, setupSteps, unreadable,
+  ATTENTION_SHOWN, FEED_ALL_LIMIT, MOVEMENT_NONE, MOVEMENT_SHOWN, SETUP_LINKS, allMovementView, attentionItems,
+  headlineMetrics, isFirstRun, lifecycleStrip, movementView, ok, railSteps, riskItems, setupSteps, unreadable,
 } from './commandCentre';
+import OpportunitySheet, { OPPORTUNITY_SOURCES } from './OpportunitySheet';
 
 /**
  * Pipeline · the root, `/pipeline` — D4838 (#4838, part 1), canvas `Pipeline v2` boards PP01, PP01m, PP02, PP02m.
@@ -22,6 +24,10 @@ import {
  *
  * Every read is the zones' own; this page adds no route. A read that fails is Unreadable where it would have been
  * drawn, never a zero, and never a reason to call the pipeline empty.
+ *
+ * #9110 (D9110, PP-6): a Recent movement row whose event names a need opens the shared `OpportunitySheet` on its
+ * Activity tab, and See all opens the whole recorded feed (up to the Worker's 200) in an All movement sheet on
+ * this same address. One sheet is open at a time.
  */
 
 const SOURCES = {
@@ -230,8 +236,35 @@ function Lifecycle({ cells }) {
   );
 }
 
+const movementGrid = 'grid grid-cols-[88px_minmax(0,1fr)] gap-2 text-[13.5px]';
+
+/**
+ * One event. With a need it is a 44px button that opens that opportunity's sheet (#9110); without one it is the
+ * same line as plain text, because there is nothing to open.
+ */
+function MovementRow({ e, onOpen, testId }) {
+  const inner = (
+    <>
+      <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{formatDay(e.at)}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
+        <b className="text-axal-ink dark:text-gray-100">{e.text}</b>
+        {e.who ? <span className="text-axal-muted dark:text-gray-400"> · {e.who}</span> : null}
+      </span>
+    </>
+  );
+  if (e.needId == null || !onOpen) return <li className={`${movementGrid} py-1`} data-testid={testId}>{inner}</li>;
+  return (
+    <li data-testid={testId}>
+      <button type="button" onClick={() => onOpen(e)} data-testid={`${testId}-open`} data-need-id={e.needId} title="Open opportunity"
+        className={`${movementGrid} min-h-[44px] w-full items-center rounded-lg px-2 text-left hover:bg-[#fffbf2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#b45309] dark:hover:bg-[#2b210d]`}>
+        {inner}
+      </button>
+    </li>
+  );
+}
+
 /** Recent movement (D4838 part 9, #5943): the feed's recorded events, newest first, each with its opportunity. */
-function Movement({ movement }) {
+function Movement({ movement, onOpen, onSeeAll }) {
   const rows = movement?.state === 'ok' ? movement.rows : [];
   return (
     <section className={card} aria-labelledby="pl-move-h" data-testid="pipeline-movement" data-state={movement?.state || 'unreadable'}>
@@ -241,23 +274,95 @@ function Movement({ movement }) {
           Unreadable. The lifecycle feed could not be read; this is not evidence that nothing moved.
         </p>
       ) : rows.length ? (
-        <ul className="mt-2 flex list-none flex-col gap-1.5 p-0" data-testid="pipeline-movement-list">
-          {rows.map((e) => (
-            <li key={e.key} className="grid grid-cols-[88px_minmax(0,1fr)] gap-2 text-[13.5px]">
-              <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{formatDay(e.at)}</span>
-              <span className="min-w-0 [overflow-wrap:anywhere]">
-                <b className="text-axal-ink dark:text-gray-100">{e.text}</b>
-                {e.who ? <span className="text-axal-muted dark:text-gray-400"> · {e.who}</span> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="mt-2 flex list-none flex-col gap-0.5 p-0" data-testid="pipeline-movement-list">
+            {rows.map((e) => <MovementRow key={e.key} e={e} onOpen={onOpen} testId={`pipeline-movement-row-${e.key}`} />)}
+          </ul>
+          {onSeeAll && (
+            <button type="button" onClick={onSeeAll} data-testid="pipeline-movement-see-all"
+              className="mt-1.5 inline-flex min-h-[44px] items-center text-[13.5px] font-bold text-[#92400e] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#b45309] dark:text-amber-300">
+              See all
+            </button>
+          )}
+        </>
       ) : (
         <p className="mt-1.5 text-[13px] text-axal-muted dark:text-gray-400" data-testid="pipeline-movement-none">
-          Nothing has moved yet. No lead was passed, no proposal version or decision was recorded, no negotiation moved and no retainer started or ended.
+          {MOVEMENT_NONE}
         </p>
       )}
     </section>
+  );
+}
+
+/** The All movement sheet's read: the whole feed the Worker will return, newest first. */
+export const ALL_MOVEMENT_SOURCE = () => partnerPipelineActivityApi.list({ limit: FEED_ALL_LIMIT });
+
+/** All movement's body, from `allMovementView`: a skeleton, Unreadable with Try again, nothing moved, or the rows. */
+export function AllMovementList({ view, onOpen, onRetry }) {
+  if (view.state === 'loading') {
+    return (
+      <div aria-busy="true" className="grid gap-2" data-testid="pipeline-all-movement-loading">
+        <span className="sr-only">Reading the lifecycle feed…</span>
+        {[0, 1, 2, 3, 4].map((i) => <span key={i} className="h-6 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />)}
+      </div>
+    );
+  }
+  if (view.state !== 'ok') {
+    return (
+      <div className="grid gap-2" data-testid="pipeline-all-movement-unreadable">
+        <p className="m-0 text-[13px] font-semibold text-red-700 dark:text-red-300">
+          Unreadable. The lifecycle feed could not be read; this is not evidence that nothing moved.
+        </p>
+        {onRetry && (
+          <button type="button" onClick={onRetry} data-testid="pipeline-all-movement-retry"
+            className="inline-flex min-h-[44px] items-center justify-self-start rounded-lg border border-axal-hairline bg-white px-3 text-[13px] font-bold text-axal-ink hover:border-[#b45309] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+            Try again
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (!view.rows.length && !view.capped) {
+    return <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400" data-testid="pipeline-all-movement-none">{MOVEMENT_NONE}</p>;
+  }
+  return (
+    <div className="grid gap-2">
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0" data-testid="pipeline-all-movement-list">
+        {view.rows.map((e) => <MovementRow key={e.key} e={e} onOpen={onOpen} testId={`pipeline-all-movement-row-${e.key}`} />)}
+      </ul>
+      {view.capped && (
+        <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="pipeline-all-movement-capped">
+          {`Showing the latest ${FEED_ALL_LIMIT} events.`} Older events may be recorded and are not listed here.
+        </p>
+      )}
+    </div>
+  );
+}
+
+const SHEET_SOURCES = { opportunity: OPPORTUNITY_SOURCES, feed: ALL_MOVEMENT_SOURCE };
+
+/** See all (#9110): the recorded feed in a sheet on `/pipeline`, not a page. The canvas draws no such list. */
+export function AllMovementSheet({ onClose, onOpen, source = ALL_MOVEMENT_SOURCE }) {
+  const [read, setRead] = useState({ state: 'loading' });
+  const gen = useRef(0);
+  const load = useCallback(async () => {
+    const mine = ++gen.current;
+    setRead({ state: 'loading' });
+    try {
+      const data = await source();
+      if (mine === gen.current) setRead(ok(data));
+    } catch {
+      if (mine === gen.current) setRead(unreadable());
+    }
+  }, [source]);
+  useEffect(() => { load(); return () => { gen.current += 1; }; }, [load]);
+  return (
+    <Sheet title="All movement" eyebrow="Pipeline" sub="Recorded lifecycle events, newest first." onClose={onClose}
+      width={560} phone="full" testId="pipeline-all-movement">
+      <div className="px-5 py-4">
+        <AllMovementList view={allMovementView(read)} onOpen={onOpen} onRetry={load} />
+      </div>
+    </Sheet>
   );
 }
 
@@ -279,8 +384,15 @@ function Risks({ items }) {
   );
 }
 
-/** PP02 / PP02m — the populated command centre. */
-export function CommandCentre({ view }) {
+/**
+ * PP02 / PP02m — the populated command centre. It holds which sheet is open: one opportunity (from a movement row)
+ * or All movement, never both. A row in All movement closes that sheet and opens the opportunity's. `sheetSources`
+ * is the two sheets' reads, for a test.
+ */
+export function CommandCentre({ view, sheetSources = SHEET_SOURCES }) {
+  const [sheet, setSheet] = useState(null);
+  const openOpportunity = useCallback((e) => setSheet({ kind: 'opportunity', needId: e.needId, title: e.who }), []);
+  const close = useCallback(() => setSheet(null), []);
   return (
     <div className="flex flex-col gap-4" data-testid="pipeline-command-centre">
       <Attention items={view.attention} />
@@ -289,10 +401,16 @@ export function CommandCentre({ view }) {
       </div>
       <Lifecycle cells={view.lifecycle} />
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Movement movement={view.movement} />
+        {/* See all is drawn only over an answered feed with rows: Movement decides, from the same view. */}
+        <Movement movement={view.movement} onOpen={openOpportunity} onSeeAll={() => setSheet({ kind: 'all' })} />
         <Risks items={view.risks} />
       </div>
       <ExploreDemand />
+      {sheet?.kind === 'all' && <AllMovementSheet onClose={close} onOpen={openOpportunity} source={sheetSources.feed} />}
+      {sheet?.kind === 'opportunity' && (
+        <OpportunitySheet opportunity={{ needId: sheet.needId }} title={sheet.title || undefined} initialTab="Activity" onClose={close}
+          sources={sheetSources.opportunity} />
+      )}
     </div>
   );
 }

@@ -76,6 +76,7 @@ test('2. a whole call: launcher, pre-join with mic and camera off, lobby, notice
   assert.deepEqual(cb.statuses.map((s) => s.state), ['joining', 'waiting_room']);
   assert.ok(!page.fills.some(([s]) => s === TEAMS.chatCompose.selector), 'nothing is posted from the lobby');
   assert.equal(page.listeners, 0, 'nothing is heard from the lobby');
+  assert.deepEqual(page.started, [], 'D5812: capture is not started in the lobby');
 
   page.people([row('self', BOT_NAME, true), row('p1', 'Sam Founder'), row('p2', 'Dana Ruiz')]);
   page.show('in_call');
@@ -84,6 +85,7 @@ test('2. a whole call: launcher, pre-join with mic and camera off, lobby, notice
   const sent = page.clicks.indexOf(TEAMS.chatSend.selector);
   assert.ok(sent >= 0 && sent < page.clicks.indexOf(TEAMS.rosterButton.selector), 'the notice is sent before the roster is opened');
   assert.equal(cb.statuses.at(-1)!.state, 'recording');
+  assert.deepEqual(page.started, ['in_call'], 'D5812: capture starts once, on admission');
 
   page.captions([caption('Sam Founder')]);
   await clock.advance(1000);
@@ -135,6 +137,9 @@ for (const [screen, code, when] of [
     if (when === 'lobby') page.show(screen);
     const r = await clock.until(run);
     assert.deepEqual([r.state, r.code], ['failed', code]);
+    // D5812: the stage it stopped at, from the fixed list, so the Worker keeps it as failure_detail.
+    assert.equal(r.detail, `teams_${screen}`);
+    assert.deepEqual(page.started, []);
     assert.equal(cb.statuses.filter((s) => s.state === 'recording').length, 0);
     assert.ok(!page.fills.some(([s]) => s === TEAMS.chatCompose.selector));
     assert.equal(page.listeners, 0);

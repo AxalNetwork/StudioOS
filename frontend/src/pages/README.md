@@ -46,6 +46,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `raise/` | Round-manager panels. |
 | `closing/` | D1213 (#2424): the closing room (founder, investor, staff) and Contracts › Closings, from terms agreed to money in the account. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
+| `network/` | D9025 (#9025): Network's shared directory, read from `/api/network/directory` (D7674): People (`NetworkPeoplePage.jsx`) and, in `directory/`, the search, pager, Person Sheet and private overlay it shares with Organizations. |
 | `relationships/` | D1357 (#3572): relationship intelligence: the sharing setting, "Who knows them" on a record, the ask, and Network › Introductions (inbox, follow-ups, log). |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
@@ -62,7 +63,6 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `influencer/` | The Influencer program's pages (D4289): the `axal.vc/@handle` stub (P2, #4291), which P8 draws as IN7, and `section/`, the member's Influencer section at `/influencer` (P7, #4296; its own README). |
 | `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
-| `templates/` | `SpinoutDemoDayPage.jsx`, the public `/lp/spinout-demo-day` page. The four older persona landing pages were removed by #2321; their addresses forward to the door pages. |
 | `connect/` | D668: `/connect/assistant`, where a founder approves an AI assistant (D665) for the companies they tick. Its own README holds the rules. |
 | `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js`, `usageModel.js` and `connectorsModel.js`. Connectors (D651) replaced the Integrations page. Documented in `scripts/check-folder-docs.mjs` and in its own README. |
 | `profile/` | The founder's profile pages (D702): You, Your venture, What others see and Visibility, at `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility`, for founders only, with their shared frame and pure model. Documented in its own README. |

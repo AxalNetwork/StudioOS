@@ -23,6 +23,7 @@ import type { Env, User } from '../../types';
 import { decryptColumn, encryptColumn } from '../columnCipher';
 import { AXAL_ENTITIES, type AxalEntityKey } from '../legalDocFormat';
 import type { ParsedAccount, ParsedTransaction } from './parse';
+import { recordStatement, reversalCause } from '../capitalCallBankReversals';
 
 export const ENTITY_KEYS: readonly AxalEntityKey[] = Object.freeze(['holdings', 'management', 'gp', 'fund']);
 export const isEntityKey = (k: string): k is AxalEntityKey => (ENTITY_KEYS as readonly string[]).includes(k);
@@ -244,22 +245,32 @@ export async function upsertTransaction(env: Env, account: Pick<AccountRow, 'id'
   const same = Number(prior.amount_cents) === t.amount_cents && prior.status === t.status && prior.posted_on === t.posted_on
     && prior.created_on === t.created_on && prior.counterparty_name === t.counterparty_name && prior.memo === t.memo && prior.kind === t.kind;
   if (same) return 'unchanged';
-  await env.DB.prepare(
+  const voided = t.status != null && VOIDED_STATUSES.includes(t.status.toLowerCase());
+  const writes = [env.DB.prepare(
     `UPDATE mercury_transactions
         SET amount_cents = ?, created_on = ?, posted_on = ?, counterparty_name = ?, memo = ?, status = ?, kind = ?, updated_at = datetime('now')
       WHERE id = ?`,
-  ).bind(t.amount_cents, t.created_on, t.posted_on, t.counterparty_name, t.memo, t.status, t.kind, prior.id).run();
-  const voided = t.status != null && VOIDED_STATUSES.includes(t.status.toLowerCase());
+  ).bind(t.amount_cents, t.created_on, t.posted_on, t.counterparty_name, t.memo, t.status, t.kind, prior.id)];
+  // D9017: a receipted capital-call line whose bank line failed, was cancelled
+  // or was restated is recorded as bank reversed, once per receipt, in the
+  // same batch, before its match is flagged. Nothing is reversed (D8534 b).
+  const cause = reversalCause({ status: t.status, amount_cents: t.amount_cents }, Number(prior.amount_cents), VOIDED_STATUSES);
+  if (cause) {
+    writes.push(recordStatement(env, {
+      uid: newUid(), transactionId: Number(prior.id), cause, change: { status: t.status, amount_cents: t.amount_cents },
+    }));
+  }
   if (Number(prior.amount_cents) !== t.amount_cents || voided) {
-    await env.DB.prepare(
+    writes.push(env.DB.prepare(
       `UPDATE mercury_matches SET state = 'needs_review', updated_at = datetime('now')
         WHERE transaction_id = ? AND state IN ('proposed', 'confirmed')`,
-    ).bind(prior.id).run();
+    ).bind(prior.id));
     // D749: an active Not ours mark on a changed line goes to review too.
-    await env.DB.prepare(
+    writes.push(env.DB.prepare(
       `UPDATE mercury_not_ours SET state = 'needs_review', updated_at = datetime('now')
         WHERE transaction_id = ? AND state = 'active'`,
-    ).bind(prior.id).run();
+    ).bind(prior.id));
   }
+  await env.DB.batch(writes);
   return 'updated';
 }

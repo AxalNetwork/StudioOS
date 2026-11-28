@@ -47,8 +47,8 @@
 
 # ---- PDFs / raster images ---------------------------------------------------
 # Size-gated by scripts/lfs-size-gate.mjs (rejects > 500 KB without LFS).
-# Not auto-tracked here because small inline diagrams + the existing in-tree
-# screenshots under attached_assets/ would otherwise rewrite history.
+# Not auto-tracked here because the small PNGs and PDFs already in the tree
+# (frontend/public, design/canvases) would otherwise rewrite history.
 # New > 500 KB PDFs / PNGs MUST be added with `git lfs track` first.
 
 # ---- Office documents (legal templates, decks) ------------------------------

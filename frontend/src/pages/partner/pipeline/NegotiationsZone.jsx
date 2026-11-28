@@ -7,6 +7,7 @@ import { usePipelineZone } from './usePipelineZone';
 import NegotiationTermsSheet, {
   STAGE_LABEL, BallMark, whoOf, waitedText,
 } from './NegotiationTermsSheet';
+import OpportunitySheet from './OpportunitySheet';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -214,6 +215,9 @@ export default function PartnerNegotiationsZone() {
   // The sheet holds a quote id, not a row: the row is re-read from the latest
   // load on every render, so a background refresh updates the open sheet.
   const [sheetFor, setSheetFor] = useState(null);
+  // #9110: the shared opportunity sheet, opened from the terms sheet. One sheet at a time: opening it closes the
+  // terms sheet, and closing it returns focus to the card that opened the terms.
+  const [opportunity, setOpportunity] = useState(null);
   // Where focus goes once a moved card has re-rendered in its new lane.
   const [focusCard, setFocusCard] = useState(null);
   const openRefs = useRef({});
@@ -509,6 +513,10 @@ export default function PartnerNegotiationsZone() {
           note={note}
           // The sheet returns focus to the control that opened it.
           onClose={() => setSheetFor(null)}
+          onOpenOpportunity={(r) => {
+            setSheetFor(null);
+            setOpportunity({ quoteId: r.quote_id, title: whoOf(r) || undefined });
+          }}
           onSaveNegotiation={(r, patch) => run(
             () => api.savePartnerNegotiation(r.quote_id, patch),
             'Saved.', r.quote_id,
@@ -525,6 +533,12 @@ export default function PartnerNegotiationsZone() {
             () => api.deletePartnerNegotiationTerm(t.id),
             'Term removed.', sheetRow.quote_id,
           )}
+        />
+      )}
+      {opportunity && (
+        <OpportunitySheet
+          opportunity={{ quoteId: opportunity?.quoteId }} title={opportunity?.title} initialTab="Terms"
+          onClose={() => setOpportunity(null)}
         />
       )}
     </>

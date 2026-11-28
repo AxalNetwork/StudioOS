@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useR
 import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
+import { useRouteTitle } from './lib/seo'; // D8681: re-exported by seo.js, as App.jsx's import list is frozen (D5615)
 import { preserveReloadGuards } from './lib/reloadGuard';
 import {
   clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationArea, destinationNeedsSetup,
@@ -448,7 +449,6 @@ const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // does not belong in the entry chunk.
 const AcceptTermsPage = lazy(() => import('./pages/AcceptTermsPage'));
 // Template landing pages — audience-specific conversion surfaces.
-const SpinoutDemoDayPage = lazy(() => import('./pages/templates/SpinoutDemoDayPage'));
 const OnboardingInvestorPage = lazy(() => import('./pages/OnboardingInvestorPage'));
 const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage'));
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
@@ -2718,6 +2718,10 @@ function AppInner() {
   const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
 
   return (
+    <>
+    {/* D8681 (#8681): the tab title of every screen, reset on each navigation. Mounted BEFORE the routes, so
+        its effect runs first and a page that sets a narrower title of its own (a Deals tab, a Help guide) wins. */}
+    <RouteTitle />
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
 <Routes location={lensLocation || location}>
@@ -3563,11 +3567,13 @@ function AppInner() {
       {/* D696 decision 12, D1109 (#2989): /raise/data-room is the Data room tool's Home. An investor's
           rooms are read by grant under Research · Diligence (D311): the investor branch is a redirect
           there, so a bookmark still lands, and the guard keeps admitting investor so the redirect can run.
+          D6162 (#6162): that redirect keeps the query and hash, so `?project_id=N` reaches the list,
+          which opens that venture's room or says no room is open to you for it.
           The retired files tool (?mode=workspace) and access view (?mode=access) forward to the tool's
           Files and Access tabs with a moved notice, the query and hash kept, each forward counted (#2319). */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor' && !holds('founder')
-          ? <Navigate to="/research/diligence" replace />
+          ? <Navigate to={{ pathname: '/research/diligence', search: location.search, hash: location.hash }} replace />
           : movedKind(location.search)
             ? <DataRoomMovedRedirect kind={movedKind(location.search)} />
             : <CycleRoute cycle="raise" slug="data-room" />)} />
@@ -4303,7 +4309,7 @@ function AppInner() {
       <Route path="/lp/customer-discovery" element={<Navigate to="/for-founders" replace />} />
       <Route path="/lp/investor" element={<Navigate to="/for-investors" replace />} />
       <Route path="/lp/partner" element={<Navigate to="/for-service-partners" replace />} />
-      <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
+      <Route path="/lp/spinout-demo-day" element={<Navigate to="/events" replace />} />
       {/* ── Route modules (D528) ── every frontend/src/routes/<area>.jsx, as
           ROUTE_MODULES (the block of the same name at the top of this file)
           collects them (#4105): each module's routes(routeTools), in its
@@ -4317,7 +4323,18 @@ function AppInner() {
     </Routes>
 </RouteErrorBoundary>
 </Suspense>
+    </>
   );
+}
+
+// D8681 (#8681): the browser tab title, from the address alone (`lib/pageTitles.js`). The real location, not a
+// lens's background one: the tab names the screen the address names. While a session with no cached user loads,
+// a workspace path says only "Axal VC" (a page or a sign-in redirect is not decided yet); the background re-sync
+// of a cached user decides nothing, so it leaves the title alone.
+function RouteTitle() {
+  const { user, loading } = useAuth() || {};
+  useRouteTitle(useLocation().pathname, { loading: !!loading && !user });
+  return null;
 }
 
 // Task #6 — Mount the tier paywall once at the app shell so any 402

@@ -4,6 +4,8 @@ import { NETWORK_ORG_COPY, ORG_BACKED } from '../noStoreCopy.js';
 // the overview's organisation count is the same computation as the page's —
 // and a board does not import a page (see `lib/partnerBookRollUp.js`).
 import { rollUp } from '../../lib/partnerBookRollUp.js';
+// D9025 (#9025): People, the shared directory, is the first Network zone on every licence.
+import { networkDirectoryApi } from '../../lib/api/networkDirectory.js';
 
 /*
  * `/network` — Partner Operator Canvas P6 and Advisor Canvas V5. One board,
@@ -74,6 +76,9 @@ import { rollUp } from '../../lib/partnerBookRollUp.js';
  * own `rollUp`, imported rather than re-derived, so the overview's organisation
  * count is computed by the same function as the zone's and cannot drift from it.
  */
+/** How many people the overview reads: the board shows five, the count is the Worker's total. */
+const PEOPLE_PREVIEW = 5;
+
 export default function networkBoard(role, api) {
   const orgHasStore = ORG_BACKED.has(role);
   // The partner arm. `book` is the firm relationship book; `edges` is the
@@ -81,10 +86,26 @@ export default function networkBoard(role, api) {
   const fromBook = role === 'partner';
   return {
     sources: {
+      people: () => networkDirectoryApi.entries({ kind: 'person', limit: PEOPLE_PREVIEW }),
       relationships: () => (fromBook ? api.partnerBook() : api.partnerRelationships()),
       introductions: () => api.networkIntroductionsList(),
     },
     sections: [
+      {
+        // D9025: the shared directory's own total (the Worker's, under the same filter), never the rows read.
+        slug: 'people',
+        anchor: 'nw-people',
+        title: 'People',
+        span: 'full',
+        source: 'people',
+        cols: '1.4fr 1.2fr 1.4fr',
+        columns: ['Person', 'Geography', 'Profile source'],
+        empty: 'Nobody has been published to the shared directory yet.',
+        summary: (d) => summary(count(d?.total, 'person in the shared directory', 'people in the shared directory')),
+        rows: (d) => top(d?.entries).map((e) => [e.name, e.geography || 'Not recorded', e.source?.name || 'Not recorded']),
+        footnote: () =>
+          'A sourced profile, not a verified identity. A listing is not a relationship, and opening one contacts nobody.',
+      },
       {
         slug: 'relationships',
         anchor: 'nw-book',

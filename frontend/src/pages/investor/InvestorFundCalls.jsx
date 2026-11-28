@@ -13,6 +13,7 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { useManagedFund, FundPicker } from './managedFund';
 import FromMercury from './FromMercury';
+import BankReversals, { BankReversalPill } from './BankReversals';
 import { FundActControl, useFundActs } from '../../lib/fundActs';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { reminderSubject } from './fundLpCommsModel';
@@ -50,6 +51,11 @@ import {
  * corrected and a call with no receipts withdrawn, each recorded with who
  * and when. Send reminders lays out one Eadwyn draft per line behind; each is
  * logged as sent only when the GP confirms it, and the product sends none.
+ *
+ * D9017 (#9017): a line whose receipted wire the bank reversed carries a Bank
+ * reversed pill, and the call page lists its reversals for the GP of record
+ * or an Admin to resolve with a note (`BankReversals.jsx`). Nothing is
+ * reversed: the receipt and the line stand (D8534 answer b).
  */
 const money = (cents) => formatCents(cents) ?? 'Not recorded';
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -320,7 +326,7 @@ export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave
         <td className="right" data-label="Commitment">{money(line.commitment_cents)}</td>
         <td className="right" data-label="Owed">{money(line.owed_cents)}</td>
         <td className="right" data-label="Received">{money(line.received_cents)}</td>
-        <td data-label="State"><span className={`if2-pill ${line.state}`}>{lineStateLabel(line)}</span></td>
+        <td data-label="State"><span className={`if2-pill ${line.state}`}>{lineStateLabel(line)}</span> <BankReversalPill line={line} /></td>
         <td data-label="Age">{lineAge(line)}</td>
         <td className="if2-actions">{line.state !== 'paid' && <>
           <button type="button" className="if2-row-action" data-testid={`button-record-receipt-${line.id}`} onClick={() => onOpen(line)}>Record receipt</button>
@@ -481,7 +487,7 @@ function CallPage({ fund, callId, chase, acts, onBack, onChase, onChanged }) {
   if (read.status === 'missing') return <section className="i6-card if2-ledger" data-testid="status-call-missing">{back}<p className="if2-note">That call is not on {fund.name || 'this fund'}.</p></section>;
   if (read.status === 'unreadable') return <section className="i6-card if2-ledger">{back}<Unreadable what="This call" claim="This is not a claim that the call has no lines." onRetry={load} /></section>;
 
-  const { call, receipts, comms, notices } = read.data;
+  const { call, receipts, comms, notices, bank_reversals: bankReversals } = read.data;
   const behind = linesBehind(call);
   const rule = withdrawRule(call);
   const lines = call.lines.map((l) => ({ ...l, call_number: call.call_number }));
@@ -499,6 +505,8 @@ function CallPage({ fund, callId, chase, acts, onBack, onChase, onChanged }) {
       <Stat label="Lines behind" value={`${behind.length} of ${call.lines.length}`} note="lines that still owe part or all of their share" />
     </section>}
 
+    <BankReversals fund={fund} reversals={bankReversals} lines={call.lines} acts={acts} onRetry={load} onResolved={() => load(true)} />
+
     <h3 className="if2-sub">Lines</h3>
     {call.withdrawn
       ? <div className="if2-table-wrap"><table><thead><tr><th>LP</th><th className="right">Issued share</th><th>State</th></tr></thead><tbody>
@@ -511,7 +519,7 @@ function CallPage({ fund, callId, chase, acts, onBack, onChase, onChanged }) {
           onDraft={(line) => { setReceipt(null); setFollowUp({ lineId: line.id, mode: 'draft' }); }}
           onLog={() => onChase(true)} /></div>
         <ul className="if2-cards" aria-label={`Call ${call.call_number} lines`}>
-          {lines.map((l) => <li key={l.id} className="if2-card"><div className="if2-card-head"><b>{l.lp_name || l.lp_email || `LP #${l.limited_partner_id}`}</b><span className={`if2-pill ${l.state}`}>{lineStateLabel(l)}</span></div>
+          {lines.map((l) => <li key={l.id} className="if2-card"><div className="if2-card-head"><b>{l.lp_name || l.lp_email || `LP #${l.limited_partner_id}`}</b><span><span className={`if2-pill ${l.state}`}>{lineStateLabel(l)}</span> <BankReversalPill line={l} /></span></div>
             <dl><dt>Owed</dt><dd>{money(l.owed_cents)}</dd><dt>Outstanding</dt><dd>{money(l.outstanding_cents)}</dd><dt>KYC</dt><dd>{kycLabel(l)}</dd></dl>
             {l.state !== 'paid' && <div className="if2-card-acts"><button type="button" className="if2-row-action if2-tap" onClick={() => setReceipt({ lineId: l.id, lp: l.lp_name, outstanding: l.outstanding_cents, amount: exportAmount(l.outstanding_cents) ?? '', date: todayIso(), reference: '', error: '', busy: false })}>Record receipt</button>
               <button type="button" className="if2-row-action if2-tap" onClick={() => onChase(true)}>More…</button></div>}

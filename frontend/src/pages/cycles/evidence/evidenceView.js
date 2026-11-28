@@ -37,10 +37,12 @@ export const CLAIM_KIND = Object.freeze({
   waitlist: 'Waitlist sign-ups', pilots: 'Pilots', headcount: 'Headcount', raise: 'The raise',
   traction_proof: 'Traction proof', team: 'Team', customer_evidence: 'Product-market fit',
   use_of_funds_section: 'Share of spend', holder_shares: 'Founder holding', growth: 'Monthly growth', margin: 'Gross margin',
+  // D5842 part 2: organic Google web search, which only a founder-chosen Search Console aggregate backs.
+  organic_search_clicks: 'Organic search clicks', organic_search_impressions: 'Organic search impressions', organic_search_ctr: 'Organic search CTR',
 });
 const KIND_UNIT = Object.freeze({
   mrr: 'money', arr: 'money', revenue: 'money', net_burn: 'money', cac: 'money', raise: 'money',
-  revenue_growth: 'percent', churn: 'percent', growth: 'percent', margin: 'percent', use_of_funds_section: 'percent',
+  revenue_growth: 'percent', churn: 'percent', growth: 'percent', margin: 'percent', use_of_funds_section: 'percent', organic_search_ctr: 'percent',
   runway: 'months', holder_shares: 'shares',
 });
 
@@ -51,7 +53,7 @@ export const ITEM_KIND = Object.freeze({
   'pain-theme': 'Pain theme', 'consented-quote': 'Quote, with consent', 'icp-fit': 'Interview fit',
   'demand-signal': 'Demand signal', 'experiment-result': 'Experiment result', 'validation-verdict': 'Validation decision',
   'kpi-snapshot': 'KPI snapshot', 'bank-revenue': 'Revenue from the bank', 'roadmap-release': 'Release',
-  'must-have-done': 'Must-have delivered', 'mapped-bank-spend': 'Mapped bank spend', 'hiring-plan': 'Planned hire',
+  'must-have-done': 'Must-have delivered', 'prototype-test-result': 'Prototype test result', 'mapped-bank-spend': 'Mapped bank spend', 'hiring-plan': 'Planned hire',
   'roadmap-milestone': 'Milestone', 'formation-proof': 'Formation step', 'filed-obligation': 'Filed obligation',
   'signed-document': 'Signed document', 'github-ip-step': 'GitHub IP step', 'bank-statement': 'Bank statement',
   'loi-file': 'Letter of intent', 'revenue-proof': 'Revenue proof', 'accepted-safe': 'Accepted SAFE', 'filed-83b': '83(b) election',
@@ -59,6 +61,8 @@ export const ITEM_KIND = Object.freeze({
   'round-call-response': 'Round-call response', 'typed-commitment': 'Commitment, as entered', 'model-assumption': 'Model assumption',
   // D6864 (RA-32): evidence the founder added by hand.
   'stated-by-founder': 'Stated by you',
+  // D5842 part 2: one week of the venture's selected Search Console property, chosen by the founder for one claim.
+  'search-console-aggregate': 'Organic search (Search Console)',
 });
 export const itemTitle = (i) => ITEM_KIND[i?.kind] || 'Evidence';
 
@@ -69,7 +73,7 @@ export const DATASET = Object.freeze({
   ipSteps: 'GitHub IP step', skills: 'Team actions', themes: 'Problem discovery', interviews: 'Interviews', signals: 'Demand signals',
   experiments: 'Experiments', verdicts: 'Validation decisions', metrics: 'KPI snapshots', features: 'Solution design', hires: 'Planned hires',
   milestones: 'Roadmap', formation: 'Formation', obligations: 'Entity obligations', documents: 'Documents', filings83b: '83(b) elections',
-  responses: 'Round calls', prospects: 'Capital relationships', models: 'Capital model',
+  responses: 'Round calls', prospects: 'Capital relationships', models: 'Capital model', searchConsole: 'Search Console',
 });
 export const datasetName = (d) => DATASET[d] || 'A source';
 

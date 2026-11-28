@@ -200,7 +200,8 @@ test('an Admin\'s catalogue: Propose a program, Your proposals with statuses, no
   try {
     assert.equal(view.props('programs-propose').href, '/admin/programs/propose');
     assert.ok(!view.has('programs-licence-packages'));
-    assert.ok(!view.has('programs-open-testing-campaigns'));
+    // D5894 (#5894): an Admin's Product testing door opens the shell, never the HQ-only page.
+    assert.equal(view.props('programs-card-product-testing-open').href, '/admin/programs/product-testing');
     assert.ok(!view.has('programs-new'), 'New program is HQ\'s');
     assert.ok(!view.has('programs-tabs'), 'an Admin\'s catalogue has one tab, so no strip');
     assert.ok(!view.has('proposals-queue'));
@@ -235,7 +236,8 @@ test('a Super Admin\'s catalogue: New program, the tab strip with the amber coun
   try {
     assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
     assert.equal(view.props('programs-licence-packages').href, '/admin/licences/packages');
-    assert.equal(view.props('programs-open-testing-campaigns').href, '/admin/platform/product-testing/programs');
+    // D5894 (#5894): Product testing's card opens its shell, which links out to the HQ page.
+    assert.equal(view.props('programs-card-product-testing-open').href, '/admin/programs/product-testing');
     assert.equal(LINE_SUPER, 'Every program on StudioOS, what needs HQ now, and what studios propose.');
     assert.ok(!view.has('programs-propose'), 'HQ does not propose to itself');
     assert.equal(view.textOf('programs-tab-catalogue'), 'Catalogue');

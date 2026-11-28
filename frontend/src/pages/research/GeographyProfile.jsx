@@ -2,10 +2,13 @@ import React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Card } from '../../ui';
-import { Unreadable, Unrecorded } from '../../ui/Honesty';
+import { StateChip, Unreadable, Unrecorded } from '../../ui/Honesty';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { useRead } from './MarketDirectoryZone';
+import { researchObservationsApi } from '../../lib/api/researchObservations.js';
+import ObservationInspector from './observations/ObservationInspector';
+import { countryFigures, reading } from './observations/observationRead.js';
 import { useResearchLinks } from './researchLinks.js';
 
 /**
@@ -99,6 +102,69 @@ function CountryStrip({ code }) {
   );
 }
 
+function InspectFigure({ row, onClose }) {
+  const [detail, retry] = useRead(() => researchObservationsApi.one(row.observation.id));
+  if (detail.status === 'loading') return <p role="status">Reading observation…</p>;
+  if (detail.status !== 'ready') return <Unreadable what="The observation" onRetry={retry} />;
+  const { observation, revisions } = detail.data;
+  const next = revisions.find(r => r.position === 'newer');
+  return <ObservationInspector observation={{ ...observation, definition: row.metric?.definition,
+    replacedBy: next?.id ?? 'None' }} onClose={onClose} />;
+}
+
+const coverageWords = {
+  no_observation: 'No observation held', not_covered: 'Not covered by any source',
+  source_failing: 'Source failing · last valid value', stale: 'Stale',
+};
+
+export function CountryFigures({ code }) {
+  const [result, retry] = useRead(() => countryFigures(researchObservationsApi, code));
+  const [selected, select] = React.useState(null);
+  const [download, setDownload] = React.useState('');
+  async function exportFigures() {
+    setDownload('Downloading…');
+    try {
+      await researchObservationsApi.exportCsv({ geography: code });
+      setDownload('File downloaded.');
+    } catch { setDownload('Download failed. Try again.'); }
+  }
+  const grouped = new Map();
+  for (const row of result.data ?? []) {
+    const source = row.observation?.source_name ?? row.metric?.source_name;
+    if (!grouped.has(source)) grouped.set(source, []);
+    grouped.get(source).push(row);
+  }
+  return <Card>
+    <h2 className="text-lg font-bold">Published country figures</h2>
+    <p className="text-sm text-axal-muted">Figures published about {code}, with their sources and periods.</p>
+    {result.status === 'loading' ? <p role="status">Reading country figures…</p>
+      : result.status !== 'ready' ? <Unreadable what="The country figures" onRetry={retry} />
+      : !result.data.length ? <Unrecorded>No observation held</Unrecorded>
+      : [...grouped].map(([source, rows]) => <section key={source} className="mt-4">
+        <h3 className="font-semibold">{source ?? <Unrecorded />}</h3>
+        <ul>{rows.map((row) => {
+          const { observation: o, metric, state } = row;
+          return <li key={o?.id ?? metric.metric_key}
+          className="my-2 grid gap-2 rounded-lg border border-axal-hairline p-3 text-sm dark:border-gray-700 md:grid-cols-[2fr_1fr_1fr_1fr_1.5fr_auto]">
+          <div><strong>{o?.metric_label ?? metric.label}</strong>
+            {o?.exportable === false && <small className="block">Excluded from CSV under source terms</small>}
+          </div>
+          {o && <><span>{reading('value', o.value) ?? <Unrecorded />} {o.unit}</span>
+            <span><small className="block">Period measured</small>{o.period ?? <Unrecorded />}</span>
+            <span><small className="block">Status</small>{reading('observation_status', o.observation_status) ?? <Unrecorded />}</span>
+            <span><small className="block">Retrieved</small>{o.retrieved_at ?? <Unrecorded />}</span>
+            <button type="button" aria-haspopup="dialog" aria-label={`Inspect ${o.metric_label}, ${o.period}`}
+              className="min-h-[44px] underline" onClick={() => select(row)}>Inspect</button></>}
+          {coverageWords[state] && <div className="md:col-span-full"><StateChip kind={state === 'stale' ? 'stale' : state === 'source_failing' ? 'unavailable' : 'not_recorded'}
+            label={coverageWords[state]} />
+            {o?.age_days != null && ['source_failing', 'stale'].includes(state) && <small className="ml-2">Retrieved {o.age_days} days ago</small>}</div>}
+        </li>; })}</ul></section>)}
+    <button type="button" className="min-h-[44px] underline" disabled={download === 'Downloading…'} onClick={exportFigures}>Download these figures (CSV)</button>
+    <span role="status" className="ml-2 text-sm">{download}</span>
+    {selected && <InspectFigure key={selected.observation.id} row={selected} onClose={() => select(null)} />}
+  </Card>;
+}
+
 /** The licences whose route table reaches a directory company's page. */
 
 export function GeographyBody({ data, role = 'founder' }) {
@@ -130,6 +196,8 @@ export function GeographyBody({ data, role = 'founder' }) {
           <Link to="/research/markets" className="mt-1 inline-block text-[12px] font-semibold text-axal-violet">See worldwide demand by sector →</Link>
         </div>
       </div>
+
+      <CountryFigures key={item.code} code={item.code} />
 
       <Card data-testid="geo-company-section">
         <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Companies based in {item.name}</h2>

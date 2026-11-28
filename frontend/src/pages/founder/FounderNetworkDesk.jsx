@@ -48,6 +48,8 @@ export const finite = (value) => value !== null && value !== undefined && value 
  * card cannot hand off to a page the row does not name (`founder_overview_subpage_links`).
  */
 const SECTIONS = [
+  // D9025 (#9025): People, the shared directory, is the fifth Network link, after Overview (D7676 Q1, answer A).
+  ['People', '/network/people'],
   ['Relationships', '/network/relationships'],
   ['Introductions', '/network/introductions'],
   ['Organizations', '/network/organizations'],

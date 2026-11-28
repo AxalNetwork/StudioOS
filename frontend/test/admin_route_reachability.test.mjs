@@ -71,20 +71,26 @@ const APP = readRoutesSource(root);
  * Scans the WHOLE file. `/admin/advisor-cohorts` lives far below the block
  * where the other 32 sit, so a block-bounded parser silently loses it —
  * which is why the completeness test below counts.
- * Segment-splitting shape lifted from `route_role_zone_contract.test.mjs:67`.
+ * Read only the element expression. JSX after the route, including the
+ * route-module fragment, is outside that expression.
  */
 function routes(src) {
   const out = [];
-  for (const seg of src.split('<Route').slice(1)) {
-    const p = /^\s*path="([^"]+)"/.exec(seg);
-    if (!p) continue;
-    const next = seg.indexOf('\n      <Route');
-    const body = next >= 0 ? seg.slice(0, next) : seg;
+  for (const match of src.matchAll(/<Route\s+path="([^"]+)"\s+element=\{/g)) {
+    const start = match.index + match[0].length;
+    let end = start;
+    let depth = 1;
+    while (depth && end < src.length) {
+      if (src[end] === '{') depth++;
+      else if (src[end] === '}') depth--;
+      end++;
+    }
+    const body = src.slice(start, end - 1);
     // The first PascalCase element is the page; `<Navigate>` means this route is
     // a redirect rather than a surface.
     const els = [...body.matchAll(/<([A-Z]\w+)/g)].map((m) => m[1]);
     out.push({
-      path: p[1],
+      path: match[1],
       body,
       // A `*Redirect` element that is the route's whole body is a redirect too,
       // as `redirect_hits_2301.test.mjs` counts it (D893's HeldInsightsRedirect).
@@ -769,6 +775,19 @@ test('the computed-base resolver still sees the due-diligence case links', () =>
     assert.ok(tabs.includes(d), `DdTabs no longer yields the door ${d}`);
   }
   assert.equal(toRoute('/admin/due-diligence/${}/${}'), '/admin/due-diligence/:uid/:tab');
+});
+
+test('the last inline redirect does not pick up JSX from the route modules', () => {
+  const [route] = routes(`
+    <Route path="/old" element={<Navigate to={{ pathname: '/events' }} replace />} />
+    {modules.map((module) => <React.Fragment>{module.routes()}</React.Fragment>)}
+  `);
+  assert.deepEqual(route, {
+    path: '/old',
+    body: "<Navigate to={{ pathname: '/events' }} replace />",
+    redirect: true,
+    component: null,
+  });
 });
 
 test('a component mounted at a second path is declared once', () => {

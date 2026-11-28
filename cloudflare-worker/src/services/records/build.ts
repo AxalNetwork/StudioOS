@@ -18,7 +18,7 @@ import type { Env } from '../../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../../integrations/registry';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import {
-  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, patchFormationStep, deleteFormationStep, putSystem,
+  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, promoteRecordFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, patchFormationStep, deleteFormationStep, putSystem,
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
@@ -34,6 +34,7 @@ import {
 } from '../systemsState';
 import { putRecordOrThrow } from '../recordStore';
 import { eraseRecordObjects } from '../recordErasure';
+import { agentChoices, deliverableUrl, mayOwn, ownerChoices, ownerNote, proofStage } from '../buildOwners';
 
 type Any = Record<string, any>;
 type Section = { rows: Row[]; empty?: string; action?: string };
@@ -191,15 +192,6 @@ const truthy = (v: unknown) => !(v === false || v === 0 || v === '0' || v === 'f
 function logRow(ctx: RecordContext, module: 'solution-design' | 'product-roadmap' | 'founding-team' | 'company-creation', entityId: string | number, action: string, summary: string) {
   return logCycleWriteStatement(ctx.env, { projectId: ctx.projectId, userId: ctx.user.id, cycle: 'build', module, entityId, action, summary });
 }
-/** An owner is a member of the venture's company; one who is not is the caller's choice, a 400. */
-async function memberOwner(ctx: RecordContext, raw: unknown): Promise<number | null> {
-  const owner = idIn(raw, 'owner');
-  if (owner == null) return null;
-  const { company_id: companyId } = await projectRow(ctx);
-  const member = companyId != null && await ctx.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(companyId, owner).first();
-  if (!member) refuse(400, 'Owner is not a member of this company');
-  return owner;
-}
 /** The company's members, the owners a form offers. Writers only see them. */
 async function owners(ctx: RecordContext): Promise<Option[]> {
   const { company_id: companyId } = await projectRow(ctx);
@@ -207,6 +199,14 @@ async function owners(ctx: RecordContext): Promise<Option[]> {
   return rowsOf(await ctx.env.DB.prepare(
     'SELECT u.id, u.name FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? ORDER BY lower(u.name), u.id',
   ).bind(companyId).all<Any>()).map(u => ({ value: String(u.id), label: u.name ?? 'Unnamed member' }));
+}
+/** D8775 (#8775, Q1 option A): a must-have's, a session's and a roadmap item's owner is on the project's team or in its company. */
+const teamOwners = (ctx: RecordContext): Promise<Option[]> => ownerChoices(ctx.env, ctx.projectId);
+async function teamOwner(ctx: RecordContext, raw: unknown): Promise<number | null> {
+  const owner = idIn(raw, 'owner');
+  if (owner == null) return null;
+  if (!await mayOwn(ctx.env, ctx.projectId, owner)) refuse(400, 'Owner is not on this project’s team or in its company');
+  return owner;
 }
 
 const IMPACT_OPTIONS = optionsOf({ High: 'High', Medium: 'Medium', Low: 'Low' });
@@ -238,7 +238,8 @@ function itemFields(v: Any, columns: Option[]): RecordField[] {
 /** A feature's stored fields, as its Edit carries them. `ownedRow` has already run. */
 async function featureFields(ctx: RecordContext, id: string): Promise<Any> {
   const row = await ctx.env.DB.prepare(
-    `SELECT title, description, pain_group_id, hypothesis_id, added_value, effort, scope, is_must_have, delivery_status, owner_user_id, due_date
+    `SELECT title, description, pain_group_id, hypothesis_id, added_value, effort, scope, is_must_have, delivery_status, owner_user_id, due_date,
+            reviewer_user_id, builder_agent_id
        FROM mvp_features WHERE id = ? AND project_id = ?`,
   ).bind(numericId(id), ctx.projectId).first<Any>();
   if (!row) throw new Error('Build feature vanished after its ownership check');
@@ -287,10 +288,14 @@ async function addSession(ctx: RecordContext, featureId: number, b: Body): Promi
   const title = textIn(b.title, 200, true, 'Title'), heldOn = dayIn(b.held_on, 'Date');
   const status = b.status == null || b.status === '' ? 'planned' : String(b.status);
   if (!['planned', 'done'].includes(status)) refuse(400, 'Status is planned or done');
-  const owner = await memberOwner(ctx, b.owner_user_id);
+  // D8775: a done session is dated, so a test result always says when it was held.
+  if (status === 'done' && heldOn == null) refuse(400, 'A done session needs its date');
+  const deliverable = deliverableUrl(b.deliverable_url);
+  if (deliverable === false) refuse(400, 'The deliverable is an https address');
+  const owner = await teamOwner(ctx, b.owner_user_id);
   await ctx.env.DB.batch([
-    ctx.env.DB.prepare('INSERT INTO mvp_test_sessions (project_id, feature_id, title, held_on, owner_user_id, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(ctx.projectId, featureId, title, heldOn, owner, status, ctx.user.id),
+    ctx.env.DB.prepare('INSERT INTO mvp_test_sessions (project_id, feature_id, title, held_on, owner_user_id, status, deliverable_url, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(ctx.projectId, featureId, title, heldOn, owner, status, deliverable ?? null, ctx.user.id),
     logRow(ctx, 'solution-design', featureId, 'build_test_session_added', status === 'done' ? 'Test session added, done' : 'Test session added, planned'),
   ]);
   return { ok: true };
@@ -524,7 +529,11 @@ async function hypothesisOptions(ctx: RecordContext) {
   return { options: rowsOf(await ctx.env.DB.prepare('SELECT id, code, claim FROM hypotheses WHERE project_id = ? AND retired_at IS NULL ORDER BY id LIMIT 200')
     .bind(ctx.projectId).all<Any>()).map(r => ({ value: String(r.id), label: r.code ? `${r.code} · ${r.claim}` : r.claim })), empty: NONE_YET };
 }
-const ownerOptions = async (ctx: RecordContext) => ({ options: await owners(ctx), empty: NONE_YET });
+/** D8775: the team's people; an empty list says why and where to add someone, in place of "No member". */
+async function ownerOptions(ctx: RecordContext) {
+  const options = await teamOwners(ctx);
+  return options.length ? { options, empty: NONE_YET } : { options, empty: NONE_YET, note: ownerNote(ctx.projectId) };
+}
 /** The venture's KPIs, read through `growKpis.ts`: the seven, then each custom KPI as `custom-<uid>`. */
 async function kpiOptions(ctx: RecordContext) {
   const custom = await customKpis(ctx.env, ctx.projectId);
@@ -557,11 +566,14 @@ function catalogue(kind: SystemKind): Array<{ provider_key: string; display_name
 async function featureRow(ctx: RecordContext, id: string): Promise<Any> {
   const row = await ctx.env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.scope, f.description, f.is_must_have, f.delivery_status, f.due_date,
-            f.hypothesis_id, f.created_by, f.created_at, pg.title AS pain_theme, h.claim AS hypothesis, u.name AS owner
+            f.hypothesis_id, f.created_by, f.created_at, pg.title AS pain_theme, h.claim AS hypothesis, h.success_bar, u.name AS owner,
+            r.name AS reviewer, trim(COALESCE(a.first_name, '') || ' ' || COALESCE(a.last_name, '')) AS builder_agent, a.role_key AS builder_role
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
        LEFT JOIN users u ON u.id = f.owner_user_id
+       LEFT JOIN users r ON r.id = f.reviewer_user_id
+       LEFT JOIN team_agents a ON a.id = f.builder_agent_id AND a.scope_kind = 'project' AND a.project_id = f.project_id
       WHERE f.id = ? AND f.project_id = ?`,
   ).bind(numericId(id), ctx.projectId).first<Any>();
   if (!row) throw new Error('Build feature vanished after its ownership check');
@@ -574,6 +586,30 @@ function featureLevels(f: Any): { impact: string | null; effort: string | null; 
   const outOfScope = f.scope === 'out' || (f.scope == null && impact === 'low');
   return { impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null, outOfScope };
 }
+
+/** D8775: the hypothesis's success bar, the acceptance condition a feature carries into its must-have. */
+const successBar = (f: Any): string | null => (typeof f.success_bar === 'string' && f.success_bar.trim() ? f.success_bar.trim() : null);
+/** D8775 (BLV02B): what a feature carries into its must-have: its pain theme, its hypothesis and that hypothesis's success bar. */
+function carried(f: Any): { rows: Row[] } {
+  return { rows: [
+    { a: 'Pain theme', b: f.pain_theme ?? 'Not linked to a pain theme.' },
+    { a: 'Hypothesis', b: f.hypothesis ?? 'Not linked to a hypothesis.' },
+    { a: 'Success bar', b: successBar(f) ?? (f.hypothesis == null ? 'Not linked to a hypothesis.' : 'The hypothesis has no success bar recorded.') },
+  ] };
+}
+/** D8775 (Q2 option A): who builds it: an agent, named with the person reviewing, or the owner when no agent is set. */
+function builderText(f: Any): string | null {
+  const agent = typeof f.builder_agent === 'string' && f.builder_agent.trim() ? f.builder_agent.trim() : (f.builder_role ?? null);
+  if (agent) return f.reviewer ? `${agent} (agent), reviewed by ${f.reviewer}` : `${agent} (agent)`;
+  return f.owner ?? null;
+}
+const hostOf = (url: string): string => { try { return new URL(url).hostname; } catch { return 'an address'; } };
+/** D8775 (BLV00): each proof stage's words, with what certifies it. */
+const PROOF_WORDS: Record<string, { c: string; tone: string; b: string }> = {
+  tested: { c: 'Tested', tone: 'ok', b: 'A done session kept a finding.' },
+  returned: { c: 'Returned', tone: 'amb', b: 'Returned is not tested: an address is linked, and no done session has kept a finding yet.' },
+  none: { c: 'Not yet', tone: 'grey', b: 'No session has a deliverable address or a kept finding yet.' },
+};
 
 /** D6023 (#6023): the feature's risks, the ones its Edit, Close and Reopen offer. */
 async function featureRisks(ctx: RecordContext, featureId: number): Promise<Any[]> {
@@ -656,11 +692,12 @@ const solutionDesign: ModuleSpec = {
       return { rows, empty: 'Not on the MVP or the roadmap.', action: 'add-to-roadmap' };
     } },
     { key: 'brief', title: 'Brief', side: true, async read() { return notRecorded('No brief is stored for a feature.'); } },
+    { key: 'carried', title: 'Carried into its must-have', side: true, async read(ctx, id) { return carried(await featureRow(ctx, id)); } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const f = await featureFields(ctx, id), featureId = numericId(id), feature = { id: String(featureId) };
     const { outOfScope } = featureLevels(f);
-    const people = await owners(ctx);
+    const people = await owners(ctx), team = await teamOwners(ctx);
     const risks = await featureRisks(ctx, featureId);
     const actions: RecordAction[] = [
       { key: 'add-risk', label: 'Add a risk', kind: 'form',
@@ -682,11 +719,20 @@ const solutionDesign: ModuleSpec = {
         : { key: 'scope-out', label: 'Move out of scope', kind: 'write', execute: c => viaRoute(c, patchFeature, feature, { scope: 'out' }) },
       { key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'form',
         form: { title: 'Add item', cta: 'Add', foot: 'Issues from a connected GitHub repository land here too.',
-          fields: itemFields({ title: f.title, column: 'next', owners: people }, COLUMN_OPTIONS) },
+          fields: itemFields({ title: f.title, column: 'next', owners: team }, COLUMN_OPTIONS) },
         execute: (c, _id, body) => viaRoute(c, postRoadmap, {}, { ...formBody(jsonOf(body), ITEM_KEYS, ITEM_CLEARABLE), feature_id: featureId }) },
     ];
     if (Number(f.is_must_have) !== 1) {
-      actions.push({ key: 'mark-must-have', label: 'Mark as must-have', kind: 'write', execute: c => viaRoute(c, patchFeature, feature, { is_must_have: true }) });
+      // D8775 (BLV02B): one promotion of this row, carrying its pain theme, hypothesis and success bar; Also on the roadmap adds the linked item in the same write.
+      actions.push({ key: 'mark-must-have', label: 'Make it a must-have', kind: 'form', tone: 'primary',
+        form: { title: `Make ${f.title} a must-have`, cta: 'Make it a must-have',
+          foot: 'Carried from this feature, not retyped: its pain theme, hypothesis and success bar, risks and sessions.',
+          fields: [
+            { key: 'owner_user_id', label: 'Owner', kind: 'CH', options: team, ...(team.length ? {} : { note: ownerNote(ctx.projectId).text }) },
+            { key: 'due_date', label: 'Due', kind: 'T', input: 'date', value: f.due_date ?? '' },
+            { key: 'roadmap', label: 'Also on the roadmap', kind: 'CH', options: [{ value: '', label: 'Not now' }, ...COLUMN_OPTIONS], value: '' },
+          ] },
+        execute: (c, _id, body) => viaRoute(c, promoteRecordFeature, feature, formBody(jsonOf(body), ['owner_user_id', 'due_date', 'roadmap'])) });
     }
     actions.push({ key: 'delete', label: 'Remove feature', kind: 'write', tone: 'danger',
       confirm: { title: 'Remove this feature?', cta: 'Remove feature',
@@ -809,13 +855,16 @@ const prototypeMvp: ModuleSpec = {
   sections: [
     { key: 'sessions', title: 'Test sessions', async read(ctx, id) {
       const sessions = rowsOf(await ctx.env.DB.prepare(
-        `SELECT s.title, s.held_on, s.status, (SELECT COUNT(*) FROM mvp_test_findings t WHERE t.session_id = s.id) AS findings
+        `SELECT s.title, s.held_on, s.status, s.deliverable_url, (SELECT COUNT(*) FROM mvp_test_findings t WHERE t.session_id = s.id) AS findings
            FROM mvp_test_sessions s WHERE s.feature_id = ? AND s.project_id = ? ORDER BY s.held_on IS NULL, s.held_on, s.id`,
       ).bind(numericId(id), ctx.projectId).all<Any>());
       return { rows: sessions.map(s => {
         const on = dateText(s.held_on);
-        return { a: on ? `${s.title} · ${on}` : s.title, b: plural(Number(s.findings), 'finding'),
-          c: s.status === 'done' ? 'Done' : 'Planned', tone: s.status === 'done' ? 'ok' : 'grey' };
+        // D8775: the deliverable a session tested lives outside Axal; the row links it and never counts it as a test.
+        const where = typeof s.deliverable_url === 'string' && s.deliverable_url ? ` · deliverable at ${hostOf(s.deliverable_url)}` : '';
+        return { a: on ? `${s.title} · ${on}` : s.title, b: plural(Number(s.findings), 'finding') + where,
+          c: s.status === 'done' ? 'Done' : 'Planned', tone: s.status === 'done' ? 'ok' : 'grey',
+          ...(where ? { href: s.deliverable_url } : {}) };
       }), empty: 'No test sessions yet.' };
     } },
     { key: 'findings', title: 'Findings', async read(ctx, id) {
@@ -865,10 +914,37 @@ const prototypeMvp: ModuleSpec = {
       return { rows: [{ a: 'Done', b: `${done} of ${checks.length}` },
         ...checks.map(k => ({ a: k.label, c: k.done_at ? 'Done' : 'Open', tone: k.done_at ? 'ok' : 'grey' }))], action: 'add-check' };
     } },
+    { key: 'carried', title: 'Carried from the feature', side: true, async read(ctx, id) { return carried(await featureRow(ctx, id)); } },
+    { key: 'builder', title: 'Who builds it', side: true, async read(ctx, id) {
+      // D8775 (BLV05B): who builds and reviews it.
+      const f = await featureRow(ctx, id);
+      return { rows: [
+        { a: 'Builder', b: builderText(f) ?? 'No builder recorded. The owner builds it.' },
+        { a: 'Reviewer', b: f.reviewer ?? 'No reviewer recorded.' },
+      ], action: 'assign-builder' };
+    } },
+    { key: 'proof', title: 'Proof', side: true, async read(ctx, id) {
+      // D8775 (BLV08–BLV10): Returned and Tested, each with what certifies it. Pitch only ever gets it through
+      // Raise › Evidence › Waiting for review, where the founder accepts or dismisses it.
+      const sessions = rowsOf(await ctx.env.DB.prepare(
+        `SELECT s.status, s.deliverable_url, s.held_on,
+                (SELECT COUNT(*) FROM mvp_test_findings t WHERE t.session_id = s.id AND t.kept = 1) AS kept
+           FROM mvp_test_sessions s WHERE s.feature_id = ? AND s.project_id = ?`,
+      ).bind(numericId(id), ctx.projectId).all<Any>());
+      const stage = proofStage(sessions.map(s => ({ status: String(s.status), deliverable_url: s.deliverable_url ?? null, kept: Number(s.kept) })));
+      const words = PROOF_WORDS[stage];
+      const tested = sessions.filter(s => s.status === 'done' && Number(s.kept) > 0 && s.held_on).map(s => String(s.held_on)).sort();
+      const rows: Row[] = [{ a: 'Stage', b: words.b, c: words.c, tone: words.tone }];
+      if (tested.length) rows.push({ a: 'Last tested', b: dateText(tested[tested.length - 1]) ?? tested[tested.length - 1] });
+      rows.push({ a: 'Pitch', b: sessions.some(s => s.status === 'done' && Number(s.kept) > 0 && s.deliverable_url && s.held_on)
+        ? 'Offered in Raise › Evidence › Waiting for review. Nothing reaches the deck until you accept it there.'
+        : 'Offered to Pitch once a dated, done session keeps a finding and links its deliverable.' });
+      return { rows };
+    } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const f = await featureFields(ctx, id), featureId = numericId(id), feature = { id: String(featureId) };
-    const people = await owners(ctx);
+    const people = await teamOwners(ctx), agents = await agentChoices(ctx.env, ctx.projectId);
     const sessions = rowsOf(await ctx.env.DB.prepare('SELECT id, title FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? ORDER BY id')
       .bind(featureId, ctx.projectId).all<Any>());
     const checks = rowsOf(await ctx.env.DB.prepare('SELECT id, label, done_at FROM mvp_release_checks WHERE feature_id = ? ORDER BY id').bind(featureId).all<Any>());
@@ -878,9 +954,24 @@ const prototypeMvp: ModuleSpec = {
           { key: 'title', label: 'Session', kind: 'T', required: true },
           { key: 'held_on', label: 'Date', kind: 'T', input: 'date' },
           { key: 'owner_user_id', label: 'Owner', kind: 'CH', options: people },
-          { key: 'status', label: 'Status', kind: 'CH', options: optionsOf({ planned: 'Planned', done: 'Done' }), value: 'planned' },
+          { key: 'status', label: 'Status', kind: 'CH', options: optionsOf({ planned: 'Planned', done: 'Done' }), value: 'planned',
+            note: 'A done session needs its date. It counts as Tested only once it keeps a finding.' },
+          // D8775 (BLV08): where the tested prototype lives. Linking it is Returned, never Tested.
+          { key: 'deliverable_url', label: 'Deliverable address', kind: 'T', placeholder: 'https://', max: 1000,
+            note: 'The prototype or demo you tested, outside Axal. An address alone is not a test.' },
         ] },
         execute: (c, _id, body) => addSession(c, featureId, jsonOf(body)) },
+      // D8775 (BLV04–BLV05B, Q2 option A): a person builds it, or one of the project's agents drafts it with a named person reviewing.
+      { key: 'assign-builder', label: 'Builder and reviewer', kind: 'form',
+        form: { title: 'Who builds and reviews it', cta: 'Save',
+          foot: 'An agent only drafts. Opening Lovable, linking, testing and offering to Pitch stay with people.',
+          fields: [
+            { key: 'builder_agent_id', label: 'Agent building it', kind: 'CH', options: [{ value: '', label: 'No agent: the owner builds it' }, ...agents],
+              value: idValue(f.builder_agent_id), ...(agents.length ? {} : { note: 'This project has no active agent. Add one from the project’s team, or let a person build it.' }) },
+            { key: 'reviewer_user_id', label: 'Reviewer', kind: 'CH', options: people, value: idValue(f.reviewer_user_id),
+              note: people.length ? 'Required when an agent builds it.' : ownerNote(ctx.projectId).text },
+          ] },
+        execute: (c, _id, body) => viaRoute(c, patchFeature, feature, formBody(jsonOf(body), ['builder_agent_id', 'reviewer_user_id'], ['builder_agent_id', 'reviewer_user_id'])) },
     ];
     if (sessions.length) {
       actions.push({ key: 'add-finding', label: 'Add a finding', kind: 'form',
@@ -936,7 +1027,10 @@ const prototypeMvp: ModuleSpec = {
     return actions;
   },
   async formOptions(ctx) {
-    return { hypothesis_id: await hypothesisOptions(ctx), owner_user_id: await ownerOptions(ctx), state: { options: STATE_OPTIONS } };
+    return { hypothesis_id: await hypothesisOptions(ctx), owner_user_id: await ownerOptions(ctx), state: { options: STATE_OPTIONS },
+      // D8775 (#8775): Add must-have's From Solution design, the features not yet must-haves; the frontend puts "A new one" first.
+      feature_id: { options: rowsOf(await ctx.env.DB.prepare('SELECT id, title FROM mvp_features WHERE project_id = ? AND is_must_have IS NOT 1 ORDER BY sort_order, id LIMIT 200')
+        .bind(ctx.projectId).all<Any>()).map(r => ({ value: String(r.id), label: r.title })), empty: NONE_YET } };
   },
 };
 
@@ -1113,7 +1207,7 @@ const productRoadmap: ModuleSpec = {
     actions.push({ key: 'edit', label: 'Edit', kind: 'form',
       form: { title: 'Edit item', cta: 'Save', fields: [
         ...itemFields({ title: o.objective, column: o.kanban_status, kpi_key: o.kpi_key, feedback_theme: o.feedback_theme,
-          owner_user_id: o.owner_user_id, target_date: o.target_date, owners: await owners(ctx) }, withCurrent(optionsOf(COLUMN_LABEL), o.kanban_status)),
+          owner_user_id: o.owner_user_id, target_date: o.target_date, owners: await teamOwners(ctx) }, withCurrent(optionsOf(COLUMN_LABEL), o.kanban_status)),
         { key: 'feature_id', label: 'Feature', kind: 'CH', value: idValue(o.feature_id), options: await featureChoices(ctx) },
         // D8776 (#8776, owner question 2, option A): the quarter is edited on the item; the route refuses any other form.
         { key: 'quarter', label: 'Quarter', kind: 'T', value: o.quarter ?? '', placeholder: 'Q1 2027' },

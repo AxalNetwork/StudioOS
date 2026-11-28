@@ -68,6 +68,9 @@
   "POST /api/funds/:id/capital-calls/:callId/withdraw": {
     "kind": "target"
   },
+  "POST /api/funds/:id/capital-calls/bank-reversals/:uid/resolve": {
+    "kind": "target"
+  },
   "POST /api/funds/:id/capital-calls/lines/:lineId/receipts": {
     "kind": "target"
   },

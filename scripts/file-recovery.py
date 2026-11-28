@@ -397,7 +397,8 @@ def restore_main(argv):
 
 def main():
     if sys.argv[1:2] == ['restore']:
-        return restore_main(sys.argv[2:])
+        restore_main(sys.argv[2:])
+        return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', required=True, help='Approved #6650 registry JSON; no default personal-file prefixes')
     parser.add_argument('--bundle-dir', help='Fresh private staging directory; never uploaded as a workflow artifact')

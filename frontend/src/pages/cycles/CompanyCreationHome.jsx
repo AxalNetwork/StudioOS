@@ -11,22 +11,26 @@
  *     (one row per founder), the BD11 filings table with where each filing is
  *     changed, its supporting tools (Add another filing, Legal documents,
  *     E-signature), documents with Stored or Missing, the After formation
- *     steps and the hand-off links.
+ *     steps and the hand-off links. D9101 (#9101): the IP step's Record IP
+ *     assignment copies the founder's accepted Spin-Out application's IP.
  *
  * Each block draws its own state (BD29): a block whose read failed says so,
  * on that block only, and the rest of the page still works. The words come
  * from `companyCreationModel.js`, so desktop and phone say the same. Every
  * colour has its `dark:` pair (BD31), and no state is carried by colour alone.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PhoneRows, Unreadable } from '../../ui';
+import { spinoutLab } from '../../lib/api';
 import { cyclesWrite } from '../../lib/api/cycles';
+import { useViewMode } from '../../contexts/ViewModeContext';
+import { isFounderPreview } from './previewUploadModel.js';
 import { RecordsTable } from './CycleModulePage.jsx';
 import { safeHref, isPlainClick } from './cycleModel';
 import { incorporateFirst, listStage, progressiveFor } from './progressiveList.js';
 import {
-  documentsView, dominantView, electionView, filingRows, ipStep, sourcesIn, suggestionHref, suggestionsView, summaryView, ventureQuery,
+  documentsView, dominantView, electionView, filingRows, ipStep, runIpCopy, sourcesIn, suggestionHref, suggestionsView, summaryView, ventureQuery,
 } from './companyCreationModel.js';
 import { FilingsExport, PapersToDataRoom } from './CompanyCreationHandoffs.jsx';
 
@@ -246,7 +250,35 @@ export function Documents({ view, rowHref, onRetry }) {
   return <Block title="Documents" testid="company-documents" line={view.line}>{papers}{proofs}</Block>;
 }
 
-export function AfterFormation({ ip, search = '' }) {
+const SMALL_BTN = 'inline-flex min-h-[44px] items-center justify-center rounded-[9px] border border-axal-lavender-edge px-3 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender disabled:cursor-not-allowed disabled:opacity-60 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950/40';
+
+/**
+ * D9101 (#9101, BD25, BD29, BD30 C): the IP step's own action and states. Record IP assignment (Record on a phone)
+ * only in the copy state; the Lab read's failure, a failed copy and founder preview say so here and nowhere else.
+ */
+function IpAction({ ip, phone, saving, error, onCopy, onRetryCheck }) {
+  if (ip.recorded) return null;
+  if (ip.check === 'unreadable') {
+    return (
+      <span className="flex flex-wrap items-center gap-2" data-testid="company-ip-check">
+        <Tag word="Unreadable" label="Could not be read" />
+        {onRetryCheck && <button type="button" className={SMALL_BTN} onClick={onRetryCheck} data-testid="company-ip-check-retry">Try again</button>}
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <Tag word="Not recorded" />
+      {ip.action === 'copy' && onCopy && (
+        <button type="button" className={SMALL_BTN} disabled={saving} aria-busy={saving || undefined} onClick={onCopy} data-testid="company-ip-copy">
+          {saving ? 'Saving…' : error ? 'Try again' : phone ? 'Record' : 'Record IP assignment'}
+        </button>
+      )}
+    </span>
+  );
+}
+
+export function AfterFormation({ ip, search = '', phone = false, saving = false, error = '', onCopy = null, onRetryCheck = null }) {
   return (
     <Block title="After formation" testid="company-after" line="2 steps">
       <ul className="m-0 list-none p-0">
@@ -254,14 +286,51 @@ export function AfterFormation({ ip, search = '' }) {
           <span><span className="font-semibold text-axal-ink dark:text-gray-100">Bank account</span><small className="block text-[11px] text-axal-muted dark:text-gray-400">Its connection and state are kept in Operating systems › Systems</small></span>
           <Link to={`/build/operating-systems${search || ''}`} className={LINK}>Manage in Operating systems</Link>
         </li>
-        <li className="flex flex-wrap items-center justify-between gap-2 py-2 text-[12.5px]" data-testid="company-ip" data-state={ip.recorded ? 'recorded' : 'not_recorded'}>
-          <span className="min-w-0"><span className="font-semibold text-axal-ink dark:text-gray-100">IP assignment</span>
-            <small className="block text-[11px] text-axal-muted dark:text-gray-400">{ip.recorded ? `${ip.value} · ${ip.source}` : `${ip.reason} ${ip.source}.`}</small></span>
-          {!ip.recorded && <Tag word="Not recorded" />}
+        <li className="flex flex-wrap items-center justify-between gap-2 py-2 text-[12.5px]" data-testid="company-ip" data-state={ip.recorded ? 'recorded' : 'not_recorded'}
+          data-action={ip.action || undefined} data-check={ip.check || undefined} aria-busy={ip.check === 'loading' || undefined}>
+          <span className="min-w-0 break-words"><span className="font-semibold text-axal-ink dark:text-gray-100">IP assignment</span>
+            <small className="block text-[11px] text-axal-muted dark:text-gray-400">{ip.recorded ? `${ip.value} · ${ip.source}` : `${ip.reason} ${ip.source}.`}</small>
+            {!ip.recorded && ip.note && <small className="block text-[11px] text-axal-muted dark:text-gray-400" data-testid="company-ip-note">{ip.note}</small>}
+            {!ip.recorded && error && <small className="block text-[11px] font-semibold text-red-700 dark:text-red-300" role="alert" data-testid="company-ip-error"><span aria-hidden="true">! </span>{error}</small>}</span>
+          <IpAction ip={ip} phone={phone} saving={saving} error={error} onCopy={onCopy} onRetryCheck={onRetryCheck} />
         </li>
       </ul>
     </Block>
   );
+}
+
+/**
+ * D9101: the IP step with its Lab read and its copy. The viewer's Lab state is read once, and only while the step
+ * is not recorded and the viewer is not a Super Admin previewing a founder (the copy reads the caller's own
+ * application). A copy that lands refetches the module, so the step reads the record from `facts.ip`, never from
+ * the copy's answer.
+ */
+function IpAssignment({ facts, projectId, phone, search, reload, labApi, copyIp }) {
+  const mode = useViewMode();
+  const recorded = ipStep(facts).recorded;
+  const preview = isFounderPreview(mode);
+  const [lab, setLab] = useState({ status: 'loading', application: null });
+  const [tick, setTick] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const needed = !recorded && !preview;
+  useEffect(() => {
+    if (!needed) return undefined;
+    let live = true;
+    setLab({ status: 'loading', application: null });
+    Promise.resolve().then(() => labApi.state())
+      .then((s) => { if (live) setLab({ status: 'ready', application: s?.application || null }); })
+      .catch(() => { if (live) setLab({ status: 'unreadable', application: null }); });
+    return () => { live = false; };
+  }, [needed, tick, labApi]);
+  const ip = ipStep(facts, needed ? lab : null, mode);
+  const copy = async () => {
+    if (ip.action !== 'copy' || saving) return;
+    setSaving(true); setError('');
+    setError(await runIpCopy(ip, projectId, copyIp, reload));
+    setSaving(false);
+  };
+  return <AfterFormation ip={ip} search={search} phone={phone} saving={saving} error={error} onCopy={copy} onRetryCheck={() => setTick((n) => n + 1)} />;
 }
 
 function Handoff({ projectId, search = '' }) {
@@ -324,7 +393,7 @@ export function IncorporateFirst({ copy, add, phone = false }) {
 }
 
 /** The page. `p` is what `CycleModulePage` / `PhoneModulePage` hand a module's home; `data` and `projectId` the def's own. */
-export default function CompanyCreationHome({ data, projectId, ...p }) {
+export default function CompanyCreationHome({ data, projectId, labApi = spinoutLab, copyIp = cyclesWrite.build.ipCopy, ...p }) {
   const phone = !!p.phone;
   const copy = progressiveFor('build', 'company-creation');
   const loading = !data;
@@ -381,7 +450,7 @@ export default function CompanyCreationHome({ data, projectId, ...p }) {
           {/* D8260 (BD25): the stored papers, preselected for the venture's data room; members only. */}
           {docs.state === 'ok' && <PapersToDataRoom projectId={projectId} />}
         </div>
-        <AfterFormation ip={ipStep(facts)} search={p.search} />
+        <IpAssignment facts={facts} projectId={projectId} phone={phone} search={p.search} reload={p.reload || retry} labApi={labApi} copyIp={copyIp} />
       </div>
       <Handoff projectId={projectId} search={p.search} />
     </div>
