@@ -132,7 +132,9 @@ test('each prune walks its table by a time index, not a table scan', () => {
   for (const { table, column } of LOG_TABLES) {
     const plan = db.prepare(`EXPLAIN QUERY PLAN ${pruneCandidatesSql(table, column)}`)
       .all('2026-10-28 03:00:00', '2026-10-28 03:00:00', 500).map((r: any) => r.detail).join(' | ');
-    assert.match(plan, new RegExp(`SEARCH ${table} USING (?:COVERING )?INDEX \\w+ \\(${column}<\\?\\)`), `${table}: ${plan}`);
+    // Plain string checks (no RegExp built from a name): SQLite reports `SEARCH <table> USING [COVERING ]INDEX <name> (<column><?)`.
+    const search = plan.split(' | ').find((d: string) => d.startsWith(`SEARCH ${table} USING `)) ?? '';
+    assert.ok(search.includes(' INDEX ') && search.endsWith(` (${column}<?)`), `${table}: ${plan}`);
   }
 });
 
