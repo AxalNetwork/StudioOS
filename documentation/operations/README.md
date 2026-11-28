@@ -37,6 +37,7 @@ files say how to act on it.
 | `AIRAIL.md` | Run the Eadwyn AI rail (D720): how a page gets its models, add a model Cloudflare publishes, how members are billed, and where a member's consumption is shown. A draft until D781 closes. |
 | `CLOSING.md` | Run a closing end to end (D1220): open it, prepare and send the paper, countersign for Axal, choose each route, share instructions, record evidence, the founder's cap-table decision, and Mark Closed; what no page does yet. |
 | `MERCURY_MEMBER_CHECKS.md` | Run D752's read-only live checks: four Mercury field names for S02 or S03, and the owner's walk-through with a test investor and founder (#1008 item 34). |
+| `WELLBEING_STORAGE_REVIEW.md` | Run the Super Admin's read-only review of how Wellness check-ins and reflections are held at rest (encrypted, plaintext, unreadable), and what to do with each answer (D7118 part 4). |
 | `MCP_API_RUNBOOK.md` | Switch member API keys for `/mcp` on, check them read-only, roll back, revoke a member's keys and read usage in aggregate (D850). |
 | `LOVABLE_CONNECTOR.md` | Add Axal VC to a Lovable workspace as a custom connector: mint the OAuth client, the form's values, connecting and checking (D1361). The contract is `AXAL_CONNECTOR_API.openapi.json`. |
 | `REDIRECT_RETIREMENT.md` | Retire the SPA's internal redirects on 2027-01-19 (#2301): what is counted and kept, the D1 query for the last 30 days, and what to remove. |

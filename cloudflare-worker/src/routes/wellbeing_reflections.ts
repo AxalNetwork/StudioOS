@@ -49,6 +49,7 @@ import { decryptString, encryptString } from '../services/cryptoBox';
 import { refuse } from '../util/refusal';
 import { clampLimit } from '../util/pagination';
 import { DAILY_KEYS, weekSpan } from './wellbeing.helpers';
+import { PULSE_FIELDS, holdingOf } from '../services/wellbeing/storageReview';
 import wellbeing, { serializeDaily } from './wellbeing';
 import {
   type Cadence, currentPeriods, datesBetween, isCadence, isDate, isTimezone, periodOf, periodProblem,
@@ -156,9 +157,15 @@ export async function serializeReflection(env: Env, r: ReflectionRow) {
   };
 }
 
-/** An earlier check-in, labelled for what it is and filed as neither a day nor a week. */
+/**
+ * An earlier check-in, labelled for what it is and filed as neither a day nor
+ * a week. `held` says how it is stored (D7118 part 4): `encrypted`,
+ * `not_encrypted` (the Task #33 writer kept plaintext when encryption failed)
+ * or `partly_unreadable` (ciphertext that no longer opens), so the page never
+ * puts "Stored encrypted" over a check-in that is not.
+ */
 async function serializeEarlier(env: Env, row: any) {
-  const s = await serializeDaily(env, row);
+  const [s, holding] = await Promise.all([serializeDaily(env, row), holdingOf(env, row, PULSE_FIELDS)]);
   return {
     kind: 'earlier_checkin' as const,
     uid: s.uid, day: s.day, week_start: weekSpan(s.day).start,
@@ -166,6 +173,7 @@ async function serializeEarlier(env: Env, row: any) {
     note: 'Saved before daily, weekly and monthly reflections were kept apart. It keeps its own date and is not counted as a day or a week.',
     scores: Object.fromEntries(DAILY_KEYS.map((k) => [k, (s as any)[k] ?? null]).filter(([, v]) => v != null)),
     text: s.free_text, topics: s.tags, saved_at: s.created_at,
+    held: holding.held,
   };
 }
 

@@ -33,16 +33,21 @@ report there.
 | --- | --- | --- | --- |
 | Which figures are missing | `GET /api/admin/licence-pricing/catalogue?incomplete=1` | `requireSuperAdmin` | HQ › Licences › Pricing (`/admin/licences/pricing`) |
 | A country's figures and history | `GET /api/admin/licence-pricing/catalogue/:code` | `requireSuperAdmin` | HQ › Licences › Pricing › country |
-| The consistency read | `GET /api/admin/licence-pricing/consistency` | `requireSuperAdmin` | none |
+| The consistency read | `GET /api/admin/licence-pricing/consistency` | `requireSuperAdmin` | HQ › Licences › Pricing and a country: the "Values to check" chip, the Check column and each flag (D7715) |
 | The profiles with their figures and revisions | `GET /api/admin/licence-pricing/countries` | `requireSuperAdmin` | none |
-| Record one figure | `POST /api/admin/licence-pricing/countries/:code/observations` | `requireSuperAdminWriteBar` | none |
-| Mark a field provisional or not recorded | `PUT /api/admin/licence-pricing/countries/:code/fields/:field/status` | `requireSuperAdminWriteBar` | none |
-| Import figures | `POST /api/admin/licence-pricing/countries/import` | `requireSuperAdminWriteBar` | none |
+| Record one figure | `POST /api/admin/licence-pricing/countries/:code/observations` | `requireSuperAdminWriteBar` | HQ › Licences › Pricing › country › Record observation… › Record a value (D7715) |
+| Mark a field provisional or not recorded | `PUT /api/admin/licence-pricing/countries/:code/fields/:field/status` | `requireSuperAdminWriteBar` | HQ › Licences › Pricing › country › Record observation… › Change a field's status (D7715) |
+| Import figures | `POST /api/admin/licence-pricing/countries/import` | `requireSuperAdminWriteBar` | HQ › Licences › Pricing › Import country data… (D7715) |
 
-No screen sends a write today: #5020 closed with the read screens only
-(D5020-p2 §3), and #7715 draws the write screens. Until it lands, the owner
-sends these requests from their own signed-in session. This runbook does not
-describe how a session is carried.
+The three writes are sent from the HQ pricing screens (D7715, #7715). Each
+asks for a reason, names the revision read on screen, and goes through the
+write bar: the screen asks for the authenticator code when the step-up has
+lapsed. The Import country data sheet reads the builder's body in the
+browser, keeps nothing, shows the countries, fields, rows and revisions
+before sending, and sends a body once: after a `207`, or an answer that never
+came, the same body cannot be sent again from that page. The saved
+`GET /api/admin/licence-pricing/countries` read the builder needs has no
+screen.
 
 ## 1. Read first
 
@@ -66,7 +71,8 @@ The owner's question on #7714 is open; until it is answered this follows **B**.
 **B (recommended): record the checked figure again.** One write, through
 either route:
 
-- `POST /api/admin/licence-pricing/countries/:code/observations` with
+- Record observation… on the country page (Record a value), which sends
+  `POST /api/admin/licence-pricing/countries/:code/observations` with
   `field`, `value`, `status`, `source`, `source_ref`, `as_of`, the
   `expected_revision` from a fresh read, and a `reason` that says the figure is
   recorded again because its history row was missing (D7714); or
@@ -76,8 +82,9 @@ either route:
 The value, source, reference and as-of date come from the reviewed source,
 checked again, not copied from the profile.
 
-**A: clear, then record.** `PUT …/fields/ppp_gdp_per_capita/status` with
-`status: not_recorded` and a reason, then record the figure as in B. Two
+**A: clear, then record.** Record observation… › Change a field's status ›
+Not recorded (`PUT …/fields/ppp_gdp_per_capita/status` with
+`status: not_recorded` and a reason), then record the figure as in B. Two
 writes; between them the market has no PPP figure and cannot be priced.
 
 Then read again (step 1): the finding is gone.
@@ -105,7 +112,9 @@ Then read again (step 1): the finding is gone.
    says so. It calls no API.
 3. Read the body before sending it: the rows, the countries in
    `expected_revisions`, the reason.
-4. Send it as the body of `POST /api/admin/licence-pricing/countries/import`.
+4. Send it from HQ › Licences › Pricing › Import country data…: choose the
+   body, read what it will change, keep or change the reason, and press
+   Import. It is the body of `POST /api/admin/licence-pricing/countries/import`.
    - `200`: every country applied (`applied` counts rows per country).
    - `207`: the countries in `conflicts` changed since the read and applied
      nothing; the others applied. Go back to 3.1, read again and rebuild. Never

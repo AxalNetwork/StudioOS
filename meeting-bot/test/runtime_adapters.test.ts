@@ -12,10 +12,33 @@ const context:RuntimeAdapterContext={uid,secret,callbackOrigin:'https://worker.e
 test('packaged browser selection includes Teams and Meet and closes each owned browser',async()=>{
   for(const platform of ['google_meet','teams'] as const){
     let closed=0;
-    const browser={newPage:async(options:any)=>{assert.equal(options?.locale,'en-US');return {evaluate:async()=>{}};},close:async()=>{closed++;}};
+    const browser={newPage:async(options:any)=>{assert.equal(options?.locale,'en-US');return fakePage([]);},close:async()=>{closed++;}};
     const adapter=await runtimeAdapter(platform,context,{launch:async()=>browser as any});
     assert.equal(adapter.platform,platform);await adapter.leave();await adapter.leave();assert.equal(closed,1);
   }
+});
+
+/** A Playwright-shaped page that records what is called on it; its first read aborts `stop`. */
+function fakePage(calls:string[],stop?:AbortController){
+  const locator=(selector:string):any=>({first:()=>locator(selector),count:async()=>0,click:async()=>{calls.push('click');},fill:async()=>{calls.push('fill');},
+    evaluateAll:async()=>{calls.push('evaluateAll');stop?.abort();return [];}});
+  return {goto:async()=>{calls.push('goto');},locator:(s:string)=>{calls.push('locator');return locator(s);},evaluate:async()=>{calls.push('evaluate');},
+    exposeFunction:async(name:string)=>{calls.push(`exposeFunction:${name}`);},addInitScript:async()=>{calls.push('addInitScript');},close:async()=>{calls.push('close');},isClosed:()=>false};
+}
+
+// D5812: the factory gives Teams its Playwright driver, never a cast page. Mutation checked: restoring
+// `new TeamsAdapter(page as unknown as TeamsPage)` → the join rejects with "query is not a function" and this fails.
+test('D5812: the packaged Teams adapter reads the page through the driver: capture installed before goto, then locator reads',async()=>{
+  const calls:string[]=[],stop=new AbortController();let closed=0;
+  const browser={newPage:async()=>fakePage(calls,stop),close:async()=>{closed++;}};
+  const adapter=await runtimeAdapter('teams',context,{launch:async()=>browser as any});
+  const failure:any=await adapter.join({url:'https://teams.microsoft.com/meet/1234567890123?p=FixturePass1',botName:'Eadwyn AI',signal:stop.signal}).then(()=>null,(e:unknown)=>e);
+  assert.ok(failure instanceof AdapterFailure,String(failure));
+  assert.equal(failure.code,'platform_blocked');
+  assert.deepEqual(calls.slice(0,3),['exposeFunction:__eadwynAudio','addInitScript','goto'],'the capture is in place before the link opens');
+  assert.ok(calls.includes('evaluateAll'),'the screen is read through locator().evaluateAll');
+  assert.ok(!calls.includes('evaluate'),'capture is not switched on before admission');
+  await adapter.leave();assert.equal(closed,1);
 });
 test('Zoom uses only run-scoped signed bootstrap and hands fresh OBF to the native bridge',async()=>{
   let jwt='',joined:any,calls=0;

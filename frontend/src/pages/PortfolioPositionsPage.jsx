@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
@@ -110,23 +110,34 @@ export default function PortfolioPositionsPage({ embedded = false }) {
     } catch (e) { setQueueNote(e?.message || 'The evidence file could not be downloaded.'); }
   };
 
+  // D4818 part 4: only the latest company read may fill the sheet. A read that
+  // answers after another company was opened (or after the sheet closed) is
+  // dropped, so a late answer never swaps the company under an open draft and
+  // its write (`saveMark` posts to `detail.project.uid`).
+  const detailRead = useRef(0);
+  const requestsRead = useRef(0);
   const loadRequests = (projectUid) => {
     if (!isAdmin || !projectUid) return;
+    const mine = (requestsRead.current += 1);
     setRequests((cur) => ({ state: 'loading', items: cur.items }));
     markRequestsApi.list({ projectUid }).then(
-      (res) => setRequests(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }),
-      () => setRequests({ state: 'unreadable', items: [] }),
+      (res) => { if (mine === requestsRead.current) setRequests(Array.isArray(res?.items) ? { state: 'ok', items: res.items } : { state: 'unreadable', items: [] }); },
+      () => { if (mine === requestsRead.current) setRequests({ state: 'unreadable', items: [] }); },
     );
   };
 
   const openDetail = async (projectUid, { keepRecorded = false } = {}) => {
     if (!projectUid) return;
+    const mine = (detailRead.current += 1);
     setErr(null);
     if (!keepRecorded) setJustRecorded(null);
     loadRequests(projectUid);
-    try { setDetail(await api.positionsByProject(projectUid)); }
-    catch (e) { setErr(e.message || 'Failed to load company'); }
+    try {
+      const read = await api.positionsByProject(projectUid);
+      if (mine === detailRead.current) setDetail(read);
+    } catch (e) { if (mine === detailRead.current) setErr(e.message || 'Failed to load company'); }
   };
+  const dropDetail = () => { detailRead.current += 1; setDetail(null); };
 
   const onCreate = async (e) => {
     e.preventDefault();
@@ -183,8 +194,8 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   const openFlow = (kind) => { setAnswering(null); setAnswerOutcome(null); setSeed(null); setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 })); };
   // The page's clock, read when a draft opens: the flow's model reads none.
   const today = () => new Date().toISOString().slice(0, 10);
-  const closeSheet = () => { if (flow) setCloseAsked(true); else setDetail(null); };
-  const closeAnswered = (closed) => { setCloseAsked(false); if (closed) setDetail(null); };
+  const closeSheet = () => { if (flow) setCloseAsked(true); else dropDetail(); };
+  const closeAnswered = (closed) => { setCloseAsked(false); if (closed) dropDetail(); };
 
   const field = (key, placeholder, extra = {}) => (
     <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} {...extra}

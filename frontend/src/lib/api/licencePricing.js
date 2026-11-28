@@ -9,6 +9,15 @@
 //        → { committed, decision, terms, agreement, pushed, push_outcome }; 409 terms_conflict / snapshot_stale / agreement_ack_required
 //   POST /api/admin/licences/:uid/pricing/reviews { allow_provisional? } → { review, snapshot, licence_changed: false }
 //   POST /api/admin/licences/:uid/pricing/reviews/:reviewUid/resolve { action: keep|postpone, reason, postponed_until?, expected_revision }
+//
+// D7715 (#7715) — the country catalogue's writes (D5016), sent by the HQ sheets on `/admin/licences/pricing`.
+// Worker: cloudflare-worker/src/routes/admin_licence_pricing.ts. Each takes the write bar, a reason and the revision read.
+//   POST /api/admin/licence-pricing/countries/import { observations[1..500], expected_revisions, reason }
+//        → 200 or 207 { applied: { CODE: rows }, conflicts: [{ country_code, current_revision }] }
+//   POST /api/admin/licence-pricing/countries/:code/observations { field, value, status, source, source_ref, as_of, reason,
+//        expected_revision } → 201 { profile }; 409 profile_conflict { current_revision }; 400 invalid_observation { fields }
+//   PUT  /api/admin/licence-pricing/countries/:code/fields/:field/status { status: provisional|not_recorded, reason,
+//        expected_revision } → { profile }
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -21,4 +30,10 @@ export const licencePricingApi = {
   apply: (uid, body) => post(`/admin/licences/${enc(uid)}/pricing/apply`, body),
   openReview: (uid, body) => post(`/admin/licences/${enc(uid)}/pricing/reviews`, body),
   resolveReview: (uid, reviewUid, body) => post(`/admin/licences/${enc(uid)}/pricing/reviews/${enc(reviewUid)}/resolve`, body),
+};
+
+export const licencePricingCatalogueApi = {
+  importCountries: (body) => post('/admin/licence-pricing/countries/import', body),
+  recordObservation: (code, body) => post(`/admin/licence-pricing/countries/${enc(code)}/observations`, body),
+  setFieldStatus: (code, field, body) => request(`/admin/licence-pricing/countries/${enc(code)}/fields/${enc(field)}/status`, { method: 'PUT', body: JSON.stringify(body) }),
 };

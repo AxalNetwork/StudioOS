@@ -32,6 +32,7 @@ import HypothesisRecord from '../HypothesisRecord';
 // Imported statically: its lead (`ValidateLead`, `ValidateObjective`, `PmfChip`) is already in the route's bundle.
 import ValidateOverview from '../ValidateOverview';
 import { painThemesApi } from '../../../lib/api/painThemes.js';
+import ProposedGroupings from '../ProposedGroupings.jsx';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
@@ -258,13 +259,15 @@ const validate = {
     ),
     'ideal-customer-profile': (data, ctx) => <SegmentsSection key={ctx.projectId} parts={data?.parts}
       onAssign={(interviewId, segmentId) => cycleValidateApi.setInterviewSegment(ctx.projectId, interviewId, segmentId).then(ctx.reload)} />,
-    'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+    'problem-discovery': (data, ctx) => <><PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
       onExport={() => api.exportValidatePainMap(ctx.projectId)}
       // #1692's `attach` on the theme record, so the theme's activity logs it.
       onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
       // #6006 (V17): the selection bar's one bulk write, to a theme or a new one.
       onAssignMany={(body) => painThemesApi.assignMany(ctx.projectId, body).then(ctx.reload)}
-      newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
+      newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />
+      {/* D8546 part 2 (#9020, V17/V29): the proposed groupings, writers only; an accepted set reads the module again. */}
+      <ProposedGroupings key={ctx.projectId} projectId={ctx.projectId} canWrite={data?.parts?.can_write === true} onAccepted={ctx.reload} /></>,
     experiments: (data, ctx) => (
       <>
         {/* The evidence CSV names Verdict decisions, so it is offered only to a reader of decisions. */}

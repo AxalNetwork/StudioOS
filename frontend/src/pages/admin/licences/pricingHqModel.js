@@ -103,6 +103,8 @@ export function catalogueRow(r, today) {
     tierIndex: tierIndexCell(r.recommendation, r.recommendation_reason),
     annual: feeCell(r.recommendation, 'recommended_annual_fee_cents'),
     initial: feeCell(r.recommendation, 'recommended_initial_fee_cents'),
+    // D7715: the profile revision the import file names for this country (LCD-01, the catalogue's Revision column).
+    revision: Number.isInteger(r.profile_revision) ? r.profile_revision : null,
   };
 }
 
@@ -312,4 +314,290 @@ export function licenceMarketFacts(view, today) {
     ? `${latest.decision === 'overridden' ? 'Overridden' : 'Accepted'} ${String(latest.created_at).slice(0, 10)} · effective ${latest.effective_from}${latest.decision === 'overridden' && latest.override_reason ? ` · ${latest.override_reason}` : ''}`
     : null;
   return { stale, recommendation, accepted, noDecision: !latest };
+}
+
+// ── D7715 (#7715): the Import country data and Record observation sheets (canvas LCD-00 to LCD-08, D7703) ──────
+//
+// WHAT THE SHEETS SEND. The three D5016 writes (`lib/api/licencePricing.js`, `licencePricingCatalogueApi`), each
+// behind the Super Admin write bar with a reason and the revision read. The Worker validates every value; these
+// rules only read the file, say what it will change, and turn the Worker's answer into words. A refusal is shown in
+// the Worker's own sentence, and a failed send changes nothing on the page.
+
+/** The four observed fields, in the Worker's order (`OBSERVED_FIELDS`, D5016). */
+export const OBSERVED_FIELDS = Object.freeze(['population', 'ppp_gdp_per_capita', 'startup_ecosystem_score', 'startup_ecosystem_rank']);
+const FIELD_LABEL = Object.freeze({
+  population: 'Population',
+  ppp_gdp_per_capita: 'PPP GDP per capita',
+  startup_ecosystem_score: 'Startup ecosystem score',
+  startup_ecosystem_rank: 'Startup ecosystem rank',
+});
+const FIELD_UNIT = Object.freeze({
+  population: 'persons',
+  ppp_gdp_per_capita: 'international dollars, whole',
+  startup_ecosystem_score: 'thousandths of a point',
+  startup_ecosystem_rank: 'position, 1 is first',
+});
+export const fieldLabel = (f) => FIELD_LABEL[f] || String(f || '').replace(/_/g, ' ');
+export const fieldUnit = (f) => FIELD_UNIT[f] || '';
+
+/** The most rows one import holds (the Worker refuses more, `invalid_import`). */
+export const IMPORT_MAX_ROWS = 500;
+
+/** The profile columns each field lives in. A rank has a value only: it is recorded or not, never provisional. */
+const PROFILE_COLUMNS = Object.freeze({
+  population: { value: 'population', status: 'population_status', source: 'population_source', ref: 'population_source_ref', asOf: 'population_as_of' },
+  ppp_gdp_per_capita: { value: 'ppp_gdp_per_capita', status: 'ppp_status', source: 'ppp_source', ref: 'ppp_source_ref', asOf: 'ppp_as_of' },
+  startup_ecosystem_score: { value: 'startup_ecosystem_score', status: 'startup_score_status', source: 'startup_source', ref: 'startup_source_ref', asOf: 'startup_as_of' },
+  startup_ecosystem_rank: { value: 'startup_ecosystem_rank' },
+});
+
+/** What a profile holds today for one field: `{ value, status, source, source_ref, as_of }`, nulls where nothing. */
+export function profileField(profile, field) {
+  const c = PROFILE_COLUMNS[field];
+  const p = profile || {};
+  if (!c) return { value: null, status: 'not_recorded', source: null, source_ref: null, as_of: null };
+  const value = p[c.value] ?? null;
+  const fallback = value === null ? 'not_recorded' : 'recorded';
+  return {
+    value,
+    status: c.status ? (p[c.status] || fallback) : fallback,
+    source: c.source ? p[c.source] ?? null : null,
+    source_ref: c.ref ? p[c.ref] ?? null : null,
+    as_of: c.asOf ? p[c.asOf] ?? null : null,
+  };
+}
+
+/** A field's value in words with its unit; a score also in points. Never a 0 for nothing. */
+export function fieldValueWords(field, value) {
+  if (value === null || value === undefined || value === '') return NOT_RECORDED;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  const whole = n.toLocaleString('en-US');
+  if (field === 'startup_ecosystem_score') return `${whole} = ${(n / 1000).toFixed(3)} points`;
+  if (field === 'startup_ecosystem_rank') return `rank ${whole}`;
+  return `${whole} ${fieldUnit(field)}`.trim();
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const listWords = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * The file the import-file builder wrote (`scripts/build-country-import.mjs`, D7714): `{ observations,
+ * expected_revisions, reason }`, read in the browser and kept nowhere. Refused here, before anything is sent, is
+ * only what the Worker would refuse whole (LCD-01 E): a file that is not that body, 0 or more than 500 rows, a
+ * country with no revision named. Each row's fields are the Worker's to judge, in its words.
+ *   → { ok: true, body, summary } | { ok: false, problem }
+ */
+export function parseImportFile(text, name = 'The file') {
+  let raw;
+  try { raw = JSON.parse(String(text ?? '')); } catch { return { ok: false, problem: `${name} is not the JSON body the import-file builder writes. Nothing was imported.` }; }
+  const rows = raw && typeof raw === 'object' && Array.isArray(raw.observations) ? raw.observations : null;
+  if (!rows) return { ok: false, problem: `${name} has no observations list, so it is not the body the import-file builder writes. Nothing was imported.` };
+  if (rows.length === 0) return { ok: false, problem: `${name} holds 0 observations. Nothing to review.` };
+  if (rows.length > IMPORT_MAX_ROWS) {
+    return { ok: false, problem: `An import holds 1 to ${IMPORT_MAX_ROWS} observations. ${name} has ${rows.length} rows. Nothing was imported. Split it into files of at most ${IMPORT_MAX_ROWS} rows.` };
+  }
+  const revs = raw.expected_revisions && typeof raw.expected_revisions === 'object' ? raw.expected_revisions : {};
+  const revOf = (code) => { const v = revs[code]; return Number.isInteger(v) && v >= 0 ? v : null; };
+  const codes = [...new Set(rows.map((r) => String(r?.country_code ?? '').trim().toUpperCase()))];
+  const unnamed = codes.filter((c) => revOf(c) === null);
+  if (unnamed.length) {
+    return { ok: false, problem: `Name the revision you read for every country in the import. No revision is named for ${listWords(unnamed.map((c) => c || 'a row with no country'))}. Nothing was imported.` };
+  }
+  const body = {
+    observations: rows,
+    expected_revisions: Object.fromEntries(codes.map((c) => [c, revOf(c)])),
+    reason: typeof raw.reason === 'string' ? raw.reason : '',
+  };
+  return { ok: true, body, summary: importSummary(body) };
+}
+
+/**
+ * What an import will change (LCD-01 B): its rows, each field's row count (0 said, never left out), and each
+ * country with its rows and the revision it was read at.
+ */
+export function importSummary(body) {
+  const rows = body?.observations || [];
+  const fields = Object.fromEntries(OBSERVED_FIELDS.map((f) => [f, 0]));
+  const per = new Map();
+  for (const r of rows) {
+    const code = String(r?.country_code ?? '').trim().toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(fields, r?.field)) fields[r.field] += 1;
+    per.set(code, (per.get(code) || 0) + 1);
+  }
+  const countries = [...per.entries()].map(([code, n]) => ({ code, rows: n, revision: body?.expected_revisions?.[code] ?? null }));
+  return { rows: rows.length, countries, fields: OBSERVED_FIELDS.map((f) => ({ field: f, label: fieldLabel(f), rows: fields[f] })) };
+}
+
+/** One file row as the review table draws it, numbered from 1 as in the file. */
+export function importRowView(r, i, body) {
+  const code = String(r?.country_code ?? '').trim().toUpperCase();
+  return {
+    n: i + 1, code, field: fieldLabel(r?.field), value: fieldValueWords(r?.field, r?.value),
+    status: statusWord(r?.status === undefined ? 'recorded' : r.status),
+    source: r?.source || NOT_RECORDED, ref: r?.source_ref || '—', asOf: r?.as_of || NOT_RECORDED,
+    revision: body?.expected_revisions?.[code] ?? null,
+  };
+}
+
+/**
+ * The Worker's answer to an import (200 or 207, LCD-01 C and D) against the body sent: the countries written with
+ * their rows and revisions, and the countries that changed since the file was built, which got nothing.
+ */
+export function importOutcome(result, body) {
+  const summary = importSummary(body);
+  const byCode = Object.fromEntries(summary.countries.map((c) => [c.code, c]));
+  const written = Object.entries(result?.applied || {}).map(([code, n]) => {
+    const read = byCode[code]?.revision ?? null;
+    return { code, rows: Number(n), revisionRead: read, revisionNow: read === null ? null : read + Number(n) };
+  });
+  const notWritten = (Array.isArray(result?.conflicts) ? result.conflicts : []).map((c) => ({
+    code: c.country_code, rows: byCode[c.country_code]?.rows ?? 0,
+    revisionInFile: byCode[c.country_code]?.revision ?? null, revisionNow: c.current_revision ?? null,
+  }));
+  const rowsWritten = written.reduce((s, w) => s + w.rows, 0);
+  const partial = notWritten.length > 0;
+  const names = listWords(notWritten.map((c) => c.code));
+  const them = notWritten.length === 1 ? 'it' : 'them';
+  const recorded = `${plural(rowsWritten, 'observation', 'observations')} recorded for ${plural(written.length, 'country', 'countries')}.`;
+  return {
+    partial, written, notWritten, rowsWritten,
+    line: partial ? `${recorded} ${plural(notWritten.length, 'country', 'countries')} changed since this file was built: ${names}. Nothing was written for ${them}.` : recorded,
+    live: partial ? `${recorded} ${names} changed since the file was built; nothing was written for ${them}.` : recorded,
+  };
+}
+
+/**
+ * A refused or failed write in words (LCD-01 E, LCD-02 B and C, LCD-05): the Worker's sentence and code, its
+ * problems by field (`fields`) or by row (`rows`, renumbered from 1 as in the file), the countries it names and the
+ * revision the country is at now. `answered` is false when no answer came back (no status, or a 5xx): what the
+ * Worker did is then unknown, and the page says so instead of the error.
+ */
+export function refusalOf(e, body) {
+  const data = e?.data && typeof e.data === 'object' ? e.data : {};
+  const answered = Number.isInteger(e?.status) && e.status > 0 && e.status < 500;
+  const rows = Array.isArray(data.rows) ? data.rows.flatMap((r) => Object.entries(r?.fields || {}).map(([field, words]) => ({
+    n: Number(r.row) + 1,
+    code: String(body?.observations?.[r.row]?.country_code ?? '').trim().toUpperCase() || NOT_RECORDED,
+    field, words: String(words),
+  }))) : [];
+  return {
+    answered,
+    status: e?.status ?? null,
+    code: e?.code || null,
+    sentence: e?.message || 'The Worker refused this without a sentence.',
+    fields: data.fields && typeof data.fields === 'object' ? data.fields : {},
+    rows,
+    countries: Array.isArray(data.countries) ? data.countries : [],
+    currentRevision: Number.isInteger(data.current_revision) ? data.current_revision : null,
+  };
+}
+
+/** The problems a refusal puts under the form's fields: the Worker's `fields`, and its reason or status sentence. */
+export function formErrors(refusal) {
+  if (!refusal) return {};
+  const out = { ...(refusal.fields || {}) };
+  if (refusal.code === 'reason_required') out.reason = refusal.sentence;
+  if (refusal.code === 'invalid_status' && !out.status) out.status = refusal.sentence;
+  return out;
+}
+
+/**
+ * Which statuses each mode of the Record observation sheet offers for a field (LCD-02, LCD-03, owner Q9 A).
+ * Record a value: Recorded or Provisional; a rank, Recorded only. Change a field's status: Provisional only where a
+ * value exists and is not already provisional (never for a rank), Not recorded where a value exists, and nothing for
+ * a field already Not recorded (it offers only Record a value).
+ */
+export function statusChoices(field, now) {
+  const rank = field === 'startup_ecosystem_rank';
+  const has = now?.value !== null && now?.value !== undefined;
+  return {
+    record: rank ? ['recorded'] : ['recorded', 'provisional'],
+    status: !has ? [] : rank ? ['not_recorded'] : [...(now?.status === 'provisional' ? [] : ['provisional']), 'not_recorded'],
+  };
+}
+
+/** A typed number with its grouping (`41,250`, `41 250`) read as a number; anything else sent as typed. */
+export function typedValue(s) {
+  const t = String(s ?? '').trim().replace(/[,\s_]/g, '');
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : t;
+}
+
+/** The body of `POST …/countries/:code/observations`: the form as typed, with the revision read on screen. */
+export function observationBody(form, revision) {
+  return {
+    field: form.field,
+    value: typedValue(form.value),
+    status: form.status || 'recorded',
+    source: String(form.source ?? ''),
+    source_ref: String(form.source_ref ?? '').trim() || null,
+    as_of: String(form.as_of ?? '').trim(),
+    reason: String(form.reason ?? ''),
+    expected_revision: revision,
+  };
+}
+
+/** The body of `PUT …/fields/:field/status`. */
+export const statusBody = (status, reason, revision) => ({ status, reason: String(reason ?? ''), expected_revision: revision });
+
+const KIND_WORDS = Object.freeze({
+  value_without_history: 'No history row for this value',
+  differs_from_history: 'Differs from its latest history row',
+  cleared_but_history_holds_value: 'Not recorded, yet its latest history row holds a value',
+  history_ahead_of_profile: 'Its latest history row names a later revision than the profile',
+});
+
+/**
+ * The consistency read (#7714, `GET …/consistency`) as the flags draw it (LCD-04, owner Q8 A): `reading` until it
+ * answers, `unavailable` when it failed (no flag, and never "all consistent"), else `ok` with the findings by
+ * country and field and how much was checked.
+ */
+export function consistencyFlags(res) {
+  if (!res || res.state === 'loading') return { state: 'reading', byCountry: {}, countries: [], total: 0, checked: null };
+  if (res.state !== 'ok' || !res.data || !Array.isArray(res.data.findings)) return { state: 'unavailable', byCountry: {}, countries: [], total: 0, checked: null };
+  const byCountry = {};
+  for (const f of res.data.findings) (byCountry[f.country_code] ||= {})[f.field] = f;
+  return { state: 'ok', byCountry, countries: Object.keys(byCountry), total: res.data.findings.length, checked: res.data.checked || null };
+}
+
+/** One finding in words: what differs, the history's side, and the frozen snapshots holding the value. */
+export function findingLine(f) {
+  if (!f) return null;
+  let line = KIND_WORDS[f.kind] || 'Differs from its history';
+  if (f.kind === 'differs_from_history' && f.history) {
+    const diffs = f.differences || [];
+    const others = diffs.filter((d) => d !== 'value').map((d) => (d === 'source_ref' ? 'reference' : d === 'as_of' ? 'as-of date' : d));
+    const value = diffs.includes('value') ? `profile ${fieldValueWords(f.field, f.profile?.value)} · history ${fieldValueWords(f.field, f.expected?.value)}` : null;
+    const parts = [value, others.length ? `${listWords(others)} ${others.length === 1 ? 'differs' : 'differ'}` : null].filter(Boolean);
+    line += `: ${parts.join(' · ')} (${f.history.as_of || NOT_RECORDED}, revision ${f.history.profile_revision})`;
+  }
+  const n = f.snapshots?.count;
+  if (Number.isFinite(n) && n > 0) line += ` · ${plural(n, 'frozen pricing snapshot holds', 'frozen pricing snapshots hold')} it`;
+  return line;
+}
+
+/** The checked-and-clean line (LCD-04 C), or null when there is something to flag or the check did not answer. */
+export function consistencyClearLine(flags) {
+  if (flags.state !== 'ok' || flags.total > 0 || !flags.checked) return null;
+  return `Checked ${flags.checked.countries} countries and ${flags.checked.fields} fields: every value matches its history.`;
+}
+
+/** One history row as the country page draws it, newest first. */
+export function historyRow(o) {
+  const cleared = o.kind === 'status' && o.status === 'not_recorded';
+  return {
+    key: o.uid,
+    at: o.ingested_at ? String(o.ingested_at).slice(0, 16).replace('T', ' ') : NOT_RECORDED,
+    field: fieldLabel(o.field),
+    value: cleared ? NOT_RECORDED : fieldValueWords(o.field, o.value),
+    status: statusWord(o.status),
+    statusKey: o.status === 'recorded' ? 'value' : o.status,
+    source: o.source ? `${o.source}${o.source_ref ? ` · ${o.source_ref}` : ''}` : '—',
+    asOf: o.as_of || '—',
+    by: o.recorded_by || NOT_RECORDED,
+    reason: o.reason || NOT_RECORDED,
+    revision: o.profile_revision,
+  };
 }

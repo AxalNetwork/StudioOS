@@ -65,10 +65,10 @@ export function sourceOf(keyText) {
 
 /** A bare identifier key read through the nearest `const name = …;` above the call in the same file. */
 function resolveLocal(src, upTo, name) {
-  const re = new RegExp(`\\b(?:const|let)\\s+${name}\\s*=\\s*`, 'g');
+  const re = /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*/g;
   let last = null; let m;
   const head = src.slice(0, upTo);
-  while ((m = re.exec(head))) last = m;
+  while ((m = re.exec(head))) if (m[1] === name) last = m;
   if (!last) return null;
   const rest = src.slice(last.index + last[0].length, last.index + last[0].length + 600);
   const end = rest.search(/;\s*\n/);
@@ -92,10 +92,10 @@ function argsAt(src, start) {
   return args;
 }
 
-/** The value text of `key:` in an object literal's source, up to the next top-level comma or closing brace. */
-function propText(opts, key) {
-  const m = new RegExp(`(?:^|[{,\\s])${key}\\s*:\\s*`).exec(opts);
-  if (!m) return new RegExp(`[{,]\\s*${key}\\s*[,}]`).test(opts) ? key : null; // shorthand `{ idempotencyKey }`
+/** The value of `idempotencyKey:` up to the next top-level comma or closing brace. */
+function idempotencyKeyText(opts) {
+  const m = /(?:^|[{,\s])idempotencyKey\s*:\s*/.exec(opts);
+  if (!m) return /[{,]\s*idempotencyKey\s*[,}]/.test(opts) ? 'idempotencyKey' : null;
   let depth = 0; let quote = null; const start = m.index + m[0].length; let i = start;
   for (; i < opts.length; i += 1) {
     const ch = opts[i];
@@ -120,7 +120,7 @@ export function readCalls(files) {
       const lit = /^(['`])((?:\\.|(?!\1)[\s\S])*)\1$/.exec(args[1] ?? '');
       const opts = args[3] ?? '';
       const method = /\bmethod:\s*'(GET|DELETE|POST)'/.exec(opts)?.[1] ?? 'POST';
-      let keyText = opts ? propText(opts, 'idempotencyKey') : null;
+      let keyText = opts ? idempotencyKeyText(opts) : null;
       let via = null;
       if (keyText !== null && /^[A-Za-z_$][\w$]*$/.test(keyText)) {
         const resolved = resolveLocal(src, m.index, keyText);

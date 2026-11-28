@@ -95,7 +95,9 @@ test('RS-16: a lapsed row keeps its title and one reason in its own words; an ND
 test('wiring: the room lists the Library cell; the Library draws the Source filter, Open in room and Remove from Library', () => {
   const room = read('frontend/src/pages/research/DiligenceRoom.jsx');
   assert.match(room, /const library = useRoomLibrary\(room\?\.project\?\.uid \|\| null\)/);
-  assert.match(room, /<RoomFileLibrary file=\{f\} read=\{library\.read\} onAdd=\{setAdding\} \/>/);
+  // D6913 part 4: the cell is `RoomFileActions`, which draws `RoomFileLibrary` at desktop and a ⋯ sheet on a phone.
+  assert.match(room, /<RoomFileActions file=\{f\} read=\{library\.read\} onAdd=\{setAdding\} fileHref=\{fileHref\} phone=\{phone\} \/>/);
+  assert.match(read('frontend/src/pages/research/RoomLibrary.jsx'), /if \(!phone\) return <RoomFileLibrary file=\{file\} read=\{read\} onAdd=\{onAdd\} \/>;/);
   assert.match(room, /<AddToLibrarySheet file=\{adding\} room=\{room\}/);
   const lib = read('frontend/src/pages/research/LibraryZone.jsx');
   assert.match(lib, /data-testid="library-source-filter"/);

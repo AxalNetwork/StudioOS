@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '../../ui';
 import { DataState, StateChip, UNAVAILABLE_CLAIM, isRefusal } from '../../ui/Honesty.jsx';
 import { api } from '../../lib/api';
 import { StatedLimit, ZoneHeading } from '../advisor/expertise/kit';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import RoomDeals from './RoomDeals';
-import { chipCounts, dayWord, expiryMark, ndaWord, roomCounts, tiles, view } from './diligenceZoneRead.js';
+import { NO_VENTURE_ROOM, chipCounts, dayWord, expiryMark, ndaWord, roomCounts, roomTarget, tiles, ventureRooms, view } from './diligenceZoneRead.js';
 
 /**
  * Research · Diligence — the rooms founders have opened to you, and your own
@@ -33,6 +33,12 @@ import { chipCounts, dayWord, expiryMark, ndaWord, roomCounts, tiles, view } fro
  * Unavailable with Retry, a refused one says Refused, an empty list says None
  * in a sentence, and a value the store does not hold says Not recorded. Each
  * block fails on its own: a failed request read leaves the rooms on screen.
+ *
+ * A LINK THAT NAMES A VENTURE (D6162). `/raise/data-room?project_id=N` sends an
+ * investor here with its query and hash kept. When one live grant is for that
+ * venture the page opens its room; when several are, each is marked; when none
+ * is, the page says so in one line above the list. A failed read says nothing
+ * about the venture: Unavailable is never "no room".
  */
 
 const CELL_EYE = 'text-[10px] font-extrabold uppercase tracking-[.08em] text-gray-600 dark:text-gray-400 lg:sr-only';
@@ -83,12 +89,16 @@ export function NdaStatus({ nda }) {
   );
 }
 
-function RoomRow({ r, now }) {
+function RoomRow({ r, now, marked = false }) {
   const c = roomCounts(r);
   const exp = expiryMark(r.expires_at, now);
   const num = (v) => (v == null ? NOT_RECORDED : <b className={MONO}>{v}</b>);
   return (
-    <li className={`grid grid-cols-2 gap-x-3 gap-y-2 py-3 lg:items-center ${ROW_GRID}`} data-testid="room-row">
+    <li
+      className={`grid grid-cols-2 gap-x-3 gap-y-2 py-3 lg:items-center ${ROW_GRID}`}
+      data-testid="room-row"
+      data-venture={marked ? 'match' : undefined}
+    >
       <Cell label="Company" className="col-span-2 lg:col-span-1">
         <Link
           to={`/research/diligence/${encodeURIComponent(r.grant_uid)}`}
@@ -96,6 +106,7 @@ function RoomRow({ r, now }) {
         >
           {r.project_name}
         </Link>
+        {marked ? <small className="ml-1.5 inline-flex items-center rounded-full border border-indigo-700 bg-indigo-50 px-2 py-px text-[11px] font-bold text-indigo-800 dark:border-indigo-400 dark:bg-indigo-950/40 dark:text-indigo-300" data-testid="room-venture-mark">This venture</small> : null}
       </Cell>
       <Cell label="Files open to you">
         <span data-testid="room-files">{num(c.open)} open of {num(c.total)}</span>
@@ -193,10 +204,33 @@ function RequestsBlock({ requests, filter, onRetry }) {
 }
 
 /**
+ * D6162: the one line a venture-naming address gets above the list. Nothing
+ * for an unnamed venture or one the rooms cannot be compared on.
+ */
+function VentureLine({ venture }) {
+  const cls = 'rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-[13px] text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-100';
+  if (venture?.state === 'none') {
+    return (
+      <p role="status" className={cls} data-testid="venture-no-room">
+        <b>{NO_VENTURE_ROOM}</b> Only its founder can open one; you can ask from the deal’s Documents tab.
+      </p>
+    );
+  }
+  if (venture?.state === 'many') {
+    return <p role="status" className={cls} data-testid="venture-rooms">{`${venture.rooms.length} rooms are open to you for this venture. Each is marked below.`}</p>;
+  }
+  if (venture?.state === 'one') {
+    return <p role="status" className={cls} data-testid="venture-opening">{`Opening the room for ${venture.rooms[0].project_name || 'this venture'}…`}</p>;
+  }
+  return null;
+}
+
+/**
  * The page below the toolbar for one read: loading, refused, unavailable, or
  * the tiles, rooms and requests. Exported so a test renders each state.
+ * `venture` is `ventureRooms(data, search)` (D6162), or null.
  */
-export function DiligenceBody({ loading, error, data, filter, now, onRetry }) {
+export function DiligenceBody({ loading, error, data, filter, now, onRetry, venture = null }) {
   if (loading && !data) {
     return (
       <div role="status" aria-busy="true" data-testid="rooms-loading">
@@ -219,8 +253,10 @@ export function DiligenceBody({ loading, error, data, filter, now, onRetry }) {
   }
   const shown = view(data, filter);
   const t = tiles(data);
+  const marked = new Set(venture && (venture.state === 'one' || venture.state === 'many') ? venture.rooms.map((r) => r.grant_uid) : []);
   return (
     <>
+      <VentureLine venture={venture} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="room-tiles">
         <Tile eye="Rooms granted" sub="rooms, live grants as of now" testid="tile-granted"><Figure>{t.granted}</Figure></Tile>
         <Tile eye="Partly staged" sub="rooms with files behind an NDA you have not signed" testid="tile-partial"><Figure>{t.partlyStaged}</Figure></Tile>
@@ -252,7 +288,7 @@ export function DiligenceBody({ loading, error, data, filter, now, onRetry }) {
                 {COLUMNS.map((h) => <span key={h}>{h}</span>)}<span />
               </div>
               <ul className="divide-y divide-gray-200 dark:divide-gray-800" aria-label="Rooms opened to you">
-                {shown.rooms.map((r) => <RoomRow key={r.grant_uid} r={r} now={now} />)}
+                {shown.rooms.map((r) => <RoomRow key={r.grant_uid} r={r} now={now} marked={marked.has(r.grant_uid)} />)}
               </ul>
               <p className="mt-2 text-[11px] text-gray-600 dark:text-gray-300">
                 Behind an NDA is a count, never the names. What is behind it is not listed until an NDA is active between you.
@@ -287,6 +323,16 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
   const data = state.data;
   const rooms = data ? (view(data, filter).rooms || []) : [];
 
+  // D6162: the venture a data-room link named, matched only once the list has
+  // been read. One live grant for it opens that room, the query and hash kept.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const venture = data && !state.error ? ventureRooms(data, location.search) : null;
+  const openUid = venture?.state === 'one' ? venture.rooms[0].grant_uid : null;
+  useEffect(() => {
+    if (openUid) navigate(roomTarget(openUid, { search: location.search, hash: location.hash }), { replace: true });
+  }, [openUid, navigate, location.search, location.hash]);
+
   return (
     <div className="space-y-6">
       {zoneActions && (
@@ -302,7 +348,7 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
         blurb="Data rooms founders opened to you, live now. Every row is a live grant; only the founder can open or widen one."
       />
 
-      <DiligenceBody loading={state.loading} error={state.error} data={data} filter={filter} now={now} onRetry={load} />
+      <DiligenceBody loading={state.loading} error={state.error} data={data} filter={filter} now={now} onRetry={load} venture={venture} />
 
       <StatedLimit title="What this page will not do">
         This list is the rooms you have been let into, so nothing here asks a founder for

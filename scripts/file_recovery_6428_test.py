@@ -177,6 +177,46 @@ class RecordingStore(drill.SyntheticStore):
         return super().get(key, archive=archive, etag=etag)
 
 
+class RecoveryCommand(unittest.TestCase):
+    """The restore command exits after its own handler; backup still uses the default path (#8264)."""
+
+    def test_restore_main_dispatches_arguments_once_without_starting_backup(self):
+        argv = ['file-recovery.py', 'restore', '--run-id', 'synthetic-run', '--target', 'synthetic-target']
+        for result in [None, {'outcome': 'restored'}]:
+            with self.subTest(result=result), patch.object(r.sys, 'argv', argv), \
+                    patch.object(r, 'restore_main', return_value=result) as restore, \
+                    patch.object(r, 'AwsStore') as store, patch.object(r.argparse, 'ArgumentParser') as parser:
+                self.assertIsNone(r.main())
+            restore.assert_called_once_with(argv[2:])
+            store.assert_not_called()
+            parser.assert_not_called()
+
+    def test_restore_main_propagates_failure_without_starting_backup(self):
+        with patch.object(r.sys, 'argv', ['file-recovery.py', 'restore']), \
+                patch.object(r, 'restore_main', side_effect=ValueError('synthetic refusal')) as restore, \
+                patch.object(r, 'AwsStore') as store:
+            with self.assertRaisesRegex(ValueError, 'synthetic refusal'):
+                r.main()
+        restore.assert_called_once_with([])
+        store.assert_not_called()
+
+    def test_backup_main_still_outputs_verified_receipt_and_returns_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'registry.json'
+            path.write_text(json.dumps(registry()))
+            store = drill.SyntheticStore()
+            with patch.object(r.sys, 'argv', ['file-recovery.py', '--registry', str(path)]), \
+                    patch.object(r, 'restore_main') as restore, patch.object(r, 'AwsStore', return_value=store), \
+                    patch.object(r, 'verify_live_lock') as lock, patch('builtins.print') as output:
+                self.assertIsNone(r.main())
+            restore.assert_not_called()
+            lock.assert_called_once()
+            result = json.loads(output.call_args.args[0])
+            self.assertEqual(result['outcome'], 'verified')
+            self.assertEqual(result['objects'], 2)
+            self.assertIn(r.ARCHIVE_PREFIX + result['snapshot'] + '/manifest.json', store.archive)
+
+
 class Suppression(unittest.TestCase):
     """D6654: the suppression ledger, the restore that reads it first, and the locked-copy filter."""
 

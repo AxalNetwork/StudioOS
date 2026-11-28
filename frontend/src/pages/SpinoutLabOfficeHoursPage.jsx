@@ -1,7 +1,6 @@
 // Spin-Out Lab — Office Hours (Week 3 tool page).
 //
-// Design handoff: spin-out-lab-pipeline/project/Office Hours.dc.html (same
-// file uploaded to attached_assets). The design's fabricated content
+// Design handoff: spin-out-lab-pipeline/project/Office Hours.dc.html. The design's fabricated content
 // (invented partner personas, ratings, "Partner prep sent", fake session
 // summaries) is intentionally NOT reproduced. Mapping to REAL surfaces only:
 //   - Host directory (D377): GET /spinout-lab/hosts/directory — ONLY the

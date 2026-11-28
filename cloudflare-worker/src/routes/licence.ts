@@ -1300,7 +1300,7 @@ r.get('/mine/statements', async (c) => {
     const { listFeeInvoices, licenseeInvoiceView } = await import('../services/licenceFeeInvoices');
     fee_invoices = (await listFeeInvoices(c.env, own.licence.uid)).map(licenseeInvoiceView);
   } catch {
-    fee_invoices_reason = 'Your annual fee invoices could not be read. Try again in a moment.';
+    fee_invoices_reason = 'Your fee invoices could not be read. Try again in a moment.';
   }
   return c.json({ ...body, fee_invoices, fee_invoices_reason });
 });

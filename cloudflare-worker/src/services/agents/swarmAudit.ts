@@ -108,9 +108,20 @@ const advance = (store: AdmissionStore, through: number) => store.transaction(st
  */
 export function scopedSwarmState(sw: SwarmState, venture: { tenant_id: number; company_id: number }): SwarmState {
   const key = ventureKey(venture);
-  return structuredClone({ ...sw,
+  const { retired, ...rest } = sw;
+  return structuredClone({ ...rest,
     tickets: Object.fromEntries(Object.entries(sw.tickets).filter(([, t]) => ventureKey(t) === key)),
-    audit: sw.audit.filter(e => ventureKey(e) === key) });
+    audit: sw.audit.filter(e => ventureKey(e) === key),
+    // D5586-p4: only this venture's part of what retention compacted. `dropped` and `audit_compacted` are the
+    // coordinator's counters, like `audit_dropped`, and say nothing about another venture.
+    ...(retired ? { retired: {
+      uids: Object.fromEntries(Object.entries(retired.uids).filter(([, r]) => r.venture === key)),
+      order: retired.order.filter(u => retired.uids[u]?.venture === key),
+      dropped: retired.dropped, audit_compacted: retired.audit_compacted,
+      tickets: key in retired.tickets ? { [key]: retired.tickets[key] } : {},
+      charged: key in retired.charged ? { [key]: retired.charged[key] } : {},
+      render: Object.fromEntries(Object.entries(retired.render).filter(([k]) => k.startsWith(`${key}|`))),
+    } } : {}) });
 }
 
 /**
