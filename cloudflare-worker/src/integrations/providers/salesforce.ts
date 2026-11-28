@@ -50,6 +50,7 @@ import {
 import { acquireRefreshLease } from '../refreshLease';
 import { runSystemMove } from '../../services/dealTransitions';
 import { dealHiddenFrom, hiddenDealIds, hiddenJson } from '../../services/dealPreparation';
+import { ownerDealsChangedSinceSql, ownerDealByCrmIdSql, SF_OWNER_DEAL_SQL, SF_OWNER_PROJECT_SQL } from '../crmDealScope';
 
 const PROVIDER_KEY = 'salesforce';
 const SF_API_VERSION = 'v60.0';
@@ -400,11 +401,7 @@ async function opportunityContent(env: Env, row: IntegrationRow, dealId: number)
   // Without this scope, any user with an active SF integration could push another
   // tenant's deal by guessing the ID.
   const deal = await env.DB.prepare(
-    'SELECT d.*, p.name as project_name, p.sf_account_id ' +
-    'FROM deals d ' +
-    'LEFT JOIN projects p ON p.id = d.project_id ' +
-    'LEFT JOIN founders f ON f.id = p.founder_id ' +
-    'WHERE d.id = ? AND f.user_id = ?',
+    SF_OWNER_DEAL_SQL,
   ).bind(dealId, row.user_id).first<{
     id: number; status: string; amount: number | null; notes: string | null;
     sf_opportunity_id: string | null; project_name: string | null;
@@ -467,11 +464,9 @@ async function pushDeal(env: Env, row: IntegrationRow, dealId: number): Promise<
 
 /** The account (and first contact) `pushProjectAccount` sends: read once, by push and by preview alike. */
 async function accountContent(env: Env, row: IntegrationRow, projectId: number) {
-  // Tenant isolation: project must belong to the integration owner via founder.user_id.
+  // Tenant isolation: project must belong to the integration owner via users.founder_id (D8964).
   const proj = await env.DB.prepare(
-    'SELECT p.*, f.id as f_id, f.email as founder_email, f.name as founder_name, f.sf_contact_id as founder_sf_contact_id ' +
-    'FROM projects p LEFT JOIN founders f ON f.id = p.founder_id ' +
-    'WHERE p.id = ? AND f.user_id = ?',
+    SF_OWNER_PROJECT_SQL,
   ).bind(projectId, row.user_id).first<{
     id: number; name: string; description: string | null; sector: string | null;
     sf_account_id: string | null; sf_primary_contact_id: string | null;
@@ -606,14 +601,7 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
   // D5454 (#5454, R4): less what `refuseHiddenDeal` refuses, bound before the LIMIT; a guard failure fails the sync.
   const hidden = hiddenJson(await hiddenDealIds(c.env, 'transactional'));
   const localDeals = await c.env.DB.prepare(
-    'SELECT d.id, d.status, d.sf_opportunity_id, d.updated_at ' +
-    'FROM deals d ' +
-    'LEFT JOIN projects p ON p.id = d.project_id ' +
-    'LEFT JOIN founders f ON f.id = p.founder_id ' +
-    'WHERE f.user_id = ? AND datetime(d.updated_at) > datetime(?) ' +
-    'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1) ' +
-    'AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) ' +
-    'ORDER BY datetime(d.updated_at) DESC LIMIT 100',
+    ownerDealsChangedSinceSql('sf_opportunity_id', true),
   ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id, hidden).all<{
     id: number; status: string; sf_opportunity_id: string | null;
   }>();
@@ -657,11 +645,7 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
         const next = sfStageToStudio(stageMaps, r.StageName);
         if (!next) continue;
         const local = await c.env.DB.prepare(
-          'SELECT d.id, d.status, d.stage_changed_at FROM deals d ' +
-          'LEFT JOIN projects p ON p.id = d.project_id ' +
-          'LEFT JOIN founders f ON f.id = p.founder_id ' +
-          'WHERE d.sf_opportunity_id = ? AND f.user_id = ? ' +
-          'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
+          ownerDealByCrmIdSql('sf_opportunity_id'),
         ).bind(r.Id, row.user_id, row.id).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (local && local.status !== next) {
           await runSystemMove(c.env, { dealId: local.id, to: next, source: 'salesforce' });
