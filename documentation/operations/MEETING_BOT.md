@@ -23,8 +23,9 @@ reports `platforms.teams: false` (Zoom and Meet keep their own answers), and a
 send with a Teams link answers `503 bot_unavailable` before any `meeting_bots`
 row or token hold. It narrows `MEETING_BOT`, never widens it: with
 `MEETING_BOT` `off` Teams is off too, and under `canary` it still reaches Super
-Admins only. It stays `off` until the bot's Teams page driver (D1451 part 2)
-and the live check in §4 pass; the owner turns it on in its own PR.
+Admins only. The bot's Teams page driver (D1451 part 2) is built (D5812,
+#5812, headless, tested on a constructed fixture only). It stays `off` until
+the live check in §4 passes; the owner turns it on in its own PR.
 
 B1 (#2579) owns these checks on both immediate and scheduled runs. Changing
 the var alone does not install the control plane or runtime. It also does

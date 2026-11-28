@@ -54,13 +54,16 @@ folder's lockfile. No TypeScript compilation step is needed in the image.
 | `package.json`, `package-lock.json` | Pinned browser dependency and isolated runtime install. |
 
 | `src/adapters/teams.ts` | B5 (#2583): Microsoft Teams as a browser guest, over a `TeamsPage` driver (attributes only, so a caption's or a message's words never reach it). Launcher → pre-join (mic and camera off) → lobby, including Teams' "Suspected threats" bot approval; the notice in the meeting chat; the People pane as the roster; live captions' speaker names as the speaker timeline. A captcha, anonymous join turned off or a blocked bot is `platform_blocked`. |
+| `src/adapters/teams/page.ts` | D5812 (#5812): `playwrightTeamsPage`, the Playwright `TeamsPage` driver the packaged factory gives `TeamsAdapter`. Visible elements' named attributes only (never text); clicks and fills bounded; the shared capture installed before the first `goto`, switched on only once admitted **and** subscribed (after the notice). |
+| `src/adapters/capture.ts` | The in-page audio capture shared by Meet and Teams (D5812): every remote WebRTC audio track mixed in Web Audio and handed to Node, only while the adapter has switched it on. |
 | `src/adapters/teamsSelectors.ts` | B5: every Teams selector and the link rule (work or school, and Teams free; https only). **Provisional**, from published reports, until the live check records Teams' screens. |
 | `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
 | `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It signs in to Eadwyn's Google account first when one is set up (D3678), else joins as a guest, with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
 | `src/adapters/meet/selectors.ts` | Every Meet page hook, in one place. **UNVERIFIED:** written without access to Meet, and to be measured (#2581 step 1, D886 §8). |
 | `src/adapters/meet/signals.ts` | The Meet adapter's pure rules: the page state from its hooks, the link check, the roster and the active speaker. |
 | `src/adapters/meet/signin.ts` | D3678 (#3678): the sign-in to Eadwyn's own Google account before the bot opens a meeting, its hooks (**UNVERIFIED**, constructed), its failure codes, and `meetCredentials`, the source that asks the site Worker for the account and each two-step code over the run's signed callback. With no account set up, the bot joins as a guest. |
-| `src/adapters/meet/capture.ts` | The in-page audio capture: every remote WebRTC audio track mixed in Web Audio and handed to Node, from admission only. |
+| `src/adapters/meet/capture.ts` | Meet's import path for the shared capture in `src/adapters/capture.ts`. |
+| `test/teams_page_driver.test.ts`, `test/_teams_browser.ts` | D5812: the Teams driver and the packaged factory's Teams run in Chromium on `test/fixtures/teams.html`, a **constructed** page (not recorded); skips by name without Chromium (`CHROMIUM_PATH` or `PW_CHROMIUM_PATH`). Headless vs headed under Xvfb is measured in D5812 §3. |
 | `test/meet_*.test.ts`, `test/_meet_browser.ts` | The Meet tests. `meet_selectors` has one test per hook, so a changed hook fails one named test. The browser tests run Chromium on `test/fixtures/meet.html` and, for the sign-in (D3678), `test/fixtures/google_signin.html`, both **constructed** pages (not recorded), and skip by name where there is no Chromium (`CHROMIUM_PATH`). |
 
 ## The run
@@ -298,6 +301,8 @@ Actual provider behavior remains a gated live check.
 control boundary. `wrangler.meeting-bot.toml` and `meeting-bot-deploy.yml` own
 the image release independently of the site. `container-entry.sh` supplies
 Xvfb/PulseAudio for the SDK sidecar. The packaged factory now connects Teams
-and Zoom; no real-platform measurement or publication is implied.
+(through its Playwright driver, D5812, still headless) and Zoom; no
+real-platform measurement or publication is implied, and Teams stays behind
+`MEETING_BOT_TEAMS=off`.
 
 D5675: `src/previewCanary.ts` sends only the signed synthetic callback from the runtime image; `worker/previewCanary.ts` validates its isolated recipient and cleanup receipt.
