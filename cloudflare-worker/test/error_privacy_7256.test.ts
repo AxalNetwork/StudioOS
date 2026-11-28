@@ -94,7 +94,9 @@ test('custom error names, stack, cause and import-row exceptions never enter dia
 test('the production boundary and visual catch use the bounded logger while retaining generic public replies', () => {
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
   const worker = source('../src/index.ts');
-  assert.match(worker, /reportPrivateError\('edge_unhandled', err\)/);
+  // D9186: the boundary's last branch moved to util/edgeError.ts, which logs with method and route.
+  assert.match(worker, /return edgeFallback\(c, err\);\n\}\);/);
+  assert.match(source('../src/util/edgeError.ts'), /reportPrivateError\('edge_unhandled', err, code, \{ method: c\.req\.method, route: routePattern\(c\) \}\)/);
   assert.doesNotMatch(worker, /console\.error\('\[edge\] unhandled error/);
   const visual = source('../../frontend/tests/visual/server.ts');
   assert.match(visual, /reportPrivateError\('visual_request', e\)/);
