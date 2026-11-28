@@ -395,6 +395,23 @@ Steps:
    if part of the job had already happened (§5.3); a dead-lettered email's
    log row reads `dlq` until then.
 
+A replay runs once (D9034). The route claims the row by deleting it, and only
+the request whose delete changed the row enqueues the job: a second click, or a
+second admin at the same moment, gets 409 `dlq_item_already_claimed`. If the
+enqueue throws, the row is put back unchanged and the answer is 502
+`dlq_replay_enqueue_failed`; try again. The replay's idempotency key is the
+message's own key (kept in `cf_dlq_mirror.idempotency_key`) with
+`:dlq-replay:<source>-<id>` added, so a replay that is retried carries the same
+key and the consumer runs it once. Each replay writes a `dlq_replayed` audit
+row and each discard (`DELETE /api/infra/dlq/:id`) a `dlq_deleted` row, naming
+the admin, the source, the row id and the job type, never the payload.
+
+The mirror itself holds one row per message (`idx_cf_dlq_message`). A mirror
+write that fails is retried after 60 seconds (`retry_delay` on every job DLQ
+consumer in `wrangler.toml`). On the final attempt the consumer writes an
+`error_logs` row with `source = 'dlq-consumer'`, the job type and the message
+id, and acks: the message is gone, so read that row before anything else.
+
 **Notifies (D9032):** a new dead letter of any job but `agent_run` opens the
 `incidents.dlq.new_waiting` episode (warning from one, critical at `DLQ_HIGH`,
 §5); it clears when those letters are replayed or discarded. Agent-run letters

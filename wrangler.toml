@@ -422,6 +422,9 @@ queue              = "studioos-job-queue-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
+# D9034: a delayed retry rides out a short D1 outage; the final attempt
+# records the lost message in error_logs (queue-consumer.ts JOB_DLQ_*).
+retry_delay        = 60
 
 # D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
 # routes "agent-queue" batches before its own `dlq` test.
@@ -908,6 +911,9 @@ queue              = "studioos-job-queue-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
+# D9034: a delayed retry rides out a short D1 outage; the final attempt
+# records the lost message in error_logs (queue-consumer.ts JOB_DLQ_*).
+retry_delay        = 60
 
 # D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
 # routes "agent-queue" batches before its own `dlq` test.
@@ -1234,6 +1240,9 @@ queue              = "studioos-job-queue-preview-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
+# D9034: a delayed retry rides out a short D1 outage; the final attempt
+# records the lost message in error_logs (queue-consumer.ts JOB_DLQ_*).
+retry_delay        = 60
 
 # D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
 # routes "agent-queue" batches before its own `dlq` test.
