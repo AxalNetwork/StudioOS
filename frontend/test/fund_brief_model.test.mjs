@@ -257,8 +257,8 @@ test('the recipient line is optional and never invented', () => {
   assert.equal(fundBriefModel({ recipient: { name: '   ' } }).meta.preparedFor, null);
   assert.equal(fundBriefModel({ recipient: { email: 'lp@example.com' } }).meta.preparedFor, 'Prepared for lp@example.com');
   assert.equal(
-    fundBriefModel({ recipient: { name: 'A. Partner', email: 'lp@example.com', standing: 'Committed LP · $250K committed' } }).meta.preparedFor,
-    'Prepared for A. Partner · Committed LP · $250K committed',
+    fundBriefModel({ recipient: { name: 'A. Partner', email: 'lp@example.com', standing: 'Full rights · $250,000.00' } }).meta.preparedFor,
+    'Prepared for A. Partner · Full rights · $250,000.00',
   );
 });
 

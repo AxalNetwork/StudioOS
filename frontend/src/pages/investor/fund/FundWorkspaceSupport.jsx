@@ -1,6 +1,7 @@
 import React from 'react';
 import { Lock, Clock, Check, ShieldCheck } from 'lucide-react';
 import { FUND, ALLOC_THRESHOLD_K } from '../../../lib/spinoutFundModel';
+import { formatCents } from '../fundCallsModel';
 
 export const CARD =
   'rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900';
@@ -62,13 +63,31 @@ export const GATE = {
   },
 };
 
+// D9006 (#9006): the standing chip's words are the canvas's (Axal VC Fund v2
+// and LP Workspace, STAND). The canvas's "applicant" is lpAccessState()'s
+// 'pending' and its "full" is 'voting'. The tones are unchanged.
 export const PROFILE_CHIP = {
-  visitor: ['gray', 'Invited guest'],
-  pending: ['amber', 'Applicant · under review'],
-  approved: ['violet', 'Approved LP'],
+  visitor: ['gray', 'Visitor · viewing by invitation'],
+  pending: ['amber', 'Applicant · application in review'],
+  approved: ['violet', 'Approved · nothing committed yet'],
   committed: ['violet', 'Committed LP'],
-  voting: ['green', 'Committed LP'],
+  voting: ['green', 'Full rights'],
 };
+
+/** The standings whose chip carries the commitment, as the canvas draws them. */
+const SHOWS_AMOUNT = new Set(['committed', 'voting']);
+
+/**
+ * The standing in words, as the chip and the fund brief print it: the canvas
+ * words, then the commitment from the record for a committed standing
+ * ("Committed LP · $150,000.00"). No commitment recorded prints no amount,
+ * never $0.
+ */
+export function standingWords(state, commitmentCents) {
+  const words = (PROFILE_CHIP[state] || PROFILE_CHIP.visitor)[1];
+  const amount = SHOWS_AMOUNT.has(state) && Number(commitmentCents) > 0 ? formatCents(commitmentCents) : null;
+  return amount ? `${words} · ${amount}` : words;
+}
 
 export const REPORT_PKG = [
   'Quarterly portfolio report with company-level marks',

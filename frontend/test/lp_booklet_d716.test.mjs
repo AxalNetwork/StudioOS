@@ -213,7 +213,8 @@ test('D716 #1866 the mount: only for an approved application, and the old senten
   assert.match(page, /derived\.applicationStatus === 'approved' && <SubscriptionBooklet \/>/);
   assert.equal((page.match(/<SubscriptionBooklet/g) || []).length, 1);
   assert.ok(!page.includes('The fund team is preparing your subscription documents.'));
-  assert.ok(page.includes('Your Subscription Booklet is below: read each part, tick what applies, then submit it. Reporting and participation activate once the general partner records your commitment on the fund’s register.'));
+  // D6130 part 2: the approved applicant's sentence moved to the first screen.
+  assert.ok(src('../src/pages/investor/fund/FundFirstScreen.jsx').includes('Your Subscription Booklet is below: read each part, tick what applies, then submit it. Reporting and participation activate once the general partner records your commitment on the fund’s register.'));
 });
 
 test('D716 #1866 nothing is stored in the browser', () => {

@@ -12,7 +12,7 @@
  * snapshots. The profile stays: Settings and investor onboarding write it.
  */
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { getSQL } from '../db';
 import { hashEmail } from '../util/hashEmail';
@@ -62,6 +62,27 @@ export const LEGACY_SECTOR_OPTIONS: readonly string[] = ['AI/ML','Climate','Fint
 export const SECTOR_OPTIONS: readonly string[] = [...new Set([...NFX_SECTORS, ...LEGACY_SECTOR_OPTIONS])];
 const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
 const GEO_OPTIONS    = ['North America','Europe','LATAM','APAC','MENA','Africa'];
+
+// D6128 Q4: assemble a proposal from closed-list answers only. No account,
+// entity, accreditation or other free text is needed to draft a thesis.
+export function draftInvestorThesis(answer: Record<string, unknown>): string | null {
+  const sectors = asStrArr(answer.sectors, SECTOR_OPTIONS);
+  const stages = asStrArr(answer.stages, STAGE_OPTIONS);
+  if (!sectors.length || !stages.length) return null;
+  const regions = asStrArr(answer.geos, GEO_OPTIONS);
+  const excludedSectors = asStrArr(answer.anti_thesis_sectors, SECTOR_OPTIONS);
+  const excludedStages = asStrArr(answer.anti_thesis_stages, STAGE_OPTIONS);
+  const formatSectors = (items: string[]) => items.length > 8
+    ? `${items.slice(0, 8).join(', ')} and ${items.length - 8} other selected sectors`
+    : items.join(', ');
+  const band = TICKET_BANDS.find((value) => value === answer.check_size);
+  return [
+    `I look for ${stages.join(', ')} investments in ${formatSectors(sectors)}${regions.length ? ` across ${regions.join(', ')}` : ''}.`,
+    band && `My typical check is ${band} per deal.`,
+    excludedSectors.length > 0 && `I exclude ${formatSectors(excludedSectors)}.`,
+    excludedStages.length > 0 && `I exclude these stages: ${excludedStages.join(', ')}.`,
+  ].filter(Boolean).join(' ');
+}
 
 const STOP_WORDS = new Set([
   'the','a','an','and','or','but','of','in','on','for','to','with','at','by',
@@ -303,11 +324,13 @@ interface ProfileUpsertBody {
 
 investorProfile.put('/me', async (c) => {
   const user = await requireAuth(c);
-  await ensureSchema(c.env);
   let body: ProfileUpsertBody;
   try { body = await c.req.json<ProfileUpsertBody>(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'Invalid profile' }, 400);
+  return c.json({ profile: await saveInvestorProfile(c.env, user, body) });
+});
 
+export async function saveInvestorProfile(env: Env, user: User, body: ProfileUpsertBody, completion?: D1PreparedStatement) {
   const investor_type = typeof body.investor_type === 'string'
     ? body.investor_type.slice(0, 32) : null;
   const sectors = asStrArr(body.sectors, SECTOR_OPTIONS);
@@ -353,12 +376,17 @@ investorProfile.put('/me', async (c) => {
   const target = parseInt(String(body.lp_target_usd), 10);
   const lp_target_usd = Number.isFinite(target) && target >= 0 ? target : null;
   const notes = clampStr(body.notes, 2000);
+  if (completion && (!['angel', 'family_office', 'institutional', 'fund_gp'].includes(investor_type ?? '') ||
+    !accreditation_status || !country || !ticket_band || !sectors.length || !stages.length || !geos.length)) {
+    return null;
+  }
   // Presence is separate from normalization: an explicit clear is a write.
   // Evaluate it in the upsert so concurrent edits to different fields compose.
   const supplied = JSON.stringify(Object.fromEntries(Object.keys(body).map((key) => [key, true])));
 
-  await c.env.DB.batch([
-    c.env.DB.prepare(
+  await ensureSchema(env);
+  const [, profileWrite] = await env.DB.batch<ProfileRow>([
+    env.DB.prepare(
       `WITH supplied_fields(flags) AS (VALUES (?))
       INSERT INTO investor_profiles (
         user_id, investor_type, sectors_json, stages_json, geos_json,
@@ -397,24 +425,31 @@ investorProfile.put('/me', async (c) => {
       JSON.stringify(anti_thesis_sectors), JSON.stringify(anti_thesis_stages), JSON.stringify(value_weights),
       accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
     ),
-    c.env.DB.prepare(
+    env.DB.prepare(
       `UPDATE investor_profiles SET completed_at = ?
        WHERE user_id = ? AND NULLIF(investor_type, '') IS NOT NULL AND ticket_band IS NOT NULL
          AND CASE WHEN json_valid(sectors_json) THEN json_array_length(sectors_json) ELSE 0 END > 0
-         AND CASE WHEN json_valid(stages_json) THEN json_array_length(stages_json) ELSE 0 END > 0`,
+         AND CASE WHEN json_valid(stages_json) THEN json_array_length(stages_json) ELSE 0 END > 0
+       RETURNING *`,
     ).bind(new Date().toISOString(), user.id),
+    ...(completion ? [completion] : []),
   ]);
 
   try {
-    const sql = getSQL(c.env);
+    const sql = getSQL(env);
     await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('investor_profile_updated', ${`Investor profile updated (sectors=${sectors.length}, stages=${stages.length}, anti=${anti_thesis_sectors.length}, contribute=${body.contribute_to_signals === undefined ? 'unchanged' : contribute_to_signals})`}, ${await hashEmail(user.email)}, ${user.id})`;
   } catch {}
 
-  const row = await c.env.DB.prepare(
+  if (completion) {
+    const row = profileWrite.results[0];
+    if (!row) throw new Error('Completed investor profile could not be read back');
+    return shapeProfile(row);
+  }
+  const row = await env.DB.prepare(
     `SELECT * FROM investor_profiles WHERE user_id = ?`,
   ).bind(user.id).first<ProfileRow>();
-  return c.json({ profile: shapeProfile(row || emptyProfile(user.id)) });
-});
+  return shapeProfile(row || emptyProfile(user.id));
+}
 
 investorProfile.post('/me/opt-out', async (c) => {
   const user = await requireAuth(c);

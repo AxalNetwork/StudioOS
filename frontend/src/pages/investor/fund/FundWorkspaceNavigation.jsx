@@ -6,14 +6,22 @@ export const FUND_SECTION_HASHES = [
   '#my-notices', '#subscription-booklet',
 ];
 
-export default function FundWorkspaceNavigation({ hasPosition, showReports }) {
+/**
+ * `onboardingFirst` (D6130 part 2): an applicant's links put Apply and
+ * onboarding before Fund and terms, in the order the page draws the sections.
+ */
+export default function FundWorkspaceNavigation({ hasPosition, showReports, onboardingFirst = false }) {
   const { hash } = useLocation();
+  const fund = ['#fund', 'Fund and terms'];
+  const apply = ['#apply', 'Apply and onboarding'];
   const links = [
     ['#overview', 'Overview'],
     ...(hasPosition ? [['#my-commitment', 'My commitment'], ['#documents', 'Documents']] : []),
-    ...(showReports ? [['#reports', 'Reports']] : []),
-    ['#fund', 'Fund and terms'],
-    ['#apply', 'Apply and onboarding'],
+    ...(onboardingFirst ? [apply] : []),
+    ...(showReports && !onboardingFirst ? [['#reports', 'Reports']] : []),
+    fund,
+    ...(showReports && onboardingFirst ? [['#reports', 'Reports']] : []),
+    ...(onboardingFirst ? [] : [apply]),
   ];
 
   return (

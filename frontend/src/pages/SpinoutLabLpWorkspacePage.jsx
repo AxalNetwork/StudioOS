@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuthSync';
 import { showsProof } from './investor/proofOfFundsModel';
-import { useProofTargets } from './investor/ProofOfFunds';
+import { useProofTargets, ProofDoor } from './investor/ProofOfFunds';
 import { useLocation } from 'react-router-dom';
 import { api, spinoutLab } from '../lib/api';
 import { lpAccessState, lpHasReports, SPINOUT_FUND_SLUG, fundTerms, LP_STATES } from '../lib/spinoutFundModel';
-import { GATE, PROFILE_CHIP, EXTERNAL_DOCS, LBL, MONO, Chip } from './investor/fund/FundWorkspaceSupport';
+import { PROFILE_CHIP, standingWords, EXTERNAL_DOCS, LBL, Chip } from './investor/fund/FundWorkspaceSupport';
 import { programFigures, fundFigures } from '../lib/spinoutFundFigures';
 import { selectHolding, fmtDate, quarterOf, lastClosedQuarter } from '../lib/quarterlyReportViewModel';
-import { Landmark, Lock, AlertCircle, RefreshCw } from 'lucide-react';
+import { Landmark, Lock } from 'lucide-react';
 import LpSkeleton from './investor/fund/LpSkeleton';
 import { WorkspaceHeader } from '../components/WorkspaceTabs';
 import FundOverviewSection from './investor/fund/FundOverviewSection';
@@ -16,6 +16,9 @@ import FundParticipationSection from './investor/fund/FundParticipationSection';
 import FundReportsSection from './investor/fund/FundReportsSection';
 import FundOnboardingSection from './investor/fund/FundOnboardingSection';
 import FundWorkspaceNavigation, { FUND_SECTION_HASHES } from './investor/fund/FundWorkspaceNavigation';
+import FundFirstScreen from './investor/fund/FundFirstScreen';
+import useFirstScreenReads from './investor/fund/useFirstScreenReads';
+import { firstScreenKind, sectionOrder, onboardingFirst } from '../lib/fundFirstScreenModel';
 
 /** D8731 (#8731): focus the section's own heading (`data-section-heading`), without scrolling it again. */
 export function focusSectionHeading(target) {
@@ -48,7 +51,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const workspaceContent = useRef(null);
   useEffect(() => {
     if (loading || !FUND_SECTION_HASHES.includes(hash)) return undefined;
-    const target = document.getElementById(hash.slice(1));
+    const form = hash === '#apply' ? document.getElementById('lp-application-entry') : null;
+    const target = form || document.getElementById(hash.slice(1));
     if (!target) return undefined;
     const scroll = () => target.scrollIntoView?.({ block: 'start' });
     scroll();
@@ -76,6 +80,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   // separates "no application" from "could not tell", so a failed read never
   // renders a fresh form to someone who has already applied.
   const [application, setApplication] = useState(null);
+  const [applicationPrefill, setApplicationPrefill] = useState(null);
   const [applicationLoaded, setApplicationLoaded] = useState(false);
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefErr, setBriefErr] = useState('');
@@ -115,6 +120,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     // unknown, and the form stays hidden behind the same `applicationLoaded`
     // flag the submit path uses.
     setApplication(appRes.status === 'fulfilled' ? (appRes.value?.application ?? null) : null);
+    setApplicationPrefill(appRes.status === 'fulfilled' ? (appRes.value?.prefill ?? null) : null);
     setApplicationLoaded(appRes.status === 'fulfilled');
     setLoading(false);
   };
@@ -128,15 +134,18 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   }, [hash, derived.holdings, err]);
 
   const state = isAdmin && preview ? preview : derived.state;
+  // D6130 part 2: the first screen follows the standing; a failed position read is its own screen.
+  const kind = firstScreenKind({ loading, portalFailed: !portal && !!err, state, applicationStatus: derived.applicationStatus, holdings: derived.holdings });
+  const reads = useFirstScreenReads({
+    wantsBooklet: !loading && !!portal && (derived.applicationStatus === 'approved' || derived.holdings > 0),
+    wantsNotices: !loading && !!portal && derived.holdings > 0,
+  });
 
-  const gate = GATE[state] || GATE.visitor;
-  const GateIcon = gate.icon;
-  const [chipTone, chipText] = PROFILE_CHIP[state] || PROFILE_CHIP.visitor;
+  const chipTone = (PROFILE_CHIP[state] || PROFILE_CHIP.visitor)[0];
+  // D9006: the canvas words, with the commitment from the record for a committed standing.
+  const chipText = standingWords(state, derived.commitmentCents);
   const hasReports = lpHasReports(state);
   const showApply = !err && state === 'visitor';
-  const showPending = !err && state === 'pending';
-
-  const commitLabel = derived.commitmentK > 0 ? `$${derived.commitmentK}K` : '—';
 
   // D6137: every figure below is a string from the read, the same strings the
   // fund brief prints (lib/spinoutFundFigures.js). The program block keeps its
@@ -266,9 +275,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         recipient: {
           name: user?.name,
           email: user?.email,
-          standing: derived.commitmentK > 0
-            ? `${PROFILE_CHIP[derived.state]?.[1] || 'Investor'} · $${derived.commitmentK}K committed`
-            : PROFILE_CHIP[derived.state]?.[1],
+          // D9006: the chip's words, amount included once.
+          standing: standingWords(derived.state, derived.commitmentCents),
         },
         metrics: live,
       });
@@ -279,6 +287,53 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     }
   };
 
+  const sections = {
+    fund: <FundOverviewSection F={F} P={P} downloadBrief={downloadBrief} briefBusy={briefBusy} briefErr={briefErr} econ={econ} />,
+    participation: (
+      <FundParticipationSection
+        showApply={showApply}
+        applicationLoaded={applicationLoaded}
+        application={application}
+        prefill={applicationPrefill}
+        setApplication={setApplication}
+        derived={derived}
+        proofOn={proofOn}
+        openProof={openProof}
+        portal={portal}
+        err={err}
+        load={load}
+        proofTargets={proofTargets}
+        proofKey={proofKey}
+        proofSheet={proofSheet}
+        setProofSheet={setProofSheet}
+        setProofKey={setProofKey}
+      />
+    ),
+    reports: (
+      <FundReportsSection
+        F={F}
+        kpis={kpis}
+        ARCHIVE_FILTERS={ARCHIVE_FILTERS}
+        setArchiveFilter={setArchiveFilter}
+        archiveFilter={archiveFilter}
+        archive={archive}
+        hasReports={hasReports}
+        holding={holding}
+        generateReport={generateReport}
+        reportBusy={reportBusy}
+        reportErr={reportErr}
+        ambiguousFund={ambiguousFund}
+        portal={portal}
+        state={state}
+        chipTone={chipTone}
+        chipText={chipText}
+        derived={derived}
+        isAdmin={isAdmin}
+      />
+    ),
+    onboarding: <FundOnboardingSection kyc={kyc} application={application} applicationLoaded={applicationLoaded} portal={portal} />,
+  };
+
   const body = (
     <div ref={workspaceContent} className="space-y-6">
       {/* confidentiality */}
@@ -287,16 +342,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         Confidential — prepared for curated investors only. Contents are indicative and qualified in
         their entirety by the fund&apos;s legal documents.
       </div>
-
-      {err && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">
-          <AlertCircle size={16} className="flex-none" />
-          <span className="flex-1">{err}</span>
-          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 dark:border-red-800 px-2.5 py-1 text-xs font-semibold">
-            <RefreshCw size={12} /> Retry
-          </button>
-        </div>
-      )}
 
       {/* admin preview — inert, admin-only */}
       {isAdmin && (
@@ -322,77 +367,27 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         </div>
       )}
 
-      <FundWorkspaceNavigation hasPosition={derived.holdings > 0 || (!portal && !!err)} showReports={state !== 'visitor'} />
+      <FundWorkspaceNavigation hasPosition={derived.holdings > 0 || (!portal && !!err)} showReports={state !== 'visitor'} onboardingFirst={onboardingFirst(kind)} />
 
-      {err ? <p role="status" id="overview">LP position unavailable</p> : (
-      <div id="overview" tabIndex={-1} className={`flex scroll-mt-6 flex-wrap items-center gap-4 rounded-2xl border px-5 py-4 ${gate.wrap}`}>
-        <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-          <GateIcon size={17} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
-            {gate.title}
-            {(state === 'committed' || state === 'voting') && derived.commitmentK > 0 && ` (${commitLabel})`}
-          </div>
-          <div className="mt-0.5 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">{gate.body}</div>
-        </div>
-      </div>
-      )}
-
-      <FundOverviewSection
-        F={F}
-        P={P}
-        downloadBrief={downloadBrief}
-        briefBusy={briefBusy}
-        briefErr={briefErr}
-        econ={econ}
-      />
-      <FundParticipationSection
-        showApply={showApply}
-        applicationLoaded={applicationLoaded}
+      <FundFirstScreen
+        kind={kind}
+        portal={portal}
         application={application}
-        setApplication={setApplication}
-        showPending={showPending}
-        derived={derived}
-        proofOn={proofOn}
-        lpApplicationTarget={lpApplicationTarget}
-        openProof={openProof}
-        portal={portal}
-        err={err}
-        load={load}
-        proofTargets={proofTargets}
-        proofKey={proofKey}
-        proofSheet={proofSheet}
-        setProofSheet={setProofSheet}
-        setProofKey={setProofKey}
-      />
-      <FundReportsSection
-        F={F}
-        kpis={kpis}
-        ARCHIVE_FILTERS={ARCHIVE_FILTERS}
-        setArchiveFilter={setArchiveFilter}
-        archiveFilter={archiveFilter}
-        archive={archive}
-        hasReports={hasReports}
-        holding={holding}
-        generateReport={generateReport}
-        reportBusy={reportBusy}
-        reportErr={reportErr}
-        ambiguousFund={ambiguousFund}
-        portal={portal}
-        state={state}
-        chipTone={chipTone}
-        chipText={chipText}
-        derived={derived}
-        commitLabel={commitLabel}
-        isAdmin={isAdmin}
-      />
-      <FundOnboardingSection
         kyc={kyc}
-        application={application}
-        applicationLoaded={applicationLoaded}
-        portal={portal}
+        booklet={reads.booklet}
+        notices={reads.notices}
+        err={err}
+        onRetryPortal={load}
+        onRetryBooklet={reads.reloadBooklet}
+        onRetryNotices={reads.reloadNotices}
+        P={P}
+        fundId={holding?.fund_id ?? null}
+        proofSlot={proofOn && lpApplicationTarget ? <ProofDoor target={lpApplicationTarget} onShare={openProof} /> : null}
+        today={new Date().toISOString().slice(0, 10)}
       />
+
+      {/* D6130 part 2: the sections follow in the standing's order (sectionOrder). */}
+      {sectionOrder(kind).map((key) => <React.Fragment key={key}>{sections[key]}</React.Fragment>)}
 
     </div>
   );
@@ -419,14 +414,15 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           are a visitor or a $250K LP: it decides what the rest of the page will
           even show them. Rendered only when the position has loaded, so it can
           never flash a lower standing than the viewer actually holds. */}
+      {/* D6130 part 2 (VF-15B): while the position is read, the chip says so and draws no standing. */}
+      {loading && (
+        <div className="-mt-4 mb-6" role="status" data-testid="lp-standing-loading">
+          <Chip tone="gray">Reading your standing…</Chip>
+        </div>
+      )}
       {!loading && !err && (
         <div className="-mt-4 mb-6 flex flex-wrap items-center gap-2.5" data-testid="lp-standing">
           <Chip tone={chipTone}>{chipText}</Chip>
-          {derived.commitmentK > 0 && (
-            <span className={`text-[12px] font-semibold text-gray-600 dark:text-gray-300 ${MONO}`}>
-              {commitLabel} committed
-            </span>
-          )}
           {user?.name && (
             <span className="text-[12px] text-gray-500 dark:text-gray-400">{user.name}</span>
           )}

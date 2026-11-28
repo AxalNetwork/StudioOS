@@ -1,12 +1,57 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SelectField } from '../components/OnboardingWizard';
-import { api } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
+import { investorOnboardingApi } from '../lib/api/investorOnboarding.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { COUNTRIES } from '../lib/countries';
 import { NFX_SECTORS } from '../lib/nfxSectors';
-import { investorFundHref, investorLanding, investorProfilePayload, investorResumeStep } from '../lib/onboarding';
+import { investorFundHref, investorLanding, investorResumeStep } from '../lib/onboarding';
 import { OnboardingCanvas } from '../components/auth/AuthShell';
+import Sheet from '../ui/Sheet';
+
+function ThesisAnswer({ values, set }) {
+  const [proposal, setProposal] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const input = useRef(null);
+  async function draft() {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await investorOnboardingApi.draftThesis();
+      setProposal(result.draft);
+    } catch (err) {
+      setError(err?.message || 'Could not draft a thesis. You can still write your own.');
+    } finally {
+      setLoading(false);
+    }
+  }
+  function useProposal(edit) {
+    set('thesis_text', proposal);
+    setProposal(null);
+    if (edit) requestAnimationFrame(() => input.current?.querySelector('textarea')?.focus());
+  }
+  const button = 'min-h-11 rounded-lg border border-gray-300 px-3 text-sm font-semibold dark:border-gray-600';
+  return <div className="space-y-4">
+    <div ref={input}>
+      <TextArea label="Investment thesis" value={values.thesis_text} onChange={value => set('thesis_text', value.slice(0, 2000))}
+        placeholder="A few sentences on what you look for" rows={5} className="min-h-[160px] resize-none" />
+      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{(values.thesis_text || '').length} / 2,000 characters</p>
+    </div>
+    <button type="button" className={button} disabled={loading} onClick={draft}>{loading ? 'Drafting…' : 'Draft with Eadwyn'}</button>
+    {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
+    {proposal && <Sheet title="Eadwyn" eyebrow="Draft from your answers" phone="sheet" width={480} onClose={() => setProposal(null)}>
+      <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">This draft uses your saved answers from steps 1 to 5. Your thesis is saved when you continue.</p>
+      <p className="mb-4 break-words text-sm">{proposal}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={button} onClick={() => useProposal(false)}>Accept</button>
+        <button type="button" className={button} onClick={() => useProposal(true)}>Edit draft</button>
+        <button type="button" className={button} onClick={() => setProposal(null)}>Discard</button>
+      </div>
+    </Sheet>}
+  </div>;
+}
 
 const ENTITY_FIELDS = [
   ['entity_name', 'Legal entity name'], ['registration_number', 'Registration number'],
@@ -60,48 +105,85 @@ function ReviewAnswers({ values, edit }) {
     ['lp_intent', 'Fund interest', [['LP intent', intent[values.lp_intent] || values.lp_intent], ['Target commitment (USD)', values.lp_target_usd], ['Notes', values.notes]]],
   ];
   return <div className="space-y-4">{groups.map(([key, title, rows]) => <section key={key} className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
-    <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{title}</h3><button type="button" className="min-h-11 shrink-0 text-sm text-violet-700 underline dark:text-violet-300" aria-label={`Edit ${title}`} onClick={() => edit(key)}>Edit</button></div>
+    <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{title}</h3>{edit && <button type="button" className="min-h-11 shrink-0 text-sm text-violet-700 underline dark:text-violet-300" aria-label={`Edit ${title}`} onClick={() => edit(key)}>Edit</button>}</div>
     {values._skipped?.includes(key) ? <p className="text-sm">Skipped</p> : <dl className="space-y-2 text-sm">{rows.map(([label, value]) => <div key={label}><dt className="text-gray-600 dark:text-gray-400">{label}</dt><dd className="break-words text-gray-900 dark:text-gray-100">{display(value)}</dd></div>)}</dl>}
   </section>)}</div>;
 }
 
 // D6135 (#6135): saved onboarding answers, an honest profile-copy result,
 // and an explicit, role-safe handoff after the final step.
-export function InvestorOnboardingFinish({ values, role, onContinue, onFund, autoSave = true }) {
-  const [status, setStatus] = useState(autoSave ? 'saving' : 'unconfirmed');
+async function completeInvestor(values) {
+  const { profile, completed_at } = await api.onboardingComplete('investor', values);
+  if (!completed_at || !profile?.completed_at) throw new Error('Could not confirm your saved profile. Try again.');
+  return { profile };
+}
+
+export function InvestorOnboardingFinish({ values, role, onContinue, onFund, savedProfile }) {
+  const [profile, setProfile] = useState(savedProfile || null);
+  const [state, setState] = useState(savedProfile ? 'ready' : 'reading');
   const [attempt, setAttempt] = useState(0);
+  const [application, setApplication] = useState(undefined);
   useEffect(() => {
-    if (!autoSave && attempt === 0) return undefined;
-    let alive = true;
-    setStatus('saving');
-    Promise.resolve().then(() => api.saveInvestorProfile(investorProfilePayload(values)))
-      .then(() => { if (alive) setStatus('saved'); })
-      .catch(() => { if (alive) setStatus('failed'); });
-    return () => { alive = false; };
-  }, [values, autoSave, attempt]);
-  const fund = investorFundHref(role, values.lp_intent);
-  const fundReady = status === 'saved' && fund && values.lp_intent === 'yes_now';
-  const button = 'min-h-11 rounded-lg px-4 py-2 text-sm font-semibold';
-  return (
-    <section className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="investor-finish">
-      {status === 'saving' ? <p aria-busy="true">Saving your investor profile…</p>
-        : status === 'failed' || status === 'unconfirmed' ? <>
-          <h2 className="text-lg font-semibold" role={status === 'failed' ? 'alert' : undefined}>{status === 'failed' ? 'Your profile was not saved' : 'Your onboarding answers are saved'}</h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{status === 'failed' ? 'Your answers are kept in your onboarding progress.' : 'Save these answers to your investor profile, or continue without changing it.'}</p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button type="button" className={`${button} bg-violet-700 text-white dark:bg-violet-600`} data-testid="investor-profile-retry" onClick={() => { setStatus('saving'); setAttempt((n) => n + 1); }}>{status === 'failed' ? 'Try again' : 'Save profile'}</button>
-            <button type="button" className={`${button} border border-gray-300 dark:border-gray-600`} data-testid="investor-profile-skip" onClick={() => setStatus('skipped')}>Continue anyway</button>
-          </div>
-        </> : <>
-          <h2 className="text-lg font-semibold">{status === 'saved' ? 'Your profile is saved' : 'Continue without saving your profile'}</h2>
-          <div className="mt-4 flex flex-wrap gap-3">
-            {fundReady && <button type="button" className={`${button} bg-violet-700 text-white dark:bg-violet-600`} data-testid="investor-fund" onClick={() => onFund(fund)}>Review fund application</button>}
-            <button type="button" className={`${button} ${fundReady ? 'border border-gray-300 dark:border-gray-600' : 'bg-violet-700 text-white dark:bg-violet-600'}`} data-testid="investor-deals" onClick={onContinue}>{role === 'exploring' ? 'See membership status' : 'See deal flow'}</button>
-            {fund && !fundReady && <button type="button" className={`${button} border border-gray-300 dark:border-gray-600`} data-testid="investor-fund" onClick={() => onFund(fund)}>Open the Axal VC Fund</button>}
-          </div>
-        </>}
-    </section>
-  );
+    if (savedProfile) return undefined;
+    let current = true;
+    api.getInvestorProfile().then(({ profile: saved }) => {
+      if (!current) return;
+      setProfile(saved);
+      setState(saved?.completed_at ? 'ready' : 'legacy');
+    }).catch(() => { if (current) setState('unreadable'); });
+    return () => { current = false; };
+  }, [savedProfile, attempt]);
+  async function restoreProfile() {
+    setState('saving');
+    try {
+      const result = await completeInvestor(values);
+      setProfile(result.profile);
+      setState('ready');
+    } catch {
+      setState('save-failed');
+    }
+  }
+  const fund = investorFundHref(role, profile?.lp_intent);
+  const fundReady = fund && profile?.lp_intent === 'yes_now';
+  useEffect(() => {
+    if (!fundReady) return undefined;
+    let current = true;
+    spinoutLab.lpApplication().then(data => { if (current) setApplication(data); })
+      .catch(() => { if (current) setApplication(null); });
+    return () => { current = false; };
+  }, [fundReady]);
+  const applicationStatus = application?.application?.status;
+  const targetWarning = application?.prefill?.target_out_of_range;
+  const button = 'inline-flex min-h-11 items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold dark:border-gray-600';
+  return <section className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="investor-finish">
+    {state === 'reading' || state === 'saving' ? <p role="status">{state === 'reading' ? 'Reading your saved profile…' : 'Saving your investor profile…'}</p>
+      : state === 'unreadable' ? <>
+        <p role="alert">Your saved profile could not be read.</p>
+        <button type="button" className={button} onClick={() => { setState('reading'); setAttempt(n => n + 1); }}>Try again</button>
+      </> : state === 'legacy' || state === 'save-failed' ? <>
+        <h2 className="text-lg font-semibold">Your profile still needs to be saved</h2>
+        <p className="my-3 text-sm">Your earlier onboarding answers are available. Save them to finish your investor profile.</p>
+        {state === 'save-failed' && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">Your profile could not be saved. Try again.</p>}
+        <button type="button" className={button} onClick={restoreProfile}>{state === 'save-failed' ? 'Try again' : 'Save profile'}</button>
+      </> : <>
+        <h2 className="text-lg font-semibold">{role === 'exploring' ? 'Your membership is under review' : 'Your profile is saved'}</h2>
+        {fundReady && targetWarning && <p className="mt-3 text-sm text-amber-800 dark:text-amber-300">The fund application takes $50,000 to $2,000,000. Your target falls outside that range and won’t be sent to the application.</p>}
+        {fundReady && applicationStatus && <p className="mt-3 text-sm">Fund application status <strong className="capitalize">{applicationStatus}</strong></p>}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {fundReady && applicationStatus !== 'declined' && <button type="button" className={`${button} bg-violet-700 text-white dark:bg-violet-600`} data-testid="investor-fund" onClick={() => onFund(fund + '#apply')}>
+            {application && !application.application ? 'Review fund application' : 'Open fund workspace'}
+          </button>}
+          <button type="button" className={button} data-testid="investor-deals" onClick={onContinue}>{role === 'exploring' ? 'See membership status' : 'See deal flow'}</button>
+          <Link className={button} to="/trust/me">Open Trust</Link>
+          {role !== 'exploring' && <Link className={button} to="/kyc">Verify identity</Link>}
+          {fund && !fundReady && <button type="button" className={button} data-testid="investor-fund" onClick={() => onFund(fund)}>Read about the fund</button>}
+        </div>
+        <details className="mt-5">
+          <summary className="cursor-pointer py-2 font-semibold">Review saved answers</summary>
+          <ReviewAnswers values={{ ...values, ...profile, check_size: profile.ticket_band }} />
+        </details>
+      </>}
+  </section>;
 }
 
 export default function OnboardingInvestorPage() {
@@ -237,14 +319,7 @@ export default function OnboardingInvestorPage() {
       description: 'A few sentences on what you look for. With your consent, words may appear in the public thesis cloud, anonymised and only when shared by at least five investors.',
       render: ({ values, set }) => (
         <div className="space-y-4">
-          <TextArea
-            label="Investment thesis"
-            value={values.thesis_text}
-            onChange={(x) => set('thesis_text', x)}
-            placeholder="e.g. Pre-seed founders building AI-native infrastructure for vertical SaaS markets. Bias toward technical founders with prior exit."
-            rows={5}
-            className="min-h-[160px] resize-none"
-          />
+          <ThesisAnswer values={values} set={set} />
           <label className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
@@ -284,6 +359,8 @@ export default function OnboardingInvestorPage() {
       key: 'lp_intent',
       title: 'LP commitment intent',
       description: 'Are you exploring an LP commitment to the Axal VC main fund?',
+      validate: v => v.lp_target_usd && (!Number.isSafeInteger(Number(v.lp_target_usd)) || Number(v.lp_target_usd) < 0)
+        ? 'Enter the optional fund target as whole US dollars.' : null,
       render: ({ values, set }) => (
         <div className="space-y-4">
           <ChoiceField
@@ -334,8 +411,8 @@ export default function OnboardingInvestorPage() {
         onDark
         finishLabel="Finish profile"
         requireFinalSave
-        reviewFlow={{ resumeStep: investorResumeStep }}
-        renderComplete={(values, { resumed }) => <InvestorOnboardingFinish values={values} role={user?.role} autoSave={!resumed}
+        reviewFlow={{ resumeStep: investorResumeStep, complete: completeInvestor }}
+        renderComplete={(values, { completion }) => <InvestorOnboardingFinish values={values} role={user?.role} savedProfile={completion?.profile}
           onContinue={continueToDeals} onFund={(href) => navigate(href, { replace: true })} />}
       />
     </OnboardingCanvas>
