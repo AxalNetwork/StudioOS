@@ -116,7 +116,8 @@ test('existing scoped API methods page through every source and malformed respon
 });
 test('record destinations are scoped to the correct zone and reject injected selectors', () => {
   assert.equal(recordLink('session', 1), '/practice/sessions?record=session&id=1');
-  assert.equal(recordTarget('/practice/sessions', '?record=session&id=1'), 'lifecycle-1');
+  // D8732: the target is the card SessionActions draws (session-card-<id>).
+  assert.equal(recordTarget('/practice/sessions', '?record=session&id=1'), 'session-card-1');
   assert.equal(recordTarget('/practice/engagements', '?record=session&id=1'), null);
   assert.equal(recordTarget('/practice/sessions', '?record=session&id=1%22%5D'), null);
   assert.equal(recordLink('session', '1junk'), '/practice');

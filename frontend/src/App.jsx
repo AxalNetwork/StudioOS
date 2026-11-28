@@ -23,7 +23,7 @@ import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
-import { researchRoleFor, resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
+import { guardAdmits, researchRoleFor, resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
 import { multiLicenceSet } from './lib/multiLicencePages.js';
 import { buildLicenceSidebar, isLicence } from './lib/licenceSidebar';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
@@ -2128,8 +2128,9 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   // D4473 (#4473): a route is allowed when the role browsed as OR any licence held is in its list, so a founder
   // who also holds Investor reaches /deals. `effectiveRole` keeps its meaning for the redirect and the boundary.
+  // #9024: the rule is `guardAdmits`, which the Worker also reads to decide which Calendar items link here.
   const held = resolveHeldLicences({ user, realUser, viewMode, isImpersonating });
-  if (!allowedRoles.includes(effectiveRole) && !held.some((l) => allowedRoles.includes(l))) {
+  if (!guardAdmits(allowedRoles, effectiveRole, held)) {
     // Task #102 — impersonation handoff. When an admin starts impersonating
     // from an admin-only route (e.g. /admin/spinout-lab → "Open workspace"),
     // this guard re-renders with the impersonated role BEFORE the caller's

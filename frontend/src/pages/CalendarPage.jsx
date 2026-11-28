@@ -887,8 +887,11 @@ function PersonalCalendar({ scopes = [] }) {
           item={(items || []).find((ev) => ev.kind === external.kind && ev.source_uid === external.id) || null} />
       )}
       {opened && opened.kind !== AGENT_KIND && (
+        // D8732 (#8732): a drawer opened from Studio's Today goes back with the row to focus and the scroll it left,
+        // and shows what Today read when the item itself cannot be read.
         <CalendarItemDrawer kind={opened.kind} id={opened.id} canCopy={anyConnected} onChanged={load}
-                            onClose={() => navigate(behind)} />
+                            fallback={location.state?.today || null}
+                            onClose={() => navigate(behind, location.state?.focus ? { state: { focus: location.state.focus, scroll: location.state.scroll } } : undefined)} />
       )}
     </div>
   );

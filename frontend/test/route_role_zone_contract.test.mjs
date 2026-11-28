@@ -232,11 +232,11 @@ test('admin, browsing Research and Network as the founder, reaches only zones th
 });
 
 test('the Research routes closed to admin still open for an admin using View as a licence that has them', async () => {
-  const { resolveActiveRole, resolveHeldLicences } = await import('../src/lib/activeRole.js');
+  const { guardAdmits, resolveActiveRole, resolveHeldLicences } = await import('../src/lib/activeRole.js');
   // RoleGuard's and labRoles' own lines, pinned so the simulation below is the one App.jsx runs.
   assert.ok(appSrc.includes("const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);"),
     'RoleGuard no longer reads the previewed role the way this test simulates');
-  assert.ok(appSrc.includes('if (!allowedRoles.includes(effectiveRole) && !held.some((l) => allowedRoles.includes(l))) {'),
+  assert.ok(appSrc.includes('if (!guardAdmits(allowedRoles, effectiveRole, held)) {'),
     'RoleGuard no longer admits on the role browsed as or a held licence');
   assert.ok(appSrc.includes("const adminToResearch = (element) => (effectiveRole === 'admin' ? <Navigate to=\"/research\" replace /> : element);"),
     'the admin redirect these routes rely on changed');
@@ -248,7 +248,7 @@ test('the Research routes closed to admin still open for an admin using View as 
     const effective = resolveActiveRole(session(viewMode));
     if (effective === 'admin') return 'redirect:/research';
     const held = resolveHeldLicences(session(viewMode));
-    return roles.includes(effective) || held.some((l) => roles.includes(l)) ? 'page' : 'refused';
+    return guardAdmits(roles, effective, held) ? 'page' : 'refused';
   };
   const researchRoleFor = (viewMode) => (!viewMode || viewMode === 'admin' ? 'founder' : viewMode);
 

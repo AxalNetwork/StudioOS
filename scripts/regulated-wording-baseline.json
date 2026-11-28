@@ -39,11 +39,6 @@
     },
     {
       "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
-      "text": "Advisor session",
-      "why": "The advisor Studio home is a human advisor's own page; this names that persona's sessions with founders, not the model (D322)."
-    },
-    {
-      "file": "frontend/src/pages/advisor/AdvisorStudioHome.jsx",
       "text": "Advisor earnings are not recorded in the local development service.",
       "why": "The advisor Studio home is a human advisor's own page; this names that persona's earnings, not the model (D322)."
     },

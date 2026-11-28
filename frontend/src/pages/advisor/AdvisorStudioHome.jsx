@@ -7,35 +7,14 @@ import { PURPOSE, TILE } from '../studio/studioLayoutModel';
 import { useStudioLayout } from '../studio/useStudioLayout';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import { AWAITING_DECISION, slotMinutes, slotView } from './advisory/kit';
-import { advisorToday, listNames, todayState } from './advisorToday';
+import { useLocation } from 'react-router-dom';
+import { AWAITING_DECISION } from './advisory/kit';
+import { advisorToday, todayState } from './advisorToday';
+import { STALE_AFTER_MS } from './advisorTodayView';
+import { todayTile, useTodayReturn } from './AdvisorTodayTile';
 import './advisorStudioHome.css';
 import { earningsFigures } from './advisorEarnings';
 import { ADVISOR_AGENDA_KINDS } from '../studio/studioAgenda';
-
-/**
- * " · 45 min", or nothing at all.
- *
- * These rows read `duration_min` and printed "Duration not recorded" on every
- * one of them, forever: it is an INPUT to slot creation and no DTO returns it.
- * The window is what the worker sends, so the length is derived from it —
- * and when only one end is present the label is omitted rather than guessed.
- */
-/**
- * When a row on the "today" list happens, across the two sources it mixes.
- * A booking's time lives on its slot; a calendar event carries its own.
- */
-function itemStart(row) {
-  return row.scheduled_start || row.slot_starts_at || row.start_at || row.start || null;
-}
-
-function minutesLabel(row) {
-  const mins = slotMinutes({
-    starts_at: row.starts_at || row.start_at || row.slot_starts_at || row.scheduled_start,
-    ends_at: row.ends_at || row.slot_ends_at,
-  });
-  return mins == null ? '' : ` · ${mins} min`;
-}
 
 const unavailable = (message = 'Unavailable in this environment') => ({ state: 'unavailable', message });
 const loading = { state: 'loading' };
@@ -44,15 +23,6 @@ const ready = (data) => ({ state: 'ready', data });
 const failed = (error) => ({ state: 'unavailable', failed: true, message: error?.message || 'Unavailable in this environment' });
 const firstName = (value) => String(value || '').trim().split(/\s+/)[0] || 'there';
 const asItems = (value) => Array.isArray(value) ? value : (Array.isArray(value?.items) ? value.items : []);
-
-
-
-function formatWhen(value) {
-  if (!value) return 'Time not recorded';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Time not recorded';
-  return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
-}
 
 function Status({ children, tone = 'neutral' }) {
   return <span className={`advisor-status advisor-status--${tone}`} data-testid={`status-${String(children).toLowerCase().replace(/\s+/g, '-')}`}>{children}</span>;
@@ -65,36 +35,6 @@ function StateNote({ text, icon: Icon = ShieldCheck }) {
 function bookingIdentity(booking) {
   // A person by name, never by email (D1419): the address is a key, not a label.
   return booking.client_name || booking.founder_name || booking.user_name || booking.name || 'Client identity not recorded';
-}
-
-/**
- * The Today tile from `advisorToday`'s answer. What an input returned is shown
- * even while another is loading or has failed, with the gap named; it is
- * Empty only when every input has answered, and Unreadable (never Empty) when
- * nothing came back and an input failed.
- */
-function todayTile(today, onRetry) {
-  const { items, openSlots, loading: pending, failed: broken } = today;
-  const gap = [
-    pending.length ? `Still reading ${listNames(pending)}.` : '',
-    broken.length ? `Could not read ${listNames(broken)}, so this list may be incomplete.` : '',
-  ].filter(Boolean).join(' ');
-  const state = todayState(today);
-  if (state === 'unreadable') return { state: TILE.UNREADABLE, onRetry };
-  if (state === 'loading') return { state: TILE.LOADING };
-  if (state === 'empty') return { state: TILE.EMPTY, empty: 'No sessions or open slots are scheduled for today.', href: '/calendar', openLabel: 'Open calendar' };
-  return {
-    state: TILE.READY,
-    href: '/calendar',
-    openLabel: 'Open calendar',
-    body: (
-      <div className="advisor-list">
-        {items.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(itemStart(item))}{minutesLabel(item)}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
-        {openSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slotView(slot).startsAt)}{minutesLabel(slot)} · date-specific</span></div><Status>Open</Status></div>)}
-        {gap && <div className="advisor-state-note" role="status" data-testid="status-advisor-today-partial"><span>{gap}</span>{broken.length > 0 && <button type="button" onClick={onRetry} data-testid="button-retry-advisor-today"><RefreshCw size={13} /> Retry</button>}</div>}
-      </div>
-    ),
-  };
 }
 
 export default function AdvisorStudioHome({
@@ -118,10 +58,12 @@ export default function AdvisorStudioHome({
   // that failed and leaves what the others returned in place. `latest` drops an
   // answer that a newer ask for the same source has already replaced.
   const latest = useRef({});
+  // D8732 (SAV06F): while `keeping` is set, a source read again keeps what it returned in place, so Refresh keeps the rows.
+  const keeping = useRef(false);
   const read = useCallback((key, set, ask, shape) => {
     const mine = (latest.current[key] || 0) + 1;
     latest.current[key] = mine;
-    set(loading);
+    if (!keeping.current) set(loading);
     ask().then((r) => { if (latest.current[key] === mine) set(ready(shape(r))); })
       .catch((e) => { if (latest.current[key] === mine) set(failed(e)); });
   }, []);
@@ -130,6 +72,9 @@ export default function AdvisorStudioHome({
   // D5203 (#5203): Today reads only the kinds it draws, never all of the calendar's sources.
   const loadCalendar = useCallback(() => read('calendar', setCalendar, () => api.listCalendarEvents({ kinds: ADVISOR_AGENDA_KINDS.join(',') }), (r) => r), [read]);
   const loadSlots = useCallback((uid) => read('slots', setSlots, () => api.listAdvisorSlots(uid, true), asItems), [read]);
+  // D8732 (#8732): when Today was read, and the clock it is judged Stale by (SAV06F).
+  const [readAt, setReadAt] = useState(() => new Date());
+  const [clock, setClock] = useState(() => new Date());
 
   const load = useCallback(() => {
     if (previewing) {
@@ -142,6 +87,7 @@ export default function AdvisorStudioHome({
       return;
     }
     setAdvisor(loading); setSlots(loading); setPayouts(loading); setCommissions(loading);
+    setReadAt(new Date()); setClock(new Date());
     api.getMyAdvisor()
       .then((profile) => {
         if (!profile?.uid) { setAdvisor(unavailable('Your advisor profile is not available yet.')); setSlots(unavailable('Publish an advisor profile to manage slots.')); return; }
@@ -157,8 +103,23 @@ export default function AdvisorStudioHome({
 
   useEffect(() => { load(); }, [load]);
 
+  // D8732 (SAV06F): the clock moves each minute and when the tab comes back, so Today says Stale after 30 minutes.
+  useEffect(() => {
+    if (previewing || typeof window === 'undefined') return undefined;
+    const tick = () => setClock(new Date());
+    const timer = window.setInterval(tick, 60_000);
+    const back = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener?.('visibilitychange', back);
+    return () => { window.clearInterval(timer); document.removeEventListener?.('visibilitychange', back); };
+  }, [previewing]);
+
   // The Today list's reads: bookings, the calendar and the slots (D4620).
-  const today = useMemo(() => advisorToday({ bookings, calendar, slots }), [bookings, calendar, slots]);
+  // `clock` is a dependency so the list is judged again as time passes (a session that ends leaves Today).
+  const today = useMemo(() => advisorToday({ bookings, calendar, slots }), [bookings, calendar, slots, clock]); // eslint-disable-line react-hooks/exhaustive-deps
+  const todayKind = todayState(today);
+  // D8732 (SAV03): back from a session's drawer, focus and scroll return to its row once Today has settled.
+  const location = useLocation();
+  useTodayReturn(location.state, todayKind !== 'loading' && bookings.state !== 'loading');
   // Retry asks again for the inputs that failed, and nothing else.
   const retryToday = useCallback(() => {
     if (today.failed.includes('bookings')) loadBookings();
@@ -167,6 +128,16 @@ export default function AdvisorStudioHome({
       if (advisor.state === 'ready' && advisor.data?.uid) loadSlots(advisor.data.uid); else load();
     }
   }, [today, advisor, loadBookings, loadCalendar, loadSlots, load]);
+  // D8732 (SAV06F): Refresh reads all three again and keeps the rows while it reads.
+  const refreshToday = useCallback(() => {
+    setReadAt(new Date()); setClock(new Date());
+    keeping.current = true;
+    try {
+      loadBookings(); loadCalendar();
+      if (advisor.state === 'ready' && advisor.data?.uid) loadSlots(advisor.data.uid);
+    } finally { keeping.current = false; }
+  }, [advisor, loadBookings, loadCalendar, loadSlots]);
+  const viewerZone = useMemo(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } }, []);
 
   const engagements = useMemo(() => {
     if (bookings.state !== 'ready') return [];
@@ -204,7 +175,10 @@ export default function AdvisorStudioHome({
   const studio = useStudioLayout({ profile: 'advisor', viewer: user });
   const withheld = { state: TILE.WITHHELD };
   const tiles = previewing ? Object.fromEntries(['today', 'storefront', 'engagements', 'consented_proof', 'earnings'].map((k) => [k, withheld])) : {
-    today: todayTile(today, retryToday),
+    today: todayTile(today, todayKind, {
+      now: clock, readAt, zone: viewerZone, from: `${location.pathname}${location.search || ''}`, onRetry: retryToday,
+      onRefresh: clock.getTime() - readAt.getTime() >= STALE_AFTER_MS ? refreshToday : null,
+    }),
     storefront: advisor.state === 'loading' ? { state: TILE.LOADING }
       : advisor.failed ? { state: TILE.UNREADABLE, onRetry: load }
         : !profile ? { state: TILE.NOT_RECORDED, reason: advisor.message || 'Storefront details are not available.', href: '/expertise/profile', openLabel: 'Open storefront' }

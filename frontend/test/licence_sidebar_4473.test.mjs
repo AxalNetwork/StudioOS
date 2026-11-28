@@ -91,7 +91,7 @@ test('the shell is built from the held set for licence shells; staff shells keep
   const app = read('App.jsx');
   assert.match(app, /const licenceGroup = isLicence\(shell\) \? buildLicenceSidebar\(heldLicences \|\| \[role\], \{ primaryRole: role \}\) : null;/);
   assert.match(app, /getSidebarGroups\(activeRole \|\| 'founder', primaryPersonaId, user, hqView, heldLicences\)/);
-  assert.match(app, /const held = resolveHeldLicences\(\{ user, realUser, viewMode, isImpersonating \}\);\n\s+if \(!allowedRoles\.includes\(effectiveRole\) && !held\.some\(\(l\) => allowedRoles\.includes\(l\)\)\)/,
+  assert.match(app, /const held = resolveHeldLicences\(\{ user, realUser, viewMode, isImpersonating \}\);\n\s+if \(!guardAdmits\(allowedRoles, effectiveRole, held\)\)/,
     'RoleGuard admits a held licence');
   for (const [route, licence] of [['/funds"', 'investor'], ['/deals"', 'investor'], ['/funds/performance"', 'investor'], ['/pipeline"', 'partner']]) {
     const at = app.indexOf(`path="${route}`);

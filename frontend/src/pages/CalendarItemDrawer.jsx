@@ -14,7 +14,8 @@ import CalendarComplianceSheet from './CalendarComplianceSheet';
 import CalendarPrep from './CalendarPrep';
 import {
   ANSWERS, ANSWER_WORD, KIND_WORDS, LENGTHS, NOT_PARTY, NOT_PARTY_SUB, SAYS,
-  copyLines, externalAction, goingLine, joinOpen, minutesOf, noChangeLine, refusalOf, startError, startOf, whenLine, whenShort, zoneLabel,
+  changedSince, copyLines, externalAction, fallbackDayHref, fallbackLine, goingLine, joinOpen, minutesOf, noChangeLine, pageHref, refusalOf,
+  startError, startOf, whenLine, whenShort, zoneLabel,
 } from './calendarItemModel';
 
 const INK = 'text-axal-ink dark:text-gray-200';
@@ -182,6 +183,27 @@ function Where({ item, now }) {
 }
 
 /**
+ * D8732 (SAV05A, SAV05B): when the item cannot be shown, what Studio's Today
+ * itself read (`state.today`): who, when and the day in Calendar. Nothing from
+ * the session is guessed.
+ */
+function TodayFallback({ fallback, onClose }) {
+  const line = fallbackLine(fallback);
+  if (!line) return null;
+  const day = fallbackDayHref(fallback);
+  return (
+    <section className="mx-5 mb-5 flex flex-col gap-2 rounded-[10px] border border-axal-hairline px-4 py-3 text-left dark:border-gray-700" data-testid="cal-item-fallback">
+      <p className={`m-0 text-[13px] font-semibold ${INK}`}>{line}</p>
+      <p className={`m-0 text-[12px] ${MUTED}`}>{`What Studio read${fallback.readAt ? ` at ${fallback.readAt}` : ''}. The session itself is not shown here.`}</p>
+      <span className="flex flex-wrap items-center gap-3">
+        {day ? <Link className={LINK} to={day} data-testid="cal-item-fallback-day">Open {fallback.day || 'the day'} in Calendar ›</Link> : null}
+        <button type="button" className={actionGhost} onClick={onClose} data-testid="cal-item-fallback-back">{fallback.back || 'Back'}</button>
+      </span>
+    </section>
+  );
+}
+
+/**
  * D1485 (#3979): a Google or Outlook event on the calendar. It is read-only and
  * not stored, so `item` is the page's own read of it, or null when this view
  * does not hold it. It offers one thing, opening it where it lives.
@@ -224,7 +246,7 @@ export function ExternalItemSheet({ kind, item, onClose }) {
  * address; `onClose` returns to the view; `onChanged` re-reads it after a
  * change. `canCopy` is whether a calendar is connected to copy to.
  */
-export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCopy = false }) {
+export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCopy = false, fallback = null }) {
   const zone = viewerZone();
   const [read, setRead] = useState({ status: 'loading', item: null, error: null });
   const [dialog, setDialog] = useState(null);
@@ -267,8 +289,9 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
           <span aria-hidden="true" className={`text-[22px] ${MUTED}`}>⊘</span>
           <p className={`m-0 text-[14px] font-bold ${INK}`} data-testid="cal-item-not-party">{NOT_PARTY}</p>
           <p className={`m-0 text-[12.5px] ${MUTED}`}>{NOT_PARTY_SUB}</p>
-          <button type="button" className={actionGhost} onClick={onClose}>Back to Calendar</button>
+          {fallback ? null : <button type="button" className={actionGhost} onClick={onClose}>Back to Calendar</button>}
         </div>
+        <TodayFallback fallback={fallback} onClose={onClose} />
       </Sheet>
     );
   }
@@ -280,6 +303,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
             ? <Unreadable what="This item" claim="That is not the same as it not existing." onRetry={load} />
             : <p className={`m-0 text-[13px] ${MUTED}`}>Reading…</p>}
         </div>
+        {read.status === 'error' ? <TodayFallback fallback={fallback} onClose={onClose} /> : null}
       </Sheet>
     );
   }
@@ -297,6 +321,9 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
   const going = goingLine(people);
   const venture = item.kind === 'ic_meeting' ? { title: 'Deal', name: item.deal_name, sub: 'In your deal room', act: 'Open deal' }
     : item.project_name ? { title: 'Venture', name: item.project_name, sub: null, act: 'Open venture' } : null;
+  const changed = changedSince(item, fallback);
+  const day = fallbackDayHref(fallback);
+  const founder = fallback?.who || people.find((p) => p.profile === 'Founder')?.name || 'the founder';
   const pageAct = { advisor_booking: 'Open booking', partner_office_hour: 'Open booking', expert_booking: 'Open wellbeing', event_ticket: 'Show ticket', event_hosted: 'Open hosted event', investor_meeting: 'Open Capital relationships' }[item.kind];
   const head = (
     <span className="flex flex-col gap-1.5">
@@ -327,6 +354,12 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
     <>
       <Sheet label={item.title || kindWord} eyebrow={null} title={item.title || 'Not recorded'} sub={head} onClose={onClose} width={640} footer={footer} testId="cal-item-drawer">
         <div className={`flex flex-col ${cancelled ? 'opacity-90' : ''}`} data-testid={`cal-item-${item.kind}`}>
+          {changed ? (
+            <Section testId="cal-item-changed">
+              <p className={`m-0 text-[13px] font-bold ${INK}`}>Changed since Studio read it</p>
+              <p className={`m-0 text-[12.5px] ${MUTED}`}>{changed}</p>
+            </Section>
+          ) : null}
           {cancelled ? (
             <Section testId="cal-item-cancel-reason">
               <p className={`m-0 text-[13px] ${INK}`}>{item.cancel_reason ? `Cancelled: ‘${item.cancel_reason}’` : 'Cancelled. No reason was recorded.'}</p>
@@ -334,6 +367,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
           ) : null}
           <Section title="When" testId="cal-item-when">
             <p className={`m-0 font-mono text-[12.5px] font-semibold leading-relaxed ${INK}`}>{whenLine(item, zone)}</p>
+            {day ? <Link className={`self-start text-[12.5px] ${LINK}`} to={day} data-testid="cal-item-day">See {fallback.day || 'the day'} in Calendar ›</Link> : null}
           </Section>
           <Where item={item} now={Date.now()} />
           {can.rsvp ? (
@@ -371,7 +405,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
               </span>
             </Section>
           ) : item.href && pageAct ? (
-            <Section testId="cal-item-page"><Link className={LINK} to={item.href} data-testid="cal-item-open">{pageAct}</Link></Section>
+            <Section testId="cal-item-page"><Link className={LINK} to={pageHref(item)} data-testid="cal-item-open">{pageAct}</Link></Section>
           ) : null}
           {/* D1585 (#3832): Prep, the prospect's brief, on an investor meeting. */}
           {item.kind === 'investor_meeting' && !cancelled && item.prospect_id && item.project_id
@@ -379,6 +413,8 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
           {item.notes ? (
             <Section title={item.kind === 'ic_meeting' ? 'Agenda' : 'Notes'} testId="cal-item-notes">
               <p className={`m-0 whitespace-pre-line text-[13px] leading-relaxed ${INK}`}>{item.notes}</p>
+              {/* D8732 (SAV02): the founder's booking notes are the preparation context, and say whose they are. */}
+              {item.kind === 'advisor_booking' ? <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="cal-item-notes-whose">What {founder} wrote when booking. Nothing from their venture is shown here.</p> : null}
             </Section>
           ) : null}
           {!cancelled && can.copy ? (
