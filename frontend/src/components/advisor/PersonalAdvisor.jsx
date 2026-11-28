@@ -54,6 +54,8 @@ import {
 import { api, getActiveCompanyId, spinoutLab as spinoutLabApi } from '../../lib/api';
 import { railPressHeaders } from '../../lib/railPage.js';
 import { orientationMessage, shouldOrient } from '../../lib/eadwynOrientation';
+import { historyUnreadableNotice, isHistoryUnreadable, openingState, readToolMessage, toolEnvelopeText } from '../../lib/advisor/transcript.js';
+import { ToolPreview, UnreadableNotice } from './transcriptPieces';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -264,6 +266,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   useEffect(() => { availabilityRef.current = onAvailabilityChange; }, [onAvailabilityChange]);
 
   // ---------- Initial load ------------------------------------------------
+  // D9288 — Retry on the unreadable-history notice runs the load again.
+  const [bootRun, setBootRun] = useState(0);
   const bootstrap = useCallback(async () => {
     setLoadError(null);
     try {
@@ -276,12 +280,16 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       // Hydrate transcript so reloads show prior turns.
       const cid = r.conversation_id || r.conversation_uid;
       let hydrated = 0;
+      // D9288 — a failed read is not an empty history: it opens on the
+      // unreadable notice with Retry, never on the orientation.
+      let historyReadable = true;
       if (cid) {
         try {
           const hist = await api.advisor.conversation(cid);
+          if (!Array.isArray(hist?.messages)) throw new Error('history answered without messages');
           // D701 — `created_at` dates the phone thread's label; the rest of
           // the chat ignores it. A message added in this tab has none.
-          const msgs = (hist?.messages || []).map((m) => ({
+          const msgs = hist.messages.map((m) => ({
             role: m.role,
             content: m.content,
             question_id: m.question_id || null,
@@ -290,8 +298,13 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
           setMessages(msgs);
           setAnsweredIds((hist?.answers || []).filter((a) => a.saved_status === 'saved').map((a) => a.question_id));
           hydrated = msgs.length;
-        } catch { /* non-fatal */ }
+        } catch (e) {
+          reportError('PersonalAdvisor:history', e);
+          historyReadable = false;
+        }
       }
+      const opening = openingState({ historyReadable, hydrated });
+      if (opening === 'unreadable') setMessages([historyUnreadableNotice(() => setBootRun((n) => n + 1))]);
       // ORIENTATION — Eadwyn says what it is before it asks anything.
       //
       // A newcomer arriving from onboarding met this panel empty, with the
@@ -310,7 +323,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       // the worst place to spend a budget nobody has agreed to, which is the
       // same call `ui/eadwynConfig.js` makes about the onboarding chat.
       const orientProgress = r.progress || null;
-      if (shouldOrient({ ready: true, messageCount: hydrated })) {
+      if (opening === 'orient' && shouldOrient({ ready: true, messageCount: hydrated })) {
         setMessages([{
           role: 'assistant',
           orientation: true,
@@ -352,7 +365,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     }
   }, [user?.role, user?.name]);
 
-  useEffect(() => { if (user) bootstrap(); }, [user, bootstrap]);
+  useEffect(() => { if (user) bootstrap(); }, [user, bootstrap, bootRun]);
   // Server-driven progress + lab state.
   useEffect(() => {
     if (!user) return;
@@ -663,9 +676,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       const r = await api.advisor.toolAuto(raw, railPressHeaders(sendKey));
       setMessages((m) => [...m, {
         role: 'tool',
-        content: JSON.stringify({ result: r.result, cta: r.cta }),
-        cta: r.cta,
-        tool: r.tool,
+        content: toolEnvelopeText(r),
       }]);
     } catch (e) {
       const data = e?.data || null;
@@ -1316,20 +1327,12 @@ const Transcript = React.forwardRef(function Transcript({ messages, tutor, onClo
 });
 
 function Bubble({ m, onCtaClick }) {
+  if (isHistoryUnreadable(m)) return <UnreadableNotice message={m.content} onRetry={m.onRetry} testId="advisor-history-unreadable" />;
   const isUser = m.role === 'user';
-  // Task #5 (AV) — render the inline CTA block produced by /advisor/tool.
-  // The envelope can arrive on `m.cta` (live tool turn) or be embedded in
-  // `m.content` as JSON when /conversations/:id rehydrates a role='tool'
-  // message from the audit log.
-  let cta = m.cta || null;
-  let toolPreview = null;
-  if (!cta && m.role === 'tool' && typeof m.content === 'string' && m.content.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(m.content);
-      cta = parsed?.cta || null;
-      toolPreview = parsed?.result || null;
-    } catch { /* leave content as-is */ }
-  }
+  // D9288 — a tool turn is read from its stored envelope, live or reloaded
+  // (`readToolMessage`), so its receipt draws the same both ways.
+  const tool = readToolMessage(m);
+  const cta = tool ? tool.cta : (m.cta || null);
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
@@ -1338,8 +1341,8 @@ function Bubble({ m, onCtaClick }) {
           : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm'
       }`}>
         {/* Tool messages: prefer rendering the human-readable CTA over the raw envelope. */}
-        {m.role === 'tool' && cta ? (
-          <ToolPreview preview={toolPreview} />
+        {tool ? (
+          <ToolPreview view={tool} />
         ) : (
           m.content
         )}
@@ -1359,36 +1362,6 @@ function Bubble({ m, onCtaClick }) {
       </div>
     </div>
   );
-}
-
-function ToolPreview({ preview }) {
-  if (!preview || typeof preview !== 'object') return null;
-  // Render the most common result shapes compactly. Falls back to a
-  // truncated JSON dump for shapes we don't know about.
-  const list =
-    preview.advisors || preview.investors || preview.partners || preview.deals || preview.tasks;
-  if (Array.isArray(list)) {
-    if (list.length === 0) {
-      return <div className="text-xs text-gray-500 dark:text-gray-400 italic">No matches yet.</div>;
-    }
-    return (
-      <ul className="text-xs space-y-1">
-        {list.slice(0, 5).map((row) => (
-          <li key={row.id} className="leading-snug">
-            <span className="font-medium">{row.title || row.name}</span>
-            {row.snippet && <span className="text-gray-600 dark:text-gray-400"> — {row.snippet}</span>}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  if (preview.page) {
-    return <div className="text-xs text-gray-700 dark:text-gray-300">Opening {preview.page}.</div>;
-  }
-  if (preview.gated) {
-    return <div className="text-xs text-gray-700 dark:text-gray-300">{preview.feature} requires the {preview.required_tier} tier.</div>;
-  }
-  return null;
 }
 
 function CtaButtons({ cta, onCtaClick }) {
