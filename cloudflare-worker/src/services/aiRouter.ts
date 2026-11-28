@@ -4,8 +4,8 @@
  * Single entry point every Personal Advisor feature (banks, write-router
  * LLM tool-calls, guardrails, find/deep-link, MI extractors, publication
  * synthesis) calls into. Production: Workers AI only.
- * The dev/eval-only provider (Task #31) is documented separately under
- * `docs/dev/`; this file no longer references it by name.
+ * The dev/eval-only provider (Task #31) is gated in `routes/assistant.ts`
+ * and documented in D5339; this file no longer references it by name.
  *
  * Public API:
  *   run(env, opts) → Promise<RunResult>

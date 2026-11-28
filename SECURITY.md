@@ -5,7 +5,7 @@ reports from researchers, customers, and the public as a first-class
 operational priority. This document tells you how to reach us, what to
 expect, and what we ask of you.
 
-> **Last updated:** 2026-10-25
+> **Last updated:** 2026-11-27
 > **Contact:** `security@axal.vc`
 > **Public policy page:** `https://axal.vc/trust/disclosure`
 
@@ -17,6 +17,14 @@ custom domains — the SPA from its assets binding and the API at
 `/api/*` on either host — with one build behind both, and the static
 responses carrying the headers `docs/_headers` declares. There is no
 Cloudflare Pages deployment (the mirror was retired on 2026-09-03).
+Two more Workers from this repository are in scope: the meeting bot
+(`studioos-meeting-bot`, canary only) and Merge Control
+(`studioos-merge-control`), which receives the repository's GitHub App
+webhooks. The tail consumer `studioos-tail` only receives the
+`studioos` Worker's logs and has no public route. The candidates under
+`agent-compute/`, `workspace-engine/`, `cloudflare-archive-observer/`,
+`engineering-notifications/` and `engineering-slack/` are not deployed to
+production; `CLAUDE.md`'s file map says how each ships.
 Everything is continuously updated;
 there is no notion of a "supported version" for end users. Researchers should target the live production surface or
 a publicly available preview environment.
@@ -91,7 +99,9 @@ severity bucket we assigned and why.
   misuse, exfiltration of other users' data. As of Task #31 the
   production Advisor surface runs on Cloudflare Workers AI only; the
   dev/eval-only provider toggle and its gating contract are documented
-  in [`docs/dev/ANTHROPIC_DEV.md`](docs/dev/ANTHROPIC_DEV.md). Any
+  in [`documentation/architecture/decisions/D5339.md`](documentation/architecture/decisions/D5339.md)
+  and the "Anthropic is dev/eval-only" entry of
+  [`documentation/architecture/GOTCHAS.md`](documentation/architecture/GOTCHAS.md). Any
   `scripts/ci/no-anthropic-in-prod.mjs` guard runs in `npm run test:guards`.
   It walks the Personal Advisor route/service import graph, refuses a path to
   D851's provider service or adapters, restricts Anthropic references to a

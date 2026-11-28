@@ -17,11 +17,18 @@ canonical entity map.
 | ------------------- | --------------------------------------------------------------------- |
 | `frontend/`         | React 19 + Vite 8 + Tailwind 4 SPA — built into `docs/`, served by the Worker on both hosts |
 | `cloudflare-worker/`| **Production API** — Hono on Cloudflare Workers, D1, KV, R2, Queues, Vectorize, Durable Objects |
+| `meeting-bot/`      | The meeting bot runtime — its own Worker and Container, `studioos-meeting-bot`, canary only (`meeting-bot-deploy.yml`) |
+| `merge-control/`    | Merge Control webhook Worker, `studioos-merge-control` (D5618; `merge-control-deploy.yml`, gated) |
+| `cloudflare-worker-tail/` | Tail consumer `studioos-tail`, archives the Worker's logs to R2; deployed by hand |
+| `cloudflare-archive-observer/` | D5676: disabled archive observer candidate (`archive-observer-deploy.yml`, off) |
+| `agent-compute/`    | D4557: staged compute host, preview only by owner-gated dispatch |
+| `workspace-engine/` | D5566: disabled coding-workspace candidate, never deployed |
 | `engineering-notifications/` | D5664: inactive independent GitHub metadata capture and reconciliation proposal. |
 | `engineering-slack/` | D5665: inactive independent Slack batching and durable delivery proposal. |
 | `backend/`          | FastAPI (Python) — **Replit-dev-only**, not deployed to production    |
 | `attached_assets/`  | Design specs, screenshots, methodology docs, legal templates          |
-| `docs/`             | Built frontend bundle (Vite output) — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
+| `infra/`            | Records of Cloudflare resources provisioned outside the repo |
+| `docs/`             | Built frontend bundle (Vite output), not committed — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
 | [LICENSE](./LICENSE) | The existing proprietary project notice, also stated below. |
 
 ## Local development on Replit
