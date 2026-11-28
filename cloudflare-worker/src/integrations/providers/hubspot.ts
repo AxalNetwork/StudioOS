@@ -39,6 +39,7 @@ import { loadDealstageMap, studioStageToHubspot, hubspotStageToStudio, type Stud
 import { enabledCompanyIds, projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import { acquireRefreshLease } from '../refreshLease';
 import { runSystemMove } from '../../services/dealTransitions';
+import { dealHiddenFrom, hiddenDealIds, hiddenJson } from '../../services/dealPreparation';
 
 const HS_API = 'https://api.hubapi.com';
 const HS_AUTH = 'https://app.hubspot.com';
@@ -332,9 +333,23 @@ interface PushPayload {
   project_id?: number;
 }
 
+/**
+ * D5454 (#5454, R4): a push is an export to the company's own CRM, and the deals it sends are the integration
+ * company's own ventures' (`projectEnabled`), so it reads as the venture's owner, in `transactional` mode. A deal whose
+ * preparation is never released or unknown is not sent or previewed, for anyone, and answers as a deal that does not
+ * exist; a withdrawn or archived release is still sent to its own company's CRM. A guard failure throws, so nothing
+ * is sent past it. One indexed read per pushed id; `sync` filters its batch in SQL instead.
+ */
+async function refuseHiddenDeal(env: Env, dealId: unknown): Promise<void> {
+  if (await dealHiddenFrom(env, Number(dealId), 'transactional')) throw new Error(`deal_not_found: ${Number(dealId)}`);
+}
+
 async function pushOne(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow, payload: unknown): Promise<PushResult> {
   const p = (payload || {}) as PushPayload;
-  if (p.deal_id) return pushDeal(c.env, row, p.deal_id);
+  if (p.deal_id) {
+    await refuseHiddenDeal(c.env, p.deal_id);
+    return pushDeal(c.env, row, p.deal_id);
+  }
   if (p.project_id) return pushProjectCompany(c.env, row, p.project_id);
   throw new Error('hubspot_push_requires_deal_id_or_project_id');
 }
@@ -346,6 +361,7 @@ async function pushOne(c: Context<{ Bindings: Env }>, _user: User, row: Integrat
 async function previewOne(env: Env, row: IntegrationRow, payload: unknown): Promise<PushPreview> {
   const p = (payload || {}) as PushPayload;
   if (p.deal_id) {
+    await refuseHiddenDeal(env, p.deal_id);
     const { deal, properties, associations } = await dealContent(env, row, p.deal_id);
     return {
       target: `${deal.hubspot_deal_id ? 'Update' : 'New'} HubSpot deal "${properties.dealname}"`,
@@ -517,6 +533,8 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
   const since = row.last_synced_at ? Date.parse(row.last_synced_at + 'Z') || 0 : 0;
 
   // ── outbound: push StudioOS deals modified since last sync that belong to this user.
+  // D5454 (#5454, R4): less what `refuseHiddenDeal` refuses, bound before the LIMIT; a guard failure fails the sync.
+  const hidden = hiddenJson(await hiddenDealIds(c.env, 'transactional'));
   const localDeals = await c.env.DB.prepare(
     'SELECT d.id, d.status, d.hubspot_deal_id, d.updated_at ' +
     'FROM deals d ' +
@@ -524,8 +542,9 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     'LEFT JOIN founders f ON f.id = p.founder_id ' +
     'WHERE f.user_id = ? AND datetime(d.updated_at) > datetime(?) ' +
     'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1) ' +
+    'AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) ' +
     'ORDER BY datetime(d.updated_at) DESC LIMIT 100',
-  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id).all<{
+  ).bind(row.user_id, row.last_synced_at || '1970-01-01 00:00:00', row.id, hidden).all<{
     id: number; status: string; hubspot_deal_id: string | null;
   }>();
   for (const d of (localDeals.results || [])) {
