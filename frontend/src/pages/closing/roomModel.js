@@ -310,12 +310,18 @@ const EVIDENCE_WORD = Object.freeze({
   bank_confirmation: ['Document', 'A bank confirmation file'],
 });
 
-/** A line's evidence, newest first (the Worker gives it oldest first). Only the receiving side's turns a line Received; withdrawn evidence says why. */
-export function evidenceRows(evidence) {
+/**
+ * A line's evidence, newest first (the Worker gives it oldest first). Only the receiving side's turns a line Received; withdrawn evidence says why.
+ * With the viewer's id (D9108), each piece also says who added it: "Added by you" or "Added by another Admin", never a name (the read gives an id only).
+ */
+export function evidenceRows(evidence, viewerId = null) {
   return (Array.isArray(evidence) ? evidence : []).map((e, i) => {
     const w = EVIDENCE_WORD[e?.kind];
     return {
       key: e?.uid || String(i),
+      uid: typeof e?.uid === 'string' && e.uid ? e.uid : null,
+      live: !e?.withdrawn_at,
+      by: addedBy(e?.recorded_by, viewerId),
       source: w ? w[0] : 'Recorded',
       words: w ? w[1] : 'Evidence of a kind this page does not name',
       side: e?.side === 'receiving' ? 'Receiving side' : e?.side === 'sending' ? 'Sending side' : 'Side not recorded',
@@ -325,6 +331,111 @@ export function evidenceRows(evidence) {
       order: i,
     };
   }).sort((a, b) => b.order - a.order);
+}
+
+// ───────────────────────────────────────────────────────────── CP10 for an Admin (D9108, #9108)
+//
+// What an Admin records on a line from Contracts › Closings, mirrored from the
+// Worker (`services/closings.ts`: EVIDENCE_SIDE, SOURCE_REF, WITHDRAW_REASON_*).
+// The Worker decides every act; these only keep the browser from offering what
+// it cannot honestly send.
+
+/**
+ * The kinds this page records, each with its side. Only two: an Axal entity's
+ * Mercury credit (the one admin-readable Mercury, `GET /api/admin/mercury/transactions`)
+ * and a phone-verified deal transfer. `company_mercury` and `investor_mercury`
+ * have no admin-readable source, and the Worker would accept an Axal uid under
+ * either, so they are never offered. `bank_confirmation` needs a stored file no
+ * route uploads yet.
+ */
+export const RECORDABLE_KINDS = Object.freeze({ axal_mercury: 'receiving', phone_verified_record: 'receiving' });
+export const canRecordKind = (kind) => Object.prototype.hasOwnProperty.call(RECORDABLE_KINDS, kind);
+
+/** A stored record's id as the Worker's SOURCE_REF takes it. */
+const REF_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The evidence body for an Axal entity's Mercury credit, or `{error}`: a credit only, named by its uid. */
+export function mercuryEvidenceBody(tx) {
+  const uid = String(tx?.uid ?? '');
+  if (!REF_ID.test(uid)) return { error: 'Choose a credit from the list.' };
+  if (!(Number(tx?.amount_cents) > 0)) return { error: 'Only a credit, money received, is evidence of receipt.' };
+  return { kind: 'axal_mercury', source_ref: `mercury:${uid}` };
+}
+
+/** The evidence body for a phone-verified transfer the transfer route just saved, or null. */
+export function transferEvidenceBody(item) {
+  const uid = String(item?.uid ?? '');
+  return REF_ID.test(uid) ? { kind: 'phone_verified_record', source_ref: `deal_transfer:${uid}` } : null;
+}
+
+/** "400,000.00" or "$400000" as integer cents, or null: never a float, never a guess. */
+export function centsFromInput(text) {
+  const t = String(text ?? '').replace(/[\s,$]/g, '');
+  const m = /^(\d{1,13})(?:\.(\d{1,2}))?$/.exec(t);
+  if (!m) return null;
+  const cents = Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
+  return cents > 0 && Number.isSafeInteger(cents) ? cents : null;
+}
+
+export const TRANSFER_WORDS = Object.freeze({
+  phone: 'I confirmed by phone on a number I already hold',
+  phoneNeeded: 'Tick the box once you have confirmed the transfer by phone on a number you already hold. Until then nothing is recorded.',
+  amount: 'Give the amount received, such as 400,000.00.',
+  saved: 'The transfer was saved, but it is not yet recorded on this line.',
+});
+
+/** The transfer route's body, phone-verified and tied to the line, or `{error}`. The Worker takes no date. */
+export function transferBody({ amount, reference, phone, lineUid }) {
+  if (!phone) return { error: TRANSFER_WORDS.phoneNeeded };
+  const cents = centsFromInput(amount);
+  if (cents == null) return { error: TRANSFER_WORDS.amount };
+  const ref = String(reference ?? '').trim().slice(0, 200);
+  return { amount_cents: cents, reference: ref || undefined, phone_verified: true, closing_line_uid: lineUid };
+}
+
+/** The Worker's withdraw-reason bounds (WITHDRAW_REASON_MIN/MAX), on the trimmed text. */
+export const WITHDRAW_REASON_MIN = 10;
+export const WITHDRAW_REASON_MAX = 200;
+export function reasonState(text) {
+  const n = String(text ?? '').trim().length;
+  const ok = n >= WITHDRAW_REASON_MIN && n <= WITHDRAW_REASON_MAX;
+  const short = WITHDRAW_REASON_MIN - n;
+  const long = n - WITHDRAW_REASON_MAX;
+  const hint = short > 0 ? `${short} more character${short === 1 ? '' : 's'} needed`
+    : long > 0 ? `${long} character${long === 1 ? '' : 's'} too long` : 'Enough';
+  return { length: n, ok, count: `${n} / ${WITHDRAW_REASON_MAX}`, hint };
+}
+
+/** Who added a piece, from its `recorded_by` id: never a name the read does not give. */
+export function addedBy(recordedBy, viewerId) {
+  if (recordedBy == null || recordedBy === '') return null;
+  if (viewerId != null && Number(recordedBy) === Number(viewerId)) return 'Added by you';
+  return 'Added by another Admin';
+}
+
+/** True when the line holds live sending-side evidence and no live receiving-side evidence: Sent, not yet confirmed. */
+export function sentNotReceived(evidence) {
+  const live = (Array.isArray(evidence) ? evidence : []).filter((e) => e && !e.withdrawn_at);
+  return live.some((e) => e.side === 'sending') && !live.some((e) => e.side === 'receiving');
+}
+
+/**
+ * The deal's commitments that can still take a line: `pending` or `confirmed`
+ * (the Worker's `status IN ('pending','confirmed')`), with a uid, and no line
+ * on this closing yet, withdrawn lines included (one line per commitment). The
+ * read carries no `amount_cents`, so a commitment with no cents amount stays
+ * listed and the Worker's `amount_not_recorded` says why.
+ */
+export function lineableCommitments(commitments, lines) {
+  const taken = new Set((Array.isArray(lines) ? lines : []).map((l) => l?.commitment_id).filter((v) => v != null).map(Number));
+  return (Array.isArray(commitments) ? commitments : [])
+    .filter((c) => c && ['pending', 'confirmed'].includes(c.status) && typeof c.uid === 'string' && c.uid && !taken.has(Number(c.id)));
+}
+
+/** A Raise prospect's id as `addLine` takes it, or null. */
+export function prospectIdOf(text) {
+  const t = String(text ?? '').trim();
+  return /^[1-9]\d{0,11}$/.test(t) ? Number(t) : null;
 }
 
 // ───────────────────────────────────────────────────────────── CP11: the cap-table proposal

@@ -24,7 +24,7 @@ export const NotYet = ({ children, testId }) => (
   <span className="inline-flex w-fit items-center rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400" data-testid={testId} title={children || undefined}>{NOT_YET}</span>
 );
 
-function useAct() {
+export function useAct() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const run = async (fn, fallback) => {
@@ -34,7 +34,7 @@ function useAct() {
   return { busy, error, setError, run };
 }
 
-function useLoad(run, deps) {
+export function useLoad(run, deps) {
   const [state, setState] = useState({ status: 'loading', data: null });
   const [tick, setTick] = useState(0);
   useEffect(() => {

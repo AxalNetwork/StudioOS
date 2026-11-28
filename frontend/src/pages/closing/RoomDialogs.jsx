@@ -16,11 +16,13 @@ import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
 import { Lightbox, Unrecorded, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from '../account/AccountCenter';
 import { Err } from './ClosingDialogs';
+import { BANK_CONFIRMATION_LINE, RecordMercuryEvidenceDialog, RecordTransferDialog, WithdrawEvidenceDialog } from './EvidenceDialogs';
 import { closingHrefFor, moneyCents } from './deskModel';
 import {
-  ACCOUNT_FIELDS, ACCOUNT_WORDS, accountBody, accountFieldOf, accountForm, isAccountConflict, PAY_WORDS, ROOM_WAITS, SIGN_WORDS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, signActions, signingRows,
+  ACCOUNT_FIELDS, ACCOUNT_WORDS, accountBody, accountFieldOf, accountForm, isAccountConflict, PAY_WORDS, ROOM_WAITS, SIGN_WORDS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, sentNotReceived, signActions, signingRows,
 } from './roomModel';
 import Sheet from '../../ui/Sheet.jsx';
+import { accountChange } from './investorRoomModel';
 
 const mutedText = 'm-0 text-[12.5px] text-gray-600 dark:text-gray-400';
 const NOT_YET_PILL = 'w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400';
@@ -137,27 +139,61 @@ export function SignDrawer({ row, envelope, failed, viewer, company, onClose }) 
 }
 
 /** CP10: a line's evidence, newest first; only the receiving side's turns the line Received. */
-export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
-  const items = evidenceRows(row.evidence);
+/**
+ * CP10. In the room an Admin is sent to Contracts › Closings to record
+ * evidence. There (D9108, `admin` given) the drawer records it itself: an Axal
+ * entity's Mercury credit or a phone-verified transfer, and a Withdraw on each
+ * live piece for any Admin holding `closing.evidence` (the Worker's rule; the
+ * canvas's "only the person who added it" is not narrowed here). `admin` is
+ * `{ closing, line, viewerId, refused, reading, onChanged }`; `refused` is the
+ * act's sentence when the table refuses this Admin.
+ */
+export function ReceiptDrawer({ row, viewer, dealId, onClose, admin = null }) {
+  const [dialog, setDialog] = useState(null); // { kind, piece? }
+  const desk = viewer === 'admin' && admin ? admin : null;
+  const items = evidenceRows(row.evidence, desk?.viewerId ?? null);
+  const live = desk && !desk.refused && desk.line?.status !== 'withdrawn' && desk.closing?.status === 'open';
+  const done = () => { setDialog(null); desk?.onChanged?.(); };
+  const footer = (
+    <Foot>
+      {viewer === 'admin' && !desk ? <Link className={BTN.ghost} to={closingHrefFor(dealId)} data-testid="closing-receipt-desk-link">Record evidence on Contracts › Closings</Link> : null}
+      {live ? (
+        <>
+          <button type="button" className={BTN.ghost} onClick={() => setDialog({ kind: 'mercury' })} data-testid="closing-receipt-record-mercury">Record an Axal Mercury credit</button>
+          <button type="button" className={BTN.ghost} onClick={() => setDialog({ kind: 'transfer' })} data-testid="closing-receipt-record-transfer">Record a transfer</button>
+          <button type="button" className={BTN.ghost} disabled title={BANK_CONFIRMATION_LINE} aria-describedby="closing-receipt-bank-why" data-testid="closing-receipt-upload-bank">Upload a bank confirmation</button>
+        </>
+      ) : null}
+      <button type="button" className={BTN.ghost} onClick={onClose}>Close</button>
+    </Foot>
+  );
   return (
-    <Sheet label="Receipt" eyebrow="Step 5 · Receipt" title={row.investor} sub={row.amount || undefined} onClose={onClose} width={560} phone="sheet" testId="closing-receipt"
-      footer={<Foot>{viewer === 'admin' ? <Link className={BTN.ghost} to={closingHrefFor(dealId)}>Record evidence on Contracts › Closings</Link> : null}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button></Foot>}>
+    <Sheet label="Receipt" eyebrow="Step 5 · Receipt" title={row.investor} sub={row.amount || undefined} onClose={onClose} width={560} phone="sheet" testId="closing-receipt" footer={footer}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <p className="m-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] dark:border-violet-800 dark:bg-violet-950/40">Received needs the receiving side’s evidence: the company’s Mercury, an Axal entity’s Mercury, a phone-verified record or a bank confirmation. The investor’s own Mercury alone reads Sent, not yet confirmed.</p>
         <p className="m-0 text-[13px]" data-testid="closing-receipt-status">This line: <b>{row.status}</b></p>
+        {sentNotReceived(row.evidence) && <p className="m-0 text-[12.5px] text-amber-800 dark:text-amber-200" data-testid="closing-receipt-sent-only">This line holds sending-side evidence only. Only receiving-side evidence makes it Received.</p>}
+        {desk?.refused && <p className={mutedText} data-testid="closing-receipt-refused">{desk.refused}</p>}
+        {live && <p className={mutedText} id="closing-receipt-bank-why" data-testid="closing-receipt-bank-why">{BANK_CONFIRMATION_LINE}</p>}
         <h3 className="m-0 text-[14px] font-bold">Evidence, newest first</h3>
+        {desk?.reading && <p className={mutedText} role="status" data-testid="closing-receipt-reading">Reading the line again…</p>}
         {items.length === 0 ? <p className={mutedText} data-testid="closing-receipt-empty">No evidence recorded for this line yet.</p> : items.map((e) => (
           <div key={e.key} className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 dark:border-gray-800" data-testid={`closing-evidence-${e.key}`}>
             <span className="text-[12.5px] font-semibold">{e.source} · {e.words}</span>
             <span className="flex flex-wrap items-center gap-2 text-[12px] text-gray-600 dark:text-gray-400">
               {e.at || 'Day not recorded'}
               <span className={`rounded-full px-2 text-[11px] font-bold ${e.receiving ? 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>{e.side}</span>
+              {desk && e.by ? <span data-testid={`closing-evidence-by-${e.key}`}>{e.by}</span> : null}
             </span>
             {e.withdrawn ? <span className="text-[12px] text-red-700 dark:text-red-300">{e.withdrawn}</span> : null}
+            {live && e.live && e.uid ? <button type="button" className={`${BTN.link} w-fit`} onClick={() => setDialog({ kind: 'withdraw', piece: e })} data-testid={`closing-evidence-withdraw-${e.key}`}>Withdraw</button> : null}
           </div>
         ))}
         <p className={mutedText}>The evidence names a stored record, never a bank memo or an account number. Its amount is the line’s.</p>
       </div>
+      {dialog?.kind === 'mercury' && <RecordMercuryEvidenceDialog closing={desk.closing} line={desk.line} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'transfer' && <RecordTransferDialog closing={desk.closing} line={desk.line} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'withdraw' && <WithdrawEvidenceDialog closing={desk.closing} piece={dialog.piece} onClose={() => setDialog(null)} onDone={done} />}
     </Sheet>
   );
 }
@@ -168,7 +204,7 @@ export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
  * this line's commitment, and shows the number for the seconds the Worker
  * returns, then masks it again. Each refusal prints the Worker's sentence.
  */
-export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId, onClose }) {
+export function PaymentDrawer({ company, amount, route = null, projectId, dealId, commitmentId, onClose }) {
   const phone = usePhoneWidth();
   const [tick, setTick] = useState(0);
   const [read, setRead] = useState({ result: null, error: null, done: false });
@@ -212,7 +248,7 @@ export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId
   const tap = phone ? 'min-h-[44px]' : '';
   const rows = state.kind === 'ok' ? payRows(state.account, amount) : [];
   return (
-    <Sheet label="Payment instructions" eyebrow="Pay" title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
+    <Sheet label="Payment instructions" eyebrow={amount ? ['Your line', amount, route].filter(Boolean).join(' · ') : 'Pay'} title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
       footer={<Foot><button type="button" className={`${BTN.ghost} ${tap}`} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <Warning testId="closing-pay-warning">{PAY_WARNING(company)}</Warning>
@@ -241,6 +277,7 @@ export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId
                     {r.key === 'account' && full ? <span className="font-mono font-semibold" data-testid="closing-pay-full">{full}</span>
                       : r.value ? <span className={r.mono ? 'font-mono break-all' : 'break-words'}>{r.value}</span> : <Unrecorded reason={`The company’s account carries no ${r.label.toLowerCase()}.`} />}
                     {r.key === 'account' && full ? <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="closing-pay-hides">Hides in {left}s</span> : null}
+                    {r.key === 'account' && full ? <button type="button" className={`${BTN.link} ${tap}`} onClick={() => setFull(null)} data-testid="closing-pay-mask">Mask now</button> : null}
                     {r.key === 'account' && !full && commitmentId != null ? (
                       <button type="button" className={`${BTN.link} ${tap}`} onClick={() => { setRefused(null); setAsking(true); }} disabled={busy} data-testid="closing-pay-reveal">Reveal full number</button>
                     ) : null}
@@ -252,6 +289,12 @@ export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId
               <div className="flex flex-col gap-2" data-testid={`closing-pay-reveal-${refused.kind}`}>
                 <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert">{refused.text}</p>
                 {refused.retry ? <button type="button" className={`${BTN.ghost} w-fit ${tap}`} onClick={reveal} disabled={busy} data-testid="closing-pay-reveal-retry">Try again</button> : null}
+              </div>
+            ) : null}
+            {accountChange(state.account) ? (
+              <div className="flex flex-col gap-0.5 rounded-lg border border-gray-200 p-3 text-[12.5px] dark:border-gray-800" role="note" data-testid="closing-pay-changed">
+                <b>{accountChange(state.account).title}</b>
+                <span className="text-gray-600 dark:text-gray-400">{accountChange(state.account).text}</span>
               </div>
             ) : null}
             <p className={mutedText} data-testid="closing-pay-note">{dayOf(state.account.created_at) ? `Set on ${dayOf(state.account.created_at)}. ` : ''}{PAY_WORDS.revealNote}</p>

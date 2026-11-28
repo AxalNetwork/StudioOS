@@ -16,7 +16,11 @@ D1213 (#2424), built to the owner's canvas: `design/incoming/Closing Room Page.d
 | `RecordRoom.jsx` | The room from the closings store, for the founder (CP1), an investor (CP2, CP20) and an Admin under the deal: steps, tiles, lines with route, paper, money and next, reporting after Closed, the investor's Mercury matches, the states (CP16–CP19) (D1218); the founder's receiving account card, with Set or Change (CP1, #6190). |
 | `RoomDialogs.jsx` | The room's drawers and dialogs: Review and sign (CP4), payment instructions with the warning first (CP9), the receipt drawer (CP10), the cap-table decision (CP11), the investor's match (D1218), the founder's receiving account dialog (#6190). All but the match, a centred confirmation, are the shared `Sheet` (D1317). |
 | `roomModel.js` | Pure: who acts next on a line, the seven steps and the tiles, the signing order, the evidence, the cap-table view, reporting duties and Mercury matches for one closing (D1218); the receiving account card's state, fields and body (#6190). |
+| `InvestorRoom.jsx` | The investor's room from the closings store, built to the #6188 v2 canvas (DE35–DE41): steps, line, paper, deadline, committee conditions, evidence sides, the one primary action, after Closed; `InvestorNotOpened` before a closing is opened (D8926). |
+| `investorRoomModel.js` | Pure: the investor room's header, chips, the action by step, the paper's signers, the conditions kept to the deal, the evidence sides, the commitment before a closing and the account change notice (D8926). |
+| `roomShared.jsx` | What both rooms share: the read hook, each line's paper read, the no-access card, the money and Not recorded cells, the cap-table card (D8926). |
 | `PaperState.jsx` | A line's paper as the agreement lifecycle's pill and its detail, or words only where no lifecycle word applies (D4811 part 22). |
+| `EvidenceDialogs.jsx` | An Admin's receipt acts on one closing: record an Axal entity's Mercury credit or a phone-verified transfer as evidence, withdraw a piece with a reason, add a late line (D9108). |
 
 ## Where it lives
 

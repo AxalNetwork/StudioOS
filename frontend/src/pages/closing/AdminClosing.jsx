@@ -14,11 +14,13 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { closingsApi, stagedSigningApi } from '../../lib/api/closings';
 import { useAuth } from '../../hooks/useAuthSync';
-import { useFundActs } from '../../lib/fundActs';
-import { Unreadable, Unrecorded } from '../../ui';
+import { fundActRefusal, useFundActs } from '../../lib/fundActs';
+import { Unreadable, Unrecorded, usePhoneWidth } from '../../ui';
 import { BTN } from '../account/AccountCenter';
 import ActivityDrawer, { ActivityRow } from './ActivityDrawer';
 import { CompleteDialog, CountersignDialog, RouteDialog, WithdrawLineDialog } from './ClosingDialogs';
+import { AddLineDialog } from './EvidenceDialogs';
+import { ReceiptDrawer } from './RoomDialogs';
 import PaperDrawer from './PaperDrawer';
 import PaperState from './PaperState';
 import { FundCard, SyndicatePanel, ThirdPartyDrawer } from './RoutePanels';
@@ -38,8 +40,9 @@ function useLoad(run, deps) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
-    setState((s) => ({ status: s.data ? 'ok' : 'loading', data: s.data }));
-    run().then((data) => { if (live) setState({ status: 'ok', data }); }, () => { if (live) setState({ status: 'error', data: null }); });
+    // D9108: `reading` while a re-read after a write is in flight; the last answer stays drawn meanwhile.
+    setState((s) => ({ status: s.data ? 'ok' : 'loading', data: s.data, reading: true }));
+    run().then((data) => { if (live) setState({ status: 'ok', data, reading: false }); }, () => { if (live) setState({ status: 'error', data: null, reading: false }); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick]);
@@ -129,6 +132,7 @@ export default function AdminClosing({ summary, onChanged }) {
   const paper = usePaper(lines, rev);
   const [open, setOpen] = useState(null); // { kind, line?, envelope? }
   const [panel, setPanel] = useState(null);
+  const phone = usePhoneWidth();
   const done = () => { setOpen(null); setRev((n) => n + 1); onChanged?.(); };
 
   if (read.status === 'loading' && !closing) return <div className="h-40 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="closing-detail-loading" />;
@@ -143,6 +147,29 @@ export default function AdminClosing({ summary, onChanged }) {
   const close = closeState(closing);
   const company = summary.project_name || null;
   const shownLine = panel ? lines.find((l) => l.uid === panel) : null;
+  // D9108: the receipt drawer follows the line in the latest read, so its status and evidence change without a reload.
+  const receiptLine = open?.kind === 'receipt' ? lines.find((l) => l.uid === open.lineUid) || null : null;
+  const lineActs = (l) => {
+    const live = editable && l.status !== 'withdrawn';
+    return (
+      <>
+        {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'receipt', lineUid: l.uid })} data-testid={`closing-line-receipt-btn-${l.uid}`}>Receipt</button>}
+        {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'route', line: l })} data-testid={`closing-line-route-btn-${l.uid}`}>Choose the route</button>}
+        {live && l.commitment_id && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'paper', line: l })} data-testid={`closing-line-paper-btn-${l.uid}`}>Prepare paper</button>}
+        {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'third', line: l })} data-testid={`closing-line-third-btn-${l.uid}`}>Third-party fund</button>}
+        {['syndicate', 'axal_fund'].includes(l.route) && <button type="button" className={BTN.ghost} aria-expanded={panel === l.uid} onClick={() => setPanel(panel === l.uid ? null : l.uid)} data-testid={`closing-line-panel-btn-${l.uid}`}>{panel === l.uid ? 'Hide the route' : 'Open the route'}</button>}
+        {live && <button type="button" className={BTN.danger} onClick={() => setOpen({ kind: 'withdraw', line: l })} data-testid={`closing-line-withdraw-btn-${l.uid}`}>Withdraw</button>}
+      </>
+    );
+  };
+  const cells = (l) => {
+    const p = paper[l.uid] || { status: 'none', envelopes: [] };
+    return {
+      amount: <Money cents={l.amount_cents} currency={l.currency || currency} reason="No amount is recorded on this line." />,
+      route: <>{routeWord(l.route) || <Unrecorded reason="No capital route is chosen for this line.">No route chosen</Unrecorded>}{l.vehicle_ref && l.route !== 'direct' ? <span className="block text-[11px] text-gray-500 dark:text-gray-400">{l.vehicle_ref}</span> : null}</>,
+      paper: p.status === 'none' ? <Unrecorded reason="A Raise prospect has no commitment, so its paper is not read here.">Not read here</Unrecorded> : p.status === 'loading' ? 'Reading…' : p.status === 'error' ? <span className="text-red-700 dark:text-red-300">Unreadable</span> : <PaperState state={closingPaperLifecycle(p.envelopes)} />,
+    };
+  };
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="closing-detail">
@@ -165,29 +192,40 @@ export default function AdminClosing({ summary, onChanged }) {
       </div>
 
       <section className={box} data-testid="closing-detail-lines">
-        <h2 className="m-0 text-[15px] font-bold">Lines</h2>
-        {lines.length === 0 ? <p className="m-0 text-sm text-gray-600 dark:text-gray-400" data-testid="closing-detail-no-lines">No line yet. A line is a live commitment on the deal with an amount, or a Raise prospect of the venture.</p> : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="m-0 text-[15px] font-bold">Lines</h2>
+          {editable && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'add-line' })} data-testid="closing-add-line-btn">Add a line</button>}
+        </div>
+        {lines.length === 0 ? <p className="m-0 text-sm text-gray-600 dark:text-gray-400" data-testid="closing-detail-no-lines">No line yet. A line is a live commitment on the deal with an amount, or a Raise prospect of the venture.</p> : phone ? (
+          <ul className="m-0 flex list-none flex-col p-0 text-[12.5px]" data-testid="closing-detail-line-cards">
+            {lines.map((l) => {
+              const c = cells(l);
+              return (
+                <li key={l.uid} className="flex min-w-0 flex-col gap-1.5 border-t border-gray-100 py-2.5 first:border-t-0 dark:border-gray-800" data-testid={`closing-line-row-${l.uid}`}>
+                  <span className="flex flex-wrap items-baseline justify-between gap-2"><b className="break-words">{l.investor_name || 'Name not recorded'}</b>{c.amount}</span>
+                  <span className="text-gray-600 dark:text-gray-400" data-testid={`closing-line-status-${l.uid}`}>{lineStatus(l.status)}</span>
+                  <span data-testid={`closing-line-route-${l.uid}`}>Route: {c.route}</span>
+                  <span data-testid={`closing-line-paper-${l.uid}`}>Paper: {c.paper}</span>
+                  <span className="flex flex-wrap gap-1.5">{lineActs(l)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-[12.5px]">
               <thead><tr className="text-[11px] uppercase text-gray-500 dark:text-gray-400"><th className="py-1">Investor</th><th>Amount</th><th>Route</th><th>Paper</th><th>Status</th><th><span className="sr-only">Acts</span></th></tr></thead>
               <tbody>
                 {lines.map((l) => {
-                  const p = paper[l.uid] || { status: 'none', envelopes: [] };
-                  const live = editable && l.status !== 'withdrawn';
+                  const c = cells(l);
                   return (
                     <tr key={l.uid} className="border-t border-gray-100 align-top dark:border-gray-800" data-testid={`closing-line-row-${l.uid}`}>
                       <td className="py-1.5 font-semibold">{l.investor_name || 'Name not recorded'}</td>
-                      <td><Money cents={l.amount_cents} currency={l.currency || currency} reason="No amount is recorded on this line." /></td>
-                      <td data-testid={`closing-line-route-${l.uid}`}>{routeWord(l.route) || <Unrecorded reason="No capital route is chosen for this line.">No route chosen</Unrecorded>}{l.vehicle_ref && l.route !== 'direct' ? <span className="block text-[11px] text-gray-500 dark:text-gray-400">{l.vehicle_ref}</span> : null}</td>
-                      <td data-testid={`closing-line-paper-${l.uid}`}>{p.status === 'none' ? <Unrecorded reason="A Raise prospect has no commitment, so its paper is not read here.">Not read here</Unrecorded> : p.status === 'loading' ? 'Reading…' : p.status === 'error' ? <span className="text-red-700 dark:text-red-300">Unreadable</span> : <PaperState state={closingPaperLifecycle(p.envelopes)} />}</td>
+                      <td>{c.amount}</td>
+                      <td data-testid={`closing-line-route-${l.uid}`}>{c.route}</td>
+                      <td data-testid={`closing-line-paper-${l.uid}`}>{c.paper}</td>
                       <td data-testid={`closing-line-status-${l.uid}`}>{lineStatus(l.status)}</td>
-                      <td className="flex flex-wrap justify-end gap-1.5 py-1">
-                        {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'route', line: l })} data-testid={`closing-line-route-btn-${l.uid}`}>Choose the route</button>}
-                        {live && l.commitment_id && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'paper', line: l })} data-testid={`closing-line-paper-btn-${l.uid}`}>Prepare paper</button>}
-                        {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'third', line: l })} data-testid={`closing-line-third-btn-${l.uid}`}>Third-party fund</button>}
-                        {['syndicate', 'axal_fund'].includes(l.route) && <button type="button" className={BTN.ghost} aria-expanded={panel === l.uid} onClick={() => setPanel(panel === l.uid ? null : l.uid)} data-testid={`closing-line-panel-btn-${l.uid}`}>{panel === l.uid ? 'Hide the route' : 'Open the route'}</button>}
-                        {live && <button type="button" className={BTN.danger} onClick={() => setOpen({ kind: 'withdraw', line: l })} data-testid={`closing-line-withdraw-btn-${l.uid}`}>Withdraw</button>}
-                      </td>
+                      <td className="flex flex-wrap justify-end gap-1.5 py-1">{lineActs(l)}</td>
                     </tr>
                   );
                 })}
@@ -216,6 +254,12 @@ export default function AdminClosing({ summary, onChanged }) {
       {open?.kind === 'withdraw' && <WithdrawLineDialog closing={closing} line={open.line} onClose={() => setOpen(null)} onDone={done} />}
       {open?.kind === 'complete' && <CompleteDialog closing={closing} onClose={() => setOpen(null)} onDone={done} />}
       {open?.kind === 'countersign' && <CountersignDialog envelope={open.envelope} onClose={() => setOpen(null)} onDone={() => setRev((n) => n + 1)} />}
+      {open?.kind === 'add-line' && <AddLineDialog closing={closing} lines={lines} onClose={() => setOpen(null)} onDone={done} />}
+      {receiptLine && (
+        <ReceiptDrawer viewer="admin" dealId={closing.deal_id} onClose={() => setOpen(null)}
+          row={{ investor: receiptLine.investor_name || 'Name not recorded', amount: moneyCents(receiptLine.amount_cents, receiptLine.currency || currency), status: lineStatus(receiptLine.status), evidence: Array.isArray(receiptLine.evidence) ? receiptLine.evidence : [] }}
+          admin={{ closing, line: receiptLine, viewerId: user?.id ?? null, refused: fundActRefusal(access, 'closing.evidence'), reading: !!read.reading, onChanged: () => setRev((n) => n + 1) }} />
+      )}
       {open?.kind === 'activity' && <ActivityDrawer title={`Closing · ${company || 'Venture not recorded'}${summary.round_label ? ` ${summary.round_label}` : ''}`} rows={activity} onClose={() => setOpen(null)} />}
     </div>
   );
