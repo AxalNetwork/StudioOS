@@ -70,7 +70,8 @@ async function mount({ url, route, page, api, answer }) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  const settle = async (n = 8) => { for (let i = 0; i < n; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+  // A turn of the event loop per pass, not a timer: the stubbed read settles without waiting on the clock (D5614).
+  const settle = async (n = 8) => { for (let i = 0; i < n; i += 1) await act(async () => { await new Promise((r) => setImmediate(r)); }); };
   await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null, h(Route, { path: route, element: h(page) })))); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];

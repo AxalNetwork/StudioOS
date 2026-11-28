@@ -16,6 +16,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { OG_ROUTES, SITE_NAME, ogTagsFor, prerenderedRoutes } from '../src/lib/ogRegistry.js';
+import { waitUntil } from './_waitUntil.mjs';
 
 const h = React.createElement;
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -48,10 +49,10 @@ async function appAt(route) {
   let shown; let left;
   try {
     await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route] }, h(App))); });
-    for (let i = 0; i < 120; i += 1) {
-      await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
-      if (select(doc, 'h1').length) break;
-    }
+    // The lazy route chunk loads on its own time: wait for the heading against a deadline, not a fixed sleep (D5614).
+    await waitUntil(() => select(doc, 'h1').length > 0, {
+      label: `a heading at ${route}`, timeoutMs: 15000, advance: () => act(() => new Promise((r) => setImmediate(r))),
+    });
     shown = { ...headNow(), h1s: select(doc, 'h1').map((n) => n.textContent.trim()) };
   } finally {
     await act(async () => root.unmount());
