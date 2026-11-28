@@ -774,8 +774,8 @@ const SATISFIABLE_BY_CLICKWRAP: ReadonlySet<ObligationKey> = new Set<ObligationK
  * fails when either page's date and this map disagree. Change the page, then this.
  */
 export const LEGAL_DOCUMENT_VERSIONS: Readonly<Record<'tos_v1' | 'privacy_v1', string>> = Object.freeze({
-  tos_v1: '2026-07-08',
-  privacy_v1: '2026-10-29',
+  tos_v1: '2026-11-27',
+  privacy_v1: '2026-11-27',
 });
 
 /**

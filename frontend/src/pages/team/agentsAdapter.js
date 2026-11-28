@@ -282,6 +282,23 @@ export async function rebaseSkill(uid, body) {
     return { available: false, unreadable: true, reason: 'could not be read' };
   }
 }
+/**
+ * D8827 (#8827): `POST /api/teams/skills/:uid/proposals` → Eadwyn's summary and proposals, or `{ estimate }` for
+ * `{ estimate: true }`. A refusal keeps the Worker's code, its sentence and, on `quote_changed`, the fresh estimate;
+ * an answer with no code is unreadable. Nothing here writes a draft.
+ */
+export async function skillProposals(uid, body) {
+  try {
+    return { available: true, value: await teamAgentsApi.skillProposals(uid, body) };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    const estimate = e?.data?.estimate && Number.isFinite(e.data.estimate.hold_microusd) ? e.data.estimate : null;
+    if (code && [400, 402, 403, 404, 409, 422, 503].includes(status)) return { available: false, refused: true, status, code, estimate, reason: e?.message || null };
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
 export const coverage = (scope, id) =>throughSkill(() => teamAgentsApi.coverage(scope, id));
 /** D4121 (#4121): the agent's cost per run with `add` skills added and `remove` taken off; `{ available: false }` when pricing cannot be read. */
 export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));

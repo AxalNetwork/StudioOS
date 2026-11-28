@@ -58,6 +58,7 @@
  *                                        version's parts, the HQ skill's current version, `base_update_available`
  *                                        (a newer published HQ version, never applied), and a per-field three-way
  *                                        comparison (old base, new base, the company's latest) naming conflicts.
+ *                                        `versions[]` is `{ version, based_on_version, published_at, by_name }` (D8826).
  *   PATCH /skills/:uid on an extension   its tools stay within its base version's (422 `tool_not_in_base`).
  *   Every card carries `based_on: { skill_uid, version } | null`.
  *
@@ -183,25 +184,25 @@ async function isMember(env: Env, companyId: number, user: User): Promise<boolea
   if (isAdmin(user)) return true;
   return !!(await env.DB.prepare('SELECT 1 AS ok FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(companyId, user.id).first());
 }
-async function mayWrite(env: Env, s: Pick<SkillRow, 'scope' | 'company_id'>, user: User): Promise<boolean> {
+export async function mayWrite(env: Env, s: Pick<SkillRow, 'scope' | 'company_id'>, user: User): Promise<boolean> {
   if (s.scope === 'hq') return isSuperAdmin(user as any);
   return s.company_id != null && canEditAsMember(env, { id: s.company_id }, user);
 }
-async function mayRead(env: Env, s: SkillRow, user: User): Promise<boolean> {
+export async function mayRead(env: Env, s: SkillRow, user: User): Promise<boolean> {
   if (!(s.scope === 'hq' || (s.company_id != null && await isMember(env, s.company_id, user)))) return false;
   return s.current_version > 0 || mayWrite(env, s, user);
 }
 
-async function skillByUid(env: Env, uid: string): Promise<SkillRow | null> {
+export async function skillByUid(env: Env, uid: string): Promise<SkillRow | null> {
   if (!/^[a-f0-9]{32}$/.test(uid)) return null;
   return env.DB.prepare('SELECT * FROM agent_skills WHERE uid = ?').bind(uid).first<SkillRow>();
 }
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
-type Parts = { name: string; purpose: string; steps: string[]; tools: string[]; output_kind: OutputKind; tags: Tag[]; roles: string[] };
+export type Parts = { name: string; purpose: string; steps: string[]; tools: string[]; output_kind: OutputKind; tags: Tag[]; roles: string[] };
 
-async function draftParts(env: Env, s: SkillRow): Promise<Parts> {
+export async function draftParts(env: Env, s: SkillRow): Promise<Parts> {
   const tags = await all<{ taxonomy_skill_slug: string; level: Tag['level'] }>(env, 'SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = ? ORDER BY rowid', s.id);
   const roles = await all<{ role_key: string }>(env, 'SELECT role_key FROM agent_skill_roles WHERE skill_id = ? ORDER BY rowid', s.id);
   return draftContent(s, tags.map((t) => ({ slug: t.taxonomy_skill_slug, level: t.level })), roles.map((r) => r.role_key));
@@ -213,11 +214,11 @@ function draftContent(s: SkillRow, tags: Tag[], roles: string[]): Parts {
     tags, roles,
   };
 }
-const versionParts = (v: VersionRow): Parts => ({
+export const versionParts = (v: VersionRow): Parts => ({
   name: v.name, purpose: v.purpose, steps: parse(v.steps_json, []), tools: parse(v.allowed_tools_json, []), output_kind: v.output_kind,
   tags: parse(v.taxonomy_json, []), roles: parse(v.roles_json, []),
 });
-async function versionOf(env: Env, skillId: number, version: number): Promise<VersionRow | null> {
+export async function versionOf(env: Env, skillId: number, version: number): Promise<VersionRow | null> {
   return env.DB.prepare('SELECT * FROM agent_skill_versions WHERE skill_id = ? AND version = ?').bind(skillId, version).first<VersionRow>();
 }
 
@@ -680,7 +681,7 @@ type HqBase = { row: Pick<SkillRow, 'id' | 'uid' | 'name' | 'status' | 'current_
  * An extension's HQ base and the exact version it was forked from. The uid is looked up within `scope = 'hq'` only,
  * so a lineage column can never lead to another company's skill. Null when the HQ row cannot be found.
  */
-async function baseOf(env: Env, s: SkillRow): Promise<HqBase | null> {
+export async function baseOf(env: Env, s: SkillRow): Promise<HqBase | null> {
   if (!s.based_on_skill_uid || s.based_on_version == null) return null;
   const row = await env.DB.prepare(`SELECT id, uid, name, status, current_version FROM agent_skills WHERE uid = ? AND scope = 'hq'`)
     .bind(s.based_on_skill_uid).first<HqBase['row']>();
@@ -696,7 +697,7 @@ const partKey = (p: Parts, f: PartField) => JSON.stringify(f === 'tags' ? p.tags
  * version, and the company's latest. A field is a `conflict` when both sides changed it and differently. Read only:
  * nothing is merged here. The rebase route below applies explicit choices to a draft (D4538 part 5).
  */
-function threeWay(oldBase: Parts, newBase: Parts | null, company: Parts) {
+export function threeWay(oldBase: Parts, newBase: Parts | null, company: Parts) {
   return PART_FIELDS.map((field) => {
     const o = partKey(oldBase, field), n = newBase ? partKey(newBase, field) : o, mine = partKey(company, field);
     const companyChanged = mine !== o, baseChanged = n !== o;
@@ -835,6 +836,12 @@ router.post('/skills/:uid/rebase', async (c) => {
   return c.json({ skill: await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, ''), base: { uid: base.row.uid, version: b.version } });
 });
 
+/** D8826: a publisher's display name, or null when there is none to show; a value holding "@" is never sent. */
+function publisherName(name: string | null): string | null {
+  const n = typeof name === 'string' ? name.trim() : '';
+  return n && !n.includes('@') ? n : null;
+}
+
 router.get('/skills/:uid/base', async (c) => {
   const user = await requireAuth(c);
   const s = await skillByUid(c.env, c.req.param('uid'));
@@ -843,9 +850,13 @@ router.get('/skills/:uid/base', async (c) => {
   if (s.scope !== 'company' || !s.based_on_skill_uid || s.based_on_version == null) return c.json({ lineage: null });
   const tax = await taxonomy(c.env);
   const base = await baseOf(c.env, s);
-  const history = await all<{ version: number; based_on_version: number | null }>(c.env,
-    'SELECT version, based_on_version FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC', s.id);
-  const lineage = { based_on: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, reason: s.fork_reason ?? null, versions: history };
+  // D8826 (#8826): who published each company version, and when, for History. The publisher's display name only — no
+  // uid, no email — and a name that is blank or holds an address is null (the screen's "Not recorded").
+  const history = await all<{ version: number; based_on_version: number | null; published_at: string | null; by_name: string | null }>(c.env,
+    `SELECT v.version, v.based_on_version, v.published_at, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
+      WHERE v.skill_id = ? ORDER BY v.version DESC`, s.id);
+  const versions = history.map((v) => ({ version: v.version, based_on_version: v.based_on_version, published_at: v.published_at ?? null, by_name: publisherName(v.by_name) }));
+  const lineage = { based_on: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, reason: s.fork_reason ?? null, versions };
   // The HQ row or its version could not be read: say so, never guess an answer (the screen's "Unreadable").
   if (!base?.version) return c.json({ lineage: { ...lineage, base: null, base_update_available: null, fields: null } });
   const retired = base.row.status === 'retired';

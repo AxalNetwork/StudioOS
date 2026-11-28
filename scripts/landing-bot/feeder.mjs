@@ -16,7 +16,7 @@ async function main(stage, env) {
   if (!['plan', 'apply'].includes(stage) || env.GITHUB_REPOSITORY !== repo ||
       env.GITHUB_REF !== 'refs/heads/main' || !runId || attempt !== 1 ||
       !['schedule', 'workflow_dispatch'].includes(event) || env.LANDING_AUTO !== 'true' ||
-      (event === 'workflow_dispatch' && !dispatchPr) || !triggerAllowed(env, {event, dispatchPr, prNumber: dispatchPr})) {
+      (event === 'workflow_dispatch' && !dispatchPr) || !triggerAllowed(env, {event, dispatchPr, prNumber: dispatchPr, kind: 'feeder'})) {
     throw new Error('Workflow invocation is outside the enabled landing policy.');
   }
   const reader = createGitHubReader({repo, token: env.GH_TOKEN, botLogin: env.LANDING_BOT_LOGIN || undefined});
@@ -25,7 +25,9 @@ async function main(stage, env) {
   const limit = count(env.LANDING_BOT_DAILY_FEEDS);
   // #8076 (D8076): a held candidate is said in one line in the run summary.
   const onHold = h => appendFileSync(env.GITHUB_STEP_SUMMARY, `PR #${h.number} — ${h.line}\n`);
-  const options = {repo, event, env, reader, dispatchPr, onHold};
+  // #6481 (D6481-p2): a listed PR that is not admitted says why (checks, policy, conflict, hold, owner review, capacity).
+  const onWait = w => appendFileSync(env.GITHUB_STEP_SUMMARY, `- ${w.number ? `PR #${w.number}` : 'Sweep'} waiting — ${w.line}\n`);
+  const options = {repo, event, env, reader, dispatchPr, onHold, onWait};
   const ledger = async (slots = 0) => readDailyReservations({
     get: reader.get, runId, attempt, day, expectedSlots: slots, now: Date.now,
   });

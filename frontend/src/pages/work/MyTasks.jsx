@@ -56,7 +56,7 @@ export default function MyTasks({ licence = 'founder', project = null, title = '
         </div>
       </div>
       {read.status === 'loading' ? <p className={MUTED} data-testid={`${testId}-loading`}>Reading…</p> : null}
-      {read.status === 'off' ? <HonestBlock testId={`${testId}-off`}>{read.reason}</HonestBlock> : null}
+      {read.status === 'off' ? <HonestBlock testId={`${testId}-off`}>Axal switches tasks on for the platform. Your team’s assignments will appear here when the engine is available.</HonestBlock> : null}
       {read.status === 'error' ? (
         <HonestBlock role="alert" testId={`${testId}-error`} action={<button type="button" className={BTN_SECONDARY} onClick={load}>Try again</button>}>{read.message}</HonestBlock>
       ) : null}

@@ -1,10 +1,11 @@
 /** #5830: private-copy mutation proof for dark approval, current ownership and the atomic revocation guard. */
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { isolatedMutationSource } from './_isolated_mutation_source.mjs';
+import { writeFileAtomic } from './_atomic_write.mjs';
 const root=fileURLToPath(new URL('../..',import.meta.url));
 const copy=isolatedMutationSource(root);
 try {
@@ -19,8 +20,8 @@ try {
   ['stale snapshot bypass',"if (b.expected_mapping_revision !== before.revision)",'if (false)'],
   ['commit snapshot bypass','AND (${SNAPSHOT_SQL}) = ?','AND (? IS NOT NULL OR ? IS NOT NULL)']
  ]) {
-  assert.ok(original.includes(before),name+' target exists');writeFileSync(route,original.replace(before,after));result=run();
+  assert.ok(original.includes(before),name+' target exists');writeFileAtomic(route,original.replace(before,after));result=run();
   assert.notEqual(result.status,0,name+' survived');assert.match(result.stdout+result.stderr,/AssertionError/,name+' must fail a behavioral assertion, not imports/syntax');console.log(name+': KILLED, exit '+result.status);
  }
- writeFileSync(route,original);result=run();assert.equal(result.status,0,result.stdout+result.stderr);console.log('restored: PASS, exit 0');
+ writeFileAtomic(route,original);result=run();assert.equal(result.status,0,result.stdout+result.stderr);console.log('restored: PASS, exit 0');
 } finally {copy.close();}

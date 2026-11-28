@@ -435,7 +435,8 @@ test('bind: a candidate built from head A refuses the pull request once it moves
   const r = bind(f.dir, main0, b, candidate);
   assert.equal(r.status, 1, r.lines.join('\n'));
   assert.equal(r.lines.length, 1);
-  assert.match(r.lines[0], new RegExp(`^agent-provenance: REFUSED pull request head ${b} is not the one candidate ${candidate} was built from: base ${main0} merged with it gives tree [0-9a-f]{40}, the candidate's tree is ${f.git('rev-parse', `${candidate}^{tree}`)}$`));
+  const refusal = /^agent-provenance: REFUSED pull request head ([0-9a-f]{40}) is not the one candidate ([0-9a-f]{40}) was built from: base ([0-9a-f]{40}) merged with it gives tree [0-9a-f]{40}, the candidate's tree is ([0-9a-f]{40})$/.exec(r.lines[0]);
+  assert.deepEqual(refusal?.slice(1), [b, candidate, main0, f.git('rev-parse', `${candidate}^{tree}`)], r.lines[0]);
   // A push on top of A moves the head as well.
   f.git('checkout', '--quiet', '-B', BRANCH, a);
   const c = f.put(`feat: three\n\n${CHAIN}`);
@@ -459,7 +460,7 @@ test('bind: an unchanged head passes for a lone pull request and for one stacked
   // The range the job then checks is the stacked pull request's own commit, not the one ahead of it.
   r = run(f.dir, ['--base', c1, '--head', a2, '--branch', 'agent/claude/8069-second']);
   assert.equal(r.status, 0, r.lines.join('\n'));
-  assert.match(r.lines.at(-1), new RegExp(`^agent-provenance: verdict=pass head=${a2} commits=1 `));
+  assert.ok(r.lines.at(-1).startsWith(`agent-provenance: verdict=pass head=${a2} commits=1 `));
   // The base binds too: the stacked candidate is not one commit on main, and the first candidate is not the second's.
   r = bind(f.dir, main0, a2, c2);
   assert.equal(r.status, 1);

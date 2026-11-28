@@ -14,7 +14,8 @@ import { VERCEL_READ_BY, VERCEL_READ_REASON } from './vercelFeeds';
  */
 // D1096: Vercel's parts land `connector_fed_items` rows (deploy, health, runtime, hosting_step) as each is built.
 // D2407: Beehiiv's Grow facts and posts land through the ledger (`services/beehiiv/grow.ts`).
-export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'google_workspace', 'notion', 'vercel', 'beehiiv']);
+// D8815: a founder's own X lands its audience snapshots and posts through the ledger (`services/x/growFeeds.ts`).
+export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'google_workspace', 'notion', 'vercel', 'beehiiv', 'x']);
 
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 export { MODULE_LABELS } from './moduleLabels';

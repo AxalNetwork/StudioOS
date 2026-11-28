@@ -216,8 +216,9 @@ test('trust bulk permissions: bounded queries match single-deal invitations and 
     const prepare = f.env.DB.prepare.bind(f.env.DB);
     f.env.DB.prepare = (sql: string) => { queries++; return prepare(sql); };
     assert.equal(await mayReadTrustScores(f.env, { id: 3, role: 'investor' } as any, [4, 5, 6]), true);
-    // D1074: one bounded query decides every id (an open deal or intro in either direction).
-    assert.equal(queries, 1, 'one bulk authorization query');
+    // D1074: one bounded query decides every id (an open deal or intro in either direction). D5454 (#5454, R4) adds
+    // the preparation guard's one hidden-set read before it: two statements for the whole batch, never one per id.
+    assert.equal(queries, 2, 'one hidden-set read and one bulk authorization query');
   } finally { f.db.close(); }
 });
 

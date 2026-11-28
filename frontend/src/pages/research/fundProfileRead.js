@@ -10,7 +10,7 @@
  * copied the row) and Source use reviewed (when the list's terms were read).
  * Amounts are printed in the currency the list reported; nothing is converted.
  */
-import { toMajorString } from '../../lib/money.js';
+import { currencyCode, toMajorString } from '../../lib/money.js';
 import { NOT_RECORDED } from './researchStates.js';
 
 /** The three action names (D7031, FND-P01). */
@@ -41,9 +41,13 @@ export function day(value) {
 
 const SYMBOL = { EUR: '€', USD: 'US$', GBP: '£' };
 
-/** Cents in a named currency → "€75m", "US$185m"; null for an unknown currency. Never converted. */
+/**
+ * Cents in a named currency → "€75m", "US$185m", "CHF 40m"; null for a currency the money layer does not list.
+ * D7744: a code with no mark prints as the code, so a row, its Sheet, its profile and a comparison cell agree.
+ * Never converted.
+ */
 export function amount(cents, currency) {
-  if (cents == null || !SYMBOL[currency]) return null;
+  if (cents == null || !currencyCode(currency)) return null;
   // Minor to major units through the money layer (D5029, D5373), never a bare factor.
   const major = Number(toMajorString(Math.round(Number(cents)), currency));
   if (!Number.isFinite(major)) return null;
@@ -51,7 +55,7 @@ export function amount(cents, currency) {
   const text = m >= 1
     ? m.toLocaleString('en-US', { maximumFractionDigits: m < 10 ? 1 : 0 })
     : (major / 1e3).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  return `${SYMBOL[currency]}${text}${m >= 1 ? 'm' : 'k'}`;
+  return `${SYMBOL[currency] || `${currency} `}${text}${m >= 1 ? 'm' : 'k'}`;
 }
 
 /** The chip on a figure: "@Euro_VC · reported 25 Sep 2023". */

@@ -166,7 +166,8 @@ const ROUTES = (closing, over = {}) => ({
 test('mounted, open: the deadline with days left, the step that waits on you, and the count of the rest; no other line', async () => {
   const v = await mount({ routes: ROUTES(CLOSING()) });
   try {
-    assert.match(v.text('closing-your-deadline'), /Closing deadline 30 Nov 2026 · (in \d+ days?|\d+ days? past)/);
+    // D8926: DE35's Deadline tile, the date over the days left.
+    assert.match(v.text('closing-your-deadline'), /Deadline 30 Nov 2026 (in \d+ days?|\d+ days? past) Set by the studio on this closing\./);
     assert.match(v.text('closing-left-sign'), /Waits on you: Sign the paper.*Open the signing order/);
     assert.ok(!v.has('closing-left-send_payment'), 'the step tied to another investor’s line is not drawn');
     assert.match(v.text('closing-left-rest'), /4 more steps are open in this round\. 2 on your line.*1 line of other investors not yet received; 1 for the round as a whole\./);
@@ -194,7 +195,9 @@ test('mounted, closed: amount, signed and received days, the signed copy, the du
     assert.match(v.text('closing-summary-signed'), /Signed 11 Oct 2026/);
     assert.match(v.text('closing-summary-received'), /Received 15 Oct 2026/);
     assert.equal(v.props('closing-portfolio-link').href, '/portfolio/companies/proj-acme');
-    assert.match(v.text('closing-portfolio-link'), /Open Acme Robotics in Portfolio/);
+    // D8926: DE37's "Keep it in Portfolio" card names the company; its button says Open in Portfolio.
+    assert.equal(v.text('closing-portfolio-link'), 'Open in Portfolio');
+    assert.match(v.text('closing-portfolio'), /Opens Acme Robotics in Portfolio\./);
     assert.match(v.text('closing-duty-du1'), /Quarterly investor update.*Quarterly · 45 days after the period ends.*§1\.1\(c\) ?, in the signed paper/);
     assert.match(v.text('closing-duty-du2'), /Annual budget.*Yearly · 30 days before the period starts.*Default, not in the paper/);
     assert.ok(!v.has('closing-left') && !v.has('closing-your-deadline'), 'nothing is left once Closed');
