@@ -612,7 +612,7 @@ r.get('/meeting-bots/test/:uid', async (c) => {
   } catch { return c.json({ code: 'bot_test_unreadable', message: 'The check timings could not be read.' },503); }
 });
 
-// #3708: the owner's staged diagnostic. A Meet or Zoom link the owner hosts; no
+// #3708: the owner's staged diagnostic. A Meet, Zoom or (D5814) Teams link the owner hosts; no
 // session, consent or charge, and nothing but codes, counts and one screenshot
 // kept, for the Super Admin who started it.
 r.post('/meeting-bots/diagnose', async (c) => {

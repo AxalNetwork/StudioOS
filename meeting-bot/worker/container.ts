@@ -57,7 +57,8 @@ export class MeetingBotContainer implements DurableObject {
         if (path==='/diagnose') {
           // #3708: one owner diagnostic per id, on its own instance; no meeting run, no heartbeat.
           if (lease || container.running) return reply(409,'runtime_busy');
-          if (!['zoom','google_meet'].includes(body.platform) || typeof body.meeting_url!=='string' || body.meeting_url.length>2048) return reply(400,'invalid_command');
+          // D5814: Teams too, with the Teams driver in the image.
+          if (!['zoom','google_meet','teams'].includes(body.platform) || typeof body.meeting_url!=='string' || body.meeting_url.length>2048) return reply(400,'invalid_command');
           const image=container.images.runtime;
           if (!image) return reply(503,'image_unavailable');
           const key=await runtimeKey(this.env.MEETING_BOT_SECRET ?? '',body.uid),origin=runtimeOrigin(this.env);

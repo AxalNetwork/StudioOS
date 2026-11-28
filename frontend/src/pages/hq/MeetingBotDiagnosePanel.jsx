@@ -1,11 +1,13 @@
 // #3708: the owner's staged diagnostic. One link, one table: where Eadwyn AI stops, why, and the fix.
+// D5814: Teams links too, with Teams' own row for the recording notice it posts before it listens.
 import React, { useEffect, useState } from 'react';
 import { adminMeetingBotsApi } from '../../lib/api/adminMeetingBots';
 import { Card } from '../../ui';
 
 const STAGES = {
-  site: 'The site reaches the bot', config: 'Google or Zoom setup', container: 'The container starts', browser: 'The browser launches',
-  egress: 'Egress to the meeting hosts', join: 'Join attempt', admission: 'Admission', audio: 'Audio frames and first chunk', last_run: 'Your last real run',
+  site: 'The site reaches the bot', config: 'Google, Zoom or Teams setup', container: 'The container starts', browser: 'The browser launches',
+  egress: 'Egress to the meeting hosts', join: 'Join attempt', admission: 'Admission', notice: 'Recording notice in the chat',
+  audio: 'Audio frames and first chunk', last_run: 'Your last real run',
 };
 const RESULT = {
   pass: 'text-emerald-700 dark:text-emerald-300', fail: 'text-red-700 dark:text-red-300',
@@ -27,7 +29,7 @@ export function DiagnosisTable({ diagnosis }) {
       <thead className="text-xs text-axal-muted dark:text-gray-300"><tr><th className="py-1 pr-3">Stage</th><th className="py-1 pr-3">Result</th><th className="py-1 pr-3">What it found</th><th className="py-1">Fix</th></tr></thead>
       <tbody>{diagnosis.rows.map((row) => <tr key={row.stage} className="border-t border-axal-hairline align-top dark:border-gray-700" data-stage={row.stage} data-result={row.result}>
         <td className="py-2 pr-3 font-bold">{STAGES[row.stage] || label(row.stage)}</td>
-        <td className={`py-2 pr-3 font-bold capitalize ${RESULT[row.result] || ''}`}>{RESULT_WORD[row.result] || row.result}{row.delivery === 'late' && <span className="block text-xs font-normal normal-case text-axal-muted dark:text-gray-300">Report arrived late, after {row.attempts || 1} failed {(row.attempts || 1) === 1 ? 'send' : 'sends'}. The result is the check’s own.</span>}</td>
+        <td className={`py-2 pr-3 font-bold capitalize ${RESULT[row.result] || ''}`}>{RESULT_WORD[row.result] || row.result}{Number.isInteger(row.elapsed_s) && <span className="block text-xs font-normal normal-case text-axal-muted dark:text-gray-300">after {row.elapsed_s} s</span>}{row.delivery === 'late' && <span className="block text-xs font-normal normal-case text-axal-muted dark:text-gray-300">Report arrived late, after {row.attempts || 1} failed {(row.attempts || 1) === 1 ? 'send' : 'sends'}. The result is the check’s own.</span>}</td>
         <td className="py-2 pr-3">{row.result === 'unrecorded' && <span className="block text-xs">The report for this step did not arrive, so the console cannot say whether it passed. This is a reporting problem, not a failed check.</span>}<span className="font-mono text-xs">{row.code}</span>{Object.keys(row.facts || {}).length > 0 && <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-axal-muted dark:text-gray-300">{Object.entries(row.facts).map(([k, v]) => <React.Fragment key={k}><dt>{label(k)}</dt><dd className="font-mono">{String(v)}</dd></React.Fragment>)}</dl>}</td>
         <td className="py-2 text-xs">{row.fix || '—'}</td>
       </tr>)}</tbody>
@@ -62,9 +64,9 @@ export default function MeetingBotDiagnosePanel() {
   const stop = diagnosis?.stops_at, unrecorded = diagnosis?.unrecorded || [];
   return <Card data-testid="meeting-bot-diagnose">
     <h2 className="font-bold">Diagnose Eadwyn AI</h2>
-    <p className="mt-1 text-sm text-axal-muted dark:text-gray-300">Open a Google Meet or Zoom call you host, paste its link, and stay in the call to admit Eadwyn AI. Each stage runs in order and says where it stops. No session, consent or AI tokens are used, and no audio, names or page text are kept. A screenshot of the stopping point is kept for you only.</p>
+    <p className="mt-1 text-sm text-axal-muted dark:text-gray-300">Open a Google Meet, Zoom or Microsoft Teams call you host, paste its link, and stay in the call to admit Eadwyn AI. Each stage runs in order and says where it stops. On Teams, Eadwyn AI posts its recording notice in the chat before it listens. No session, consent or AI tokens are used, and no audio, names or page text are kept. A screenshot of the stopping point is kept for you only.</p>
     <form onSubmit={start} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-      <label className="text-xs font-bold">Meeting link<input className={field} type="url" autoComplete="off" required maxLength={2048} placeholder="Google Meet or Zoom" value={link} onChange={(e) => setLink(e.target.value)} /></label>
+      <label className="text-xs font-bold">Meeting link<input className={field} type="url" autoComplete="off" required maxLength={2048} placeholder="Google Meet, Zoom or Teams" value={link} onChange={(e) => setLink(e.target.value)} /></label>
       <button className={button} disabled={busy || (!!diagnosis && !diagnosis.done)}>{busy ? 'Starting…' : 'Diagnose'}</button>
     </form>
     {error && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">{error}</p>}

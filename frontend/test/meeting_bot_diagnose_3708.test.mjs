@@ -21,7 +21,7 @@ const stopped = {
 
 test('the table names every stage in order, with the failing row’s code, facts and fix', () => {
   const html = renderToStaticMarkup(React.createElement(DiagnosisTable, { diagnosis: stopped }));
-  const order = ['The site reaches the bot', 'Google or Zoom setup', 'The container starts', 'The browser launches', 'Egress to the meeting hosts', 'Join attempt', 'Admission', 'Audio frames and first chunk', 'Your last real run'];
+  const order = ['The site reaches the bot', 'Google, Zoom or Teams setup', 'The container starts', 'The browser launches', 'Egress to the meeting hosts', 'Join attempt', 'Admission', 'Audio frames and first chunk', 'Your last real run'];
   let at = -1;
   for (const name of order) { const next = html.indexOf(name); assert.ok(next > at, name); at = next; }
   for (const phrase of ['signin_wall', 'meet_page_signin', 'Allow guests in the call.', 'a1b2c3d4e5f6']) assert.ok(html.includes(phrase), phrase);

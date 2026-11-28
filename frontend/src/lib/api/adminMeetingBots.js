@@ -6,7 +6,7 @@ export const adminMeetingBotsApi = {
     method: 'POST', body: JSON.stringify({ session_id: sessionId, meeting_url: meetingUrl }),
   }),
   test: (uid) => request(`/admin/platform/meeting-bots/test/${encodeURIComponent(uid)}`),
-  // #3708: the owner's staged diagnostic against a Meet or Zoom call they host; no session or charge.
+  // #3708: the owner's staged diagnostic against a Meet, Zoom (or, D5814, Teams) call they host; no session or charge.
   diagnose: (meetingUrl) => request('/admin/platform/meeting-bots/diagnose', {
     method: 'POST', body: JSON.stringify({ meeting_url: meetingUrl }),
   }),

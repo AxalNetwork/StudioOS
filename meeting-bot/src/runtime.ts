@@ -60,9 +60,9 @@ export class RuntimeHost {
     if(path==='/diagnose'){
       const diagnose=this.options.diagnose;
       if(!diagnose)return reply({code:'not_found'},404);
-      if(!['zoom','google_meet'].includes(command.platform)||typeof command.meeting_url!=='string'||command.meeting_url.length>2048)return reply({code:'invalid_command'},400);
+      if(!['zoom','google_meet','teams'].includes(command.platform)||typeof command.meeting_url!=='string'||command.meeting_url.length>2048)return reply({code:'invalid_command'},400);
       const stop=new AbortController(),active={uid:command.uid,fingerprint,stop,done:Promise.resolve(),ended:false};this.active=active;
-      // A diagnostic records nothing and sends no notice: it never enters runBot.
+      // A diagnostic records nothing and never enters runBot. D5814: only Teams posts the published notice, before it listens.
       active.done=Promise.resolve().then(()=>diagnose(command.platform,command.meeting_url,{uid:command.uid,secret:this.options.secret,callbackOrigin:this.options.callbackOrigin,stop:AbortSignal.any([stop.signal,this.shutdownController.signal])}))
         .catch(()=>logLine(this.options.log??(()=>{}),'diagnose_failed')).finally(()=>{active.ended=true;});
       return reply({accepted:true,mode:'diagnose'},202);

@@ -27,14 +27,25 @@
  * Zoom joins through the native SDK with a run's own credentials, so Zoom's
  * container stages stop at egress; the Worker checks Zoom's credentials and
  * reads the last Zoom run instead.
+ *
+ * D5814 (#5814): Teams runs the Meet stages with the Teams adapter, plus one
+ * stage of its own, `notice`, between admission and audio. Teams' page
+ * capture is gated on the recording notice (D5812), so the check posts the
+ * same published notice a run posts and listens only once it is posted; a
+ * notice that fails skips the audio stage, and nothing is heard. Egress is
+ * the three hosts a Teams link may name; `join` says whether the link is a
+ * work or a personal one; every refusal and timeout is a code from
+ * `teamsJoinStop`, never Teams' words.
  */
 import { encodeWav } from './wav.ts';
-import { BOT_NAME } from './constants.ts';
+import { BOT_NAME, NOTICE_TRIES } from './constants.ts';
+import { meetingBotNotice } from '../notice.mjs';
+import { teamsJoinUrl } from './adapters/teamsSelectors.ts';
 import { signRequest } from './callback.ts';
 import { AdapterFailure } from './types.ts';
 import type { AudioFrame, Clock, LogSink, MeetingAdapter, Platform } from './types.ts';
 
-export type DiagnoseStage = 'container' | 'browser' | 'egress' | 'join' | 'admission' | 'audio';
+export type DiagnoseStage = 'container' | 'browser' | 'egress' | 'join' | 'admission' | 'notice' | 'audio';
 export type DiagnoseResult = 'pass' | 'fail' | 'skipped' | 'running';
 export type DiagnoseFact = string | number | boolean;
 export interface DiagnoseReport {
@@ -73,6 +84,8 @@ export interface DiagnoseDeps {
   /** How long the host has to admit the bot, and how long frames may take after. */
   readonly admitMs?: number;
   readonly audioMs?: number;
+  /** D5814: the recording notice Teams posts before it listens; the published notice when absent. */
+  readonly notice?: () => string;
 }
 
 export const DIAGNOSE_ADMIT_MS = 3 * 60_000;
@@ -80,12 +93,16 @@ export const DIAGNOSE_AUDIO_MS = 20_000;
 export const EGRESS_HOSTS: Record<Platform, readonly string[]> = {
   google_meet: ['meet.google.com', 'accounts.google.com'],
   zoom: ['zoom.us', 'api.zoom.us'],
-  teams: ['teams.microsoft.com', 'login.microsoftonline.com'],
+  // D5814: the three hosts a supported Teams link names (D1451): work or school, its newer address, and personal.
+  teams: ['teams.microsoft.com', 'teams.cloud.microsoft', 'teams.live.com'],
 };
 const CODE = /^[a-z0-9_]{1,40}$/;
 const code = (value: unknown, fallback: string) => (typeof value === 'string' && CODE.test(value) ? value : fallback);
+/** Meet's and Zoom's stages, in order. */
 export const DIAGNOSE_STAGES: readonly DiagnoseStage[] = ['container', 'browser', 'egress', 'join', 'admission', 'audio'];
-const STAGES = DIAGNOSE_STAGES;
+/** D5814: Teams' stages: Meet's, with the recording notice between admission and audio. */
+export const TEAMS_DIAGNOSE_STAGES: readonly DiagnoseStage[] = ['container', 'browser', 'egress', 'join', 'admission', 'notice', 'audio'];
+export const stagesFor = (platform: Platform): readonly DiagnoseStage[] => (platform === 'teams' ? TEAMS_DIAGNOSE_STAGES : DIAGNOSE_STAGES);
 /** Sends per report while the check runs (short, so a dead callback never stalls it) and in the last flush after it. */
 export const REPORT_TRIES = 2;
 export const FINAL_REPORT_TRIES = 6;
@@ -110,6 +127,26 @@ export function joinStop(error: unknown, step: string | null): string {
   return 'page_unread';
 }
 
+/**
+ * D5814: where a Teams join or admission stopped, from the adapter's last
+ * screen (`teams_<screen>`, D5812) and its refusal. Refusal screens are their
+ * own codes; a known screen that never moved on is a timeout; a screen none of
+ * the hooks match is `teams_page_unread`.
+ */
+export function teamsJoinStop(error: unknown, step: string | null): string {
+  const screen = step?.startsWith('teams_') ? step.slice('teams_'.length) : null;
+  if (screen === 'captcha' || screen === 'anonymous_blocked' || screen === 'bot_blocked') return `teams_${screen}`;
+  if (screen === 'not_found') return 'teams_not_found';
+  if (screen === 'ended') return 'meeting_ended';
+  if (screen === 'denied') return 'not_admitted';
+  // Read before any page: the adapter refused the link itself.
+  if (error instanceof AdapterFailure && error.code === 'link_invalid') return 'teams_link_unread';
+  if (screen === 'launcher' || screen === 'prejoin') return 'teams_join_timed_out';
+  if (screen === 'unknown' || screen === 'lobby') return 'teams_page_unread';
+  if (error instanceof AdapterFailure && error.code !== 'platform_blocked') return error.code;
+  return 'teams_navigation_failed';
+}
+
 async function reach(doFetch: typeof fetch, host: string): Promise<DiagnoseFact> {
   try {
     const res = await doFetch(`https://${host}/`, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(8000) });
@@ -120,6 +157,7 @@ async function reach(doFetch: typeof fetch, host: string): Promise<DiagnoseFact>
 }
 
 export async function runDiagnosis(platform: Platform, meetingUrl: string, deps: DiagnoseDeps): Promise<DiagnoseOutcome> {
+  const STAGES = stagesFor(platform);
   // "Ran" is a ledger entry; "delivered" is the Worker's acknowledgement of it. Neither implies the other.
   const ledger = new Map<DiagnoseStage, { event: DiagnoseReport & { rev: number; at: number }; delivered: boolean; failed: number }>();
   let revision = 0;
@@ -165,7 +203,7 @@ export async function runDiagnosis(platform: Platform, meetingUrl: string, deps:
   const reached: Record<string, DiagnoseFact> = {};
   for (const host of hosts) reached[host] = await reach(deps.fetch, host);
   const egressOk = Object.values(reached).every((v) => typeof v === 'number');
-  if (platform !== 'google_meet') {
+  if (platform === 'zoom') {
     await say({ stage: 'browser', result: 'skipped', code: 'not_used_by_platform' });
     await say({ stage: 'egress', result: egressOk ? 'pass' : 'fail', code: egressOk ? 'hosts_reached' : 'host_unreachable', facts: reached });
     return skipRest('zoom_joins_with_run_credentials');
@@ -194,31 +232,60 @@ export async function runDiagnosis(platform: Platform, meetingUrl: string, deps:
     if (!egressOk) { await capture(); return await skipRest('egress_failed'); }
 
     const stop = deps.stop ?? new AbortController().signal;
+    const teams = platform === 'teams';
+    // D5814: a work or school link, or a personal (Teams free) one; never the link itself.
+    const kind = teams ? teamsJoinUrl(meetingUrl)?.kind : undefined;
+    const linkFacts: Record<string, DiagnoseFact> = kind ? { link_kind: kind === 'free' ? 'personal' : 'work' } : {};
+    const stopAt = (e: unknown, step: string | null) => (teams ? teamsJoinStop(e, step) : joinStop(e, step));
     let landed: 'lobby' | 'in_call';
     try {
       await meet.join({ url: meetingUrl, botName: BOT_NAME, signal: stop });
-      landed = meet.diagnostic() === 'meet_join_result:in_call' ? 'in_call' : 'lobby';
+      landed = meet.diagnostic() === (teams ? 'teams_in_call' : 'meet_join_result:in_call') ? 'in_call' : 'lobby';
     } catch (e) {
       const step = meet.diagnostic();
       await capture();
-      await say({ stage: 'join', result: 'fail', code: joinStop(e, step), facts: step ? { step } : {} });
+      await say({ stage: 'join', result: 'fail', code: stopAt(e, step), facts: { ...linkFacts, ...(step ? { step } : {}) } });
       return await skipRest('join_failed');
     }
-    await say({ stage: 'join', result: 'pass', code: landed === 'in_call' ? 'admitted_directly' : 'asked_to_join' });
+    await say({ stage: 'join', result: 'pass', code: landed === 'in_call' ? 'admitted_directly' : 'asked_to_join', ...(teams ? { facts: linkFacts } : {}) });
 
-    if (landed === 'lobby') {
-      await say({ stage: 'admission', result: 'running', code: 'waiting_for_admission' });
+    // D5814: Teams reads its admission even when it landed in the call: that read is what starts the page's capture (D5812).
+    if (landed === 'lobby' || teams) {
+      if (landed === 'lobby') await say({ stage: 'admission', result: 'running', code: 'waiting_for_admission' });
       const wait = new AbortController();
       const cancel = deps.clock.setTimeout(() => wait.abort(), deps.admitMs ?? DIAGNOSE_ADMIT_MS);
       try {
         await meet.admitted(AbortSignal.any([wait.signal, stop]));
       } catch (e) {
         await capture();
-        await say({ stage: 'admission', result: 'fail', code: wait.signal.aborted ? 'admission_timed_out' : e instanceof AdapterFailure ? e.code : 'admission_unread' });
+        const step = meet.diagnostic();
+        await say({ stage: 'admission', result: 'fail', code: wait.signal.aborted ? 'admission_timed_out'
+          : teams ? teamsJoinStop(e, step) : e instanceof AdapterFailure ? e.code : 'admission_unread', ...(teams && step ? { facts: { step } } : {}) });
         return await skipRest('not_admitted');
       } finally { cancel(); }
     }
     await say({ stage: 'admission', result: 'pass', code: landed === 'lobby' ? 'admitted' : 'admitted_directly' });
+
+    if (teams) {
+      // D5814: Teams listens only after its notice is posted (D5812); a notice that fails means nothing is heard.
+      let text: string;
+      try { text = (deps.notice ?? (() => meetingBotNotice()))(); } catch {
+        await say({ stage: 'notice', result: 'fail', code: 'notice_unpublished' });
+        await capture();
+        return await skipRest('notice_failed');
+      }
+      let attempts = 0, posted = false;
+      while (!posted && attempts < NOTICE_TRIES && !stop.aborted) {
+        attempts += 1;
+        try { await meet.sendChat(text); posted = true; } catch { if (attempts < NOTICE_TRIES) await deps.clock.sleep(1000); }
+      }
+      if (!posted) {
+        await capture();
+        await say({ stage: 'notice', result: 'fail', code: 'notice_failed', facts: { attempts } });
+        return await skipRest('notice_failed');
+      }
+      await say({ stage: 'notice', result: 'pass', code: 'notice_posted', facts: { attempts } });
+    }
 
     let frames = 0, samples = 0;
     const off = meet.audio((f: AudioFrame) => { frames += 1; samples += f.samples.length; });

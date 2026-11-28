@@ -277,7 +277,8 @@ test('the runtime serves /diagnose only when given a diagnostic, signed, and nev
     diagnose: async (platform, url, ctx) => { seen.push(`${platform}:${ctx.uid}:${url === 'https://meet.google.com/abc-defg-hij'}`); } });
   const body = { uid: UID, platform: 'google_meet', meeting_url: 'https://meet.google.com/abc-defg-hij' };
   assert.equal((await send(host, body, 'another-secret-another-secret-0123')).status, 401);
-  assert.equal((await send(host, { ...body, platform: 'teams' })).status, 400);
+  // D5814: Teams is a diagnostic platform now; a platform the bot does not join is still refused.
+  assert.equal((await send(host, { ...body, platform: 'webex' })).status, 400);
   assert.equal((await send(host, body)).status, 202);
   await host.shutdown();
   assert.deepEqual(seen, [`google_meet:${UID}:true`]);

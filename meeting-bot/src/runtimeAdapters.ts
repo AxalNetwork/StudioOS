@@ -59,7 +59,7 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
   }catch{await browser.close();throw new AdapterFailure('platform_blocked');}
 }
 
-/** #3708: the owner's staged diagnostic with the packaged browser and the Meet adapter. */
+/** #3708: the owner's staged diagnostic with the packaged browser and the Meet adapter; D5814: the Teams driver for a Teams link. */
 export async function runtimeDiagnose(platform:Platform,meetingUrl:string,context:RuntimeDiagnoseContext,factories:RuntimeFactories={}):Promise<void>{
   const callbacks=diagnoseCallbacks(context.callbackOrigin,context.uid,context.secret,factories.fetch??fetch);
   await runDiagnosis(platform,meetingUrl,{...callbacks,diagnosisId:context.uid,fetch:factories.fetch??fetch,clock:realClock,stop:context.stop,log:consoleSink,
@@ -67,6 +67,8 @@ export async function runtimeDiagnose(platform:Platform,meetingUrl:string,contex
       const browser=await (factories.launch??(()=>chromium.launch({headless:true,chromiumSandbox:true})))();
       try{
         const page=await browser.newPage({locale:'en-US',viewport:{width:1280,height:720}});
+        // D5814: the same Playwright Teams driver a run uses (D5812), built before any goto so its capture script is in place.
+        if(platform==='teams')return {page:{screenshot:()=>page.screenshot({type:'png'}),url:()=>page.url()},meet:new TeamsAdapter(await playwrightTeamsPage(page)),close:()=>browser.close()};
         return {page:{screenshot:()=>page.screenshot({type:'png'}),url:()=>page.url()},
           meet:new MeetAdapter(page as unknown as MeetPage,{log:consoleSink,
             signIn:meetCredentials({origin:context.callbackOrigin,path:`/api/meeting-bots/diagnostics/${context.uid}/meet-credentials`,key:context.secret,...(factories.fetch?{fetch:factories.fetch}:{})})}),close:()=>browser.close()};
