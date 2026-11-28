@@ -36,7 +36,7 @@ function world() {
     headRefName: 'agent/x', headRefOid: s.head, headRepository: { nameWithOwner: REPO }, baseRepository: { nameWithOwner: REPO },
     labels: { nodes: s.labels.map((name) => ({ name })) }, autoMergeRequest: null, timelineItems: { nodes: s.timeline } });
   const gh = {
-    graph: async () => ({ pullRequests: { nodes: [node()] } }),
+    graph: async (query) => (/stackEntry/.test(query) ? { nameWithOwner: REPO, pullRequest: { number: 7, headRefOid: s.head, isDraft: false, isInMergeQueue: s.inQueue, autoMergeRequest: null, stack: null, stackEntry: null } } : { pullRequests: { nodes: [node()] } }),
     get: async (p) => {
       if (p.startsWith('actions/workflows/ci.yml/runs?branch=main&event=push&per_page=20')) return { workflow_runs: [{ id: 1, event: 'push', head_branch: 'main', status: 'completed', conclusion: 'success', created_at: T(-30) }] };
       if (p.startsWith('actions/workflows/ci.yml/runs?branch=main&event=push&status=completed')) return { workflow_runs: [{ id: 1, conclusion: 'success' }] };
